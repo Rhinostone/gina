@@ -1,5 +1,5 @@
 geena
 =====
 
-Geena Project - NodeJs framework
-Project under developement. Thank you for you patience.
+<strong>Geena Project</strong> - NodeJs framework
+<br/>Project under developement. Thank you for you patience.
