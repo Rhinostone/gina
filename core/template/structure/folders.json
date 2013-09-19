@@ -1,0 +1,44 @@
+{
+    "_comment" : "Default app = app type",
+    "default": {
+        "addons" : "",
+        "{apps}" : {
+            "{appName}" : [
+                "config",
+                "controllers",
+                "lib",
+                "mocks"
+            ]
+        },
+        "cache" : [
+            "{appName}"
+        ],
+        "logs" : [
+            "{appName}"
+        ],
+        "static" : {
+            "common" : [
+                "css",
+                "js"
+            ],
+            "themes" : {
+                "default" : [
+                    "css",
+                    "js"
+                ]
+            }
+        },
+        "test": [
+            "{appName}"
+        ],
+        "tmp" : [
+            "{apps}",
+            "geena",
+            "pid"
+        ]
+    },
+    "app" : "",
+    "blog" : "",
+    "cms" : "",
+    "ws" : ""
+}
