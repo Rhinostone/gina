@@ -1,0 +1,18 @@
+# IDE
+.idea
+# SCM
+.svn
+.sock
+# Desktop
+.DS_Store
+desktop.ini
+# Capistrano
+Capfile
+/config
+# Misc
+/log
+/tmp
+/data
+/cache
+/geena/nbproject/private/
+node_modules
