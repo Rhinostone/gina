@@ -1,18 +1,26 @@
 # IDE
+.jshintrc
 .idea
+nbproject
+
+# Geena
+/logs
+/tmp
+/cache
+.gna
+
 # SCM
 .svn
-.sock
+.git
+
 # Desktop
 .DS_Store
 desktop.ini
+
 # Capistrano
 Capfile
 /config
+
 # Misc
-/log
-/tmp
 /data
-/cache
-/geena/nbproject/private/
-node_modules
+/cgi-bin
