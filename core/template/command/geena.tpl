@@ -13,13 +13,14 @@
  *  alias geena="/usr/local/bin/node geena $@"
  */
 
+
 var Fs = require('fs');
 //Check for geena context.
 if (
     Fs.existsSync('./node_modules/geena') && Fs.existsSync('./node_modules/geena/node_modules/geena.utils')
-        && process.argv[3] != "-u"
-        && process.argv[3] != "--update"
-    ) {
+    && process.argv[2] != "-u"
+    && process.argv[2] != "--update"
+) {
 
     require('./node_modules/geena/node_modules/colors');
 
@@ -40,13 +41,13 @@ if (
      *  Init Geena and its dependencies
      *  -------------------------------
      *
-     *  $ ./geena init
+     *  $ ./geena --install
      *
      *
      *  Update Geena and its dependencies
      *  ---------------------------------
      *
-     *  $ ./geena update
+     *  $ ./geena --update
      *
      * Issues:
      * ------
@@ -55,9 +56,8 @@ if (
      * information. When done, commit the new state or stash your changes
      * and hit this command: $ git reset
      *
-     * TODO - $ ./geena clean
-     * TODO - $ ./geena init v1.5-245
-     * TODO - $ ./geena update v1.6
+     * TODO - $ ./geena --clean
+     * TODO - Apply update() source to innstall() so we can have the choice of submodules @ install
      * TODO - Refacto
      *
      **/
@@ -67,12 +67,29 @@ if (
         Spawn   = require('child_process').spawn,
         allowed = ["--clean", "-i","--install", "-u","--update"];
 
+    //By default.
+    var defaultSubmodules= {
+        //Means node_modules/geena/node_modules/geena.utils
+        "geena/geena.utils": {
+            "version" : "",
+            "repo" : "https://github.com/Rhinostone/geena.utils.git"
+        },
+        //Order matters.
+        "geena" : {
+            "version" : "",
+            "repo" : "https://github.com/Rhinostone/geena.git"
+        }
+    };
+
 
     var subHandler = {
         cmd : {},
-        dir : "",
+        //Yeah always from the root.
+        dir : __dirname,
+        //Use package.json with the following key: projectDependencies
+        submodules : defaultSubmodules,
         /**
-         * Init Geena Project with its dependencies
+         * Install Geena Project with its dependencies
          *
          * */
         i : function(){ this.install(arguments);},
@@ -151,7 +168,7 @@ if (
                         });
                         utils.on('close', function(code){
                             if (!code) {
-                                console.log('sub module geena.utils imported with success');
+                                console.log('submodule: geena.utils imported with success');
                             } else {
                                 console.log('process exit with error code ' + code);
                             }
@@ -167,55 +184,136 @@ if (
         /**
          * Update existing sources for Geena Project with its dependencies
          *
-         * @param {string} release - Release nummber
+         * @param {string} release - Release number
          * */
-        u : function(){ this.update(arguments);},
-        update : function(release){
+        u : function(){ this.update(submodules, list);},
+        update : function(submodules, list){
+            var _this = this;
 
-            //check first if module exists
-            this.dir = __dirname;
-            var path = this.dir + '/node_modules/geena';
-            var release = (typeof(release) != "undefined" && release != "") ? release : "master";
+            if (typeof(list) != "undefined") {
 
-            Fs.exists(path, function(exists){
-                if (!exists) {
-                    console.error("path not found");
-                    return false;
+                m = list.shift(),
+                tag = submodules[m].version,
+                path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+            } else {
+                //First case.
+                var list = [];
+                for (var m in submodules) list.push(m);
+
+                var m = list.shift(), tag = submodules[m].version;
+                var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+            }
+
+            this.pull(m, path, tag, function(done, module){
+                //Get next task in list.
+                if (list.length > 0) {
+                    _this.update(submodules, list);
                 }
-                process.chdir(path + '/node_modules/geena.utils');//CD command like.
-                this.cmd = Spawn('git', ['pull', 'origin', 'master']);
+            });
+        },
+        /**
+         * Pull command
+         *
+         * */
+        pull : function(module, path, tag, callback){
+            if ( Fs.existsSync(path) ) {
 
-                this.cmd.stdout.setEncoding('utf8');
-                this.cmd.stdout.on('data', function(data){
+                tag = (typeof(tag) != "undefined" && tag != "") ? tag : "master";
+                //console.log("about to enter ", path);
+                process.chdir(path);//CD command like.
+
+                var cmd = Spawn('git', ['checkout', tag]);
+
+                cmd.stdout.setEncoding('utf8');
+                cmd.stdout.on('data', function(data){
                     var str = data.toString();
                     var lines = str.split(/(\r?\n)/g);
                     console.log(lines.join(""));
                 });
 
-                this.cmd.stderr.on('data',function (err) {
+                cmd.stderr.on('data',function (err) {
                     var str = err.toString();
                     var lines = str.split(/(\r?\n)/g);
                     console.log(lines.join(""));
                 });
 
-                this.cmd.on('close', function (code) {
+                cmd.on('close', function (code) {
                     if (!code) {
-                        process.chdir(path);
-                        this.cmd = Spawn('git', ['pull', 'origin', release]);
-                        console.log('update finished with success');
+                        console.log('Checking out: ', tag + "[" + module + "]");
+                        //Trigger pull command.
+                        gitPull();
+
                     } else {
                         console.log('process exit with error code ' + code);
                     }
                 });
-            });
+
+                var gitPull = function() {
+                    var git = Spawn('git', ['pull', 'origin', tag]);
+
+                    git.stdout.setEncoding('utf8');
+                    git.stdout.on('data', function(data){
+                        var str = data.toString();
+                        var lines = str.split(/(\r?\n)/g);
+                        console.log(lines.join(""));
+                    });
+
+                    git.stderr.on('data',function (err) {
+                        var str = err.toString();
+                        var lines = str.split(/(\r?\n)/g);
+                        console.log(lines.join(""));
+                    });
+
+                    git.on('close', function (code) {
+                        if (code) {
+                            console.log('process exit with error code ' + code);
+                            callback(false, module);
+                        } else {
+                            callback(true, module);
+                        }
+
+
+                    });
+                };
+
+            } else {
+                console.warn("[warn]: path not found ", path);
+                console.warn("Geena could not load ", module);
+            }
         },
         /**
          * Clean on fails
          *
          * */
         clean : function () {
-            ///...TODO
+            //check for git project.
+            var path = "./.git/config";
+            if ( Fs.existsSync(path) ) {
+
+            } else {
+                console.log("Sorry, [./git/config] not found. Geena can not clean().");
+            }
+            //...TODO
+        },
+
+        getProjectConfiguration : function (){
+            if (Fs.existsSync("./package.json")) {
+                try {
+                    var dep = require('./package.json').submodules;
+                    for (var d in dep) {
+                        //console.log('d' , d, 'dep ', dep[d]);
+                        this.submodules[d] = dep[d];
+                        return this.submodules;
+                    }
+                } catch(err) {
+                    return this.submodules;
+                }
+
+            } else {
+                return this.submodules;
+            }
         }
+
     };
 
 
@@ -225,23 +323,23 @@ if (
         console.log("Usage: \n $ ./geena -i\n $ ./geena --install <release>\n $ ./geena --clean");
     } else {
 
+        //Get submodules config from.
+        var submodules = subHandler.getProjectConfiguration();
+        //console.log("About to load submodules ", submodules);
         allowed.forEach(function(i){
 
             if (arg == i) {
                 i = i.replace(/-/g, '');
+
                 try {
-                    if (typeof(process.argv[3]) != "undefined") {
-                        //release.
-                        var tag     = process.argv[3];
-                        subHandler[i](tag);
-                    } else {
-                        subHandler[i]();
-                    }
+                    subHandler[i](submodules);
                 } catch(err) {
                     if (err) console.log(err);
                 }
             }
         });
     }
+
+
 
 }
