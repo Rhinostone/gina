@@ -18,9 +18,9 @@ var Fs = require('fs');
 //Check for geena context.
 if (
     Fs.existsSync('./node_modules/geena') && Fs.existsSync('./node_modules/geena/node_modules/geena.utils')
-    && process.argv[2] != "-u"
-    && process.argv[2] != "--update"
-) {
+        && process.argv[2] != "-u"
+        && process.argv[2] != "--update"
+    ) {
 
     require('./node_modules/geena/node_modules/colors');
 
@@ -186,15 +186,15 @@ if (
          *
          * @param {string} release - Release number
          * */
-        u : function(){ this.update(submodules, list);},
-        update : function(submodules, list){
-            var _this = this;
+        u : function(){ this.update();},
+        update : function(list){
+            var _this = this,  submodules = this.submodules;
 
             if (typeof(list) != "undefined") {
 
                 m = list.shift(),
-                tag = submodules[m].version,
-                path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                    tag = submodules[m].version,
+                    path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
             } else {
                 //First case.
                 var list = [];
@@ -203,11 +203,11 @@ if (
                 var m = list.shift(), tag = submodules[m].version;
                 var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
             }
-
+            //Pulling.
             this.pull(m, path, tag, function(done, module){
                 //Get next task in list.
                 if (list.length > 0) {
-                    _this.update(submodules, list);
+                    _this.update(list);
                 }
             });
         },
@@ -296,22 +296,17 @@ if (
             //...TODO
         },
 
-        getProjectConfiguration : function (){
-            if (Fs.existsSync("./package.json")) {
-                try {
-                    var dep = require('./package.json').submodules;
-                    for (var d in dep) {
-                        //console.log('d' , d, 'dep ', dep[d]);
-                        this.submodules[d] = dep[d];
-                        return this.submodules;
-                    }
-                } catch(err) {
-                    return this.submodules;
-                }
+        getProjectConfiguration : function (callback){
 
-            } else {
-                return this.submodules;
+            try {
+                var dep = require('./package.json').submodules;
+                for (var d in dep) {
+                    this.submodules[d] = dep[d];
+                }
+            } catch(err) {
+                //get the default value..
             }
+            callback(true);
         }
 
     };
@@ -324,20 +319,22 @@ if (
     } else {
 
         //Get submodules config from.
-        var submodules = subHandler.getProjectConfiguration();
-        //console.log("About to load submodules ", submodules);
-        allowed.forEach(function(i){
+        subHandler.getProjectConfiguration(function(done){
+            //console.log("About to load submodules ", submodules);
+            allowed.forEach(function(i){
 
-            if (arg == i) {
-                i = i.replace(/-/g, '');
+                if (arg == i) {
+                    i = i.replace(/-/g, '');
 
-                try {
-                    subHandler[i](submodules);
-                } catch(err) {
-                    if (err) console.log(err);
+                    try {
+                        subHandler[i]();
+                    } catch(err) {
+                        if (err) console.log(err);
+                    }
                 }
-            }
+            });
         });
+
     }
 
 
