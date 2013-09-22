@@ -53,7 +53,7 @@ Gna.start = function(executionPath){
 
     Config.parent = $this;
 
-    Config.init(env, function(conf, apps){
+    Config.init(env, function(conf, apps, allApps){
 
         var isStandalone = Config.Host.isStandalone();
 
@@ -66,6 +66,7 @@ Gna.start = function(executionPath){
         Server.setConf({
             "appName" : $this.startingApp,
             "apps" : apps,//Apps list.
+            "allApps" : allApps,
             "appsPath" : $this.appsPath,
             "env" : env,
             "isStandalone" : isStandalone,

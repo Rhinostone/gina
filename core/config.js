@@ -21,6 +21,7 @@ var Fs      = require('fs'),
     Log     = Utils.Logger,
     Config  = {
     apps : [],
+    allApps : [],
     init : function(env, callback){
 
         Log.debug('geena', 'CONFIG:DEBUG:1', 'Initalizing config', __stack);
@@ -56,12 +57,13 @@ var Fs      = require('fs'),
         this.Env.load(function(ready){
             //On load.
             var conf = _this.Env.getConf(),
-                apps = _this.getApps();
+                apps = _this.getApps(),
+                allApps = _this.getAllApps();
             /**
             for(var apps in confs){
 
             }*/
-            callback(conf, apps);
+            callback(conf, apps, allApps);
             //_this.isFileInProject(conf[env]["files"]);
         });
     },
@@ -70,6 +72,7 @@ var Fs      = require('fs'),
             conf = this.Env.getConf();
         return (typeof(conf) != 'undefined') ? conf : null;
     },
+
     /**
      * @class Env
      *
@@ -201,7 +204,7 @@ var Fs      = require('fs'),
             : template["{appName}"]["{appEnv}"].port.http;
 
         //Pushing default app first.
-        this.apps.push(this.startingApp);//This is a JSON.push
+        this.apps.push(this.startingApp);//This is a JSON.push.
         //console.log(" CONTENT TO BE SURE ", JSON.stringify(content, null, 4));
         //For each app.
         for (var app in content) {
@@ -227,7 +230,7 @@ var Fs      = require('fs'),
                         //console.log("PUSHING APPS ", app + "=>" + isStandalone);
                         _this.apps.push(app);
                     }
-
+                    _this.allApps.push(app);
                     newContent[app][env] = Utils.extend(
                         true,
                         newContent[app][env],
@@ -274,6 +277,16 @@ var Fs      = require('fs'),
             __stack
         );
         return this.apps;
+    },
+    getAllApps : function(){
+        //Registered apps only.
+        Log.debug(
+            'geena',
+            'CONFIG:DEBUG:5',
+            'Pushing ALL apps ' + JSON.stringify(this.allApps, null, '\t'),
+            __stack
+        );
+        return this.allApps;
     }
 
 };
