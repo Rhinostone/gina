@@ -32,16 +32,15 @@ var Fs              = require("fs"),
 
         //Set paths for utils. Won't override.
         //To reset it, just delete the hidden folder.
-        Utils.Config.set('geena', 'project.josn', {
+        Utils.Config.set('geena', 'project.json', {
+            //project : Utils.Config.getProjectName(),
             paths : {
                 utils : Utils.Config.__dirname,
                 executionPath : this.executionPath,
                 env : this.executionPath + '/env.json',
                 tmp : this.executionPath + '/tmp'
             },
-            bundles : {
-                "list" : this.apps
-            }
+            bundles : options.allApps
         });
 
         //process.exit(42);
@@ -100,7 +99,7 @@ var Fs              = require("fs"),
             Log.debug(
                 'geena',
                 'SERVER:DEBUG:1',
-                'Routing loaded' + '\n'+ JSON.stringify(_this.routing, null, 4),
+                'Routing loaded' + '\n'+ JSON.stringify(_this.routing, null, '\t'),
                 __stack
             );
 

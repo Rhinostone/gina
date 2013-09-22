@@ -61,6 +61,8 @@ var extend          = require('geena.utils').extend,
         /**
         * Clean files on directory read
         * Mac os Hack
+        * @deprecated
+        * @note use PathHelperObj.clean()
         **/
         cleanFiles : function(files){
             for(f=0; f< files.length; f++){
