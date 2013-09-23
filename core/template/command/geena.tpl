@@ -78,16 +78,14 @@ if (
                 "repo" : {
                     "ssh" : "git@github.com:Rhinostone/geena.git",
                     "https" : "https://github.com/Rhinostone/geena.git"
+                },
+                //For upgrade/downgrade only.
+                "dependencies" : {
+                    "geena/geena.utils" : {
+                        "version" : "master"
+                    }
                 }
             }
-            //Means node_modules/geena/node_modules/geena.utils
-//            "geena/geena.utils": {
-//                "version" : "",
-//                "repo" : {
-//                    "ssh" : "git@github.com:Rhinostone/geena.utils.git",
-//                    "https" : "https://github.com/Rhinostone/geena.utils.git"
-//                }
-//            }
         }
     };
 
@@ -307,7 +305,7 @@ if (
          * @param {string} module
          * @param {function} callback
          * @return {status} err
-         * */
+         *
         cleanDependencies : function(module,  callback){
             var _this = this, isDependency = false, deps = [];
 
@@ -391,7 +389,7 @@ if (
             });
 
         },
-
+         */
         /**
          * Update existing sources for Geena Project with its dependencies
          *
@@ -399,7 +397,8 @@ if (
          * */
         u : function(){ this.update(null);},
         update : function(list){
-            var _this = this, submodules = this.submodules.pacakges;
+            var _this = this, submodules = this.submodules.packages;
+
 
             if ( typeof(list) != "undefined" && list != null ) {
                 //Queue it.
@@ -412,10 +411,25 @@ if (
                 for (var m in submodules)
                     list.push(m);
 
+                var m = list.shift();
 
-                var m = list.shift(), tag = submodules[m].version;
+
+                //Get dependencies.
+                if ( typeof(submodules[m]['dependencies']) != "undefined") {
+                    for (d in submodules[m]['dependencies']) {
+                        //console.log("m ", m, "=> ", submodules[m]['dependencies'][d]);
+                        submodules[d] = submodules[m]['dependencies'][d];
+                        list.push(d);
+                    }
+                }
+
+
+                var tag = submodules[m].version;
                 var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
             }
+
+
+
 
             _this.pull(m, path, tag, function(done, module){
                 //Get next task in list.
@@ -517,11 +531,11 @@ if (
             console.log(
                 "usage:\n" +
                 "\nInstalling Geena" +
-                "\n     $ geena -i <release>" +
+                "\n     $ geena -i" +
                 "\n or" +
-                "\n     $ geena --install <release>" +
+                "\n     $ geena --install" +
                 "\n" +
-                "\nUpdating Geena" +
+                "\nUpdating or downgrading Geena" +
                 "\n     $ geena -u <release>" +
                 "\n or" +
                 "\n     $ geena --update <release>" +
