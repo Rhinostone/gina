@@ -14,13 +14,13 @@
  */
 
 
-var Fs = require('fs');
+var Fs = require('fs'), vers = '0.0.7';
 //Check for geena context.
 if (
     Fs.existsSync('./node_modules/geena') && Fs.existsSync('./node_modules/geena/node_modules/geena.utils')
-        && process.argv[2] != "-u"
-        && process.argv[2] != "--update"
-    ) {
+    && process.argv[2] != "-u"
+    && process.argv[2] != "--update"
+) {
 
     require('./node_modules/geena/node_modules/colors');
 
@@ -29,7 +29,7 @@ if (
     Utils.Cmd.load(__dirname, "/node_modules/geena/package.json");
 } else {
 
-    console.log('Geena Installer Tool \r\n');
+    console.log('Geena Installer Tool '+ vers +' \r\n');
 
 
     /**
@@ -56,8 +56,8 @@ if (
      * information. When done, commit the new state or stash your changes
      * and hit this command: $ git reset
      *
-     * TODO - $ ./geena --clean
-     * TODO - Apply update() source to innstall() so we can have the choice of submodules @ install
+     * TODO - $ ./geena --clean  &&   $ ./geena -c
+     * TODO - Apply update() source to install() so we can have the choice of submodules @ install
      * TODO - Refacto
      *
      **/
@@ -65,146 +65,359 @@ if (
     var arg     = process.argv[2];
     var Fs      = require("fs"),
         Spawn   = require('child_process').spawn,
-        allowed = ["--clean", "-i","--install", "-u","--update"];
+        allowed = ["--clean", "-i","--install", "-u","--update", "-h", "--help"];
 
     //By default.
     var defaultSubmodules= {
-        //Means node_modules/geena/node_modules/geena.utils
-        "geena/geena.utils": {
-            "version" : "",
-            "repo" : "https://github.com/Rhinostone/geena.utils.git"
-        },
-        //Order matters.
-        "geena" : {
-            "version" : "",
-            "repo" : "https://github.com/Rhinostone/geena.git"
+        //this mode is only used for installation
+        "use_https" : false,
+        "packages" : {
+            //Wil clone main project with its dependencies along.
+            "geena" : {
+                "version" : "",
+                "repo" : {
+                    "ssh" : "git@github.com:Rhinostone/geena.git",
+                    "https" : "https://github.com/Rhinostone/geena.git"
+                }
+            }
+            //Means node_modules/geena/node_modules/geena.utils
+//            "geena/geena.utils": {
+//                "version" : "",
+//                "repo" : {
+//                    "ssh" : "git@github.com:Rhinostone/geena.utils.git",
+//                    "https" : "https://github.com/Rhinostone/geena.utils.git"
+//                }
+//            }
         }
     };
-
 
     var subHandler = {
         cmd : {},
         //Yeah always from the root.
         dir : __dirname,
-        //Use package.json with the following key: projectDependencies
+        //Use package.json with the following key: submodules.
         submodules : defaultSubmodules,
         /**
          * Install Geena Project with its dependencies
          *
+         * @param {array} list [optional]
          * */
-        i : function(){ this.install(arguments);},
-        install : function(release){
-            var release = (typeof(release) != "undefined" && release != "") ? release : "master";
+        i : function(){ this.install(null);},
+        install : function(list){
 
-            this.dir = __dirname;
-            this.cmd = Spawn('git', [
-                'submodule',
-                'add',
-                '-f',
-                'https://github.com/Rhinostone/geena.git',
-                'node_modules/geena'
+            //console.log("your conf \n", JSON.stringify(this.submodules, null, 4));
+
+            var _this = this, submodules = this.submodules.packages;
+
+            if ( typeof(list) != "undefined" && list != null ) {
+                //Queue it.
+                var m = list.shift(),
+                    path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+
+                if ( typeof(submodules[m]['version']) != 'undefined' && submodules[m]['version'] != "" ) {
+                    var tag = submodules[m].version;
+                } else {
+                    var tag = 'master';
+                }
+                //if ( typeof(submodules[m]['use_https']) != 'undefined' &&  typeof(submodules[m]['repo']['https']) != 'undefined' ){
+                if ( typeof(submodules[m]['use_https']) && submodules[m]['use_https'] == true){
+                    var repo = submodules[m].repo.https;
+                    //console.log("Using HTTPS mode for " + m);
+                } else if (this.useHttps && typeof(submodules[m]['repo']['use_https']) == "undefined") {
+                    var repo = submodules[m].repo.https;
+                    //console.log("Using HTTPS mode for " + m);
+                } else {
+                    var repo = submodules[m].repo.ssh;
+                    //console.log("Using SSH mode for " + m);
+                }
+
+            } else {
+                //First case.
+                var list = [], repo = "";
+                for (var m in submodules)
+                    list.push(m);
+
+
+                var m = list.shift();
+                var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                if ( typeof(submodules[m]['version']) != 'undefined' && submodules[m]['version'] != "" ) {
+                    var tag = submodules[m].version;
+                } else {
+                    var tag = 'master';
+                }
+
+                if ( typeof(submodules[m]['use_https']) && submodules[m]['use_https'] == true){
+                    var repo = submodules[m].repo.https;
+                    //console.log("Using HTTPS mode for " + m);
+                } else if ( this.useHttps && typeof(submodules[m]['repo']['use_https']) == "undefined" ) {
+                    var repo = submodules[m].repo.https;
+                    //console.log("Using HTTPS mode for " + m);
+                } else {
+                    var repo = submodules[m].repo.ssh;
+                    //console.log("Using SSH mode for " + m);
+                }
+            }
+
+            try {
+
+                console.log(
+                    "module: " + m,
+                    "\npath: " + path,
+                    "\nrepo: " +repo,
+                    "\ntag: " + tag
+                );
+                //console.log("==>", this.useHttps, (typeof(submodules[m]['repo']['use_https']) == "undefined" ));
+                //process.exit(42);
+                _this.clone( m, path, repo, tag, function(err, module){
+                    if (err) {
+                        console.log(err, "this.clone( m, path, repo, tag, callback){...}");
+                        process.exit(1);
+                    }
+
+                    //Get next task in list.
+                    if (list.length > 0) {
+                        _this.install(list);
+                    }
+                });
+            } catch (err) {
+                console.log(err, "this.clone() call");
+            }
+
+
+        },
+        /**
+         * Clone project and dependencies
+         *
+         * @param {string} module
+         * @param {string} path
+         * @param {string} repo
+         * @param {string} tag
+         * @param {function} module
+         * */
+
+        clone : function(module, path, repo, tag, callback){
+            var cmd = Spawn('git', [
+                'clone',
+                '--recursive',
+                repo,
+                path
             ]);
 
-            this.cmd.stdout.setEncoding('utf8');
-
-            this.cmd.stdout.on('data', function(data){
+            cmd.stdout.setEncoding('utf8');
+            cmd.stdout.on('data', function(data){
                 var str = data.toString();
                 var lines = str.split(/(\r?\n)/g);
+
+                console.log("clone... ", module);
                 console.log(lines.join(""));
-                //clean.stdout.setEncoding('utf8');
-                //clean.stdin.write(data);
             });
 
-            this.cmd.stderr.on('data',function (err) {
+            cmd.stderr.on('data',function (err) {
+                var str = err.toString();
+                var lines = str.split(/(\r?\n)/g);
+
+                console.log('[error] ', str);
+            });
+
+            cmd.on('close', function (code) {
+                if (!code) {
+                    console.log(module, ' submodule done with success');
+                    callback(false, module);
+                } else {
+                    callback(true, '[error] '+ code);
+                }
+            });
+        },
+         /**clone : function(module, path, repo, tag, callback){
+            var _this = this, isDependency = false;
+
+            if (module.match("/")) {
+                isDependency = true;
+                console.log("Skipping clonning for an existing submodule: ", module);
+                _this.cleanDependencies(module, function(err, module){
+                    console.log("removed ", module, " junks");
+                    if (!err) {
+                        console.log(false, module);
+                        callback(false, module);
+                    } else {
+                        callback(true, err + 'clone : function(module, path, repo, tag, callback) => _this.cleanDependencies(...)');
+                    }
+                });
+            } else {
+
+                var cmd = Spawn('git', [
+                    'submodule',
+                    'add',
+                    '-f',
+                    '--recursive',
+                    repo,
+                    path
+                ]);
+
+                cmd.stdout.setEncoding('utf8');
+                cmd.stdout.on('data', function(data){
+                    var str = data.toString();
+                    var lines = str.split(/(\r?\n)/g);
+
+                    console.log("clone... ", module);
+                    console.log(lines.join(""));
+                });
+
+                cmd.stderr.on('data',function (err) {
+                    var str = err.toString();
+                    var lines = str.split(/(\r?\n)/g);
+
+                    if ( str.match("fatal: Not a git repository") ) {
+                        console.log(
+                            'Maybe, you should try to init your git project first...' +
+                            '\n\n$ git init\n'
+                        );
+                        process.exit(0);//just for this case.
+                    } else {
+                        console.log('[error] ', str);
+                    }
+
+
+                });
+
+                cmd.on('close', function (code) {
+                    if (!code) {
+                        console.log('init done with success');
+
+//                        _this.cleanDependencies(module, function(err, module){
+//                            console.log("removed ", module, " junks");
+//                            if (!err) {
+//                                console.log(false, module);
+//                                callback(false, module);
+//                            } else {
+//                                callback(true, err + 'clone : function(module, path, repo, tag, callback) => _this.cleanDependencies(...)');
+//                            }
+//                        });
+                        callback(false, module);
+                    } else {
+                        callback(true, '[error] '+ code);
+                    }
+                });
+
+            }
+        },*/
+        /**
+         * Clean current level dependecies
+         *
+         * @param {string} module
+         * @param {function} callback
+         * @return {status} err
+         * */
+        cleanDependencies : function(module,  callback){
+            var _this = this, isDependency = false, deps = [];
+
+
+            console.log("content ", JSON.stringify(this.submodules, null, 4));
+            if (module.match("/")) {
+                isDependency = true;
+            }
+
+            console.log(module, "isDependency ", isDependency);
+
+            if (!isDependency) {
+
+                console.log("start junk removal") ;
+                for (var m in this.submodules.packages) {
+                    var blocks = m.split(/\//g);
+                    var l = 0;// first level.
+                    if (blocks.length > 1) {
+                        //whitch level ?
+
+
+                        for (var i in blocks) {
+
+                            if (blocks[i] == module) {
+                                //found dependency @ level "l".
+                                //console.log("dep lev ", l, " => ", module, m);
+                                //deps.push(_this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/'));
+                                var p = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                                deps.push(p);
+                                l = 0;
+                                break;
+                            }
+                            ++l;
+                        }
+
+                    }
+
+                }
+                console.log("removing ", deps);
+                for (var i=0; i<deps.length; ++i) {
+                    console.log("removing.. ", deps[i]);
+                    _this.rm(deps[i], function(err){
+
+                        if (err) callback(err + 'cleanDependencies(..) => _this.rm(p, function(err){...');
+
+                        if (deps > 0) {
+                            deps.shift();
+                        } else {
+                            callback(false, module);
+                        }
+
+                    });
+                }
+            } else {
+                callback(false, module);
+            }
+        },
+        rm : function(p, callback){
+            console.log("starting removal ", p);
+            var clean = Spawn('rm', [
+                '-r',
+                p
+            ]);
+
+            clean.stdout.on('data', function(data){
+                var str = data.toString();
+                if(str) console.log("wrting ", str);
+
+            });
+
+            clean.stderr.on('data', function(err){
                 var str = err.toString()
                 var lines = str.split(/(\r?\n)/g);
                 console.log(lines.join(""));
             });
 
-            this.cmd.on('close', function (code) {
-                if (!code) {
-                    console.log('init done with success');
-                    //Cleaning
-                    var clean = Spawn('rm', [
-                        '-r',
-                        'node_modules/geena/node_modules/geena.utils'
-                    ]);
+            clean.on('close', function(code){
+                if (code) callback(code + 'rm => clean.stderr.on');
 
-                    clean.stdout.on('data', function(data){
-                        var str = data.toString();
-                        if(str) console.log("wrting ", str)
-                    });
-                    clean.stderr.on('data', function(err){
-                        var str = err.toString()
-                        var lines = str.split(/(\r?\n)/g);
-                        console.log(lines.join(""));
-                    });
-
-                    clean.on('close', function(err){
-                        if (err) {
-                            console.log("rm command ignored, about to import geena.utils...")
-                        } else {
-                            console.log('sub dir removed with success. About to start import');
-                        }
-
-                        //Adding geena.utils submodules
-                        var utils = Spawn('git', [
-                            'submodule',
-                            'add',
-                            '-f',
-                            'https://github.com/Rhinostone/geena.utils.git',
-                            'node_modules/geena/node_modules/geena.utils'
-                        ]);
-                        utils.stdout.on('data', function(data){
-                            var str = data.toString();
-                            var lines = str.split(/(\r?\n)/g);
-                            console.log(lines.join(""));
-                        });
-                        utils.stderr.on('data', function(err){
-                            var str = err.toString();
-                            var lines = str.split(/(\r?\n)/g);
-                            process.exit(0);//just for this case.
-
-                        });
-                        utils.on('close', function(code){
-                            if (!code) {
-                                console.log('submodule: geena.utils imported with success');
-                            } else {
-                                console.log('process exit with error code ' + code);
-                            }
-                        });
-                    });
-                } else {
-                    console.log('process exit with error code ', + code);
-                }
+                callback(false);
             });
 
-
         },
+
         /**
          * Update existing sources for Geena Project with its dependencies
          *
          * @param {string} release - Release number
          * */
-        u : function(){ this.update();},
+        u : function(){ this.update(null);},
         update : function(list){
-            var _this = this,  submodules = this.submodules;
+            var _this = this, submodules = this.submodules.pacakges;
 
-            if (typeof(list) != "undefined") {
-
+            if ( typeof(list) != "undefined" && list != null ) {
+                //Queue it.
                 m = list.shift(),
-                    tag = submodules[m].version,
-                    path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                tag = submodules[m].version,
+                path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
             } else {
                 //First case.
                 var list = [];
-                for (var m in submodules) list.push(m);
+                for (var m in submodules)
+                    list.push(m);
+
 
                 var m = list.shift(), tag = submodules[m].version;
                 var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
             }
-            //Pulling.
-            this.pull(m, path, tag, function(done, module){
+
+            _this.pull(m, path, tag, function(done, module){
                 //Get next task in list.
                 if (list.length > 0) {
                     _this.update(list);
@@ -219,6 +432,7 @@ if (
             if ( Fs.existsSync(path) ) {
 
                 tag = (typeof(tag) != "undefined" && tag != "") ? tag : "master";
+                if ( tag != "master" && v.substring(0, 1) != "v") tag = "v" + tag;
                 //console.log("about to enter ", path);
                 process.chdir(path);//CD command like.
 
@@ -234,12 +448,16 @@ if (
                 cmd.stderr.on('data',function (err) {
                     var str = err.toString();
                     var lines = str.split(/(\r?\n)/g);
-                    console.log(lines.join(""));
+
+                    if ( !str.match("Already on") ) {
+                        console.log(lines.join(""));
+                    }
+
                 });
 
                 cmd.on('close', function (code) {
                     if (!code) {
-                        console.log('Checking out: ', tag + "[" + module + "]");
+                        console.log('Checking out: ', "[" + module + "] " + tag);
                         //Trigger pull command.
                         gitPull();
 
@@ -261,7 +479,20 @@ if (
                     git.stderr.on('data',function (err) {
                         var str = err.toString();
                         var lines = str.split(/(\r?\n)/g);
-                        console.log(lines.join(""));
+                        if ( str.match("errno=Operation timed out") ) {
+
+                            console.log("\n[error] Could not connect to GitHub" +
+                                "\n 1) PLease check your firewall configuration and make sure Git ports are open" +
+                                "\n 2) Check if you are not behind a proxy");
+
+                            console.log(
+                                "If you are behind a proxy, you might have to contact your system administrator.");
+
+                            process.exit(1);
+                        } else {
+                            console.log(lines.join(""));
+                        }
+
                     });
 
                     git.on('close', function (code) {
@@ -281,6 +512,22 @@ if (
                 console.warn("Geena could not load ", module);
             }
         },
+        h : function(){ this.help();},
+        help : function(){
+            console.log(
+                "usage:\n" +
+                "\nInstalling Geena" +
+                "\n     $ geena -i <release>" +
+                "\n or" +
+                "\n     $ geena --install <release>" +
+                "\n" +
+                "\nUpdating Geena" +
+                "\n     $ geena -u <release>" +
+                "\n or" +
+                "\n     $ geena --update <release>" +
+                "\n\nNB.: leave <release> empty if you are looking for the latest.\n"
+            );
+        },
         /**
          * Clean on fails
          *
@@ -295,18 +542,52 @@ if (
             }
             //...TODO
         },
-
+        /**
+         * Get submodules conf from packages.json
+         *
+         *
+         * @param {function} callback
+         * @return {object} data - Result conf object
+         * */
         getProjectConfiguration : function (callback){
+            var _this = this;
+            //Merging with existing;
+            if (Fs.existsSync("./package.json")) {
+                try {
+                    var dep = require('./package.json').submodules;
+                    if ( typeof(dep.use_https) != "undefined" && dep.use_https ) {
+                        _this.useHttps = true;
+                    }
 
-            try {
-                var dep = require('./package.json').submodules;
-                for (var d in dep) {
-                    this.submodules[d] = dep[d];
+                    if ( typeof(dep['packages']) == "undefined") {
+                        dep['packages'] = {};
+                    }
+
+                    if (
+                        typeof(dep['packages']) != "undefined"
+                        && typeof(_this.submodules['packages']) != "undefined"
+                    ) {
+
+                        for (var d in dep) {
+
+                            if (d == 'packages')
+                                for (p in dep[d]) _this.submodules['packages'][p] = dep['packages'][p];
+                            else
+                                _this.submodules[d] = dep[d];
+
+                        }
+                    } else {
+                        _this.submodules = dep;
+                    }
+
+                    callback(false);
+                } catch (err) {
+                    callback(true, err);
                 }
-            } catch(err) {
-                //get the default value..
+
+            } else {
+                callback(false);
             }
-            callback(true);
         }
 
     };
@@ -315,21 +596,23 @@ if (
 
     if (process.argv.length < 3) {
         console.log("Command geena must have argument(s) !");
-        console.log("Usage: \n $ ./geena -i\n $ ./geena --install <release>\n $ ./geena --clean");
+        console.log("usage: \n $ ./geena -i\n $ ./geena --install <release>\n $ ./geena --clean");
     } else {
 
-        //Get submodules config from.
-        subHandler.getProjectConfiguration(function(done){
-            //console.log("About to load submodules ", submodules);
+        //Get submodules config.
+        subHandler.getProjectConfiguration( function(err){
+            if (err) console.log(err + 'getProjectConfiguration => callback');
+
+            //var submodules = this.submodules.packages;
+            //console.log("About to load submodules ", JSON.stringify(subHandler.submodules, null, 4)); process.exit(42);
             allowed.forEach(function(i){
 
                 if (arg == i) {
                     i = i.replace(/-/g, '');
-
                     try {
                         subHandler[i]();
                     } catch(err) {
-                        if (err) console.log(err);
+                        if (err) console.log(err,  subHandler[i]);
                     }
                 }
             });
@@ -338,5 +621,5 @@ if (
     }
 
 
-
 }
+
