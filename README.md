@@ -13,4 +13,4 @@ You can install this module using npm:
 
 You can also install it via GitHub:
 
-```$ git clone https://github.com/Rhinostone/geena.git```
+```$ git clone --recursive https://github.com/Rhinostone/geena.git ./node_modules/geena```
