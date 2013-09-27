@@ -30,7 +30,8 @@ var Fs              = require("fs"),
         this.executionPath = options.executionPath;
         this.apps = options.apps;
 
-        //Set paths for utils. Won't override.
+        //TODO - Don't override if syntax is ok - no mixed paths.
+        //Set paths for utils. Override for now.
         //To reset it, just delete the hidden folder.
         Utils.Config.set('geena', 'project.json', {
             //project : Utils.Config.getProjectName(),
