@@ -121,7 +121,7 @@ var Fs              = require("fs"),
      *
      * */
     onRoutesLoaded : function(callback){
-        console.info("Trigged onRoutesLoaded");
+        //console.info("Trigged onRoutesLoaded");
         console.info('\nENV : ', this.env, '\nPORT :', this.conf[this.appName].port,  '\nAPP NAME :', this.appName);
         //console.info('ENV : ', this.conf[this.appName].env, '\n routing file\n ', this.conf[this.appName].files);
 
@@ -198,7 +198,6 @@ var Fs              = require("fs"),
         //console.info('app name..............>>>>>>>>>>>', this.appName);
         //Reload everything for dev and debug only - Cache handled by express.
         console.log("appname is ", this.appName);
-        console.log("load ing conf....");
         this.loadAppsConfiguration(this.appName, function(err, conf){
             if (!err) {
                 callback(false, conf);
@@ -305,8 +304,6 @@ var Fs              = require("fs"),
                 isRoute = Router.compareUrls(params, _this.routing[rule].url);
                 if (pathname === _this.routing[rule].url || isRoute.past) {
 
-
-
                     Log.debug(
                         'geena',
                         'SERVER:DEBUG:4',
@@ -329,7 +326,19 @@ var Fs              = require("fs"),
                     'caught 404 request ' + url.parse(request.url).pathname,
                     __stack
                 );
-                response.send('Error 404. Page not found : ' + url.parse(request.url).pathname, 404);
+
+                if ( typeof(_this.conf[_this.appName].template) == "undefined" || !_this.conf[_this.appName].template) {
+
+                    response.setHeader("Content-Type", "application/json");
+                    response.send('404', JSON.stringify({
+                        status: 404,
+                        error: "Error 404. Page not found : " + url.parse(request.url).pathname
+                    }));
+                } else {
+
+                    response.send('404', 'Error 404. Page not found : ' + url.parse(request.url).pathname);
+                }
+
                 response.end();
             }
         });
@@ -345,15 +354,15 @@ var Fs              = require("fs"),
         var _this       = this,
             apps        = this.apps,
             app         = [],//App variables & constants.
+            appEnv      = [],//Env App variables & constants.
             view        = [],
             settings    = [],
             models      = [],//databases.
             appPath     = "",
             error       = "",
             filename    = "",
-            cacheless   = false;
-
-        console.log("inside conf....", apps.length);
+            cacheless   = false,
+            tmp         = "";
 
         //For each apps.
         for (var i=0; i<apps.length; ++i) {
@@ -362,16 +371,37 @@ var Fs              = require("fs"),
             cacheless = (this.conf[appName].env == "dev" || this.conf[appName].env == "debug") ? true : false;
 
             //App : dev configuration & variables - not required.
+            if (this.env != 'prod') {
+
+                tmp = this.conf[appName].files.app.replace(/.json/, '.' +this.env + '.json');
+                filename = _(appPath + '/config/' + tmp);
+
+                if ( Fs.existsSync(filename) ) {
+                    console.log("app conf is ", filename);
+                    if (cacheless) delete require.cache[filename];
+
+                    app[appName] = require(filename);
+                    console.log("watch out !!", app[appName]);
+                } else {
+                    filename = _(appPath + '/config/' + this.conf[appName].files.app);
+                }
+                tmp = "";
+            }
+
+            //Loading app.json.
             filename = _(appPath + '/config/' + this.conf[appName].files.app);
             try {
                 if (cacheless) delete require.cache[filename];
 
-                app[appName] = require(filename);
+                //app[appName] = require(filename);
+                app[appName] = Utils.extend( true, app[appName], require(filename) );
 
             } catch (err) {
-                app[appName] = null;
-                Log.warn('geena', 'SERVER:WARN:1', err);
-                Log.debug('geena', 'SERVER:DEBUG:5', err, __stack);
+                if (app[appName].length == 0) {
+                    app[appName] = null;
+                    Log.warn('geena', 'SERVER:WARN:1', err);
+                    Log.debug('geena', 'SERVER:DEBUG:5', err, __stack);
+                }
             }
 
 
@@ -419,7 +449,6 @@ var Fs              = require("fs"),
             filename = "", app = [], view = [], settings = [], models = [];
         }//EO for each app
 
-        Log.warn("geena", "SERVER:WARN:10", "!!!!!!APPPPP " + this.conf[appName].app );
         callback(false, this.conf[appName]);
     }/**,
     spawnChild : function(action, params){
