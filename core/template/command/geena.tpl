@@ -82,7 +82,11 @@ if (
                 //For upgrade/downgrade only.
                 "dependencies" : {
                     "geena/geena.utils" : {
-                        "version" : "master"
+                        "version" : "master",
+                        "repo" : {
+                            "ssh" : "git@github.com:Rhinostone/geena.utils.git",
+                            "https" : "https://github.com/Rhinostone/geena.utils.git"
+                        }
                     }
                 }
             }
@@ -137,6 +141,16 @@ if (
 
 
                 var m = list.shift();
+
+                //Get dependencies.
+                if ( typeof(submodules[m]['dependencies']) != "undefined") {
+                    for (d in submodules[m]['dependencies']) {
+                        //console.log("m ", m, "=> ", submodules[m]['dependencies'][d]);
+                        submodules[d] = submodules[m]['dependencies'][d];
+                        list.push(d);
+                    }
+                }
+
                 var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
                 if ( typeof(submodules[m]['version']) != 'undefined' && submodules[m]['version'] != "" ) {
                     var tag = submodules[m].version;
@@ -167,6 +181,7 @@ if (
                 //console.log("==>", this.useHttps, (typeof(submodules[m]['repo']['use_https']) == "undefined" ));
                 //process.exit(42);
                 _this.clone( m, path, repo, tag, function(err, module){
+                //_this.clone( m, path, repo, tag, function(err, module){
                     if (err) {
                         console.log(err, "this.clone( m, path, repo, tag, callback){...}");
                         process.exit(1);
@@ -196,10 +211,12 @@ if (
         clone : function(module, path, repo, tag, callback){
             var cmd = Spawn('git', [
                 'clone',
-                '--recursive',
+                //'--recursive',//this does'n work well if submodule is using a diffrent protocol SSH vs HTTPS
                 repo,
                 path
             ]);
+
+            var mainCloned = false;
 
             cmd.stdout.setEncoding('utf8');
             cmd.stdout.on('data', function(data){
@@ -222,174 +239,11 @@ if (
                     console.log(module, ' submodule done with success');
                     callback(false, module);
                 } else {
-                    callback(true, '[error] '+ code);
+                    callback('[error] '+ code);
                 }
             });
         },
-         /**clone : function(module, path, repo, tag, callback){
-            var _this = this, isDependency = false;
 
-            if (module.match("/")) {
-                isDependency = true;
-                console.log("Skipping clonning for an existing submodule: ", module);
-                _this.cleanDependencies(module, function(err, module){
-                    console.log("removed ", module, " junks");
-                    if (!err) {
-                        console.log(false, module);
-                        callback(false, module);
-                    } else {
-                        callback(true, err + 'clone : function(module, path, repo, tag, callback) => _this.cleanDependencies(...)');
-                    }
-                });
-            } else {
-
-                var cmd = Spawn('git', [
-                    'submodule',
-                    'add',
-                    '-f',
-                    '--recursive',
-                    repo,
-                    path
-                ]);
-
-                cmd.stdout.setEncoding('utf8');
-                cmd.stdout.on('data', function(data){
-                    var str = data.toString();
-                    var lines = str.split(/(\r?\n)/g);
-
-                    console.log("clone... ", module);
-                    console.log(lines.join(""));
-                });
-
-                cmd.stderr.on('data',function (err) {
-                    var str = err.toString();
-                    var lines = str.split(/(\r?\n)/g);
-
-                    if ( str.match("fatal: Not a git repository") ) {
-                        console.log(
-                            'Maybe, you should try to init your git project first...' +
-                            '\n\n$ git init\n'
-                        );
-                        process.exit(0);//just for this case.
-                    } else {
-                        console.log('[error] ', str);
-                    }
-
-
-                });
-
-                cmd.on('close', function (code) {
-                    if (!code) {
-                        console.log('init done with success');
-
-//                        _this.cleanDependencies(module, function(err, module){
-//                            console.log("removed ", module, " junks");
-//                            if (!err) {
-//                                console.log(false, module);
-//                                callback(false, module);
-//                            } else {
-//                                callback(true, err + 'clone : function(module, path, repo, tag, callback) => _this.cleanDependencies(...)');
-//                            }
-//                        });
-                        callback(false, module);
-                    } else {
-                        callback(true, '[error] '+ code);
-                    }
-                });
-
-            }
-        },*/
-        /**
-         * Clean current level dependecies
-         *
-         * @param {string} module
-         * @param {function} callback
-         * @return {status} err
-         *
-        cleanDependencies : function(module,  callback){
-            var _this = this, isDependency = false, deps = [];
-
-
-            console.log("content ", JSON.stringify(this.submodules, null, 4));
-            if (module.match("/")) {
-                isDependency = true;
-            }
-
-            console.log(module, "isDependency ", isDependency);
-
-            if (!isDependency) {
-
-                console.log("start junk removal") ;
-                for (var m in this.submodules.packages) {
-                    var blocks = m.split(/\//g);
-                    var l = 0;// first level.
-                    if (blocks.length > 1) {
-                        //whitch level ?
-
-
-                        for (var i in blocks) {
-
-                            if (blocks[i] == module) {
-                                //found dependency @ level "l".
-                                //console.log("dep lev ", l, " => ", module, m);
-                                //deps.push(_this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/'));
-                                var p = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
-                                deps.push(p);
-                                l = 0;
-                                break;
-                            }
-                            ++l;
-                        }
-
-                    }
-
-                }
-                console.log("removing ", deps);
-                for (var i=0; i<deps.length; ++i) {
-                    console.log("removing.. ", deps[i]);
-                    _this.rm(deps[i], function(err){
-
-                        if (err) callback(err + 'cleanDependencies(..) => _this.rm(p, function(err){...');
-
-                        if (deps > 0) {
-                            deps.shift();
-                        } else {
-                            callback(false, module);
-                        }
-
-                    });
-                }
-            } else {
-                callback(false, module);
-            }
-        },
-        rm : function(p, callback){
-            console.log("starting removal ", p);
-            var clean = Spawn('rm', [
-                '-r',
-                p
-            ]);
-
-            clean.stdout.on('data', function(data){
-                var str = data.toString();
-                if(str) console.log("wrting ", str);
-
-            });
-
-            clean.stderr.on('data', function(err){
-                var str = err.toString()
-                var lines = str.split(/(\r?\n)/g);
-                console.log(lines.join(""));
-            });
-
-            clean.on('close', function(code){
-                if (code) callback(code + 'rm => clean.stderr.on');
-
-                callback(false);
-            });
-
-        },
-         */
         /**
          * Update existing sources for Geena Project with its dependencies
          *
