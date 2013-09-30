@@ -1,8 +1,19 @@
+/*
+ * This file is part of the geena package.
+ * Copyright (c) 2009-2013 Rhinostone <geena@rhinostone.com>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
 /**
- * Server Class
+ * @class Server
+ *
  *
  * @package     Geena
- * @author      Rhinostone
+ * @namespace   Geena.Server
+ * @author      Rhinostone <geena@rhinostone.com>
+ * @api         Public
  */
 var Fs              = require("fs"),
     express         = require("express"),
@@ -33,8 +44,9 @@ var Fs              = require("fs"),
         //TODO - Don't override if syntax is ok - no mixed paths.
         //Set paths for utils. Override for now.
         //To reset it, just delete the hidden folder.
+        var projectName =  (self = this.executionPath.split(/\//g)).splice(0, self.length-1).join("/");
         Utils.Config.set('geena', 'project.json', {
-            //project : Utils.Config.getProjectName(),
+            project : projectName,
             paths : {
                 utils : Utils.Config.__dirname,
                 executionPath : this.executionPath,
@@ -44,13 +56,17 @@ var Fs              = require("fs"),
             bundles : options.allApps
         });
 
-        //process.exit(42);
         console.log("!!Stand alone ? ", this.isStandalone, this.apps);
 
         if (this.isStandalone) {
             //Only load the related conf / env.
-            this.conf[this.appName] = options.conf[this.appName][this.env];
-            this.conf[this.appName].appsPath = this.executionPath + options.conf[this.appName][this.env].appsPath;
+            try {
+                this.conf[this.appName] = options.conf[this.appName][this.env];
+                this.conf[this.appName].appsPath = this.executionPath + options.conf[this.appName][this.env].appsPath;
+            } catch (err) {
+                Log.error('geena', 'SERVER:ERR:4', "["+this.appName + "] doesn't seem to be a really app.\nPLease check env.json, and verify your bundle path.", __stack);
+                process.exit(1);
+            }
 
         } else {
 
@@ -200,6 +216,41 @@ var Fs              = require("fs"),
         console.log("appname is ", this.appName);
         this.loadAppsConfiguration(this.appName, function(err, conf){
             if (!err) {
+                //Load Models.
+                console.log("ATTENTION !! trying to get model ");
+                try {
+                    var modelModule  = require(this.conf[appName].appsPath +'/'+ appName + '/models');
+                    var Model = require("./model");
+
+                    //modelModule.trash("toto", "tata");
+                    console.log("required  ", Server.conf[appName].appsPath +'/'+ appName + '/models');
+                    console.log("\nMODEL 1 structure \n", modelModule);
+
+                    //Two places in this file to change these kind of values.
+//            Model.app = {
+//                appName         : appName,//module
+//                appPath         : Server.conf[appName].appsPath +'/'+ appName,
+//                conf            : Server.conf[appName],
+//                instance        : Server.instance,
+//                //to remove later
+//                webPath         : Server.executionPath
+//            };
+
+                    //AppModel = Utils.extend(false, modelModule, Model);
+                    AppModel = Util.inherits(modelModule, Model);
+                    console.log("\nMODEL  2structure \n", JSON.stringify(Model, null, '\t') );
+                    console.log("\nMODEL 3 structure \n", JSON.stringify(AppModel, null, '\t') );
+                    modelModule = null;
+
+                } catch (err) {
+                    //Means that you have decided not to use models.
+                    Log.debug(
+                        'geena',
+                        'ROUTER:DEBUG:1',
+                        err,
+                        __stack
+                    );
+                }
                 callback(false, conf);
             }
         });
@@ -425,7 +476,7 @@ var Fs              = require("fs"),
                 settings[appName] = require(filename);
             } catch (err) {
                 settings[appName] = null;
-                Log.warn('geena', 'SERVER:WARN:3', err);
+                Log.warn('geena', 'SERVER:WARN:3', err );
                 Log.debug('geena', 'SERVER:DEBUG:7', err,  __stack);
             }
 

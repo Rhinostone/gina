@@ -1,15 +1,24 @@
-/**
- * Router Class
+/*
+ * This file is part of the geena package.
+ * Copyright (c) 2013 Rhinostone <geena@rhinostone.com>
  *
- * @package     Gna
- * @author      Rhinostone
- * @error       ROUTER:CONF:ERR
- * @warning     ROUTER:CONF:WARN
- * @message     ROUTER:CONF:MESS 
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+/**
+ * @class Router
+ *
+ *
+ * @package     Geena
+ * @namespace   Geena.Router
+ * @author      Rhinostone <geena@rhinostone.com>
+ * @api         Public
  */
 var url             = require("url"),
     fs              = require("fs"),
     Utils           = require('./utils.js'),
+    Util            = require('util'),
     Router          = { 
     request : {},    
     init : function(){},
@@ -102,6 +111,8 @@ var url             = require("url"),
             Server          = this.parent,
             _this           = this;
 
+
+
         //Middleware Filters when declared.
         var resHeders = Config.Env.getConf(appName, Config.Env.get()).server.response.header;
         /** to be tested */
@@ -109,6 +120,9 @@ var url             = require("url"),
             for (h in resHeders)
                 response.header(h, resHeders[h]);
         }
+
+        //Getting Models & extending it with super Models.
+
 
         //console.log("ACTION ON  ROUTING IS : " + action);
         var controllerFile  = Server.conf[appName].appsPath +'/'+ appName + '/controllers/controllers.js',
@@ -121,13 +135,10 @@ var url             = require("url"),
         
         Controller.request = request;
         Controller.response = response;
-        
         //console.log("get conf env ", Config.Env.get() );
-                
-
+        console.log("ATTENTION !! trying to get controller ");
+        //Getting Controller & extending it with super Controller.
         try {
-
-            //Server.actionResponse = AppController[action]();
             //console.info('hum 3');
             Server.actionHandler = _this.loadHandler(handlersPath, action);   
             //console.info('hum 4');
@@ -147,9 +158,7 @@ var url             = require("url"),
                 webPath         : Server.executionPath
             };
 
-            console.log('ok ..... ', Controller.app.action);
-
-
+            //console.log('ok ..... ', Controller.app.action);
 
             AppController = Utils.extend(false, Server.actionRequest, Controller); 
 
@@ -164,13 +173,7 @@ var url             = require("url"),
             action = null;
 
         } catch (err) {
-            error = {
-                "warning" : {
-                    "code" : "1",
-                    "message" : "ROUTER:CONF:WARN:1",
-                    "explicit" : err
-                }
-            };
+
             Log.error(
                 'geena',
                 'ROUTER:ERR:1',
@@ -191,7 +194,7 @@ var url             = require("url"),
                 handler     : Server.actionHandler,
                 view        : (typeof(Server.conf[appName].view) != "undefined") ? Server.conf[appName].view : null,
                 route       : routeObj,
-                ext         : (Server.conf[appName].template) ? Server.conf[appName].template.ext : Config.Env.getDefault().ext
+                ext         : (Server.conf[appName].template) ? '.' +Server.conf[appName].template.ext : Config.Env.getDefault().ext
             };
             Controller.app = app;
 
@@ -202,6 +205,8 @@ var url             = require("url"),
             action = null;
             app = null;
         }
+
+
     }
     
 };
