@@ -25,16 +25,16 @@ var fs              = require("fs"),
         console.log("web path !!", this.app.webPath);
         console.log('______action ', this.app.action);
 
-        var appName         = this.app.appName,
-            action          = this.app.action,
-            ext             = this.app.ext,
-            instance        = this.app.instance,
-            viewConf        = this.app.view,
-            templateEngine  = this.app.templateEngine,
-            handler         = this.app.handler,
-            data            = {},
+        var action          = this.app.action,
+            appName         = this.app.appName,
             content         = '',
-            Server          = this.parent;
+            //conf            = this.app.conf,
+            data            = {},
+            ext             = this.app.ext,
+            handler         = this.app.handler,
+            instance        = this.app.instance,
+            templateEngine  = this.app.templateEngine,
+            viewConf        = this.app.view;
 
         //Only if templates are handled. Will handle swigg by default.
         if (templateEngine != null && viewConf != "undefined" && viewConf != null) {
@@ -67,6 +67,7 @@ var fs              = require("fs"),
     },
     /**
      * Render Swigg by default
+     * @param {object} data
      * */
     render : function(data){
         this.app.isXmlHttpRequest = (typeof(this.request) != "undefined" && this.request.xhr && this.app.isXmlHttpRequest || this.app.isXmlHttpRequest ) ? true : false;
@@ -198,7 +199,7 @@ var fs              = require("fs"),
             case 'css':
                 var css = resObj;
                 for(var res in resArr){
-                    //means that you will find options
+                    //means that you will find options.
                     if(typeof(resArr[res]) == "object"){
                         //console.info('found object ', resArr[res]);
                         css.media = (resArr[res].options.media) ? resArr[res].options.media : css.media;
@@ -243,6 +244,9 @@ var fs              = require("fs"),
 
 
     },
+    /**
+     * TODO -  Controller.setMeta()
+     * */
     setMeta : function(metaName, metacontent){
 
     },
@@ -251,20 +255,41 @@ var fs              = require("fs"),
         data = Utils.refToObj(this.data);
         return data;
     },
+    /**
+     * TODO -  Controller.redirect()
+     * */
     redirect : function(route){
 
     },
+    /**
+     * TODO -  Controller.forward404Unless()
+     * */
     forward404Unless : function(condition){
 
     },
+    /**
+     * TODO -  Controller.getParameter()
+     * */
     getParameter : function(paramName){
         var params = this.request.query;
         if(typeof(params[paramName])){
             return params[paramName];
         }
     },
-    getConfig : function(){
-        return this.parent.Server.conf;
+    /**
+     * TODO -  Controller.getConfig()
+     * */
+    getConfig : function(name){
+
+        if ( typeof(name) != 'undefined' ) {
+            try {
+                return this.app.conf[name][this.app.appName];
+            } catch (err) {
+                return undefined;
+            }
+        } else {
+            return this.app.conf;
+        }
     }
 };
 

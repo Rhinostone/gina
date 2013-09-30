@@ -35,10 +35,9 @@ var url             = require("url"),
                     ++score;
                 else if (this.hasParams(uRo[i]) && this.fitsWithRequirements(uRo[i], uRe[i], params))
                     ++score;
-
             }            
         }
-        r.passed = (score === maxLen) ? true : false;
+        r.past = (score === maxLen) ? true : false;
         r.request = this.request;
         return r;
     },
@@ -133,19 +132,19 @@ var url             = require("url"),
             Server.actionHandler = _this.loadHandler(handlersPath, action);   
             //console.info('hum 4');
 
-            //Two places in this file to change these kind of values
-
+            //Two places in this file to change these kind of values.
             Controller.app = {
-                instance        : Server.instance,
+                action          : action,
                 appName         : appName,//module
                 appPath         : Server.conf[appName].appsPath +'/'+ appName,
-                webPath         : Server.executionPath,
-                action          : action,
+                conf            : Server.conf[appName],
+                ext             : (Server.conf[appName].template) ? Server.conf[appName].template.ext : Config.Env.getDefault().ext,
                 handler         : Server.actionHandler,
-                view            : (typeof(Server.conf[appName].view) != "undefined") ? Server.conf[appName].view : null,
+                instance        : Server.instance,
                 //to remove later
                 templateEngine  : (typeof(Server.conf.templateEngine) != "undefined") ? Server.conf.templateEngine : null,
-                ext             : (Server.conf[appName].template) ? Server.conf[appName].template.ext : Config.Env.getDefault().ext
+                view            : (typeof(Server.conf[appName].view) != "undefined") ? Server.conf[appName].view : null,
+                webPath         : Server.executionPath
             };
 
             console.log('ok ..... ', Controller.app.action);
