@@ -58,6 +58,7 @@ if (
      *
      * TODO - $ ./geena --clean  &&   $ ./geena -c
      * TODO - Apply update() source to install() so we can have the choice of submodules @ install
+     * TODO - $ ./geena --install specific.module.only
      * TODO - Refacto
      *
      **/
@@ -74,7 +75,7 @@ if (
         "packages" : {
             //Wil clone main project with its dependencies along.
             "geena" : {
-                "version" : "",
+                "version" : "dev",
                 "repo" : {
                     "ssh" : "git@github.com:Rhinostone/geena.git",
                     "https" : "https://github.com/Rhinostone/geena.git"
@@ -82,7 +83,7 @@ if (
                 //For upgrade/downgrade only.
                 "dependencies" : {
                     "geena/geena.utils" : {
-                        "version" : "master",
+                        "version" : "dev",
                         "repo" : {
                             "ssh" : "git@github.com:Rhinostone/geena.utils.git",
                             "https" : "https://github.com/Rhinostone/geena.utils.git"
@@ -289,39 +290,71 @@ if (
             if ( Fs.existsSync(path) ) {
 
                 tag = (typeof(tag) != "undefined" && tag != "") ? tag : "master";
-                if ( tag != "master" && v.substring(0, 1) != "v") tag = "v" + tag;
+
                 //console.log("about to enter ", path);
                 process.chdir(path);//CD command like.
 
-                var cmd = Spawn('git', ['checkout', tag]);
+                var gitFetch = function(){
+                    var git = Spawn('git', ['fetch']);
 
-                cmd.stdout.setEncoding('utf8');
-                cmd.stdout.on('data', function(data){
-                    var str = data.toString();
-                    var lines = str.split(/(\r?\n)/g);
-                    console.log(lines.join(""));
-                });
-
-                cmd.stderr.on('data',function (err) {
-                    var str = err.toString();
-                    var lines = str.split(/(\r?\n)/g);
-
-                    if ( !str.match("Already on") ) {
+                    git.stdout.setEncoding('utf8');
+                    git.stdout.on('data', function(data){
+                        var str = data.toString();
+                        var lines = str.split(/(\r?\n)/g);
                         console.log(lines.join(""));
-                    }
+                    });
 
-                });
+                    git.stderr.on('data',function (err) {
+                        var str = err.toString();
+                        var lines = str.split(/(\r?\n)/g);
+                        console.log(lines.join(""));
+                    });
 
-                cmd.on('close', function (code) {
-                    if (!code) {
-                        console.log('Checking out: ', "[" + module + "] " + tag);
-                        //Trigger pull command.
-                        gitPull();
+                    git.on('close', function (code) {
+                        if (!code) {
+                            console.log('Fetch command done.');
+                            //Trigger checkout command.
+                            gitCheckout();
 
-                    } else {
-                        console.log('process exit with error code ' + code);
-                    }
-                });
+                        } else {
+                            console.log('process exit with error code ' + code);
+                        }
+                    });
+                };
+
+                var gitCheckout = function(){
+
+                    var git = Spawn('git', ['checkout', tag]);
+
+                    git.stdout.setEncoding('utf8');
+                    git.stdout.on('data', function(data){
+                        var str = data.toString();
+                        var lines = str.split(/(\r?\n)/g);
+                        console.log(lines.join(""));
+                    });
+
+                    git.stderr.on('data',function (err) {
+                        var str = err.toString();
+                        var lines = str.split(/(\r?\n)/g);
+
+                        if ( !str.match("Already on") ) {
+                            console.log(lines.join(""));
+                        }
+
+                    });
+
+                    git.on('close', function (code) {
+                        if (!code) {
+                            console.log('Checking out: ', "[" + module + "] " + tag);
+                            //Trigger pull command.
+                            gitPull();
+
+                        } else {
+                            console.log('process exit with error code ' + code);
+                        }
+                    });
+                };
+
 
                 var gitPull = function() {
                     var git = Spawn('git', ['pull', 'origin', tag]);
@@ -363,6 +396,9 @@ if (
 
                     });
                 };
+
+                //Starting update.
+                gitFetch();
 
             } else {
                 console.warn("[warn]: path not found ", path);
@@ -408,6 +444,7 @@ if (
          * */
         getProjectConfiguration : function (callback){
             var _this = this;
+
             //Merging with existing;
             if (Fs.existsSync("./package.json")) {
                 try {
@@ -443,7 +480,7 @@ if (
 
                     callback(false);
                 } catch (err) {
-                    callback(true, err);
+                    callback(err);
                 }
 
             } else {
@@ -462,8 +499,7 @@ if (
 
         //Get submodules config.
         subHandler.getProjectConfiguration( function(err){
-            if (err) console.log(err + 'getProjectConfiguration => callback');
-
+            if (err) console.log(err + ' getProjectConfiguration => callback');
 
             //var submodules = this.submodules.packages;
             //console.log("About to load submodules ", JSON.stringify(subHandler.submodules, null, 4)); process.exit(42);
