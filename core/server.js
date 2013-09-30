@@ -104,7 +104,7 @@ var Fs              = require("fs"),
             );
 
             if (success) {
-                _this.onBeforeRouting( function(err, conf){
+                _this.onBeforeRouting( function(err){
                     if (!err) {
                         _this.configure();
                         _this.onRequest();
@@ -198,9 +198,9 @@ var Fs              = require("fs"),
         //console.info('app name..............>>>>>>>>>>>', this.appName);
         //Reload everything for dev and debug only - Cache handled by express.
         console.log("appname is ", this.appName);
-        this.loadAppsConfiguration(this.appName, function(err, conf){
+        this.loadAppsConfiguration(this.appName, function(err){
             if (!err) {
-                callback(false, conf);
+                callback(false);
             }
         });
     },
@@ -255,201 +255,211 @@ var Fs              = require("fs"),
     onRequest : function(){
 
         var _this = this, apps = this.apps;
-        /**
-        this.instance.all('*', function(req, res, next) {
-            res.header("Access-Control-Allow-Origin", "*");
-            res.header("Access-Control-Allow-Headers", "X-Requested-With");
-            next();
-        });*/
+
+            /**
+             this.instance.all('*', function(req, res, next) {
+                res.header("Access-Control-Allow-Origin", "*");
+                res.header("Access-Control-Allow-Headers", "X-Requested-With");
+                next();
+            });*/
         this.instance.all('*', function(request, response, next){
 
+            _this.loadAppsConfiguration(_this.appName, function(err){
+                if (err) Log.error('geena', 'SERVER:ERR:4', err, __stack);
 
+                var pathname        = url.parse(request.url).pathname,
+                    matched         = false,
+                    Router          = require('./router.js'),
+                    params          = {},
+                    isRoute         = {};
 
-            var pathname        = url.parse(request.url).pathname,
-                matched         = false,
-                Router          = require('./router.js'),
-                params          = {},
-                isRoute         = {};
+                //CONFIGURATION.
+                request.setEncoding(_this.conf[_this.appName].encoding);
 
-            //CONFIGURATION.
-            request.setEncoding(_this.conf[_this.appName].encoding);
-
-            Router.parent = _this;
-            Router.setRequest(request);
-            if (_this.routing.count() == 0) {
-                Log.error(
-                    'geena',
-                    'SERVER:ERR:1',
-                    'Malformed routing or Null value for application ' + _this.appName,
-                    __stack
-                );
-            }
-
-
-            out:
-            for (var rule in _this.routing) {
-                console.log("\nrules ", rule);
-
-                if (typeof(_this.routing[rule]["param"]) == "undefined")
-                    break;
-
-                //Preparing params to relay to the router.
-                params = {
-                    requirements : _this.routing[rule].requirements,
-                    url : pathname,
-                    param : _this.routing[rule].param
-                };
-                //Parsing for the right url.
-                //console.log("urls \n", _this.routing[rule].url);
-                isRoute = Router.compareUrls(params, _this.routing[rule].url);
-                if (pathname === _this.routing[rule].url || isRoute.past) {
-
-                    Log.debug(
+                Router.parent = _this;
+                Router.setRequest(request);
+                if (_this.routing.count() == 0) {
+                    Log.error(
                         'geena',
-                        'SERVER:DEBUG:4',
-                        'Server routing to '+ pathname,
+                        'SERVER:ERR:1',
+                        'Malformed routing or Null value for application ' + _this.appName,
                         __stack
                     );
-                    request = isRoute.request;
-                    Router.route(request, response, params, next);
-                    matched = true;
-                    isRoute = {};
-                    break out;
-                }
-            }
-
-
-            if (!matched) {
-                Log.error(
-                    'geena',
-                    'SERVER:ERR:2',
-                    'caught 404 request ' + url.parse(request.url).pathname,
-                    __stack
-                );
-
-                if ( typeof(_this.conf[_this.appName].template) == "undefined" || !_this.conf[_this.appName].template) {
-
-                    response.setHeader("Content-Type", "application/json");
-                    response.send('404', JSON.stringify({
-                        status: 404,
-                        error: "Error 404. Page not found : " + url.parse(request.url).pathname
-                    }));
-                } else {
-
-                    response.send('404', 'Error 404. Page not found : ' + url.parse(request.url).pathname);
                 }
 
-                response.end();
-            }
+
+                out:
+                    for (var rule in _this.routing) {
+                        console.log("\nrules ", rule);
+
+                        if (typeof(_this.routing[rule]["param"]) == "undefined")
+                            break;
+
+                        //Preparing params to relay to the router.
+                        params = {
+                            requirements : _this.routing[rule].requirements,
+                            url : pathname,
+                            param : _this.routing[rule].param
+                        };
+                        //Parsing for the right url.
+                        //console.log("urls \n", _this.routing[rule].url);
+                        isRoute = Router.compareUrls(params, _this.routing[rule].url);
+                        if (pathname === _this.routing[rule].url || isRoute.past) {
+
+                            Log.debug(
+                                'geena',
+                                'SERVER:DEBUG:4',
+                                'Server routing to '+ pathname,
+                                __stack
+                            );
+                            request = isRoute.request;
+                            Router.route(request, response, params, next);
+                            matched = true;
+                            isRoute = {};
+                            break out;
+                        }
+                    }
+
+
+                if (!matched) {
+                    Log.error(
+                        'geena',
+                        'SERVER:ERR:2',
+                        'caught 404 request ' + url.parse(request.url).pathname,
+                        __stack
+                    );
+
+                    if ( typeof(_this.conf[_this.appName].template) == "undefined" || !_this.conf[_this.appName].template) {
+
+                        response.setHeader("Content-Type", "application/json");
+                        response.send('404', JSON.stringify({
+                            status: 404,
+                            error: "Error 404. Page not found : " + url.parse(request.url).pathname
+                        }));
+                    } else {
+                        response.send('404', 'Error 404. Page not found : ' + url.parse(request.url).pathname);
+                    }
+
+                    response.end();
+                }
+            });//this.loadAppsConfiguration(this.appName, function(err, conf){
         });
 
         //console.log("what th fuck !!..", this.conf[this.appName].port.http);
         console.log("\nPID: " + process.pid);
         this.instance.listen(this.conf[this.appName].port.http);//By Default 8888
 
+
+
+
     },
     loadAppsConfiguration : function(appName, callback){
 
-        //Framework.
-        var _this       = this,
-            apps        = this.apps,
-            app         = [],//App variables & constants.
-            appEnv      = [],//Env App variables & constants.
-            view        = [],
-            settings    = [],
-            models      = [],//databases.
-            appPath     = "",
-            error       = "",
-            filename    = "",
-            cacheless   = false,
-            tmp         = "";
+        if (
+            typeof(this.cacheless) == 'undefined'
+            || typeof(this.cacheless) != 'undefined' && this.cacheless
+        ) {
+            //Framework.
+            var _this       = this,
+                apps        = this.apps,
+                app         = [],//App variables & constants.
+                appEnv      = [],//Env App variables & constants.
+                view        = [],
+                settings    = [],
+                models      = [],//databases.
+                appPath     = "",
+                error       = "",
+                filename    = "",
+                cacheless   = false,
+                tmp         = "";
 
-        //For each apps.
-        for (var i=0; i<apps.length; ++i) {
-            appName = apps[i];
-            appPath = _(this.conf[appName].appsPath + '/' + appName);
-            cacheless = (this.conf[appName].env == "dev" || this.conf[appName].env == "debug") ? true : false;
+            cacheless = (this.env == "dev" || this.env == "debug") ? true : false;
+            this.conf[this.appName].cacheless = cacheless;
+            //For each apps.
+            for (var i=0; i<apps.length; ++i) {
+                appName = apps[i];
+                appPath = _(this.conf[appName].appsPath + '/' + appName);
 
-            //App : dev configuration & variables - not required.
-            if (this.env != 'prod') {
+                //App : dev configuration & variables - not required.
+                if (this.env != 'prod') {
 
-                tmp = this.conf[appName].files.app.replace(/.json/, '.' +this.env + '.json');
-                filename = _(appPath + '/config/' + tmp);
+                    tmp = this.conf[appName].files.app.replace(/.json/, '.' +this.env + '.json');
+                    filename = _(appPath + '/config/' + tmp);
 
-                if ( Fs.existsSync(filename) ) {
-                    console.log("app conf is ", filename);
+                    if ( Fs.existsSync(filename) ) {
+                        console.log("app conf is ", filename);
+                        if (cacheless) delete require.cache[filename];
+
+                        app[appName] = require(filename);
+                        console.log("watch out !!", app[appName]);
+                    } else {
+                        filename = _(appPath + '/config/' + this.conf[appName].files.app);
+                    }
+                    tmp = "";
+                }
+
+                //Loading app.json.
+                filename = _(appPath + '/config/' + this.conf[appName].files.app);
+                try {
                     if (cacheless) delete require.cache[filename];
 
-                    app[appName] = require(filename);
-                    console.log("watch out !!", app[appName]);
-                } else {
-                    filename = _(appPath + '/config/' + this.conf[appName].files.app);
+                    //app[appName] = require(filename);
+                    app[appName] = Utils.extend( true, app[appName], require(filename) );
+
+                } catch (err) {
+                    if (app[appName].length == 0) {
+                        app[appName] = null;
+                        Log.warn('geena', 'SERVER:WARN:1', err);
+                        Log.debug('geena', 'SERVER:DEBUG:5', err, __stack);
+                    }
                 }
-                tmp = "";
-            }
 
-            //Loading app.json.
-            filename = _(appPath + '/config/' + this.conf[appName].files.app);
-            try {
-                if (cacheless) delete require.cache[filename];
 
-                //app[appName] = require(filename);
-                app[appName] = Utils.extend( true, app[appName], require(filename) );
+                //Views main configuration.
+                filename = _(appPath + '/config/' + this.conf[appName].files.view);
+                try {
+                    if(cacheless) delete require.cache[filename];
 
-            } catch (err) {
-                if (app[appName].length == 0) {
-                    app[appName] = null;
-                    Log.warn('geena', 'SERVER:WARN:1', err);
-                    Log.debug('geena', 'SERVER:DEBUG:5', err, __stack);
+                    view[appName] = require(filename);
+                } catch (err) {
+                    view[appName] = null
+                    Log.warn('geena', 'SERVER:WARN:2', err);
+                    Log.debug('geena', 'SERVER:DEBUG:6', err, __stack);
                 }
-            }
 
+                //Settings : cache, debug, env.
+                filename = _(appPath + '/config/' + this.conf[appName].files.settings);
+                try {
+                    if (cacheless)  delete require.cache[filename];
 
-            //Views main configuration.
-            filename = _(appPath + '/config/' + this.conf[appName].files.view);
-            try {
-                if(cacheless) delete require.cache[filename];
+                    settings[appName] = require(filename);
+                } catch (err) {
+                    settings[appName] = null;
+                    Log.warn('geena', 'SERVER:WARN:3', err);
+                    Log.debug('geena', 'SERVER:DEBUG:7', err,  __stack);
+                }
 
-                view[appName] = require(filename);
-            } catch (err) {
-                view[appName] = null
-                Log.warn('geena', 'SERVER:WARN:2', err);
-                Log.debug('geena', 'SERVER:DEBUG:6', err, __stack);
-            }
+                //models: cache, debug, env.
+                filename = _(appPath + '/config/' + this.conf[appName].files.models);
+                try {
+                    if(cacheless) delete require.cache[filename];
 
-            //Settings : cache, debug, env.
-            filename = _(appPath + '/config/' + this.conf[appName].files.settings);
-            try {
-                if (cacheless)  delete require.cache[filename];
+                    models[appName] = require(filename);
+                } catch (err) {
+                    models[appName] = null;
+                    Log.warn('geena', 'SERVER:WARN:4', err);
+                    Log.debug('geena', 'SERVER:DEBUG:8', err, __stack);
+                }
 
-                settings[appName] = require(filename);
-            } catch (err) {
-                settings[appName] = null;
-                Log.warn('geena', 'SERVER:WARN:3', err);
-                Log.debug('geena', 'SERVER:DEBUG:7', err,  __stack);
-            }
+                this.conf[appName].app      = app;
+                this.conf[appName].view     = view;
+                this.conf[appName].settings = settings;
+                this.conf[appName].models   = models;
 
-            //models: cache, debug, env.
-            filename = _(appPath + '/config/' + this.conf[appName].files.models);
-            try {
-                if(cacheless) delete require.cache[filename];
-
-                models[appName] = require(filename);
-            } catch (err) {
-                models[appName] = null;
-                Log.warn('geena', 'SERVER:WARN:4', err);
-                Log.debug('geena', 'SERVER:DEBUG:8', err, __stack);
-            }
-
-            this.conf[appName].app      = app;
-            this.conf[appName].view     = view;
-            this.conf[appName].settings = settings;
-            this.conf[appName].models   = models;
-
-            filename = "", app = [], view = [], settings = [], models = [];
-        }//EO for each app
-
-        callback(false, this.conf[appName]);
+                filename = "", app = [], view = [], settings = [], models = [];
+            }//EO for each app
+        }
+        callback(false);
     }/**,
     spawnChild : function(action, params){
         var i = this.activeChild,
