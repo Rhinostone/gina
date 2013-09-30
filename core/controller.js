@@ -1,18 +1,27 @@
-/**
- * Controller Class
+/*
+ * This file is part of the geena package.
+ * Copyright (c) 2013 Rhinostone <geena@rhinostone.com>
  *
- * @namespace   Geena.Controller
- * @package     Geena
- * @author      Rhinostone
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
  */
-var fs              = require("fs"),
+
+/**
+ * @class Controller Super class
+ *
+ *
+ * @package     Geena
+ * @namespace   Geena.Controller
+ * @author      Rhinostone <geena@rhinostone.com>
+ * @api         Public
+ */
+var Fs              = require("fs"),
     Utils           = require("./utils"),
     Controller      = {
     data : {},
     app : {},
     request : {},
     rendered : false,
-    model: {},
     init : function(){},
     /*
     * Handle Responses
@@ -44,7 +53,7 @@ var fs              = require("fs"),
             if(viewConf)
                 this.setRessources(viewConf, action);//css & js.
 
-            content = action +'.' + ext;
+            content = action + ext;
             //console.info('ACTION IS ', content);
             this.set('page.content', content);
             this.set('page.ext', ext);
@@ -76,10 +85,10 @@ var fs              = require("fs"),
             //console.log('HANDLER SRC _____',data.page.handler);
 
             if(data.page.content){
-                //data.page.content = fs.readFileSync(this.app.appPath + '/apps/'+ this.app.appName + '/templates/' + data.page.content);
+                //data.page.content = Fs.readFileSync(this.app.appPath + '/apps/'+ this.app.appName + '/templates/' + data.page.content);
                 //data.page.content = ejs.compile(data.page.content);
                 console.log('rendering datas...', data);
-                this.response.render('layout.' + data.page.ext, data);
+                this.response.render('layout' + data.page.ext, data);
             }
         }else{
             var response = this.response;
@@ -198,40 +207,40 @@ var fs              = require("fs"),
         switch(type){
             case 'css':
                 var css = resObj;
-                for(var res in resArr){
+                for (var res in resArr) {
                     //means that you will find options.
-                    if(typeof(resArr[res]) == "object"){
+                    if (typeof(resArr[res]) == "object") {
                         //console.info('found object ', resArr[res]);
                         css.media = (resArr[res].options.media) ? resArr[res].options.media : css.media;
                         css.rel = (resArr[res].options.rel) ? resArr[res].options.rel : css.rel;
                         css.type = (resArr[res].options.type) ? resArr[res].options.type : css.type;
-                        if(!css.content[resArr[res]._]){
+                        if (!css.content[resArr[res]._]) {
                             css.content[resArr[res]._] = '<link href="'+ resArr[res]._ +'" media="'+ css.media +'" rel="'+ css.rel +'" type="'+ css.type +'">';
                             resStr += '\n\t' + css.content[resArr[res]._];
                         }
 
-                    }else{
+                    } else {
                         css.content[resArr[res]] = '<link href="'+ resArr[res] +'" media="screen" rel="'+ css.rel +'" type="'+ css.type +'">';
                         resStr += '\n\t' + css.content[resArr[res]];
                     }
 
 
                 }
-                return { css : css, cssStr : resStr};
+                return { css : css, cssStr : resStr };
             break;
 
             case 'js':
                 var js = resObj;
-                for(var res in resArr){
+                for (var res in resArr) {
                     //means that you will find options
-                    if(typeof(resArr[res]) == "object"){
+                    if ( typeof(resArr[res]) == "object" ) {
                         js.type = (resArr[res].options.type) ? resArr[res].options.type : js.type;
-                        if(!js.content[resArr[res]._]){
+                        if (!js.content[resArr[res]._]) {
                             js.content[resArr[res]._] = '<script type="'+ js.type +'" src="'+ resArr[res]._ +'"></script>';
                             resStr += '\n\t' + js.content[resArr[res]._];
                         }
 
-                    }else{
+                    } else {
                         js.content[resArr[res]] = '<script type="'+ js.type +'" src="'+ resArr[res] +'"></script>';
                         resStr += '\n\t' + js.content[resArr[res]];
                     }
@@ -241,8 +250,6 @@ var fs              = require("fs"),
                 return { js : js, jsStr : resStr};
             break;
         }
-
-
     },
     /**
      * TODO -  Controller.setMeta()
@@ -272,12 +279,17 @@ var fs              = require("fs"),
      * */
     getParameter : function(paramName){
         var params = this.request.query;
-        if(typeof(params[paramName])){
+        if ( typeof(params[paramName]) ){
             return params[paramName];
         }
     },
     /**
-     * TODO -  Controller.getConfig()
+     * Get config
+     *
+     * @param {string} [name] - Conf name without extension.
+     * @return {object} result
+     *
+     * TODO - Protect result
      * */
     getConfig : function(name){
 

@@ -1,6 +1,6 @@
 /*
  * This file is part of the geena package.
- * Copyright (c) 2009-2013 Rhinostone <geena@rhinostone.com>
+ * Copyright (c) 2013 Rhinostone <geena@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -34,7 +34,7 @@ var Fs      = require('fs'),
             this.userConf = require(this.executionPath + '/env.json');
             Log.debug(
                 'geena',
-                'CONFIG:DEBUG:5',
+                'CONFIG:DEBUG:6',
                 'Applicaiton config file loaded ['
                 + _(this.executionPath + '/env.json') + ']',
                 __stack
@@ -244,7 +244,14 @@ var Fs      = require('fs'),
             //Else not in the scenario.
 
         }//EO for.
-        console.log("YOIUR NEW CONTENT ", newContent);
+        //console.log("YOIUR NEW CONTENT ", newContent);
+        Log.debug(
+            'geena',
+            'CONFIG:DEBUG:7',
+            'Env configuration loaded \n ' + newContent,
+            __stack
+        );
+
         //Means all apps sharing the same process.
         if (!isStandalone) this.Host.standaloneMode = isStandalone;
 
