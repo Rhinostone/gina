@@ -18,9 +18,9 @@
 var Fs              = require("fs"),
     Utils           = require("./utils"),
     Controller      = {
+    name : "Controller",
     data : {},
     app : {},
-    request : {},
     rendered : false,
     init : function(){},
     /*
@@ -30,6 +30,8 @@ var Fs              = require("fs"),
     **/
     handleResponse : function(request, response, next){
 
+        this.request = request;
+        this.response = response;
 
         console.log("web path !!", this.app.webPath);
         console.log('______action ', this.app.action);
@@ -306,6 +308,7 @@ var Fs              = require("fs"),
 };
 
 //Allow protected methods to be overridden.
+//Controller.prototype.extends = Utils.extends;
 Controller.render.prototype.overridable = true;
 Controller.renderJson.prototype.overridable = true;
 

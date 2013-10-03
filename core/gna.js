@@ -13,10 +13,12 @@
  * @author     Rhinostone <geena@rhinostone.com>
  */
 var Gna     = {core:{}},
-    Config  = require('./config.js'),
-    Server  = require('./server.js');
+    Config  = require('./config'),
+    Server  = require('./server');
 
-Gna.Utils = require("geena.utils");
+Gna.Utils = require('geena.utils');
+Gna.Model = require('./model');
+
 Log       = Gna.Utils.Logger;
 
 /**
@@ -24,7 +26,7 @@ Log       = Gna.Utils.Logger;
  * @param {string} executionPath - Path in option
  * */
 Gna.start = function(executionPath){
-
+    //WTF !.
     var $this   = this.core,
         _this   = $this,
         env     = process.argv[2];
@@ -51,30 +53,30 @@ Gna.start = function(executionPath){
         core: __dirname
     });
 
-    Config.parent = $this;
-
-    Config.init(env, function(conf, apps, allApps){
+    Config.executionPath = $this.executionPath;
+    Config.startingApp = $this.startingApp;
+    Config.init(env, function(config){
 
         var isStandalone = Config.Host.isStandalone();
 
         Log.info('geena', 'CORE:INFO:2', 'Execution Path : ' + $this.executionPath);
         Log.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
 
-
-        //Server.parent = $this; man...you don't need it
+        //console.log("bundlde ocn f",  config.bundleConf );
 
         Server.setConf({
-            "appName" : $this.startingApp,
-            "apps" : apps,//Apps list.
-            "allApps" : allApps,
-            "appsPath" : $this.appsPath,
-            "env" : env,
-            "isStandalone" : isStandalone,
-            "executionPath" : $this.executionPath,
-            "conf" : conf
+            appName         : $this.startingApp,
+            //Apps list.
+            bundles         : config.bundles,
+            allBundles      : config.allBundles,
+            env             : config.env,
+            isStandalone    : isStandalone,
+            executionPath   : $this.executionPath,
+            conf            : config.conf
         },
-        function(done){
-            if (done) {
+        function(complete){
+            if (complete) {
+
                 Log.debug(
                     'geena',
                     'CORE:DEBUG:1',
@@ -95,7 +97,7 @@ Gna.start = function(executionPath){
 /**
  * Stop server
  * */
-Gna.stop = function(code){
+Gna.stop = function(pid, code){
     log("stoped server");
     if(typeof(code) != "undefined")
         process.exit(code);
@@ -103,7 +105,7 @@ Gna.stop = function(code){
     process.exit();
 };
 /**
- * Get Sttus
+ * Get Status
  * */
 Gna.status = function(){
     log("getting server status");
@@ -114,78 +116,5 @@ Gna.status = function(){
 Gna.restart = function(){
     log("starting server");
 };
-/**
-Gna.core = {
-    init : function(executionPath){
-        var _this = this,
-            error = "",
-            conf = {},
-            appArg = process.argv[1].split("/"),
-            env = process.argv[2],
-            appName = appArg[appArg.length-1];
-
-        if(!executionPath){
-            var error = {
-                "error" : {
-                    "code" : "1",
-                    "message" : "GNA:ENV:ERR:1",
-                    "explicit" : "No execution path defined. Try with Gna.init(__dirname);"
-                }
-            };
-            this.Server.log(error);
-        }
-        this.executionPath = executionPath;
-        this.startingApp = appName;
-
-        this.Utils = require('./utils.js');
-        this.Server = require('./server.js');
-        this.Server.parent = this;
-
-        this.Config = require('./config.js');
-        this.Config.parent = this;
-
-
-        this.Controller = require('./controller.js');
-        this.Controller.parent = this;
-        this.Controller.init();
-
-        this.Router = require('./router.js');
-        this.Router.parent = this;
-        this.Router.init();
-
-        this.Config.init(env, function(conf){
-            var conf = conf,
-                isStandalone = _this.Config.Host.isStandalone();
-
-            console.log('initializing geena', '\n Exec Path : ', _this.executionPath, '\nStandalone : ', isStandalone);
-
-
-            return false;
-            _this.Server.setConf({
-                "appName" : _this.startingApp,
-                "env" : env,
-                "isStandalone" : isStandalone,
-                "executionPath" : _this.executionPath,
-                "conf" : conf
-            });
-            _this.Server.init();
-        });
-
-
-        //console.info('la conf...', this.Server.conf);
-
-    }
-};
-*/
-/**
-var Gna = {
-    init : function(executionPath){
-        if(typeof(options) != 'undefined'){
-            this.options = options;
-            console.log("options ", options);
-        }
-    }
-};**/
-
 
 module.exports = Gna;
