@@ -16,9 +16,11 @@
  * @api         Public
  */
 
-
-var Fs = require('fs'), Events = require('events'), Util = require('util');
-var Utils = require('geena.utils'), Config = require('./../config');
+//Imports.
+var Fs      = require('fs'),
+    Events  = require('events'),
+    Utils   = require('geena.utils'),
+    Config  = require('./../config');
 
 var Model = function(namespace){
     var _this = this;
@@ -33,28 +35,22 @@ var Model = function(namespace){
         namespace.shift();
         var model = namespace.join(".");
 
-        console.log("Bundle", bundle);
-        console.log("Model", model);
+//        console.log("Bundle", bundle);
+//        console.log("Model", model);
 
         _this.getConfig(bundle, function(err, conf){
 
             if (!err) {
-                console.log("CONF READY ", conf);
-                _this.AgentEntity = require(conf.path).AgentEntity;
-                //return new _this;
-
+                console.log("CONF READY ", conf.path/** conf*/);
+                //Getting Entity Manager.
+                var EntityManager = require(conf.path);
+                Utils.extend(true, _this, EntityManager);
             } else {
                 console.log("no configuration found...");
             }
         });
     };
 
-    //this.getInstance = function() {
-
-    //    return {
-            AgentEntity : _this.instance
-    //    };
-    //};
 
     /**
      * Get Model configuration
@@ -86,50 +82,7 @@ var Model = function(namespace){
 
         return 'coco';
     }
-
-
-    /**
-     return {
-        getEgg : function(){
-            return 'holla';
-        }
-    }*/
-    /**
-     getEgg = function(){
-        return this.egg;
-    };
-
-     var loadEntities = function(){
-
-    };
-
-     var getConfig = function(){
-        console.log("getting config ");
-        //var conf = Utils.Config.get('geena', bundle, );
-
-        var name = 'models';
-        //console.log("CONF ", this.app.conf[bundle][this.app.appName]);
-        try {
-            //return this.app.conf[bundle][this.app.appName];
-        } catch (err) {
-            //return this.appName + '/models.json is ' + undefined + ' or malformed.';
-        }
-    };*/
-    //getConfig()
-    //loadEntities();
-//    this.getConfig = ('geena', bundle, model, function(err, conf){
-//        //loadEntities(conf.paths.models, model)
-//        console.log("FOUND config ", Config.get() );
-//    });
-//
-//    this.on('configReady', function(conf){
-//        console.log(" MY CONF è!!!!! ", conf);
-//    });
-
     _init(namespace);
-    //return _this;
 };
-
-//Util.inherits(Model, Events.EventEmitter);
 
 module.exports = Model;
