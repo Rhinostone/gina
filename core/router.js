@@ -19,70 +19,89 @@ var url             = require("url"),
     fs              = require("fs"),
     Utils           = require('./utils.js'),
     Util            = require('util'),
-    Router          = { 
-    request : {},    
+    Router          = {
+    request : {},
     init : function(){},
     hasParams : function(pathname){
         var patt = /:/;
         return (patt.test(pathname)) ? true : false;
     },
-            
-    compareUrls : function(params, urlRouting){
-        
+    /**
+     * Compare urls
+     *
+     * @param {object} request
+     * @param {object} params - Route params
+     * @param {string} urlRouting
+     *
+     * */
+    compareUrls : function(request, params, urlRouting){
+
         var uRe = params.url.split(/\//),
             uRo = urlRouting.split(/\//),
             score = 0,
             r = {};
-            
+
         if (uRe.length === uRo.length) {
             var maxLen = uRo.length;
             //console.info("-----------------FOUND MATCHING SCORE", uRe.length, uRo.length);
             //console.info(uRe, uRo);
             for (var i=0; i<maxLen; ++i) {
-                
+
                 if (uRe[i] === uRo[i])
                     ++score;
-                else if (this.hasParams(uRo[i]) && this.fitsWithRequirements(uRo[i], uRe[i], params))
+                else if (this.hasParams(uRo[i]) && this.fitsWithRequirements(request, uRo[i], uRe[i], params))
                     ++score;
-            }            
+            }
         }
         r.past = (score === maxLen) ? true : false;
-        r.request = this.request;
+        r.request = request;
         return r;
     },
     /**
+     * Fits with requiremements
      * http://en.wikipedia.org/wiki/Regular_expression
      *
+     * @param {string} urlVar
+     * @param {string} urlVal
+     * @param {object} params
+     *
+     * @return {boolean} true|false - True if fits
+     *
      * */
-    fitsWithRequirements : function(urlVar, urlVal, params){
-        
-        urlVar = urlVar.replace(/:/,"");        
-        var matched = false, 
+    fitsWithRequirements : function(request, urlVar, urlVal, params){
+
+        urlVar = urlVar.replace(/:/,"");
+        var matched = false,
             v = null;
-        //console.info("ROUTE !!! ", urlVar, params.requirements); 
-        if( typeof(params.requirements) != "undefined" && typeof(params.requirements[urlVar] != "undefined")){            
-            v = urlVal.match(params.requirements[urlVar]);            
+        //console.info("ROUTE !!! ", urlVar, params.requirements);
+        if( typeof(params.requirements) != "undefined" && typeof(params.requirements[urlVar] != "undefined")){
+            v = urlVal.match(params.requirements[urlVar]);
             //console.info('does it match ?', v);
             //works with regex like "([0-9]*)"
-            //console.log("PARAMMMMM !!! ", urlVar, params.requirements[urlVar], params.requirements);
+            //console.log("PARAMMMMM !!! ", urlVar, params.requireclearments[urlVar], params.requirements);
             if(v != null && v[0] !== ""){
-                this.request.params[urlVar] = v[0];
+                request.params[urlVar] = v[0];
             }
-            
+
         }
         return (v != null && v[0] == urlVal && v[0] !="") ? true : false;
     },
-    
-    setRequest : function(request){
-        this.request = request;
-    },
-    
+
+    /**
+     * Load handlers
+     *
+     * @param {string} path
+     * @param {string} action - Controller action
+     *
+     * @return {object|undefined} handlerObject
+     *
+     * @private
+     * */
     loadHandler : function(path, action){
         var handler = path +'/'+ action + '.js',//CONFIGURATION : settings.script_ext
             cacheless = (this.parent.conf[this.parent.appName].env == "dev") ? true : false;
 
         //console.info('!!about to add handler ', handler);
-
         try {
             if (cacheless) delete require.cache[handler];
 
@@ -92,17 +111,22 @@ var url             = require("url"),
         }
 
     },
-    
+
     /**
-    * Building route on the fly
-    */
+     * Route on the fly
+     *
+     * @param {object} request
+     * @param {object} response
+     * @param {object} params - Route params
+     *
+     * @callback next
+     * */
     route : function(request, response, params, next){
         //console.log("Request for " + pathname + " received : ", request.url, params);
 
         //Routing.
         var pathname        = url.parse(request.url).pathname,
             AppController   = {},
-            AppModel        = {},
             app             = {},
             appName         = params.param.app,
             action          = params.param.action,
@@ -125,29 +149,31 @@ var url             = require("url"),
 
 
         //console.log("ACTION ON  ROUTING IS : " + action);
-        var controllerFile  = Server.conf[appName].appsPath +'/'+ appName + '/controllers/controllers.js',
-            handlersPath    = Server.conf[appName].appsPath  +'/'+ appName + '/handlers';
+        var controllerFile  = Server.conf[appName].bundlesPath +'/'+ appName + '/controllers/controllers.js',
+            handlersPath    = Server.conf[appName].bundlesPath  +'/'+ appName + '/handlers';
 
         console.log("About to route a request for " + pathname,'\n', '....with execution path : ', Server.executionPath );
-        console.info('routing ==> ', pathname, appName);  
-        
+        console.info('routing ==> ', pathname, appName);
+
         Server.actionRequest = require(controllerFile);
-        
-        Controller.request = request;
-        Controller.response = response;
+
+        //TODO -  delete.
+        //Controller.request = request;
+        //Controller.response = response;
+
         //console.log("get conf env ", Config.Env.get() );
         console.log("ATTENTION !! trying to get controller ");
         //Getting Controller & extending it with super Controller.
         try {
             //console.info('hum 3');
-            Server.actionHandler = _this.loadHandler(handlersPath, action);   
+            Server.actionHandler = _this.loadHandler(handlersPath, action);
             //console.info('hum 4');
 
             //Two places in this file to change these kind of values.
             Controller.app = {
                 action          : action,
                 appName         : appName,//module
-                appPath         : Server.conf[appName].appsPath +'/'+ appName,
+                appPath         : Server.conf[appName].bundlesPath +'/'+ appName,
                 conf            : Server.conf[appName],
                 ext             : (Server.conf[appName].template) ? Server.conf[appName].template.ext : Config.Env.getDefault().ext,
                 handler         : Server.actionHandler,
@@ -160,14 +186,14 @@ var url             = require("url"),
 
             //console.log('ok ..... ', Controller.app.action);
 
-            AppController = Utils.extend(false, Server.actionRequest, Controller); 
+            AppController = Utils.extend(false, Server.actionRequest, Controller);
 
 
             /**
              * TypeError: Property 'xxxxxx' of object #<Object> is not a function
              * Either the controllers.js is empty, either you haven't created the method xxxxxx
              * */
-            Server.actionResponse = AppController[action]();
+            Server.actionResponse = AppController[action](request, response, next);
             AppController.handleResponse(request, response, next);
             Server.actionResponse = null;
             action = null;
@@ -181,14 +207,14 @@ var url             = require("url"),
                 __stack
             );
             AppController = Utils.extend(false, Server.actionRequest, Controller);
-            Server.actionResponse = AppController[action]();
+            Server.actionResponse = AppController[action](request, response, next);
 
             Server.actionHandler = _this.loadHandler(handlersPath, action);
             var routeObj = Server.routing;
             app = {
                 instance    : Server.instance,
                 appName     : appName,//module
-                appPath     : Server.conf[appName].appsPath +'/'+ appName,
+                appPath     : Server.conf[appName].bundlesPath +'/'+ appName,
                 webPath     : Server.executionPath,
                 action      : action,
                 handler     : Server.actionHandler,
@@ -199,7 +225,7 @@ var url             = require("url"),
             Controller.app = app;
 
             //handle response.
-            AppController.handleResponse(request, response);
+            AppController.handleResponse(request, response, next);
 
             Server.actionResponse = null;
             action = null;
@@ -208,7 +234,7 @@ var url             = require("url"),
 
 
     }
-    
+
 };
-  
+
 module.exports = Router;
