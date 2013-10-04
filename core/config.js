@@ -35,7 +35,8 @@ var Fs      = require('fs'),
         var _this = this;
 
         this.userConf = false;
-        if (Fs.existsSync( _(this.executionPath + '/env.json') )) {
+        var p = new _(this.executionPath + '/env.json').toString();
+        if (Fs.existsSync( p )) {
             this.userConf = require(this.executionPath + '/env.json');
             Log.debug(
                 'geena',
@@ -417,7 +418,7 @@ var Fs      = require('fs'),
 
             for (name in  conf[bundle][env].files) {
                 //Server only because of the shared mode VS the standalone mode.
-                if (name == 'routing') continue;
+                if (name == 'routing' ) continue;
 
                 if (env != 'prod') {
 
@@ -451,8 +452,8 @@ var Fs      = require('fs'),
                 } catch (err) {
                     //if ( typeof(files[name]) != 'undefined') {
                         files[name] = null;
-                        Log.warn('geena', 'SERVER:WARN:1', err, __stack);
-                        Log.debug('geena', 'SERVER:DEBUG:5', err, __stack);
+                        Log.warn('geena', 'SERVER:WARN:1', filename + err, __stack);
+                        Log.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack);
                     //}
                 }
             }//EO for (name

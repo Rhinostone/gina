@@ -15,17 +15,40 @@
  * @author      Rhinostone <geena@rhinostone.com>
  * @api         Public
  */
-var url             = require("url"),
-    fs              = require("fs"),
-    Utils           = require('./utils.js'),
-    Util            = require('util'),
-    Router          = {
-    request : {},
-    init : function(){},
-    hasParams : function(pathname){
+var Router;
+
+//Imports.
+var Url     = require("url"),
+    Fs      = require("fs"),
+    Util    = require('util'),
+    Utils   = require('./utils.js'),
+    Server  = require('./server');
+
+/**
+ * Router Constructor
+ * @constructor
+ * */
+Router = function(){
+    this.name = 'Router';
+
+
+    var _consctruct = function(){
+
+    };
+
+    /**
+     * Check if rule has params
+     *
+     * @param {string} pathname
+     * @return {boolean} found
+     *
+     * @private
+     * */
+    var _hasParams = function(pathname){
         var patt = /:/;
         return (patt.test(pathname)) ? true : false;
-    },
+    };
+
     /**
      * Compare urls
      *
@@ -33,10 +56,11 @@ var url             = require("url"),
      * @param {object} params - Route params
      * @param {string} urlRouting
      *
+     * @return {object|false} routes
      * */
-    compareUrls : function(request, params, urlRouting){
+    this.compareUrls = function(request, params, urlRouting){
 
-        var uRe = params.url.split(/\//),
+        var uRe = params.Url.split(/\//),
             uRo = urlRouting.split(/\//),
             score = 0,
             r = {};
@@ -49,14 +73,15 @@ var url             = require("url"),
 
                 if (uRe[i] === uRo[i])
                     ++score;
-                else if (this.hasParams(uRo[i]) && this.fitsWithRequirements(request, uRo[i], uRe[i], params))
+                else if (_hasParams(uRo[i]) && _fitsWithRequirements(request, uRo[i], uRe[i], params))
                     ++score;
             }
         }
         r.past = (score === maxLen) ? true : false;
         r.request = request;
         return r;
-    },
+    };
+
     /**
      * Fits with requiremements
      * http://en.wikipedia.org/wiki/Regular_expression
@@ -67,12 +92,13 @@ var url             = require("url"),
      *
      * @return {boolean} true|false - True if fits
      *
+     * @private
      * */
-    fitsWithRequirements : function(request, urlVar, urlVal, params){
+    var _fitsWithRequirements = function(request, urlVar, urlVal, params){
 
         urlVar = urlVar.replace(/:/,"");
-        var matched = false,
-            v = null;
+        var v = null;
+
         //console.info("ROUTE !!! ", urlVar, params.requirements);
         if( typeof(params.requirements) != "undefined" && typeof(params.requirements[urlVar] != "undefined")){
             v = urlVal.match(params.requirements[urlVar]);
@@ -85,10 +111,12 @@ var url             = require("url"),
 
         }
         return (v != null && v[0] == urlVal && v[0] !="") ? true : false;
-    },
+    };
 
     /**
      * Load handlers
+     * TODO - Load all application handler from server at once
+     * TODO - Means that if we have 2 bundles for the same app, we should load handlers for both of them
      *
      * @param {string} path
      * @param {string} action - Controller action
@@ -97,20 +125,20 @@ var url             = require("url"),
      *
      * @private
      * */
-    loadHandler : function(path, action){
+    _loadHandler = function(path, action){
         var handler = path +'/'+ action + '.js',//CONFIGURATION : settings.script_ext
-            cacheless = (this.parent.conf[this.parent.appName].env == "dev") ? true : false;
+            cacheless = (this.parent.conf[this.parent.bundle].env == "dev") ? true : false;
 
         //console.info('!!about to add handler ', handler);
         try {
             if (cacheless) delete require.cache[handler];
 
-            return {obj : fs.readFileSync(handler), file : action + '.js', name : action + 'Handler'};
+            return {obj : Fs.readFileSync(handler), file : action + '.js', name : action + 'Handler'};
         } catch (err) {
             return null;
         }
 
-    },
+    };
 
     /**
      * Route on the fly
@@ -121,78 +149,70 @@ var url             = require("url"),
      *
      * @callback next
      * */
-    route : function(request, response, params, next){
-        //console.log("Request for " + pathname + " received : ", request.url, params);
+    this.route = function(request, response, next, params){
 
         //Routing.
-        var pathname        = url.parse(request.url).pathname,
+        var pathname        = Url.parse(request.url).pathname,
             AppController   = {},
             app             = {},
-            appName         = params.param.app,
+            bundle          = params.param.app,
             action          = params.param.action,
             Config          = require("./config"),
-            Controller      = require("./controller"),
-            Server          = this.parent,
+            Controller      = new require("./controller")(),
+            Server          = Server,
             _this           = this;
 
 
 
         //Middleware Filters when declared.
-        var resHeders = Config.Env.getConf(appName, Config.Env.get()).server.response.header;
-        /** to be tested */
-        if (resHeders.count() > 0) {
-            for (h in resHeders)
+        var resHeders = Config.Env.getConf( bundle, Config.Env.get() ).server.response.header;
+        //TODO - to test
+        if ( resHeders.count() > 0 ) {
+            for (var h in resHeders)
                 response.header(h, resHeders[h]);
         }
 
-        //Getting Models & extending it with super Models.
-
-
+        Log.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
         //console.log("ACTION ON  ROUTING IS : " + action);
-        var controllerFile  = Server.conf[appName].bundlesPath +'/'+ appName + '/controllers/controllers.js',
-            handlersPath    = Server.conf[appName].bundlesPath  +'/'+ appName + '/handlers';
 
-        console.log("About to route a request for " + pathname,'\n', '....with execution path : ', Server.executionPath );
-        console.info('routing ==> ', pathname, appName);
+        //Getting Models & extending it with super Models.
+        var controllerFile  = Server.conf[bundle].bundlesPath +'/'+ bundle + '/controllers/controllers.js',
+            handlersPath    = Server.conf[bundle].bundlesPath  +'/'+ bundle + '/handlers';
 
-        Server.actionRequest = require(controllerFile);
+        try {
+            Server.actionRequest = require(controllerFile);
+        } catch (err) {
+            Log.error('geena', 'ROUTER:ERR:1', 'Could not trigger actionRequest', __stack);
+        }
 
-        //TODO -  delete.
-        //Controller.request = request;
-        //Controller.response = response;
-
-        //console.log("get conf env ", Config.Env.get() );
-        console.log("ATTENTION !! trying to get controller ");
+        Log.debug('geena', 'ROUTER:DEBUG:1', 'About to contact Controller', __stack);
         //Getting Controller & extending it with super Controller.
         try {
             //console.info('hum 3');
-            Server.actionHandler = _this.loadHandler(handlersPath, action);
+            Server.actionHandler = _loadHandler(handlersPath, action);
             //console.info('hum 4');
 
             //Two places in this file to change these kind of values.
             Controller.app = {
                 action          : action,
-                appName         : appName,//module
-                appPath         : Server.conf[appName].bundlesPath +'/'+ appName,
-                conf            : Server.conf[appName],
-                ext             : (Server.conf[appName].template) ? Server.conf[appName].template.ext : Config.Env.getDefault().ext,
+                bundle          : bundle,//module
+                appPath         : Server.conf[bundle].bundlesPath +'/'+ bundle,
+                conf            : Server.conf[bundle],
+                ext             : (Server.conf[bundle].template) ? Server.conf[bundle].template.ext : Config.Env.getDefault().ext,
                 handler         : Server.actionHandler,
                 instance        : Server.instance,
                 //to remove later
                 templateEngine  : (typeof(Server.conf.templateEngine) != "undefined") ? Server.conf.templateEngine : null,
-                view            : (typeof(Server.conf[appName].view) != "undefined") ? Server.conf[appName].view : null,
+                view            : (typeof(Server.conf[bundle].view) != "undefined") ? Server.conf[bundle].view : null,
                 webPath         : Server.executionPath
             };
-
-            //console.log('ok ..... ', Controller.app.action);
 
             AppController = Utils.extend(false, Server.actionRequest, Controller);
 
 
-            /**
-             * TypeError: Property 'xxxxxx' of object #<Object> is not a function
-             * Either the controllers.js is empty, either you haven't created the method xxxxxx
-             * */
+
+            //TypeError: Property 'xxxxxx' of object #<Object> is not a function
+            //Either the controllers.js is empty, either you haven't created the method xxxxxx
             Server.actionResponse = AppController[action](request, response, next);
             AppController.handleResponse(request, response, next);
             Server.actionResponse = null;
@@ -209,18 +229,18 @@ var url             = require("url"),
             AppController = Utils.extend(false, Server.actionRequest, Controller);
             Server.actionResponse = AppController[action](request, response, next);
 
-            Server.actionHandler = _this.loadHandler(handlersPath, action);
+            Server.actionHandler = _loadHandler(handlersPath, action);
             var routeObj = Server.routing;
             app = {
                 instance    : Server.instance,
-                appName     : appName,//module
-                appPath     : Server.conf[appName].bundlesPath +'/'+ appName,
+                bundle      : bundle,//module
+                appPath     : Server.conf[bundle].bundlesPath +'/'+ bundle,
                 webPath     : Server.executionPath,
                 action      : action,
                 handler     : Server.actionHandler,
-                view        : (typeof(Server.conf[appName].view) != "undefined") ? Server.conf[appName].view : null,
+                view        : (typeof(Server.conf[bundle].view) != "undefined") ? Server.conf[bundle].view : null,
                 route       : routeObj,
-                ext         : (Server.conf[appName].template) ? '.' +Server.conf[appName].template.ext : Config.Env.getDefault().ext
+                ext         : (Server.conf[bundle].template) ? '.' +Server.conf[bundle].template.ext : Config.Env.getDefault().ext
             };
             Controller.app = app;
 
@@ -232,9 +252,9 @@ var url             = require("url"),
             app = null;
         }
 
+    }//EO route()
 
-    }
-
+    _init();
 };
 
 module.exports = Router;

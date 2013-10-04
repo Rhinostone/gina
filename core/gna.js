@@ -1,6 +1,6 @@
 /*
  * This file is part of the geena package.
- * Copyright (c) 2009-2013 Rhinostone <geena@rhinostone.com>
+ * Copyright (c) 2013 Rhinostone <geena@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -27,8 +27,8 @@ Log       = Gna.Utils.Logger;
  * */
 Gna.start = function(executionPath){
     //WTF !.
-    var $this   = this.core,
-        _this   = $this,
+    var core   = this.core,
+        _this   = core,
         env     = process.argv[2];
 
     if(executionPath == undefined){
@@ -41,37 +41,41 @@ Gna.start = function(executionPath){
         }
     }
 
-    $this.executionPath = _(executionPath);
-    $this.startingApp = appName;
+    core.executionPath = new _(executionPath).toString();
+    core.startingApp = appName;
+    core.geenaPath = new _(__dirname).toString();
+
     //Setting env.
     if (env != 'undefined') {
         Log.setEnv(env);
     }
     //Setting log paths.
+
     Log.init({
-        logs : _($this.executionPath + '/logs'),
-        core: __dirname
+        logs : new _(core.executionPath + '/logs').toString(),
+        core: new _(__dirname).toString()
     });
 
-    Config.executionPath = $this.executionPath;
-    Config.startingApp = $this.startingApp;
+    Config.executionPath = core.executionPath;
+    Config.startingApp = core.startingApp;
     Config.init(env, function(config){
 
         var isStandalone = Config.Host.isStandalone();
 
-        Log.info('geena', 'CORE:INFO:2', 'Execution Path : ' + $this.executionPath);
+        Log.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
         Log.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
 
         //console.log("bundlde ocn f",  config.bundleConf );
 
         Server.setConf({
-            appName         : $this.startingApp,
+            appName         : core.startingApp,
             //Apps list.
             bundles         : config.bundles,
             allBundles      : config.allBundles,
             env             : config.env,
             isStandalone    : isStandalone,
-            executionPath   : $this.executionPath,
+            executionPath   : core.executionPath,
+            geenaPath       : core.geenaPath,
             conf            : config.conf
         },
         function(complete){
@@ -86,7 +90,7 @@ Gna.start = function(executionPath){
                 Log.notice(
                     'geena',
                     'CORE:NOTICE:2',
-                    'Starting [' + $this.startingApp + '] instance'
+                    'Starting [' + core.startingApp + '] instance'
                 );
                 Server.init();
             }
