@@ -32,6 +32,8 @@ var Fs              = require('fs'),
         this.isStandalone = options.isStandalone;
 
         this.executionPath = options.executionPath;
+        var geenaPath = options.geenaPath;
+        console.log("Geena ", options);
         this.bundles = options.bundles;
 
         //TODO - Don't override if syntax is ok - no mixed paths.
@@ -40,6 +42,7 @@ var Fs              = require('fs'),
         Utils.Config.set('geena', 'project.json', {
             //project : Utils.Config.getProjectName(),
             paths : {
+                geena : geenaPath,
                 utils : Utils.Config.__dirname,
                 executionPath : this.executionPath,
                 env : this.executionPath + '/env.json',
@@ -210,6 +213,8 @@ var Fs              = require('fs'),
         );
         //Express js part
         //console.info("configuring express.....", this.conf[this.appName], " PATH : ", this.conf[this.appName].bundlesPath);
+        //TODO - Forward to main bundle file.
+        //this.onConfigure();
         this.instance.set('env', this.env);
 
         var app = this.instance, _this = this;
@@ -262,17 +267,16 @@ var Fs              = require('fs'),
 
                 if (err) Log.error('geena', 'SERVER:ERR:6', err, __stack);
 
-                var pathname        = Url.parse(request.url).pathname,
-                    matched         = false,
-                    Router          = require('./router.js'),
-                    params          = {},
+                var matched         = false,
+                    Router          = new require('./router.js')(),
                     isRoute         = {};
 
-                //CONFIGURATION.
+                //Middleware configuration.
                 request.setEncoding(_this.conf[_this.appName].encoding);
 
-                Router.parent = _this;
-                //Router.setRequest(request);
+                //TODO - You might want to remove this and require Server instead.
+                //Router.parent = _this;
+
                 if ( _this.routing.count() == 0 ) {
                     Log.error(
                         'geena',
@@ -282,7 +286,7 @@ var Fs              = require('fs'),
                     );
                 }
 
-
+                var params = {}, pathname = Url.parse(request.url).pathname;
                 out:
                     for (var rule in _this.routing) {
                         console.log("\nrules ", rule);
@@ -308,7 +312,7 @@ var Fs              = require('fs'),
                                 __stack
                             );
                             request = isRoute.request;
-                            Router.route(request, response, params, next);
+                            Router.route(request, response, next, params);
                             matched = true;
                             isRoute = {};
                             break out;
@@ -331,6 +335,7 @@ var Fs              = require('fs'),
                             status: 404,
                             error: "Error 404. Page not found : " + Url.parse(request.url).pathname
                         }));
+
                     } else {
                         response.send('404', 'Error 404. Page not found : ' + Url.parse(request.url).pathname);
                     }
@@ -338,7 +343,7 @@ var Fs              = require('fs'),
                     response.end();
                 }
             });//EO this.loadBundleConfiguration(this.appName, function(err, conf){
-        });
+        });//EO this.instance
 
         //console.log("what th fuck !!..", this.conf[this.appName].port.http);
         console.log(
@@ -357,8 +362,7 @@ var Fs              = require('fs'),
             Config.refresh(bundle, function(err){
                 if (err) Log.error('geena', 'SERVER:ERR:5', err, __stack);
 
-                //Also refesh routing.
-
+                //Also refresh routing.
                 callback(false);
             });
         }

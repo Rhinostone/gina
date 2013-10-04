@@ -7,34 +7,62 @@
  */
 
 /**
- * @class Controller Super class
- *
+ * @class Controller
+ * @mixing
  *
  * @package     Geena
  * @namespace   Geena.Controller
  * @author      Rhinostone <geena@rhinostone.com>
+ *
  * @api         Public
  */
-var Fs              = require("fs"),
-    Utils           = require("./utils"),
-    Controller      = {
-    name : "Controller",
-    data : {},
-    app : {},
-    rendered : false,
-    init : function(){},
-    /*
+var Controller;
+
+//Imports.
+var Fs      = require("fs"),
+    Utils   = require("./utils");
+
+/**
+ * Controller Constructor
+ * @constructor
+ * */
+Controller = function(){
+
+    this.name       = "Controller";
+    this.data       = {};
+    this.app        = {};
+    this.rendered   = false;
+
+    var _request, _response, _next;
+
+    /**
     * Handle Responses
+    *
+    * @param {object} request
+    * @param {object} response
+    * @callback [next]
+    *
     * @return {void}
-    * @private
     **/
-    handleResponse : function(request, response, next){
+    this.handleResponse = function(request, response, next){
 
-        this.request = request;
-        this.response = response;
+        _request    = request;
+        _response   = response;
+        _next       = next;
 
-        console.log("web path !!", this.app.webPath);
-        console.log('______action ', this.app.action);
+        Log.info(
+            'geena',
+            'CONTROLLER:FACTORY:INFO:1',
+            'Web Path  is: '+ this.app.webPath,
+            __stack
+        );
+
+        Log.info(
+            'geena',
+            'CONTROLLER:FACTORY:INFO:2',
+            'Action  is: '+ this.app.action,
+            __stack
+        );
 
         var action          = this.app.action,
             appName         = this.app.appName,
@@ -53,7 +81,7 @@ var Fs              = require("fs"),
             //Usefull or Useless not ?.
             instance.set('views', this.app.appPath +'/template');
             if(viewConf)
-                this.setRessources(viewConf, action);//css & js.
+                setRessources(viewConf, action);//css & js.
 
             content = action + ext;
             //console.info('ACTION IS ', content);
@@ -75,13 +103,16 @@ var Fs              = require("fs"),
             }
         }
 
-    },
+    };
+
     /**
-     * Render Swigg by default
+     * Render HTML templates Swigg by default
+     *
      * @param {object} data
+     * @return {void}
      * */
-    render : function(data){
-        this.app.isXmlHttpRequest = (typeof(this.request) != "undefined" && this.request.xhr && this.app.isXmlHttpRequest || this.app.isXmlHttpRequest ) ? true : false;
+    this.render = function(data){
+        this.app.isXmlHttpRequest = (typeof(_request) != "undefined" && _request.xhr && this.app.isXmlHttpRequest || this.app.isXmlHttpRequest ) ? true : false;
         if(typeof(this.app.isXmlHttpRequest) == "undefined" || !this.app.isXmlHttpRequest ){
             data.page.handler = (this.app.handler != null) ? '<script type="text/javascript" src="/'+ this.app.appName + '/handlers/' + this.app.handler.file +'"></script>' : '';
             //console.log('HANDLER SRC _____',data.page.handler);
@@ -90,45 +121,54 @@ var Fs              = require("fs"),
                 //data.page.content = Fs.readFileSync(this.app.appPath + '/apps/'+ this.app.appName + '/templates/' + data.page.content);
                 //data.page.content = ejs.compile(data.page.content);
                 console.log('rendering datas...', data);
-                this.response.render('layout' + data.page.ext, data);
+                _response.render('layout' + data.page.ext, data);
             }
         }else{
-            var response = this.response;
+            var response = _response;
             response.setHeader("Content-Type", "application/json");
         }
         response.end();
         this.rendered = true;
-    },
+    };
+
     /**
      * Render Json
+     *
+     * @param {object|string} jsonObj
+     * @return {void}
      * */
-    renderJson : function(jsonObj){
-         var response = this.response;
+    this.renderJson : function(jsonObj){
+         var response = _response;
          if(typeof(options) != "undefined" && typeof(options.charset) !="undefined"){
              response.setHeader("charset", options.charset);
          }
          response.setHeader("Content-Type", "application/json");
          response.end(JSON.stringify(jsonObj));
          this.rendered = true;
-    },
+    };
+
     /**
      * Set data
-     * @param {String} variable Data name to set
-     * @param {String} value Data value to set
+     *
+     * @param {string} variable Data name to set
+     * @param {string} value Data value to set
+     * @return {void}
      * */
-    set : function(variable, value){
+    this.set = function(variable, value){
         this.data[variable] = value;
-    },
+    };
+
     /**
      * Get data
+     *
      * @param {String} variable Data name to set
      * @return {Object | String} data Data object or String
      * */
-    get : function(variable){
+    get = function(variable){
         return this.data[variable];
-    },
+    };
 
-    setRessources : function(viewConf, localRessources){
+    var setRessources = function(viewConf, localRessources){
         var res = '',
             tmpRes = {},
             css = {
@@ -158,14 +198,14 @@ var Fs              = require("fs"),
             //console.info('found default ', ["default"]);
             //Get css
             if(viewConf["default"]["stylesheets"]){
-                tmpRes = this.getResNode('css', cssStr, viewConf["default"]["stylesheets"], css);
+                tmpRes = getResNode('css', cssStr, viewConf["default"]["stylesheets"], css);
                 cssStr = tmpRes.cssStr;
                 css = tmpRes.css;
                 tmpRes = null;
             }
             //Get js
             if(viewConf["default"]["javascripts"]){
-                tmpRes = this.getResNode('js', jsStr, viewConf["default"]["javascripts"], js);
+                tmpRes = getResNode('js', jsStr, viewConf["default"]["javascripts"], js);
                 jsStr = tmpRes.jsStr;
                 js = tmpRes.js;
                 tmpRes = null;
@@ -182,7 +222,7 @@ var Fs              = require("fs"),
             //Get css
             if(viewConf[localRessources]["stylesheets"]){
                 //console.info('case ', viewConf[localRessources]["stylesheets"], localRessources);
-                tmpRes = this.getResNode('css', cssStr, viewConf[localRessources]["stylesheets"], css);
+                tmpRes = getResNode('css', cssStr, viewConf[localRessources]["stylesheets"], css);
                 cssStr = tmpRes.cssStr;
                 css = tmpRes.css;
                 tmpRes = null;
@@ -194,7 +234,7 @@ var Fs              = require("fs"),
             }
             //Get js
             if(viewConf[localRessources]["javascripts"]){
-                tmpRes = this.getResNode('js', jsStr, viewConf[localRessources]["javascripts"], js);
+                tmpRes = getResNode('js', jsStr, viewConf[localRessources]["javascripts"], js);
                 jsStr = tmpRes.jsStr;
                 js = tmpRes.js;
                 tmpRes = null;
@@ -203,8 +243,21 @@ var Fs              = require("fs"),
         this.set('page.stylesheets', cssStr);
         this.set('page.scripts', jsStr);
         //console.info('setting ressources !! ', cssStr, jsStr);
-    },
-    getResNode : function(type, resStr, resArr, resObj){
+    };
+
+    /**
+     * Get node resources
+     *
+     * @param {string} type
+     * @param {string} resStr
+     * @param {array} resArr
+     * @param {object} resObj
+     *
+     * @return {object} content
+     *
+     * @private
+     * */
+    var getResNode = function(type, resStr, resArr, resObj){
         //console.log('assigning ..... ', resStr);
         switch(type){
             case 'css':
@@ -256,35 +309,40 @@ var Fs              = require("fs"),
     /**
      * TODO -  Controller.setMeta()
      * */
-    setMeta : function(metaName, metacontent){
+    this.setMeta = function(metaName, metacontent){
 
-    },
-    getData : function(){
+    };
+
+    this.getData = function(){
         var data = {};
         data = Utils.refToObj(this.data);
         return data;
-    },
+    };
+
     /**
      * TODO -  Controller.redirect()
      * */
-    redirect : function(route){
+    this.redirect = function(route){
 
-    },
+    };
+
     /**
      * TODO -  Controller.forward404Unless()
      * */
-    forward404Unless : function(condition){
+    this.forward404Unless = function(condition){
 
-    },
+    };
+
     /**
      * TODO -  Controller.getParameter()
      * */
     getParameter : function(paramName){
-        var params = this.request.query;
+        var params = _request.query;
         if ( typeof(params[paramName]) ){
             return params[paramName];
         }
-    },
+    };
+
     /**
      * Get config
      *
