@@ -70,10 +70,11 @@ Model = function(namespace){
 
             if (!err) {
                 configuration = conf.model;
-                console.log("CONF READY ", model, conf.path/** conf*/);
+                //console.log("CONF READY ", model, conf.path/** conf*/);
                 //TODO - More tries & catches...
                 //Getting Entities Manager.
-                var EntitiesManager = new require(conf.path)()[model];
+                var EntitiesManager = new require(conf.path)();
+                //var Entities = EntitiesManager[model];
 
                 //For now, I just need the F..ing entity name.
                 var modelPath = conf.path + '/' + modelDirName
@@ -82,37 +83,56 @@ Model = function(namespace){
 
                     var entityName, exluded = ['index.js'];
 
+                    //Will be in Utils.Dev.Factory soon.
                     var produce = function(entityName, i){
                         console.log("producing ", files[i]);
 
                         Utils.Config.get('geena', 'project.json', function(err, config){
                             if (err) Log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
 
-                           // console.log("found path ", config);
-                            var filename = config.paths.geena + '/model/entity.js';
-                            try {
-                                var ModelEntityClass = require(filename);
-                                var ModelEntity = new ModelEntityClass( _this.getConfig() );
+                            var filename = config.paths.geena + '/model/entityFactory.js';
 
-                                var EntityClass = require(modelPath  + '/' + files[i]);
-                                var Entity = new EntityClass();
-                                //Inherits.
-                                Utils.extend(true, Entity, ModelEntity );
-                                //Overriding.
-                                EntitiesManager[entityName] = Entity;
-                                //console.log("show me ", entityName, EntitiesManager[entityName],"\n\n");
+                            //TODO - Factory class
+                            //var Factory = new Factory({source: , target: ).onComplete();
+                            console.log("LOADING ", filename);
+                            //Getting source.
+                            loadFile(filename, entityName, function(err, source){
+                                console.log("got source ", err, source);
 
-                            } catch (err) {
-                                console.log("Did not find entity " + modelPath + '/' + files[i] + "\nOR "+ filename);
-                            }
+                                try {
+                                    if (entityName != "undefiend") {
+                                        console.log("preparing entity ", entityName);
+                                        //TODO - Would be great to implement in Utils.Dev.
+                                        var EntityFactorySource = source
+                                            .replace(/\{Entity\}/g, entityName)
+                                            .replace(/\{Model\}/g, model);
 
-                            //console.log("EntityManager  \n",  EntitiesManager,"\n VS \n",  Entity);
-                            if (i == files.length-1) {
-                                //console.log("All done !");
-                                //var EntitiesManager = new require(conf.path)()[model];
-                                _this.emit('ready', false, EntitiesManager);
-                                ++i;
-                            }
+                                        //var EntityFactory = new requireFromString(EntityFactorySource)( _this.getConfig() );
+                                        var EntityFactoryClass = requireFromString(EntityFactorySource);
+                                        var EntityFactory = new EntityFactoryClass( _this.getConfig() );
+                                        console.log("Factory is ",  EntityFactory);
+
+                                        //var Entity = new Entity();
+                                        Utils.extend(true, Entity, EntityFactory);
+                                        console.log("\nEntity CONTENT ", Entity, " \nVS\n", EntityFactory);
+
+                                    } else {
+                                        throw new Error('Geena.Model.getConfig(...): [entityName] is undefined.');
+                                    }
+                                } catch (err) {
+                                    Log.error('geena', 'MODEL:ERR:4', 'EEMPTY: EntitySuper\n' + err, __stack);
+                                }
+
+                                //Entity = new EntitiesManager[model]();
+                                //Utils.extend(true, _this, Entity);
+                                console.log("EntityManager  \n",  EntitiesManager,"\n VS \n",  EntityFactory);
+                                if (i == files.length-1) {
+                                    console.log("All done !");
+                                    _this.emit('ready', false, EntitiesManager);
+                                    ++i;
+                                }
+
+                            });//EO loadFile
 
                         });//EO Utils.Config.get
 
@@ -123,7 +143,6 @@ Model = function(namespace){
                         //console.log("TEsting entity exclusion ",  i + ": ", exluded.indexOf(files[i]) != -1 && files[i].match(/.js/), files[i]);
                         if ( files[i].match(/.js/) && exluded.indexOf(files[i]) == -1 && !files[i].match(/.json/)) {
                             entityName = files[i].replace(/.js/, "") + suffix;
-                            entityName = entityName.substring(0, 1).toUpperCase() + entityName.substring(1);
                             console.log("entityName  : ", entityName );
                             produce(entityName, i++);
                         } else if (i == files.length-1) {
@@ -131,6 +150,7 @@ Model = function(namespace){
                             _this.emit('ready', false, EntitiesManager);
                             ++i;
                         } else {
+                            console.log("missed ", i, files[i]);
                             ++i;
                         }
                     }//EO while.
@@ -185,7 +205,31 @@ Model = function(namespace){
         }
     };
 
+    var loadFile = function(filename, entityName, callback){
 
+
+        Fs.readFile(filename, function (err, data){
+
+            if (err) {
+                Log.error('geena', 'MODEL:ERR:3', err, __stack);
+                callback(err);
+            }
+
+            console.log("Evaluating...", data.toString() );
+            var entityFactory = data.toString().replace(/\{Entity\}/g, entityName);
+            console.log("SHIT ");
+            process.exit(42);
+            callback(false, entityFactory);
+        });
+
+    };
+
+    var requireFromString = function(src, filename) {
+        var Module = module.constructor;
+        var m = new Module();
+        m._compile(src, filename);
+        return m.exports;
+    }
 
 //    this.getEntitiesManager = function(){
 //
@@ -197,7 +241,7 @@ Model = function(namespace){
         onReady : function(callback){
             _this.on('ready', function(err, entities){
                 //console.log("foudn entities ", entities);
-                callback(err, entities );
+                callback(err, new entities() );
             });
         }
     }
