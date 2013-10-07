@@ -29,7 +29,7 @@ var Fs      = require("fs"),
  * Controller Constructor
  * @constructor
  * */
-Controller = function(options){
+Controller = function(request, response, next, options){
 
     //Public
     this.name       = "Controller";
@@ -38,7 +38,10 @@ Controller = function(options){
     this.rendered   = false;
 
     //Private
-    var _request, _response, _next;
+    var _request = request,
+        _response = response,
+        _next = next;
+
     var _this = this;
 
     var _init = function(){
@@ -49,11 +52,12 @@ Controller = function(options){
         } else {
             console.log("class Controller NOT defined");
             Controller.initialized = true;
+            Controller.instance = _this;
         }
     };
 
     this.getInstance = function(){
-        return _this;
+        return Controller.instance;
     };
 
     /**
@@ -65,12 +69,7 @@ Controller = function(options){
     *
     * @return {void}
     **/
-    this.handleResponse = function(request, response, next){
-
-        _request    = request;
-        _response   = response;
-        _next       = next;
-
+    this.handleResponse = function(){
 
         Log.info(
             'geena',
@@ -96,6 +95,7 @@ Controller = function(options){
             instance        = _this.app.instance,
             templateEngine  = _this.app.templateEngine,
             viewConf        = _this.app.view;
+
 
         //Only if templates are handled. Will handle swigg by default.
         if (templateEngine != null && viewConf != "undefined" && viewConf != null) {
@@ -124,7 +124,6 @@ Controller = function(options){
                 data = null;
             }
         }
-
     };
 
     /**
@@ -134,6 +133,7 @@ Controller = function(options){
      * @return {void}
      * */
     this.render = function(data){
+        var response = _response;
         _this.app.isXmlHttpRequest = ( typeof(_request) != "undefined" && _request.xhr && _this.app.isXmlHttpRequest || _this.app.isXmlHttpRequest ) ? true : false;
 
         if( typeof(_this.app.isXmlHttpRequest) == "undefined" || !_this.app.isXmlHttpRequest ){
@@ -147,7 +147,6 @@ Controller = function(options){
                 _response.render('layout' + data.page.ext, data);
             }
         } else {
-            var response = _response;
             response.setHeader("Content-Type", "application/json");
         }
         response.end();
@@ -377,7 +376,7 @@ Controller = function(options){
 
         if ( typeof(name) != 'undefined' ) {
             try {
-                return _this.app.conf[name][_this.app.appName];
+                return _this.app.conf.filesContent[name];
             } catch (err) {
                 return undefined;
             }
