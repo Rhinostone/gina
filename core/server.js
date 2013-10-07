@@ -268,14 +268,13 @@ var Fs              = require('fs'),
                 if (err) Log.error('geena', 'SERVER:ERR:6', err, __stack);
 
                 var matched         = false,
-                    Router          = new require('./router.js')(),
+                    Router          = require('./router.js'),
                     isRoute         = {};
+
+                var router = new Router(_this.env);
 
                 //Middleware configuration.
                 request.setEncoding(_this.conf[_this.appName].encoding);
-
-                //TODO - You might want to remove this and require Server instead.
-                //Router.parent = _this;
 
                 if ( _this.routing.count() == 0 ) {
                     Log.error(
@@ -302,7 +301,7 @@ var Fs              = require('fs'),
                         };
                         //Parsing for the right url.
                         //console.log("urls \n", _this.routing[rule].url);
-                        isRoute = Router.compareUrls(request, params, _this.routing[rule].url);
+                        isRoute = router.compareUrls(request, params, _this.routing[rule].url);
                         if (pathname === _this.routing[rule].url || isRoute.past) {
 
                             Log.debug(
@@ -312,7 +311,7 @@ var Fs              = require('fs'),
                                 __stack
                             );
                             request = isRoute.request;
-                            Router.route(request, response, next, params);
+                            router.route(request, response, next, params);
                             matched = true;
                             isRoute = {};
                             break out;

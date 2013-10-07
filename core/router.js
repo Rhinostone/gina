@@ -22,18 +22,27 @@ var Url     = require("url"),
     Fs      = require("fs"),
     Util    = require('util'),
     Utils   = require('./utils.js'),
-    Server  = require('./server');
+    Config  = require('./config');
+    //Server  = require('./server');
 
 /**
  * Router Constructor
  * @constructor
  * */
-Router = function(){
+Router = function(env){
+
     this.name = 'Router';
+    var _this = this;
+    var _conf = Config.getInstance();
 
-
-    var _consctruct = function(){
-
+    var _init = function(){
+        if ( typeof(Router.initialized) != "undefined" ) {
+            console.log("....instance already exists...");
+            return _this.getInstance();
+        } else {
+            Router.initialized = true;
+            console.log("....creating new one...");
+        }
     };
 
     /**
@@ -49,6 +58,10 @@ Router = function(){
         return (patt.test(pathname)) ? true : false;
     };
 
+    this.getInstance = function(){
+        return _this;
+    };
+
     /**
      * Compare urls
      *
@@ -60,7 +73,7 @@ Router = function(){
      * */
     this.compareUrls = function(request, params, urlRouting){
 
-        var uRe = params.Url.split(/\//),
+        var uRe = params.url.split(/\//),
             uRo = urlRouting.split(/\//),
             score = 0,
             r = {};
@@ -127,7 +140,7 @@ Router = function(){
      * */
     _loadHandler = function(path, action){
         var handler = path +'/'+ action + '.js',//CONFIGURATION : settings.script_ext
-            cacheless = (this.parent.conf[this.parent.bundle].env == "dev") ? true : false;
+            cacheless = Config.isCacheless();
 
         //console.info('!!about to add handler ', handler);
         try {
@@ -157,15 +170,12 @@ Router = function(){
             app             = {},
             bundle          = params.param.app,
             action          = params.param.action,
-            Config          = require("./config"),
-            Controller      = new require("./controller")(),
-            Server          = Server,
-            _this           = this;
+            Controller      = require("./controller");
 
 
 
         //Middleware Filters when declared.
-        var resHeders = Config.Env.getConf( bundle, Config.Env.get() ).server.response.header;
+        var resHeders = Config.Env.getConf( bundle, env ).server.response.header;
         //TODO - to test
         if ( resHeders.count() > 0 ) {
             for (var h in resHeders)
@@ -176,11 +186,15 @@ Router = function(){
         //console.log("ACTION ON  ROUTING IS : " + action);
 
         //Getting Models & extending it with super Models.
-        var controllerFile  = Server.conf[bundle].bundlesPath +'/'+ bundle + '/controllers/controllers.js',
-            handlersPath    = Server.conf[bundle].bundlesPath  +'/'+ bundle + '/handlers';
+        var controllerFile  = _conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js',
+            handlersPath    = _conf[bundle][env].bundlesPath  +'/'+ bundle + '/handlers';
+
+        console.log("FILE ", controllerFile);
 
         try {
-            Server.actionRequest = require(controllerFile);
+            var controllerRequest  = require(controllerFile)
+             _this.actionRequest = new controllerRequest();
+
         } catch (err) {
             Log.error('geena', 'ROUTER:ERR:1', 'Could not trigger actionRequest', __stack);
         }
@@ -189,33 +203,33 @@ Router = function(){
         //Getting Controller & extending it with super Controller.
         try {
             //console.info('hum 3');
-            Server.actionHandler = _loadHandler(handlersPath, action);
+            _this.actionHandler = _loadHandler(handlersPath, action);
             //console.info('hum 4');
 
             //Two places in this file to change these kind of values.
-            Controller.app = {
+            var options = {
                 action          : action,
                 bundle          : bundle,//module
-                appPath         : Server.conf[bundle].bundlesPath +'/'+ bundle,
-                conf            : Server.conf[bundle],
-                ext             : (Server.conf[bundle].template) ? Server.conf[bundle].template.ext : Config.Env.getDefault().ext,
-                handler         : Server.actionHandler,
-                instance        : Server.instance,
+                appPath         : _conf[bundle][env].bundlesPath +'/'+ bundle,
+                conf            : _conf[bundle][env],
+                ext             : (_conf[bundle][env].template) ? _conf[bundle][env].template.ext : Config.Env.getDefault().ext,
+                handler         : _this.actionHandler,
+                instance        : _this.instance,
                 //to remove later
-                templateEngine  : (typeof(Server.conf.templateEngine) != "undefined") ? Server.conf.templateEngine : null,
-                view            : (typeof(Server.conf[bundle].view) != "undefined") ? Server.conf[bundle].view : null,
-                webPath         : Server.executionPath
+                templateEngine  : (typeof(_conf.templateEngine) != "undefined") ? _conf.templateEngine : null,
+                view            : (typeof(_conf[bundle][env].view) != "undefined") ? _conf[bundle][env].view : null,
+                webPath         : _this.executionPath
             };
 
-            AppController = Utils.extend(false, Server.actionRequest, Controller);
+            AppController = Utils.extend(false, _this.actionRequest, new Controller(options));
 
 
 
             //TypeError: Property 'xxxxxx' of object #<Object> is not a function
             //Either the controllers.js is empty, either you haven't created the method xxxxxx
-            Server.actionResponse = AppController[action](request, response, next);
+            _this.actionResponse = AppController[action](request, response, next);
             AppController.handleResponse(request, response, next);
-            Server.actionResponse = null;
+            _this.actionResponse = null;
             action = null;
 
         } catch (err) {
@@ -226,35 +240,40 @@ Router = function(){
                 err,
                 __stack
             );
-            AppController = Utils.extend(false, Server.actionRequest, Controller);
-            Server.actionResponse = AppController[action](request, response, next);
+            AppController = Utils.extend(false, _this.actionRequest, new Controller());
+            //Utils.extend(false, _this.actionRequest, Controller);
+            console.log("--->> ", _this.actionRequest);
+            //process.exit();
+            //AppController = new _this.actionRequest();
+            _this.actionResponse = AppController[action](request, response, next);
 
-            Server.actionHandler = _loadHandler(handlersPath, action);
-            var routeObj = Server.routing;
+            _this.actionHandler = _loadHandler(handlersPath, action);
+            var routeObj = _this.routing;
             app = {
-                instance    : Server.instance,
+                instance    : _this.instance,
                 bundle      : bundle,//module
-                appPath     : Server.conf[bundle].bundlesPath +'/'+ bundle,
-                webPath     : Server.executionPath,
+                appPath     : _conf[bundle][env].bundlesPath +'/'+ bundle,
+                webPath     : _this.executionPath,
                 action      : action,
-                handler     : Server.actionHandler,
-                view        : (typeof(Server.conf[bundle].view) != "undefined") ? Server.conf[bundle].view : null,
+                handler     : _this.actionHandler,
+                view        : (typeof(_conf[bundle][env].view) != "undefined") ? _conf[bundle][env].view : null,
                 route       : routeObj,
-                ext         : (Server.conf[bundle].template) ? '.' +Server.conf[bundle].template.ext : Config.Env.getDefault().ext
+                ext         : (_conf[bundle][env].template) ? '.' +_conf[bundle][env].template.ext : Config.Env.getDefault().ext
             };
             Controller.app = app;
 
             //handle response.
             AppController.handleResponse(request, response, next);
 
-            Server.actionResponse = null;
+            _this.actionResponse = null;
             action = null;
             app = null;
         }
 
-    }//EO route()
+    };//EO route()
 
     _init();
+
 };
 
 module.exports = Router;

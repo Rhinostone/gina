@@ -8,7 +8,7 @@
 
 /**
  * @class Controller
- * @mixing
+ *
  *
  * @package     Geena
  * @namespace   Geena.Controller
@@ -20,20 +20,41 @@ var Controller;
 
 //Imports.
 var Fs      = require("fs"),
+    //Node
+    Util    = require('util'),
+    //Geena
     Utils   = require("./utils");
 
 /**
  * Controller Constructor
  * @constructor
  * */
-Controller = function(){
+Controller = function(options){
 
+    //Public
     this.name       = "Controller";
     this.data       = {};
-    this.app        = {};
+    this.app        = options;
     this.rendered   = false;
 
+    //Private
     var _request, _response, _next;
+    var _this = this;
+
+    var _init = function(){
+        console.log("...", _this instanceof Controller);
+        if ( typeof(Controller.initialized) != "undefined" ) {
+            console.log("class Controller already defined");
+            return _this.getInstance();
+        } else {
+            console.log("class Controller NOT defined");
+            Controller.initialized = true;
+        }
+    };
+
+    this.getInstance = function(){
+        return _this;
+    };
 
     /**
     * Handle Responses
@@ -53,52 +74,52 @@ Controller = function(){
         Log.info(
             'geena',
             'CONTROLLER:FACTORY:INFO:1',
-            'Web Path  is: '+ this.app.webPath,
+            'Web Path  is: '+ _this.app.webPath,
             __stack
         );
 
         Log.info(
             'geena',
             'CONTROLLER:FACTORY:INFO:2',
-            'Action  is: '+ this.app.action,
+            'Action  is: '+ _this.app.action,
             __stack
         );
 
-        var action          = this.app.action,
-            appName         = this.app.appName,
+        var action          = _this.app.action,
+            appName         = _this.app.appName,
             content         = '',
             //conf            = this.app.conf,
             data            = {},
-            ext             = this.app.ext,
-            handler         = this.app.handler,
-            instance        = this.app.instance,
-            templateEngine  = this.app.templateEngine,
-            viewConf        = this.app.view;
+            ext             = _this.app.ext,
+            handler         = _this.app.handler,
+            instance        = _this.app.instance,
+            templateEngine  = _this.app.templateEngine,
+            viewConf        = _this.app.view;
 
         //Only if templates are handled. Will handle swigg by default.
         if (templateEngine != null && viewConf != "undefined" && viewConf != null) {
 
             //Usefull or Useless not ?.
-            instance.set('views', this.app.appPath +'/template');
+            instance.set('views', _this.app.appPath +'/template');
             if(viewConf)
                 setRessources(viewConf, action);//css & js.
 
             content = action + ext;
             //console.info('ACTION IS ', content);
-            this.set('page.content', content);
-            this.set('page.ext', ext);
+            _this.set('page.content', content);
+            _this.set('page.ext', ext);
 
-            data = this.getData();
+            data = _this.getData();
 
-            if (this.rendered != true) {
-                this.render(data);
+            if (_this.rendered != true) {
+                _this.render(data);
                 data = null;
             }
         } else {
             //Webservices handling.
-            data = this.getData();
-            if (this.rendered != true) {
-                this.renderJson(data);
+            data = _this.getData();
+            if (_this.rendered != true) {
+                _this.renderJSON(data);
                 data = null;
             }
         }
@@ -112,39 +133,40 @@ Controller = function(){
      * @return {void}
      * */
     this.render = function(data){
-        this.app.isXmlHttpRequest = (typeof(_request) != "undefined" && _request.xhr && this.app.isXmlHttpRequest || this.app.isXmlHttpRequest ) ? true : false;
-        if(typeof(this.app.isXmlHttpRequest) == "undefined" || !this.app.isXmlHttpRequest ){
-            data.page.handler = (this.app.handler != null) ? '<script type="text/javascript" src="/'+ this.app.appName + '/handlers/' + this.app.handler.file +'"></script>' : '';
+        _this.app.isXmlHttpRequest = ( typeof(_request) != "undefined" && _request.xhr && _this.app.isXmlHttpRequest || _this.app.isXmlHttpRequest ) ? true : false;
+
+        if( typeof(_this.app.isXmlHttpRequest) == "undefined" || !_this.app.isXmlHttpRequest ){
+            data.page.handler = (_this.app.handler != null) ? '<script type="text/javascript" src="/'+ _this.app.appName + '/handlers/' + _this.app.handler.file +'"></script>' : '';
             //console.log('HANDLER SRC _____',data.page.handler);
 
-            if(data.page.content){
+            if (data.page.content) {
                 //data.page.content = Fs.readFileSync(this.app.appPath + '/apps/'+ this.app.appName + '/templates/' + data.page.content);
                 //data.page.content = ejs.compile(data.page.content);
                 console.log('rendering datas...', data);
                 _response.render('layout' + data.page.ext, data);
             }
-        }else{
+        } else {
             var response = _response;
             response.setHeader("Content-Type", "application/json");
         }
         response.end();
-        this.rendered = true;
+        _this.rendered = true;
     };
 
     /**
-     * Render Json
+     * Render JSON
      *
      * @param {object|string} jsonObj
      * @return {void}
      * */
-    this.renderJson : function(jsonObj){
+    this.renderJSON = function(jsonObj){
          var response = _response;
          if(typeof(options) != "undefined" && typeof(options.charset) !="undefined"){
              response.setHeader("charset", options.charset);
          }
          response.setHeader("Content-Type", "application/json");
          response.end(JSON.stringify(jsonObj));
-         this.rendered = true;
+         _this.rendered = true;
     };
 
     /**
@@ -155,7 +177,7 @@ Controller = function(){
      * @return {void}
      * */
     this.set = function(variable, value){
-        this.data[variable] = value;
+        _this.data[variable] = value;
     };
 
     /**
@@ -164,8 +186,8 @@ Controller = function(){
      * @param {String} variable Data name to set
      * @return {Object | String} data Data object or String
      * */
-    get = function(variable){
-        return this.data[variable];
+    this.get = function(variable){
+        return _this.data[variable];
     };
 
     var setRessources = function(viewConf, localRessources){
@@ -186,7 +208,7 @@ Controller = function(){
 
         //intercept errors in case of malformed config
         //console.log('type of view conf ', typeof(viewConf));
-        if(typeof(viewConf) != "object"){
+        if( typeof(viewConf) != "object" ){
             cssStr = viewConf;
             jsStr = viewConf;
         }
@@ -194,18 +216,18 @@ Controller = function(){
         //console.info('setting ressources for .... ', localRessources, viewConf);
         //Getting global/default css
         //Default will be completed OR overriden by locals - if options are set to "override_css" : "true" or "override" : "true"
-        if(viewConf["default"]){
+        if( viewConf["default"] ){
             //console.info('found default ', ["default"]);
             //Get css
-            if(viewConf["default"]["stylesheets"]){
-                tmpRes = getResNode('css', cssStr, viewConf["default"]["stylesheets"], css);
+            if( viewConf["default"]["stylesheets"] ){
+                tmpRes = _getNodeRes('css', cssStr, viewConf["default"]["stylesheets"], css);
                 cssStr = tmpRes.cssStr;
                 css = tmpRes.css;
                 tmpRes = null;
             }
             //Get js
-            if(viewConf["default"]["javascripts"]){
-                tmpRes = getResNode('js', jsStr, viewConf["default"]["javascripts"], js);
+            if( viewConf["default"]["javascripts"] ){
+                tmpRes = _getNodeRes('js', jsStr, viewConf["default"]["javascripts"], js);
                 jsStr = tmpRes.jsStr;
                 js = tmpRes.js;
                 tmpRes = null;
@@ -213,35 +235,35 @@ Controller = function(){
         }
 
         //Check if local css exists
-        if(viewConf[localRessources]){
+        if( viewConf[localRessources] ){
             //Css override test
             if(viewConf[localRessources]["override_css"] && viewConf[localRessources]["override_css"] == true || viewConf[localRessources]["override"] && viewConf[localRessources]["override"] == true){
                 cssStr = "";
                 css.content = [];
             }
             //Get css
-            if(viewConf[localRessources]["stylesheets"]){
+            if( viewConf[localRessources]["stylesheets"] ){
                 //console.info('case ', viewConf[localRessources]["stylesheets"], localRessources);
-                tmpRes = getResNode('css', cssStr, viewConf[localRessources]["stylesheets"], css);
+                tmpRes = _getNodeRes('css', cssStr, viewConf[localRessources]["stylesheets"], css);
                 cssStr = tmpRes.cssStr;
                 css = tmpRes.css;
                 tmpRes = null;
             }
             //js override test
-            if(viewConf[localRessources]["override_js"] && viewConf[localRessources]["override_js"] == true || viewConf[localRessources]["override"] && viewConf[localRessources]["override"] == true){
+            if( viewConf[localRessources]["override_js"] && viewConf[localRessources]["override_js"] == true || viewConf[localRessources]["override"] && viewConf[localRessources]["override"] == true ){
                 jsStr = "";
                 js.content = [];
             }
             //Get js
-            if(viewConf[localRessources]["javascripts"]){
-                tmpRes = getResNode('js', jsStr, viewConf[localRessources]["javascripts"], js);
+            if( viewConf[localRessources]["javascripts"] ){
+                tmpRes = _getNodeRes('js', jsStr, viewConf[localRessources]["javascripts"], js);
                 jsStr = tmpRes.jsStr;
                 js = tmpRes.js;
                 tmpRes = null;
             }
         }
-        this.set('page.stylesheets', cssStr);
-        this.set('page.scripts', jsStr);
+        _this.set('page.stylesheets', cssStr);
+        _this.set('page.scripts', jsStr);
         //console.info('setting ressources !! ', cssStr, jsStr);
     };
 
@@ -257,7 +279,7 @@ Controller = function(){
      *
      * @private
      * */
-    var getResNode = function(type, resStr, resArr, resObj){
+    var _getNodeRes = function(type, resStr, resArr, resObj){
         //console.log('assigning ..... ', resStr);
         switch(type){
             case 'css':
@@ -302,10 +324,11 @@ Controller = function(){
 
 
                 }
-                return { js : js, jsStr : resStr};
+                return { js : js, jsStr : resStr };
             break;
         }
-    },
+    };
+
     /**
      * TODO -  Controller.setMeta()
      * */
@@ -314,9 +337,7 @@ Controller = function(){
     };
 
     this.getData = function(){
-        var data = {};
-        data = Utils.refToObj(this.data);
-        return data;
+        return Utils.refToObj(this.data);
     };
 
     /**
@@ -336,7 +357,7 @@ Controller = function(){
     /**
      * TODO -  Controller.getParameter()
      * */
-    getParameter : function(paramName){
+    this.getParameter = function(paramName){
         var params = _request.query;
         if ( typeof(params[paramName]) ){
             return params[paramName];
@@ -351,23 +372,25 @@ Controller = function(){
      *
      * TODO - Protect result
      * */
-    getConfig : function(name){
+    this.getConfig = function(name){
 
         if ( typeof(name) != 'undefined' ) {
             try {
-                return this.app.conf[name][this.app.appName];
+                return _this.app.conf[name][_this.app.appName];
             } catch (err) {
                 return undefined;
             }
         } else {
-            return this.app.conf;
+            return _this.app.conf;
         }
     }
+
+    _init();
 };
 
 //Allow protected methods to be overridden.
 //Controller.prototype.extends = Utils.extends;
-Controller.render.prototype.overridable = true;
-Controller.renderJson.prototype.overridable = true;
+//Controller.render.prototype.overridable = true;
+//Controller.renderJson.prototype.overridable = true;
 
 module.exports = Controller;
