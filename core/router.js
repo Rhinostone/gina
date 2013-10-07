@@ -173,7 +173,7 @@ Router = function(env){
             Controller      = require("./controller");
 
 
-
+        console.log("routing..");
         //Middleware Filters when declared.
         var resHeders = Config.Env.getConf( bundle, env ).server.response.header;
         //TODO - to test
@@ -210,7 +210,8 @@ Router = function(env){
             var options = {
                 action          : action,
                 bundle          : bundle,//module
-                appPath         : _conf[bundle][env].bundlesPath +'/'+ bundle,
+                bundlePath  : _conf[bundle][env].bundlesPath +'/'+ bundle,
+                rootPath    : _this.executionPath,
                 conf            : _conf[bundle][env],
                 ext             : (_conf[bundle][env].template) ? _conf[bundle][env].template.ext : Config.Env.getDefault().ext,
                 handler         : _this.actionHandler,
@@ -228,6 +229,7 @@ Router = function(env){
             //TypeError: Property 'xxxxxx' of object #<Object> is not a function
             //Either the controllers.js is empty, either you haven't created the method xxxxxx
             _this.actionResponse = AppController[action](request, response, next);
+            console.log("handling response 1");
             AppController.handleResponse(request, response, next);
             _this.actionResponse = null;
             action = null;
@@ -252,8 +254,8 @@ Router = function(env){
             app = {
                 instance    : _this.instance,
                 bundle      : bundle,//module
-                appPath     : _conf[bundle][env].bundlesPath +'/'+ bundle,
-                webPath     : _this.executionPath,
+                bundlePath  : _conf[bundle][env].bundlesPath +'/'+ bundle,
+                rootPath    : _this.executionPath,
                 action      : action,
                 handler     : _this.actionHandler,
                 view        : (typeof(_conf[bundle][env].view) != "undefined") ? _conf[bundle][env].view : null,
@@ -263,6 +265,7 @@ Router = function(env){
             Controller.app = app;
 
             //handle response.
+            console.log("handling response 2");
             AppController.handleResponse(request, response, next);
 
             _this.actionResponse = null;
