@@ -71,10 +71,11 @@ Controller = function(options){
         _response   = response;
         _next       = next;
 
+
         Log.info(
             'geena',
             'CONTROLLER:FACTORY:INFO:1',
-            'Web Path  is: '+ _this.app.webPath,
+            'bundle Path  is: '+ _this.app.bundlePath,
             __stack
         );
 
@@ -100,7 +101,7 @@ Controller = function(options){
         if (templateEngine != null && viewConf != "undefined" && viewConf != null) {
 
             //Usefull or Useless not ?.
-            instance.set('views', _this.app.appPath +'/template');
+            instance.set('views', _this.app.bundlePath +'/template');
             if(viewConf)
                 setRessources(viewConf, action);//css & js.
 
@@ -140,7 +141,7 @@ Controller = function(options){
             //console.log('HANDLER SRC _____',data.page.handler);
 
             if (data.page.content) {
-                //data.page.content = Fs.readFileSync(this.app.appPath + '/apps/'+ this.app.appName + '/templates/' + data.page.content);
+                //data.page.content = Fs.readFileSync(this.app.bundlePath + '/apps/'+ this.app.appName + '/templates/' + data.page.content);
                 //data.page.content = ejs.compile(data.page.content);
                 console.log('rendering datas...', data);
                 _response.render('layout' + data.page.ext, data);
