@@ -21,8 +21,8 @@ var Router;
 var Url     = require("url"),
     Fs      = require("fs"),
     Util    = require('util'),
-    Utils   = require('./utils.js'),
-    Config  = require('./config');
+    Utils   = require('./utils.js');
+    //Config  = require('./config');
     //Server  = require('./server');
 
 /**
@@ -33,6 +33,7 @@ Router = function(env){
 
     this.name = 'Router';
     var _this = this;
+    var Config  = require('./config');
     var _conf = Config.getInstance();
 
     var _init = function(){
@@ -189,7 +190,7 @@ Router = function(env){
         var controllerFile  = _conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js',
             handlersPath    = _conf[bundle][env].bundlesPath  +'/'+ bundle + '/handlers';
 
-        console.log("FILE ", controllerFile);
+        //console.log("FILE ", controllerFile);
 
         try {
             var controllerRequest  = require(controllerFile)
@@ -202,10 +203,8 @@ Router = function(env){
         Log.debug('geena', 'ROUTER:DEBUG:1', 'About to contact Controller', __stack);
         //Getting Controller & extending it with super Controller.
         try {
-            //console.info('hum 3');
+            console.log("Action is ", action);
             _this.actionHandler = _loadHandler(handlersPath, action);
-            //console.info('hum 4');
-
             //Two places in this file to change these kind of values.
             var options = {
                 action          : action,
@@ -221,33 +220,37 @@ Router = function(env){
                 view            : (typeof(_conf[bundle][env].view) != "undefined") ? _conf[bundle][env].view : null,
                 webPath         : _this.executionPath
             };
-
-            AppController = Utils.extend(false, _this.actionRequest, new Controller(options));
-
-
+            //console.log("found conf \n", options.conf);
+            //AppController = Utils.extend(false, _this.actionRequest, new Controller(options));
+            //var controller = new Controller(request, response, next, options);
+            //Should be a get instance..
+            Utils.extend( true, _this.actionRequest, new Controller(request, response, next, options) );
+            //console.log("--->> 1 ", action, _this.actionRequest);
 
             //TypeError: Property 'xxxxxx' of object #<Object> is not a function
             //Either the controllers.js is empty, either you haven't created the method xxxxxx
-            _this.actionResponse = AppController[action](request, response, next);
-            console.log("handling response 1");
-            AppController.handleResponse(request, response, next);
-            _this.actionResponse = null;
+            //console.log("handling response 0 ", action, AppController[action]);
+            try {
+                _this.actionRequest[action](request, response, next);
+            } catch (err) {
+                Log.error('geena', 'ROUTER:ERR:3', 'failed to execute function: '+ action +'(request, response, next)\n'+ err, __stack);
+            }
+
+            _this.actionRequest.handleResponse();
             action = null;
 
         } catch (err) {
 
             Log.error(
                 'geena',
-                'ROUTER:ERR:1',
-                err,
+                'ROUTER:ERR:2',
+                'Action '+ action +' failled to execute \n'+err,
                 __stack
             );
-            AppController = Utils.extend(false, _this.actionRequest, new Controller());
-            //Utils.extend(false, _this.actionRequest, Controller);
-            console.log("--->> ", _this.actionRequest);
-            //process.exit();
-            //AppController = new _this.actionRequest();
-            _this.actionResponse = AppController[action](request, response, next);
+
+            Utils.extend( true, _this.actionRequest, new Controller(request, response, next) );
+            //_this.actionResponse = AppController[action](request, response, next);
+            _this.actionRequest[action](request, response, next);
 
             _this.actionHandler = _loadHandler(handlersPath, action);
             var routeObj = _this.routing;
@@ -265,10 +268,7 @@ Router = function(env){
             Controller.app = app;
 
             //handle response.
-            console.log("handling response 2");
-            AppController.handleResponse(request, response, next);
-
-            _this.actionResponse = null;
+            _this.actionRequest.handleResponse();
             action = null;
             app = null;
         }

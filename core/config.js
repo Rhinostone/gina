@@ -86,8 +86,7 @@ var Fs      = require('fs'),
      * @return {object|undefined} configuration|"undefined"
      * */
     getInstance : function (bundle){
-        //console.log("Bundle conf ", bundle, this.configuration);
-
+        //console.log("Bundle conf ", bundle, JSON.stringify(this.configuration, null, '\t') );
         if ( typeof(bundle) != 'undefined' && typeof(this.configuration) != 'undefined' ) {
 
             try {
