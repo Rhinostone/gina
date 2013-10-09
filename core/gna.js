@@ -32,7 +32,7 @@ Gna.start = function(executionPath){
         env     = process.argv[2];
 
     if(executionPath == undefined){
-        var p = process.argv[1].split("/");
+        var p = new _(process.argv[1]).toUnixStyle().split("/");
         var appName = p[p.length-1].split(".")[0];
 
         executionPath = "";
