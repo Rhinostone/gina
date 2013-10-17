@@ -36,23 +36,23 @@ var Fs              = require('fs'),
         console.log("Geena ", options);
         this.bundles = options.bundles;
 
+
         //TODO - Don't override if syntax is ok - no mixed paths.
         //Set paths for utils. Override for now.
         //To reset it, just delete the hidden folder.
-        Utils.Config.set('geena', 'project.json', {
-            //project : Utils.Config.getProjectName(),
-            paths : {
-                geena : geenaPath,
-                utils : Utils.Config.__dirname,
-                executionPath : this.executionPath,
-                env : this.executionPath + '/env.json',
-                tmp : this.executionPath + '/tmp'
-            },
-            //TODO - Replace by a property by bundle.
-            bundles : options.allBundles
-        });
+//        Utils.Config.set('geena', 'project.json', {
+//            //project : Utils.Config.getProjectName(),
+//            paths : {
+//                geena : geenaPath,
+//                utils : Utils.Config.__dirname,
+//                executionPath : this.executionPath,
+//                env : this.executionPath + '/env.json',
+//                tmp : this.executionPath + '/tmp'
+//            },
+//            //TODO - Replace by a property by bundle.
+//            bundles : options.allBundles
+//        });
         console.log("!!Stand alone ? ", this.isStandalone, this.bundles, '\n'+options.conf);
-
         console.log("CONF CONTENT \n",  options.conf[this.appName][this.env]);
 
         if (this.isStandalone) {
@@ -105,7 +105,7 @@ var Fs              = require('fs'),
             'Init ['+ this.appName +'] on port : ['+ this.conf[this.appName].port.http + ']'
         );
 
-        this.onRoutesLoaded(function(success){//load all registered routes in routing.json
+        this.onRoutesLoaded( function(success){//load all registered routes in routing.json
             Log.debug(
                 'geena',
                 'SERVER:DEBUG:1',
@@ -113,9 +113,13 @@ var Fs              = require('fs'),
                 __stack
             );
 
+
+
             if (success) {
+
                 _this.configure( function(success){
-                    _this.onRequest();
+
+                   _this.onRequest();
                 });
             }
         });
@@ -196,7 +200,6 @@ var Fs              = require('fs'),
 
         }//EO for.
         callback(true);
-
     },
 
     /**
@@ -344,21 +347,24 @@ var Fs              = require('fs'),
             });//EO this.loadBundleConfiguration(this.appName, function(err, conf){
         });//EO this.instance
 
-        //console.log("what th fuck !!..", this.conf[this.appName].port.http);
+        console.log("what th fuck !!..", this.conf[this.appName].port.http);
         console.log(
             "\nPID: " + process.pid,
             "\nPORT: " + this.conf[this.appName].port.http
         );
+
         this.instance.listen(this.conf[this.appName].port.http);//By Default 8888
     },
-    loadBundleConfiguration :function(bundle, callback) {
-        var _this = this, cacheless = Config.isCacheless();
+    loadBundleConfiguration : function(bundle, callback) {
+        var conf = Config().getInstance();
+        console.log("bundle ", bundle, " VS config \n" );
+        var _this = this, cacheless = conf.isCacheless();
 
         //Reloading assets & files.
         if (!cacheless) {
             callback(false);
         } else {
-            Config.refresh(bundle, function(err){
+            conf.refresh(bundle, function(err){
                 if (err) Log.error('geena', 'SERVER:ERR:5', err, __stack);
 
                 //Also refresh routing.

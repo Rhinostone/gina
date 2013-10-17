@@ -26,22 +26,28 @@ Log       = Gna.Utils.Logger;
  * @param {string} executionPath - Path in option
  * */
 Gna.start = function(executionPath){
+    //instances = [];
     //WTF !.
     var core   = this.core,
         _this   = core,
         env     = process.argv[2];
 
+
     if(executionPath == undefined){
         var p = new _(process.argv[1]).toUnixStyle().split("/");
         var appName = p[p.length-1].split(".")[0];
 
-        executionPath = "";
-        for(var i=1; i<p.length-1; ++i){
-            executionPath += '/' + p[i];
+        var executionPath = "";
+        for(var i=0; i<p.length-1; ++i){
+            //if (i < p.length-1)
+                executionPath +=  p[i] + '/';
         }
+        executionPath = executionPath.substring(0, executionPath.length-1);
     }
 
     core.executionPath = new _(executionPath).toString();
+
+
     core.startingApp = appName;
     core.geenaPath = new _(__dirname).toString();
 
@@ -56,27 +62,31 @@ Gna.start = function(executionPath){
         core: new _(__dirname).toString()
     });
 
-    Config.executionPath = core.executionPath;
-    Config.startingApp = core.startingApp;
-    Config.init(env, function(config){
+    var config = new Config({
+        env : env,
+        executionPath : core.executionPath,
+        startingApp : core.startingApp
+    });
 
-        var isStandalone = Config.Host.isStandalone();
+    config.onReady( function(err, obj){
+        Log.info('geena', 'CORE:INFO:42','Hi you !!!! ', __stack);
+        var isStandalone = obj.isStandalone;
 
         Log.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
         Log.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
 
-        //console.log("bundlde ocn f",  config.bundleConf );
+        ///console.log("bundlde ocn f",  JSON.stringify(obj, null, '\t') );
 
         Server.setConf({
             appName         : core.startingApp,
             //Apps list.
-            bundles         : config.bundles,
-            allBundles      : config.allBundles,
-            env             : config.env,
+            bundles         : obj.bundles,
+            allBundles      : obj.allBundles,
+            env             : obj.env,
             isStandalone    : isStandalone,
             executionPath   : core.executionPath,
             geenaPath       : core.geenaPath,
-            conf            : config.conf
+            conf            : obj.conf
         },
         function(complete){
             if (complete) {

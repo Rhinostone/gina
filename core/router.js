@@ -22,7 +22,7 @@ var Url     = require("url"),
     Fs      = require("fs"),
     Util    = require('util'),
     Utils   = require('./utils.js');
-    //Config  = require('./config');
+    Config  = require('./config');
     //Server  = require('./server');
 
 /**
