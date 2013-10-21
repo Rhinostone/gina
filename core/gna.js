@@ -26,7 +26,6 @@ Log       = Gna.Utils.Logger;
  * @param {string} executionPath - Path in option
  * */
 Gna.start = function(executionPath){
-    //instances = [];
     //WTF !.
     var core   = this.core,
         _this   = core,
