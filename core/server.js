@@ -9,7 +9,7 @@ var Fs              = require('fs'),
     Express         = require('express'),
     Url             = require('url'),
     Utils           = require('geena.utils'),
-    Config          = require('./config'),
+    Config          = require('./config')(),
     Server          = {
     conf : {},
     routing : {},
@@ -40,20 +40,20 @@ var Fs              = require('fs'),
         //TODO - Don't override if syntax is ok - no mixed paths.
         //Set paths for utils. Override for now.
         //To reset it, just delete the hidden folder.
-//        Utils.Config.set('geena', 'project.json', {
-//            //project : Utils.Config.getProjectName(),
-//            paths : {
-//                geena : geenaPath,
-//                utils : Utils.Config.__dirname,
-//                executionPath : this.executionPath,
-//                env : this.executionPath + '/env.json',
-//                tmp : this.executionPath + '/tmp'
-//            },
-//            //TODO - Replace by a property by bundle.
-//            bundles : options.allBundles
-//        });
-        console.log("!!Stand alone ? ", this.isStandalone, this.bundles, '\n'+options.conf);
-        console.log("CONF CONTENT \n",  options.conf[this.appName][this.env]);
+        Utils.Config.set('geena', 'project.json', {
+            //project : Utils.Config.getProjectName(),
+            paths : {
+                geena : geenaPath,
+                utils : Utils.Config.__dirname,
+                executionPath : this.executionPath,
+                env : this.executionPath + '/env.json',
+                tmp : this.executionPath + '/tmp'
+            },
+            //TODO - Replace by a property by bundle.
+            bundles : options.allBundles
+        });
+        //console.log("!!Stand alone ? ", this.isStandalone, this.bundles, '\n'+options.conf);
+        //console.log("CONF CONTENT \n",  options.conf[this.appName][this.env]);
 
         if (this.isStandalone) {
             //Only load the related conf / env.
@@ -62,25 +62,21 @@ var Fs              = require('fs'),
 
             this.conf[this.appName].bundlesPath = options.conf[this.appName][this.env].bundlesPath;
             this.conf[this.appName].modelsPath =  options.conf[this.appName][this.env].modelsPath;
-            console.log("FUCK0 ", this.conf[this.appName]);
+            //console.log("FUCK0 ", this.conf[this.appName]);
             //console.log("FUCK1 ", this.conf[this.appName].modelsPath);
             //console.log("FUCK2 ",  options.conf[this.appName][this.env].bundlesPath);
         } else {
 
-            console.log("Running mode not handled yet..", this.appName, " VS ", this.bundles);
-            //console.log( JSON.stringify(options.conf, null, 4) );
-
+            //console.log("Running mode not handled yet..", this.appName, " VS ", this.bundles);
             //Load all conf for the related apps & env.
             var apps = this.bundles;
             for (var i=0; i<apps.length; ++i) {
-
                 this.conf[apps[i]] = options.conf[apps[i]][this.env];
                 this.conf[apps[i]].bundlesPath = options.conf[apps[i]][this.env].bundlesPath;
                 this.conf[apps[i]].modelsPath = options.conf[apps[i]][this.env].modelsPath;
                 //console.log("making conf for ", apps[i]);
             }
         }
-
         //console.log("My Conf ",JSON.stringify(this.conf, null, '\t'));
         this.libPath = _(__dirname);//Server Lib Path.
         callback(true);
@@ -132,16 +128,16 @@ var Fs              = require('fs'),
      * */
     onRoutesLoaded : function(callback){
         //console.info("Trigged onRoutesLoaded");
-        console.info('\nENV : ', this.env, '\nPORT :', this.conf[this.appName].port,  '\nAPP NAME :', this.appName);
-        //console.info('ENV : ', this.conf[this.appName].env, '\n routing file\n ', this.conf[this.appName].files);
 
+        //console.info('ENV : ', this.conf[this.appName].env, '\n routing file\n ', this.conf[this.appName].files);
+        var conf =  Config.getInstance(this.appName);
         var _this       = this,
             env         = this.env,
-            apps        = this.bundles,
+            apps        = conf.bundles,
             filename    = "",
             appName     = "";
             tmp         = {};
-
+        console.info('\nENVi : ', this.env, '\nPORT :', this.conf[this.appName].port,  '\nBUNDLE :', this.appName, '\nBundles ', conf.bundles);
         //Standalone or shared instance mode. It doesn't matter.
         for (var i=0; i<apps.length; ++i) {
 
@@ -152,11 +148,12 @@ var Fs              = require('fs'),
             //Spécific case.
             if (!this.isStandalone && i == 0) appName = apps[i];
             try {
+
                 var files = Utils.cleanFiles(Fs.readdirSync(appPath));
                 if (files.length > 0 && files.inArray(apps[i])) {
                     filename = _(appPath + '/' + apps[i] + '/config/' + _this.conf[apps[i]].files.routing);
 
-                    console.log("!!! my files ", filename);
+                    //console.log("!!! my files ", filename);
                     try {
                         if (cacheless) {
                             delete require.cache[filename];
@@ -175,7 +172,7 @@ var Fs              = require('fs'),
                             _this.routing = tmp;
                         }
 
-                        console.log("making route for ", apps[i], "\n", _this.routing);
+                        //console.log("making route for ", apps[i], "\n", _this.routing);
                         tmp = {};
                     } catch (err) {
                         this.routing = null;
@@ -265,6 +262,7 @@ var Fs              = require('fs'),
                 next();
             });*/
         this.instance.all('*', function(request, response, next){
+            console.log("routing ...", _this.routing);
             //Only for dev & debug.
             _this.loadBundleConfiguration(_this.appName, function(err, conf){
 
@@ -356,15 +354,15 @@ var Fs              = require('fs'),
         this.instance.listen(this.conf[this.appName].port.http);//By Default 8888
     },
     loadBundleConfiguration : function(bundle, callback) {
-        var conf = Config().getInstance();
-        console.log("bundle ", bundle, " VS config \n" );
-        var _this = this, cacheless = conf.isCacheless();
 
+        console.log("bundle [", bundle, "] VS config ", Config.getInstance(bundle) );
+        var _this = this, cacheless = Config.isCacheless();
+        console.log("is cacheless ", cacheless);
         //Reloading assets & files.
         if (!cacheless) {
             callback(false);
         } else {
-            conf.refresh(bundle, function(err){
+            Config.refresh(bundle, function(err){
                 if (err) Log.error('geena', 'SERVER:ERR:5', err, __stack);
 
                 //Also refresh routing.

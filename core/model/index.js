@@ -25,7 +25,7 @@ var Fs      = require('fs'),
     //Dev     = Utils.Dev,
     Util    = require('util'),
     EventEmitter  = require('events').EventEmitter,
-    Config  = require('./../config');
+    Config  = require('./../config')();
 
 Model = function(namespace){
     var _this = this;

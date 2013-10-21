@@ -22,7 +22,7 @@ var Url     = require("url"),
     Fs      = require("fs"),
     Util    = require('util'),
     Utils   = require('./utils.js');
-    Config  = require('./config');
+    //Config  = require('./config')();
     //Server  = require('./server');
 
 /**
@@ -33,7 +33,7 @@ Router = function(env){
 
     this.name = 'Router';
     var _this = this;
-    var Config  = require('./config');
+    var Config  = require('./config')();
     var _conf = Config.getInstance();
 
     var _init = function(){
@@ -174,7 +174,7 @@ Router = function(env){
             Controller      = require("./controller");
 
 
-        console.log("routing..");
+        console.log("routing..", bundle, env,  Config.Env.getConf( bundle, env ));
         //Middleware Filters when declared.
         var resHeders = Config.Env.getConf( bundle, env ).server.response.header;
         //TODO - to test
@@ -189,18 +189,57 @@ Router = function(env){
         //Getting Models & extending it with super Models.
         var controllerFile  = _conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js',
             handlersPath    = _conf[bundle][env].bundlesPath  +'/'+ bundle + '/handlers';
+        var controller;
 
-        //console.log("FILE ", controllerFile);
 
         try {
-            var controllerRequest  = require(controllerFile)
-             _this.actionRequest = new controllerRequest();
-
+            var controllerRequest  = require(controllerFile);
         } catch (err) {
             Log.error('geena', 'ROUTER:ERR:1', 'Could not trigger actionRequest', __stack);
         }
 
+        var options = {
+            action          : action,
+            bundle          : bundle,//module
+            bundlePath      : _conf[bundle][env].bundlesPath +'/'+ bundle,
+            rootPath        : _this.executionPath,
+            conf            : _conf[bundle][env],
+            ext             : (_conf[bundle][env].template) ? _conf[bundle][env].template.ext : Config.Env.getDefault().ext,
+            handler         : _this.actionHandler,
+            instance        : _this.instance,
+            //to remove later
+            templateEngine  : (typeof(_conf.templateEngine) != "undefined") ? _conf.templateEngine : null,
+            view            : (typeof(_conf[bundle][env].view) != "undefined") ? _conf[bundle][env].view : null,
+            webPath         : _this.executionPath
+        };
+
+        var actionController = controllerRequest, parent = new Controller(request, response, next, options);
+        Utils.extend( true, actionController, parent);
+
+
+        //Will clean my mess :(
+        //var actionController = new controllerRequest();
+        //Util.inherits( controllerRequest, Controller);
+
+        //var actionController = new controllerRequest();
+       // actionController.super_(request, response, next, options);
+
+        //controllerRequest = controllerRequest();
+        //Utils.extend( true, my, mon);
+        //console.log("blabla =>", child );
+
+        //Utils.extend( true, controllerRequest, Controller);
+        //var actionController =  new controllerRequest(request, response, next, options);//new controllerRequest.super_(request, response, next, options);
+
+        //var /new controllerRequest.super_(request, response, next, options);
+        //console.log("hello ", actionController, actionController.super_);
+        actionController[action](request, response, next);
+
+        //controllerRequest[action](request, response, next);
         Log.debug('geena', 'ROUTER:DEBUG:1', 'About to contact Controller', __stack);
+
+
+        /**
         //Getting Controller & extending it with super Controller.
         try {
             console.log("Action is ", action);
@@ -224,7 +263,9 @@ Router = function(env){
             //AppController = Utils.extend(false, _this.actionRequest, new Controller(options));
             //var controller = new Controller(request, response, next, options);
             //Should be a get instance..
-            Utils.extend( true, _this.actionRequest, new Controller(request, response, next, options) );
+            //Utils.extend( true, _this.actionRequest, new Controller(request, response, next, options) );
+            controller = new Controller(request, response, next, options);
+            Util.inherits( _this.actionRequest(), controller );
             //console.log("--->> 1 ", action, _this.actionRequest);
 
             //TypeError: Property 'xxxxxx' of object #<Object> is not a function
@@ -248,7 +289,9 @@ Router = function(env){
                 __stack
             );
 
-            Utils.extend( true, _this.actionRequest, new Controller(request, response, next) );
+            controller = new Controller(request, response, next);
+            //Utils.extend( true, _this.actionRequest, new Controller(request, response, next) );
+            Util.inherits( _this.actionRequest(), controller );
             //_this.actionResponse = AppController[action](request, response, next);
             _this.actionRequest[action](request, response, next);
 
@@ -271,7 +314,7 @@ Router = function(env){
             _this.actionRequest.handleResponse();
             action = null;
             app = null;
-        }
+        }*/
 
     };//EO route()
 
