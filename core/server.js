@@ -55,9 +55,9 @@ var Fs              = require('fs'),
         //console.log("!!Stand alone ? ", this.isStandalone, this.bundles, '\n'+options.conf);
         //console.log("CONF CONTENT \n",  options.conf[this.appName][this.env]);
 
-        if (this.isStandalone) {
+        if (!this.isStandalone) {
             //Only load the related conf / env.
-            console.log("conf ", options.conf);
+            console.log("none standalone conf => ", options.conf);
             this.conf[this.appName] = options.conf[this.appName][this.env];
 
             this.conf[this.appName].bundlesPath = options.conf[this.appName][this.env].bundlesPath;
@@ -67,7 +67,7 @@ var Fs              = require('fs'),
             //console.log("FUCK2 ",  options.conf[this.appName][this.env].bundlesPath);
         } else {
 
-            //console.log("Running mode not handled yet..", this.appName, " VS ", this.bundles);
+            console.log("Running mode not handled yet..", this.appName, " VS ", this.bundles);
             //Load all conf for the related apps & env.
             var apps = this.bundles;
             for (var i=0; i<apps.length; ++i) {
@@ -137,7 +137,7 @@ var Fs              = require('fs'),
             filename    = "",
             appName     = "";
             tmp         = {};
-        console.info('\nENVi : ', this.env, '\nPORT :', this.conf[this.appName].port,  '\nBUNDLE :', this.appName, '\nBundles ', conf.bundles);
+        console.info('\nENVi : ', this.env, '\nPORT :', this.conf[this.appName].port,  '\nBUNDLE :', this.appName, '\nBundles ', apps, apps.length);
         //Standalone or shared instance mode. It doesn't matter.
         for (var i=0; i<apps.length; ++i) {
 
@@ -145,11 +145,13 @@ var Fs              = require('fs'),
             var cacheless = (this.env == "dev" || this.env == "debug") ? true : false;
             appName =  apps[i];
 
-            //Spécific case.
+            //Specific case.
             if (!this.isStandalone && i == 0) appName = apps[i];
+            //console.log("trying..", new _(this.conf[apps[i]].bundlesPath) );
             try {
 
                 var files = Utils.cleanFiles(Fs.readdirSync(appPath));
+
                 if (files.length > 0 && files.inArray(apps[i])) {
                     filename = _(appPath + '/' + apps[i] + '/config/' + _this.conf[apps[i]].files.routing);
 
@@ -196,6 +198,7 @@ var Fs              = require('fs'),
             }
 
         }//EO for.
+        console.log("found routing ", _this.routing);
         callback(true);
     },
 

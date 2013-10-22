@@ -77,9 +77,11 @@ Config  = function(opt){
                 //Need to globalize some of them.
                 this.env = env;
                 this.envConf = envConf;
+
                 _loadBundlesConfiguration( function(err){
                     Log.debug('geena', 'CONFIG:DEBUG:43', 'CONF LOADED 43', __stack);
-                    //console.log("::: ", JSON.stringify( _this.getInstance(), null, '\t') );
+
+                    console.log("::: bundles ", _this.getBundles() );
 
                     //console.log("found this ",  JSON.stringify(_this.getInstance(), null, '\t'));
                     _this.bundlesConfiguration = {
@@ -285,8 +287,9 @@ Config  = function(opt){
         //Pushing default app first.
         _this.bundles.push(_this.startingApp);//This is a JSON.push.
         //console.log(" CONTENT TO BE SURE ", app, JSON.stringify(content, null, 4));
-        console.log("bundle list ", _this.bundles);
+        //console.log("bundle list ", _this.bundles);
         var root = new _(_this.executionPath).toUnixStyle();
+
         //For each app.
         for (var app in content) {
             //Checking if genune app.
@@ -319,21 +322,25 @@ Config  = function(opt){
                 if ( Fs.existsSync(appsPath) ) {
                     var masterPort = content[_this.startingApp][env].port.http;
                     //Check if standalone or shared instance
-                    console.log(
-                        "\nenv            => " + env,
-                        "\napp            => " + app,
-                        "\nstarting app   => " + _this.startingApp,
-                        "\napp port       => " + content[app][env].port.http,
-                        "\nmaster port    => " + masterPort + '  ' + content[_this.startingApp][env].port.http
-                    );
-
-                    if (app != _this.startingApp && content[app][env].port.http == masterPort) {
+                    if (/**app != _this.startingApp &&*/ content[app][env].port.http != masterPort) {
+                        console.log("should be ok !!");
                         isStandalone = false;
+                        _this.Host.standaloneMode = isStandalone;
                         //console.log("PUSHING APPS ", app + "=>" + isStandalone);
+                    } else if(app != _this.startingApp) {
                         _this.bundles.push(app);
                     }
                     _this.allBundles.push(app);
 
+                    console.log(
+                        "\nenv                  => " + env,
+                        "\napp parsed           => " + app,
+                        "\napp is Standalone    => " + _this.Host.isStandalone(),
+                        "\nstarting app         => " + _this.startingApp,
+                        "\napp port             => " + content[app][env].port.http,
+                        "\nmaster port          => " + masterPort + '  ' + content[_this.startingApp][env].port.http,
+                        "\nRegisterd bundles    => " + _this.bundles
+                    );
                     //console.log("Merging..."+ app, "\n", content[app][env], "\n AND \n", template[app][env]);
                     //Mergin user's & template.
                     newContent[app][env] = Utils.extend(
@@ -362,8 +369,8 @@ Config  = function(opt){
                         }) );
 
                     console.log("result ", _this.bundles,"\n",newContent[app][env]);
-                    console.log("bundle list ", _this.bundles);
-                    callback(false, newContent);
+                    //console.log("bundle list ", _this.bundles);
+                    //callback(false, newContent);
 
                 } else {
                     Log.warn(
@@ -398,7 +405,8 @@ Config  = function(opt){
             'Is server running as a standalone instance ? ' + isStandalone,
             __stack
         );
-        return newContent;
+        //return newContent;
+        callback(false, newContent);
     };
 
     var isFileInProject = function(file){
@@ -422,7 +430,7 @@ Config  = function(opt){
         Log.debug(
             'geena',
             'CONFIG:DEBUG:4',
-            'Pushing apps ' + JSON.stringify(_this.apps, null, '\t'),
+            'Pushing apps ' + JSON.stringify(_this.bundles, null, '\t'),
             __stack
         );
         return _this.bundles;
@@ -446,23 +454,24 @@ Config  = function(opt){
      * */
     var _loadBundlesConfiguration = function(callback, bundle){
 
-
         if ( typeof(bundle) == "undefined") {
             var bundle = _this.startingApp;
         }
 
         var bundles = _this.getBundles();
+
         Log.info('geena', 'CORE:INFO:42','go ninja  !!!!' + bundles , __stack);
         if (arguments.length > 1) {
             var bundle = arguments[1];
             var callback = arguments[0];
-            bundles = bundles.splice(bundles.indexOf(bundle), 1);
+            //if (!_this.Host.isStandalone())
+             //   bundles = bundles.splice(bundles.indexOf(bundle), 1);
 
         } else {
             var callback = arguments[0];
             var bundle = "";
         }
-
+        console.log("bundle list ", _this.bundles);
         //Framework config files.
         var name        = "",
             files       = {},
@@ -540,7 +549,7 @@ Config  = function(opt){
 
         //We always return something.
 
-        Log.info('geena', 'CORE:INFO:42','ninja conf  !!!!' + conf , __stack);
+        Log.info('geena', 'CORE:INFO:42','ninja conf  !!!!' + JSON.stringify(conf, null, '\t') , __stack);
         callback(false);
     };
 

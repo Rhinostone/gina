@@ -22,8 +22,6 @@ var Url     = require("url"),
     Fs      = require("fs"),
     Util    = require('util'),
     Utils   = require('./utils.js');
-    //Config  = require('./config')();
-    //Server  = require('./server');
 
 /**
  * Router Constructor
@@ -213,108 +211,13 @@ Router = function(env){
             webPath         : _this.executionPath
         };
 
-        var actionController = controllerRequest, parent = new Controller(request, response, next, options);
-        Utils.extend( true, actionController, parent);
+        var actionController = controllerRequest, parentController = new Controller(request, response, next, options);
+        Utils.extend( true, actionController, parentController);
 
-
-        //Will clean my mess :(
-        //var actionController = new controllerRequest();
-        //Util.inherits( controllerRequest, Controller);
-
-        //var actionController = new controllerRequest();
-       // actionController.super_(request, response, next, options);
-
-        //controllerRequest = controllerRequest();
-        //Utils.extend( true, my, mon);
-        //console.log("blabla =>", child );
-
-        //Utils.extend( true, controllerRequest, Controller);
-        //var actionController =  new controllerRequest(request, response, next, options);//new controllerRequest.super_(request, response, next, options);
-
-        //var /new controllerRequest.super_(request, response, next, options);
-        //console.log("hello ", actionController, actionController.super_);
-        actionController[action](request, response, next);
-
-        //controllerRequest[action](request, response, next);
         Log.debug('geena', 'ROUTER:DEBUG:1', 'About to contact Controller', __stack);
-
-
-        /**
-        //Getting Controller & extending it with super Controller.
-        try {
-            console.log("Action is ", action);
-            _this.actionHandler = _loadHandler(handlersPath, action);
-            //Two places in this file to change these kind of values.
-            var options = {
-                action          : action,
-                bundle          : bundle,//module
-                bundlePath  : _conf[bundle][env].bundlesPath +'/'+ bundle,
-                rootPath    : _this.executionPath,
-                conf            : _conf[bundle][env],
-                ext             : (_conf[bundle][env].template) ? _conf[bundle][env].template.ext : Config.Env.getDefault().ext,
-                handler         : _this.actionHandler,
-                instance        : _this.instance,
-                //to remove later
-                templateEngine  : (typeof(_conf.templateEngine) != "undefined") ? _conf.templateEngine : null,
-                view            : (typeof(_conf[bundle][env].view) != "undefined") ? _conf[bundle][env].view : null,
-                webPath         : _this.executionPath
-            };
-            //console.log("found conf \n", options.conf);
-            //AppController = Utils.extend(false, _this.actionRequest, new Controller(options));
-            //var controller = new Controller(request, response, next, options);
-            //Should be a get instance..
-            //Utils.extend( true, _this.actionRequest, new Controller(request, response, next, options) );
-            controller = new Controller(request, response, next, options);
-            Util.inherits( _this.actionRequest(), controller );
-            //console.log("--->> 1 ", action, _this.actionRequest);
-
-            //TypeError: Property 'xxxxxx' of object #<Object> is not a function
-            //Either the controllers.js is empty, either you haven't created the method xxxxxx
-            //console.log("handling response 0 ", action, AppController[action]);
-            try {
-                _this.actionRequest[action](request, response, next);
-            } catch (err) {
-                Log.error('geena', 'ROUTER:ERR:3', 'failed to execute function: '+ action +'(request, response, next)\n'+ err, __stack);
-            }
-
-            _this.actionRequest.handleResponse();
-            action = null;
-
-        } catch (err) {
-
-            Log.error(
-                'geena',
-                'ROUTER:ERR:2',
-                'Action '+ action +' failled to execute \n'+err,
-                __stack
-            );
-
-            controller = new Controller(request, response, next);
-            //Utils.extend( true, _this.actionRequest, new Controller(request, response, next) );
-            Util.inherits( _this.actionRequest(), controller );
-            //_this.actionResponse = AppController[action](request, response, next);
-            _this.actionRequest[action](request, response, next);
-
-            _this.actionHandler = _loadHandler(handlersPath, action);
-            var routeObj = _this.routing;
-            app = {
-                instance    : _this.instance,
-                bundle      : bundle,//module
-                bundlePath  : _conf[bundle][env].bundlesPath +'/'+ bundle,
-                rootPath    : _this.executionPath,
-                action      : action,
-                handler     : _this.actionHandler,
-                view        : (typeof(_conf[bundle][env].view) != "undefined") ? _conf[bundle][env].view : null,
-                route       : routeObj,
-                ext         : (_conf[bundle][env].template) ? '.' +_conf[bundle][env].template.ext : Config.Env.getDefault().ext
-            };
-            Controller.app = app;
-
-            //handle response.
-            _this.actionRequest.handleResponse();
-            action = null;
-            app = null;
-        }*/
+        actionController[action](request, response, next);
+        actionController.handleResponse(response);
+        action = null;
 
     };//EO route()
 
