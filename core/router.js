@@ -137,7 +137,7 @@ Router = function(env){
      *
      * @private
      * */
-    _loadHandler = function(path, action){
+    var _loadHandler = function(path, action){
         var handler = path +'/'+ action + '.js',//CONFIGURATION : settings.script_ext
             cacheless = Config.isCacheless();
 
@@ -203,7 +203,7 @@ Router = function(env){
             rootPath        : _this.executionPath,
             conf            : _conf[bundle][env],
             ext             : (_conf[bundle][env].template) ? _conf[bundle][env].template.ext : Config.Env.getDefault().ext,
-            handler         : _this.actionHandler,
+            handler         : _loadHandler(handlersPath, action),
             instance        : _this.instance,
             //to remove later
             templateEngine  : (typeof(_conf.templateEngine) != "undefined") ? _conf.templateEngine : null,
