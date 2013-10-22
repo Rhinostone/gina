@@ -35,17 +35,15 @@ Controller = function(request, response, next, options){
     this.name       = "Controller";
     this.data       = {};
     this.app        = options;
-    this.rendered   = false;
 
     //Private
-    var _request = request,
-        _response = response,
-        _next = next;
+    var _request, _response, _next;
 
     var _this = this;
 
-    var _init = function(){
-        console.log("...", _this instanceof Controller);
+    var _init = function(request, response, next){
+        _request = request, _response = response, _next = next;
+        //console.log("...", _this instanceof Controller);
         if ( typeof(Controller.initialized) != "undefined" ) {
             console.log("class Controller already defined");
             return _this.getInstance();
@@ -63,14 +61,12 @@ Controller = function(request, response, next, options){
     /**
     * Handle Responses
     *
-    * @param {object} request
     * @param {object} response
-    * @callback [next]
     *
     * @return {void}
     **/
-    this.handleResponse = function(){
-
+    this.handleResponse = function(response){
+        _response = response;
         Log.info(
             'geena',
             'CONTROLLER:FACTORY:INFO:1',
@@ -85,6 +81,7 @@ Controller = function(request, response, next, options){
             __stack
         );
 
+        _this.rendered      = false;
         var action          = _this.app.action,
             appName         = _this.app.appName,
             content         = '',
@@ -117,8 +114,10 @@ Controller = function(request, response, next, options){
                 data = null;
             }
         } else {
+
             //Webservices handling.
             data = _this.getData();
+            console.log("get header ", _this.rendered);
             if (_this.rendered != true) {
                 _this.renderJSON(data);
                 data = null;
@@ -133,7 +132,7 @@ Controller = function(request, response, next, options){
      * @return {void}
      * */
     this.render = function(data){
-        var response = _response;
+
         _this.app.isXmlHttpRequest = ( typeof(_request) != "undefined" && _request.xhr && _this.app.isXmlHttpRequest || _this.app.isXmlHttpRequest ) ? true : false;
 
         if( typeof(_this.app.isXmlHttpRequest) == "undefined" || !_this.app.isXmlHttpRequest ){
@@ -147,9 +146,9 @@ Controller = function(request, response, next, options){
                 _response.render('layout' + data.page.ext, data);
             }
         } else {
-            response.setHeader("Content-Type", "application/json");
+            _response.setHeader("Content-Type", "application/json");
         }
-        response.end();
+        _response.end();
         _this.rendered = true;
     };
 
@@ -160,13 +159,14 @@ Controller = function(request, response, next, options){
      * @return {void}
      * */
     this.renderJSON = function(jsonObj){
-         var response = _response;
-         if(typeof(options) != "undefined" && typeof(options.charset) !="undefined"){
-             response.setHeader("charset", options.charset);
-         }
-         response.setHeader("Content-Type", "application/json");
-         response.end(JSON.stringify(jsonObj));
-         _this.rendered = true;
+
+        if(typeof(options) != "undefined" && typeof(options.charset) !="undefined"){
+            _response.setHeader("charset", options.charset);
+        }
+
+        _response.setHeader("Content-Type", "application/json");
+        _response.end(JSON.stringify(jsonObj));
+        _this.rendered = true;
     };
 
     /**
@@ -385,7 +385,7 @@ Controller = function(request, response, next, options){
         }
     }
 
-    _init();
+    _init(request, response, next);
 };
 
 //Allow protected methods to be overridden.
