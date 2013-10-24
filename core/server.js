@@ -5,7 +5,7 @@
  * @author      Rhinostone
  */
 var Fs              = require('fs'),
-    Events          = require('events'),
+    EventEmitter    = require('events').EventEmitter,
     Express         = require('express'),
     Url             = require('url'),
     Utils           = require('geena.utils'),
@@ -79,14 +79,15 @@ var Fs              = require('fs'),
         }
         //console.log("My Conf ",JSON.stringify(this.conf, null, '\t'));
         this.libPath = _(__dirname);//Server Lib Path.
-        callback(true);
+        this.instance = Express();
+        callback(false, this.instance, Express, this.conf[this.appName]);
     },
 
     init : function(){
 
         var _this = this;
         process.title = 'geena: '+ this.appName;
-        this.instance = Express();
+        //this.instance = Express();
 
         Log.debug(
             'geena',
@@ -114,6 +115,7 @@ var Fs              = require('fs'),
             if (success) {
 
                 _this.configure( function(success){
+                    //Override configuration with user settings.
 
                    _this.onRequest();
                 });
@@ -234,20 +236,20 @@ var Fs              = require('fs'),
             if (Fs.existsSync( _(path) )) {
                 app.configure(this.env, function() {
                     //console.info('Configuring middleware for the prod environment.', _this.conf[_this.appName].bundlesPath);
-                    app.use(express.bodyParser());//in order to get POST params
+                    app.use(Express.bodyParser());//in order to get POST params
                     //Configuring path
-                    app.use("/js", express.static(path + '/js'));
-                    app.use("/css", express.static(path + '/theme_default/css'));
-                    app.use("/images", express.static(path + '/theme_default/images'));
-                    app.use("/assets", express.static(path + '/assets', { maxAge: 3600000 }));//60 min of caching (=3600000)
+                    app.use("/js", Express.static(path + '/js'));
+                    app.use("/css", Express.static(path + '/theme_default/css'));
+                    app.use("/images", Express.static(path + '/theme_default/images'));
+                    app.use("/assets", Express.static(path + '/assets', { maxAge: 3600000 }));//60 min of caching (=3600000)
 
                     //Setting frontend handlers: like we said, only when statics path is defined.
-                    app.use("/"+ apps[i] +"/handlers", express.static(_this.conf[apps[i]].bundlesPath +'/'+ apps[i] +'/handlers'));
+                    app.use("/"+ apps[i] +"/handlers", Express.static(_this.conf[apps[i]].bundlesPath +'/'+ apps[i] +'/handlers'));
                 });
 
                 Log.notice('geena', 'SERVER:NOTICE:3', 'Server runing with static folder: ' + path);
             } else {
-                Log.notice('geena', 'SERVER:NOTICE:3', 'Server runing without static folder');
+                Log.notice('geena', 'SERVER:NOTICE:3', 'Server runing without static folder ');
             }
         }
 
@@ -373,89 +375,6 @@ var Fs              = require('fs'),
             });
         }
     }
-//    /**
-//     * Load Apps Configuration
-//     *
-//     * TODO - simplify / optimize
-//     * */
-//    loadBundleConfiguration : function(appName, callback){
-//
-//        if (
-//            typeof(this.cacheless) == 'undefined'
-//            || typeof(this.cacheless) != 'undefined' && this.cacheless
-//        ) {
-//            //Framework.
-//            var _this       = this,
-//                apps        = this.bundles,
-//                name        = "",
-//                files       = [],
-//                app         = [],//App variables & constants.
-//                appEnv      = [],//Env App variables & constants.
-//                view        = [],
-//                setting     = [],
-//                model       = [],//databases.
-//                appPath     = "",
-//                modelsPath   = "",
-//                error       = "",
-//                filename    = "",
-//                cacheless   = false,
-//                tmp         = "",
-//                err         = false;
-//
-//            cacheless = (this.env == "dev" || this.env == "debug") ? true : false;
-//            this.conf[this.appName].cacheless = cacheless;
-//            //For each apps.
-//            for (var i=0; i<apps.length; ++i) {
-//                appName = apps[i];
-//                appPath = _(this.conf[appName].bundlesPath + '/' + appName);
-//                modelsPath = _(this.conf[appName].modelsPath);
-//                for (name in  this.conf[appName].files) {
-//                    if (this.env != 'prod') {
-//                        files[name] = [];
-//                        //eval('var '+name' = []';
-//                        tmp = this.conf[appName].files[name].replace(/.json/, '.' +this.env + '.json');
-//                        //console.log("tmp .. ", tmp);
-//                        filename = _(appPath + '/config/' + tmp);
-//                        //Can't do a thing without.
-//                        if ( Fs.existsSync(filename) ) {
-//                            console.log("app conf is ", filename);
-//                            if (cacheless) delete require.cache[filename];
-//
-//                            files[name][appName] = require(filename);
-//                            console.log("watch out !!", files[name][appName]);
-//                        } else {
-//                            filename = _(appPath + '/config/' + this.conf[appName].files[name]);
-//                        }
-//                        tmp = "";
-//                    }
-//
-//                    filename = _(appPath + '/config/' + this.conf[appName].files[name]);
-//
-//                    try {
-//                        if (cacheless) delete require.cache[filename];
-//
-//                        files[name][appName] = Utils.extend( true, files[name][appName], require(filename) );
-//                        this.conf[this.appName][name] = files[name][appName];
-//                        //console.log("Got filename ", files[name][appName]);
-//                    } catch (err) {
-//                        if ( typeof(files[name][appName]) != 'undefined') {
-//                            files[name][appName] = null;
-//                            Log.warn('geena', 'SERVER:WARN:1', err, __stack);
-//                            Log.debug('geena', 'SERVER:DEBUG:5', err, __stack);
-//                        }
-//                    }
-//                }
-//
-//            }//EO for each app
-//
-//        }//EO Cacheless.
-////        if ( typeof(conf) == "undefined")
-////            var conf = this.conf[appName];
-//
-//
-//        callback(false);
-//
-//    }
 
 };
 

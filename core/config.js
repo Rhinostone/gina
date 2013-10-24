@@ -27,7 +27,6 @@ var Fs              = require('fs'),
     Utils           = require("geena.utils"),
     Log             = Utils.Logger;
 
-
 Config  = function(opt){
 
     var _this = this;
@@ -93,7 +92,6 @@ Config  = function(opt){
                     };
                     console.log("found bundles ", _this.bundlesConfiguration.bundles);
                     _this.Env.loaded = true;
-
 
                     _this.emit('complete', false, _this.bundlesConfiguration);
                     //isFileInProject(conf[env]["files"]);
