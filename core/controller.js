@@ -65,7 +65,7 @@ Controller = function(request, response, next, options){
     *
     * @return {void}
     **/
-    this.handleResponse = function(response){
+    this.handleResponse = function(response, autoRendered){
         _response = response;
         Log.info(
             'geena',
@@ -107,18 +107,19 @@ Controller = function(request, response, next, options){
             _this.set('page.content', content);
             _this.set('page.ext', ext);
 
-            data = _this.getData();
 
-            if (_this.rendered != true) {
+
+            if (_this.rendered != true && autoRendered) {
+                data = _this.getData();
                 _this.render(data);
                 data = null;
             }
         } else {
 
-            //Webservices handling.
-            data = _this.getData();
-            console.log("get header ", _this.rendered);
-            if (_this.rendered != true) {
+           // console.log("get header ", _this.rendered);
+            if (_this.rendered != true && autoRendered) {
+                //Webservices handling.
+                data = _this.getData();
                 _this.renderJSON(data);
                 data = null;
             }
@@ -166,6 +167,20 @@ Controller = function(request, response, next, options){
 
         _response.setHeader("Content-Type", "application/json");
         _response.end(JSON.stringify(jsonObj));
+        _this.rendered = true;
+    };
+
+    this.renderTEXT = function(content){
+        if ( typeof(content) != "string" ) {
+            var content = content.toString();
+        }
+
+        if(typeof(options) != "undefined" && typeof(options.charset) !="undefined"){
+            _response.setHeader("charset", options.charset);
+        }
+
+        _response.setHeader("Content-Type", "text/plain");
+        _response.end(content);
         _this.rendered = true;
     };
 

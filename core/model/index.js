@@ -24,8 +24,8 @@ var Fs      = require('fs'),
     Utils   = require('geena.utils'),
     //Dev     = Utils.Dev,
     Util    = require('util'),
-    EventEmitter  = require('events').EventEmitter,
-    Config  = require('./../config')();
+    Config  = require('./../config')(),
+    EventEmitter  = require('events').EventEmitter;
 
 Model = function(namespace){
     var _this = this;

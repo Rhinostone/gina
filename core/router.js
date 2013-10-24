@@ -21,6 +21,8 @@ var Router;
 var Url     = require("url"),
     Fs      = require("fs"),
     Util    = require('util'),
+   // Utils   = require('geena.utils');
+
     Utils   = require('./utils.js');
 
 /**
@@ -191,9 +193,10 @@ Router = function(env){
 
 
         try {
+            console.log("controller file is ", controllerFile);
             var controllerRequest  = require(controllerFile);
         } catch (err) {
-            Log.error('geena', 'ROUTER:ERR:1', 'Could not trigger actionRequest', __stack);
+            Log.error('geena', 'ROUTER:ERR:1', 'Could not complete ['+ action +' : function(req, res)...] : ' + err , __stack);
         }
 
         var options = {
@@ -213,11 +216,22 @@ Router = function(env){
 
         var actionController = controllerRequest, parentController = new Controller(request, response, next, options);
         Utils.extend( true, actionController, parentController);
-
         Log.debug('geena', 'ROUTER:DEBUG:1', 'About to contact Controller', __stack);
+//        var a = actionController[action];
+//        a(request, response, next);
+//        //actionController.handleResponse(response);
+//        //console.log("a ", a);
+//          if (/.render/.test( a.toString() ))
+//        if (a.toString().match(/.render/) ) {
+//            actionController.handleResponse(response, false);
+//        } else {
+//            actionController.handleResponse(response, true);
+//        }
+
         actionController[action](request, response, next);
         actionController.handleResponse(response);
         action = null;
+
 
     };//EO route()
 

@@ -14,12 +14,56 @@
  */
 var Gna     = {core:{}},
     Config  = require('./config'),
-    Server  = require('./server');
+    Server  = require('./server'),
+    Util    = require('util'),
+    EventEmitter = require('events').EventEmitter;
 
 Gna.Utils = require('geena.utils');
 Gna.Model = require('./model');
 
 Log       = Gna.Utils.Logger;
+
+var e = new EventEmitter();
+Gna.initialized = false;
+
+/**
+ * On User server configuration
+ *
+ * @callback callback
+ *
+ * */
+Gna.onInitialize = function(callback){
+    Gna.initialized = true;
+    e.on('init', function(instance, express, conf){
+
+        e.getConfig = function(name){
+            //conf
+            if ( typeof(name) != 'undefined' ) {
+                try {
+                    return conf.filesContent[name];
+                } catch (err) {
+                    return undefined;
+                }
+            } else {
+                return conf;
+            }
+        };
+
+        e.setConfig = function(name, obj){
+            if ( typeof(name) == 'undefined' || name == '' ) {
+                var name = 'global';
+            }
+
+            if ( typeof(conf.filesContent[name]) != "undefined") {
+                Gna.Utils.extend(conf.filesContent[name], obj);
+            } else {
+                conf.filesContent[name] = obj;
+            }
+        };
+
+        callback(e, instance, express);
+    });
+};
 
 /**
  * Start server
@@ -27,10 +71,8 @@ Log       = Gna.Utils.Logger;
  * */
 Gna.start = function(executionPath){
     //WTF !.
-    var core   = this.core,
-        _this   = core,
+    var core    = Gna.core,
         env     = process.argv[2];
-
 
     if(executionPath == undefined){
         var p = new _(process.argv[1]).toUnixStyle().split("/");
@@ -39,14 +81,12 @@ Gna.start = function(executionPath){
         var executionPath = "";
         for(var i=0; i<p.length-1; ++i){
             //if (i < p.length-1)
-                executionPath +=  p[i] + '/';
+            executionPath +=  p[i] + '/';
         }
         executionPath = executionPath.substring(0, executionPath.length-1);
     }
 
     core.executionPath = new _(executionPath).toString();
-
-
     core.startingApp = appName;
     core.geenaPath = new _(__dirname).toString();
 
@@ -68,7 +108,6 @@ Gna.start = function(executionPath){
     });
 
     config.onReady( function(err, obj){
-        Log.info('geena', 'CORE:INFO:42','Hi you !!!! ', __stack);
         var isStandalone = obj.isStandalone;
 
         Log.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
@@ -77,36 +116,47 @@ Gna.start = function(executionPath){
         ///console.log("bundlde ocn f",  JSON.stringify(obj, null, '\t') );
 
         Server.setConf({
-            appName         : core.startingApp,
-            //Apps list.
-            bundles         : obj.bundles,
-            allBundles      : obj.allBundles,
-            env             : obj.env,
-            isStandalone    : isStandalone,
-            executionPath   : core.executionPath,
-            geenaPath       : core.geenaPath,
-            conf            : obj.conf
-        },
-        function(complete){
-            if (complete) {
+                appName         : core.startingApp,
+                //Apps list.
+                bundles         : obj.bundles,
+                allBundles      : obj.allBundles,
+                env             : obj.env,
+                isStandalone    : isStandalone,
+                executionPath   : core.executionPath,
+                geenaPath       : core.geenaPath,
+                conf            : obj.conf
+            },
+            function(err, instance, express, conf){
+                if (!err) {
 
-                Log.debug(
-                    'geena',
-                    'CORE:DEBUG:1',
-                    'Server conf loaded',
-                    __stack
-                );
-                Log.notice(
-                    'geena',
-                    'CORE:NOTICE:2',
-                    'Starting [' + core.startingApp + '] instance'
-                );
-                Server.init();
-            }
-        });
+                    Log.debug(
+                        'geena',
+                        'CORE:DEBUG:1',
+                        'Server conf loaded',
+                        __stack
+                    );
+
+                    Log.notice(
+                        'geena',
+                        'CORE:NOTICE:2',
+                        'Starting [' + core.startingApp + '] instance'
+                    );
+                    //On user conf complete.
+                    e.on('complete', function(instance){
+                        Server.instance = instance;
+                        Server.init();
+                    });
+                    e.emit('init', instance, express, conf);
+                    //In case there is no user init.
+                    if (!Gna.initialized) {
+                        e.emit('complete', instance);
+                    }
+                }
+            });
 
     });
 };
+
 /**
  * Stop server
  * */
