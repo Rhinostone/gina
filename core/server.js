@@ -9,6 +9,7 @@ var Fs              = require('fs'),
     Express         = require('express'),
     Url             = require('url'),
     Utils           = require('geena.utils'),
+    Proc            = require('geena.utils').Proc,
     Config          = require('./config')(),
     Server          = {
     conf : {},
@@ -27,13 +28,15 @@ var Fs              = require('fs'),
 
         //Starting app.
         this.appName = options.appName;
+        var PID = new Proc(this.appName, process);
+
         this.env = options.env;
         //False => multiple apps sharing the same server (port).
         this.isStandalone = options.isStandalone;
 
         this.executionPath = options.executionPath;
         var geenaPath = options.geenaPath;
-        console.log("Geena ", options);
+        //console.log("Geena ", options);
         this.bundles = options.bundles;
 
 
@@ -57,7 +60,7 @@ var Fs              = require('fs'),
 
         if (!this.isStandalone) {
             //Only load the related conf / env.
-            console.log("none standalone conf => ", options.conf);
+            //console.log("none standalone conf => ", options.conf);
             this.conf[this.appName] = options.conf[this.appName][this.env];
 
             this.conf[this.appName].bundlesPath = options.conf[this.appName][this.env].bundlesPath;
@@ -67,7 +70,7 @@ var Fs              = require('fs'),
             //console.log("FUCK2 ",  options.conf[this.appName][this.env].bundlesPath);
         } else {
 
-            console.log("Running mode not handled yet..", this.appName, " VS ", this.bundles);
+            //console.log("Running mode not handled yet..", this.appName, " VS ", this.bundles);
             //Load all conf for the related apps & env.
             var apps = this.bundles;
             for (var i=0; i<apps.length; ++i) {
@@ -139,7 +142,8 @@ var Fs              = require('fs'),
             filename    = "",
             appName     = "";
             tmp         = {};
-        console.info('\nENVi : ', this.env, '\nPORT :', this.conf[this.appName].port,  '\nBUNDLE :', this.appName, '\nBundles ', apps, apps.length);
+
+        //console.info('\nENVi : ', this.env, '\nPORT :', this.conf[this.appName].port,  '\nBUNDLE :', this.appName, '\nBundles ', apps, apps.length);
         //Standalone or shared instance mode. It doesn't matter.
         for (var i=0; i<apps.length; ++i) {
 
@@ -200,7 +204,7 @@ var Fs              = require('fs'),
             }
 
         }//EO for.
-        console.log("found routing ", _this.routing);
+        //console.log("found routing ", _this.routing);
         callback(true);
     },
 
@@ -231,7 +235,7 @@ var Fs              = require('fs'),
                 ? this.executionPath + this.conf[apps[i]].staticPath
                 : '/static';
 
-            console.log(" static found ? ", path, Fs.existsSync( _(path) ));
+            //console.log(" static found ? ", path, Fs.existsSync( _(path) ));
             //Only applies when static folder exists.
             if (Fs.existsSync( _(path) )) {
                 app.configure(this.env, function() {
@@ -267,7 +271,6 @@ var Fs              = require('fs'),
                 next();
             });*/
         this.instance.all('*', function(request, response, next){
-            console.log("routing ...", _this.routing);
             //Only for dev & debug.
             _this.loadBundleConfiguration(_this.appName, function(err, conf){
 
@@ -294,7 +297,7 @@ var Fs              = require('fs'),
                 var params = {}, pathname = Url.parse(request.url).pathname;
                 out:
                     for (var rule in _this.routing) {
-                        console.log("\nrules ", rule);
+                        //console.log("\nrules ", rule);
 
                         if (typeof(_this.routing[rule]["param"]) == "undefined")
                             break;
@@ -350,7 +353,7 @@ var Fs              = require('fs'),
             });//EO this.loadBundleConfiguration(this.appName, function(err, conf){
         });//EO this.instance
 
-        console.log("what th fuck !!..", this.conf[this.appName].port.http);
+        //console.log("what th fuck !!..", this.conf[this.appName].port.http);
         console.log(
             "\nPID: " + process.pid,
             "\nPORT: " + this.conf[this.appName].port.http

@@ -27,7 +27,7 @@ var e = new EventEmitter();
 Gna.initialized = false;
 
 /**
- * On User server configuration
+ * On middleware initialization
  *
  * @callback callback
  *
