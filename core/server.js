@@ -28,7 +28,7 @@ var Fs              = require('fs'),
 
         //Starting app.
         this.appName = options.appName;
-        var PID = new Proc(this.appName, process);
+        //var PID = new Proc(this.appName, process);
 
         this.env = options.env;
         //False => multiple apps sharing the same server (port).
@@ -43,11 +43,12 @@ var Fs              = require('fs'),
         //TODO - Don't override if syntax is ok - no mixed paths.
         //Set paths for utils. Override for now.
         //To reset it, just delete the hidden folder.
-        Utils.Config.set('geena', 'project.json', {
+        UtilsConfig = new Utils.Config();
+        UtilsConfig.set('geena', 'project.json', {
             //project : Utils.Config.getProjectName(),
             paths : {
                 geena : geenaPath,
-                utils : Utils.Config.__dirname,
+                utils : UtilsConfig.__dirname,
                 executionPath : this.executionPath,
                 env : this.executionPath + '/env.json',
                 tmp : this.executionPath + '/tmp'
@@ -60,14 +61,10 @@ var Fs              = require('fs'),
 
         if (!this.isStandalone) {
             //Only load the related conf / env.
-            //console.log("none standalone conf => ", options.conf);
             this.conf[this.appName] = options.conf[this.appName][this.env];
 
             this.conf[this.appName].bundlesPath = options.conf[this.appName][this.env].bundlesPath;
             this.conf[this.appName].modelsPath =  options.conf[this.appName][this.env].modelsPath;
-            //console.log("FUCK0 ", this.conf[this.appName]);
-            //console.log("FUCK1 ", this.conf[this.appName].modelsPath);
-            //console.log("FUCK2 ",  options.conf[this.appName][this.env].bundlesPath);
         } else {
 
             //console.log("Running mode not handled yet..", this.appName, " VS ", this.bundles);
