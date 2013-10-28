@@ -67,39 +67,42 @@ Gna.onInitialize = function(callback){
 
 /**
  * Start server
- * @param {string} executionPath - Path in option
+ *
+ * @param {string} [executionPath]
  * */
 Gna.start = function(executionPath){
     //WTF !.
     var core    = Gna.core,
         env     = process.argv[2];
 
-    if(executionPath == undefined){
+
+    if( executionPath == undefined){
+
         var p = new _(process.argv[1]).toUnixStyle().split("/");
         var appName = p[p.length-1].split(".")[0];
-
         var executionPath = "";
-        for(var i=0; i<p.length-1; ++i){
-            //if (i < p.length-1)
+
+        for (var i=0; i<p.length-1; ++i) {
             executionPath +=  p[i] + '/';
         }
-        executionPath = executionPath.substring(0, executionPath.length-1);
+
+        var executionPath = executionPath.substring(0, executionPath.length-1);
     }
 
-    core.executionPath = new _(executionPath).toString();
+    core.executionPath = _(executionPath);
     core.startingApp = appName;
-    core.geenaPath = new _(__dirname).toString();
+    core.geenaPath = _(__dirname);
 
     //Setting env.
     if (env != 'undefined') {
         Log.setEnv(env);
     }
     //Setting log paths.
-
     Log.init({
-        logs : new _(core.executionPath + '/logs').toString(),
-        core: new _(__dirname).toString()
+        logs : _(core.executionPath + '/logs'),
+        core: _(__dirname)
     });
+
 
     var config = new Config({
         env : env,

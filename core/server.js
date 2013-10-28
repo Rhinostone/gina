@@ -28,7 +28,7 @@ var Fs              = require('fs'),
 
         //Starting app.
         this.appName = options.appName;
-        //var PID = new Proc(this.appName, process);
+        var PID = new Proc(this.appName, process);
 
         this.env = options.env;
         //False => multiple apps sharing the same server (port).
@@ -45,7 +45,7 @@ var Fs              = require('fs'),
         //To reset it, just delete the hidden folder.
         UtilsConfig = new Utils.Config();
         UtilsConfig.set('geena', 'project.json', {
-            //project : Utils.Config.getProjectName(),
+            //project : UtilsConfig.getProjectName(),
             paths : {
                 geena : geenaPath,
                 utils : UtilsConfig.__dirname,
@@ -86,7 +86,7 @@ var Fs              = require('fs'),
     init : function(){
 
         var _this = this;
-        process.title = 'geena: '+ this.appName;
+        //process.title = 'geena: '+ this.appName;
         //this.instance = Express();
 
         Log.debug(
@@ -150,7 +150,7 @@ var Fs              = require('fs'),
 
             //Specific case.
             if (!this.isStandalone && i == 0) appName = apps[i];
-            //console.log("trying..", new _(this.conf[apps[i]].bundlesPath) );
+            //console.log("trying..",  _(this.conf[apps[i]].bundlesPath) );
             try {
 
                 var files = Utils.cleanFiles(Fs.readdirSync(appPath));
@@ -353,7 +353,8 @@ var Fs              = require('fs'),
         //console.log("what th fuck !!..", this.conf[this.appName].port.http);
         console.log(
             "\nPID: " + process.pid,
-            "\nPORT: " + this.conf[this.appName].port.http
+            "\nPORT: " + this.conf[this.appName].port.http,
+            "\nPATHS: " + getPaths()
         );
 
         this.instance.listen(this.conf[this.appName].port.http);//By Default 8888

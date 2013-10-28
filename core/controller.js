@@ -352,7 +352,7 @@ Controller = function(request, response, next, options){
     };
 
     this.getData = function(){
-        return Utils.refToObj(this.data);
+        return Utils.refToObj(_this.data);
     };
 
     /**
