@@ -43,9 +43,9 @@ Config  = function(opt){
         Log.debug('geena', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
 
         _this.userConf = false;
-        var p = new _(_this.executionPath + '/env.json').toString();
+        var path = _(_this.executionPath + '/env.json');
 
-        if ( Fs.existsSync( p ) ) {
+        if ( Fs.existsSync(path) ) {
 
             _this.userConf = require(_this.executionPath + '/env.json');
 
@@ -285,14 +285,13 @@ Config  = function(opt){
 //                )
 //                ? content[this.startingApp][env].port.http
 //                : template["{bundle}"]["{env}"].port.http;
-
+""
 
         //Pushing default app first.
         _this.bundles.push(_this.startingApp);//This is a JSON.push.
         //console.log(" CONTENT TO BE SURE ", app, JSON.stringify(content, null, 4));
         //console.log("bundle list ", _this.bundles);
         var root = new _(_this.executionPath).toUnixStyle();
-
         //For each app.
         for (var app in content) {
             //Checking if genune app.
@@ -325,7 +324,7 @@ Config  = function(opt){
                 if ( Fs.existsSync(appsPath) ) {
                     var masterPort = content[_this.startingApp][env].port.http;
                     //Check if standalone or shared instance
-                    if (/**app != _this.startingApp &&*/ content[app][env].port.http != masterPort) {
+                    if (content[app][env].port.http != masterPort) {
                         //console.log("should be ok !!");
                         isStandalone = false;
                         _this.Host.standaloneMode = isStandalone;
@@ -379,10 +378,10 @@ Config  = function(opt){
                     Log.warn(
                         'geena',
                         'CONFIG:WARN:1',
-                        'Server won\'t load [' +app + '] app or apps path does not exists: ' + new _(appsPath).toString(),
+                        'Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath),
                         __stack
                     );
-                    callback('Server won\'t load [' +app + '] app or apps path does not exists: ' + new _(appsPath).toString() );
+                    callback('Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath) );
                 }
             }
             //Else not in the scenario.

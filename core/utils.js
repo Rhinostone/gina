@@ -70,26 +70,6 @@ var extend          = require('geena.utils').extend,
                     files.splice(0,1);
             }
             return files;
-        },
-        /**
-         * Delete a folder and all its subdirectories recursively
-         * @param path  the directory path you want to delete recursively
-         * @note thx to http://stackoverflow.com/questions/12627586/is-node-js-rmdir-recursive-will-it-work-on-non-empty-directories#answer-12761924
-         **/
-        deleteFolderRecursive : function(path){
-            var files = [];
-            if( fs.existsSync(path) ) {
-                files = fs.readdirSync(path);
-                files.forEach(function(file,index){
-                    var curPath = path + "/" + file;
-                    if(fs.statSync(curPath).isDirectory()) { // recurse
-                        Utils.deleteFolderRecursive(curPath);
-                    } else { // delete file
-                        fs.unlinkSync(curPath);
-                    }
-                });
-                fs.rmdirSync(path);
-            }
         }
 };
 
