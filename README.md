@@ -4,8 +4,8 @@ Geena
 <strong>Geena Project</strong> - A Node.js MVC framework
 <br/>Project under developement. Thank you for you patience.
 
+<a href="https://nodei.co/npm/geena/"><img src="https://nodei.co/npm/geena.png" alt="NPM" style="max-width:100%;"></a>
 
-The project is still in development. Thank you for your patience.
 
 You can install this module using npm:
 
