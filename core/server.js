@@ -9,8 +9,8 @@ var Fs              = require('fs'),
     Express         = require('express'),
     Url             = require('url'),
     Utils           = require('geena.utils'),
-    Proc            = require('geena.utils').Proc,
     Config          = require('./config')(),
+    Proc            = Utils.Proc,
     Server          = {
     conf : {},
     routing : {},
@@ -25,10 +25,9 @@ var Fs              = require('fs'),
     * @public
     */
     setConf : function(options, callback){
-
+        var _this = this;
         //Starting app.
         this.appName = options.appName;
-        var PID = new Proc(this.appName, process);
 
         this.env = options.env;
         //False => multiple apps sharing the same server (port).
@@ -86,8 +85,10 @@ var Fs              = require('fs'),
     init : function(){
 
         var _this = this;
+        var proc = new Proc(this.appName, process);
         //process.title = 'geena: '+ this.appName;
         //this.instance = Express();
+
 
         Log.debug(
             'geena',
@@ -109,7 +110,6 @@ var Fs              = require('fs'),
                 'Routing loaded' + '\n'+ JSON.stringify(_this.routing, null, '\t'),
                 __stack
             );
-
 
 
             if (success) {
@@ -378,5 +378,6 @@ var Fs              = require('fs'),
     }
 
 };
+
 
 module.exports = Server;

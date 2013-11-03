@@ -11,7 +11,7 @@
  *
  *
  * @package     Geena
- * @namespace   Geena.Config
+ * @namespace
  * @author      Rhinostone <geena@rhinostone.com>
  * @api         Public
  *
@@ -38,7 +38,8 @@ Config  = function(opt){
     this.bundles = [];
     this.allBundles = [];
 
-    var _init =  function(env){
+
+    var init =  function(env){
 
         Log.debug('geena', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
 
@@ -67,10 +68,10 @@ Config  = function(opt){
         //Do some checking please.. like already has a PID ?.
         //if yes, join in case of standalone.. or create a new thread.
         _this.Host.setMaster(_this.startingApp);
-        _getConf();
+        getConf();
     };
 
-    var _getConf = function(){
+    var getConf = function(){
 
         Log.debug('geena', 'CONFIG:DEBUG:2', 'Loading conf', __stack);
 
@@ -82,7 +83,7 @@ Config  = function(opt){
                 this.env = env;
                 this.envConf = envConf;
 
-                _loadBundlesConfiguration( function(err){
+                loadBundlesConfiguration( function(err){
                     //Log.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
 
                     //console.log("::: bundles ", _this.getBundles() );
@@ -454,7 +455,7 @@ Config  = function(opt){
      *
      * TODO - simplify / optimize
      * */
-    var _loadBundlesConfiguration = function(callback, bundle){
+    var loadBundlesConfiguration = function(callback, bundle){
 
         if ( typeof(bundle) == "undefined") {
             var bundle = _this.startingApp;
@@ -567,7 +568,7 @@ Config  = function(opt){
 
     this.refresh = function(bundle, callback){
 
-        _loadBundlesConfiguration( function(err){
+        loadBundlesConfiguration( function(err){
             if (!err) {
                 callback(false);
             } else {
@@ -603,12 +604,12 @@ Config  = function(opt){
         //Log.info('geena', 'CORE:INFO:42','about to init !!!! ', __stack);
 
         //Events
-        this.on('complete', function(err, config){
+        this.once('complete', function(err, config){
             //Log.info('geena', 'CORE:INFO:42','Ninja received EVENT  !!!!');
             _ready = {err: err, val: config};
         });
         _this.env = opt.env;
-        _init(opt.env);
+        init(opt.env);
 
         return {
             onReady : function(callback){
