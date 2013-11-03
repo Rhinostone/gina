@@ -16,12 +16,13 @@ var Gna     = {core:{}},
     Config  = require('./config'),
     Server  = require('./server'),
     Util    = require('util'),
+    Proc    = require('geena.utils').Proc,
     EventEmitter = require('events').EventEmitter;
 
 Gna.Utils = require('geena.utils');
 Gna.Model = require('./model');
 
-Log       = Gna.Utils.Logger;
+Log     = Gna.Utils.Logger;
 
 var e = new EventEmitter();
 Gna.initialized = false;
@@ -33,34 +34,11 @@ Gna.initialized = false;
  *
  * */
 Gna.onInitialize = function(callback){
+
     Gna.initialized = true;
+
     e.on('init', function(instance, express, conf){
-
-        e.getConfig = function(name){
-            //conf
-            if ( typeof(name) != 'undefined' ) {
-                try {
-                    return conf.filesContent[name];
-                } catch (err) {
-                    return undefined;
-                }
-            } else {
-                return conf;
-            }
-        };
-
-        e.setConfig = function(name, obj){
-            if ( typeof(name) == 'undefined' || name == '' ) {
-                var name = 'global';
-            }
-
-            if ( typeof(conf.filesContent[name]) != "undefined") {
-                Gna.Utils.extend(conf.filesContent[name], obj);
-            } else {
-                conf.filesContent[name] = obj;
-            }
-        };
-
+        addContext(conf);
         callback(e, instance, express);
     });
 };
@@ -93,6 +71,10 @@ Gna.start = function(executionPath){
     core.startingApp = appName;
     core.geenaPath = _(__dirname);
 
+
+    //Inherits parent (geena) context.
+    setConfig( JSON.parse(process.argv[3]) );
+
     //Setting env.
     if (env != 'undefined') {
         Log.setEnv(env);
@@ -116,7 +98,7 @@ Gna.start = function(executionPath){
         Log.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
         Log.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
 
-        ///console.log("bundlde ocn f",  JSON.stringify(obj, null, '\t') );
+        Log.info('geena', 'CORE:INFO:42', 'Mamabo !!');
 
         Server.setConf({
                 appName         : core.startingApp,
@@ -144,6 +126,8 @@ Gna.start = function(executionPath){
                         'CORE:NOTICE:2',
                         'Starting [' + core.startingApp + '] instance'
                     );
+
+
                     //On user conf complete.
                     e.on('complete', function(instance){
                         Server.instance = instance;

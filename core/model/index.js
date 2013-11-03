@@ -22,6 +22,7 @@ var Model;
 var Fs      = require('fs'),
     Module  = require('module')
     Utils   = require('geena.utils'),
+    UtilsConfig = Utils.Config(),
     //Dev     = Utils.Dev,
     Util    = require('util'),
     Config  = require('./../config')(),
@@ -83,12 +84,12 @@ Model = function(namespace){
                     var entityName, exluded = ['index.js'];
 
                     var produce = function(entityName, i){
-                        console.log("producing ", files[i]);
+                        //console.log("producing ", files[i]);
 
-                        Utils.Config.get('geena', 'project.json', function(err, config){
+                        UtilsConfig.get('geena', 'project.json', function(err, config){
+
                             if (err) Log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
 
-                           // console.log("found path ", config);
                             var filename = config.paths.geena + '/model/entity.js';
                             try {
                                 var ModelEntityClass = require(filename);
@@ -114,7 +115,7 @@ Model = function(namespace){
                                 ++i;
                             }
 
-                        });//EO Utils.Config.get
+                        });//EO UtilsConfig.get
 
                     }//EO produce
 
@@ -127,7 +128,7 @@ Model = function(namespace){
                             console.log("entityName  : ", entityName );
                             produce(entityName, i++);
                         } else if (i == files.length-1) {
-                            console.log("All done !");
+                            //console.log("All done !");
                             _this.emit('ready', false, EntitiesManager);
                             ++i;
                         } else {
@@ -196,7 +197,7 @@ Model = function(namespace){
     return {
         onReady : function(callback){
             _this.on('ready', function(err, entities){
-                //console.log("foudn entities ", entities);
+                console.log("foudn entities ", entities);
                 callback(err, entities );
             });
         }
