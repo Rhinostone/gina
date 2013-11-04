@@ -14,7 +14,7 @@
  */
 
 
-var Fs = require('fs'), vers = '0.0.7';
+var Fs = require('fs'), vers = '0.0.8';
 //Check for geena context.
 if (
     Fs.existsSync('./node_modules/geena') && Fs.existsSync('./node_modules/geena/node_modules/geena.utils')
@@ -63,10 +63,11 @@ if (
      *
      **/
 
-    var arg     = process.argv[2];
-    var Fs      = require("fs"),
-        Spawn   = require('child_process').spawn,
-        allowed = ["--clean", "-i","--install", "-u","--update", "-h", "--help"];
+    var arg             = process.argv[2];
+    var modulesPackage  = './submodules.json';
+    var Fs              = require("fs"),
+        Spawn           = require('child_process').spawn,
+        allowed         = ["--clean", "-i","--install", "-u","--update", "-h", "--help"];
 
     //By default.
     var defaultSubmodules= {
@@ -80,6 +81,7 @@ if (
                     "ssh" : "git@github.com:Rhinostone/geena.git",
                     "https" : "https://github.com/Rhinostone/geena.git"
                 },
+                //Blank target means node_modules
                 //For upgrade/downgrade only.
                 "dependencies" : {
                     "geena/geena.utils" : {
@@ -88,6 +90,7 @@ if (
                             "ssh" : "git@github.com:Rhinostone/geena.utils.git",
                             "https" : "https://github.com/Rhinostone/geena.utils.git"
                         }
+                        //Blank target means node_modules
                     }
                 }
             }
@@ -98,7 +101,7 @@ if (
         cmd : {},
         //Yeah always from the root.
         dir : __dirname,
-        //Use package.json with the following key: submodules.
+        //Use submodules.json with the following key: submodules.
         submodules : defaultSubmodules,
         useHttps : false,
         /**
@@ -115,8 +118,13 @@ if (
 
             if ( typeof(list) != "undefined" && list != null ) {
                 //Queue it.
-                var m = list.shift(),
-                    path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                var m = list.shift();
+                //var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                if ( typeof(submodules[m]['target']) != 'undefined' && submodules[m]['target'] != "" ) {
+                    var path = this.dir + submodules[m].target;
+                } else {
+                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                }
 
                 if ( typeof(submodules[m]['version']) != 'undefined' && submodules[m]['version'] != "" ) {
                     var tag = submodules[m].version;
@@ -132,7 +140,12 @@ if (
 
 
                 var m = list.shift();
-                var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                //var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                if ( typeof(submodules[m]['target']) != 'undefined' && submodules[m]['target'] != "" ) {
+                    var path = this.dir + submodules[m].target;
+                } else {
+                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                }
 
                 //Get dependencies.
                 if ( typeof(submodules[m]['dependencies']) != "undefined") {
@@ -436,7 +449,7 @@ if (
             //...TODO
         },
         /**
-         * Get submodules conf from packages.json
+         * Get submodules conf from submodules.json
          *
          *
          * @param {function} callback
@@ -446,9 +459,9 @@ if (
             var _this = this;
 
             //Merging with existing;
-            if (Fs.existsSync("./package.json")) {
+            if ( Fs.existsSync(modulesPackage) ) {
                 try {
-                    var dep = require('./package.json').submodules;
+                    var dep = require(modulesPackage).submodules;
 
                     if (
                         typeof(dep.use_https) != "undefined" && dep.use_https == true
