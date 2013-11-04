@@ -38,7 +38,7 @@ Gna.onInitialize = function(callback){
     Gna.initialized = true;
 
     e.on('init', function(instance, express, conf){
-        addContext(conf);
+        addTopic(conf);
         callback(e, instance, express);
     });
 };
@@ -73,7 +73,7 @@ Gna.start = function(executionPath){
 
 
     //Inherits parent (geena) context.
-    setConfig( JSON.parse(process.argv[3]) );
+    setContext( JSON.parse(process.argv[3]) );
 
     //Setting env.
     if (env != 'undefined') {

@@ -11,7 +11,7 @@
  *
  *
  * @package     Geena
- * @namespace   Geena.Model
+ * @namespace
  * @author      Rhinostone <geena@rhinostone.com>
  * @api         Public
  */
@@ -28,6 +28,10 @@ var Fs      = require('fs'),
     Config  = require('./../config')(),
     EventEmitter  = require('events').EventEmitter;
 
+/**
+ * Model Constructor
+ * @constructor
+ * */
 Model = function(namespace){
     var _this = this;
     var configuration = null;
@@ -67,11 +71,11 @@ Model = function(namespace){
         console.log("Model", model);
 
 
-        getConfig(bundle, function(err, conf){
+        getContext(bundle, function(err, conf){
 
             if (!err) {
                 configuration = conf.model;
-                console.log("CONF READY ", model, conf.path/** conf*/);
+                console.log("CONF READY ", model, conf.path);
                 //TODO - More tries & catches...
                 //Getting Entities Manager.
                 var EntitiesManager = new require(conf.path)()[model];
@@ -93,7 +97,7 @@ Model = function(namespace){
                             var filename = config.paths.geena + '/model/entity.js';
                             try {
                                 var ModelEntityClass = require(filename);
-                                var ModelEntity = new ModelEntityClass( _this.getConfig() );
+                                var ModelEntity = new ModelEntityClass( _this.getContext() );
 
                                 var EntityClass = require(modelPath  + '/' + files[i]);
                                 var Entity = new EntityClass();
@@ -151,7 +155,7 @@ Model = function(namespace){
      *
      * @return {object|undefined} configuration
      * */
-    this.getConfig = function(){
+    this.getContext = function(){
         if (configuration) {
             return configuration;
         } else {
@@ -170,7 +174,7 @@ Model = function(namespace){
      *
      * @private
      * */
-    var getConfig = function(bundle, callback){
+    var getContext = function(bundle, callback){
         var configuration = Config.getInstance(bundle);
 
         console.log("getting for bundle ", bundle, configuration);
