@@ -351,11 +351,12 @@ var Fs              = require('fs'),
         });//EO this.instance
 
         //console.log("what th fuck !!..", this.conf[this.appName].port.http);
+        /**
         console.log(
             "\nPID: " + process.pid,
             "\nPORT: " + this.conf[this.appName].port.http,
             "\nPATHS: " + getPaths()
-        );
+        );*/
 
         this.instance.listen(this.conf[this.appName].port.http);//By Default 8888
     },
