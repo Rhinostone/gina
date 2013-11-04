@@ -176,9 +176,11 @@ if (
             }
 
             try {
-                if ( Fs.existsSync(path) ) {
+                if ( Fs.existsSync(path) && Fs.readdirSync(path).length > 0) {
                     console.log("Submodule ["+ m +"] already installed. Won't override.");
-                    _this.install(list);
+                    if (list.length > 0) {
+                        _this.install(list);
+                    }
                 } else {
                     console.log(
                         "module: " + m,
