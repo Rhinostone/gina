@@ -11,7 +11,7 @@
  *
  *
  * @package     Geena
- * @namespace   Geena.Model
+ * @namespace
  * @author      Rhinostone <geena@rhinostone.com>
  * @api         Public
  */
@@ -66,7 +66,7 @@ Model = function(namespace){
         console.log("Model", model);
 
 
-        getConfig(bundle, function(err, conf){
+        getContext(bundle, function(err, conf){
 
             if (!err) {
                 configuration = conf.model;
@@ -107,9 +107,9 @@ Model = function(namespace){
                                             .replace(/\{Entity\}/g, entityName)
                                             .replace(/\{Model\}/g, model);
 
-                                        //var EntityFactory = new requireFromString(EntityFactorySource)( _this.getConfig() );
+                                        //var EntityFactory = new requireFromString(EntityFactorySource)( _this.getContext() );
                                         var EntityFactoryClass = requireFromString(EntityFactorySource);
-                                        var EntityFactory = new EntityFactoryClass( _this.getConfig() );
+                                        var EntityFactory = new EntityFactoryClass( _this.getContext() );
                                         console.log("Factory is ",  EntityFactory);
 
                                         //var Entity = new Entity();
@@ -117,7 +117,7 @@ Model = function(namespace){
                                         console.log("\nEntity CONTENT ", Entity, " \nVS\n", EntityFactory);
 
                                     } else {
-                                        throw new Error('Geena.Model.getConfig(...): [entityName] is undefined.');
+                                        throw new Error('Geena.Model.getContext(...): [entityName] is undefined.');
                                     }
                                 } catch (err) {
                                     Log.error('geena', 'MODEL:ERR:4', 'EEMPTY: EntitySuper\n' + err, __stack);
@@ -170,7 +170,7 @@ Model = function(namespace){
      *
      * @return {object|undefined} configuration
      * */
-    this.getConfig = function(){
+    this.getContext = function(){
         if (configuration) {
             return configuration;
         } else {
@@ -189,7 +189,7 @@ Model = function(namespace){
      *
      * @private
      * */
-    var getConfig = function(bundle, callback){
+    var getContext = function(bundle, callback){
         var configuration = Config.getInstance(bundle);
 
         console.log("getting for bundle ", bundle, configuration);

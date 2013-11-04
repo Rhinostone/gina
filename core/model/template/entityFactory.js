@@ -20,7 +20,7 @@ var {Entity}Entity = function(configuration){
 
     var _this = this;
 
-    this.getConfig = function(){
+    this.getContext = function(){
         console.log("{Entity}Entity super ON !", configuration);
         return configuration;
     };

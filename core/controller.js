@@ -387,7 +387,7 @@ Controller = function(request, response, next, options){
      *
      * TODO - Protect result
      * */
-    this.getConfig = function(name){
+    this.getContext = function(name){
 
         if ( typeof(name) != 'undefined' ) {
             try {
