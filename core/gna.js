@@ -98,8 +98,6 @@ Gna.start = function(executionPath){
         Log.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
         Log.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
 
-        Log.info('geena', 'CORE:INFO:42', 'Mamabo !!');
-
         Server.setConf({
                 appName         : core.startingApp,
                 //Apps list.

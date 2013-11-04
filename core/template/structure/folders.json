@@ -2,8 +2,8 @@
     "_comment" : "Default app = app type",
     "default": {
         "addons" : "",
-        "{apps}" : {
-            "{appName}" : [
+        "{bundles}" : {
+            "{bundleName}" : [
                 "config",
                 "controllers",
                 "lib",
@@ -11,10 +11,10 @@
             ]
         },
         "cache" : [
-            "{appName}"
+            "{bundleName}"
         ],
         "logs" : [
-            "{appName}"
+            "{bundleName}"
         ],
         "static" : {
             "common" : [
@@ -29,10 +29,10 @@
             }
         },
         "test": [
-            "{appName}"
+            "{bundleName}"
         ],
         "tmp" : [
-            "{apps}",
+            "{bundles}",
             "geena",
             "pid"
         ]

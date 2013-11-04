@@ -11,7 +11,7 @@
  *
  *
  * @package     Geena
- * @namespace   Geena.Controller
+ * @namespace
  * @author      Rhinostone <geena@rhinostone.com>
  *
  * @api         Public
@@ -141,7 +141,7 @@ Controller = function(request, response, next, options){
             //console.log('HANDLER SRC _____',data.page.handler);
 
             if (data.page.content) {
-                //data.page.content = Fs.readFileSync(this.app.bundlePath + '/apps/'+ this.app.appName + '/templates/' + data.page.content);
+                //data.page.content = Fs.readFileSync(this.app.bundlesPath + '/'+ this.app.appName + '/templates/' + data.page.content);
                 //data.page.content = ejs.compile(data.page.content);
                 console.log('rendering datas...', data);
                 _response.render('layout' + data.page.ext, data);
