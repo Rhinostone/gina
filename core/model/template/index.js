@@ -62,8 +62,8 @@ Model = function(namespace){
             var model = namespace[0];
         }
 
-        console.log("\nBundle", bundle);
-        console.log("Model", model);
+        //console.log("\nBundle", bundle);
+        //console.log("Model", model);
 
 
         getContext(bundle, function(err, conf){
@@ -243,6 +243,9 @@ Model = function(namespace){
                 //console.log("foudn entities ", entities);
                 callback(err, new entities() );
             });
+        },
+        getInstance : function(){
+            return
         }
     }
 };
