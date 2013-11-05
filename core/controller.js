@@ -116,7 +116,7 @@ Controller = function(request, response, next, options){
             }
         } else {
 
-           // console.log("get header ", _this.rendered);
+            //console.log("get header ", _this.rendered, autoRendered);
             if (_this.rendered != true && autoRendered) {
                 //Webservices handling.
                 data = _this.getData();
@@ -143,7 +143,7 @@ Controller = function(request, response, next, options){
             if (data.page.content) {
                 //data.page.content = Fs.readFileSync(this.app.bundlesPath + '/'+ this.app.appName + '/templates/' + data.page.content);
                 //data.page.content = ejs.compile(data.page.content);
-                console.log('rendering datas...', data);
+                //console.log('rendering datas...', data);
                 _response.render('layout' + data.page.ext, data);
             }
         } else {
