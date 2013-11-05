@@ -11,7 +11,7 @@
  *
  *
  * @package     Geena
- * @namespace   Geena.Router
+ * @namespace
  * @author      Rhinostone <geena@rhinostone.com>
  * @api         Public
  */
@@ -228,8 +228,9 @@ Router = function(env){
 //            actionController.handleResponse(response, true);
 //        }
 
+        actionController.handleResponse(response);//inverted.
         actionController[action](request, response, next);
-        actionController.handleResponse(response);
+
         action = null;
 
 
