@@ -38,7 +38,24 @@ Gna.onInitialize = function(callback){
     Gna.initialized = true;
 
     e.on('init', function(instance, express, conf){
-        addTopic(conf);
+
+        joinContext(conf);
+
+        Gna.getConfig = function(name){
+            var tmp = "";
+            if ( typeof(name) != 'undefined' ) {
+                try {
+                    //Protect it.
+                    tmp = JSON.stringify(conf.filesContent[name]);
+                    return JSON.parse(tmp);
+                } catch (err) {
+                    return undefined;
+                }
+            } else {
+                tmp = JSON.stringify(conf);
+                return JSON.parse(tmp);
+            }
+        };
         callback(e, instance, express);
     });
 };
