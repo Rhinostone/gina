@@ -387,16 +387,19 @@ Controller = function(request, response, next, options){
      *
      * TODO - Protect result
      * */
-    this.getContext = function(name){
-
+    this.getConfig = function(name){
+        var tmp = "";
         if ( typeof(name) != 'undefined' ) {
             try {
-                return _this.app.conf.filesContent[name];
+                //Protect it.
+                tmp = JSON.stringify(_this.app.conf.filesContent[name]);
+                return JSON.parse(tmp);
             } catch (err) {
                 return undefined;
             }
         } else {
-            return _this.app.conf;
+            tmp = JSON.stringify(_this.app.conf);
+            return JSON.parse(tmp);
         }
     }
 

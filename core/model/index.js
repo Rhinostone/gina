@@ -34,7 +34,7 @@ var Fs      = require('fs'),
  * */
 Model = function(namespace){
     var _this = this;
-    var configuration = null;
+    var _configuration = null;
 
     /**
      * Init
@@ -71,10 +71,10 @@ Model = function(namespace){
         console.log("Model", model);
 
 
-        getContext(bundle, function(err, conf){
+        getConfig(bundle, function(err, conf){
 
             if (!err) {
-                configuration = conf.model;
+                _configuration = conf.model;
                 console.log("CONF READY ", model, conf.path);
                 //TODO - More tries & catches...
                 //Getting Entities Manager.
@@ -97,7 +97,7 @@ Model = function(namespace){
                             var filename = config.paths.geena + '/model/entity.js';
                             try {
                                 var ModelEntityClass = require(filename);
-                                var ModelEntity = new ModelEntityClass( _this.getContext() );
+                                var ModelEntity = new ModelEntityClass( _this.getConfig() );
 
                                 var EntityClass = require(modelPath  + '/' + files[i]);
                                 var Entity = new EntityClass();
@@ -155,9 +155,9 @@ Model = function(namespace){
      *
      * @return {object|undefined} configuration
      * */
-    this.getContext = function(){
-        if (configuration) {
-            return configuration;
+    this.getConfig = function(){
+        if (_configuration) {
+            return _configuration;
         } else {
             return undefined;
         }
@@ -174,15 +174,19 @@ Model = function(namespace){
      *
      * @private
      * */
-    var getContext = function(bundle, callback){
-        var configuration = Config.getInstance(bundle);
+    var getConfig = function(bundle, callback){
 
-        console.log("getting for bundle ", bundle, configuration);
+        var configuration = Config.getInstance(bundle);
+        //console.log("getting for bundle ", bundle, configuration);
+
         if ( typeof(configuration) != 'undefined' ) {
+            var tmp = JSON.stringify(configuration);
+            tmp = JSON.parse(tmp);
+            console.log("getting for bundle ", bundle, tmp);
             //Response.
             var confObj = {
-                model : configuration.filesContent.model,
-                path : configuration.modelsPath
+                model : tmp.filesContent.model,
+                path : tmp.modelsPath
             };
             callback(false, confObj);
         } else {

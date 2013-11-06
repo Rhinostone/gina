@@ -545,6 +545,7 @@ Config  = function(opt){
             }//EO for (name
 
             conf[bundle][env].filesContent = files;
+            conf[bundle][env].bundle = bundle;
 
             files = {};
 
