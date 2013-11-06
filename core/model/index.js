@@ -185,7 +185,7 @@ Model = function(namespace){
             console.log("getting for bundle ", bundle, tmp);
             //Response.
             var confObj = {
-                model : tmp.filesContent.model,
+                model : tmp.content.model,
                 path : tmp.modelsPath
             };
             callback(false, confObj);

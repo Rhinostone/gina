@@ -537,15 +537,20 @@ Config  = function(opt){
                     //console.log("Got filename ", name ,files[name]);
                 } catch (err) {
                     //if ( typeof(files[name]) != 'undefined') {
-                    files[name] = null;
+                    if ( Fs.existsSync(filename) )
+                        files[name] = "malformed !!";
+                    else
+                        files[name] = null;
+
                     Log.warn('geena', 'SERVER:WARN:1', filename + err, __stack);
                     Log.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack);
                     //}
                 }
             }//EO for (name
 
-            conf[bundle][env].filesContent = files;
-            conf[bundle][env].bundle = bundle;
+
+            conf[bundle][env].content   = files;
+            conf[bundle][env].bundle    = bundle;
 
             files = {};
 
