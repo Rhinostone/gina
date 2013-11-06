@@ -392,7 +392,7 @@ Controller = function(request, response, next, options){
         if ( typeof(name) != 'undefined' ) {
             try {
                 //Protect it.
-                tmp = JSON.stringify(_this.app.conf.filesContent[name]);
+                tmp = JSON.stringify(_this.app.conf.content[name]);
                 return JSON.parse(tmp);
             } catch (err) {
                 return undefined;

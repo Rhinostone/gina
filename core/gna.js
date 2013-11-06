@@ -39,14 +39,16 @@ Gna.onInitialize = function(callback){
 
     e.on('init', function(instance, express, conf){
 
-        joinContext(conf);
+        console.log("join context ", conf);
+        joinContext(conf.contexts);
 
         Gna.getConfig = function(name){
             var tmp = "";
             if ( typeof(name) != 'undefined' ) {
                 try {
                     //Protect it.
-                    tmp = JSON.stringify(conf.filesContent[name]);
+                    tmp = JSON.stringify(conf.content[name]);
+                    console.log("parsing ", conf.content);
                     return JSON.parse(tmp);
                 } catch (err) {
                     return undefined;

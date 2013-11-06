@@ -107,9 +107,9 @@ Model = function(namespace){
                                             .replace(/\{Entity\}/g, entityName)
                                             .replace(/\{Model\}/g, model);
 
-                                        //var EntityFactory = new requireFromString(EntityFactorySource)( _this.getContext() );
+                                        //var EntityFactory = new requireFromString(EntityFactorySource)( _this.getConfig() );
                                         var EntityFactoryClass = requireFromString(EntityFactorySource);
-                                        var EntityFactory = new EntityFactoryClass( _this.getContext() );
+                                        var EntityFactory = new EntityFactoryClass( _this.getConfig() );
                                         console.log("Factory is ",  EntityFactory);
 
                                         //var Entity = new Entity();
@@ -170,7 +170,7 @@ Model = function(namespace){
      *
      * @return {object|undefined} configuration
      * */
-    this.getContext = function(){
+    this.getConfig = function(){
         if (configuration) {
             return configuration;
         } else {
@@ -196,7 +196,7 @@ Model = function(namespace){
         if ( typeof(configuration) != 'undefined' ) {
             //Response.
             var confObj = {
-                model : configuration.filesContent.model,
+                model : configuration.content.model,
                 path : configuration.modelsPath
             };
             callback(false, confObj);
