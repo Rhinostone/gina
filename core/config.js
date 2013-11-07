@@ -362,15 +362,16 @@ Config  = function(opt){
                         "env" : env,
                         "bundle" : app
                     };
-                    var jess = JSON.stringify(newContent).replace(/\{(\w+)\}/g, function(s, key) {
-                        return reps[key] || s;
-                    });
+//                    var jess = JSON.stringify(newContent).replace(/\{(\w+)\}/g, function(s, key) {
+//                        return reps[key] || s;
+//                    });
                     //console.log("damn path ", jess, null, 4);
-                    newContent = JSON.parse(
-                        JSON.stringify(newContent).replace(/\{(\w+)\}/g, function(s, key) {
-                            return reps[key] || s;
-                        }) );
-
+//                    newContent = JSON.parse(
+//                        JSON.stringify(newContent).replace(/\{(\w+)\}/g, function(s, key) {
+//                            return reps[key] || s;
+//                        })
+//                    );
+                    newContent = whisper(reps, newContent);
                     //console.log("result ", _this.bundles,"\n",newContent[app][env]);
                     //console.log("bundle list ", _this.bundles);
                     //callback(false, newContent);
@@ -386,7 +387,6 @@ Config  = function(opt){
                 }
             }
             //Else not in the scenario.
-
 
         }//EO for.
 
@@ -495,6 +495,7 @@ Config  = function(opt){
 
             conf[bundle][env].bundles = bundles;
             conf[bundle].cacheless = cacheless;
+            conf[bundle][env].executionPath = getContext("paths").root;
 
             appPath = _(conf[bundle][env].bundlesPath + '/' + bundle);
             modelsPath = _(conf[bundle][env].modelsPath);
@@ -548,6 +549,23 @@ Config  = function(opt){
                 }
             }//EO for (name
 
+            //Constants to be exposed in configuration files.
+            var reps = {
+                //TODO - remove this duplicate ?
+                "root"          : conf[bundle][env].executionPath,
+                "executionPath" : conf[bundle][env].executionPath,
+                "bundlesPath"   : conf[bundle][env].bundlesPath,
+                "bundlePath"    : conf[bundle][env].bundlePath,
+                "modelsPath"    : conf[bundle][env].modelsPath,
+                "handlersPath"  : conf[bundle][env].handlersPath,
+                "staticPath"    : conf[bundle][env].staticPath,
+                "logsPath"      : conf[bundle][env].logsPath,
+                "tmpPath"       : conf[bundle][env].tmpPath,
+                "env"           : env,
+                "bundle"        : bundle
+            };
+
+            files = whisper(reps, files);
 
             conf[bundle][env].content   = files;
             conf[bundle][env].bundle    = bundle;
@@ -557,8 +575,6 @@ Config  = function(opt){
         }//EO for each app
 
         //We always return something.
-
-        //Log.info('geena', 'CORE:INFO:42','ninja conf  !!!!' + JSON.stringify(conf, null, '\t') , __stack);
         callback(false);
     };
 
