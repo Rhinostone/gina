@@ -23,7 +23,7 @@
     "geena.utils": ""
   },
   "engine": [
-    "node >=0.8"
+    "node >=0.10"
   ],
   "main": "core/gna",
   "devDependencies": {},
@@ -56,7 +56,5 @@
     }
   ],
   "readme": "# geena\n\n[Geena Project](http://www.geena-project.com/) MVC Framework for [Node](http://nodejs.org/).\n\nYou can install this module using [npm](http://github.com/isaacs/npm):\n\n    npm install geena\n\n## License (MIT)\n\nCopyright (c) 2009-2013 [Rhinostone](http://www.rhinostone.com/) [<geena@rhinostone.com>]\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n",
-  "readmeFilename": "README.md",
-  "_id": "geena@0.0.3",
-  "_from": "geena@"
+  "readmeFilename": "README.md"
 }
