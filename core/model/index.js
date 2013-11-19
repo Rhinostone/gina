@@ -22,7 +22,7 @@ var Model;
 var Fs      = require('fs'),
     Module  = require('module')
     Utils   = require('geena.utils'),
-    UtilsConfig = Utils.Config(),
+    //UtilsConfig = Utils.Config(),
     //Dev     = Utils.Dev,
     Util    = require('util'),
     Config  = require('./../config')(),
@@ -89,7 +89,7 @@ Model = function(namespace){
 
                     var produce = function(entityName, i){
                         //console.log("producing ", files[i]);
-
+                        var UtilsConfig = new Utils.Config();
                         UtilsConfig.get('geena', 'project.json', function(err, config){
 
                             if (err) Log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
