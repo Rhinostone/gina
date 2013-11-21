@@ -72,7 +72,7 @@ Gna.start = function(executionPath){
     var core    = Gna.core,
         env     = process.argv[2];
 
-
+    console.log("my executionPath ", executionPath);
     if( executionPath == undefined){
 
         var p = new _(process.argv[1]).toUnixStyle().split("/");
