@@ -39,7 +39,6 @@ Gna.onInitialize = function(callback){
 
     e.on('init', function(instance, express, conf){
 
-        console.log("join context ", conf);
         joinContext(conf.contexts);
 
         Gna.getConfig = function(name){
@@ -48,12 +47,13 @@ Gna.onInitialize = function(callback){
                 try {
                     //Protect it.
                     tmp = JSON.stringify(conf.content[name]);
-                    console.log("parsing ", conf.content);
+                    console.warn("parsing ", conf.content);
                     return JSON.parse(tmp);
                 } catch (err) {
                     return undefined;
                 }
             } else {
+                console.error("config!!!! ", conf);
                 tmp = JSON.stringify(conf);
                 return JSON.parse(tmp);
             }
@@ -72,17 +72,14 @@ Gna.start = function(executionPath){
     var core    = Gna.core,
         env     = process.argv[2];
 
-    console.log("my executionPath ", executionPath);
     if( executionPath == undefined){
 
         var p = new _(process.argv[1]).toUnixStyle().split("/");
         var appName = p[p.length-1].split(".")[0];
         var executionPath = "";
-
         for (var i=0; i<p.length-1; ++i) {
             executionPath +=  p[i] + '/';
         }
-
         var executionPath = executionPath.substring(0, executionPath.length-1);
     }
 
@@ -92,7 +89,9 @@ Gna.start = function(executionPath){
 
 
     //Inherits parent (geena) context.
-    setContext( JSON.parse(process.argv[3]) );
+    if ( typeof(process.argv[3]) != 'undefined' ) {
+        setContext( JSON.parse(process.argv[3]) );
+    }
 
     //Setting env.
     if (env != 'undefined') {
@@ -103,7 +102,6 @@ Gna.start = function(executionPath){
         logs : _(core.executionPath + '/logs'),
         core: _(__dirname)
     });
-
 
     var config = new Config({
         env : env,
@@ -155,6 +153,12 @@ Gna.start = function(executionPath){
                     if (!Gna.initialized) {
                         e.emit('complete', instance);
                     }
+                } else {
+                    Log.error(
+                        'geena',
+                        'CORE:ERROR:1',
+                        'Geena::Core.setConf() error. '+ err
+                    );
                 }
             });
 

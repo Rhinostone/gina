@@ -38,8 +38,10 @@ Config  = function(opt){
     this.bundles = [];
     this.allBundles = [];
 
-
-    var init =  function(env){
+    var _init =  function(opt){
+        var env = opt.env;
+        _this.startingApp = opt.startingApp,
+        _this.executionPath = opt.executionPath;
 
         Log.debug('geena', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
 
@@ -48,7 +50,7 @@ Config  = function(opt){
 
         if ( Fs.existsSync(path) ) {
 
-            _this.userConf = require(_this.executionPath + '/env.json');
+            _this.userConf = require(path);
 
             Log.debug(
                 'geena',
@@ -82,7 +84,6 @@ Config  = function(opt){
                 //Need to globalize some of them.
                 this.env = env;
                 this.envConf = envConf;
-
                 loadBundlesConfiguration( function(err){
                     //Log.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
 
@@ -96,7 +97,8 @@ Config  = function(opt){
                         allBundles      : _this.getAllBundles(),
                         isStandalone    : _this.Host.isStandalone()
                     };
-                    //console.log("found bundles ", _this.bundlesConfiguration.bundles);
+
+                    //console.error("found bundles ", _this.bundlesConfiguration.bundles);
                     _this.Env.loaded = true;
 
                     _this.emit('complete', false, _this.bundlesConfiguration);
@@ -124,16 +126,10 @@ Config  = function(opt){
         //Do some checking please.. like already has a PID ?.
         //if yes, join in case of standalone.. or create a new thread.
         _this.Host.setMaster(bundle);
-
-//        Log.info('geena', 'CORE:INFO:42','final env :::: ' + _this.env , __stack);
-//        Log.info('geena', 'CORE:INFO:42','final cache :::: ' + _this.isCacheless() , __stack);
-//        Log.info('geena', 'CORE:INFO:42','final :::: ' + "Bundle conf ====> " + bundle + JSON.stringify(configuration, null, '\t'), __stack);
-
         if ( typeof(bundle) != 'undefined' && typeof(configuration) != 'undefined' ) {
 
             try {
                 return configuration[bundle][_this.Env.get()];
-
             } catch (err) {
                 Log.error('geena', 'CONFIG:ERR:1', err, __stack);
                 return undefined;
@@ -159,12 +155,14 @@ Config  = function(opt){
             try {
 
                 var envConf = "";
-                //console.log("loading once ", this.parent.userConf);
+                //console.error("loading once ", this.parent.userConf);
 
                 //require(this.executionPath + '/env.json');
 
                 if (this.parent.userConf) {
+
                     loadWithTemplate(this.parent.userConf, this.template, function(err, envConf){
+
                         _this.envConf = envConf;
                         //Log.warn('geena', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t') );
                         callback(false, envConf);
@@ -279,20 +277,14 @@ Config  = function(opt){
             env = _this.Env.get(),
             appsPath = "",
             modelsPath = "";
-//            masterPort = (
-//                typeof(content) != "undefined" &&
-//                    typeof(content[this.startingApp]) != "undefined" &&
-//                    typeof(content[this.startingApp][env]) != "undefined"
-//                )
-//                ? content[this.startingApp][env].port.http
-//                : template["{bundle}"]["{env}"].port.http;
-""
+
 
         //Pushing default app first.
         _this.bundles.push(_this.startingApp);//This is a JSON.push.
         //console.log(" CONTENT TO BE SURE ", app, JSON.stringify(content, null, 4));
         //console.log("bundle list ", _this.bundles);
         var root = new _(_this.executionPath).toUnixStyle();
+
         //For each app.
         for (var app in content) {
             //Checking if genune app.
@@ -309,15 +301,13 @@ Config  = function(opt){
                     ? content[app][env].appsPath
                     : template["{bundle}"]["{env}"].bundlesPath;
 
-
-                //I had to for this one...
-                appsPath = appsPath.replace(/\{executionPath\}/g, root);
-
-
-
                 modelsPath = (typeof(content[app][env]['modelsPath']) != "undefined")
                     ?  content[app][env].modelsPath
                     :  template["{bundle}"]["{env}"].modelsPath;
+
+                //I had to for this one...
+                appsPath = appsPath.replace(/\{executionPath\}/g, root);
+                //modelsPath = modelsPath.replace(/\{executionPath\}/g, mPath);
 
                 //console.log("My env ", env, _this.executionPath, JSON.stringify(template, null, '\t') );
 
@@ -353,7 +343,6 @@ Config  = function(opt){
                     );
 
 
-
                     //Variables replace. Compare with geena/core/template/conf/env.json.
                     var reps = {
                         "executionPath" : root,
@@ -362,6 +351,9 @@ Config  = function(opt){
                         "env" : env,
                         "bundle" : app
                     };
+
+
+                    //console.error("reps ", reps);
 //                    var jess = JSON.stringify(newContent).replace(/\{(\w+)\}/g, function(s, key) {
 //                        return reps[key] || s;
 //                    });
@@ -371,8 +363,13 @@ Config  = function(opt){
 //                            return reps[key] || s;
 //                        })
 //                    );
+                    //console.warn("join context ", newContent);
+
                     newContent = whisper(reps, newContent);
-                    //console.log("result ", _this.bundles,"\n",newContent[app][env]);
+
+                    //console.error("joined now ", newContent);
+                    //console.error("man.. ",  reps, "\n " + newContent[app][env]);
+                    //console.error("result ", _this.bundles,"\n",newContent[app][env]);
                     //console.log("bundle list ", _this.bundles);
                     //callback(false, newContent);
 
@@ -385,6 +382,7 @@ Config  = function(opt){
                     );
                     callback('Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath) );
                 }
+
             }
             //Else not in the scenario.
 
@@ -409,6 +407,7 @@ Config  = function(opt){
             __stack
         );
         //return newContent;
+
         callback(false, newContent);
     };
 
@@ -487,12 +486,10 @@ Config  = function(opt){
         var cacheless = _this.isCacheless(), conf = _this.envConf;
 
 
-
         //For each bundles.
         for (var i=0; i<bundles.length; ++i) {
 
             bundle = bundles[i];
-
             conf[bundle][env].bundles = bundles;
             conf[bundle].cacheless = cacheless;
             conf[bundle][env].executionPath = getContext("paths").root;
@@ -501,9 +498,9 @@ Config  = function(opt){
             modelsPath = _(conf[bundle][env].modelsPath);
             //files = conf[bundle][env].files;
 
-            for (name in  conf[bundle][env].files) {
+            for (var name in  conf[bundle][env].files) {
                 //Server only because of the shared mode VS the standalone mode.
-                if (name == 'routing' ) continue;
+                if (name == 'routing') continue;
 
                 if (env != 'prod') {
 
@@ -525,8 +522,6 @@ Config  = function(opt){
                 }
 
                 filename = appPath + '/config/' + conf[bundle][env].files[name];
-
-
                 try {
                     if (cacheless) delete require.cache[filename];
 
@@ -565,7 +560,9 @@ Config  = function(opt){
                 "bundle"        : bundle
             };
 
+
             files = whisper(reps, files);
+            //console.error("bundles path ", conf[bundle][env].bundlesPath);
 
             conf[bundle][env].content   = files;
             conf[bundle][env].bundle    = bundle;
@@ -620,8 +617,6 @@ Config  = function(opt){
         };
     } else {
         //Defined before init.
-        this.startingApp = opt.startingApp,
-        this.executionPath = opt.executionPath;
         var env = opt.env, _ready = {err:'not ready', val: null};
         //Log.info('geena', 'CORE:INFO:42','about to init !!!! ', __stack);
 
@@ -631,7 +626,7 @@ Config  = function(opt){
             _ready = {err: err, val: config};
         });
         _this.env = opt.env;
-        init(opt.env);
+        _init(opt);
 
         return {
             onReady : function(callback){
