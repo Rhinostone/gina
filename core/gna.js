@@ -73,17 +73,17 @@ Gna.start = function(executionPath){
         env     = process.argv[2];
 
     if( executionPath == undefined){
-
         var p = new _(process.argv[1]).toUnixStyle().split("/");
         var appName = p[p.length-1].split(".")[0];
         var executionPath = "";
         for (var i=0; i<p.length-1; ++i) {
             executionPath +=  p[i] + '/';
         }
-        var executionPath = executionPath.substring(0, executionPath.length-1);
+        executionPath = executionPath.substring(0, executionPath.length-1);
     }
 
     core.executionPath = _(executionPath);
+    console.error("found context ",  core.executionPath);
     core.startingApp = appName;
     core.geenaPath = _(__dirname);
 
