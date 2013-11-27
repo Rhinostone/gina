@@ -218,7 +218,7 @@ Model = function(namespace){
             console.log("Evaluating...", data.toString() );
             var entityFactory = data.toString().replace(/\{Entity\}/g, entityName);
             console.log("SHIT ");
-            process.exit(42);
+            //process.exit(42);
             callback(false, entityFactory);
         });
 
