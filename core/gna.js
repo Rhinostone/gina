@@ -53,7 +53,7 @@ Gna.onInitialize = function(callback){
                     return undefined;
                 }
             } else {
-                console.error("config!!!! ", conf);
+                //console.error("config!!!! ", conf);
                 tmp = JSON.stringify(conf);
                 return JSON.parse(tmp);
             }
@@ -82,6 +82,14 @@ Gna.start = function(executionPath){
         executionPath = executionPath.substring(0, executionPath.length-1);
     }
 
+    var root = getPath('root');
+
+    if ( root == undefined) {
+        setPath( 'root', _(executionPath) );
+        root = _(executionPath);
+        var geenaPath = _(__dirname);
+        setPath('geena.core', _(geenaPath +'/core'));
+    }
 
     core.executionPath = _(executionPath);
     console.error("found context ",  core.executionPath);
