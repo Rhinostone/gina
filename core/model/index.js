@@ -94,6 +94,8 @@ Model = function(namespace){
 
                             if (err) Log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
 
+
+
                             var filename = config.paths.geena + '/model/entity.js';
                             try {
                                 var ModelEntityClass = require(filename);

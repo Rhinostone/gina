@@ -82,6 +82,7 @@ Gna.start = function(executionPath){
         executionPath = executionPath.substring(0, executionPath.length-1);
     }
 
+
     core.executionPath = _(executionPath);
     console.error("found context ",  core.executionPath);
     core.startingApp = appName;

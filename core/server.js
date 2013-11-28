@@ -34,27 +34,10 @@ var Fs              = require('fs'),
         this.isStandalone = options.isStandalone;
 
         this.executionPath = options.executionPath;
-        var geenaPath = options.geenaPath;
+
         //console.log("Geena ", options);
         this.bundles = options.bundles;
 
-
-        //TODO - Don't override if syntax is ok - no mixed paths.
-        //Set paths for utils. Override for now.
-        //To reset it, just delete the hidden folder.
-        var UtilsConfig = new Utils.Config();
-        UtilsConfig.set('geena', 'project.json', {
-            //project : UtilsConfig.getProjectName(),
-            paths : {
-                geena : geenaPath,
-                utils : UtilsConfig.__dirname,
-                executionPath : this.executionPath,
-                env : this.executionPath + '/env.json',
-                tmp : this.executionPath + '/tmp'
-            },
-            //TODO - Replace by a property by bundle.
-            bundles : options.allBundles
-        });
         //console.log("!!Stand alone ? ", this.isStandalone, this.bundles, '\n'+options.conf);
         //console.log("CONF CONTENT \n",  options.conf[this.appName][this.env]);
 
@@ -79,7 +62,31 @@ var Fs              = require('fs'),
         //console.log("My Conf ",JSON.stringify(this.conf, null, '\t'));
         this.libPath = _(__dirname);//Server Lib Path.
         this.instance = Express();
+
+        //TODO - Don't override if syntax is ok - no mixed paths.
+        //Set paths for utils. Override for now.
+        //To reset it, just delete the hidden folder.
+        var geenaPath = options.geenaPath;
+        var UtilsConfig = new Utils.Config();
+//        UtilsConfig.set('geena', 'project.json', {
+//            //project : UtilsConfig.getProjectName(),
+//            paths : {
+//                geena : geenaPath,
+//                utils : UtilsConfig.__dirname,
+//                executionPath : this.executionPath,
+//                env : this.executionPath + '/env.json',
+//                tmp : this.executionPath + '/tmp'
+//            },
+//            //TODO - Replace by a property by bundle.
+//            bundles : options.allBundles
+//        }, function(err){
+//            if (!err)
+//                callback(false, this.instance, Express, this.conf[this.appName]);
+//            else
+//                callback(err);
+//        });
         callback(false, this.instance, Express, this.conf[this.appName]);
+
     },
 
     init : function(){

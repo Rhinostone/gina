@@ -39,6 +39,7 @@ Config  = function(opt){
     this.allBundles = [];
 
     var _init =  function(opt){
+
         var env = opt.env;
         _this.startingApp = opt.startingApp,
         _this.executionPath = opt.executionPath;
