@@ -27,6 +27,24 @@ Log     = Gna.Utils.Logger;
 var e = new EventEmitter();
 Gna.initialized = false;
 
+if( Gna.executionPath == undefined){
+    var p = new _(process.argv[1]).toUnixStyle().split("/");
+    var appName = p[p.length-1].split(".")[0];
+    Gna.executionPath = "";
+    for (var i=0; i<p.length-1; ++i) {
+        Gna.executionPath +=  p[i] + '/';
+    }
+    Gna.executionPath = Gna.executionPath.substring(0, Gna.executionPath.length-1);
+}
+
+var root = getPath('root');
+
+if ( root == undefined) {
+    setPath( 'root', _(Gna.executionPath) );
+    root = _(Gna.executionPath);
+    var geenaPath = _(__dirname);
+    setPath('geena.core', _(geenaPath +'/core'));
+}
 /**
  * On middleware initialization
  *
@@ -72,25 +90,11 @@ Gna.start = function(executionPath){
     var core    = Gna.core,
         env     = process.argv[2];
 
-    if( executionPath == undefined){
-        var p = new _(process.argv[1]).toUnixStyle().split("/");
-        var appName = p[p.length-1].split(".")[0];
-        var executionPath = "";
-        for (var i=0; i<p.length-1; ++i) {
-            executionPath +=  p[i] + '/';
-        }
-        executionPath = executionPath.substring(0, executionPath.length-1);
+    if ( typeof(executionPath) != 'undefined' ) {
+        Gna.executionPath = executionPath;
+    } else {
+        var executionPath = Gna.executionPath;
     }
-
-    var root = getPath('root');
-
-    if ( root == undefined) {
-        setPath( 'root', _(executionPath) );
-        root = _(executionPath);
-        var geenaPath = _(__dirname);
-        setPath('geena.core', _(geenaPath +'/core'));
-    }
-
     core.executionPath = _(executionPath);
     console.error("found context ",  core.executionPath);
     core.startingApp = appName;
