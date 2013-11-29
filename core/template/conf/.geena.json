@@ -1,0 +1,93 @@
+{
+    "use_https" : true,
+    "packages" : {
+        "geena" : {
+            "use_https" : true,
+            "comment" : "Node module",
+            "version" : "dev",
+            "repo" : {
+                "ssh" : "git@github.com:Rhinostone/geena.git",
+                "https" : "https://github.com/Rhinostone/geena.git"
+            },
+            "dependencies" : {
+                "geena/geena.utils" : {
+                    "use_https" : true,
+                    "comment" : "Geena module - submodule dependency",
+                    "version" : "dev",
+                    "repo" : {
+                        "ssh" : "git@github.com:Rhinostone/geena.utils.git",
+                        "https" : "https://github.com/Rhinostone/geena.utils.git"
+                    }
+                }
+            }
+        },
+        "tar"         : {
+            "comment" : "Tar - Node module",
+            "use_https" : true,
+            "version" : "v0.1.18",
+            "repo" : {
+                "ssh" : "git@github.com:isaacs/node-tar.git",
+                "https" : "https://github.com/isaacs/node-tar.git"
+            }
+        },
+        "amqplib"     : {
+            "comment" : "AMQP Lib -  Node module",
+            "use_https" : true,
+            "version" : "v0.1.0",
+            "repo" : {
+                "ssh" : "git@github.com:squaremo/amqp.node.git",
+                "https" : "https://github.com/squaremo/amqp.node.git"
+            }
+        },
+        "q"           : {
+            "comment" : "AMQP Lib -  Node module",
+            "use_https" : true,
+            "version" : "v0.9.7",
+            "repo" : {
+                "ssh" : "git@github.com:kriskowal/q.git",
+                "https" : "https://github.com/kriskowal/q.git"
+            }
+        },
+        "etap.utils" : {
+            "comment" : "Node module",
+            "use_https" : false,
+            "version" : "",
+            "repo" : {
+                "ssh" : "git@continuousintegration.emea1.ciscloud:/home/git/repositories/etap/etap.utils.git",
+                "https" : "http://continuousintegration.emea1.ciscloud:9090/home/git/repositories/etap/etap.utils.git"
+            }
+        },
+        "updater" : {
+            "comment" : "Updater bundle - Target must be relative.",
+            "use_https" : false,
+            "version" : "v0.0.1",
+            "target" : "src/updater",
+            "repo" : {
+                "ssh" : "git@continuousintegration.emea1.ciscloud:/home/git/repositories/etap/updater.git",
+                "https" : "http://continuousintegration.emea1.ciscloud:9090/home/git/repositories/etap/updater.git"
+            },
+            "build" : {
+                "version" : "v0.0.1",
+                "target" : "releases/updater/0.0.1",
+                "link" : "bundles/updater",
+                "post_build" : "script/post_build/updater"
+            }
+        },
+        "service" : {
+            "comment" : "Service bundle - Target must be relative.",
+            "use_https" : false,
+            "version" : "0.0.7-dev",
+            "target" : "src/service",
+            "repo" : {
+                "ssh" : "git@continuousintegration.emea1.ciscloud:/home/git/repositories/etap/service.git",
+                "https" : "http://continuousintegration.emea1.ciscloud:9090/home/git/repositories/etap/service.git"
+            },
+            "build" : {
+                "version" : "0.0.7-dev",
+                "target" : "releases/service/0.0.7-dev",
+                "link" : "bundles/service",
+                "post_build" : "script/post_build/service"
+            }
+        }
+    }
+}

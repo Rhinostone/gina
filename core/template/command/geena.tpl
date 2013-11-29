@@ -66,7 +66,7 @@ if (
 
     var arg             = process.argv[2];
     //Config file for submodules.
-    var modulesPackage  = './submodules.json';
+    var modulesPackage  = './.geena.json';
     var Fs              = require("fs"),
         Spawn           = require('child_process').spawn,
         allowed         = ["--clean", "-i","--install", "-u","--update", "-h", "--help"];
@@ -308,9 +308,6 @@ if (
                 }
             }
 
-
-
-
             _this.pull(m, path, tag, function(done, module){
                 //Get next task in list.
                 if (list.length > 0) {
@@ -538,7 +535,7 @@ if (
 
             //var submodules = this.submodules.packages;
             //console.log("About to load submodules ", JSON.stringify(subHandler.submodules, null, 4)); process.exit(42);
-            allowed.forEach(function(i){
+            allowed.forEach( function(i){
 
                 if (arg == i) {
                     i = i.replace(/-/g, '');
@@ -552,6 +549,4 @@ if (
         });
 
     }
-
-
 };
