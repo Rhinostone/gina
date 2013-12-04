@@ -91,10 +91,10 @@ Model = function(namespace){
                         //console.log("producing ", files[i]);
                         var UtilsConfig = new Utils.Config();
                         UtilsConfig.get('geena', 'project.json', function(err, config){
-
+                            if (config == undefined) {
+                                throw new Error("geena/utils/.gna not found.");
+                            }
                             if (err) Log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
-
-
 
                             var filename = config.paths.geena + '/model/entity.js';
                             try {
