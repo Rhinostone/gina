@@ -38,13 +38,13 @@ if( Gna.executionPath == undefined){
 }
 
 var root = getPath('root');
-
 if ( root == undefined) {
     setPath( 'root', _(Gna.executionPath) );
     root = _(Gna.executionPath);
     var geenaPath = _(__dirname);
     setPath('geena.core', _(geenaPath +'/core'));
 }
+
 /**
  * On middleware initialization
  *
@@ -54,7 +54,6 @@ if ( root == undefined) {
 Gna.onInitialize = function(callback){
 
     Gna.initialized = true;
-
     e.on('init', function(instance, express, conf){
 
         joinContext(conf.contexts);
@@ -90,16 +89,18 @@ Gna.start = function(executionPath){
     var core    = Gna.core,
         env     = process.argv[2];
 
+
     if ( typeof(executionPath) != 'undefined' ) {
         Gna.executionPath = executionPath;
     } else {
         var executionPath = Gna.executionPath;
     }
-    core.executionPath = _(executionPath);
+
+    executionPath =  _(executionPath);
+    core.executionPath = executionPath.replace('\/bundles', '');
     console.error("found context ",  core.executionPath);
     core.startingApp = appName;
     core.geenaPath = _(__dirname);
-
 
     //Inherits parent (geena) context.
     if ( typeof(process.argv[3]) != 'undefined' ) {
@@ -140,8 +141,8 @@ Gna.start = function(executionPath){
                 conf            : obj.conf
             },
             function(err, instance, express, conf){
-                if (!err) {
 
+                if (!err) {
                     Log.debug(
                         'geena',
                         'CORE:DEBUG:1',
@@ -154,6 +155,7 @@ Gna.start = function(executionPath){
                         'CORE:NOTICE:2',
                         'Starting [' + core.startingApp + '] instance'
                     );
+
 
 
                     //On user conf complete.
@@ -188,6 +190,7 @@ Gna.stop = function(pid, code){
 
     process.exit();
 };
+
 /**
  * Get Status
  * */
