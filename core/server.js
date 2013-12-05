@@ -61,37 +61,37 @@ var Fs              = require('fs'),
         }
         //console.log("My Conf ",JSON.stringify(this.conf, null, '\t'));
         this.libPath = _(__dirname);//Server Lib Path.
-        this.instance = Express();
+
 
         //TODO - Don't override if syntax is ok - no mixed paths.
         //Set paths for utils. Override for now.
         //To reset it, just delete the hidden folder.
         var geenaPath = options.geenaPath;
         var UtilsConfig = new Utils.Config();
-//        UtilsConfig.set('geena', 'project.json', {
-//            //project : UtilsConfig.getProjectName(),
-//            paths : {
-//                geena : geenaPath,
-//                utils : UtilsConfig.__dirname,
-//                executionPath : this.executionPath,
-//                env : this.executionPath + '/env.json',
-//                tmp : this.executionPath + '/tmp'
-//            },
-//            //TODO - Replace by a property by bundle.
-//            bundles : options.allBundles
-//        }, function(err){
-//            if (!err)
-//                callback(false, this.instance, Express, this.conf[this.appName]);
-//            else
-//                callback(err);
-//        });
-        callback(false, this.instance, Express, this.conf[this.appName]);
+        UtilsConfig.set('geena', 'locals.json', {
+            //project : UtilsConfig.getProjectName(),
+            paths : {
+                geena : geenaPath,
+                utils : UtilsConfig.__dirname,
+                executionPath : this.executionPath,
+                env : this.executionPath + '/env.json',
+                tmp : this.executionPath + '/tmp'
+            },
+            //TODO - Replace by a property by bundle.
+            bundles : options.allBundles
+        }, function(err){
+            if (!err)
+                callback(false, Express(), Express, this.conf[this.appName]);
+            else
+                callback(err);
+        });
 
+        callback(false, Express(), Express, this.conf[this.appName]);
     },
 
-    init : function(){
-
+    init : function(instance){
         var _this = this;
+        this.instance = instance;
         var proc = new Proc(this.appName, process);
         //process.title = 'geena: '+ this.appName;
         //this.instance = Express();
@@ -123,7 +123,6 @@ var Fs              = require('fs'),
 
                 _this.configure( function(success){
                     //Override configuration with user settings.
-
                    _this.onRequest();
                 });
             }
@@ -274,7 +273,9 @@ var Fs              = require('fs'),
                 res.header("Access-Control-Allow-Headers", "X-Requested-With");
                 next();
             });*/
+
         this.instance.all('*', function(request, response, next){
+            console.log('calling back..');
             //Only for dev & debug.
             _this.loadBundleConfiguration(_this.appName, function(err, conf){
 

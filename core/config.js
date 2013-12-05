@@ -81,6 +81,7 @@ Config  = function(opt){
         _this.Env.load( function(err, envConf){
             //Log.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 42', __stack);
             //Log.info('geena', 'CORE:INFO:42','on this Env LOAD!', __stack);
+
             if ( typeof(_this.Env.loaded) == "undefined") {
                 //Need to globalize some of them.
                 this.env = env;
@@ -101,7 +102,6 @@ Config  = function(opt){
 
                     //console.error("found bundles ", _this.bundlesConfiguration.bundles);
                     _this.Env.loaded = true;
-
                     _this.emit('complete', false, _this.bundlesConfiguration);
                     //isFileInProject(conf[env]["files"]);
                 }, _this.startingApp);//by default.
@@ -163,7 +163,6 @@ Config  = function(opt){
                 if (this.parent.userConf) {
 
                     loadWithTemplate(this.parent.userConf, this.template, function(err, envConf){
-
                         _this.envConf = envConf;
                         //Log.warn('geena', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t') );
                         callback(false, envConf);
@@ -285,6 +284,10 @@ Config  = function(opt){
         //console.log(" CONTENT TO BE SURE ", app, JSON.stringify(content, null, 4));
         //console.log("bundle list ", _this.bundles);
         var root = new _(_this.executionPath).toUnixStyle();
+        try {
+            var pkg = require(_(root + '/project.json')).packages;
+        } catch (err) { } //bundlesPath will be default.
+
 
         //For each app.
         for (var app in content) {
@@ -298,9 +301,19 @@ Config  = function(opt){
 
             if ( typeof(content[app][env]) != "undefined" ) {
 
+                if (
+                    pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && env == 'dev'
+                    || pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && env == 'debug'
+                    ) {
+                    var p = _(pkg[app].src);
+                    content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
+                    //content[app][env]['bundlesPath'] = root + "/"+ p.replace('/' + app, '');
+                }
                 appsPath = (typeof(content[app][env]['bundlesPath']) != "undefined")
-                    ? content[app][env].appsPath
+                    ? content[app][env].bundlesPath
                     : template["{bundle}"]["{env}"].bundlesPath;
+
+
 
                 modelsPath = (typeof(content[app][env]['modelsPath']) != "undefined")
                     ?  content[app][env].modelsPath
@@ -311,7 +324,6 @@ Config  = function(opt){
                 //modelsPath = modelsPath.replace(/\{executionPath\}/g, mPath);
 
                 //console.log("My env ", env, _this.executionPath, JSON.stringify(template, null, '\t') );
-
                 //Existing app and port sharing => != standalone.
                 if ( Fs.existsSync(appsPath) ) {
                     var masterPort = content[_this.startingApp][env].port.http;
@@ -367,7 +379,7 @@ Config  = function(opt){
                     //console.warn("join context ", newContent);
 
                     newContent = whisper(reps, newContent);
-
+                    //console.error("blablabla ",newContent);
                     //console.error("joined now ", newContent);
                     //console.error("man.. ",  reps, "\n " + newContent[app][env]);
                     //console.error("result ", _this.bundles,"\n",newContent[app][env]);
@@ -390,7 +402,6 @@ Config  = function(opt){
         }//EO for.
 
 
-
         Log.debug(
             'geena',
             'CONFIG:DEBUG:7',
@@ -408,7 +419,6 @@ Config  = function(opt){
             __stack
         );
         //return newContent;
-
         callback(false, newContent);
     };
 
@@ -429,6 +439,7 @@ Config  = function(opt){
      * @return {array} bundles
      * */
     this.getBundles = function(){
+
         //Registered apps only.
         Log.debug(
             'geena',
@@ -436,7 +447,7 @@ Config  = function(opt){
             'Pushing apps ' + JSON.stringify(_this.bundles, null, '\t'),
             __stack
         );
-        return _this.bundles;
+        return this.bundles;
     };
 
     this.getAllBundles = function(){

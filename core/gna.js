@@ -98,8 +98,10 @@ Gna.start = function(executionPath){
 
     executionPath =  _(executionPath);
     core.executionPath = executionPath.replace('\/bundles', '');
-    console.error("found context ",  core.executionPath);
+
+    //console.error("found context ",  core.executionPath);
     core.startingApp = appName;
+
     core.geenaPath = _(__dirname);
 
     //Inherits parent (geena) context.
@@ -111,6 +113,7 @@ Gna.start = function(executionPath){
     if (env != 'undefined') {
         Log.setEnv(env);
     }
+
     //Setting log paths.
     Log.init({
         logs : _(core.executionPath + '/logs'),
@@ -124,6 +127,7 @@ Gna.start = function(executionPath){
     });
 
     config.onReady( function(err, obj){
+
         var isStandalone = obj.isStandalone;
 
         Log.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
@@ -141,7 +145,6 @@ Gna.start = function(executionPath){
                 conf            : obj.conf
             },
             function(err, instance, express, conf){
-
                 if (!err) {
                     Log.debug(
                         'geena',
@@ -156,13 +159,12 @@ Gna.start = function(executionPath){
                         'Starting [' + core.startingApp + '] instance'
                     );
 
-
-
                     //On user conf complete.
                     e.on('complete', function(instance){
-                        Server.instance = instance;
-                        Server.init();
+                        //Server.instance = instance;
+                        Server.init(instance);
                     });
+
                     e.emit('init', instance, express, conf);
                     //In case there is no user init.
                     if (!Gna.initialized) {
