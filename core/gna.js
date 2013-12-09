@@ -14,35 +14,56 @@
  */
 var Gna     = {core:{}},
     Config  = require('./config'),
-    Server  = require('./server'),
-    Util    = require('util'),
-    Proc    = require('geena.utils').Proc,
+    server  = require('./server'),
+    utils   = require('geena.utils'),
+    Proc    = utils.Proc,
     EventEmitter = require('events').EventEmitter;
 
 Gna.Utils = require('geena.utils');
-Gna.Model = require('./model');
+//Gna.Model = require('./model');
 
 Log     = Gna.Utils.Logger;
 
 var e = new EventEmitter();
 Gna.initialized = false;
-
+var startWithoutGeena = false;
 if( Gna.executionPath == undefined){
     var p = new _(process.argv[1]).toUnixStyle().split("/");
     var appName = p[p.length-1].split(".")[0];
     Gna.executionPath = "";
-    for (var i=0; i<p.length-1; ++i) {
-        Gna.executionPath +=  p[i] + '/';
+    if ( (/index.js/).test(process.argv[1]) ) {
+        startWithoutGeena = true;
+        appName = p[p.length-2].split(".")[0];
+        //Find root ;)
+        var m = _(__dirname).split("/");
+        Gna.executionPath = "";
+        for (var i in m) {
+            if (m[i] != p[i]){
+                break;
+            } else {
+                Gna.executionPath +=  p[i] + '/';
+            }
+        }
+        Gna.executionPath = _( Gna.executionPath.substring(0, Gna.executionPath.length-1) );
+    } else {
+        for (var i=0; i<p.length-1; ++i) {
+            Gna.executionPath +=  p[i] + '/';
+        }
+        Gna.executionPath = _( Gna.executionPath.substring(0, Gna.executionPath.length-1) );
     }
-    Gna.executionPath = Gna.executionPath.substring(0, Gna.executionPath.length-1);
+
 }
 
 var root = getPath('root');
-if ( root == undefined) {
-    setPath( 'root', _(Gna.executionPath) );
-    root = _(Gna.executionPath);
-    var geenaPath = _(__dirname);
-    setPath('geena.core', _(geenaPath +'/core'));
+var geenaPath = getPath('geena.core');
+
+if ( typeof(root) == 'undefined') {
+    root = Gna.executionPath;
+    setPath( 'root', root );
+}
+if ( typeof(geenaPath) == 'undefined') {
+    geenaPath = _(__dirname);
+    setPath('geena.core', geenaPath);
 }
 
 /**
@@ -85,24 +106,28 @@ Gna.onInitialize = function(callback){
  * @param {string} [executionPath]
  * */
 Gna.start = function(executionPath){
+
     //WTF !.
     var core    = Gna.core,
         env     = process.argv[2];
 
-
     if ( typeof(executionPath) != 'undefined' ) {
-        Gna.executionPath = executionPath;
+        Gna.executionPath = _(executionPath);
     } else {
-        var executionPath = Gna.executionPath;
+        var executionPath = root;
     }
 
-    executionPath =  _(executionPath);
-    core.executionPath = executionPath.replace('\/bundles', '');
+
+    console.error('WTF !! ', executionPath);
+    //Get bundlesDir.
+    console.error('getting bundlesDIR: ', process.argv[1], "[",appName,"]");
+
+    //core.executionPath = executionPath.replace('\/bundles', '');
 
     //console.error("found context ",  core.executionPath);
     core.startingApp = appName;
-
-    core.geenaPath = _(__dirname);
+    core.executionPath =  root;
+    core.geenaPath = geenaPath;
 
     //Inherits parent (geena) context.
     if ( typeof(process.argv[3]) != 'undefined' ) {
@@ -119,21 +144,22 @@ Gna.start = function(executionPath){
         logs : _(core.executionPath + '/logs'),
         core: _(__dirname)
     });
-
+    console.error("rock n roll !!! ", core.executionPath);
     var config = new Config({
         env : env,
         executionPath : core.executionPath,
         startingApp : core.startingApp
     });
-
+    //setContext('config', config);
     config.onReady( function(err, obj){
+
+        Gna.Model = require('./model');
 
         var isStandalone = obj.isStandalone;
 
         Log.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
         Log.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
-
-        Server.setConf({
+        server.setConf({
                 appName         : core.startingApp,
                 //Apps list.
                 bundles         : obj.bundles,
@@ -161,8 +187,8 @@ Gna.start = function(executionPath){
 
                     //On user conf complete.
                     e.on('complete', function(instance){
-                        //Server.instance = instance;
-                        Server.init(instance);
+                        //server.instance = instance;
+                        server.init(instance);
                     });
 
                     e.emit('init', instance, express, conf);

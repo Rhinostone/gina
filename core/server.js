@@ -9,7 +9,7 @@ var Fs              = require('fs'),
     Express         = require('express'),
     Url             = require('url'),
     Utils           = require('geena.utils'),
-    Config          = require('./config')(),
+    //config          = require('./config')(),
     Proc            = Utils.Proc,
     Server          = {
     conf : {},
@@ -25,6 +25,7 @@ var Fs              = require('fs'),
     * @public
     */
     setConf : function(options, callback){
+
         var _this = this;
         //Starting app.
         this.appName = options.appName;
@@ -68,6 +69,7 @@ var Fs              = require('fs'),
         //To reset it, just delete the hidden folder.
         var geenaPath = options.geenaPath;
         var UtilsConfig = new Utils.Config();
+
         UtilsConfig.set('geena', 'locals.json', {
             //project : UtilsConfig.getProjectName(),
             paths : {
@@ -138,7 +140,9 @@ var Fs              = require('fs'),
         //console.info("Trigged onRoutesLoaded");
 
         //console.info('ENV : ', this.conf[this.appName].env, '\n routing file\n ', this.conf[this.appName].files);
-        var conf =  Config.getInstance(this.appName);
+        //var config  = getContext('config');
+        var config = require('./config')();
+        var conf =  config.getInstance(this.appName);
         var _this       = this,
             env         = this.env,
             apps        = conf.bundles,
@@ -370,14 +374,16 @@ var Fs              = require('fs'),
     },
     loadBundleConfiguration : function(bundle, callback) {
 
-        console.log("bundle [", bundle, "] VS config ", Config.getInstance(bundle) );
-        var _this = this, cacheless = Config.isCacheless();
+        //var config  = getContext('config');
+        var config = require('./config')();
+        console.log("bundle [", bundle, "] VS config ", config.getInstance(bundle) );
+        var _this = this, cacheless = config.isCacheless();
         console.log("is cacheless ", cacheless);
         //Reloading assets & files.
         if (!cacheless) {
             callback(false);
         } else {
-            Config.refresh(bundle, function(err){
+            config.refresh(bundle, function(err){
                 if (err) Log.error('geena', 'SERVER:ERR:5', err, __stack);
 
                 //Also refresh routing.
