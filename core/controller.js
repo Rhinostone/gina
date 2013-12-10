@@ -19,16 +19,12 @@
 var Controller;
 
 //Imports.
-var Fs      = require("fs"),
+var fs      = require("fs"),
     //Node
-    Util    = require('util'),
+    util    = require('util'),
     //Geena
-    Utils   = require("./utils");
+    utils   = require("./utils");
 
-/**
- * Controller Constructor
- * @constructor
- * */
 Controller = function(request, response, next, options){
 
     //Public
@@ -38,10 +34,13 @@ Controller = function(request, response, next, options){
 
     //Private
     var _request, _response, _next;
-
     var _this = this;
 
-    var _init = function(request, response, next){
+    /**
+     * Controller Constructor
+     * @constructor
+     * */
+    var init = function(request, response, next){
         _request = request, _response = response, _next = next;
         //console.log("...", _this instanceof Controller);
         if ( typeof(Controller.initialized) != "undefined" ) {
@@ -67,14 +66,14 @@ Controller = function(request, response, next, options){
     **/
     this.handleResponse = function(response, autoRendered){
         _response = response;
-        Log.info(
+        logger.info(
             'geena',
             'CONTROLLER:FACTORY:INFO:1',
             'bundle Path  is: '+ _this.app.bundlePath,
             __stack
         );
 
-        Log.info(
+        logger.info(
             'geena',
             'CONTROLLER:FACTORY:INFO:2',
             'Action  is: '+ _this.app.action,
@@ -141,7 +140,7 @@ Controller = function(request, response, next, options){
             //console.log('HANDLER SRC _____',data.page.handler);
 
             if (data.page.content) {
-                //data.page.content = Fs.readFileSync(this.app.bundlesPath + '/'+ this.app.appName + '/templates/' + data.page.content);
+                //data.page.content = fs.readFileSync(this.app.bundlesPath + '/'+ this.app.appName + '/templates/' + data.page.content);
                 //data.page.content = ejs.compile(data.page.content);
                 //console.log('rendering datas...', data);
                 _response.render('layout' + data.page.ext, data);
@@ -352,7 +351,7 @@ Controller = function(request, response, next, options){
     };
 
     this.getData = function(){
-        return Utils.refToObj(_this.data);
+        return utils.refToObj(_this.data);
     };
 
     /**
@@ -403,11 +402,11 @@ Controller = function(request, response, next, options){
         }
     }
 
-    _init(request, response, next);
+    init(request, response, next);
 };
 
 //Allow protected methods to be overridden.
-//Controller.prototype.extends = Utils.extends;
+//Controller.prototype.extends = utils.extends;
 //Controller.render.prototype.overridable = true;
 //Controller.renderJson.prototype.overridable = true;
 

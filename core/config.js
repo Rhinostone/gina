@@ -666,22 +666,14 @@ Config  = function(opt){
         var env = opt.env, _ready = {err:'not ready', val: null};
         //log.info('geena', 'CORE:INFO:42','about to init !!!! ', __stack);
 
-        //Events
-//        this.once('complete', function(err, config){
-//            //log.info('geena', 'CORE:INFO:42','Ninja received EVENT  !!!!');
-//            _ready = {err: err, val: config};
-//        });
         this.env = opt.env;
         init(opt);
 
         return {
             onReady : function(callback){
                 _this.once('complete', function(err, config){
-                    //log.info('geena', 'CORE:INFO:42','Ninja received EVENT  !!!!');
-                    //_ready = {err: err, val: config};
                     callback(err, config);
                 });
-                //callback(_ready.err, _ready.val);
             }
         };
     }
