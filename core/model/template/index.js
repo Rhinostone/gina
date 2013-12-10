@@ -38,12 +38,12 @@ Model = function(namespace){
      *
      * @private
      * */
-    var _init = function(namespace){
+    var init = function(namespace){
         //TODO - if intance...
 
 
         if ( typeof(namespace) == "undefined" || namespace == "") {
-            Log.error('geena', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
+            logger.error('geena', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
         }
         var suffix = 'Entity';
         var namespace = namespace.split(/\//g);
@@ -88,7 +88,7 @@ Model = function(namespace){
                         console.log("producing ", files[i]);
 
                         Utils.Config.get('geena', 'project.json', function(err, config){
-                            if (err) Log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
+                            if (err) logger.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
 
                             var filename = config.paths.geena + '/model/entityFactory.js';
 
@@ -120,7 +120,7 @@ Model = function(namespace){
                                         throw new Error('Geena.Model.getContext(...): [entityName] is undefined.');
                                     }
                                 } catch (err) {
-                                    Log.error('geena', 'MODEL:ERR:4', 'EEMPTY: EntitySuper\n' + err, __stack);
+                                    logger.error('geena', 'MODEL:ERR:4', 'EEMPTY: EntitySuper\n' + err, __stack);
                                 }
 
                                 //Entity = new EntitiesManager[model]();
@@ -211,7 +211,7 @@ Model = function(namespace){
         Fs.readFile(filename, function (err, data){
 
             if (err) {
-                Log.error('geena', 'MODEL:ERR:3', err, __stack);
+                logger.error('geena', 'MODEL:ERR:3', err, __stack);
                 callback(err);
             }
 
@@ -235,7 +235,7 @@ Model = function(namespace){
 //
 //    };
 
-    _init(namespace);
+    init(namespace);
 
     return {
         onReady : function(callback){

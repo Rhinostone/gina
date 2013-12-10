@@ -14,15 +14,16 @@
  */
 var Gna     = {core:{}},
     Config  = require('./config'),
-    server  = require('./server'),
     utils   = require('geena.utils'),
     Proc    = utils.Proc,
+    server  = require('./server'),
     EventEmitter = require('events').EventEmitter;
 
-Gna.Utils = require('geena.utils');
-//Gna.Model = require('./model');
+Gna.Utils = utils;
+logger = Gna.Utils.Logger;
 
-Log     = Gna.Utils.Logger;
+setContext('geena.utils', utils);
+setContext('geena.utils.logger', logger);
 
 var e = new EventEmitter();
 Gna.initialized = false;
@@ -136,15 +137,15 @@ Gna.start = function(executionPath){
 
     //Setting env.
     if (env != 'undefined') {
-        Log.setEnv(env);
+        logger.setEnv(env);
     }
 
     //Setting log paths.
-    Log.init({
+    logger.init({
         logs : _(core.executionPath + '/logs'),
         core: _(__dirname)
     });
-    console.error("rock n roll !!! ", core.executionPath);
+
     var config = new Config({
         env : env,
         executionPath : core.executionPath,
@@ -156,8 +157,9 @@ Gna.start = function(executionPath){
 
         var isStandalone = obj.isStandalone;
 
-        Log.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
-        Log.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
+        logger.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
+        logger.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
+        
         server.setConf({
                 appName         : core.startingApp,
                 //Apps list.
@@ -172,14 +174,14 @@ Gna.start = function(executionPath){
             function(err, instance, express, conf){
                 if (!err) {
                     Gna.Model = require('./model');
-                    Log.debug(
+                    logger.debug(
                         'geena',
                         'CORE:DEBUG:1',
                         'Server conf loaded',
                         __stack
                     );
 
-                    Log.notice(
+                    logger.notice(
                         'geena',
                         'CORE:NOTICE:2',
                         'Starting [' + core.startingApp + '] instance'
@@ -197,14 +199,13 @@ Gna.start = function(executionPath){
                         e.emit('complete', instance);
                     }
                 } else {
-                    Log.error(
+                    logger.error(
                         'geena',
                         'CORE:ERROR:1',
                         'Geena::Core.setConf() error. '+ err
                     );
                 }
             });
-
     });
 };
 

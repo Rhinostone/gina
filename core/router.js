@@ -18,17 +18,13 @@
 var Router;
 
 //Imports.
-var Url     = require("url"),
-    Fs      = require("fs"),
-    Util    = require('util'),
+var url     = require("url"),
+    fs      = require("fs"),
+    util    = require('util'),
    // Utils   = require('geena.utils');
 
-    Utils   = require('./utils.js');
+    utils   = require('./utils.js');
 
-/**
- * Router Constructor
- * @constructor
- * */
 Router = function(env){
 
     this.name = 'Router';
@@ -36,7 +32,11 @@ Router = function(env){
     var Config  = require('./config')();
     var _conf = Config.getInstance();
 
-    var _init = function(){
+    /**
+     * Router Constructor
+     * @constructor
+     * */
+    var init = function(){
         if ( typeof(Router.initialized) != "undefined" ) {
             console.log("....instance already exists...");
             return _this.getInstance();
@@ -54,7 +54,7 @@ Router = function(env){
      *
      * @private
      * */
-    var _hasParams = function(pathname){
+    var hasParams = function(pathname){
         var patt = /:/;
         return (patt.test(pathname)) ? true : false;
     };
@@ -87,7 +87,7 @@ Router = function(env){
 
                 if (uRe[i] === uRo[i])
                     ++score;
-                else if (_hasParams(uRo[i]) && _fitsWithRequirements(request, uRo[i], uRe[i], params))
+                else if (hasParams(uRo[i]) && fitsWithRequirements(request, uRo[i], uRe[i], params))
                     ++score;
             }
         }
@@ -108,7 +108,7 @@ Router = function(env){
      *
      * @private
      * */
-    var _fitsWithRequirements = function(request, urlVar, urlVal, params){
+    var fitsWithRequirements = function(request, urlVar, urlVal, params){
 
         urlVar = urlVar.replace(/:/,"");
         var v = null;
@@ -139,7 +139,7 @@ Router = function(env){
      *
      * @private
      * */
-    var _loadHandler = function(path, action){
+    var loadHandler = function(path, action){
         var handler = path +'/'+ action + '.js',//CONFIGURATION : settings.script_ext
             cacheless = Config.isCacheless();
 
@@ -147,7 +147,7 @@ Router = function(env){
         try {
             if (cacheless) delete require.cache[handler];
 
-            return {obj : Fs.readFileSync(handler), file : action + '.js', name : action + 'Handler'};
+            return {obj : fs.readFileSync(handler), file : action + '.js', name : action + 'Handler'};
         } catch (err) {
             return null;
         }
@@ -166,7 +166,7 @@ Router = function(env){
     this.route = function(request, response, next, params){
 
         //Routing.
-        var pathname        = Url.parse(request.url).pathname,
+        var pathname        = url.parse(request.url).pathname,
             AppController   = {},
             app             = {},
             bundle          = params.param.app,
@@ -183,7 +183,7 @@ Router = function(env){
                 response.header(h, resHeders[h]);
         }
 
-        Log.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
+        logger.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
         //console.log("ACTION ON  ROUTING IS : " + action);
 
         //Getting Models & extending it with super Models.
@@ -196,7 +196,7 @@ Router = function(env){
             console.log("controller file is ", controllerFile);
             var controllerRequest  = require(controllerFile);
         } catch (err) {
-            Log.error('geena', 'ROUTER:ERR:1', 'Could not complete ['+ action +' : function(req, res)...] : ' + err , __stack);
+            logger.error('geena', 'ROUTER:ERR:1', 'Could not complete ['+ action +' : function(req, res)...] : ' + err , __stack);
         }
 
         var options = {
@@ -206,7 +206,7 @@ Router = function(env){
             rootPath        : _this.executionPath,
             conf            : _conf[bundle][env],
             ext             : (_conf[bundle][env].template) ? _conf[bundle][env].template.ext : Config.Env.getDefault().ext,
-            handler         : _loadHandler(handlersPath, action),
+            handler         : loadHandler(handlersPath, action),
             instance        : _this.instance,
             //to remove later
             templateEngine  : (typeof(_conf.templateEngine) != "undefined") ? _conf.templateEngine : null,
@@ -215,8 +215,8 @@ Router = function(env){
         };
 
         var actionController = controllerRequest, parentController = new Controller(request, response, next, options);
-        Utils.extend( true, actionController, parentController);
-        Log.debug('geena', 'ROUTER:DEBUG:1', 'About to contact Controller', __stack);
+        utils.extend( true, actionController, parentController);
+        logger.debug('geena', 'ROUTER:DEBUG:1', 'About to contact Controller', __stack);
 //        var a = actionController[action];
 //        a(request, response, next);
 //        //actionController.handleResponse(response);
@@ -236,7 +236,7 @@ Router = function(env){
 
     };//EO route()
 
-    _init();
+    init();
 
 };
 

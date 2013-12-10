@@ -7,10 +7,10 @@
 var Fs              = require('fs'),
     EventEmitter    = require('events').EventEmitter,
     Express         = require('express'),
-    Url             = require('url'),
-    Utils           = require('geena.utils'),
+    url             = require('url'),
+    utils           = require('geena.utils'),
     //config          = require('./config')(),
-    Proc            = Utils.Proc,
+    Proc            = utils.Proc,
     Server          = {
     conf : {},
     routing : {},
@@ -68,7 +68,7 @@ var Fs              = require('fs'),
 //        //Set paths for utils. Override for now.
 //        //To reset it, just delete the hidden folder.
 //        var geenaPath = options.geenaPath;
-//        var UtilsConfig = new Utils.Config();
+//        var UtilsConfig = new utils.Config();
 //        setContext('geena.utils.config', UtilsConfig);
 //
 //        UtilsConfig.set('geena', 'locals.json', {
@@ -100,21 +100,21 @@ var Fs              = require('fs'),
         //this.instance = Express();
 
 
-        Log.debug(
+        logger.debug(
             'geena',
             'SERVER:DEBUG:11',
             'Server init in progress',
             __stack
         );
 
-        Log.notice(
+        logger.notice(
             'geena',
             'SERVER:NOTICE:1',
             'Init ['+ this.appName +'] on port : ['+ this.conf[this.appName].port.http + ']'
         );
 
         this.onRoutesLoaded( function(success){//load all registered routes in routing.json
-            Log.debug(
+            logger.debug(
                 'geena',
                 'SERVER:DEBUG:1',
                 'Routing loaded' + '\n'+ JSON.stringify(_this.routing, null, '\t'),
@@ -164,7 +164,7 @@ var Fs              = require('fs'),
             //console.log("trying..",  _(this.conf[apps[i]].bundlesPath) );
             try {
 
-                var files = Utils.cleanFiles(Fs.readdirSync(appPath));
+                var files = utils.cleanFiles(Fs.readdirSync(appPath));
 
                 if (files.length > 0 && files.inArray(apps[i])) {
                     filename = _(appPath + '/' + apps[i] + '/config/' + _this.conf[apps[i]].files.routing);
@@ -183,7 +183,7 @@ var Fs              = require('fs'),
 
                         if (_this.routing.count() > 0) {
 
-                            _this.routing = Utils.extend(true, _this.routing, tmp);
+                            _this.routing = utils.extend(true, _this.routing, tmp);
                         } else {
                             _this.routing = tmp;
                         }
@@ -192,11 +192,11 @@ var Fs              = require('fs'),
                         tmp = {};
                     } catch (err) {
                         this.routing = null;
-                        Log.error('geena', 'SERVER:ERR:2', err, __stack);
+                        logger.error('geena', 'SERVER:ERR:2', err, __stack);
                         callback(false);
                     }
                 } else {
-                    Log.error(
+                    logger.error(
                         'geena',
                         'SERVER:ERR:3',
                         'Routing not matching : ' +apps[i]+ ' did not match route files ' + files,
@@ -207,7 +207,7 @@ var Fs              = require('fs'),
 
 
             } catch (err) {
-                Log.warn('geena', 'SERVER:WARN:2', err, __stack);
+                logger.warn('geena', 'SERVER:WARN:2', err, __stack);
                 callback(false);
             }
 
@@ -222,7 +222,7 @@ var Fs              = require('fs'),
      * @private
      * */
     configure : function(callback){
-        Log.debug(
+        logger.debug(
             'geena',
             'SERVER:DEBUG:12',
             'Starting server configuration',
@@ -259,9 +259,9 @@ var Fs              = require('fs'),
                     app.use("/"+ apps[i] +"/handlers", Express.static(_this.conf[apps[i]].bundlesPath +'/'+ apps[i] +'/handlers'));
                 });
 
-                Log.notice('geena', 'SERVER:NOTICE:3', 'Server runing with static folder: ' + path);
+                logger.notice('geena', 'SERVER:NOTICE:3', 'Server runing with static folder: ' + path);
             } else {
-                Log.notice('geena', 'SERVER:NOTICE:3', 'Server runing without static folder ');
+                logger.notice('geena', 'SERVER:NOTICE:3', 'Server runing without static folder ');
             }
         }
 
@@ -284,7 +284,7 @@ var Fs              = require('fs'),
             //Only for dev & debug.
             _this.loadBundleConfiguration(_this.appName, function(err, conf){
 
-                if (err) Log.error('geena', 'SERVER:ERR:6', err, __stack);
+                if (err) logger.error('geena', 'SERVER:ERR:6', err, __stack);
 
                 var matched         = false,
                     Router          = require('./router.js'),
@@ -296,7 +296,7 @@ var Fs              = require('fs'),
                 request.setEncoding(_this.conf[_this.appName].encoding);
 
                 if ( _this.routing.count() == 0 ) {
-                    Log.error(
+                    logger.error(
                         'geena',
                         'SERVER:ERR:1',
                         'Malformed routing or Null value for application ' + _this.appName,
@@ -304,7 +304,7 @@ var Fs              = require('fs'),
                     );
                 }
 
-                var params = {}, pathname = Url.parse(request.url).pathname;
+                var params = {}, pathname = url.parse(request.url).pathname;
                 out:
                     for (var rule in _this.routing) {
                         //console.log("\nrules ", rule);
@@ -323,7 +323,7 @@ var Fs              = require('fs'),
                         isRoute = router.compareUrls(request, params, _this.routing[rule].url);
                         if (pathname === _this.routing[rule].url || isRoute.past) {
 
-                            Log.debug(
+                            logger.debug(
                                 'geena',
                                 'SERVER:DEBUG:4',
                                 'Server routing to '+ pathname,
@@ -339,10 +339,10 @@ var Fs              = require('fs'),
 
                 //TODO - replace the string by the setting variable.
                 if (!matched /**&& pathname != '/favicon.ico'*/) {
-                    Log.error(
+                    logger.error(
                         'geena',
                         'SERVER:ERR:2',
-                        'caught 404 request ' + Url.parse(request.url).pathname,
+                        'caught 404 request ' + url.parse(request.url).pathname,
                         __stack
                     );
 
@@ -351,11 +351,11 @@ var Fs              = require('fs'),
                         response.setHeader("Content-Type", "application/json");
                         response.send('404', JSON.stringify({
                             status: 404,
-                            error: "Error 404. Page not found : " + Url.parse(request.url).pathname
+                            error: "Error 404. Page not found : " + url.parse(request.url).pathname
                         }));
 
                     } else {
-                        response.send('404', 'Error 404. Page not found : ' + Url.parse(request.url).pathname);
+                        response.send('404', 'Error 404. Page not found : ' + url.parse(request.url).pathname);
                     }
 
                     response.end();
@@ -385,7 +385,7 @@ var Fs              = require('fs'),
             callback(false);
         } else {
             config.refresh(bundle, function(err){
-                if (err) Log.error('geena', 'SERVER:ERR:5', err, __stack);
+                if (err) logger.error('geena', 'SERVER:ERR:5', err, __stack);
 
                 //Also refresh routing.
                 callback(false);
