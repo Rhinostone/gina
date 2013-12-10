@@ -19,13 +19,13 @@
 var Model;
 
 //Imports.
-var Fs      = require('fs'),
+var fs      = require('fs'),
     Module  = require('module')
-    Utils   = require('geena.utils'),
+    utils   = require('geena.utils'),
     //UtilsConfig = Utils.Config(),
     //Dev     = Utils.Dev,
-    Util    = require('util'),
-    Config  = require('./../config')(),
+    util    = require('util'),
+    config  = require('./../config')(),
     EventEmitter  = require('events').EventEmitter;
 
 /**
@@ -43,12 +43,12 @@ Model = function(namespace){
      *
      * @private
      * */
-    var _init = function(namespace){
+    var init = function(namespace){
         //TODO - if intance...
 
 
         if ( typeof(namespace) == "undefined" || namespace == "") {
-            Log.error('geena', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
+            log.error('geena', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
         }
         var suffix = 'Entity';
         var namespace = namespace.split(/\//g);
@@ -78,46 +78,47 @@ Model = function(namespace){
                 console.log("CONF READY ", model, conf.path);
                 //TODO - More tries & catches...
                 //Getting Entities Manager.
-                var EntitiesManager = new require(conf.path)()[model];
+                var entitiesManager = new require(conf.path)()[model];
 
                 //For now, I just need the F..ing entity name.
                 var modelPath = conf.path + '/' + modelDirName
                 //console.log('modelPath: ', modelPath);
-                Fs.readdir(modelPath, function(err, files){
+                fs.readdir(modelPath, function(err, files){
 
                     var entityName, exluded = ['index.js'];
 
                     var produce = function(entityName, i){
                         //console.log("producing ", files[i]);
-                        var UtilsConfig = new Utils.Config();
-                        UtilsConfig.get('geena', 'locals.json', function(err, config){
-                            if (config == undefined) {
+                        //var utilsConfig = new utils.Config();
+                        var utilsConfig = getContext('geena.utils.config');
+                        utilsConfig.get('geena', 'locals.json', function(err, configuration){
+                            if (configuration == undefined) {
                                 throw new Error("geena/utils/.gna not found.");
                             }
-                            if (err) Log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
+                            if (err) log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
 
-                            var filename = config.paths.geena + '/model/entity.js';
+                            var filename = configuration.paths.geena + '/model/entity.js';
                             try {
                                 var ModelEntityClass = require(filename);
-                                var ModelEntity = new ModelEntityClass( _this.getConfig() );
+                                var modelEntity = new ModelEntityClass( _this.getConfig() );
 
                                 var EntityClass = require(modelPath  + '/' + files[i]);
-                                var Entity = new EntityClass();
+                                var entity = new EntityClass();
                                 //Inherits.
-                                Utils.extend(true, Entity, ModelEntity );
+                                utils.extend(true, entity, modelEntity );
                                 //Overriding.
-                                EntitiesManager[entityName] = Entity;
-                                //console.log("show me ", entityName, EntitiesManager[entityName],"\n\n");
+                                entitiesManager[entityName] = entity;
+                                //console.log("show me ", entityName, entitiesManager[entityName],"\n\n");
 
                             } catch (err) {
                                 console.log("Did not find entity " + modelPath + '/' + files[i] + "\nOR "+ filename);
                             }
 
-                            //console.log("EntityManager  \n",  EntitiesManager,"\n VS \n",  Entity);
+                            //console.log("EntityManager  \n",  entitiesManager,"\n VS \n",  Entity);
                             if (i == files.length-1) {
                                 //console.log("All done !");
-                                //var EntitiesManager = new require(conf.path)()[model];
-                                _this.emit('ready', false, EntitiesManager);
+                                //var entitiesManager = new require(conf.path)()[model];
+                                _this.emit('ready', false, entitiesManager);
                                 ++i;
                             }
 
@@ -135,7 +136,7 @@ Model = function(namespace){
                             produce(entityName, i++);
                         } else if (i == files.length-1) {
                             //console.log("All done !");
-                            _this.emit('ready', false, EntitiesManager);
+                            _this.emit('ready', false, entitiesManager);
                             ++i;
                         } else {
                             ++i;
@@ -178,7 +179,7 @@ Model = function(namespace){
      * */
     var getConfig = function(bundle, callback){
 
-        var configuration = Config.getInstance(bundle);
+        var configuration = config.getInstance(bundle);
         //console.log("getting for bundle ", bundle, configuration);
 
         if ( typeof(configuration) != 'undefined' ) {
@@ -202,7 +203,7 @@ Model = function(namespace){
 //
 //    };
 
-    _init(namespace);
+    init(namespace);
 
     return {
         onReady : function(callback){
@@ -213,7 +214,7 @@ Model = function(namespace){
         }
     }
 };
-Util.inherits(Model, EventEmitter);
+util.inherits(Model, EventEmitter);
 
 
 module.exports = Model;

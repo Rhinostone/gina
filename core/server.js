@@ -64,30 +64,31 @@ var Fs              = require('fs'),
         this.libPath = _(__dirname);//Server Lib Path.
 
 
-        //TODO - Don't override if syntax is ok - no mixed paths.
-        //Set paths for utils. Override for now.
-        //To reset it, just delete the hidden folder.
-        var geenaPath = options.geenaPath;
-        var UtilsConfig = new Utils.Config();
-
-        UtilsConfig.set('geena', 'locals.json', {
-            //project : UtilsConfig.getProjectName(),
-            paths : {
-                geena : geenaPath,
-                utils : UtilsConfig.__dirname,
-                executionPath : this.executionPath,
-                env : this.executionPath + '/env.json',
-                tmp : this.executionPath + '/tmp'
-            },
-            //TODO - Replace by a property by bundle.
-            bundles : options.allBundles
-        }, function(err){
-            if (!err)
-                callback(false, Express(), Express, this.conf[this.appName]);
-            else
-                callback(err);
-        });
-
+//        //TODO - Don't override if syntax is ok - no mixed paths.
+//        //Set paths for utils. Override for now.
+//        //To reset it, just delete the hidden folder.
+//        var geenaPath = options.geenaPath;
+//        var UtilsConfig = new Utils.Config();
+//        setContext('geena.utils.config', UtilsConfig);
+//
+//        UtilsConfig.set('geena', 'locals.json', {
+//            project : UtilsConfig.getProjectName(),
+//            paths : {
+//                geena   : geenaPath,
+//                utils   : UtilsConfig.__dirname,
+//                root    : this.executionPath,
+//                env     : this.executionPath + '/env.json',
+//                tmp     : this.executionPath + '/tmp'
+//            },
+//            //TODO - Replace by a property by bundle.
+//            bundles : options.allBundles
+//        }, function(err){
+//            if (!err)
+//                callback(false, Express(), Express, this.conf[this.appName]);
+//            else
+//                callback(err);
+//        });
+//
         callback(false, Express(), Express, this.conf[this.appName]);
     },
 

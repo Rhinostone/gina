@@ -101,8 +101,39 @@ Config  = function(opt){
                     };
 
                     //console.error("found bundles ", _this.bundlesConfiguration.bundles);
-                    _this.Env.loaded = true;
-                    _this.emit('complete', false, _this.bundlesConfiguration);
+
+                    //TODO - Don't override if syntax is ok - no mixed paths.
+                    //Set paths for utils. Override for now.
+                    //To reset it, just delete the hidden folder.
+                    var geenaPath = opt.geenaPath;
+                    var utilsConfig = new utils.Config();
+                    setContext('geena.utils.config', utilsConfig);
+
+                    utilsConfig.set('geena', 'locals.json', {
+                        project : utilsConfig.getProjectName(),
+                        paths : {
+                            geena   : geenaPath,
+                            utils   : utilsConfig.__dirname,
+                            root    : opt.executionPath,
+                            env     : opt.executionPath + '/env.json',
+                            tmp     : opt.executionPath + '/tmp'
+                        },
+                        //TODO - Replace by a property by bundle.
+                        bundles : _this.bundlesConfiguration.allBundles
+                    }, function(err){
+//                        if (!err)
+//                            callback(false, Express(), Express, this.conf[this.appName]);
+//                        else
+//                            callback(err);
+
+                        _this.Env.loaded = true;
+                        _this.emit('complete', err, _this.bundlesConfiguration);
+                    });
+
+                    //callback(false, Express(), Express, this.conf[this.appName]);
+
+                    //_this.Env.loaded = true;
+                    //_this.emit('complete', false, _this.bundlesConfiguration);
                     //isFileInProject(conf[env]["files"]);
                 }, _this.startingApp);//by default.
             }
@@ -636,16 +667,21 @@ Config  = function(opt){
         //log.info('geena', 'CORE:INFO:42','about to init !!!! ', __stack);
 
         //Events
-        this.once('complete', function(err, config){
-            //log.info('geena', 'CORE:INFO:42','Ninja received EVENT  !!!!');
-            _ready = {err: err, val: config};
-        });
+//        this.once('complete', function(err, config){
+//            //log.info('geena', 'CORE:INFO:42','Ninja received EVENT  !!!!');
+//            _ready = {err: err, val: config};
+//        });
         this.env = opt.env;
         init(opt);
 
         return {
             onReady : function(callback){
-                callback(_ready.err, _ready.val);
+                _this.once('complete', function(err, config){
+                    //log.info('geena', 'CORE:INFO:42','Ninja received EVENT  !!!!');
+                    //_ready = {err: err, val: config};
+                    callback(err, config);
+                });
+                //callback(_ready.err, _ready.val);
             }
         };
     }

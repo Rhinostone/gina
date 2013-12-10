@@ -31,7 +31,7 @@ if( Gna.executionPath == undefined){
     var p = new _(process.argv[1]).toUnixStyle().split("/");
     var appName = p[p.length-1].split(".")[0];
     Gna.executionPath = "";
-    if ( (/index.js/).test(process.argv[1]) ) {
+    if ( (/index.js/).test(process.argv[1]) || p[p.length-1] == 'index') {
         startWithoutGeena = true;
         appName = p[p.length-2].split(".")[0];
         //Find root ;)
@@ -148,12 +148,11 @@ Gna.start = function(executionPath){
     var config = new Config({
         env : env,
         executionPath : core.executionPath,
-        startingApp : core.startingApp
+        startingApp : core.startingApp,
+        geenaPath : core.geenaPath
     });
     //setContext('config', config);
     config.onReady( function(err, obj){
-
-        Gna.Model = require('./model');
 
         var isStandalone = obj.isStandalone;
 
@@ -167,11 +166,12 @@ Gna.start = function(executionPath){
                 env             : obj.env,
                 isStandalone    : isStandalone,
                 executionPath   : core.executionPath,
-                geenaPath       : core.geenaPath,
+                //geenaPath       : core.geenaPath,
                 conf            : obj.conf
             },
             function(err, instance, express, conf){
                 if (!err) {
+                    Gna.Model = require('./model');
                     Log.debug(
                         'geena',
                         'CORE:DEBUG:1',
