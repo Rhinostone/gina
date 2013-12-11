@@ -1,0 +1,44 @@
+        ('-. .-.   ('-.             _ (`-. 
+       ( OO )  / _(  OO)           ( (OO  )
+       ,--. ,--.(,------.,--.     _.`     \
+       |  | |  | |  .---'|  |.-')(__...--''
+       |   .|  | |  |    |  | OO )|  /  | |
+       |       |(|  '--. |  |`-' ||  |_.' |
+       |  .-.  | |  .--'(|  '---.'|  .___.'
+       |  | |  | |  `---.|      | |  |     
+       `--' `--' `------'`------' `--'
+
+usage: 
+
+geena <option>
+
+option:
+    -h or --help
+    -i or --init
+    -k or --kill or --stop
+    -r or --restart
+    -s or --start
+    -t or --status
+    -u or --update
+    -v or --version    
+
+
+geena <option> <application_name> <arguments>
+
+option:
+    -a or --add
+    -d or --delete
+    -k or --kill or --stop
+    -r or --restart
+    -s or --start
+    -t or --status
+
+arguments:
+    <add>   -t or --type [ blog | cms | app | ws ]
+    <add>   -p or --port (auto -m standalone)
+    <add>   -m or --mode [ shared | standalone ]
+
+    <start>     <app_name> [ dev | debug | stage or staging | prod ] [ --stack]
+    <status>    <app_name>
+    <stop>      <app_name>
+    <restart>   <app_name> 

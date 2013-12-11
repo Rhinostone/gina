@@ -1,3 +1,4 @@
+// TEST ONLY
 var Router = {};
 
 process.parent.ready(function(){
@@ -21,10 +22,10 @@ process.parent.on('parent::method', function(action, params) {
             Router = params.obj;
             
             //Router.parent = params.obj.parent;
-            //console.info('utis = ', Router.parent.Utils);
+            //console.info('utis = ', Router.parent.utils);
             Router.merde = 'merdouille !';
             //Router.init();
-            //Router.parent.Utils = Utils.extend(true,  Router.parent.utils);
+            //Router.parent.utils = Utils.extend(true,  Router.parent.utils);
             //Router.Server = Router.parent.Server;
             //Router.Controller = Router.parent.Controller
             //console.info('conf = ', Router.parent.Server.conf);

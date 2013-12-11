@@ -21,9 +21,7 @@ var Router;
 var url     = require("url"),
     fs      = require("fs"),
     util    = require('util'),
-   // Utils   = require('geena.utils');
-
-    utils   = require('./utils.js');
+    utils   = require('./utils');
 
 Router = function(env){
 

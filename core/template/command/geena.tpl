@@ -25,9 +25,9 @@ if (
 
     require('./node_modules/geena/node_modules/colors');
 
-    var Utils = require("geena").Utils;
-    Utils.log('Geena Command Line Tool \r\n'.rainbow);
-    Utils.Cmd.load(__dirname, "/node_modules/geena/package.json");
+    var utils = require("geena").utils;
+    utils.log('Geena Command Line Tool \r\n'.rainbow);
+    utils.Cmd.load(__dirname, "/node_modules/geena/package.json");
 } else {
 
     console.log('Geena Installer Tool '+ vers +' \r\n');

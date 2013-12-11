@@ -19,11 +19,11 @@
 var Model;
 
 //Imports.
-var Fs      = require('fs'),
+var fs      = require('fs'),
     Module  = require('module')
-    Utils   = require('geena.utils'),
+    utils   = require('geena.utils'),
     //Dev     = Utils.Dev,
-    Util    = require('util'),
+    util    = require('util'),
     EventEmitter  = require('events').EventEmitter,
     Config  = require('./../config');
 
@@ -73,13 +73,13 @@ Model = function(namespace){
                 //console.log("CONF READY ", model, conf.path/** conf*/);
                 //TODO - More tries & catches...
                 //Getting Entities Manager.
-                var EntitiesManager = new require(conf.path)();
-                //var Entities = EntitiesManager[model];
+                var entitiesManager = new require(conf.path)();
+                //var Entities = entitiesManager[model];
 
                 //For now, I just need the F..ing entity name.
                 var modelPath = conf.path + '/' + modelDirName
                 //console.log('modelPath: ', modelPath);
-                Fs.readdir(modelPath, function(err, files){
+                fs.readdir(modelPath, function(err, files){
 
                     var entityName, exluded = ['index.js'];
 
@@ -87,7 +87,7 @@ Model = function(namespace){
                     var produce = function(entityName, i){
                         console.log("producing ", files[i]);
 
-                        Utils.Config.get('geena', 'project.json', function(err, config){
+                        utils.config.get('geena', 'project.json', function(err, config){
                             if (err) logger.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
 
                             var filename = config.paths.geena + '/model/entityFactory.js';
@@ -123,12 +123,12 @@ Model = function(namespace){
                                     logger.error('geena', 'MODEL:ERR:4', 'EEMPTY: EntitySuper\n' + err, __stack);
                                 }
 
-                                //Entity = new EntitiesManager[model]();
+                                //Entity = new entitiesManager[model]();
                                 //Utils.extend(true, _this, Entity);
-                                console.log("EntityManager  \n",  EntitiesManager,"\n VS \n",  EntityFactory);
+                                console.log("EntityManager  \n",  entitiesManager,"\n VS \n",  EntityFactory);
                                 if (i == files.length-1) {
                                     console.log("All done !");
-                                    _this.emit('ready', false, EntitiesManager);
+                                    _this.emit('ready', false, entitiesManager);
                                     ++i;
                                 }
 
@@ -147,7 +147,7 @@ Model = function(namespace){
                             produce(entityName, i++);
                         } else if (i == files.length-1) {
                             console.log("All done !");
-                            _this.emit('ready', false, EntitiesManager);
+                            _this.emit('ready', false, entitiesManager);
                             ++i;
                         } else {
                             console.log("missed ", i, files[i]);

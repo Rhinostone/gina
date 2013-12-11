@@ -25,8 +25,8 @@ var fs              = require('fs'),
     util            = require('util'),
     Events          = require('events'),
     EventEmitter    = require('events').EventEmitter,
-    utils           = require("geena.utils"),
-    log             = utils.Logger;
+    utils           = require("./utils"),
+    log             = utils.logger;
 
 /**
  * Config Constructor
