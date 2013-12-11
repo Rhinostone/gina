@@ -20,8 +20,8 @@ var Model;
 
 //Imports.
 var fs      = require('fs'),
-    Module  = require('module')
-    utils   = require('geena.utils'),
+    Module  = require('module'),
+    utils   = require('geena').utils,
     //UtilsConfig = Utils.Config(),
     //Dev     = Utils.Dev,
     util    = require('util'),

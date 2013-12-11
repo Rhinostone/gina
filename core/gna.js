@@ -14,13 +14,32 @@
  */
 var Gna     = {core:{}},
     Config  = require('./config'),
-    utils   = require('geena.utils'),
+    utils   = require('./utils'),
     Proc    = utils.Proc,
     server  = require('./server'),
-    EventEmitter = require('events').EventEmitter;
+    EventEmitter = require('events').EventEmitter,
+    Winston = require('winston');
 
-Gna.Utils = utils;
-logger = Gna.Utils.Logger;
+Gna.utils = utils;
+
+logger = getContext('logger');
+
+if ( logger == undefined ) {
+    logger = Gna.utils.logger;
+    //console.error('logger ', logger);
+    var loggerInstance = new (Winston.Logger)({
+        levels : logger.custom.levels,
+        transports : [
+            new (Winston.transports.Console)({
+                colorize: true
+            })
+        ],
+        colors : logger.custom.colors
+    });
+
+    setContext('logger', loggerInstance);
+}
+
 
 setContext('geena.utils', utils);
 setContext('geena.utils.logger', logger);
@@ -118,10 +137,8 @@ Gna.start = function(executionPath){
         var executionPath = root;
     }
 
-
-    console.error('WTF !! ', executionPath);
     //Get bundlesDir.
-    console.error('getting bundlesDIR: ', process.argv[1], "[",appName,"]");
+    //console.error('getting bundlesDIR: ', process.argv[1], "[",appName,"]");
 
     //core.executionPath = executionPath.replace('\/bundles', '');
 

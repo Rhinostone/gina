@@ -4,12 +4,11 @@
  * @package     Geena
  * @author      Rhinostone
  */
-var Fs              = require('fs'),
+var fs              = require('fs'),
     EventEmitter    = require('events').EventEmitter,
     Express         = require('express'),
     url             = require('url'),
-    utils           = require('geena.utils'),
-    //config          = require('./config')(),
+    utils           = require('./utils'),
     Proc            = utils.Proc,
     Server          = {
     conf : {},
@@ -164,7 +163,7 @@ var Fs              = require('fs'),
             //console.log("trying..",  _(this.conf[apps[i]].bundlesPath) );
             try {
 
-                var files = utils.cleanFiles(Fs.readdirSync(appPath));
+                var files = utils.cleanFiles(fs.readdirSync(appPath));
 
                 if (files.length > 0 && files.inArray(apps[i])) {
                     filename = _(appPath + '/' + apps[i] + '/config/' + _this.conf[apps[i]].files.routing);
@@ -243,9 +242,9 @@ var Fs              = require('fs'),
                 ? this.executionPath + this.conf[apps[i]].staticPath
                 : '/static';
 
-            //console.log(" static found ? ", path, Fs.existsSync( _(path) ));
+            //console.log(" static found ? ", path, fs.existsSync( _(path) ));
             //Only applies when static folder exists.
-            if (Fs.existsSync( _(path) )) {
+            if (fs.existsSync( _(path) )) {
                 app.configure(this.env, function() {
                     //console.info('Configuring middleware for the prod environment.', _this.conf[_this.appName].bundlesPath);
                     app.use(Express.bodyParser());//in order to get POST params
