@@ -22,11 +22,10 @@ var Gna     = {core:{}},
 
 Gna.utils = utils;
 
-logger = getContext('logger');
+logger = getContext('geena.utils.logger');
 
 if ( logger == undefined ) {
     logger = Gna.utils.logger;
-    //console.error('logger ', logger);
     var loggerInstance = new (Winston.Logger)({
         levels : logger.custom.levels,
         transports : [
@@ -36,13 +35,11 @@ if ( logger == undefined ) {
         ],
         colors : logger.custom.colors
     });
-
-    setContext('logger', loggerInstance);
+    setContext('geena.utils.logger', loggerInstance);
 }
 
 
 setContext('geena.utils', utils);
-setContext('geena.utils.logger', logger);
 
 var e = new EventEmitter();
 Gna.initialized = false;

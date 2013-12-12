@@ -338,24 +338,8 @@ var fs      = require('fs'),
                                     ? msg.explicit
                                     : msg.message;
 
-                                try {
-                                    var logger = getContext('logger');
-                                } catch (err) {
-                                    if ( typeof(logger) == "undefined") {
-                                        console.warn("app logger not found !");
+                                var logger = getContext('geena.utils.logger');
 
-                                        var logger = new (Winston.Logger)({
-
-                                            transports : [
-                                                new (Winston.transports.Console)({ colorize: true}),
-                                                new (Winston.transports.File)({ filename: filename})
-                                            ],
-                                            levels : this.custom.levels,
-                                            colors : this.custom.colors
-                                        });
-                                        setContext('logger', logger);
-                                    }
-                                }
 
                                 //F...ing Winston....
                                 msg.level = (msg.level == "err")
