@@ -14,21 +14,10 @@
  */
 
 
-var Fs = require('fs'), vers = '0.0.7';
+var fs = require('fs'), vers = '0.0.8';
+
 //Check for geena context.
-if (
-    Fs.existsSync('./node_modules/geena') && Fs.existsSync('./node_modules/geena/node_modules/geena.utils')
-    && process.argv[2] != "-u"
-    && process.argv[2] != "--update"
-) {
-
-    require('./node_modules/geena/node_modules/colors');
-
-    var Utils = require("geena").Utils;
-    Utils.log('Geena Command Line Tool \r\n'.rainbow);
-    Utils.Cmd.load(__dirname, "/node_modules/geena/package.json");
-} else {
-
+var begin = function(){
     console.log('Geena Installer Tool '+ vers +' \r\n');
 
 
@@ -58,32 +47,32 @@ if (
      *
      * TODO - $ ./geena --clean  &&   $ ./geena -c
      * TODO - Apply update() source to install() so we can have the choice of submodules @ install
+     * TODO - $ ./geena --install specific.module.only
      * TODO - Refacto
      *
      **/
 
-    var arg     = process.argv[2];
-    var Fs      = require("fs"),
-        Spawn   = require('child_process').spawn,
-        allowed = ["--clean", "-i","--install", "-u","--update", "-h", "--help"];
+    var arg             = process.argv[2];
+    //Config file for submodules.
+    var modulesPackage  = './project.json';
+    var fs              = require("fs"),
+        spawn           = require('child_process').spawn,
+        allowed         = ["--clean", "-i","--install", "-u","--update", "-h", "--help"];
 
     //By default.
     var defaultSubmodules= {
         //this mode is only used for installation
         "use_https" : false,
+        "bundlesPath" : "bundles",
+        "releasesPath" : "releases",
         "packages" : {
             //Wil clone main project with its dependencies along.
             "geena" : {
+                //Tag number or Branch. Empty means master.
                 "version" : "",
                 "repo" : {
                     "ssh" : "git@github.com:Rhinostone/geena.git",
                     "https" : "https://github.com/Rhinostone/geena.git"
-                },
-                //For upgrade/downgrade only.
-                "dependencies" : {
-                    "geena/geena.utils" : {
-                        "version" : "master"
-                    }
                 }
             }
         }
@@ -92,9 +81,10 @@ if (
     var subHandler = {
         cmd : {},
         //Yeah always from the root.
-        dir : __dirname,
-        //Use package.json with the following key: submodules.
+        dir : __dirname.replace(/\\/g, '\/') + '/',
+        //Use submodules.json with the following key: submodules.
         submodules : defaultSubmodules,
+        useHttps : false,
         /**
          * Install Geena Project with its dependencies
          *
@@ -102,31 +92,20 @@ if (
          * */
         i : function(){ this.install(null);},
         install : function(list){
-
             //console.log("your conf \n", JSON.stringify(this.submodules, null, 4));
-
             var _this = this, submodules = this.submodules.packages;
 
             if ( typeof(list) != "undefined" && list != null ) {
                 //Queue it.
-                var m = list.shift(),
-                    path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
-
-                if ( typeof(submodules[m]['version']) != 'undefined' && submodules[m]['version'] != "" ) {
-                    var tag = submodules[m].version;
+                var m = list.shift();
+                //var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                if ( typeof(submodules[m]['src']) != 'undefined' && submodules[m]['src'] != "" ) {
+                    submodules[m].src =  ( submodules[m].src.substring(0,1) != '\/') ?
+                                            '/' + submodules[m].src
+                                            : submodules[m].src;
+                    var path = this.dir + submodules[m].src;
                 } else {
-                    var tag = 'master';
-                }
-                //if ( typeof(submodules[m]['use_https']) != 'undefined' &&  typeof(submodules[m]['repo']['https']) != 'undefined' ){
-                if ( typeof(submodules[m]['use_https']) && submodules[m]['use_https'] == true){
-                    var repo = submodules[m].repo.https;
-                    //console.log("Using HTTPS mode for " + m);
-                } else if (this.useHttps && typeof(submodules[m]['repo']['use_https']) == "undefined") {
-                    var repo = submodules[m].repo.https;
-                    //console.log("Using HTTPS mode for " + m);
-                } else {
-                    var repo = submodules[m].repo.ssh;
-                    //console.log("Using SSH mode for " + m);
+                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
                 }
 
             } else {
@@ -137,48 +116,115 @@ if (
 
 
                 var m = list.shift();
-                var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
-                if ( typeof(submodules[m]['version']) != 'undefined' && submodules[m]['version'] != "" ) {
-                    var tag = submodules[m].version;
+                //var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                if ( typeof(submodules[m]['src']) != 'undefined' && submodules[m]['src'] != "" ) {
+                    var path = this.dir + submodules[m].src;
                 } else {
-                    var tag = 'master';
+                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
                 }
 
-                if ( typeof(submodules[m]['use_https']) && submodules[m]['use_https'] == true){
-                    var repo = submodules[m].repo.https;
-                    //console.log("Using HTTPS mode for " + m);
-                } else if ( this.useHttps && typeof(submodules[m]['repo']['use_https']) == "undefined" ) {
-                    var repo = submodules[m].repo.https;
-                    //console.log("Using HTTPS mode for " + m);
-                } else {
-                    var repo = submodules[m].repo.ssh;
-                    //console.log("Using SSH mode for " + m);
+                //Get dependencies.
+                if ( typeof(submodules[m]['dependencies']) != "undefined") {
+                    for (d in submodules[m]['dependencies']) {
+                        //console.log("m ", m, "=> ", submodules[m]['dependencies'][d]);
+                        submodules[d] = submodules[m]['dependencies'][d];
+                        list.push(d);
+                    }
                 }
             }
 
+
+            if ( typeof(submodules[m]['version']) != 'undefined' && submodules[m]['version'] != "" ) {
+                var tag = submodules[m].version;
+            } else {
+                var tag = 'master';
+            }
+
+            if (
+                typeof(submodules[m]['use_https'])!= 'undefined'  && submodules[m]['use_https'] == true
+                    || typeof(submodules[m]['use_https']) != 'undefined' && submodules[m]['use_https'] == 'true'
+                    || this.useHttps && typeof(submodules[m]['use_https']) == "undefined"
+                ){
+                var repo = submodules[m].repo.https;
+                //console.log("Using HTTPS mode for " + m);
+            } else {
+                var repo = submodules[m].repo.ssh;
+                //console.log("Using SSH mode for " + m);
+            }
+
             try {
+                //Support for multiple releases under the same directory.
+                if ( fs.existsSync(path) && fs.readdirSync(path).length > 0 && submodules[m]['release'] != undefined && submodules[m]['release']['target'] != undefined && !fs.existsSync(this.dir + submodules[m].release.target) ) {
+                    path = _this.dir + submodules[m].release.target;
+                    tag = submodules[m].release.version;
+                    this.clone( m, path, repo, tag, function(err, module){
 
-                console.log(
-                    "module: " + m,
-                    "\npath: " + path,
-                    "\nrepo: " +repo,
-                    "\ntag: " + tag
-                );
-                //console.log("==>", this.useHttps, (typeof(submodules[m]['repo']['use_https']) == "undefined" ));
-                //process.exit(42);
-                _this.clone( m, path, repo, tag, function(err, module){
-                    if (err) {
-                        console.log(err, "this.clone( m, path, repo, tag, callback){...}");
-                        process.exit(1);
-                    }
-
-                    //Get next task in list.
+                        if (submodules[m]['release']['target']['link'] != undefined) {
+                            var linkPath =  _this.dir + submodules[m].release.link;
+                            _this.link( path, linkPath, 'dir', function(err){
+                                if (list.length > 0) {
+                                    _this.install(list);
+                                }
+                            });
+                        } else if (list.length > 0) {
+                            _this.install(list);
+                        }
+                    });
+                } else if ( fs.existsSync(path) && fs.readdirSync(path).length > 0) {
+                    console.warn("Submodule ["+ m +"] already installed. Won't override.");
                     if (list.length > 0) {
                         _this.install(list);
+                    } else {
+                        this.end();
                     }
-                });
+                } else {
+                    console.info(
+                        "module: " + m,
+                        "\npath: " + path,
+                        "\nrepo: " +repo,
+                        "\ntag: " + tag
+                    );
+                    //console.log("==>", this.useHttps, (typeof(submodules[m]['repo']['use_https']) == "undefined" ));
+
+                    _this.clone( m, path, repo, tag, function(err, module){
+                        if (err) {
+                            console.error(err, "this.clone( m, path, repo, tag, callback){...}");
+                            process.exit(1);
+                        }
+
+                        //Unpack if bundle.
+                        console.info("checking: ", submodules[m]['release']);
+                        //if (submodules[m]['release'] != undefined) {
+                        //    console.log(" => ",  submodules[m]['release']['target']);
+                        //}
+                        if (submodules[m]['release'] != undefined && submodules[m]['release']['target'] != undefined) {
+                            console.info("Unpacking: ", m);
+                            path = _this.dir + submodules[m].release.target;
+                            tag = submodules[m].release.version;
+                            _this.clone( m, path, repo, tag, function(err, module){
+                                if (submodules[m]['release']['target']['link'] != undefined) {
+                                    //console.log(" => ",  submodules[m]['release'].link);
+                                    var linkPath =  _this.dir + submodules[m].release.link;
+                                    _this.link( path, linkPath, 'dir', function(err){
+                                        if (list.length > 0) {
+                                            _this.install(list);
+                                        }
+                                    });
+                                } else if (list.length > 0) {
+                                    _this.install(list);
+                                }
+                            });
+                        } else if (list.length > 0) {//Get next task in list.
+                            _this.install(list);
+                        } else {
+                            _this.end();
+                        }
+
+
+                    });
+                }
             } catch (err) {
-                console.log(err, "this.clone() call");
+                console.error(err, "this.clone() call");
             }
 
 
@@ -194,9 +240,10 @@ if (
          * */
 
         clone : function(module, path, repo, tag, callback){
-            var cmd = Spawn('git', [
+            var cmd = spawn('git', [
                 'clone',
-                '--recursive',
+                '-b',
+                tag,
                 repo,
                 path
             ]);
@@ -214,7 +261,7 @@ if (
                 var str = err.toString();
                 var lines = str.split(/(\r?\n)/g);
 
-                console.log('[error] ', str);
+                console.error('[error] ', str);
             });
 
             cmd.on('close', function (code) {
@@ -222,174 +269,11 @@ if (
                     console.log(module, ' submodule done with success');
                     callback(false, module);
                 } else {
-                    callback(true, '[error] '+ code);
+                    callback('[error] '+ code);
                 }
             });
         },
-         /**clone : function(module, path, repo, tag, callback){
-            var _this = this, isDependency = false;
 
-            if (module.match("/")) {
-                isDependency = true;
-                console.log("Skipping clonning for an existing submodule: ", module);
-                _this.cleanDependencies(module, function(err, module){
-                    console.log("removed ", module, " junks");
-                    if (!err) {
-                        console.log(false, module);
-                        callback(false, module);
-                    } else {
-                        callback(true, err + 'clone : function(module, path, repo, tag, callback) => _this.cleanDependencies(...)');
-                    }
-                });
-            } else {
-
-                var cmd = Spawn('git', [
-                    'submodule',
-                    'add',
-                    '-f',
-                    '--recursive',
-                    repo,
-                    path
-                ]);
-
-                cmd.stdout.setEncoding('utf8');
-                cmd.stdout.on('data', function(data){
-                    var str = data.toString();
-                    var lines = str.split(/(\r?\n)/g);
-
-                    console.log("clone... ", module);
-                    console.log(lines.join(""));
-                });
-
-                cmd.stderr.on('data',function (err) {
-                    var str = err.toString();
-                    var lines = str.split(/(\r?\n)/g);
-
-                    if ( str.match("fatal: Not a git repository") ) {
-                        console.log(
-                            'Maybe, you should try to init your git project first...' +
-                            '\n\n$ git init\n'
-                        );
-                        process.exit(0);//just for this case.
-                    } else {
-                        console.log('[error] ', str);
-                    }
-
-
-                });
-
-                cmd.on('close', function (code) {
-                    if (!code) {
-                        console.log('init done with success');
-
-//                        _this.cleanDependencies(module, function(err, module){
-//                            console.log("removed ", module, " junks");
-//                            if (!err) {
-//                                console.log(false, module);
-//                                callback(false, module);
-//                            } else {
-//                                callback(true, err + 'clone : function(module, path, repo, tag, callback) => _this.cleanDependencies(...)');
-//                            }
-//                        });
-                        callback(false, module);
-                    } else {
-                        callback(true, '[error] '+ code);
-                    }
-                });
-
-            }
-        },*/
-        /**
-         * Clean current level dependecies
-         *
-         * @param {string} module
-         * @param {function} callback
-         * @return {status} err
-         *
-        cleanDependencies : function(module,  callback){
-            var _this = this, isDependency = false, deps = [];
-
-
-            console.log("content ", JSON.stringify(this.submodules, null, 4));
-            if (module.match("/")) {
-                isDependency = true;
-            }
-
-            console.log(module, "isDependency ", isDependency);
-
-            if (!isDependency) {
-
-                console.log("start junk removal") ;
-                for (var m in this.submodules.packages) {
-                    var blocks = m.split(/\//g);
-                    var l = 0;// first level.
-                    if (blocks.length > 1) {
-                        //whitch level ?
-
-
-                        for (var i in blocks) {
-
-                            if (blocks[i] == module) {
-                                //found dependency @ level "l".
-                                //console.log("dep lev ", l, " => ", module, m);
-                                //deps.push(_this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/'));
-                                var p = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
-                                deps.push(p);
-                                l = 0;
-                                break;
-                            }
-                            ++l;
-                        }
-
-                    }
-
-                }
-                console.log("removing ", deps);
-                for (var i=0; i<deps.length; ++i) {
-                    console.log("removing.. ", deps[i]);
-                    _this.rm(deps[i], function(err){
-
-                        if (err) callback(err + 'cleanDependencies(..) => _this.rm(p, function(err){...');
-
-                        if (deps > 0) {
-                            deps.shift();
-                        } else {
-                            callback(false, module);
-                        }
-
-                    });
-                }
-            } else {
-                callback(false, module);
-            }
-        },
-        rm : function(p, callback){
-            console.log("starting removal ", p);
-            var clean = Spawn('rm', [
-                '-r',
-                p
-            ]);
-
-            clean.stdout.on('data', function(data){
-                var str = data.toString();
-                if(str) console.log("wrting ", str);
-
-            });
-
-            clean.stderr.on('data', function(err){
-                var str = err.toString()
-                var lines = str.split(/(\r?\n)/g);
-                console.log(lines.join(""));
-            });
-
-            clean.on('close', function(code){
-                if (code) callback(code + 'rm => clean.stderr.on');
-
-                callback(false);
-            });
-
-        },
-         */
         /**
          * Update existing sources for Geena Project with its dependencies
          *
@@ -403,8 +287,17 @@ if (
             if ( typeof(list) != "undefined" && list != null ) {
                 //Queue it.
                 m = list.shift(),
-                tag = submodules[m].version,
-                path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                tag = submodules[m].version;
+                //path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+
+                if ( typeof(submodules[m]['src']) != 'undefined' && submodules[m]['src'] != "" ) {
+                    submodules[m].src =  ( submodules[m].src.substring(0,1) != '\/') ?
+                        '/' + submodules[m].src
+                        : submodules[m].src;
+                    var path = this.dir + submodules[m].src;
+                } else {
+                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                }
             } else {
                 //First case.
                 var list = [];
@@ -425,16 +318,23 @@ if (
 
 
                 var tag = submodules[m].version;
-                var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                //var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                if ( typeof(submodules[m]['src']) != 'undefined' && submodules[m]['src'] != "" ) {
+                    submodules[m].src =  ( submodules[m].src.substring(0,1) != '\/') ?
+                        '/' + submodules[m].src
+                        : submodules[m].src;
+                    var path = this.dir + submodules[m].src;
+                } else {
+                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                }
             }
-
-
-
 
             _this.pull(m, path, tag, function(done, module){
                 //Get next task in list.
                 if (list.length > 0) {
                     _this.update(list);
+                } else {
+                    this.end('update');
                 }
             });
         },
@@ -443,45 +343,77 @@ if (
          *
          * */
         pull : function(module, path, tag, callback){
-            if ( Fs.existsSync(path) ) {
+            if ( fs.existsSync(path) ) {
 
                 tag = (typeof(tag) != "undefined" && tag != "") ? tag : "master";
-                if ( tag != "master" && v.substring(0, 1) != "v") tag = "v" + tag;
+
                 //console.log("about to enter ", path);
                 process.chdir(path);//CD command like.
 
-                var cmd = Spawn('git', ['checkout', tag]);
+                var gitFetch = function(){
+                    var git = spawn('git', ['fetch']);
 
-                cmd.stdout.setEncoding('utf8');
-                cmd.stdout.on('data', function(data){
-                    var str = data.toString();
-                    var lines = str.split(/(\r?\n)/g);
-                    console.log(lines.join(""));
-                });
-
-                cmd.stderr.on('data',function (err) {
-                    var str = err.toString();
-                    var lines = str.split(/(\r?\n)/g);
-
-                    if ( !str.match("Already on") ) {
+                    git.stdout.setEncoding('utf8');
+                    git.stdout.on('data', function(data){
+                        var str = data.toString();
+                        var lines = str.split(/(\r?\n)/g);
                         console.log(lines.join(""));
-                    }
+                    });
 
-                });
+                    git.stderr.on('data',function (err) {
+                        var str = err.toString();
+                        var lines = str.split(/(\r?\n)/g);
+                        console.log(lines.join(""));
+                    });
 
-                cmd.on('close', function (code) {
-                    if (!code) {
-                        console.log('Checking out: ', "[" + module + "] " + tag);
-                        //Trigger pull command.
-                        gitPull();
+                    git.on('close', function (code) {
+                        if (!code) {
+                            console.log('Fetch command done.');
+                            //Trigger checkout command.
+                            gitCheckout();
 
-                    } else {
-                        console.log('process exit with error code ' + code);
-                    }
-                });
+                        } else {
+                            console.log('process exit with error code ' + code);
+                        }
+                    });
+                };
+
+                var gitCheckout = function(){
+
+                    var git = spawn('git', ['checkout', tag]);
+
+                    git.stdout.setEncoding('utf8');
+                    git.stdout.on('data', function(data){
+                        var str = data.toString();
+                        var lines = str.split(/(\r?\n)/g);
+                        console.log(lines.join(""));
+                    });
+
+                    git.stderr.on('data',function (err) {
+                        var str = err.toString();
+                        var lines = str.split(/(\r?\n)/g);
+
+                        if ( !str.match("Already on") ) {
+                            console.log(lines.join(""));
+                        }
+
+                    });
+
+                    git.on('close', function (code) {
+                        if (!code) {
+                            console.log('Checking out: ', "[" + module + "] " + tag);
+                            //Trigger pull command.
+                            gitPull();
+
+                        } else {
+                            console.log('process exit with error code ' + code);
+                        }
+                    });
+                };
+
 
                 var gitPull = function() {
-                    var git = Spawn('git', ['pull', 'origin', tag]);
+                    var git = spawn('git', ['pull', 'origin', tag]);
 
                     git.stdout.setEncoding('utf8');
                     git.stdout.on('data', function(data){
@@ -506,7 +438,6 @@ if (
                         } else {
                             console.log(lines.join(""));
                         }
-
                     });
 
                     git.on('close', function (code) {
@@ -516,10 +447,11 @@ if (
                         } else {
                             callback(true, module);
                         }
-
-
                     });
                 };
+
+                //Starting update.
+                gitFetch();
 
             } else {
                 console.warn("[warn]: path not found ", path);
@@ -536,11 +468,119 @@ if (
                 "\n     $ geena --install" +
                 "\n" +
                 "\nUpdating or downgrading Geena" +
-                "\n     $ geena -u <release>" +
+                "\n     $ geena -u <version>" +
                 "\n or" +
-                "\n     $ geena --update <release>" +
-                "\n\nNB.: leave <release> empty if you are looking for the latest.\n"
+                "\n     $ geena --update <version>" +
+                "\n\nNB.: leave <version> empty if you are looking for the latest.\n"
             );
+        },
+
+        npmInstall : function(callback){
+
+            var path = this.dir;
+            process.chdir(path);//CD command like.
+
+            var npmInstall = function(){
+                var npmCmd = (process.platform === "win32" ? "npm.cmd" : "npm");
+                var npm = spawn(npmCmd, ['install']);
+
+                npm.stdout.setEncoding('utf8');
+                npm.stdout.on('data', function(data){
+                    var str = data.toString();
+                    var lines = str.split(/(\r?\n)/g);
+                    console.log(lines.join(""));
+                });
+
+                npm.stderr.on('data',function (err) {
+
+                    var str = err.toString();
+                    var lines = str.split(/(\r?\n)/g);
+
+                    if ( !str.match("Already on") ) {
+                        console.log(lines.join(""));
+                    }
+                });
+
+                npm.on('close', function (code) {
+                    if (!code) {
+                        console.log('NPM install done');
+                        //... log transaction ??? maybe later..
+                    } else {
+                        console.log('process exit with error code ' + code);
+                    }
+                    callback(false);
+                });
+            };
+            npmInstall();
+        },
+        createPath : function(path, callback) {
+            var t = path.replace(/\\/g, '\/').split('/');
+            var path = '';
+            //creating folders
+            try {
+                for (var p=0; p<t.length; ++p) {
+                    if (process.platform == 'win32' && p === 0) {
+                         path += t[p];
+                    } else {
+                        path += '/' + t[p];
+                    }
+                    if ( !fs.existsSync(path) ) {
+                        fs.mkdirSync(path);
+                    }
+                }  
+                callback(false);
+            } catch (err) {
+                callback(err);
+            }                      
+        },
+        createPaths : function(paths, p, callback){
+            var _this = this;
+            if (p == paths.length-1) {
+                //end.
+                callback(false);
+            }
+            
+            
+            paths[p] = paths[p].replace(/\\/g, '\/');            
+            paths[p] = paths[p].replace(/\/\//g, '/');
+            //console.log("about to create ", p, paths[p]);
+            this.createPath(paths[p], function(err){         
+                if (err)
+                    callback(err)
+                else       
+                    _this.createPaths(paths, p+1, callback);
+            });
+        },
+        link : function(source, target, type, callback) {
+            //creating folders
+            var path = this.createPath(this.submodules.bundlesPath, function(err){
+                if (!err) {
+                    try {
+                        if ( type != undefined) {
+                            fs.symlinkSync(source, target, type);
+                        } else {
+                            fs.symlinkSync(source, target);
+                        }
+                        callback(false);
+                    } catch (err) {
+                        callback(err);
+                    }
+                } else {
+                    console.error(err);
+                }
+            });                    
+        },
+        end : function(task){
+//            if (task == undefined) {
+//                var task = 'install';
+//            }
+
+//            if (task == 'install' && this.submodules['npm'] != undefined &&  this.submodules['npm'] ) {
+//                this.npmInstall(function(err){
+//                    console.log("nothing to do ", task, " done.")
+//                });
+//            }
+
         },
         /**
          * Clean on fails
@@ -549,15 +589,15 @@ if (
         clean : function () {
             //check for git project.
             var path = "./.git/config";
-            if ( Fs.existsSync(path) ) {
+            if ( fs.existsSync(path) ) {
 
             } else {
-                console.log("Sorry, [./git/config] not found. Geena can not clean().");
+                console.error("Sorry, [./git/config] not found. Geena can not clean().");
             }
             //...TODO
         },
         /**
-         * Get submodules conf from packages.json
+         * Get submodules conf from submodules.json
          *
          *
          * @param {function} callback
@@ -565,11 +605,16 @@ if (
          * */
         getProjectConfiguration : function (callback){
             var _this = this;
+
             //Merging with existing;
-            if (Fs.existsSync("./package.json")) {
+            if ( fs.existsSync(modulesPackage) ) {
                 try {
-                    var dep = require('./package.json').submodules;
-                    if ( typeof(dep.use_https) != "undefined" && dep.use_https ) {
+                    var dep = require(modulesPackage);
+
+                    if (
+                        typeof(dep.use_https) != "undefined" && dep.use_https == true
+                        || typeof(dep.use_https) != "undefined" && dep.use_https == "true"
+                ) {
                         _this.useHttps = true;
                     }
 
@@ -596,44 +641,94 @@ if (
 
                     callback(false);
                 } catch (err) {
-                    callback(true, err);
+                    callback(err);
                 }
 
             } else {
                 callback(false);
             }
         }
-
     };
 
 
 
     if (process.argv.length < 3) {
         console.log("Command geena must have argument(s) !");
-        console.log("usage: \n $ ./geena -i\n $ ./geena --install <release>\n $ ./geena --clean");
+        console.log("usage: \n $ ./geena -i\n $ ./geena --install <version>\n $ ./geena --clean");
     } else {
 
         //Get submodules config.
         subHandler.getProjectConfiguration( function(err){
-            if (err) console.log(err + 'getProjectConfiguration => callback');
+            if (err) console.error(err + ' getProjectConfiguration => callback');
 
-            //var submodules = this.submodules.packages;
-            //console.log("About to load submodules ", JSON.stringify(subHandler.submodules, null, 4)); process.exit(42);
-            allowed.forEach(function(i){
+            subHandler.createPaths( 
+                [
+                    subHandler.dir + '/tmp', 
+                    subHandler.dir + '/logs', 
+                    subHandler.dir + '/' + subHandler.submodules.bundlesPath, 
+                    subHandler.dir + '/' + subHandler.submodules.releasesPath
+                ],
+                0,
+                function(err){
+                    //console.log("About to load submodules ", JSON.stringify(subHandler.submodules, null, 4)); process.exit(42);
+                    if (!err) {
 
-                if (arg == i) {
-                    i = i.replace(/-/g, '');
-                    try {
-                        subHandler[i]();
-                    } catch(err) {
-                        if (err) console.log(err,  subHandler[i]);
+                        allowed.forEach( function(i){
+                            if (arg == i) {
+                                i = i.replace(/-/g, '');
+                                var task = undefined;
+                                switch (i) {
+                                    case 'i':
+                                    case 'install':
+                                        task = 'install';
+                                    break;
+
+                                    case 'u':
+                                    case 'update':
+                                        task = 'update';
+                                    break;
+                                }
+                                try {
+
+                                    if ( task == 'install' && subHandler.submodules['npm'] != undefined &&  subHandler.submodules['npm'] ) {
+                                        subHandler.npmInstall( function(err){
+                                            subHandler[i]();
+                                        });
+                                    } else {
+                                        subHandler[i]();
+                                    }
+                                } catch(err) {
+                                    if (err) console.log(err,  subHandler[i]);
+                                }
+                            }
+                        });
                     }
-                }
             });
+
+                
         });
 
     }
+};
 
+if (
+    process.argv[2] != "-u"
+    && process.argv[2] != "--update"
+    && process.argv[2] != "-i"
+    && process.argv[2] != "--install"    
+) {
 
-}
+    try {
 
+        require('./node_modules/geena/node_modules/colors');
+
+        var utils = require("geena").utils;
+        utils.log('Geena Command Line Tool \r\n'.rainbow);
+        utils.cmd.load(__dirname, "/node_modules/geena/package.json");
+    } catch (err) {
+        begin();
+    }
+        
+} else {
+    begin();
+};

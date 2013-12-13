@@ -6,7 +6,7 @@
  * file that was distributed with this source code.
  */
 
-var Utils = require("geena.utils").Utils,
+var utils = require("geena").utils,
     PrePublish = {
     taskCount : 0,
     init : function(){

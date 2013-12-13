@@ -1,0 +1,23 @@
+{
+  "name": "geena.core.modele",
+  "description": "Model - Geena Project framework dependencies",
+  "keywords": [
+    "framework",
+    "micro framework",
+    "geena",
+    "geena project"
+  ],
+  "version": "0.0.6",
+  "author": {
+    "name": "Rhinostone",
+    "email": "geena@rhinosotne.com"
+  },
+  "copyright": "Copyright (c) 2013 Rhinostone <geena@rhinostone.com>",
+  "engine": [
+    "node >=0.10.15"
+  ],
+  "main": "index",
+  "devDependencies": {},
+  "license": "MIT",
+  "readme": "Modele - WIP\n<br/>Dependencies for Geena Project\n"
+}
