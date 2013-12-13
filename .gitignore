@@ -24,3 +24,4 @@ Capfile
 # Misc
 /data
 /cgi-bin
+._.DS_Store

@@ -1,3 +1,3 @@
-[submodule "node_modules/geena.utils"]
-	path = node_modules/geena.utils
-	url = https://github.com/Rhinostone/geena.utils.git
+[submodule "doc"]
+	path = doc
+	url = https://github.com/Rhinostone/geena.documentation.git
