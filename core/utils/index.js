@@ -25,6 +25,7 @@ var utils = {
     helpers : require('./lib/helpers'),
     //this one must move to Dev since it's dev related
     extend  : require('./lib/extend'),
+    generator : require('./lib/generator'),
     Proc    : require('./lib/proc'),
     logger  : require('./lib/logger'),
     cmd     : require('./lib/cmd')
