@@ -1,4 +1,4 @@
-/*
+/**
  * This file is part of the geena package.
  * Copyright (c) 2013 Rhinostone <geena@rhinostone.com>
  *
@@ -7,8 +7,9 @@
  */
 var PostInstall;
 
-var fs = require("fs"), EventEmitter = require('events').EventEmitter;
-var utils = require("geena").utils, util = require('util');
+var fs = require("fs");
+var utils = require("./../core/utils");
+
 
 /**
  * Post install constructor
@@ -17,26 +18,24 @@ var utils = require("geena").utils, util = require('util');
 PostInstall = function(){
 
     var _this = this;
-    this.path = __dirname.substring(0, (__dirname.length - "script".length));
+    this.path = _( __dirname.substring(0, (__dirname.length - "script".length)) );
 
-    /**
-     * Initialize post installation scripts
-     * */
+
+    //Initialize post installation scripts.
+
     var init = function(){
-
         createGeenaFile();
-            //.onComplete();
+        //.onComplete();
     };
 
-    /**
-     * Creating framework command line file
-     * */
-    var createGeenaFile = function(){
 
-        var name = require(_this.path + 'package.json').name,
-            appPath = _this.path.substring(0, (_this.path.length - ("node_modules/" + name + '/').length)),
-            source = _this.path + 'core/template/command/geena.tpl',
-            target = appPath + name;
+    //Creating framework command line file.     
+    var createGeenaFile = function(){
+        console.log('..', _(_this.path + 'package.json') );
+        var name = require( _(_this.path + 'package.json') ).name;
+        var appPath = _( _this.path.substring(0, (_this.path.length - ("node_modules/" + name + '/').length)) );
+        var source = _(_this.path + 'core/template/command/geena.tpl');
+        var target = _(appPath + name);
         //Will override.
         utils.generator.createFileFromTemplate(source, target);
     };
@@ -47,9 +46,5 @@ PostInstall = function(){
 
     init();
 };
-util.inherits(PostInstall, EventEmitter);
-
+//util.inherits(PostInstall, EventEmitter);
 var postInstall = new PostInstall();
-//PostInstall.init();
-//module.exports = PostInstall;
-
