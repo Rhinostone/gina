@@ -7,8 +7,8 @@
  */
 var PostInstall;
 
-var Fs = require("fs"), EventEmitter = require('events').EventEmitter;
-var Utils = require("geena.utils");
+var fs = require("fs"), EventEmitter = require('events').EventEmitter;
+var utils = require("geena").utils, util = require('util');
 
 /**
  * Post install constructor
@@ -37,8 +37,8 @@ PostInstall = function(){
             appPath = _this.path.substring(0, (_this.path.length - ("node_modules/" + name + '/').length)),
             source = _this.path + 'core/template/command/geena.tpl',
             target = appPath + name;
-
-        Utils.Generator.createFileFromTemplate(source, target);
+        //Will override.
+        utils.generator.createFileFromTemplate(source, target);
     };
 
     var createGeenaHome = function(){
@@ -47,7 +47,7 @@ PostInstall = function(){
 
     init();
 };
-Util.inherits(PostInstall, EventEmitter);
+util.inherits(PostInstall, EventEmitter);
 
 var postInstall = new PostInstall();
 //PostInstall.init();
