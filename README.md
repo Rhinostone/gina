@@ -2,7 +2,7 @@ Geena
 =====
 
 <strong>Geena Project</strong> - A Node.js MVC framework
-<br/>Project under developement. Thank you for you patience.
+<br/>Project under developement. Thank you for your patience.
 
 <a href="https://nodei.co/npm/geena/"><img src="https://nodei.co/npm/geena.png" alt="NPM" style="max-width:100%;"></a>
 
