@@ -12,12 +12,15 @@
  * @package    Geena.Utils.Cmd
  * @author     Rhinostone <geena@rhinostone.com>
  */
-var fs      = require('fs'),
-    spawn   = require('child_process').spawn,
-    logger  = require('geena').utils.logger,
-    Proc    = require('geena').utils.Proc,
-    Winston = require('winston'),
-    AppCommand = {
+var fs      = require('fs');
+var spawn   = require('child_process').spawn;
+var utils   = require('geena').utils;
+var Winston = require('winston');
+var logger  = utils.logger;
+var Proc    = utils.Proc;
+var generator = utils.generator;
+
+var AppCommand = {
     opt : {},
     allowedOptions : [
         '-a',
@@ -331,6 +334,8 @@ var fs      = require('fs'),
                 var appPath = _this.bundleInit ;
                 //console.log("spawning ...", opt, "\n VS \n");
                 //log("spawning ...", opt['argument']);
+
+
                 _this.prc = spawn('node', [
                     //_this.appName,
                     appPath,

@@ -12,20 +12,21 @@
  * @package    Geena
  * @author     Rhinostone <geena@rhinostone.com>
  */
-var Gna     = {core:{}},
-    Config  = require('./config'),
-    utils   = require('./utils'),
-    Proc    = utils.Proc,
-    server  = require('./server'),
-    EventEmitter = require('events').EventEmitter,
-    Winston = require('winston');
+var gna     = {core:{}};
+var fs      = require('fs');
+var Config  = require('./config');
+var utils   = require('./utils');
+var Proc    = utils.Proc;
+var server  = require('./server');
+var Winston = require('./../node_modules/winston');
+var EventEmitter = require('events').EventEmitter;
 
-Gna.utils = utils;
+gna.utils = utils;
 
 logger = getContext('geena.utils.logger');
 
 if ( logger == undefined ) {
-    logger = Gna.utils.logger;
+    logger = gna.utils.logger;
     var loggerInstance = new (Winston.Logger)({
         levels : logger.custom.levels,
         transports : [
@@ -38,44 +39,56 @@ if ( logger == undefined ) {
     setContext('geena.utils.logger', loggerInstance);
 }
 
+if ( logger == undefined ) {
+    logger = gna.utils.logger;
+    var loggerInstance = new (Winston.Logger)({
+        levels : logger.custom.levels,
+        transports : [
+            new (Winston.transports.Console)({
+                colorize: true
+            })
+        ],
+        colors : logger.custom.colors
+    });
+    setContext('geena.utils.logger', loggerInstance);
+}
 
 setContext('geena.utils', utils);
 
 var e = new EventEmitter();
-Gna.initialized = false;
+gna.initialized = process.initialized = false;
 var startWithoutGeena = false;
-if( Gna.executionPath == undefined){
+if( gna.executionPath == undefined){
     var p = new _(process.argv[1]).toUnixStyle().split("/");
     var appName = p[p.length-1].split(".")[0];
-    Gna.executionPath = "";
+    gna.executionPath = "";
     if ( (/index.js/).test(process.argv[1]) || p[p.length-1] == 'index') {
         startWithoutGeena = true;
         appName = p[p.length-2].split(".")[0];
         //Find root ;)
         var m = _(__dirname).split("/");
-        Gna.executionPath = "";
+        gna.executionPath = "";
         for (var i in m) {
             if (m[i] != p[i]){
                 break;
             } else {
-                Gna.executionPath +=  p[i] + '/';
+                gna.executionPath +=  p[i] + '/';
             }
         }
-        Gna.executionPath = _( Gna.executionPath.substring(0, Gna.executionPath.length-1) );
+        gna.executionPath = _( gna.executionPath.substring(0, gna.executionPath.length-1) );
     } else {
         for (var i=0; i<p.length-1; ++i) {
-            Gna.executionPath +=  p[i] + '/';
+            gna.executionPath +=  p[i] + '/';
         }
-        Gna.executionPath = _( Gna.executionPath.substring(0, Gna.executionPath.length-1) );
+        gna.executionPath = _( gna.executionPath.substring(0, gna.executionPath.length-1) );
     }
-
 }
 
 var root = getPath('root');
 var geenaPath = getPath('geena.core');
 
 if ( typeof(root) == 'undefined') {
-    root = Gna.executionPath;
+    root = gna.executionPath;
     setPath( 'root', root );
 }
 if ( typeof(geenaPath) == 'undefined') {
@@ -83,20 +96,23 @@ if ( typeof(geenaPath) == 'undefined') {
     setPath('geena.core', geenaPath);
 }
 
+var core    = gna.core;
+var env     = process.argv[2] || 'prod';
+gna.env = process.env.NODE_ENV = env;
+
 /**
  * On middleware initialization
  *
  * @callback callback
  *
  * */
-Gna.onInitialize = function(callback){
+gna.onInitialize = process.onInitialize = function(callback){
 
-    Gna.initialized = true;
+    gna.initialized = true;
     e.on('init', function(instance, express, conf){
 
         joinContext(conf.contexts);
-
-        Gna.getConfig = function(name){
+        gna.getConfig = function(name){
             var tmp = "";
             if ( typeof(name) != 'undefined' ) {
                 try {
@@ -122,14 +138,10 @@ Gna.onInitialize = function(callback){
  *
  * @param {string} [executionPath]
  * */
-Gna.start = function(executionPath){
-
-    //WTF !.
-    var core    = Gna.core,
-        env     = process.argv[2];
+gna.start = process.start = function(executionPath){
 
     if ( typeof(executionPath) != 'undefined' ) {
-        Gna.executionPath = _(executionPath);
+        gna.executionPath = _(executionPath);
     } else {
         var executionPath = root;
     }
@@ -168,26 +180,24 @@ Gna.start = function(executionPath){
     });
     //setContext('config', config);
     config.onReady( function(err, obj){
-
         var isStandalone = obj.isStandalone;
 
         logger.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
         logger.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
-        
+
         server.setConf({
-                appName         : core.startingApp,
+                bundle          : core.startingApp,
                 //Apps list.
                 bundles         : obj.bundles,
                 allBundles      : obj.allBundles,
                 env             : obj.env,
                 isStandalone    : isStandalone,
                 executionPath   : core.executionPath,
-                //geenaPath       : core.geenaPath,
                 conf            : obj.conf
             },
             function(err, instance, express, conf){
                 if (!err) {
-                    Gna.Model = require('./model');
+                    gna.Model = require('./model');
                     logger.debug(
                         'geena',
                         'CORE:DEBUG:1',
@@ -203,20 +213,48 @@ Gna.start = function(executionPath){
 
                     //On user conf complete.
                     e.on('complete', function(instance){
-                        //server.instance = instance;
                         server.init(instance);
                     });
 
-                    e.emit('init', instance, express, conf);
-                    //In case there is no user init.
-                    if (!Gna.initialized) {
-                        e.emit('complete', instance);
-                    }
+
+
+                    gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, project){
+
+                        var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
+                        var linkPath =  _( root +'/'+ project.packages[core.startingApp].release.link );
+
+                        gna.mount( conf.bundlesPath, source, linkPath, function onBundleMounted(err){
+                            if (!err) {
+                                // -- BO
+                                e.emit('init', instance, express, conf);
+                                //In case there is no user init.
+                                if (!gna.initialized) {
+                                    e.emit('complete', instance);
+                                }
+                                console.error('mounted!! ', conf.bundle);
+                                // -- EO
+                            } else {
+                                logger.error(
+                                    'geena',
+                                    'CORE:ERR:2',
+                                    'Could not mount bundle ' + core.startingApp + '. ' + err + '\n' + err.stack,
+                                    err.stack
+                                );
+                            }
+                        });
+                    });
+
+
+//                    e.emit('init', instance, express, conf);
+//                    //In case there is no user init.
+//                    if (!gna.initialized) {
+//                        e.emit('complete', instance);
+//                    }
                 } else {
                     logger.error(
                         'geena',
                         'CORE:ERROR:1',
-                        'Geena::Core.setConf() error. '+ err
+                        'Geena::Core.setConf() error. '+ err+ '\n' + err.stack
                     );
                 }
             });
@@ -226,7 +264,7 @@ Gna.start = function(executionPath){
 /**
  * Stop server
  * */
-Gna.stop = function(pid, code){
+gna.stop = process.stop = function(pid, code){
     log("stoped server");
     if(typeof(code) != "undefined")
         process.exit(code);
@@ -237,14 +275,129 @@ Gna.stop = function(pid, code){
 /**
  * Get Status
  * */
-Gna.status = function(){
+gna.status = process.status = function(){
     log("getting server status");
 };
 /**
  * Restart server
  * */
-Gna.restart = function(){
+gna.restart = process.restart = function(){
     log("starting server");
 };
 
-module.exports = Gna;
+/**
+* Get project conf from project.json
+*
+*
+* @param {function} callback
+* @return {object} data - Result conf object
+* */
+gna.getProjectConfiguration = function (callback){
+    var modulesPackage = _(root + '/project.json');
+    var project = {};
+    //Merging with existing;
+    if ( fs.existsSync(modulesPackage) ) {
+        try {
+            var dep = require(modulesPackage);
+
+            if ( typeof(dep['packages']) == "undefined") {
+                dep['packages'] = {};
+            }
+
+            if (
+                typeof(dep['packages']) != "undefined"
+                    && typeof(project['packages']) != "undefined"
+                ) {
+
+                for (var d in dep) {
+
+                    if (d == 'packages')
+                        for (var p in dep[d]) project['packages'][p] = dep['packages'][p];
+                    else
+                        project[d] = dep[d];
+
+                }
+            } else {
+                project = dep;
+            }
+            gna.project = project;
+            callback(false, project);
+        } catch (err) {
+            gna.project = project;
+            callback(err);
+        }
+
+    } else {
+        gna.project = project;
+        callback(false, project);
+    }
+};
+
+/**
+ * mount release => bundle
+ * @param {string} source
+ * @param {string} target
+ * @param {string} type
+ *
+ * @callback callback
+ * @param {boolean|string} err
+ * */
+gna.mount = process.mount = function(bundlesPath, source, target, type, callback){
+    if ( typeof(type) == 'function') {
+        var callback = type;
+        type = 'dir';
+    }
+    //creating folders.
+    //use junction when using Win XP os.release == '5.1.2600'
+    var exists = fs.existsSync(source);
+    if ( exists ) {
+        var path = utils.generator.createPathSync(bundlesPath, function onPathCreated(err){
+            if (!err) {
+                try {
+                    if ( fs.existsSync(target) ) {
+                        fs.unlinkSync(target);
+                    }
+                    if ( type != undefined) {
+                        fs.symlinkSync(source, target, type);
+                    } else {
+                        fs.symlinkSync(source, target);
+                    }
+                    callback(false);
+                } catch (err) {
+                    if ( fs.existsSync(target) ) {
+                        var stats = fs.lstatSync(target);
+                        if ( stats.isDirectory() ) {
+                            var d = new _(target).rm( function(err){
+                                callback(err);
+                            });
+                        } else {
+                            fs.unlinkSync(target);
+                            callback(err);
+                        }
+                    }
+                }
+            } else {
+                //console.error(err);
+                callback(err);
+            }
+        });
+    } else {
+        // Means that it did not find the release. Build and re mount.
+
+        callback('No release was found to mount for: ', source);
+// Auto build ? Well, I don't know yet. We'll see
+//
+//        gna.build(source, target, type, function(err){
+//
+//        });
+    }
+};
+
+//gna.build = function(source, target, type, callback) {
+//    var project = gna.project;
+//    console.log("building project ", project);
+//
+//    //Mount
+//};
+
+module.exports = gna;
