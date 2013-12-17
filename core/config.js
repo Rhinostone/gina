@@ -26,7 +26,7 @@ var fs              = require('fs'),
     Events          = require('events'),
     EventEmitter    = require('events').EventEmitter,
     utils           = require("./utils"),
-    log             = utils.logger;
+    logger          = utils.logger;
 
 /**
  * Config Constructor
@@ -44,7 +44,7 @@ Config  = function(opt){
         _this.startingApp = opt.startingApp;
         _this.executionPath = opt.executionPath;
 
-        log.debug('geena', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
+        logger.debug('geena', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
 
         _this.userConf = false;
         var path = _(_this.executionPath + '/env.json');
@@ -53,7 +53,7 @@ Config  = function(opt){
 
             _this.userConf = require(path);
 
-            log.debug(
+            logger.debug(
                 'geena',
                 'CONFIG:DEBUG:6',
                 'Applicaiton config file loaded ['
@@ -76,18 +76,18 @@ Config  = function(opt){
 
     var getConf = function(){
 
-        log.debug('geena', 'CONFIG:DEBUG:2', 'Loading conf', __stack);
+        logger.debug('geena', 'CONFIG:DEBUG:2', 'Loading conf', __stack);
 
         _this.Env.load( function(err, envConf){
-            //log.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 42', __stack);
-            //log.info('geena', 'CORE:INFO:42','on this Env LOAD!', __stack);
+            //logger.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 42', __stack);
+            //logger.info('geena', 'CORE:INFO:42','on this Env LOAD!', __stack);
 
             if ( typeof(_this.Env.loaded) == "undefined") {
                 //Need to globalize some of them.
                 this.env = env;
                 this.envConf = envConf;
                 loadBundlesConfiguration( function(err){
-                    //log.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
+                    //logger.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
 
                     //console.log("::: bundles ", _this.getBundles() );
 
@@ -163,7 +163,7 @@ Config  = function(opt){
             try {
                 return configuration[bundle][_this.Env.get()];
             } catch (err) {
-                log.error('geena', 'CONFIG:ERR:1', err, __stack);
+                logger.error('geena', 'CONFIG:ERR:1', err, __stack);
                 return undefined;
             }
         } else if ( typeof(configuration) != 'undefined' ) {
@@ -195,26 +195,26 @@ Config  = function(opt){
 
                     loadWithTemplate(this.parent.userConf, this.template, function(err, envConf){
                         _this.envConf = envConf;
-                        //log.warn('geena', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t') );
+                        //logger.warn('geena', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t') );
                         callback(false, envConf);
                     });
                 } else {
 
                     envConf = this.template;
                     _this.envConf = envConf;
-                    //log.warn('geena', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t'));
+                    //logger.warn('geena', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t'));
                     callback(false, envConf);
                 }
 
             } catch(err) {
-                log.warn('geena', 'CONF:ENV:WARN:1', err, __stack);
+                logger.warn('geena', 'CONF:ENV:WARN:1', err, __stack);
                 callback(err);
             }
         },
 
         set : function(env){
             var found = false;
-            log.debug('geena', 'CONFIG:ENV:DEBUG:1', 'Setting Env',  __stack);
+            logger.debug('geena', 'CONFIG:ENV:DEBUG:1', 'Setting Env',  __stack);
             var registeredEnvs = this.template.registeredEnvs;
             for (var e=0; e<registeredEnvs.length; ++e) {
                 if (registeredEnvs[e] == env) {
@@ -228,7 +228,7 @@ Config  = function(opt){
                 if (typeof(env) == "undefined") {
                     this.current = this.template.defEnv;
                 } else {
-                    log.error('geena', 'CONFIG:ENV:ERR:1', 'Env: ' + env + '] not found');
+                    logger.error('geena', 'CONFIG:ENV:ERR:1', 'Env: ' + env + '] not found');
                     process.exit(1);
                 }
             }
@@ -323,7 +323,7 @@ Config  = function(opt){
         //For each app.
         for (var app in content) {
             //Checking if genune app.
-            log.debug(
+            logger.debug(
                 'geena',
                 'CONFIG:DEBUG:4',
                 'Checking if application is registered ' + app,
@@ -418,7 +418,7 @@ Config  = function(opt){
                     //callback(false, newContent);
 
                 } else {
-                    log.warn(
+                    logger.warn(
                         'geena',
                         'CONFIG:WARN:1',
                         'Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath),
@@ -433,7 +433,7 @@ Config  = function(opt){
         }//EO for.
 
 
-        log.debug(
+        logger.debug(
             'geena',
             'CONFIG:DEBUG:7',
             'Env configuration loaded \n ' + newContent,
@@ -443,7 +443,7 @@ Config  = function(opt){
         //Means all apps sharing the same process.
         if (!isStandalone) _this.Host.standaloneMode = isStandalone;
 
-        log.debug(
+        logger.debug(
             'geena',
             'CONFIG:DEBUG:3',
             'Is server running as a standalone instance ? ' + isStandalone,
@@ -459,7 +459,7 @@ Config  = function(opt){
             var usrConf = require(_this.executionPath +'/'+ file +'.json');
             return true;
         } catch(err) {
-            log.warn('geena', 'CONF:HOST:WARN:1', err, __stack);
+            logger.warn('geena', 'CONF:HOST:WARN:1', err, __stack);
             return false;
         }
     };
@@ -472,19 +472,19 @@ Config  = function(opt){
     this.getBundles = function(){
 
         //Registered apps only.
-        log.debug(
+        logger.debug(
             'geena',
             'CONFIG:DEBUG:4',
             'Pushing apps ' + JSON.stringify(_this.bundles, null, '\t'),
             __stack
         );
 
-        return this.bundles;
+        return _this.bundles;
     };
 
     this.getAllBundles = function(){
         //Registered apps only.
-        log.debug(
+        logger.debug(
             'geena',
             'CONFIG:DEBUG:5',
             'Pushing ALL apps ' + JSON.stringify(_this.allBundles, null, '\t'),
@@ -506,7 +506,7 @@ Config  = function(opt){
 
         var bundles = _this.getBundles();
 
-        //log.info('geena', 'CORE:INFO:42','go ninja  !!!!' + bundles , __stack);
+        //logger.info('geena', 'CORE:INFO:42','go ninja  !!!!' + bundles , __stack);
         if (arguments.length > 1) {
             var bundle = arguments[1];
             var callback = arguments[0];
@@ -546,6 +546,7 @@ Config  = function(opt){
                 //Server only because of the shared mode VS the standalone mode.
                 if (name == 'routing') continue;
 
+
                 if (env != 'prod') {
 
                     tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
@@ -559,9 +560,9 @@ Config  = function(opt){
                         name = name +'_'+env;
                         files[name] = require(filename);
                         //console.log("watch out !!", files[name][bundle]);
-                    } else {
+                    }/** else {
                         filename = appPath + '/config/' + conf[bundle][env].files[name];
-                    }
+                    }*/
                     tmp = "";
                 }
 
@@ -576,15 +577,14 @@ Config  = function(opt){
 
                     //console.log("Got filename ", name ,files[name]);
                 } catch (err) {
-                    //if ( typeof(files[name]) != 'undefined') {
+                    
                     if ( fs.existsSync(filename) )
                         files[name] = "malformed !!";
                     else
                         files[name] = null;
 
-                    log.warn('geena', 'SERVER:WARN:1', filename + err, __stack);
-                    log.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack);
-                    //}
+                    logger.warn('geena', 'SERVER:WARN:1', filename + err, __stack);
+                    logger.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack);
                 }
             }//EO for (name
 
@@ -648,7 +648,7 @@ Config  = function(opt){
                 return _this.getInstance(bundle)
             },
             isCacheless : function() {
-                //log.info('geena', 'CORE:INFO:42','ninja conf  !!!!' + this.envConf, __stack);
+                //logger.info('geena', 'CORE:INFO:42','ninja conf  !!!!' + this.envConf, __stack);
                 return _this.isCacheless()
             },
             refresh : function(bundle, callback) {
@@ -664,7 +664,7 @@ Config  = function(opt){
 
         //Defined before init.
         var env = opt.env, _ready = {err:'not ready', val: null};
-        //log.info('geena', 'CORE:INFO:42','about to init !!!! ', __stack);
+        //logger.info('geena', 'CORE:INFO:42','about to init !!!! ', __stack);
 
         this.env = opt.env;
         init(opt);
