@@ -61,37 +61,44 @@ var AppCommand = {
      * @param {boolean} longCMD
      * */
     run : function(options, message, longCMD){
+
+        //herited from gna.js.
+        var root = getPath('root');
+        this.argv = getContext('process.argv');
         var PID = new Proc('geena', process);
         PID.setMaster();
 
         this.options = options;
         this.msg = message;
-        this.opt['option'] = process.argv[2];
-        this.appName = process.argv[3].replace('.js', '');
+        this.opt['option'] = this.argv[2];
+
+        //herited from gna.js.
+        this.appName = getContext('bundle');
+
         if (longCMD) {
-            this.opt['argument'] = process.argv[4];
-            this.opt['type'] = process.argv[5];
+            this.opt['argument'] = this.argv[4];
+            this.opt['type'] = this.argv[5];
             if (this.opt['option'] != 'a' && this.opt['option'] != '-add') {
                 //this.allowedArguments(this.opt);.
                 //console.log(this.msg.default[1]);.
                 //return false;.
             }
         } else {
-            this.opt['argument'] = process.argv[4];
+            this.opt['argument'] =  this.argv[4];
         }
 
         //Setting default env.
         if (this.opt['option'] != 's' && this.opt['option'] != '-start') {
 
-            if (typeof(process.argv[4]) != 'undefined') {
+            if (typeof(this.argv[4]) != 'undefined') {
                 //if (process.argv[5] != 'undefined') {
                 //    this.opt['argument2']  = process.argv[5];
                 //}
-                var env = process.argv[4];
+                var env = this.argv[4];
                 this.opt['argument'] = env;
             } else {
                 var env = 'prod';
-                process.argv[4] = env;
+                this.argv[4] = env;
                 this.opt['argument'] = env;
             }
             this.env = env;
@@ -357,7 +364,7 @@ var AppCommand = {
 
                 //var appPath = 'releases/agent/0.0.7-dev/index';
 
-                console.log("spawning ...", opt, "\n VS \n");
+                //console.log("spawning ...", opt, "\n VS \n");
                 //log("spawning ...", opt['argument']);
                 //console.log("command ", "node ",appPath, opt['argument'], JSON.stringify( getContext() ));
 //                _this.prc = spawn('node', [
@@ -366,7 +373,7 @@ var AppCommand = {
 //                ]);
                 _this.prc = spawn('node', [
                     //"--debug-brk=63342",
-                    //"--debug-brk=5858",
+                    "--debug-brk=5858",
                     appPath,
                     opt['argument']//,
                     //JSON.stringify( getContext() )//Passing context to child.
