@@ -143,7 +143,7 @@ Proc = function(bundle, proc){
             });
 
             proc.on('exit', function(code){
-                console.log("got exit code ", code, PID, " VS ", process.pid);
+                console.log("got exit code ", "("+code+")", PID, " VS ", process.pid);
                 var obj = logger.emerg('geena', 'UTILS:EMERG1', 'process exit code ' + code);
                 if (_this.env != "debug" /**&& _this.env != "dev" && code != 0*/) {
                     //var cmd = require('geena.utils').Cmd;
