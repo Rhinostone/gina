@@ -339,7 +339,11 @@ Config  = function(opt){
                     var p = _(pkg[app].src);
                     content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
                     //content[app][env]['bundlesPath'] = root + "/"+ p.replace('/' + app, '');
+                } else {
+                    var p = ( typeof(pkg[app].release.link) != 'undefined' ) ? _(pkg[app].release.link) : _(pkg[app].release.target);
+                    content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
                 }
+
                 appsPath = (typeof(content[app][env]['bundlesPath']) != "undefined")
                     ? content[app][env].bundlesPath
                     : template["{bundle}"]["{env}"].bundlesPath;
