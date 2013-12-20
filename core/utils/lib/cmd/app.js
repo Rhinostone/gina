@@ -12,12 +12,15 @@
  * @package    Geena.Utils.Cmd
  * @author     Rhinostone <geena@rhinostone.com>
  */
-var fs      = require('fs'),
-    spawn   = require('child_process').spawn,
-    logger  = require('geena').utils.logger,
-    Proc    = require('geena').utils.Proc,
-    Winston = require('winston'),
-    AppCommand = {
+var fs      = require('fs');
+var spawn   = require('child_process').spawn;
+var utils   = require('geena').utils;
+var Winston = require('winston');
+var logger  = utils.logger;
+var Proc    = utils.Proc;
+var generator = utils.generator;
+
+var AppCommand = {
     opt : {},
     allowedOptions : [
         '-a',
@@ -150,6 +153,9 @@ var fs      = require('fs'),
         }
         callback(found);
     },
+    isMounted : function(bundle){
+
+    },
     isRealApp : function(callback){
         var _this = this;
         var allClear = false;
@@ -158,22 +164,37 @@ var fs      = require('fs'),
         var env = this.env;
 
 
-
         try {
+            //This is mostly for dev.
             var pkg = require( _(this.options.root + '/project.json') ).packages;
             if (
                 pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && env == 'dev'
                 || pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && env == 'debug'
                 ) {
                 var path = pkg[app].src;
-                if (env === 'debug' || env === 'dev') {
-                    p = _( this.options.root +"/"+ path );//path.replace('/' + app, '')
-                    d = _( this.options.root +"/"+ path + '/index.js' );
-                    this.bundleDir = path.replace('/' + app, '');
-                    setContext("bundle_dir", this.bundleDir);
-                    this.bundlesPath =  _( this.options.root +"/"+ this.bundleDir );
-                    this.bundleInit = d;
-                }
+
+                p = _( this.options.root +"/"+ path );//path.replace('/' + app, '')
+                d = _( this.options.root +"/"+ path + '/index.js' );
+                this.bundleDir = path.replace('/' + app, '');
+                setContext("bundle_dir", this.bundleDir);
+                this.bundlesPath =  _( this.options.root +"/"+ this.bundleDir );
+                this.bundleInit = d;
+
+            } else {
+                //Use releases for prod.
+                var path = pkg[app].release.target;
+                var version = pkg[app].release.version;
+                p = _( this.options.root +"/"+ path );//path.replace('/' + app, '')
+                d = _( this.options.root +"/"+ path + '/index.js' );
+
+                //this.bundleDir = path.replace('/' + app + '/' + version, '');
+                this.bundleDir = path;
+                this.bundlesPath = _(this.options.root + '/'+ this.bundleDir);
+//                p = _(this.options.root + '/'+this.bundleDir+'/' + this.appName);
+//                d = _(this.options.root + '/'+this.bundleDir+'/' + this.appName + '/index.js');
+                this.bundleInit = d;
+//                var path = pkg[app].release.target;
+//                console.error('use release');
             }
 
         } catch (err) {
@@ -189,7 +210,7 @@ var fs      = require('fs'),
 
 
         //p = _(this.options.root + '/' + this.appName + '.js'),
-        log("checking ", p, " && ", d, " => ", this.bundleDir);
+        log("checking... ", p, " && ", d, " => ", this.bundleDir);
         //process.exit(42);
         //Checking root.
         fs.exists(d, function(exists){
@@ -329,15 +350,27 @@ var fs      = require('fs'),
                 //var bundlePath = _(_this.bundlesPath);
                 //var appPath = ( new RegExp(_this.bundleDir+'\/').test(bundlePath) ) ? bundlePath : bundlePath +"\/" + _this.bundleDir;
                 var appPath = _this.bundleInit ;
-                //console.log("spawning ...", opt, "\n VS \n");
+                var isPath = (/\//).test(appPath);
+                if (!isPath) {
+                    appPath = _(_this.bundlesPath +'/'+ appPath + '/index');
+                }
+
+                //var appPath = 'releases/agent/0.0.7-dev/index';
+
+                console.log("spawning ...", opt, "\n VS \n");
                 //log("spawning ...", opt['argument']);
+                //console.log("command ", "node ",appPath, opt['argument'], JSON.stringify( getContext() ));
+//                _this.prc = spawn('node', [
+//                    appPath,
+//                    "dev"
+//                ]);
                 _this.prc = spawn('node', [
-                    //_this.appName,
+                    //"--debug-brk=63342",
+                    //"--debug-brk=5858",
                     appPath,
-                    opt['argument'],
-                    JSON.stringify( getContext() ),//Passing context to child.
-                    {detached : true}
-                ]);
+                    opt['argument']//,
+                    //JSON.stringify( getContext() )//Passing context to child.
+                ], {detached : true});
 
                 //On message.
                 _this.prc.stdout.setEncoding('utf8');//Set encoding.

@@ -42,7 +42,6 @@ var Proc;
 
 //Imports
 var fs      = require('fs');
-//var Log     = require('geena.utils').Logger;
 var logger  = require( _(__dirname + '/logger.js') );
 
 /**
@@ -139,12 +138,12 @@ Proc = function(bundle, proc){
 
             //Will prevent the server from stopping.
             proc.on('uncaughtException', function(err){
-                logger.error('geena', 'FATAL_EXCEPTION:1', 'Special care needed !! ' + err + __stack);
+                logger.error('geena', 'FATAL_EXCEPTION:1', 'Special care needed !! ' + err + err.stack);
                 //TODO - Send an email to the administrator/dev
             });
 
             proc.on('exit', function(code){
-                console.log("got exit code ", code, PID, " VS ", process.pid);
+                console.log("got exit code ", "("+code+")", PID, " VS ", process.pid);
                 var obj = logger.emerg('geena', 'UTILS:EMERG1', 'process exit code ' + code);
                 if (_this.env != "debug" /**&& _this.env != "dev" && code != 0*/) {
                     //var cmd = require('geena.utils').Cmd;

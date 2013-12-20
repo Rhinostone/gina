@@ -21,11 +21,44 @@ var Proc    = utils.Proc;
 var server  = require('./server');
 var Winston = require('./../node_modules/winston');
 var EventEmitter = require('events').EventEmitter;
-
+var e = new EventEmitter();
+gna.initialized = process.initialized = false;
 gna.utils = utils;
 
 logger = getContext('geena.utils.logger');
 
+// BO cooking..
+var startWithGeena = false;
+if (process.argv.length >= 4) {
+    startWithGeena = true;
+    process.argv.splice(1,2);
+}
+
+var root = "";
+var getRoot = function(){
+    var paths = _(__dirname).split('/');
+    var newPath;
+    for (var i = paths.length; i>0; --i) {
+        paths.splice(paths.length-1, 1);
+        newPath = paths.join('/');
+        if ( fs.existsSync( newPath + '/project.json') || fs.existsSync( newPath + '/geena') && !fs.statSync( newPath + '/geena').isDirectory() || fs.existsSync( newPath + '/.gna') ) {
+            return newPath;
+            break;
+        }
+    }
+};
+
+var root = getRoot();
+setPath('root', root);
+gna.executionPath = root;
+
+var geenaPath = getPath('geena.core');
+if ( typeof(geenaPath) == 'undefined') {
+    geenaPath = _(__dirname);
+    setPath('geena.core', geenaPath);
+}
+
+console.log("before.. ", root );
 if ( logger == undefined ) {
     logger = gna.utils.logger;
     var loggerInstance = new (Winston.Logger)({
@@ -42,91 +75,55 @@ if ( logger == undefined ) {
 
 setContext('geena.utils', utils);
 
-var e = new EventEmitter();
-gna.initialized = process.initialized = false;
-
-var startWithGeena = (process.argv.length < 4) ? false : true;
-var fromSpawn = ( typeof(process.argv[4]) == 'object' ) ? true : false;
 var envs = ["dev", "debug", "stage", "prod"];
 var env;
-console.error("before.. ", process.argv );
 
 
 //console.log("reading ", startWithGeena, process.argv[3], ( typeof(process.argv[4]) == 'undefined' || envs.indexOf(process.argv[4]) < 0 ));
 
-if (startWithGeena) {
-    //if (fromSpawn) {
-    //    env = process.argv[2];
-    //} else {
-        env = process.argv[4];
-        if ( typeof(process.argv[4]) == 'undefined' || envs.indexOf(process.argv[4]) < 0 ) {
-            env = 'prod';
-            process.argv.splice(4,0,env);
-        }
-    //}
-    gna.env = process.env.NODE_ENV = env;
-
-} else {
+//if (startWithGeena) {
+//    env = process.argv[4];
+//    if ( typeof(process.argv[4]) == 'undefined' || envs.indexOf(process.argv[4]) < 0 ) {
+//        env = 'prod';
+//        process.argv.splice(4,0,env);
+//    }
+//    gna.env = process.env.NODE_ENV = env;
+//
+//} else {
     var env = process.argv[2] || 'prod';
     gna.env = process.env.NODE_ENV = env;
-}
+//}
 
-console.log("nananh ", env);
+
 //console.log('ENV => ', env);
 //console.log('HOW  ', process.argv.length, process.argv);
-var p = new _(process.argv[1]).toUnixStyle().split("/");
-
-if( gna.executionPath == undefined){
-    gna.executionPath = "";
-
-//    var appName = p[p.length-1].split(".")[0];
-//    gna.executionPath = "";
-//    var path = _(process.argv[1]);
-//    if ( (/index.js/).test(path) || p[p.length-1] == 'index') {
-//        startWithGeena = true;
-//
-//
-//        var m = _(__dirname).split("/");
-//        for (var i in m) {
-//            if (m[i] != p[i]){
-//                break;
-//            } else {
-//                gna.executionPath +=  p[i] + '/';
-//            }
-//        }
-//        gna.executionPath = _( gna.executionPath.substring(0, gna.executionPath.length-1) );
-//    } else {
-        for (var i=0; i<p.length-1; ++i) {
-            gna.executionPath +=  p[i] + '/';
-        }
-        gna.executionPath = _( gna.executionPath.substring(0, gna.executionPath.length-1) );
-    //}
-}
-
-var geenaPath = getPath('geena.core');
-if ( typeof(geenaPath) == 'undefined') {
-    geenaPath = _(__dirname);
-    setPath('geena.core', geenaPath);
-}
-
-//Find root ;)
-var root = getPath('root');
-if ( typeof(root) == 'undefined') {
-    var g = _(geenaPath).split('/');
-    var max = (g.length > p.length) ? g.length : p.length;
-    root = "";
-    for (var i=0; i<max; ++i) {
-        if (g[i] == p[i]) {
-            root += g[i] + '/';
-        } else {
-            break;
-        }
-    }
-    root = root.substring(0, root.length-1);
-    setPath( 'root', root );
-}
-// Todo - load from env.json or locals  or project.json ??
 var bundlesPath = _(root + '/bundles');
+
+var p = new _(process.argv[1]).toUnixStyle().split("/");
+var isSym = false;
+var path;
+
+var isPath = (/\//).test(process.argv[1]);
+if (!isPath) {
+    //lequel ?
+    isSym = fs.lstatSync( _(bundlesPath +'/'+ process.argv[1]) ).isSymbolicLink();
+//    if (isSym) {
+//        //get real one.
+//        path =
+//    }
+//    //p = _(bundlesPath +'/'+ process.argv[1] + '/index');
+}
+
+//if( gna.executionPath == undefined){
+//    gna.executionPath = "";
+//
+//    for (var i=0; i<p.length-1; ++i) {
+//        gna.executionPath +=  p[i] + '/';
+//    }
+//    gna.executionPath = _( gna.executionPath.substring(0, gna.executionPath.length-1) );
+//}
+
+// Todo - load from env.json or locals  or project.json ??
 
 var abort = function(err) {
     console.log("got this shit ", process.argv);
@@ -264,83 +261,79 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
 
 
 gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, project){
-    console.log('loaded ? ', gna.loaded);
 
-    console.log("fucking great ", process.argv);
     console.log("project ", project);
-    gna.loaded = true;
-
 
     if (err) console.error(err);
 
 //    if (gna.project == undefined) {
-        gna.project = project;
-        var appName;
+    gna.project = project;
+    var appName;
 
-        var packs = project.packages;
-        if (startWithGeena) {
-            //auto path ?
-            var isPath = (/\//).test(process.argv[3]);
-            if (!isPath) {
-                // env ?
-                //_(bundlesPath + '/' + process.argv[3] + '/index'
-                appName = process.argv[3];
-                var path = (env == 'dev' || env == 'debug') ? packs[appName].src : packs[appName].release.target;
-            } else {
-                var path = process.argv[3]
-            }
+    var packs = project.packages;
+    if (startWithGeena) {
+        //auto path ?
+        //var isPath = (/\//).test(process.argv[3]);
+        if (!isPath) {
+            // env ?
+            //_(bundlesPath + '/' + process.argv[3] + '/index'
+            appName = process.argv[1];
+            path = (env == 'dev' || env == 'debug') ? packs[appName].src : packs[appName].release.target;
         } else {
-            var path = _(process.argv[1]);
+            path = process.argv[1]
         }
+    } else {
+        path = _(process.argv[1]);
+    }
 
-        path = path.replace(root + '/', '');
-        var search;
-        if ( (/index.js/).test(path) || p[p.length-1] == 'index') {
-            var self;
-            path = ( self = path.split('/') ).splice(0, self.length-1).join('/');
-        }
-        console.error('fuck ', env,  startWithGeena, process.argv, path);
-        try {
-            //finding app
-            var target, source, tmp;
-            for (var bundle in packs) {
-                //is bundle ?
-                tmp = "";
-                if ( typeof(packs[bundle].release) != 'undefined' && env == 'prod' || typeof(packs[bundle].release) != 'undefined' && env == 'stage') {
+    path = path.replace(root + '/', '');
+    var search;
+    if ( (/index.js/).test(path) || p[p.length-1] == 'index') {
+        var self;
+        path = ( self = path.split('/') ).splice(0, self.length-1).join('/');
+    }
+    console.error('fuck ', env,  startWithGeena, process.argv, path);
+    try {
+        //finding app
+        var target, source, tmp;
+        for (var bundle in packs) {
+            //is bundle ?
+            tmp = "";
+            if ( typeof(packs[bundle].release) != 'undefined' && env == 'prod' || typeof(packs[bundle].release) != 'undefined' && env == 'stage') {
 
-                    tmp = packs[bundle].release.target.replace(/\//g, '').replace(/\\/g, '');
-                    if ( !appName && tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
-                        appName = bundle;
-                        break;
-                    }/** else {
+                tmp = packs[bundle].release.target.replace(/\//g, '').replace(/\\/g, '');
+                if ( !appName && tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
+                    appName = bundle;
+                    break;
+                }/** else {
                     abort('Path mismatched with env: ' + path);
                 }*/
-                } else if ( typeof(packs[bundle].src) != 'undefined' && env == 'dev' || typeof(packs[bundle].src) != 'undefined' && env == 'debug') {
+            } else if ( typeof(packs[bundle].src) != 'undefined' && env == 'dev' || typeof(packs[bundle].src) != 'undefined' && env == 'debug') {
 
-                    tmp = packs[bundle].src.replace(/\//g, '').replace(/\\/g, '');
-                    if ( !appName && tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
-                        appName = bundle;
-                        break;
-                    }/** else {
+                tmp = packs[bundle].src.replace(/\//g, '').replace(/\\/g, '');
+                if ( !appName && tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
+                    appName = bundle;
+                    break;
+                }/** else {
                     abort('Path mismatched with env: ' + path);
                 }*/
-                } /**else if (startWithGeena && appName == bundle) {
+            } /**else if (startWithGeena && appName == bundle) {
                 appName = bundle;
             } else {
                 console.log("I'm fucked ! ");
             }*/
-                // else, not a bundle
-            }
-
-            if (appName == undefined)
-                abort('No bundle found for path: ' + path);
-
-
-
-
-        } catch (err) {
-            abort(err);
+            // else, not a bundle
         }
+
+        if (appName == undefined)
+            abort('No bundle found for path: ' + path);
+
+
+
+
+    } catch (err) {
+        abort(err);
+    }
 //    } else {
 //        project = gna.project;
 //    }
@@ -493,11 +486,11 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 
 
 
-    //                    e.emit('init', instance, express, conf);
-    //                    //In case there is no user init.
-    //                    if (!gna.initialized) {
-    //                        e.emit('complete', instance);
-    //                    }
+                            //                    e.emit('init', instance, express, conf);
+                            //                    //In case there is no user init.
+                            //                    if (!gna.initialized) {
+                            //                        e.emit('complete', instance);
+                            //                    }
                         } else {
                             logger.error(
                                 'geena',

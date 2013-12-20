@@ -998,8 +998,7 @@ PathHelper = function(){
             logger.info("geena", "INFO:42", " 1) got config paths " +  paths+ " VS "+ _this.userPaths, __stack);
 
             extend(true, paths, _this.userPaths);
-            console.log("what is this ", paths);
-            //if (paths)
+            //console.log("what is this ", paths);
             setContext("paths", paths);
         }
     };
