@@ -55,6 +55,8 @@ var begin = function(){
     var arg             = process.argv[2];
     //Config file for submodules.
     var modulesPackage  = './project.json';
+    var npmPackage = './package.json';
+
     var fs              = require("fs"),
         spawn           = require('child_process').spawn,
         allowed         = ["--clean", "-i","--install", "-u","--update", "-h", "--help"];
@@ -84,6 +86,7 @@ var begin = function(){
         dir : __dirname.replace(/\\/g, '\/') + '/',
         //Use submodules.json with the following key: submodules.
         submodules : defaultSubmodules,
+        package : {},
         useHttps : false,
         /**
          * Install Geena Project with its dependencies
@@ -125,7 +128,7 @@ var begin = function(){
 
                 //Get dependencies.
                 if ( typeof(submodules[m]['dependencies']) != "undefined") {
-                    for (d in submodules[m]['dependencies']) {
+                    for (var d in submodules[m]['dependencies']) {
                         //console.log("m ", m, "=> ", submodules[m]['dependencies'][d]);
                         submodules[d] = submodules[m]['dependencies'][d];
                         list.push(d);
@@ -160,12 +163,9 @@ var begin = function(){
                     this.clone( m, path, repo, tag, function(err, module){
 
                         if (submodules[m]['release']['target']['link'] != undefined) {
-                            var linkPath =  _this.dir + submodules[m].release.link;
-                            _this.link( path, linkPath, 'dir', function(err){
-                                if (list.length > 0) {
-                                    _this.install(list);
-                                }
-                            });
+                            if (list.length > 0) {
+                                _this.install(list);
+                            }
                         } else if (list.length > 0) {
                             _this.install(list);
                         }
@@ -204,12 +204,9 @@ var begin = function(){
                             _this.clone( m, path, repo, tag, function(err, module){
                                 if (submodules[m]['release']['target']['link'] != undefined) {
                                     //console.log(" => ",  submodules[m]['release'].link);
-                                    var linkPath =  _this.dir + submodules[m].release.link;
-                                    _this.link( path, linkPath, 'dir', function(err){
-                                        if (list.length > 0) {
-                                            _this.install(list);
-                                        }
-                                    });
+                                    if (list.length > 0) {
+                                        _this.install(list);
+                                    }
                                 } else if (list.length > 0) {
                                     _this.install(list);
                                 }
@@ -261,7 +258,8 @@ var begin = function(){
                 var str = err.toString();
                 var lines = str.split(/(\r?\n)/g);
 
-                console.error('[error] ', str);
+                console.error('[info] ');
+                console.error(str);
             });
 
             cmd.on('close', function (code) {
@@ -309,7 +307,7 @@ var begin = function(){
 
                 //Get dependencies.
                 if ( typeof(submodules[m]['dependencies']) != "undefined") {
-                    for (d in submodules[m]['dependencies']) {
+                    for (var d in submodules[m]['dependencies']) {
                         //console.log("m ", m, "=> ", submodules[m]['dependencies'][d]);
                         submodules[d] = submodules[m]['dependencies'][d];
                         list.push(d);
@@ -475,14 +473,16 @@ var begin = function(){
             );
         },
 
-        npmInstall : function(callback){
+        npmInstall : function(i, callback){
+            var _this = this;
+            var module = this.package[i];
 
             var path = this.dir;
             process.chdir(path);//CD command like.
 
-            var npmInstall = function(){
+            var npmInstall = function(i, callback){
                 var npmCmd = (process.platform === "win32" ? "npm.cmd" : "npm");
-                var npm = spawn(npmCmd, ['install']);
+                var npm = spawn(npmCmd, ['install', module]);
 
                 npm.stdout.setEncoding('utf8');
                 npm.stdout.on('data', function(data){
@@ -508,10 +508,17 @@ var begin = function(){
                     } else {
                         console.log('process exit with error code ' + code);
                     }
-                    callback(false);
+                    _this.npmInstall(i+1, callback);
                 });
             };
-            npmInstall();
+
+            //end.
+            if ( typeof(module) == 'undefined' ) {
+                callback(false);
+            } else {
+                npmInstall(i, callback);
+            }
+
         },
         createPath : function(path, callback) {
             var t = path.replace(/\\/g, '\/').split('/');
@@ -539,8 +546,7 @@ var begin = function(){
                 //end.
                 callback(false);
             }
-            
-            
+
             paths[p] = paths[p].replace(/\\/g, '\/');            
             paths[p] = paths[p].replace(/\/\//g, '/');
             //console.log("about to create ", p, paths[p]);
@@ -550,25 +556,6 @@ var begin = function(){
                 else       
                     _this.createPaths(paths, p+1, callback);
             });
-        },
-        link : function(source, target, type, callback) {
-            //creating folders
-            var path = this.createPath(this.submodules.bundlesPath, function(err){
-                if (!err) {
-                    try {
-                        if ( type != undefined) {
-                            fs.symlinkSync(source, target, type);
-                        } else {
-                            fs.symlinkSync(source, target);
-                        }
-                        callback(false);
-                    } catch (err) {
-                        callback(err);
-                    }
-                } else {
-                    console.error(err);
-                }
-            });                    
         },
         end : function(task){
 //            if (task == undefined) {
@@ -597,7 +584,7 @@ var begin = function(){
             //...TODO
         },
         /**
-         * Get submodules conf from submodules.json
+         * Get project conf from project.json
          *
          *
          * @param {function} callback
@@ -630,7 +617,7 @@ var begin = function(){
                         for (var d in dep) {
 
                             if (d == 'packages')
-                                for (p in dep[d]) _this.submodules['packages'][p] = dep['packages'][p];
+                                for (var p in dep[d]) _this.submodules['packages'][p] = dep['packages'][p];
                             else
                                 _this.submodules[d] = dep[d];
 
@@ -644,6 +631,33 @@ var begin = function(){
                     callback(err);
                 }
 
+            } else {
+                callback(false);
+            }
+        },
+        getNpmPackage : function(callback){
+            var i=0;
+
+            if ( fs.existsSync(npmPackage) ) {
+                try {
+                    var dep = require(npmPackage).dependencies;
+
+                    for (var d in dep) {
+                        console.error("check ", d, i);
+                        if ( typeof(dep[d]) != 'undefined' && dep[d] != '' ){
+                            this.package[i] = d+'@'+dep[d];
+                        } else {
+                            this.package[i] = d;
+                        }
+                        ++i;
+                    }
+
+                    this.npmInstall(0, function(err) {
+                        callback(err);
+                    });
+                } catch (err) {
+                    callback(err);
+                }
             } else {
                 callback(false);
             }
@@ -691,14 +705,15 @@ var begin = function(){
                                 try {
 
                                     if ( task == 'install' && subHandler.submodules['npm'] != undefined &&  subHandler.submodules['npm'] ) {
-                                        subHandler.npmInstall( function(err){
+                                        subHandler.getNpmPackage( function(err){
                                             subHandler[i]();
                                         });
+
                                     } else {
                                         subHandler[i]();
                                     }
                                 } catch(err) {
-                                    if (err) console.log(err,  subHandler[i]);
+                                    if (err) console.error(err,  subHandler[i]);
                                 }
                             }
                         });
@@ -726,7 +741,8 @@ if (
         utils.log('Geena Command Line Tool \r\n'.rainbow);
         utils.cmd.load(__dirname, "/node_modules/geena/package.json");
     } catch (err) {
-        begin();
+        console.error(err);
+        console.error(err.stack);
     }
         
 } else {

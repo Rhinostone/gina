@@ -191,7 +191,7 @@ var fs      = require('fs'),
             "profile" : this.getEnv(),
             "message" : label,
             //"explicit" : explicit
-            "explicit" : (this.env == "debug") ? explicit + stack.replace(/,/g, "\n") + "\n" : explicit
+            "explicit" : (this.env == "debug" || this.env == "dev" && level == 'error') ? explicit + stack.replace(/,/g, "\n") + "\n" : explicit
         };
 
         if (logger != undefined && label != undefined) {
