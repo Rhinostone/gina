@@ -163,12 +163,9 @@ var begin = function(){
                     this.clone( m, path, repo, tag, function(err, module){
 
                         if (submodules[m]['release']['target']['link'] != undefined) {
-                            var linkPath =  _this.dir + submodules[m].release.link;
-                            _this.mount( path, linkPath, 'dir', function(err){
-                                if (list.length > 0) {
-                                    _this.install(list);
-                                }
-                            });
+                            if (list.length > 0) {
+                                _this.install(list);
+                            }
                         } else if (list.length > 0) {
                             _this.install(list);
                         }
@@ -207,12 +204,9 @@ var begin = function(){
                             _this.clone( m, path, repo, tag, function(err, module){
                                 if (submodules[m]['release']['target']['link'] != undefined) {
                                     //console.log(" => ",  submodules[m]['release'].link);
-                                    var linkPath =  _this.dir + submodules[m].release.link;
-                                    _this.mount( path, linkPath, 'dir', function(err){
-                                        if (list.length > 0) {
-                                            _this.install(list);
-                                        }
-                                    });
+                                    if (list.length > 0) {
+                                        _this.install(list);
+                                    }
                                 } else if (list.length > 0) {
                                     _this.install(list);
                                 }
@@ -552,8 +546,7 @@ var begin = function(){
                 //end.
                 callback(false);
             }
-            
-            
+
             paths[p] = paths[p].replace(/\\/g, '\/');            
             paths[p] = paths[p].replace(/\/\//g, '/');
             //console.log("about to create ", p, paths[p]);
@@ -563,33 +556,6 @@ var begin = function(){
                 else       
                     _this.createPaths(paths, p+1, callback);
             });
-        },
-        mount : function(source, target, type, callback) {
-            //creating folders.
-            var _this = this;
-            fs.exists(source, function(exists){
-                if (exists) {
-                    var path = _this.createPath(_this.submodules.bundlesPath, function(err){
-                        if (!err) {
-                            try {
-                                if ( type != undefined) {
-                                    fs.symlinkSync(source, target, type);
-                                } else {
-                                    fs.symlinkSync(source, target);
-                                }
-                                callback(false);
-                            } catch (err) {
-                                callback(err);
-                            }
-                        } else {
-                            console.error(err);
-                        }
-                    });
-                } else {
-                    callback(false);
-                }
-            });
-
         },
         end : function(task){
 //            if (task == undefined) {
@@ -747,7 +713,7 @@ var begin = function(){
                                         subHandler[i]();
                                     }
                                 } catch(err) {
-                                    if (err) console.log(err,  subHandler[i]);
+                                    if (err) console.error(err,  subHandler[i]);
                                 }
                             }
                         });
@@ -775,7 +741,8 @@ if (
         utils.log('Geena Command Line Tool \r\n'.rainbow);
         utils.cmd.load(__dirname, "/node_modules/geena/package.json");
     } catch (err) {
-        begin();
+        console.error(err);
+        console.error(err.stack);
     }
         
 } else {
