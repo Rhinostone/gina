@@ -11,15 +11,11 @@
     "geena project",
     "geena js"
   ],
-<<<<<<< HEAD
-  "version": "0.0.7",
-=======
-  "version": "0.0.8p1",
+  "version": "0.0.8p3",
   "repository" : {
     "type" : "git",
     "url" : "https://github.com/Rhinostone/geena.git"
   },
->>>>>>> dev
   "author": {
     "name": "Rhinostone",
     "email": "geena@rhinosotne.com"

@@ -22,7 +22,7 @@ var utils = require("geena").utils,
         });*/
     },
     count : function(){
-        for(t in this){
+        for(var t in this){
             if(typeof(this[t]) == 'function' && t != 'init' && t != 'count' && t != 'onReady')
                 ++this.taskCount;
         }
@@ -33,6 +33,8 @@ var utils = require("geena").utils,
     removeConsole : function(){
 
     },
-    postToGitHub : function(){}
+    changeVersionNumber : function(callback){
+
+    }
 };
 PrePublish.init();
