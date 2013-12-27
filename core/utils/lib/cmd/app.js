@@ -89,7 +89,6 @@ var AppCommand = {
 
         //Setting default env.
         if (this.opt['option'] != 's' && this.opt['option'] != '-start') {
-
             if (typeof(this.argv[4]) != 'undefined') {
                 //if (process.argv[5] != 'undefined') {
                 //    this.opt['argument2']  = process.argv[5];
@@ -373,7 +372,7 @@ var AppCommand = {
 //                ]);
                 _this.prc = spawn('node', [
                     //"--debug-brk=63342",
-                    "--debug-brk=5858",
+                    //"--debug-brk=5858",
                     appPath,
                     opt['argument']//,
                     //JSON.stringify( getContext() )//Passing context to child.

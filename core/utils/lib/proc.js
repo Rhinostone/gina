@@ -127,8 +127,8 @@ Proc = function(bundle, proc){
                 });
             });
 
-            proc.on('SIGINT', function (){
-                console.log("got exit code ", PID);
+            proc.on('SIGINT', function (code){
+                console.log("got exit code ", code, "for ", PID);
                 var path = _(_this.path + PID);
                 fs.unlink( path, function(err){
                     //Force when stuck.
@@ -154,7 +154,7 @@ Proc = function(bundle, proc){
                 dismiss(PID, proc);
             });
 
-            proc.stderr.resume();
+            //proc.stderr.resume();
             proc.stderr.setEncoding('utf8');//Set encoding.
             proc.stderr.on('data', function(err){
                 console.error("found err ", err);
