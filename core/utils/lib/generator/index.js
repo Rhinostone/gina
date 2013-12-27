@@ -41,6 +41,26 @@ Generator = {
     },
     createFoldersFromStructureSync : function(structure){
 
+    },
+    createPathSync : function(path, callback) {
+        var t = path.replace(/\\/g, '\/').split('/');
+        var path = '';
+        //creating folders
+        try {
+            for (var p=0; p<t.length; ++p) {
+                if (process.platform == 'win32' && p === 0) {
+                    path += t[p];
+                } else {
+                    path += '/' + t[p];
+                }
+                if ( !fs.existsSync(path) ) {
+                    fs.mkdirSync(path);
+                }
+            }
+            callback(false);
+        } catch (err) {
+            callback(err);
+        }
     }
 };
 

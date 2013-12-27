@@ -195,27 +195,49 @@ Config = function() {
         //Create path.
         try {
 
+            var createFolder = function(){
+                fs.mkdir(gnaFolder, 0777, function(err){
+                    if (err) logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
+
+                    //Creating content.
+                    createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
+                        callback(err);
+                    });
+                });
+            };
             fs.exists(gnaFolder, function(exists){
                 //console.log("file exists ? ", gnaFolder, exists);
 
-                if (!exists) {
-                    //logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
-                    console.warn("waah ", gnaFolder+ '/' +file, gnaFolder, content);
-                    fs.mkdir(gnaFolder, 0777, function(err){
-                        if (err) logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
-
-                        //Creating content.
-                        createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
+                if (exists) {
+                    var folder = new _(gnaFolder).rm( function(err){
+                        if (!err) {
+                            createFolder();
+                        } else {
                             callback(err);
-                        });
-                    });
+                        }
 
+                    });
                 } else {
-                    //Means that folder was found.
-                    if ( typeof(callback) != 'undefined') {
-                        callback(false);
-                    }
+                    createFolder();
                 }
+            //logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
+//                    console.warn("waah ", gnaFolder+ '/' +file, gnaFolder, content);
+//                    fs.mkdir(gnaFolder, 0777, function(err){
+//                        if (err) logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
+//
+//                        //Creating content.
+//                        createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
+//                            callback(err);
+//                        });
+//                    });
+
+//                } else {
+//                    //Means that folder was found.
+//                    if ( typeof(callback) != 'undefined') {
+//                        callback(false);
+//                    }
+//                }
+
 //                    //Means that folder was found.
 //                    /************************************************************
 //                    * Will remove this row once the project generator is ready. *
