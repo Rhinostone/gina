@@ -81,7 +81,7 @@ if ( logger == undefined ) {
 setContext('geena.utils', utils);
 
 var envs = ["dev", "debug", "stage", "prod"];
-var env = process.argv[2] || 'prod';
+var env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
 gna.env = process.env.NODE_ENV = env;
 
 //console.log('ENV => ', env);
@@ -109,11 +109,14 @@ if (!isPath) {
 // Todo - load from env.json or locals  or project.json ??
 
 var abort = function(err) {
-    if ( typeof(err.stack) != 'undefined') {
-        console.log('Geena could not determine which bundle to load: ' + err +' ['+env+']' + '\n' + err.stack);
-        process.exit(1);
-    } else {
-        console.log('Geena could not determine which bundle to load: ' + err +' ['+env+']');
+    if (process.argv[2] == '-s' && startWithGeena || process.argv[2] == '--start' && startWithGeena || !startWithGeena && isPath) {
+        if (isPath && !startWithGeena) {
+            console.log('You are trying to load geena by hand: just make sure that your env ['+env+'] matches the given path ['+ path +']');
+        } else if ( typeof(err.stack) != 'undefined' ) {
+            console.log('Geena could not determine which bundle to load: ' + err +' ['+env+']' + '\n' + err.stack);
+        } else {
+            console.log('Geena could not determine which bundle to load: ' + err +' ['+env+']');
+        }
         process.exit(1);
     }
 };

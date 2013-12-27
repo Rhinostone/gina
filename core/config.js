@@ -614,6 +614,7 @@ Config  = function(opt){
 
             conf[bundle][env].content   = files;
             conf[bundle][env].bundle    = bundle;
+            conf[bundle][env].env       = env;
 
             files = {};
 
