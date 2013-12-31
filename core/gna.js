@@ -399,7 +399,24 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
             core: _(__dirname)
         });
 
+        //check here for mount point source...
         var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
+
+        var tmpSource = _(bundlesPath + '/' +core.startingApp);
+        if ( fs.existsSync(tmpSource) && env == 'prod' || fs.existsSync(tmpSource) && env == 'stage' ) {
+            try {
+                var stats = fs.lstatSync(tmpSource);
+                if ( stats.isSymbolicLink() ) {
+                    source = _( fs.readlinkSync(tmpSource) );
+                } else {
+                    source = tmpSource;
+                }
+            } catch (err) {
+                //silently...
+                source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
+            }
+        }
+
         var linkPath =  _( root +'/'+ project.packages[core.startingApp].release.link );
 
         gna.mount( bundlesPath, source, linkPath, function onBundleMounted(mountErr){
