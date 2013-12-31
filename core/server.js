@@ -265,11 +265,11 @@ var fs              = require('fs'),
                 //Middleware configuration.
                 request.setEncoding(_this.conf[_this.appName].encoding);
 
-                if ( _this.routing.count() == 0 ) {
+                if ( _this.routing == null || _this.routing.count() == 0 ) {
                     logger.error(
                         'geena',
                         'SERVER:ERR:1',
-                        'Malformed routing or Null value for application ' + _this.appName,
+                        'Malformed routing or Null value for application [' + _this.appName + '] => ' + request.originalUrl,
                         __stack
                     );
                 }
