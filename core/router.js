@@ -112,7 +112,7 @@ Router = function(env){
         var v = null;
 
         //console.info("ROUTE !!! ", urlVar, params.requirements);
-        if( typeof(params.requirements) != "undefined" && typeof(params.requirements[urlVar] != "undefined")){
+        if( typeof(params.requirements) != "undefined" && typeof(params.requirements[urlVar]) != "undefined" ){
             v = urlVal.match(params.requirements[urlVar]);
             //console.info('does it match ?', v);
             //works with regex like "([0-9]*)"
@@ -120,7 +120,6 @@ Router = function(env){
             if(v != null && v[0] !== ""){
                 request.params[urlVar] = v[0];
             }
-
         }
         return (v != null && v[0] == urlVal && v[0] !="") ? true : false;
     };
