@@ -461,10 +461,8 @@ PathHelper = function(){
                 } else {
                     //3C.
                     console.log("....calling method ", method);
-                    var removed = false;
                     var onRemoved = function(err, target){
                         // err: 99% means that it doesn't exist. Well, we don't care do we ?.
-
                         console.log("someshit has been triggered ! ", target);
                         //if (!err) console.log(" rm done, using same object ";
                         if (!err) {
@@ -473,16 +471,12 @@ PathHelper = function(){
 //                            console.log("MKDIR createDir ");
 
                             var target = new _(destination).mkdir(function(err, path){
-                                //if (!removed) {
                                     browseCopy(source, path, function(err){
                                         //console.log("copy Dir to Dir done");
                                         //removed = true;
                                         destination = null;
                                         e.emit("cp#complete", err);
                                     });
-                                //} //else {
-                                //    e.emit("cp#complete", err);
-                                //}
                             });
                             //});
                         } else {
@@ -725,19 +719,15 @@ PathHelper = function(){
     var mv = function(self, target){
         //console.log("starting mv/copy from ", self.value, " to ", target);
         var task = new _(self.value);
-        //rm target if exists.
-        rm(target).onComplete( function(err, _path){
-            task.cp(target, function(err){
-                if (err) console.error(err);
+        task.cp(target, function(err){
+            if (err) console.error(err);
 
-                console.log("cp done... now unlinking source ", self.value);
-                rm(self.value).onComplete( function(err, path){
-                    console.log('fuckn rm() complete');
-                    e.emit('mv#complete', err, path);
-                });
-            })
-        });
-        /**.onComplete( function(err){
+            console.log("cp done... now unlinking source ", self.value);
+            rm(self.value).onComplete( function(err, path){
+                console.log('fuckn rm() complete');
+                e.emit('mv#complete', err, path);
+            });
+        });/**.onComplete( function(err){
             e.emit('mv#complete', err, path);
         });*/
         return {
