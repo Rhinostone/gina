@@ -101,7 +101,6 @@ Proc = function(bundle, proc){
         } else {
             proc.title = bundle;
         }
-        //_this.proc = proc;
         //Set event.
         setDefaultEvents(bundle, PID, proc);
     };
@@ -115,24 +114,21 @@ Proc = function(bundle, proc){
             proc.dismiss = dismiss;
             proc.isMaster = isMaster;
 
-            //proc.stdin.resume();
-            proc.stdout.setEncoding('utf8');
-
             proc.on('SIGTERM', function (){
-                console.log("you'r damn right ", PID);
-                var path = _(_this.path + PID);
+                console.log("you'r damn right ", _this.PID);
+                var path = _(_this.path + _this.PID);
                 fs.unlink( path, function(err){
                     //Force when stuck.
-                    proc.kill(PID, "SIGKILL");
+                    process.kill(_this.PID, "SIGKILL");
                 });
             });
 
             proc.on('SIGINT', function (code){
-                console.log("got exit code ", code, "for ", PID);
-                var path = _(_this.path + PID);
+                console.log("got exit code ", code, "for ", _this.PID);
+                var path = _(_this.path + _this.PID);
                 fs.unlink( path, function(err){
                     //Force when stuck.
-                    proc.kill(PID, "SIGKILL");
+                    process.kill(_this.PID, "SIGKILL");
                 });
             });
 
@@ -143,7 +139,7 @@ Proc = function(bundle, proc){
             });
 
             proc.on('exit', function(code){
-                console.log("got exit code ", "("+code+")", PID, " VS ", process.pid);
+                console.log("got exit code ", "("+code+")", _this.PID, " VS ", process.pid);
                 var obj = logger.emerg('geena', 'UTILS:EMERG1', 'process exit code ' + code);
                 if (_this.env != "debug" /**&& _this.env != "dev" && code != 0*/) {
                     //var cmd = require('geena.utils').Cmd;
@@ -151,7 +147,7 @@ Proc = function(bundle, proc){
                     //Respawn cmd
                     console.log("Exiting and re spawning !!!");
                 }
-                dismiss(PID, proc);
+                dismiss(_this.PID, proc);
             });
 
             //proc.stderr.resume();
@@ -162,10 +158,15 @@ Proc = function(bundle, proc){
         }
     };
 
+
+
     var dismiss = function(PID, proc){
+        if (PID == undefined) {
+            var PID = _this.PID;
+        }
         var path = _(_this.path + PID);
         fs.unlinkSync(path);
-        proc.kill(PID, "SIGKILL");
+        process.kill(PID, "SIGKILL");
     };
 
     /**

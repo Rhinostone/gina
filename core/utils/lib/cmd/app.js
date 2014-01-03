@@ -300,9 +300,10 @@ var AppCommand = {
     remove : function(opt){
         log('deleting app now...', opt);
     },
-    kill : function(opt) {
-        log('killing app now...', opt);
-    },
+    //trash...
+//    kill : function(opt) {
+//        log('killing app now...', opt);
+//    },
     restart : function(opt){
         log('restarting app now...', opt);
     },
