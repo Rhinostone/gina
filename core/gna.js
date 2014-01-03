@@ -34,8 +34,10 @@ var tmp = JSON.stringify(process.argv);
 setContext('process.argv', JSON.parse(tmp) );
 tmp = null;
 
+// filter $ node.. o $ geena  with or without env
 if (process.argv.length >= 4) {
     startWithGeena = true;
+    //process.argv.splice(1,2);
     process.argv.splice(1,2);
 }
 
@@ -81,7 +83,13 @@ if ( logger == undefined ) {
 setContext('geena.utils', utils);
 
 var envs = ["dev", "debug", "stage", "prod"];
-var env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
+var env;
+//if (process.argv[0] == 'node') {
+//    env =  ( typeof(process.argv[1]) != 'undefined')  ? process.argv[1].toLowerCase() : 'prod';
+//} else {
+env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
+//}
+
 gna.env = process.env.NODE_ENV = env;
 
 //console.log('ENV => ', env);
@@ -229,7 +237,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
     } else {
         // Means that it did not find the release. Build and re mount.
 
-        callback('No release was found to mount for: ', source);
+        callback('Found no release to mount for: ', source);
 // Auto build ? Well, I don't know yet. We'll see
 //
 //        gna.build(source, target, type, function(err){
@@ -266,9 +274,11 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
             appName = process.argv[1];
             path = (env == 'dev' || env == 'debug') ? packs[appName].src : packs[appName].release.target;
         } else {
-            path = process.argv[1]
+            //path = ( process.argv[0] == 'node' ) ? process.argv[2] : process.argv[1];
+            path = process.argv[1];
         }
     } else {
+        //path = ( process.argv[0] == 'node' ) ? process.argv[2] : process.argv[1];
         path = _(process.argv[1]);
     }
 
@@ -402,7 +412,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         //check here for mount point source...
         var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
 
-        var tmpSource = _(bundlesPath + '/' +core.startingApp);
+        var tmpSource = _(bundlesPath +'/'+ core.startingApp);
         if ( fs.existsSync(tmpSource) && env == 'prod' || fs.existsSync(tmpSource) && env == 'stage' ) {
             try {
                 var stats = fs.lstatSync(tmpSource);
