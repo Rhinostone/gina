@@ -65,15 +65,15 @@ var AppCommand = {
         //herited from gna.js.
         var root = getPath('root');
         this.argv = getContext('process.argv');
-        var PID = new Proc('geena', process);
-        PID.setMaster();
+        this.PID = new Proc('geena', process);
+        this.PID.setMaster();
         
         this.options = options;
         this.msg = message;
         this.opt['option'] = this.argv[2];
 
         //herited from gna.js.
-        this.appName = getContext('bundle');
+        this.bundle = getContext('bundle');
 
         if (longCMD) {
             this.opt['argument'] = this.argv[4];
@@ -166,7 +166,7 @@ var AppCommand = {
         var _this = this;
         var allClear = false;
         var p, d;
-        var app = this.appName;
+        var app = this.bundle;
         var env = this.env;
 
 
@@ -196,8 +196,8 @@ var AppCommand = {
                 //this.bundleDir = path.replace('/' + app + '/' + version, '');
                 this.bundleDir = path;
                 this.bundlesPath = _(this.options.root + '/'+ this.bundleDir);
-//                p = _(this.options.root + '/'+this.bundleDir+'/' + this.appName);
-//                d = _(this.options.root + '/'+this.bundleDir+'/' + this.appName + '/index.js');
+//                p = _(this.options.root + '/'+this.bundleDir+'/' + this.bundle);
+//                d = _(this.options.root + '/'+this.bundleDir+'/' + this.bundle + '/index.js');
                 this.bundleInit = d;
 //                var path = pkg[app].release.target;
 //                console.error('use release');
@@ -208,14 +208,14 @@ var AppCommand = {
             // TODO - log warn ?
             this.bundleDir = 'bundles';
             this.bundlesPath = _(this.options.root + '/'+this.bundleDir);
-            p = _(this.options.root + '/'+this.bundleDir+'/' + this.appName);
-            d = _(this.options.root + '/'+this.bundleDir+'/' + this.appName + '/index.js');
+            p = _(this.options.root + '/'+this.bundleDir+'/' + this.bundle);
+            d = _(this.options.root + '/'+this.bundleDir+'/' + this.bundle + '/index.js');
             this.bundleInit = d;
         }
 
 
 
-        //p = _(this.options.root + '/' + this.appName + '.js'),
+        //p = _(this.options.root + '/' + this.bundle + '.js'),
         log("checking... ", p, " && ", d, " => ", this.bundleDir);
         //process.exit(42);
         //Checking root.
@@ -253,7 +253,7 @@ var AppCommand = {
                                 .replace("%type%", opt['type'])
                                 .replace("%command%", 'geena '
                                 + opt['option'] +' '
-                                + _this.appName
+                                + _this.bundle
                                 +' '+ opt['argument']
                                 +' '+ opt['type']);
                         log(msg);
@@ -341,7 +341,7 @@ var AppCommand = {
                                 "level"     : "err",
                                 "profile"   : logger.getEnv(),
                                 "message"   : "SERVER:EMERG:1",
-                                "explicit"  : "" + _this.msg.app[4].replace("%app%", _this.appName)
+                                "explicit"  : "" + _this.msg.app[4].replace("%app%", _this.bundle)
                             }
                         });
 
@@ -381,6 +381,8 @@ var AppCommand = {
                 {
                     detached : true
                 });
+                // detached : true
+                var bundleProcess = new Proc(_this.bundle, _this.prc);
 
                 //On message.
                 _this.prc.stdout.setEncoding('utf8');//Set encoding.
@@ -455,7 +457,7 @@ var AppCommand = {
 
         this.isRealApp( function(real){
             if (!real) {
-                log(_this.msg.app[4].replace("%app%", _this.appName));
+                log(_this.msg.app[4].replace("%app%", _this.bundle));
                 process.exit(1);
             } else {
                 //look for pid and kill it
