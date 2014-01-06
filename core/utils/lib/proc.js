@@ -145,7 +145,7 @@ Proc = function(bundle, proc){
                     //var cmd = require('geena.utils').Cmd;
                     //cmd.start(opt);
                     //Respawn cmd
-                    console.log("Exiting and re spawning !!!");
+                    console.log("Exiting and re spawning : ", _this.name);
                 }
                 dismiss(_this.PID, proc);
             });

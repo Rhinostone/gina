@@ -117,7 +117,13 @@ if (!isPath) {
 // Todo - load from env.json or locals  or project.json ??
 
 var abort = function(err) {
-    if (process.argv[2] == '-s' && startWithGeena || process.argv[2] == '--start' && startWithGeena || !startWithGeena && isPath) {
+    if (
+        process.argv[2] == '-s' && startWithGeena
+            || process.argv[2] == '--start' && startWithGeena
+            //Avoid -h, -v  ....
+            || !startWithGeena && isPath && process.argv.length > 3
+
+    ) {
         if (isPath && !startWithGeena) {
             console.log('You are trying to load geena by hand: just make sure that your env ['+env+'] matches the given path ['+ path +']');
         } else if ( typeof(err.stack) != 'undefined' ) {
