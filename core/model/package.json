@@ -12,7 +12,7 @@
     "name": "Rhinostone",
     "email": "geena@rhinosotne.com"
   },
-  "copyright": "Copyright (c) 2013 Rhinostone <geena@rhinostone.com>",
+  "copyright": "Copyright (c) 2014 Rhinostone <geena@rhinostone.com>",
   "engine": [
     "node >=0.10.15"
   ],
