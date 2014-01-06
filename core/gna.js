@@ -1,6 +1,6 @@
 /*
  * This file is part of the geena package.
- * Copyright (c) 2013 Rhinostone <geena@rhinostone.com>
+ * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -34,9 +34,14 @@ var tmp = JSON.stringify(process.argv);
 setContext('process.argv', JSON.parse(tmp) );
 tmp = null;
 
+// filter $ node.. o $ geena  with or without env
 if (process.argv.length >= 4) {
     startWithGeena = true;
-    process.argv.splice(1,2);
+    if (process.argv[1] == 'geena') {
+        process.argv.splice(1, 1);
+    } else {
+        process.argv.splice(1, 2);
+    }
 }
 
 var root = "";
@@ -81,7 +86,13 @@ if ( logger == undefined ) {
 setContext('geena.utils', utils);
 
 var envs = ["dev", "debug", "stage", "prod"];
-var env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
+var env;
+//if (process.argv[0] == 'node') {
+//    env =  ( typeof(process.argv[1]) != 'undefined')  ? process.argv[1].toLowerCase() : 'prod';
+//} else {
+env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
+//}
+
 gna.env = process.env.NODE_ENV = env;
 
 //console.log('ENV => ', env);
@@ -109,7 +120,13 @@ if (!isPath) {
 // Todo - load from env.json or locals  or project.json ??
 
 var abort = function(err) {
-    if (process.argv[2] == '-s' && startWithGeena || process.argv[2] == '--start' && startWithGeena || !startWithGeena && isPath) {
+    if (
+        process.argv[2] == '-s' && startWithGeena
+            || process.argv[2] == '--start' && startWithGeena
+            //Avoid -h, -v  ....
+            || !startWithGeena && isPath && process.argv.length > 3
+
+    ) {
         if (isPath && !startWithGeena) {
             console.log('You are trying to load geena by hand: just make sure that your env ['+env+'] matches the given path ['+ path +']');
         } else if ( typeof(err.stack) != 'undefined' ) {
@@ -229,7 +246,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
     } else {
         // Means that it did not find the release. Build and re mount.
 
-        callback('No release was found to mount for: ', source);
+        callback('Found no release to mount for: ', source);
 // Auto build ? Well, I don't know yet. We'll see
 //
 //        gna.build(source, target, type, function(err){
@@ -266,9 +283,11 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
             appName = process.argv[1];
             path = (env == 'dev' || env == 'debug') ? packs[appName].src : packs[appName].release.target;
         } else {
-            path = process.argv[1]
+            //path = ( process.argv[0] == 'node' ) ? process.argv[2] : process.argv[1];
+            path = process.argv[1];
         }
     } else {
+        //path = ( process.argv[0] == 'node' ) ? process.argv[2] : process.argv[1];
         path = _(process.argv[1]);
     }
 
@@ -399,7 +418,24 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
             core: _(__dirname)
         });
 
+        //check here for mount point source...
         var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
+
+        var tmpSource = _(bundlesPath +'/'+ core.startingApp);
+        if ( fs.existsSync(tmpSource) && env == 'prod' || fs.existsSync(tmpSource) && env == 'stage' ) {
+            try {
+                var stats = fs.lstatSync(tmpSource);
+                if ( stats.isSymbolicLink() ) {
+                    source = _( fs.readlinkSync(tmpSource) );
+                } else {
+                    source = tmpSource;
+                }
+            } catch (err) {
+                //silently...
+                source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
+            }
+        }
+
         var linkPath =  _( root +'/'+ project.packages[core.startingApp].release.link );
 
         gna.mount( bundlesPath, source, linkPath, function onBundleMounted(mountErr){
