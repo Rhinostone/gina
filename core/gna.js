@@ -37,8 +37,11 @@ tmp = null;
 // filter $ node.. o $ geena  with or without env
 if (process.argv.length >= 4) {
     startWithGeena = true;
-    //process.argv.splice(1,2);
-    process.argv.splice(1,2);
+    if (process.argv[1] == 'geena') {
+        process.argv.splice(1, 1);
+    } else {
+        process.argv.splice(1, 2);
+    }
 }
 
 var root = "";
