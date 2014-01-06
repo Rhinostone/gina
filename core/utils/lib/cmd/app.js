@@ -67,7 +67,7 @@ var AppCommand = {
         this.argv = getContext('process.argv');
         var PID = new Proc('geena', process);
         PID.setMaster();
-
+        
         this.options = options;
         this.msg = message;
         this.opt['option'] = this.argv[2];
@@ -377,7 +377,10 @@ var AppCommand = {
                     appPath,
                     opt['argument']//,
                     //JSON.stringify( getContext() )//Passing context to child.
-                ], {detached : true});
+                ],
+                {
+                    detached : true
+                });
 
                 //On message.
                 _this.prc.stdout.setEncoding('utf8');//Set encoding.
