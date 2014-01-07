@@ -65,10 +65,6 @@ var fs              = require('fs'),
     init : function(instance){
         var _this = this;
         this.instance = instance;
-        //var proc = new Proc(this.appName, process);
-        //process.title = 'geena: '+ this.appName;
-        //this.instance = Express();
-
 
         logger.debug(
             'geena',

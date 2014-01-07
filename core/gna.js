@@ -87,12 +87,8 @@ setContext('geena.utils', utils);
 
 var envs = ["dev", "debug", "stage", "prod"];
 var env;
-//if (process.argv[0] == 'node') {
-//    env =  ( typeof(process.argv[1]) != 'undefined')  ? process.argv[1].toLowerCase() : 'prod';
-//} else {
-env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
-//}
 
+env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
 gna.env = process.env.NODE_ENV = env;
 
 //console.log('ENV => ', env);
@@ -109,8 +105,7 @@ if (!isPath) {
     try {
         isSym = fs.lstatSync( _(bundlesPath +'/'+ process.argv[1]) ).isSymbolicLink();
     } catch (err) {
-        //Did not find it ^^
-
+        //Did not find it ^^.
     }
 } else {
     process.argv[1] = _(process.argv[1]);
@@ -301,7 +296,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
     }
     //console.error('fuck ', env,  startWithGeena, process.argv, path);
     try {
-        //finding app
+        //finding app.
         var target, source, tmp;
         for (var bundle in packs) {
             //is bundle ?
@@ -385,6 +380,46 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         });
     };
 
+    gna.getMountedBundles = process.getMountedBundles = function(callback){
+        fs.readdir(bundlesPath, function onRead(err, files){
+            callback(err, files);
+        });
+    };
+
+    gna.getMountedBundlesSync = process.getMountedBundlesSync = function(){
+        try {
+            return fs.readdirSync(bundlesPath);
+        } catch (err){
+            return err.stack;
+        }
+    };
+
+    gna.getRunningBundlesSync = process.getRunningBundlesSync = function(){
+        var conf = gna.getConfig();
+        var pidPath = _(conf.tmpPath +'/pid');
+        var files = fs.readdirSync(pidPath);
+        var content = [];
+        for (var f=0; f<files.length; ++f) {
+            content[f] = {};
+            content[f]['pid']  = files[f];
+            content[f]['name'] = fs.readFileSync( _(pidPath +'/'+ files[f]) ).toString();
+            content[f]['path'] = _(pidPath +'/'+ files[f]);
+        }
+        return content;
+    };
+
+    gna.getVersion = process.getVersion = function(bundle){
+        var name = bundle || appName;
+        if ( name != undefined) {
+            try {
+                return gna.getConfig('app').version;
+            } catch (err){
+                return err;
+            }
+        } else {
+            return undefined;
+        }
+    };
 
     /**
      * Start server
@@ -401,7 +436,6 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 //            appName = p[p.length-2].split(".")[0];
 //        }
         console.log('appName ', appName);
-        var porject = gna.project;
         var core    = gna.core;
         core.startingApp = appName;
         core.executionPath =  root;
@@ -494,7 +528,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                                 if (!gna.initialized) {
                                     e.emit('complete', instance);
                                 }
-                                console.error('mounted!! ', conf.bundle);
+                                console.error('mounted!! ', conf.bundle, process.pid);
                                 // -- EO
                             } else {
                                 logger.error(
@@ -506,13 +540,6 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                                 abort(err);
                             }
 
-
-
-                            //                    e.emit('init', instance, express, conf);
-                            //                    //In case there is no user init.
-                            //                    if (!gna.initialized) {
-                            //                        e.emit('complete', instance);
-                            //                    }
                         } else {
                             logger.error(
                                 'geena',
@@ -521,8 +548,8 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                             );
                         }
                     });
-            });//EO config
-        });//EO mount
+            });//EO config.
+        });//EO mount.
     };
 
     /**
@@ -550,7 +577,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
     };
 
 
-});//EO onDoneGettingProjectConfiguration
+});//EO onDoneGettingProjectConfiguration.
 
 
 module.exports = gna;
