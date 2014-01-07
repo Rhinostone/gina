@@ -156,7 +156,7 @@ Proc = function(bundle, proc){
                 var env =  this.argv[2] || 'prod';
                 var pid = _this.getPidByBundleName(bundle);
 
-                console.log("got exit code ", "("+code+")", PID, " VS ", PID, " <=> geena: ", process.pid);
+                console.log("got exit code ", "("+code+")", pid, " VS ", pid, " <=> geena: ", process.pid);
                 //code = code || 0;
                 var obj = logger.emerg('geena', 'UTILS:EMERG1', 'process exit code ' + code);
                 if (_this.env != "debug" && code != 0 /**&& _this.env != "dev" && code != 0*/) {

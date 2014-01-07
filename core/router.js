@@ -173,11 +173,11 @@ Router = function(env){
 
         console.log("routing..", bundle, env,  Config.Env.getConf( bundle, env ));
         //Middleware Filters when declared.
-        var resHeders = Config.Env.getConf( bundle, env ).server.response.header;
+        var resHeaders = Config.Env.getConf( bundle, env ).server.response.header;
         //TODO - to test
-        if ( resHeders.count() > 0 ) {
-            for (var h in resHeders)
-                response.header(h, resHeders[h]);
+        if ( resHeaders.count() > 0 ) {
+            for (var h in resHeaders)
+                response.header(h, resHeaders[h]);
         }
 
         logger.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
