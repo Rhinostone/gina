@@ -43,7 +43,7 @@ if (process.argv.length >= 4) {
         process.argv.splice(1, 2);
     }
 }
-
+setPath('node', _(process.argv[0]) );
 var root = "";
 var getRoot = function(){
     var paths = _(__dirname).split('/');
@@ -412,7 +412,9 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         var name = bundle || appName;
         if ( name != undefined) {
             try {
-                return gna.getConfig('app').version;
+                var str = fs.readFileSync( _(bundlesPath + '/' + bundle + '/config/app.json')).toString();
+                var version = JSON.parse(str).version;
+                return version;
             } catch (err){
                 return err;
             }
