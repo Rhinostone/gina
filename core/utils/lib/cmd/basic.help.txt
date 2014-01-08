@@ -10,11 +10,9 @@
 
 usage: 
 
-geena <option>
-
+$ geena <option>
 option:
     -h or --help
-    -i or --init
     -k or --kill or --stop
     -r or --restart
     -s or --start
@@ -22,11 +20,15 @@ option:
     -u or --update
     -v or --version    
 
-
-geena <option> <application_name> <arguments>
-
+$ geena <option> <project_name>
 option:
-    -a or --add
+    -i or --init
+    -d or --delete
+
+
+$ geena <option> <bundle_name> <arguments>
+option:
+    -i or --init
     -d or --delete
     -k or --kill or --stop
     -r or --restart
