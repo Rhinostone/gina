@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * Copyright (c) 2013 Rhinostone <geena@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -730,7 +730,10 @@ if (
     process.argv[2] != "-u"
     && process.argv[2] != "--update"
     && process.argv[2] != "-i"
-    && process.argv[2] != "--install"    
+    && process.argv[2] != "--install"
+    || process.argv[2] != "-i" && process.argv.length > 3
+    || process.argv[2] != "--install" && process.argv.length > 3
+    || process.argv[2] != "--init" && process.argv.length > 3
 ) {
 
     try {
