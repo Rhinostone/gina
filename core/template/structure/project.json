@@ -1,0 +1,12 @@
+{
+    "default" : {
+        "comment" : "default project structure",
+        "logs" : "",
+        "releases" : "",
+        "src" : "",
+        "tmp" : [
+            "pid"
+        ],
+        "project.json" : "{templatePath}/conf/project.json"
+    }
+}
