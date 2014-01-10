@@ -524,6 +524,7 @@ Config  = function(opt){
         //console.log("bundle list ", _this.bundles);
         //Framework config files.
         var name        = "",
+            tmpName     = "",
             files       = {},
             appPath     = "",
             modelsPath  = "",
@@ -559,9 +560,9 @@ Config  = function(opt){
                     //Can't do a thing without.
                     if ( fs.existsSync(filename) ) {
                         //console.log("app conf is ", filename);
-                        if (cacheless) delete require.cache[filename];
+                        if (cacheless) delete require.cache[_(filename, true)];
 
-                        name = name +'_'+env;
+                        tmpName = name +'_'+env;//?? maybe useless.
                         files[name] = require(filename);
                         //console.log("watch out !!", files[name][bundle]);
                     }/** else {
@@ -570,15 +571,13 @@ Config  = function(opt){
                     tmp = "";
                 }
 
-                filename = appPath + '/config/' + conf[bundle][env].files[name];
                 try {
-                    if (cacheless) delete require.cache[filename];
+
+                    filename = appPath + '/config/' + conf[bundle][env].files[name];
+                    if (env != 'prod' && cacheless) delete require.cache[_(filename, true)];
 
                     //console.log("here ", name, " VS ", filename, "\n", conf[bundle][env].files[name]);
-                    files[name] = utils.extend( true, files[name], require(filename) );
-                    //files[name] = require(filename);
-                    //_this.configuration[bundle].config = files[name][bundle];
-
+                    files[name] = utils.extend( true, true, files[name], require(filename) );
                     //console.log("Got filename ", name ,files[name]);
                 } catch (err) {
                     
@@ -662,7 +661,10 @@ Config  = function(opt){
                 });
             },
             Env : _this.Env,
-            Host : _this.Host
+            Host : _this.Host,
+            setBundles : function(bundles){
+                _this.bundles = bundles;
+            }
         };
 
     } else {

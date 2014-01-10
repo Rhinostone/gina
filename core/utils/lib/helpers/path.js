@@ -37,9 +37,18 @@ PathHelper = function(){
     this.paths = [];
     this.userPaths = {} ;
     var _this = this;
-
-    _ = function(path){
-
+    /**
+     * _
+     *
+     * @param {string} path - Path to convert
+     * @param {boolean} [force] - Force conversion to match platform style (Only for string conversion)
+     *
+     * @return {string|object} converted
+     * */
+    _ = function(path, force){
+        if ( typeof(force) == undefined) {
+            force = _this.force = false;
+        }
         path = Path.normalize(path);
         var isConstructor = false;
         if (this instanceof _ // <- You could use arguments.callee instead of _ here,
@@ -60,6 +69,7 @@ PathHelper = function(){
                     //In case of mixed slashes.
                     //this.value = path.replace(/\//g, "\\");
                     this.value = path.replace(/\\/g, "/");// Make it unix like.
+
                     var p = this.value;
 
                     this.isWindowsStyle = true;
@@ -84,7 +94,12 @@ PathHelper = function(){
                 //Means that we are not in an object context.
                 if (process.platform == "win32") {
                     //path = path.replace(/\//g, "\\");
-                    path = path.replace(/\\/g, "/");// Make it unix like.
+                    if (force)
+                        path = path.replace(/\//g, "\\");//Keep it or convert to Win32
+                    else
+                        path = path.replace(/\\/g, "/");// Make it unix like.
+
+
                     if ( _this.paths.indexOf(path) < 0) {
                         _this.paths.push(path);
                     }

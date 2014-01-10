@@ -30,6 +30,8 @@ var fs              = require('fs'),
         this.appName = options.bundle;
 
         this.env = options.env;
+        this.cacheless = (this.env == "dev" || this.env == "debug") ? true : false;
+
         //False => multiple apps sharing the same server (port).
         this.isStandalone = options.isStandalone;
 
@@ -112,6 +114,7 @@ var fs              = require('fs'),
         var conf =  config.getInstance(this.appName);
         var _this       = this,
             env         = this.env,
+            cacheless   = this.cacheless,
             apps        = conf.bundles,
             filename    = "",
             appName     = "";
@@ -122,7 +125,7 @@ var fs              = require('fs'),
         for (var i=0; i<apps.length; ++i) {
 
             var appPath = _(this.conf[apps[i]].bundlesPath);
-            var cacheless = (this.env == "dev" || this.env == "debug") ? true : false;
+            //var cacheless = (this.env == "dev" || this.env == "debug") ? true : false;
             appName =  apps[i];
 
             //Specific case.
@@ -138,7 +141,7 @@ var fs              = require('fs'),
                     //console.log("!!! my files ", filename);
                     try {
                         if (cacheless) {
-                            delete require.cache[filename];
+                            delete require.cache[_(filename, true)];
                         }
 
                         tmp = require(filename);
@@ -343,6 +346,9 @@ var fs              = require('fs'),
 
         //var config  = getContext('config');
         var config = require('./config')();
+        //config.setBundles(this.bundles);
+        config.setBundles(this.bundles);
+
         console.log("bundle [", bundle, "] VS config ", config.getInstance(bundle) );
         var _this = this, cacheless = config.isCacheless();
         console.log("is cacheless ", cacheless);
