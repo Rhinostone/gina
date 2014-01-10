@@ -159,12 +159,13 @@ Proc = function(bundle, proc){
                 console.log("got exit code ", "("+code+")", pid, " VS ", pid, " <=> geena: ", process.pid);
                 //code = code || 0;
                 var obj = logger.emerg('geena', 'UTILS:EMERG1', 'process exit code ' + code);
-                if (_this.env != "debug" && code != 0 /**&& _this.env != "dev" && code != 0*/) {
+                //if (_this.env != "debug" && code != 0 /**&& _this.env != "dev" && code != 0*/) {
                     //var cmd = require('geena.utils').Cmd;
                     //cmd.start(_this.procs[] );
                     //Respawn cmd.
                     console.error("Exiting and re spawning : ", bundle, pid);
-                }
+
+                //}
                 // First child.
                 dismiss(pid);
                 // Then master.
