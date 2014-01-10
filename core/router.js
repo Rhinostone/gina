@@ -168,7 +168,7 @@ Router = function(env){
             action          = params.param.action,
             Controller      = require("./controller");
 
-
+        var cacheless = (env == "dev" || env == "debug") ? true : false;
         console.log("routing..", bundle, env,  Config.Env.getConf( bundle, env ));
         //Middleware Filters when declared.
         var resHeaders = Config.Env.getConf( bundle, env ).server.response.header;
@@ -182,14 +182,17 @@ Router = function(env){
         //console.log("ACTION ON  ROUTING IS : " + action);
 
         //Getting Models & extending it with super Models.
-        var controllerFile  = _conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js',
-            handlersPath    = _conf[bundle][env].bundlesPath  +'/'+ bundle + '/handlers';
+        var controllerFile  = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js'),
+            handlersPath    = _(_conf[bundle][env].bundlesPath  +'/'+ bundle + '/handlers');
         var controller;
 
 
         try {
             console.log("controller file is ", controllerFile);
+            if (env != 'prod' && cacheless) delete require.cache[_(controllerFile, true)];
+
             var controllerRequest  = require(controllerFile);
+
         } catch (err) {
             //Should be rended as a 500 err.
             logger.error('geena', 'ROUTER:ERR:1', 'Could not complete ['+ action +' : function(req, res)...] : ' + err.stack , __stack);
