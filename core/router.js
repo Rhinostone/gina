@@ -164,8 +164,6 @@ Router = function(env){
 
         //Routing.
         var pathname        = url.parse(request.url).pathname,
-            AppController   = {},
-            app             = {},
             bundle          = params.param.app,
             action          = params.param.action,
             Controller      = require("./controller");
@@ -193,7 +191,15 @@ Router = function(env){
             console.log("controller file is ", controllerFile);
             var controllerRequest  = require(controllerFile);
         } catch (err) {
-            logger.error('geena', 'ROUTER:ERR:1', 'Could not complete ['+ action +' : function(req, res)...] : ' + err , __stack);
+            //Should be rended as a 500 err.
+            logger.error('geena', 'ROUTER:ERR:1', 'Could not complete ['+ action +' : function(req, res)...] : ' + err.stack , __stack);
+
+            var data = 'Error 500. Internal server error ' + '\nCould not complete ['+ action +' : function(req, res...] : ' + err.stack;
+            response.writeHead(500, {
+                'Content-Length': data.length,
+                'Content-Type': 'text/plain'
+            });
+            response.end(data);
         }
 
         var options = {
