@@ -1,5 +1,5 @@
 /*!
- * Geena.Utils.Cmd
+ * Geena.Utils.cmd
  * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,20 +21,20 @@
  * THE SOFTWARE.
  */
 
-var Cmd = {},
+var cmd = {},
     count = process.argv.length - 2;
 
-Cmd.option = [];
-Cmd.setOption = function(option){
+cmd.option = [];
+cmd.setOption = function(option){
     if (option instanceof Array) {
         for (var i=0; i<option.length; ++i) {
-            Cmd.option[option[i].name] = option[i].content;
+            cmd.option[option[i].name] = option[i].content;
         }
     } else {
-        Cmd.option[options.name] = option.content;
+        cmd.option[options.name] = option.content;
     }
 };
-Cmd.getString = function() {
+cmd.getString = function() {
     var cmd = process.argv.toString()
             .replace(/,/g,' ')
             .replace(/node/g, 'geena');
@@ -42,20 +42,20 @@ Cmd.getString = function() {
     cmd = cmdArr[cmdArr.length-1];
     return cmd;
 };
-Cmd.getOption = function(name) {
-    return Cmd.option[name];
+cmd.getOption = function(name) {
+    return cmd.option[name];
 };
 
-Cmd.getOptions = function() {
-    return Cmd.option;
+cmd.getOptions = function() {
+    return cmd.option;
 };
 
-Cmd.onExec = function() {
+cmd.onExec = function() {
 
-    Cmd.msg = require( _(__dirname + '/msg.json') );
+    cmd.msg = require( _(__dirname + '/msg.json') );
 
     var _this = this, ignore = function(){
-        log(_this.msg.default[0].replace("%command%", Cmd.getString()));
+        log(_this.msg.default[0].replace("%command%", cmd.getString()));
         return;
     };
 
@@ -64,9 +64,9 @@ Cmd.onExec = function() {
                 +"\nTry this to get help: geena -h");
     } else if (count == 1) {
         var p = _(__dirname + '/basic.js');
-        Cmd.Basic = require(p).run(Cmd.getOptions(), Cmd.msg);
+        cmd.Basic = require(p).run(cmd.getOptions(), cmd.msg);
     } else if (count >= 2 && count <4 || count == 4) {
-        var longCmd = (count>2) ? true : false;
+        var longcmd = (count>2) ? true : false;
         if (
             count == 2 && process.argv[2] == '-a'
             || count == 2 && process.argv[2] == '--add'
@@ -77,8 +77,7 @@ Cmd.onExec = function() {
             ignore();
         } else {
             var p = _(__dirname + '/app.js');
-            Cmd.App = require(p).run( Cmd.getOptions(), Cmd.msg, longCmd );
-
+            cmd.App = require(p).run( cmd.getOptions(), cmd.msg, longcmd );
         }
 
     } else {
@@ -86,4 +85,8 @@ Cmd.onExec = function() {
     }
 };
 
-module.exports = Cmd;
+cmd.respawn = function(){
+
+};
+
+module.exports = cmd;

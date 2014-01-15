@@ -30,7 +30,7 @@ var fs              = require('fs'),
         this.appName = options.bundle;
 
         this.env = options.env;
-        this.cacheless = (this.env == "dev" || this.env == "debug") ? true : false;
+        this.cacheless = process.env.IS_CACHELESS;
 
         //False => multiple apps sharing the same server (port).
         this.isStandalone = options.isStandalone;

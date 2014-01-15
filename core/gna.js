@@ -7,16 +7,19 @@
  */
 
 /**
- * Geena Bootstrap
+ * Geena Core Bootstrap
  *
  * @package    Geena
  * @author     Rhinostone <geena@rhinostone.com>
  */
 
+
+
 var gna     = {core:{}};
 var fs      = require('fs');
 var Config  = require('./config');
 var utils   = require('./utils');
+
 var Proc    = utils.Proc;
 var server  = require('./server');
 var Winston = require('./../node_modules/winston');
@@ -25,7 +28,8 @@ var e = new EventEmitter();
 gna.initialized = process.initialized = false;
 gna.utils = utils;
 
-logger = getContext('geena.utils.logger');
+//Yes it's global...
+logger = utils.logger;
 
 // BO cooking..
 var startWithGeena = false;
@@ -37,7 +41,7 @@ tmp = null;
 // filter $ node.. o $ geena  with or without env
 if (process.argv.length >= 4) {
     startWithGeena = true;
-    if (process.argv[1] == 'geena') {
+    if (process.argv[1] == 'geena' || process.argv[1] == _(root + '/geena') ) {
         process.argv.splice(1, 1);
     } else {
         process.argv.splice(1, 2);
@@ -69,27 +73,31 @@ if ( typeof(geenaPath) == 'undefined') {
 }
 
 //console.log("before.. ", root );
-if ( logger == undefined ) {
-    logger = gna.utils.logger;
-    var loggerInstance = new (Winston.Logger)({
-        levels : logger.custom.levels,
-        transports : [
-            new (Winston.transports.Console)({
-                colorize: true
-            })
-        ],
-        colors : logger.custom.colors
-    });
-    setContext('geena.utils.logger', loggerInstance);
-}
+
+//if ( logger == undefined ) {
+//    logger = gna.utils.logger;
+//    var loggerInstance = new (Winston.Logger)({
+//        levels : logger.custom.levels,
+//        transports : [
+//            new (Winston.transports.Console)({
+//                colorize: true
+//            })
+//        ],
+//        colors : logger.custom.colors
+//    });
+//    setContext('geena.utils.logger', loggerInstance);
+//}
+
 
 setContext('geena.utils', utils);
 
 var envs = ["dev", "debug", "stage", "prod"];
 var env;
-
+//Setting env.
 env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
 gna.env = process.env.NODE_ENV = env;
+//Cahceless is also defined in the main config : Config::isCacheless().
+process.env.IS_CACHELESS = (env == "dev" || env == "debug") ? true : false;
 
 //console.log('ENV => ', env);
 //console.log('HOW  ', process.argv.length, process.argv);
@@ -121,7 +129,7 @@ var abort = function(err) {
             //Avoid -h, -v  ....
             || !startWithGeena && isPath && process.argv.length > 3
 
-    ) {
+        ) {
         if (isPath && !startWithGeena) {
             console.log('You are trying to load geena by hand: just make sure that your env ['+env+'] matches the given path ['+ path +']');
         } else if ( typeof(err.stack) != 'undefined' ) {
@@ -240,22 +248,10 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
         });
     } else {
         // Means that it did not find the release. Build and re mount.
-
         callback('Found no release to mount for: ', source);
-// Auto build ? Well, I don't know yet. We'll see
-//
-//        gna.build(source, target, type, function(err){
-//
-//        });
     }
 };
 
-//gna.build = function(source, target, type, callback) {
-//    var project = gna.project;
-//    console.log("building project ", project);
-//
-//    //Mount
-//};
 
 
 gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, project){
@@ -303,8 +299,8 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
             tmp = "";
             if (
                 typeof(packs[bundle].release) != 'undefined' && env == 'prod'
-                || typeof(packs[bundle].release) != 'undefined' && env == 'stage'
-            ) {
+                    || typeof(packs[bundle].release) != 'undefined' && env == 'stage'
+                ) {
 
                 tmp = packs[bundle].release.target.replace(/\//g, '').replace(/\\/g, '');
                 if ( !appName && tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
@@ -313,8 +309,8 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                 }
             } else if (
                 typeof(packs[bundle].src) != 'undefined' && env == 'dev'
-                || typeof(packs[bundle].src) != 'undefined' && env == 'debug'
-            ) {
+                    || typeof(packs[bundle].src) != 'undefined' && env == 'debug'
+                ) {
 
                 tmp = packs[bundle].src.replace(/\//g, '').replace(/\\/g, '');
                 if ( !appName && tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
@@ -327,10 +323,12 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
             // else, not a bundle
         }
 
-        if (appName == undefined)
+        if (appName == undefined) {
             abort('No bundle found for path: ' + path);
-        else
+        } else {
             setContext('bundle', appName);
+            var bundleProcess = new Proc(appName, process);
+        }
 
     } catch (err) {
         abort(err);
@@ -380,6 +378,27 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         });
     };
 
+    gna.getShutdownConnector = process.getShutdownConnector = function(callback){
+        var connPath = _(bundlesPath +'/'+ appName + '/config/connector.json');
+        fs.readFile(connPath, function onRead(err, content){
+            try {
+                callback(err, JSON.parse(content).httpClient.shutdown);
+            } catch (err) {
+                callback(err);
+            }
+        });
+    };
+
+    gna.getShutdownConnectorSync = process.getShutdownConnectorSync = function(){
+        var connPath = _(bundlesPath +'/'+ appName + '/config/connector.json');
+        try {
+            var content = fs.readFileSync(connPath);
+            return JSON.parse(content).httpClient.shutdown;
+        } catch (err) {
+            return undefined;
+        }
+    };
+
     gna.getMountedBundles = process.getMountedBundles = function(callback){
         fs.readdir(bundlesPath, function onRead(err, files){
             callback(err, files);
@@ -395,6 +414,8 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
     };
 
     gna.getRunningBundlesSync = process.getRunningBundlesSync = function(){
+
+        //TODO - Do that thru IPC or thru socket.
         var conf = gna.getConfig();
         var pidPath = _(conf.tmpPath +'/pid');
         var files = fs.readdirSync(pidPath);
@@ -453,7 +474,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
             logs : _(core.executionPath + '/logs'),
             core: _(__dirname)
         });
-
+        setContext('geena.utils.logger', logger);
         //check here for mount point source...
         var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
 
@@ -476,10 +497,10 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 
         gna.mount( bundlesPath, source, linkPath, function onBundleMounted(mountErr){
             var config = new Config({
-                env : env,
-                executionPath : core.executionPath,
-                startingApp : core.startingApp,
-                geenaPath : core.geenaPath
+                env             : env,
+                executionPath   : core.executionPath,
+                startingApp     : core.startingApp,
+                geenaPath       : core.geenaPath
             });
             //setContext('config', config);
             config.onReady( function(err, obj){
@@ -568,7 +589,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
     /**
      * Get Status
      * */
-    gna.status = process.status = function(){
+    gna.status = process.status = function(bundle){
         log("getting server status");
     };
     /**

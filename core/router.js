@@ -142,7 +142,7 @@ Router = function(env){
 
         //console.info('!!about to add handler ', handler);
         try {
-            if (cacheless) delete require.cache[handler];
+            if (cacheless) delete require.cache[_(handler, true)];
 
             return {obj : fs.readFileSync(handler), file : action + '.js', name : action + 'Handler'};
         } catch (err) {
@@ -168,7 +168,7 @@ Router = function(env){
             action          = params.param.action,
             Controller      = require("./controller");
 
-        var cacheless = (env == "dev" || env == "debug") ? true : false;
+        var cacheless = process.env.IS_CACHELESS;
         console.log("routing..", bundle, env,  Config.Env.getConf( bundle, env ));
         //Middleware Filters when declared.
         var resHeaders = Config.Env.getConf( bundle, env ).server.response.header;
