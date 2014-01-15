@@ -249,7 +249,7 @@ Config  = function(opt){
         getConf : function(bundle, env){
             //console.log("get from ....", appName, env);
             if ( typeof(bundle) != 'undefined' && typeof(env) != 'undefined' )
-                return ( typeof(_this.envConf) != "undefined" ) ? _this.envConf[bundle][env] : null
+                return ( typeof(_this.envConf) != "undefined" ) ? _this.envConf[bundle][env] : null;
             else
                 return ( typeof(_this.envConf) != "undefined" ) ? _this.envConf : null;
         },
@@ -317,18 +317,29 @@ Config  = function(opt){
         var root = new _(_this.executionPath).toUnixStyle();
         try {
             var pkg = require(_(root + '/project.json')).packages;
-        } catch (err) { } //bundlesPath will be default.
+        } catch (err) {
+            callback(err);
+        } //bundlesPath will be default.
 
 
         //For each app.
         for (var app in content) {
-            //Checking if genune app.
+            //Checking if genuine app.
             logger.debug(
                 'geena',
                 'CONFIG:DEBUG:4',
                 'Checking if application is registered ' + app,
                 __stack
             );
+
+            //Now check if you have a description for each bundle.
+//            if ( typeof(pkg[app]) == 'undefined' ) {
+//                throw new Error('No definition found for bundle ['+ app +']in project.json');
+//                //Sorry, can't work without... fix your shit.
+//                process.kill(process.pid, 'SIGINT');
+//            }
+                //callback(new Error('No definition found for bundle ['+ app +']in project.json'));
+
 
             if ( typeof(content[app][env]) != "undefined" ) {
 
@@ -368,7 +379,7 @@ Config  = function(opt){
                         isStandalone = false;
                         _this.Host.standaloneMode = isStandalone;
                         //console.log("PUSHING APPS ", app + "=>" + isStandalone);
-                    } else if(app != _this.startingApp) {
+                    } else if (app != _this.startingApp) {
                         _this.bundles.push(app);
                     }
                     _this.allBundles.push(app);
@@ -419,8 +430,6 @@ Config  = function(opt){
                     //console.error("man.. ",  reps, "\n " + newContent[app][env]);
                     //console.error("result ", _this.bundles,"\n",newContent[app][env]);
                     //console.log("bundle list ", _this.bundles);
-                    //callback(false, newContent);
-
                 } else {
                     logger.warn(
                         'geena',
@@ -551,7 +560,6 @@ Config  = function(opt){
                 //Server only because of the shared mode VS the standalone mode.
                 if (name == 'routing') continue;
 
-
                 if (env != 'prod') {
 
                     tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
@@ -562,12 +570,10 @@ Config  = function(opt){
                         //console.log("app conf is ", filename);
                         if (cacheless) delete require.cache[_(filename, true)];
 
-                        tmpName = name +'_'+env;//?? maybe useless.
+                        tmpName = name +'_'+ env;//?? maybe useless.
                         files[name] = require(filename);
                         //console.log("watch out !!", files[name][bundle]);
-                    }/** else {
-                        filename = appPath + '/config/' + conf[bundle][env].files[name];
-                    }*/
+                    }
                     tmp = "";
                 }
 
@@ -580,7 +586,7 @@ Config  = function(opt){
                     files[name] = utils.extend( true, true, files[name], require(filename) );
                     //console.log("Got filename ", name ,files[name]);
                 } catch (err) {
-                    
+
                     if ( fs.existsSync(filename) )
                         files[name] = "malformed !!";
                     else
@@ -630,6 +636,7 @@ Config  = function(opt){
      * */
     this.isCacheless = function(){
         var env = _this.Env.get();
+        //Also defined in core/gna.
         return (env == "dev" || env == "debug") ? true : false;
     };
 
@@ -689,4 +696,4 @@ Config  = function(opt){
 };
 
 util.inherits(Config, EventEmitter);
-module.exports = Config
+module.exports = Config;

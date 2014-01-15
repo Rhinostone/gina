@@ -243,7 +243,7 @@ PathHelper = function(){
         //Enter dir & start rm.
         //console.log("enter path: ", self.value);
         fs.exists(self.value, function(exists){
-            console.log('about to create folder: ', self.value, exists);
+            //console.log('about to create folder: ', self.value, exists);
             if (exists) {
                 callback(false, self.value);
             } else {
