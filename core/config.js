@@ -564,7 +564,7 @@ Config  = function(opt){
 
                     tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
                     //console.log("tmp .. ", tmp);
-                    filename = appPath + '/config/' + tmp;
+                    filename = _(appPath + '/config/' + tmp);
                     //Can't do a thing without.
                     if ( fs.existsSync(filename) ) {
                         //console.log("app conf is ", filename);

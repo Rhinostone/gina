@@ -117,14 +117,18 @@ var fs              = require('fs'),
             cacheless   = this.cacheless,
             apps        = conf.bundles,
             filename    = "",
-            appName     = "";
-            tmp         = {};
+            appName     = "",
+            name        = "",
+            tmp         = {},
+            tmpContent  = "",
+            tmpName     = "";
 
         //console.info('\nENVi : ', this.env, '\nPORT :', this.conf[this.appName].port,  '\nBUNDLE :', this.appName, '\nBundles ', apps, apps.length);
         //Standalone or shared instance mode. It doesn't matter.
         for (var i=0; i<apps.length; ++i) {
 
-            var appPath = _(this.conf[apps[i]].bundlesPath);
+            var appPath = _(this.conf[apps[i]].bundlesPath+ '/' + apps[i]);
+
             //var cacheless = (this.env == "dev" || this.env == "debug") ? true : false;
             appName =  apps[i];
 
@@ -133,14 +137,30 @@ var fs              = require('fs'),
             //console.log("trying..",  _(this.conf[apps[i]].bundlesPath) );
             try {
 
-                var files = utils.cleanFiles(fs.readdirSync(appPath));
+//                var files = utils.cleanFiles(fs.readdirSync(appPath));
 
-                if (files.length > 0 && files.inArray(apps[i])) {
-                    filename = _(appPath + '/' + apps[i] + '/config/' + _this.conf[apps[i]].files.routing);
+//                if (files.length > 0 && files.inArray(apps[i])) {
+
+                    if (env != 'prod') {
+
+                        var tmpContent = _this.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
+                        //console.log("tmp .. ", tmp);
+                        filename = _(appPath + '/config/' + tmpContent);
+                        //Can't do a thing without.
+                        if ( fs.existsSync(filename) ) {
+                            //console.log("app conf is ", filename);
+                            if (cacheless) delete require.cache[_(filename, true)];
+
+                            tmpName = name +'_'+ env;//?? maybe useless.
+                            _this.routing = require(filename);
+                            tmpContent = "";
+                        }
+                    }
+                    filename = _(appPath + '/config/' + _this.conf[apps[i]].files.routing);
 
                     //console.log("!!! my files ", filename);
                     try {
-                        if (cacheless) {
+                        if (env != 'prod' && cacheless) {
                             delete require.cache[_(filename, true)];
                         }
 
@@ -151,8 +171,7 @@ var fs              = require('fs'),
                         }
 
                         if (_this.routing.count() > 0) {
-
-                            _this.routing = utils.extend(true, _this.routing, tmp);
+                            _this.routing = utils.extend(true, true, tmp, _this.routing);
                         } else {
                             _this.routing = tmp;
                         }
@@ -164,15 +183,15 @@ var fs              = require('fs'),
                         logger.error('geena', 'SERVER:ERR:2', err, __stack);
                         callback(false);
                     }
-                } else {
-                    logger.error(
-                        'geena',
-                        'SERVER:ERR:3',
-                        'Routing not matching : ' +apps[i]+ ' did not match route files ' + files,
-                        __stack
-                    );
-                    callback(false);
-                }
+//                } else {
+//                    logger.error(
+//                        'geena',
+//                        'SERVER:ERR:3',
+//                        'Routing not matching : ' +apps[i]+ ' did not match route files ' + files,
+//                        __stack
+//                    );
+//                    callback(false);
+//                }
 
 
             } catch (err) {
