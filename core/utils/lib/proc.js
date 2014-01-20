@@ -114,39 +114,41 @@ Proc = function(bundle, proc, usePidFile){
      * */
     var respawn = function(bundle, env, pid, callback){
         console.log("Exiting and re spawning : ", bundle, env);
+        if (env == 'prod') {//won't loop forever for others env.
+            // TODO - Count the restarts and prevent unilimited loop
+            // TODO - Send notification to admin or/and root to the Fatal Error Page.
 
-        var root = getPath('root');
-        var version = process.getVersion(bundle);
+            var root = getPath('root');
+            var version = process.getVersion(bundle);
 
-        var outPath = _(root + '/out.'+bundle+'.'+version+'.log');
-        var errPath = _(root + '/out.'+bundle+'.'+version+'.log');
-        var nodePath = getPath('node');
-        var geenaPath = _(root + '/geena');
+            var outPath = _(root + '/out.'+bundle+'.'+version+'.log');
+            var errPath = _(root + '/out.'+bundle+'.'+version+'.log');
+            var nodePath = getPath('node');
+            var geenaPath = _(root + '/geena');
 
 
-        var opt = process.getShutdownConnectorSync();
+            var opt = process.getShutdownConnectorSync();
+            //Should kill existing one..
+            opt.path = '/'+bundle + '/restart/'+ pid +'/' + env;
 
-        opt.path = '/'+bundle + '/restart/'+ pid +'/' + env;
+            var HttpClient = require('geena.com').Http;
+            var httpClient = new HttpClient();
 
-        var HttpClient = require('geena.com').Http;
-        var httpClient = new HttpClient();
-
-        if (httpClient) {
-            //httpClient.query(opt);
-            //We are not waiting for anything particular...do we ?
-            httpClient.query(opt, function(err, msg){
-                //Now start new bundle.
+            if (httpClient) {
+                //httpClient.query(opt);
+                //We are not waiting for anything particular...do we ?
+                httpClient.query(opt, function(err, msg){
+                    //Now start new bundle.
+                    callback(err);
+                });
+            } else {
+                var err = new Error('No shutdown connector found.');
+                console.error(err);
                 callback(err);
-            });
+            }
         } else {
-            var err = new Error('No shutdown connector found.');
-            console.error(err);
-            callback(err);
+            callback(false);
         }
-
-
-
-        // TODO - ask shutdown to start.
     };
 
     var setPID = function(bundle, PID, proc){

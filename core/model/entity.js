@@ -24,6 +24,10 @@ var Entity = function(configuration){
         console.log("{Entity}Entity super ON !", configuration);
         return configuration;
     };
+
+    this.getConnection = function(){
+        return ( typeof(_this.conn) != 'undefined' ) ? _this.conn : null;
+    }
 };
 
 module.exports = Entity;

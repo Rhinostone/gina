@@ -132,11 +132,11 @@ Model = function(namespace){
                                     ++i;
                                 }
 
-                            });//EO loadFile
+                            })//EO loadFile
 
-                        });//EO Utils.Config.get
+                        })//EO Utils.Config.get
 
-                    }//EO produce
+                    };//EO produce
 
                     var i = 0;
                     while (i < files.length) {
@@ -155,7 +155,7 @@ Model = function(namespace){
                         }
                     }//EO while.
 
-                });//EO Fs.readdir.
+                });//EO fs.readdir.
 
             } else {
                 _this.emit('ready', 'no configuration found for your model: ' + model);
@@ -172,9 +172,9 @@ Model = function(namespace){
      * */
     this.getConfig = function(){
         if (configuration) {
-            return configuration;
+            return configuration
         } else {
-            return undefined;
+            return undefined
         }
     };
 
@@ -201,14 +201,14 @@ Model = function(namespace){
             };
             callback(false, confObj);
         } else {
-            callback('Config not instantiated');
+            callback('Config not instantiated')
         }
     };
 
     var loadFile = function(filename, entityName, callback){
 
 
-        Fs.readFile(filename, function (err, data){
+        fs.readFile(filename, function (err, data){
 
             if (err) {
                 logger.error('geena', 'MODEL:ERR:3', err, __stack);
