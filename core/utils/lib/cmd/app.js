@@ -83,11 +83,9 @@ var AppCommand = {
 
         if (longCMD) {
             this.opt['argument'] = this.argv[4];
-            this.opt['type'] = this.argv[5];
-            if (this.opt['option'] != 'a' && this.opt['option'] != '-add') {
-                //this.allowedArguments(this.opt);.
-                //console.log(this.msg.default[1]);.
-                //return false;.
+
+            if (this.opt['option'] == 'a' || this.opt['option'] == '-add') {
+                this.opt['type'] = this.argv[5];
             }
         } else {
             this.opt['argument'] =  this.argv[4];
@@ -96,17 +94,22 @@ var AppCommand = {
         //Setting default env.
         if (this.opt['option'] != 's' && this.opt['option'] != '-start') {
             if (typeof(this.argv[4]) != 'undefined') {
-                //if (process.argv[5] != 'undefined') {
-                //    this.opt['argument2']  = process.argv[5];
-                //}
                 var env = this.argv[4];
                 this.opt['argument'] = env;
             } else {
                 var env = 'prod';
+                if (process.argv[4] != 'undefined') {
+                    this.argv[5] = this.argv[4]
+                }
                 this.argv[4] = env;
                 this.opt['argument'] = env;
             }
             this.env = env;
+
+            if (process.argv[5] != undefined) {
+                var p = this.argv[5].split(/=/);
+                this.opt[p[0]] = p[1];
+            }
         }
 
 
@@ -424,6 +427,7 @@ var AppCommand = {
 
                 _this.prc = spawn('node', [
                     //"--debug-brk=5858",//what ever port you want.
+                    (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
                     appPath,
                     opt['argument']//,
                     //JSON.stringify( getContext() )//Passing context to child.
