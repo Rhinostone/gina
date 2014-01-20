@@ -366,6 +366,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                         console.warn("parsing ", conf.content);
                         return JSON.parse(tmp);
                     } catch (err) {
+                        console.error(err.stack);
                         return undefined;
                     }
                 } else {
@@ -374,7 +375,13 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                     return JSON.parse(tmp);
                 }
             };
-            callback(e, instance, express);
+            try {
+                callback(e, instance, express);
+            } catch (err) {
+                // TODO Output this to the error logger.
+                console.log('Could not complete initialization: ', err.stack);
+            }
+
         });
     };
 
