@@ -25,7 +25,6 @@ var fs      = require('fs'),
     //UtilsConfig = Utils.Config(),
     //Dev     = Utils.Dev,
     util    = require('util'),
-    config  = require('./../config')(),//getContext()...
     EventEmitter  = require('events').EventEmitter;
 
 /**
@@ -37,7 +36,9 @@ Model = function(namespace){
     var _configuration = null;
     var _connector = null;
     var _locals = null;
+    var config = getContext('geena.config');
     var utilsConfig = getContext('geena.utils.config');
+
 
     /**
      * Init
@@ -88,10 +89,11 @@ Model = function(namespace){
                 var connectorPath   = _(modelPath + '/lib/connector.js');
 
                 //Getting Entities Manager.
-                //var entitiesManager = new require(conf.path)()[model];
-
-                fs.exists(connectorPath, function (exists){
+                var exists = fs.existsSync(connectorPath);
+                //fs.exists(connectorPath, function (exists){
                     if (exists) {
+                        if (process.env.IS_CACHELESS)
+                            delete require.cache[_(connectorPath, true)];
 
                         var Connector = require(connectorPath);
 
@@ -101,16 +103,22 @@ Model = function(namespace){
                                 _this.emit('ready' ,err.stack, null);
                             } else {
                                 //Getting Entities Manager.
+                                if (process.env.IS_CACHELESS)
+                                    delete require.cache[_(conf.path, true)];
+
                                 var entitiesManager = new require(conf.path)()[model];
                                 getModel(entitiesManager, modelPath, entitiesPath, conn)
                             }
                         });
                     } else {
                         //Means that no connector was found in models.
+                        if (process.env.IS_CACHELESS)
+                            delete require.cache[_(conf.path, true)];
+
                         var entitiesManager = new require(conf.path)()[model];
-                        getModel(entitiesManager, modelPath, entitiesPath)
+                        getModel(entitiesManager, modelPath, entitiesPath, undefined)
                     }
-                });
+                //});
 
             } else {
                 _this.emit('ready', 'no configuration found for your model: ' + model);
@@ -145,8 +153,8 @@ Model = function(namespace){
      * @private
      * */
     var getConfig = function(bundle, callback){
-
         var configuration = config.getInstance(bundle);
+
         //console.log("getting for bundle ", bundle, configuration);
         utilsConfig.get('geena', 'locals.json', function(err, locals){
             _locals = locals;
@@ -194,91 +202,87 @@ Model = function(namespace){
      * */
     var getModel = function(entitiesManager, modelPath, entitiesPath, conn){
         var suffix = 'Entity';
-        //var files = fs.readdirSync(entitiesPath);
-        fs.readdir(entitiesPath, function(err, files){
 
+        var that = this;
+        var i = that.i = that.i || 0;
+        var files = fs.readdirSync(entitiesPath);
+        //fs.readdir(entitiesPath, function(err, files){
 
             var entityName, exluded = ['index.js'];
+
             var produce = function(entityName, i){
-            //console.log("producing ", files[i]);
+                console.log("producing ", files[i], i);
+                if (_locals == undefined) {
+                    throw new Error("geena/utils/.gna not found.");
+                }
+                //if (err) log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
 
-            //utilsConfig.get('geena', 'locals.json', function(err, configuration){
-            if (_locals == undefined) {
-                throw new Error("geena/utils/.gna not found.");
-            }
-            if (err) log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
+                var filename = _locals.paths.geena + '/model/entity.js';
+                try {
+                    if (process.env.IS_CACHELESS)
+                        delete require.cache[_(filename, true)];
 
-            var filename = _locals.paths.geena + '/model/entity.js';
-            try {
+                    var ModelEntityClass = require(filename);
+                    var modelEntity = new ModelEntityClass( _this.getConfig(_connector) );
+                    if ( conn != undefined ) {
+                        modelEntity.conn = conn;
+                    }
 
-                var ModelEntityClass = require(filename);
-                var modelEntity = new ModelEntityClass( _this.getConfig(_connector) );
-                if ( typeof(conn) != 'undefined' ) {
-                    modelEntity.conn = conn;
+                    if (process.env.IS_CACHELESS)
+                        delete require.cache[_(entitiesPath + '/' + files[i], true)];
+
+                    var EntityClass = require( _(entitiesPath + '/' + files[i]) );
+                    //EntityClass.getConfig = _this.getConfig;
+
+                    var entity = new EntityClass( _this.getConfig(_connector) );
+                    //Inherits.
+                    utils.extend(true, entity, modelEntity );
+                    //Overriding.
+                    entitiesManager[entityName] = entity;
+                    //console.log("show me ", entityName, entitiesManager[entityName],"\n\n");
+                } catch (err) {
+                    console.error(err.stack);
+                    _this.emit('ready', err, null);
                 }
 
-                var EntityClass = require(entitiesPath + '/' + files[i]);
-                //EntityClass.getConfig = _this.getConfig;
+                if (i == files.length-1) {
+                    //finished.
+                    _this.emit('ready', false, entitiesManager);
+                }
+                ++that.i;
 
-                var entity = new EntityClass();
-                //Inherits.
-                utils.extend(true, entity, modelEntity );
-                //Overriding.
-                entitiesManager[entityName] = entity;
-                //console.log("show me ", entityName, entitiesManager[entityName],"\n\n");
 
-            } catch (err) {
-                console.warn("Did not find entity " + modelPath + '/' + files[i] + "\nOR "+ filename);
-            }
-
-            //console.log("EntityManager  \n",  entitiesManager,"\n VS \n",  Entity);
-            if (i == files.length-1) {
-                //console.log("All done !");
-                //var entitiesManager = new require(conf.path)()[model];
-                //Trigger ready event.
-                _this.emit('ready', false, entitiesManager);
-                ++i;
-            }
-
-            //});//EO UtilsConfig.get.
+                //console.log("EntityManager  \n",  entitiesManager,"\n VS \n",  Entity);
 
             };//EO produce.
 
-
-            var i = 0;
-            while (i < files.length) {
-                //console.log("TEsting entity exclusion ",  i + ": ", exluded.indexOf(files[i]) != -1 && files[i].match(/.js/), files[i]);
-                if ( files[i].match(/.js/) && exluded.indexOf(files[i]) == -1 && !files[i].match(/.json/)) {
-                    entityName = files[i].replace(/.js/, "") + suffix;
-                    entityName = entityName.substring(0, 1).toUpperCase() + entityName.substring(1);
-                    console.log("entityName  : ", entityName );
-                    produce(entityName, i++);
-                } else if (i == files.length-1) {
-                    //console.log("All done !");
-                    _this.emit('ready', false, entitiesManager);
-                    ++i;
-                } else {
-                    ++i;
-                }
-            }//EO while.
-
-        });//EO Fs.readdir.
+            if (that.i < files.length) {
+                    while (that.i < files.length) {
+                        //console.log("TEsting entity exclusion ",  i + ": ", exluded.indexOf(files[i]) != -1 && files[i].match(/.js/), files[i]);
+                        if ( files[that.i].match(/.js/) && exluded.indexOf(files[that.i]) == -1 && !files[that.i].match(/.json/)) {
+                            entityName = files[that.i].replace(/.js/, "") + suffix;
+                            entityName = entityName.substring(0, 1).toUpperCase() + entityName.substring(1);
+                            console.log("entityName  : ", entityName );
+                            produce(entityName, that.i);
+                        } else if (that.i == files.length-1) {
+                            //console.log("All done !");
+                            _this.emit('ready', false, entitiesManager);
+                            ++that.i;
+                        } else {
+                            ++that.i;
+                        }
+                    }//EO while.
+            }
+        //});//EO Fs.readdir.
     };
-
-
-
-//    this.getEntitiesManager = function(){
-//
-//    };
-
-    init(namespace);
 
     return {
         onReady : function(callback){
             _this.on('ready', function(err, entities){
-                console.log("foudn entities ", entities);
+                console.log("found entities ", entities);
                 callback(err, entities );
             });
+            init(namespace)
         }
     }
 };

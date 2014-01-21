@@ -639,17 +639,48 @@ Config  = function(opt){
         //Also defined in core/gna.
         return (env == "dev" || env == "debug") ? true : false;
     };
-
+    /**
+     * Refresh for cachless mode
+     *
+     * @param {string} bundle
+     *
+     * @callback callback
+     * @param {boolean|string} err
+     * */
     this.refresh = function(bundle, callback){
+        var env = _this.Env.get();
+        var conf = _this.envConf;
 
-        loadBundlesConfiguration( function(err){
-            if (!err) {
-                callback(false);
-            } else {
-                callback(err);
+        //Reload models.
+        var modelsPath = _(conf[bundle][env].modelsPath);
+        var path;
+        try {
+            var files = fs.readdirSync(modelsPath);
+            if ( typeof(files) == 'object' && files.count() > 0 ) {
+                for (var f=0; f<files.length; ++f) {
+                    path = _(modelsPath + '/' + files[f], true);
+                    delete require.cache[path];
+                }
+
+                var Model   = require('./model');
+                for (var m in conf[bundle][env].content.model) {
+                    setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m));
+                }
             }
-        }, bundle);
-    };
+
+            //Reload conf.
+            loadBundlesConfiguration( function(err){
+                if (!err) {
+                    callback(false);
+                } else {
+                    callback(err);
+                }
+            }, bundle)
+        } catch (err) {
+            console.log(err.stack);
+        }
+
+    };//EO refresh.
 
 
     if (!opt) {
@@ -688,6 +719,9 @@ Config  = function(opt){
                 _this.once('complete', function(err, config){
                     callback(err, config);
                 });
+            },
+            getInstance : function(bundle){
+                return _this.getInstance(bundle);
             }
         };
     }

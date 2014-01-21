@@ -109,8 +109,8 @@ var fs              = require('fs'),
         //console.info("Trigged onRoutesLoaded");
 
         //console.info('ENV : ', this.conf[this.appName].env, '\n routing file\n ', this.conf[this.appName].files);
-        //var config  = getContext('config');
-        var config = require('./config')();
+        var config = getContext('geena.config');
+        //var config = require('./config')();
         var conf =  config.getInstance(this.appName);
         var _this       = this,
             env         = this.env,
