@@ -363,9 +363,8 @@ var fs              = require('fs'),
     },
     loadBundleConfiguration : function(bundle, callback) {
 
-        //var config  = getContext('config');
+        //var config  = getContext('geena.config');
         var config = require('./config')();
-        //config.setBundles(this.bundles);
         config.setBundles(this.bundles);
 
         console.log("bundle [", bundle, "] VS config ", config.getInstance(bundle) );
