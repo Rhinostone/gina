@@ -59,7 +59,7 @@ Config = function() {
                 //console.log("LINSTING path ", obj.paths);
                 mainConfig = require(obj.paths.geena + '/config')();
             } else {
-                //console.log("err :: ", err);
+                console.log(err.stack);
             }
 
         });
