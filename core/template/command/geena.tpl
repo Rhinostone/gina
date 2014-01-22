@@ -534,11 +534,11 @@ var begin = function(){
                     if ( !fs.existsSync(path) ) {
                         fs.mkdirSync(path);
                     }
-                }  
+                }
                 callback(false);
             } catch (err) {
                 callback(err);
-            }                      
+            }
         },
         createPaths : function(paths, p, callback){
             var _this = this;
@@ -547,13 +547,13 @@ var begin = function(){
                 callback(false);
             }
 
-            paths[p] = paths[p].replace(/\\/g, '\/');            
+            paths[p] = paths[p].replace(/\\/g, '\/');
             paths[p] = paths[p].replace(/\/\//g, '/');
             //console.log("about to create ", p, paths[p]);
-            this.createPath(paths[p], function(err){         
+            this.createPath(paths[p], function(err){
                 if (err)
                     callback(err)
-                else       
+                else
                     _this.createPaths(paths, p+1, callback);
             });
         },
@@ -675,11 +675,11 @@ var begin = function(){
         subHandler.getProjectConfiguration( function(err){
             if (err) console.error(err + ' getProjectConfiguration => callback');
 
-            subHandler.createPaths( 
+            subHandler.createPaths(
                 [
-                    subHandler.dir + '/tmp', 
-                    subHandler.dir + '/logs', 
-                    subHandler.dir + '/' + subHandler.submodules.bundlesPath, 
+                    subHandler.dir + '/tmp',
+                    subHandler.dir + '/logs',
+                    subHandler.dir + '/' + subHandler.submodules.bundlesPath,
                     subHandler.dir + '/' + subHandler.submodules.releasesPath
                 ],
                 0,
@@ -720,7 +720,7 @@ var begin = function(){
                     }
             });
 
-                
+
         });
 
     }
@@ -730,21 +730,21 @@ if (
     process.argv[2] != "-u"
     && process.argv[2] != "--update"
     && process.argv[2] != "-i"
-    && process.argv[2] != "--install"    
+    && process.argv[2] != "--install"
 ) {
 
     try {
 
         require('./node_modules/geena/node_modules/colors');
 
-        var utils = require("geena").utils;
+        var utils = require("./node_modules/geena/core/utils");
         utils.log('Geena Command Line Tool \r\n'.rainbow);
         utils.cmd.load(__dirname, "/node_modules/geena/package.json");
     } catch (err) {
         console.error(err);
         console.error(err.stack);
     }
-        
+
 } else {
     begin();
 };

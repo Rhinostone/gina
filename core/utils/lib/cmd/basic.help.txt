@@ -1,32 +1,35 @@
-        ('-. .-.   ('-.             _ (`-. 
+        ('-. .-.   ('-.             _ (`-.
        ( OO )  / _(  OO)           ( (OO  )
        ,--. ,--.(,------.,--.     _.`     \
        |  | |  | |  .---'|  |.-')(__...--''
        |   .|  | |  |    |  | OO )|  /  | |
        |       |(|  '--. |  |`-' ||  |_.' |
        |  .-.  | |  .--'(|  '---.'|  .___.'
-       |  | |  | |  `---.|      | |  |     
+       |  | |  | |  `---.|      | |  |
        `--' `--' `------'`------' `--'
 
-usage: 
+usage:
 
-geena <option>
-
+$ geena <option>
 option:
     -h or --help
-    -i or --init
     -k or --kill or --stop
     -r or --restart
     -s or --start
     -t or --status
     -u or --update
-    -v or --version    
+    -v or --version
 
-
-geena <option> <application_name> <arguments>
-
+$ geena <option> <project_name>
 option:
-    -a or --add
+    -i or --init
+    -d or --delete
+    -b or --build
+
+
+$ geena <option> <bundle_name> <arguments>
+option:
+    -i or --init
     -d or --delete
     -k or --kill or --stop
     -r or --restart
@@ -41,4 +44,4 @@ arguments:
     <start>     <app_name> [ dev | debug | stage or staging | prod ] [ --stack]
     <status>    <app_name>
     <stop>      <app_name>
-    <restart>   <app_name> 
+    <restart>   <app_name>

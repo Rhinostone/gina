@@ -80,7 +80,7 @@ utils.log = function(content){
     log(content);
 };
 
-
+// TODO - Should be in another handler.. closer to the view controller/handler
 utils.refToObj = function (arr){
     var tmp = null,
         curObj = {},
@@ -132,6 +132,8 @@ utils.refToObj = function (arr){
 /**
 * Clean files on directory read
 * Mac os Hack
+* NB.: use once in the server.js
+* TODO - remove it...
 **/
 utils.cleanFiles = function(files){
     for(var f=0; f< files.length; f++){

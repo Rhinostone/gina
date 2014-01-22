@@ -1,6 +1,6 @@
 /* Geena.Utils.extend(source, prop1, prop2..)
  *
- * Copyright (c) 2009-2014 Rhinostone <geena@rhinostone.com>
+ * Copyright (c) 2009-2013 Rhinostone <geena@rhinostone.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,14 +20,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-//var fs = require('fs');
 
 function isObject(obj){
     if( !obj
         || {}.toString.call(obj) !== '[object Object]'
         || obj.nodeType
         || obj.setInterval
-    ){
+        ){
         return false;
     }
 
@@ -39,7 +38,7 @@ function isObject(obj){
     if( obj.constructor &&
         !hasOwnConstructor &&
         !hasMethodPrototyped ){
-      return false;
+        return false;
     }
 
     //Own properties are enumerated firstly, so to speed up,
@@ -50,77 +49,99 @@ function isObject(obj){
     return key === undefined || hasOwn.call( obj, key );
 };
 
-function extend (){
-  var target = arguments[ 0 ] || {};
-  var i      = 1;
-  var length = arguments.length;
-  var deep   = false;
-  var options, name, src, copy, copy_is_array, clone;
+/**
+ *
+ * @param {boolean} deep - Deep copy
+ * @param {boolean} [override] - Override when copying
+ * @param {object} target - Target object
+ * @param {object} source - Source object
+ *
+ * @return {object} [result]
+ * */
 
-  // Handle a deep copy situation
-  if( typeof target === 'boolean' ){
-    deep   = target;
-    target = arguments[ 1 ] || {};
-    // skip the boolean and the target
-    i = 2;
-  }
+ function extend (){
+    var target = arguments[ 0 ] || {};
+    var i      = 1;
+    var length = arguments.length;
+    var deep   = false;
+    var override = false;
+    var options, name, src, copy, copy_is_array, clone;
 
-  // Handle case when target is a string or something (possible in deep copy)
-  if( typeof target !== 'object' && typeof target !== 'function' ){
-    target = {};
-  }
+    // Handle a deep copy situation
+    if( typeof target === 'boolean' ){
+        deep   = target;
+        target = arguments[ 1 ] || {};
+        // skip the boolean and the target
+        i = 2;
+    }
+    // Handle an override copy situation
+    if( typeof target === 'boolean' ){
+        override   = target;
+        target = arguments[ 2 ] || {};
+        // skip the boolean and the target
+        i = 3;
+    }
 
-  for( ; i < length; i++ ){
-    // Only deal with non-null/undefined values
-    if(( options = arguments[ i ]) != null ){
-      // Extend the base object
 
-      for( name in options ){
-        src  = target[ name ];
-        copy = options[ name ];
+    // Handle case when target is a string or something (possible in deep copy)
+    if( typeof target !== 'object' && typeof target !== 'function' ){
+        target = {};
+    }
 
-        // Prevent never-ending loop
-        if( target === copy ){
-          continue;
-        }
+    for( ; i < length; i++ ){
+        // Only deal with non-null/undefined values
+        if(( options = arguments[ i ]) != null ){
+            // Extend the base object
 
-        // Recurse if we're merging plain objects or arrays
-        if( deep && copy && ( isObject( copy ) || ( copy_is_array = Array.isArray( copy )))){
+            for(var name in options ){
+                src  = target[ name ];
+                copy = options[ name ];
 
-            if( copy_is_array ){
-                copy_is_array = false;
-                clone = src && Array.isArray( src ) ? src : [];
-            }else{
-                clone = src && isObject( src)  ? src : {};
-            }
+                // Prevent never-ending loop
+                if( target === copy ){
+                    continue;
+                }
 
-            //[propose] Supposed to go deep... deep... deep...
-            for(var prop in copy){
-                if(typeof(clone[ prop ]) != "undefined"){
-                    copy[ prop ] = clone[ prop ];
+
+                // Recurse if we're merging plain objects or arrays
+                if( deep && copy && ( isObject( copy ) || ( copy_is_array = Array.isArray( copy )))){
+
+                    if( copy_is_array ){
+                        copy_is_array = false;
+                        clone = src && Array.isArray( src ) ? src : [];
+                    }else{
+                        clone = src && isObject( src)  ? src : {};
+                    }
+
+                    //[propose] Supposed to go deep... deep... deep...
+                    if (!override) {
+                        for(var prop in copy){
+                            if(typeof(clone[ prop ]) != "undefined"){
+                                copy[ prop ] = clone[ prop ];
+                            }
+                        }
+                    }
+
+                    // Never move original objects, clone them
+                    if(typeof(src) != "boolean"){//if property is not boolean
+                        target[ name ] = extend( deep, override, clone, copy );
+                    }
+                    // Don't bring in undefined values
+                }else if( copy !== undefined ){
+                    //[propose]Don't override existing if prop defined or override @ false
+                    if(typeof(src) != "undefined" && src != copy && !override){
+                        target[ name ] = src;
+                    }else{
+                        target[ name ] = copy;
+                    }
+
                 }
             }
-
-          // Never move original objects, clone them
-          if(typeof(src) != "boolean"){//if property is not boolean
-            target[ name ] = extend( deep, clone, copy );
-          }
-        // Don't bring in undefined values
-        }else if( copy !== undefined ){
-            //[propose]Don't override existing if prop defined
-            if(typeof(src) != "undefined" && src != copy){
-                target[ name ] = src;
-            }else{
-                target[ name ] = copy;
-            }
-
         }
-      }
     }
-  }
 
-  // Return the modified object
-  return target;
+    // Return the modified object
+    return target;
 };
 
 //Exports module.

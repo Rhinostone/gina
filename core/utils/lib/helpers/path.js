@@ -20,7 +20,7 @@ var PathHelper;
 var fs = require('fs');
 var Events = require('events');
 var Path = require('path');
-//var Util = require('util');
+
 var extend = require('./../extend');
 var ContextHelper = require('./context');
 var e =  new Events.EventEmitter();
@@ -37,9 +37,18 @@ PathHelper = function(){
     this.paths = [];
     this.userPaths = {} ;
     var _this = this;
-
-    _ = function(path){
-
+    /**
+     * _
+     *
+     * @param {string} path - Path to convert
+     * @param {boolean} [force] - Force conversion to match platform style (Only for string conversion)
+     *
+     * @return {string|object} converted
+     * */
+    _ = function(path, force){
+        if ( typeof(force) == undefined) {
+            force = _this.force = false;
+        }
         path = Path.normalize(path);
         var isConstructor = false;
         if (this instanceof _ // <- You could use arguments.callee instead of _ here,
@@ -60,6 +69,7 @@ PathHelper = function(){
                     //In case of mixed slashes.
                     //this.value = path.replace(/\//g, "\\");
                     this.value = path.replace(/\\/g, "/");// Make it unix like.
+
                     var p = this.value;
 
                     this.isWindowsStyle = true;
@@ -84,7 +94,12 @@ PathHelper = function(){
                 //Means that we are not in an object context.
                 if (process.platform == "win32") {
                     //path = path.replace(/\//g, "\\");
-                    path = path.replace(/\\/g, "/");// Make it unix like.
+                    if (force)
+                        path = path.replace(/\//g, "\\");//Keep it or convert to Win32
+                    else
+                        path = path.replace(/\\/g, "/");// Make it unix like.
+
+
                     if ( _this.paths.indexOf(path) < 0) {
                         _this.paths.push(path);
                     }
@@ -228,7 +243,7 @@ PathHelper = function(){
         //Enter dir & start rm.
         //console.log("enter path: ", self.value);
         fs.exists(self.value, function(exists){
-            console.log('about to create folder: ', self.value, exists);
+            //console.log('about to create folder: ', self.value, exists);
             if (exists) {
                 callback(false, self.value);
             } else {
@@ -251,7 +266,7 @@ PathHelper = function(){
                                     //self.created = true;
                                     callback(err, path);
                                 } else {
-                                    console.warn("no callback defined for mkdir ", path);
+                                    console.log("no callback defined for mkdir ", path);
                                 }
                             }
                         }
@@ -271,40 +286,38 @@ PathHelper = function(){
     var mkdir = function(self, permission, pathArr, i, path){
 
         var addFolder = function(self, permission, pathArr, i, path) {
-            //path = _(path);
+
             fs.mkdir(path,  function(err){
                 if (!err) {
-                    mkdir(self, permission, pathArr, i, path);
+                    mkdir(self, permission, pathArr, i, path)
                 } else {
-                    mkdirEnd(self, err);
+                    mkdirEnd(self, err)
                 }
             });
         };
 
         //by default.
         if ( typeof(permission) == 'undefined' ) {
-            var permission = 0777;
+            var permission = 0777
         }
 
         if ( typeof(pathArr) == 'undefined' ) {
-            var pathArr = toArray(self);
+            var pathArr = toArray(self)
         }
 
         if ( typeof(i) == 'undefined' ) {
-            var i = 0;
+            var i = 0
         }
 
         if (i+1 < pathArr.length) {
 
             if ( typeof(path) == 'undefined') {
-                var path =   self.start + pathArr[0];
+                var path =   self.start + pathArr[0]
             } else {
-            ++i;
-            path += '/' + pathArr[i];
-        }
-            //path = _(path);
-            //console.log("path is ", path, " <==> ", _(path) );
-            //console.log("arr ", pathArr);
+                ++i;
+                path += '/' + pathArr[i]
+            }
+
             fs.exists(path, function(exists){
                 if (!exists) {
                     addFolder(self, permission, pathArr, i, path);
@@ -771,6 +784,7 @@ PathHelper = function(){
                 console.log("done removing ", err, path);
                 callback(false, p);
             } else {
+
                 rm(p).onComplete( function(err, path){
                     console.log("done removing... ", err);
                     //if (p == path  && typeof(callback) != 'undefined' && typeof(self.created) == 'undefined' ) {

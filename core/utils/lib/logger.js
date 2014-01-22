@@ -147,11 +147,19 @@ var fs      = require('fs'),
     },
     exception : function(){
         var _this = this;
+        for (a in arguments) {
+            if ( typeof(arguments[a]) == 'function' ) {
+                var callback = arguments[a];
+            }
+        }
         this.getMsg("exception", arguments, function(err, msg){
             if (err)
                 _this.error('geena', 'LOGGER:ERR:6', msg);
-
-            _this.save(msg);
+            if ( typeof(callback) != 'undefined') {
+                _this.save(msg, callback);
+            } else {
+                _this.save(msg);
+            }
         });
 
     },
@@ -234,8 +242,11 @@ var fs      = require('fs'),
     /**
      * Save log message
      * @param {object} msg Json Object
+     *
+     * @callback [callback]
+     * @param {boolean|string} err
      * */
-    save : function(msg){
+    save : function(msg, callback){
 
         var _this = this;
         //Will also create if do not exists.
@@ -256,11 +267,12 @@ var fs      = require('fs'),
 
                     //console.log('\ngoing once ['+ msg.label+']: ', msg.explicit);
                     //Sending message.
+
 //                    process.stdout.write(
 //                        '[LOG]' + JSON.stringify({
 //                            "filename" : filename,
 //                            "env" : _this.getEnv(),
-//                            "msg" :" msg
+//                            "msg" : msg
 //                        }) + "\n",
 //                        'utf8'
 //                    );
@@ -269,6 +281,10 @@ var fs      = require('fs'),
 
                     //Important !
                     msg = {};
+                }
+
+                if ( typeof(callback) == 'function') {
+                    callback(false)
                 }
             }
         });
