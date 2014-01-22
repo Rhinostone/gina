@@ -1,18 +1,19 @@
 var buildBundle;
+//var utils = getContext('geena.utils');
+//var util = require('util');
 
 buildBundle = function(project, bundle){
 
     var releasePath;
     var version;
-    var init = function(project, bundle){
-        console.log('build init...');
-        if ( typeof(bundle) == 'undefined' ) {
-           // buildBundle(bundle);
-        } else {
-           // buildProject(project);
-        }
 
-        //build(bundle, releasePath, version);
+    var init = function(project, bundle){
+        console.log('build init...', bundle);
+        if ( typeof(bundle) != 'undefined' ) {
+            //buildBundleFromSources(project, bundle);
+        } else {
+            //buildProjectFromSources(project);
+        }
     };
 
     //var build
@@ -29,9 +30,13 @@ buildBundle = function(project, bundle){
     };
 
     var buildBundleFromSources = function(project, bundle){
+        //build(bundle, releasePath, version);
         try {
             var package = project.packages[bundle];
-            //
+            var srcPath = package.src;
+            var release = package.release;
+            var version = package.version;
+
         } catch (err) {
             console.error(err.stack);
             process.exit(0);
@@ -52,6 +57,12 @@ buildBundle = function(project, bundle){
     };
 
     init(project, bundle);
+//    return {
+//        onComplete : function(err){
+//
+//            init(project, bundle);
+//        }
+//    }
 };
 
 module.exports = buildBundle;

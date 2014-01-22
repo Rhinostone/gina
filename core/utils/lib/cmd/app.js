@@ -330,20 +330,10 @@ var AppCommand = {
         }
 
         var bundle = process.argv[3];
-        if ( typeof(bundle) != 'undefined') {
-            //is it a real bundle ?
-            if ( typeof(project.packages[bundle]) != 'undefined' ) {
-
-            } else {
-
-            }
-        }
-
 
         try {
-
-
-            if ( typeof(bundle) != 'undefined' ) {
+            //is Real bundle ?.
+            if ( typeof(bundle) != 'undefined' && typeof(project.packages[bundle]) != 'undefined') {
                 var buildCmd = require('./geena-build')(project, bundle);
             } else {
                 var buildCmd = require('./geena-build')(project);
