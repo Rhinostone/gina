@@ -663,7 +663,7 @@ Config  = function(opt){
                 }
 
                 var Model   = require('./model');
-                for (var m in conf[bundle][env].content.model) {
+                for (var m in conf[bundle][env].content.connector) {
                     setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m));
                 }
             }

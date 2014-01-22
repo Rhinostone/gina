@@ -533,10 +533,10 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                         if (!err) {
                             //TODO - Reload using cacheless method for DEV env.
                             //Loading models.
-                            if ( typeof(conf.content['model']) != 'undefined' ) {
+                            if ( typeof(conf.content['connector']) != 'undefined' ) {
                                 // TODO - utils.loadModels();
                                 var Model   = require('./model');
-                                for (var m in conf.content.model) {
+                                for (var m in conf.content.connector) {
                                     //var apiModel    = new Model(config.bundle + "/api");
                                     setContext(m+'Model',  new Model(conf.bundle + "/" + m));
                                 }

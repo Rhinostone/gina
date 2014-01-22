@@ -181,7 +181,7 @@ Router = function(env){
         logger.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
         //console.log("ACTION ON  ROUTING IS : " + action);
 
-        //Getting Models & extending it with super Models.
+        //Getting superCleasses & extending it with super Models.
         var controllerFile  = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js'),
             handlersPath    = _(_conf[bundle][env].bundlesPath  +'/'+ bundle + '/handlers');
         var controller;
