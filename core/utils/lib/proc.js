@@ -42,7 +42,8 @@ var Proc;
 
 //Imports
 var fs      = require('fs');
-var logger  = require( _(__dirname + '/logger.js') );
+var logger  = require( _(__dirname + '/logger') );
+var spawn = require('child_process').spawn;
 
 /**
  * @constructor
@@ -50,7 +51,7 @@ var logger  = require( _(__dirname + '/logger.js') );
  * @param {string} bundle
  *
  * */
-Proc = function(bundle, proc){
+Proc = function(bundle, proc, usePidFile){
 
     var _this   = this;
     this.PID    = null;
@@ -59,8 +60,10 @@ Proc = function(bundle, proc){
     this.bundle = bundle;
     this.proc   = proc;
     this.bundles = [];
-    //this.procs  = {};
 
+    if ( typeof(usePidFile) == 'undefined') {
+        var usePidFile = true;
+    }
 
     /**
      * Check target path
@@ -70,7 +73,7 @@ Proc = function(bundle, proc){
 
     var init = function(){
         //Default.
-        var pathObj = new _(getPath('root') + '/tmp/pid/');
+        var pathObj = new _( getPath('root') + '/tmp/pid/' );
         var path = pathObj.toString();
 //        console.log('looking for path ', getPath('root') + "/tmp/pid/" );
 //        console.log("init with path ...", path, " - BUNDLE : ", bundle );
@@ -80,23 +83,72 @@ Proc = function(bundle, proc){
         process.list = (process.list == undefined) ? {} : process.list;
         _this.register(_this.bundle, _this.proc.pid);
 
-
-        pathObj.mkdir( function(err, path){
-            console.log('path created ('+path+') now saving PID ' +  bundle);
-            //logger.info('geena', 'PROC:INFO:1', 'path created ('+path+') now saving PID ' +  bundle, __stack);
-            //Save file.
-            if (!err) {
-                _this.PID = _this.proc.pid;
-                _this.path = path + pathObj.sep;
-                //Add PID file.
-                setPID(_this.bundle, _this.PID, _this.proc);
-                save(_this.bundle, _this.PID, _this.proc);
-            }
-        });
+        if (usePidFile) {
+            pathObj.mkdir( function(err, path){
+                console.log('path created ('+path+') now saving PID ' +  bundle);
+                //logger.info('geena', 'PROC:INFO:1', 'path created ('+path+') now saving PID ' +  bundle, __stack);
+                //Save file.
+                if (!err) {
+                    _this.PID = _this.proc.pid;
+                    _this.path = path + pathObj.sep;
+                    //Add PID file.
+                    setPID(_this.bundle, _this.PID, _this.proc);
+                    save(_this.bundle, _this.PID, _this.proc);
+                }
+            });
+        }
     };
 
     var isMaster = function(){
         return (_this.master) ? true : false;
+    };
+    /**
+     * Going to force restart by third party (kill 9).
+     *
+     * @param {string} bundle
+     * @param {string} env
+     * @param {number} pid
+     *
+     * @callback callback
+     * @param {boolean|string} err
+     * */
+    var respawn = function(bundle, env, pid, callback){
+        console.log("Exiting and re spawning : ", bundle, env);
+        if (env == 'prod') {//won't loop forever for others env.
+            // TODO - Count the restarts and prevent unilimited loop
+            // TODO - Send notification to admin or/and root to the Fatal Error Page.
+
+            var root = getPath('root');
+            var version = process.getVersion(bundle);
+
+            var outPath = _(root + '/out.'+bundle+'.'+version+'.log');
+            var errPath = _(root + '/out.'+bundle+'.'+version+'.log');
+            var nodePath = getPath('node');
+            var geenaPath = _(root + '/geena');
+
+
+            var opt = process.getShutdownConnectorSync();
+            //Should kill existing one..
+            opt.path = '/'+bundle + '/restart/'+ pid +'/' + env;
+
+            var HttpClient = require('geena.com').Http;
+            var httpClient = new HttpClient();
+
+            if (httpClient) {
+                //httpClient.query(opt);
+                //We are not waiting for anything particular...do we ?
+                httpClient.query(opt, function(err, msg){
+                    //Now start new bundle.
+                    callback(err);
+                });
+            } else {
+                var err = new Error('No shutdown connector found.');
+                console.error(err);
+                callback(err);
+            }
+        } else {
+            callback(false);
+        }
     };
 
     var setPID = function(bundle, PID, proc){
@@ -120,14 +172,7 @@ Proc = function(bundle, proc){
             proc.dismiss = dismiss;
             proc.isMaster = isMaster;
 
-//            proc.on('SIGTERM', function (){
-//                console.log("you'r damn right ", _this.PID);
-//                var path = _(_this.path + _this.PID);
-//                fs.unlink( path, function(err){
-//                    //Force when stuck.
-//                    process.kill(_this.PID, "SIGKILL");
-//                });
-//            });
+
             proc.on('SIGTERM', function(code){
                 proc.exit(code);
             });
@@ -135,41 +180,47 @@ Proc = function(bundle, proc){
             proc.on('SIGINT', function(code){
                 console.log("got exit code ", code);
                 proc.exit(code);//tigger exit event.
-//                var path = _(_this.path + _this.PID);
-//                fs.unlink( path, function(err){
-//                    //Force when stuck.( bundle != 'geena' && _this.bundles.indexOf(bundle) == -1 )
-//                    process.kill(_this.PID, "SIGKILL");
-//                });
             });
 
             //Will prevent the server from stopping.
             proc.on('uncaughtException', function(err){
-                logger.error('geena', 'FATAL_EXCEPTION:1', 'Special care needed !! ' + err + err.stack);
-                //TODO - Send an email to the administrator/dev
+
+                logger.exception('geena', 'FATAL_EXCEPTION:1', 'Special care needed !! ' + err + err.stack, function(err){
+                    //TODO - Send an email to the administrator/dev
+                    //TODO - Have a delegate handler to allow the dev to do its stuff. Maybe it's already there if any dev can override.
+                    console.log('Fix your shit...');
+                });
+
+                var bundle = _this.bundle;
+                var pid = _this.getPidByBundleName(bundle);
+                var env =  this.argv[2] || 'prod';
+                //Wake up buddy !.
+                respawn(bundle, env, pid, function(err){
+                    proc.exit(1);
+                });
+
             });
 
             proc.on('exit', function(code){
+
                 if ( typeof(code) == 'undefined') {
                     code = 0;
                 }
-                var bundle = this.argv[1];
-                var env =  this.argv[2] || 'prod';
+
+                var bundle = _this.bundle;
                 var pid = _this.getPidByBundleName(bundle);
+                var env =  this.argv[2] || 'prod';
 
-                console.log("got exit code ", "("+code+")", PID, " VS ", PID, " <=> geena: ", process.pid);
+
+                //console.log("got exit code ", "("+code+")", pid, " VS ", pid, " <=> geena: ", process.pid);
                 //code = code || 0;
-                var obj = logger.emerg('geena', 'UTILS:EMERG1', 'process exit code ' + code);
-                if (_this.env != "debug" && code != 0 /**&& _this.env != "dev" && code != 0*/) {
-                    //var cmd = require('geena.utils').Cmd;
-                    //cmd.start(_this.procs[] );
-                    //Respawn cmd.
-                    console.error("Exiting and re spawning : ", bundle, pid);
+                //var obj = logger.emerg('geena', 'UTILS:EMERG1', 'process exit code ' + code);
+                if (code == 0  && env != "debug" && env != "dev"/***/) {
+                    // First child.
+                    dismiss(pid);
+                    // Then master.
+                    dismiss(process.pid);
                 }
-                // First child.
-                dismiss(pid);
-                // Then master.
-                dismiss(process.pid);
-
             });
 
             proc.on('SIGHUP', function(code){
@@ -182,13 +233,14 @@ Proc = function(bundle, proc){
                 dismiss(process.pid);
             });
 
-            //proc.stderr.resume();
-            //proc.stderr.setEncoding('utf8');//Set encoding.
-            proc.stderr.on('data', function(err){
-                console.error("found err ", err);
-            });
+//            proc.stderr.resume();
+//            proc.stderr.setEncoding('utf8');//Set encoding.
+//            proc.stderr.on('data', function(err){
+//                console.error("found err ", err);
+//            });
         }
     };
+
 
 
 

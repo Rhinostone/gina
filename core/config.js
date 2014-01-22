@@ -249,7 +249,7 @@ Config  = function(opt){
         getConf : function(bundle, env){
             //console.log("get from ....", appName, env);
             if ( typeof(bundle) != 'undefined' && typeof(env) != 'undefined' )
-                return ( typeof(_this.envConf) != "undefined" ) ? _this.envConf[bundle][env] : null
+                return ( typeof(_this.envConf) != "undefined" ) ? _this.envConf[bundle][env] : null;
             else
                 return ( typeof(_this.envConf) != "undefined" ) ? _this.envConf : null;
         },
@@ -317,18 +317,29 @@ Config  = function(opt){
         var root = new _(_this.executionPath).toUnixStyle();
         try {
             var pkg = require(_(root + '/project.json')).packages;
-        } catch (err) { } //bundlesPath will be default.
+        } catch (err) {
+            callback(err);
+        } //bundlesPath will be default.
 
 
         //For each app.
         for (var app in content) {
-            //Checking if genune app.
+            //Checking if genuine app.
             logger.debug(
                 'geena',
                 'CONFIG:DEBUG:4',
                 'Checking if application is registered ' + app,
                 __stack
             );
+
+            //Now check if you have a description for each bundle.
+//            if ( typeof(pkg[app]) == 'undefined' ) {
+//                throw new Error('No definition found for bundle ['+ app +']in project.json');
+//                //Sorry, can't work without... fix your shit.
+//                process.kill(process.pid, 'SIGINT');
+//            }
+                //callback(new Error('No definition found for bundle ['+ app +']in project.json'));
+
 
             if ( typeof(content[app][env]) != "undefined" ) {
 
@@ -368,7 +379,7 @@ Config  = function(opt){
                         isStandalone = false;
                         _this.Host.standaloneMode = isStandalone;
                         //console.log("PUSHING APPS ", app + "=>" + isStandalone);
-                    } else if(app != _this.startingApp) {
+                    } else if (app != _this.startingApp) {
                         _this.bundles.push(app);
                     }
                     _this.allBundles.push(app);
@@ -419,8 +430,6 @@ Config  = function(opt){
                     //console.error("man.. ",  reps, "\n " + newContent[app][env]);
                     //console.error("result ", _this.bundles,"\n",newContent[app][env]);
                     //console.log("bundle list ", _this.bundles);
-                    //callback(false, newContent);
-
                 } else {
                     logger.warn(
                         'geena',
@@ -524,6 +533,7 @@ Config  = function(opt){
         //console.log("bundle list ", _this.bundles);
         //Framework config files.
         var name        = "",
+            tmpName     = "",
             files       = {},
             appPath     = "",
             modelsPath  = "",
@@ -550,38 +560,33 @@ Config  = function(opt){
                 //Server only because of the shared mode VS the standalone mode.
                 if (name == 'routing') continue;
 
-
                 if (env != 'prod') {
 
                     tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
                     //console.log("tmp .. ", tmp);
-                    filename = appPath + '/config/' + tmp;
+                    filename = _(appPath + '/config/' + tmp);
                     //Can't do a thing without.
                     if ( fs.existsSync(filename) ) {
                         //console.log("app conf is ", filename);
-                        if (cacheless) delete require.cache[filename];
+                        if (cacheless) delete require.cache[_(filename, true)];
 
-                        name = name +'_'+env;
+                        tmpName = name +'_'+ env;//?? maybe useless.
                         files[name] = require(filename);
                         //console.log("watch out !!", files[name][bundle]);
-                    }/** else {
-                        filename = appPath + '/config/' + conf[bundle][env].files[name];
-                    }*/
+                    }
                     tmp = "";
                 }
 
-                filename = appPath + '/config/' + conf[bundle][env].files[name];
                 try {
-                    if (cacheless) delete require.cache[filename];
+
+                    filename = appPath + '/config/' + conf[bundle][env].files[name];
+                    if (env != 'prod' && cacheless) delete require.cache[_(filename, true)];
 
                     //console.log("here ", name, " VS ", filename, "\n", conf[bundle][env].files[name]);
-                    files[name] = utils.extend( true, files[name], require(filename) );
-                    //files[name] = require(filename);
-                    //_this.configuration[bundle].config = files[name][bundle];
-
+                    files[name] = utils.extend( true, true, files[name], require(filename) );
                     //console.log("Got filename ", name ,files[name]);
                 } catch (err) {
-                    
+
                     if ( fs.existsSync(filename) )
                         files[name] = "malformed !!";
                     else
@@ -631,19 +636,51 @@ Config  = function(opt){
      * */
     this.isCacheless = function(){
         var env = _this.Env.get();
+        //Also defined in core/gna.
         return (env == "dev" || env == "debug") ? true : false;
     };
-
+    /**
+     * Refresh for cachless mode
+     *
+     * @param {string} bundle
+     *
+     * @callback callback
+     * @param {boolean|string} err
+     * */
     this.refresh = function(bundle, callback){
+        var env = _this.Env.get();
+        var conf = _this.envConf;
 
-        loadBundlesConfiguration( function(err){
-            if (!err) {
-                callback(false);
-            } else {
-                callback(err);
+        //Reload models.
+        var modelsPath = _(conf[bundle][env].modelsPath);
+        var path;
+        try {
+            var files = fs.readdirSync(modelsPath);
+            if ( typeof(files) == 'object' && files.count() > 0 ) {
+                for (var f=0; f<files.length; ++f) {
+                    path = _(modelsPath + '/' + files[f], true);
+                    delete require.cache[path];
+                }
+
+                var Model   = require('./model');
+                for (var m in conf[bundle][env].content.connector) {
+                    setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m));
+                }
             }
-        }, bundle);
-    };
+
+            //Reload conf.
+            loadBundlesConfiguration( function(err){
+                if (!err) {
+                    callback(false);
+                } else {
+                    callback(err);
+                }
+            }, bundle)
+        } catch (err) {
+            console.log(err.stack);
+        }
+
+    };//EO refresh.
 
 
     if (!opt) {
@@ -662,7 +699,10 @@ Config  = function(opt){
                 });
             },
             Env : _this.Env,
-            Host : _this.Host
+            Host : _this.Host,
+            setBundles : function(bundles){
+                _this.bundles = bundles;
+            }
         };
 
     } else {
@@ -679,6 +719,9 @@ Config  = function(opt){
                 _this.once('complete', function(err, config){
                     callback(err, config);
                 });
+            },
+            getInstance : function(bundle){
+                return _this.getInstance(bundle);
             }
         };
     }
@@ -687,4 +730,4 @@ Config  = function(opt){
 };
 
 util.inherits(Config, EventEmitter);
-module.exports = Config
+module.exports = Config;

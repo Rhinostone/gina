@@ -12,8 +12,6 @@ var Config;
 
 var fs  = require('fs');
 var EventEmitter = require('events').EventEmitter;
-//var Extend = require('../extend');
-
 
 /**
  * Config constructor
@@ -59,7 +57,7 @@ Config = function() {
                 //console.log("LINSTING path ", obj.paths);
                 mainConfig = require(obj.paths.geena + '/config')();
             } else {
-                //console.log("err :: ", err);
+                console.log(err.stack);
             }
 
         });
@@ -196,14 +194,22 @@ Config = function() {
         try {
 
             var createFolder = function(){
-                fs.mkdir(gnaFolder, 0777, function(err){
-                    if (err) logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
-
-                    //Creating content.
-                    createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
-                        callback(err);
+                if ( fs.existsSync(gnaFolder) ) {
+                    callback(false);
+                } else {
+                    fs.mkdir(gnaFolder, 0777, function(err){
+                        if (err) {
+                            logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
+                            callback(err);
+                        } else {
+                            //Creating content.
+                            createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
+                                callback(err);
+                            });
+                        }
                     });
-                });
+                }
+
             };
             fs.exists(gnaFolder, function(exists){
                 //console.log("file exists ? ", gnaFolder, exists);

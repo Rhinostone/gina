@@ -142,7 +142,7 @@ Router = function(env){
 
         //console.info('!!about to add handler ', handler);
         try {
-            if (cacheless) delete require.cache[handler];
+            if (cacheless) delete require.cache[_(handler, true)];
 
             return {obj : fs.readFileSync(handler), file : action + '.js', name : action + 'Handler'};
         } catch (err) {
@@ -164,36 +164,45 @@ Router = function(env){
 
         //Routing.
         var pathname        = url.parse(request.url).pathname,
-            AppController   = {},
-            app             = {},
             bundle          = params.param.app,
             action          = params.param.action,
             Controller      = require("./controller");
 
-
+        var cacheless = process.env.IS_CACHELESS;
         console.log("routing..", bundle, env,  Config.Env.getConf( bundle, env ));
         //Middleware Filters when declared.
-        var resHeders = Config.Env.getConf( bundle, env ).server.response.header;
+        var resHeaders = Config.Env.getConf( bundle, env ).server.response.header;
         //TODO - to test
-        if ( resHeders.count() > 0 ) {
-            for (var h in resHeders)
-                response.header(h, resHeders[h]);
+        if ( resHeaders.count() > 0 ) {
+            for (var h in resHeaders)
+                response.header(h, resHeaders[h]);
         }
 
         logger.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
         //console.log("ACTION ON  ROUTING IS : " + action);
 
-        //Getting Models & extending it with super Models.
-        var controllerFile  = _conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js',
-            handlersPath    = _conf[bundle][env].bundlesPath  +'/'+ bundle + '/handlers';
+        //Getting superCleasses & extending it with super Models.
+        var controllerFile  = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js'),
+            handlersPath    = _(_conf[bundle][env].bundlesPath  +'/'+ bundle + '/handlers');
         var controller;
 
 
         try {
             console.log("controller file is ", controllerFile);
+            if (env != 'prod' && cacheless) delete require.cache[_(controllerFile, true)];
+
             var controllerRequest  = require(controllerFile);
+
         } catch (err) {
-            logger.error('geena', 'ROUTER:ERR:1', 'Could not complete ['+ action +' : function(req, res)...] : ' + err , __stack);
+            //Should be rended as a 500 err.
+            logger.error('geena', 'ROUTER:ERR:1', 'Could not complete ['+ action +' : function(req, res)...] : ' + err.stack , __stack);
+
+            var data = 'Error 500. Internal server error ' + '\nCould not complete ['+ action +' : function(req, res...] : ' + err.stack;
+            response.writeHead(500, {
+                'Content-Length': data.length,
+                'Content-Type': 'text/plain'
+            });
+            response.end(data);
         }
 
         var options = {

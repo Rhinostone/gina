@@ -44,18 +44,18 @@ var fs = require('fs'),
     },
     isAllowedOption : function(arg){
         var found = false;
-        for(var i=0; i<this.allowedOptions.length; ++i){
-            if(arg == this.allowedOptions[i]){
+        for (var i=0; i<this.allowedOptions.length; ++i) {
+            if (arg == this.allowedOptions[i]) {
                 found = true;
                 break;
             }
         }
-        if(found){
+        if (found) {
             this.map(arg);
-        }else{
-            log(this.msg.default[0].replace("%command%", "geena " + arg));
+        } else {
+            log( this.msg.default[0].replace("%command%", "geena " + arg) );
         }
-        
+
     },
     map : function(arg){
         switch(arg){
@@ -63,12 +63,12 @@ var fs = require('fs'),
             case '--version':
                 this.getVersion();
                 break;
-            
+
             case '-h':
             case '--help':
                 this.getHelp();
                 break;
-            
+
             case '-u':
             case '--update':
                 this.update();
@@ -86,17 +86,17 @@ var fs = require('fs'),
     getVersion : function(){
         var vers = "",
             version = {
-            "number" : this.options.version,
-            "platform" : process.platform,
-            "arch" : process.arch,
+            "number"    : this.options.version,
+            "platform"  : process.platform,
+            "arch"      : process.arch,
             "copyright" : this.options.copyright
         };
         vers = this.msg.basic[4]
                 + version.number +' '+ version.platform +' '+ version.arch
                 + '\n' + version.copyright;
-        if(typeof(this.options.version) != "undefined"){
+        if (typeof(this.options.version) != "undefined") {
             log(vers);
-        }else{
+        } else {
             log(this.msg.basic[5]);
         }
     },

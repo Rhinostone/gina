@@ -83,9 +83,11 @@ var AppCommand = {
 
         if (longCMD) {
             this.opt['argument'] = this.argv[4];
-
-            if (this.opt['option'] == 'a' || this.opt['option'] == '-add') {
-                this.opt['type'] = this.argv[5];
+            this.opt['type'] = this.argv[5];
+            if (this.opt['option'] != 'a' && this.opt['option'] != '-add') {
+                //this.allowedArguments(this.opt);.
+                //console.log(this.msg.default[1]);.
+                //return false;.
             }
         } else {
             this.opt['argument'] =  this.argv[4];
@@ -94,22 +96,17 @@ var AppCommand = {
         //Setting default env.
         if (this.opt['option'] != 's' && this.opt['option'] != '-start') {
             if (typeof(this.argv[4]) != 'undefined') {
+                //if (process.argv[5] != 'undefined') {
+                //    this.opt['argument2']  = process.argv[5];
+                //}
                 var env = this.argv[4];
                 this.opt['argument'] = env;
             } else {
                 var env = 'prod';
-                if (process.argv[4] != 'undefined') {
-                    this.argv[5] = this.argv[4]
-                }
                 this.argv[4] = env;
                 this.opt['argument'] = env;
             }
             this.env = env;
-
-            if (process.argv[5] != undefined) {
-                var p = this.argv[5].split(/=/);
-                this.opt[p[0]] = p[1];
-            }
         }
 
 
@@ -330,10 +327,20 @@ var AppCommand = {
         }
 
         var bundle = process.argv[3];
+        if ( typeof(bundle) != 'undefined') {
+            //is it a real bundle ?
+            if ( typeof(project.packages[bundle]) != 'undefined' ) {
+
+            } else {
+
+            }
+        }
+
 
         try {
-            //is Real bundle ?.
-            if ( typeof(bundle) != 'undefined' && typeof(project.packages[bundle]) != 'undefined') {
+
+
+            if ( typeof(bundle) != 'undefined' ) {
                 var buildCmd = require('./geena-build')(project, bundle);
             } else {
                 var buildCmd = require('./geena-build')(project);
@@ -360,7 +367,7 @@ var AppCommand = {
     start : function(opt){
         var _this = this;
 
-        this.isRealApp( function(real){
+        this.isRealApp(function(real){
 
             var loggerInstance = new (Winston.Logger)({
                 levels : logger.custom.levels,
@@ -414,10 +421,13 @@ var AppCommand = {
                 //console.log("spawning ...", opt, "\n VS \n");
                 //log("spawning ...", opt['argument']);
                 //console.log("command ", "node ",appPath, opt['argument'], JSON.stringify( getContext() ));
-
+//                _this.prc = spawn('node', [
+//                    appPath,
+//                    "dev"
+//                ]);
                 _this.prc = spawn('node', [
-                    //"--debug-brk=5858",//what ever port you want.
-                    (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
+                    //"--debug-brk=63342",
+                    //"--debug-brk=5858",
                     appPath,
                     opt['argument']//,
                     //JSON.stringify( getContext() )//Passing context to child.
@@ -425,9 +435,8 @@ var AppCommand = {
                 {
                     detached : true
                 });
-
-
-                //var bundleProcess = new Proc(_this.bundle, _this.prc);
+                // detached : true
+                var bundleProcess = new Proc(_this.bundle, _this.prc);
 
                 //On message.
                 _this.prc.stdout.setEncoding('utf8');//Set encoding.
@@ -448,12 +457,8 @@ var AppCommand = {
                         //console.log("[traces] => ", data);
 
                         // TODO - Few exception to take in consideration.
-                        //loggerInstance.onMessage(data, function(msg){
-
                         logger.onMessage(data, function(msg){
                             loggerInstance[msg.level](msg);
-
-                            //logger[msg.level](msg);
                         });
                     }
 
@@ -463,38 +468,7 @@ var AppCommand = {
                 //On error. Might be useless.
                 _this.prc.stderr.setEncoding('utf8');//Set encoding.
                 _this.prc.stderr.on('data', function(err){
-                    logger.getPath('geena', function(pathErr, path){
-                        if (!pathErr) {
-                            var filename = _(path +'/'+ logger.getFilename('geena'));
-                             //var test = JSON.stringify({"error" :err});
-                            //console.log("[TRACE]" + JSON.parse(test).error);
-                            /**
-                            var data = '[LOG]' + JSON.stringify({
-                                "filename" : filename,
-                                "env" : logger.getEnv(),
-                                "msg" : {
-                                    "logger"    : "geena",
-                                    "label"     : "SERVER:RUNTIME:ERR:2",
-                                    "level"     : "err",
-                                    "profile"   : logger.getEnv(),
-                                    "message"   : "SERVER:RUNTIME:ERR:2",
-                                    "explicit"  : "" + err
-                                }
-                            });*/
 
-
-
-                            //logger.onMessage(data, function(msg){
-                                //Node exception.
-                                //loggerInstance.err(msg);
-                            //});
-                            //logger.onMessage(data, function(msg){
-                                //Node exception.
-                                //loggerInstance.err(msg);
-                            //});/***/
-                        }
-                    });
-                    /**
                     logger.getPath('geena', function(pathErr, path){
                         if (!pathErr) {
                             //var filename = _(logger.getPath('geena') +'/'+ logger.getFilename('geena'));
@@ -520,11 +494,8 @@ var AppCommand = {
                             });
                         }
                     });
-                     */
                 });
-                /** */
             }
-
         });//EO this.isRealApp.
 
     },
