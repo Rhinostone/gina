@@ -33,9 +33,8 @@ Generator = {
             fs.writeFile(target, data, function(err, data){
                 if (err) throw err;
                 //Setting permission.
-                fs.chmodSync(target, 0755);
-                log("Geena's command line tool installed.");
-                callback = function(){return true};
+                fs.chmodSync(target, 0755);                
+                if ( typeof(callback) != 'undefined') callback(err)
             });
         });
     },

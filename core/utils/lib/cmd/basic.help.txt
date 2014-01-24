@@ -11,32 +11,32 @@
 usage:
 
 $ geena <option>
-option:
+[basic options]:
     -h or --help
+    -v or --version
+
+[project options]:
+    -i or --init or --install (needs project.json)
+    -d or --delete
+    -b or --build (will build all bundles at once)
     -k or --kill or --stop
     -r or --restart
     -s or --start
     -t or --status
     -u or --update
-    -v or --version
-
-$ geena <option> <project_name>
-option:
-    -i or --init
-    -d or --delete
-    -b or --build
 
 
 $ geena <option> <bundle_name> <arguments>
-option:
+[option]:
     -i or --init
     -d or --delete
+    -b or --build
     -k or --kill or --stop
     -r or --restart
     -s or --start
     -t or --status
 
-arguments:
+[arguments]:
     <add>   -t or --type [ blog | cms | app | ws ]
     <add>   -p or --port (auto -m standalone)
     <add>   -m or --mode [ shared | standalone ]

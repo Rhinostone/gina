@@ -16,7 +16,6 @@
  * @author      Rhinostone <geena@rhinostone.com>
  */
 
-console.error("laoded once");
 var Helpers = {
         console     : require("./console")(),
         //DateTime    : require("./time")(),

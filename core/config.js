@@ -667,18 +667,18 @@ Config  = function(opt){
                     setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m));
                 }
             }
-
-            //Reload conf.
-            loadBundlesConfiguration( function(err){
-                if (!err) {
-                    callback(false);
-                } else {
-                    callback(err);
-                }
-            }, bundle)
         } catch (err) {
             console.log(err.stack);
         }
+
+        //Reload conf.
+        loadBundlesConfiguration( function(err){
+            if (!err) {
+                callback(false);
+            } else {
+                callback(err);
+            }
+        }, bundle)
 
     };//EO refresh.
 

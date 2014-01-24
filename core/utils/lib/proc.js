@@ -179,6 +179,7 @@ Proc = function(bundle, proc, usePidFile){
 
             proc.on('SIGINT', function(code){
                 console.log("got exit code ", code);
+                if (code == undefined) var code = 0;
                 proc.exit(code);//tigger exit event.
             });
 
