@@ -415,13 +415,18 @@ var AppCommand = {
                 //log("spawning ...", opt['argument']);
                 //console.log("command ", "node ",appPath, opt['argument'], JSON.stringify( getContext() ));
 
-                _this.prc = spawn('node', [
-                    //"--debug-brk=5858",//what ever port you want.
+                var params = [
                     (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
                     appPath,
                     opt['argument']//,
                     //JSON.stringify( getContext() )//Passing context to child.
-                ],
+                ];
+                //console.log("found params ", params[0], params, opt);
+                if (!params[0]) params.splice(0,1);
+                //console.log("then new params ", params[0], params);
+
+
+                _this.prc = spawn('node', params,
                 {
                     detached : true
                 });

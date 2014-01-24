@@ -216,40 +216,47 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
     //creating folders.
     //use junction when using Win XP os.release == '5.1.2600'
     var exists = fs.existsSync(source);
+    console.log('source: ', source);
+    console.log('checking before mounting ', target, fs.existsSync(target), bundlesPath);
+    if ( fs.existsSync(target) ) {
+        try {
+            fs.unlinkSync(target)
+        } catch (err) {
+            callback(err)
+        }
+    }
     if ( exists ) {
+        //will override existing each time you restart.
         var pathToMount = utils.generator.createPathSync(bundlesPath, function onPathCreated(err){
             if (!err) {
                 try {
-                    if ( fs.existsSync(target) ) {
-                        fs.unlinkSync(target);
-                    }
-                    if ( type != undefined) {
-                        fs.symlinkSync(source, target, type);
-                    } else {
+                    if ( type != undefined)
+                        fs.symlinkSync(source, target, type)
+                    else
                         fs.symlinkSync(source, target);
-                    }
-                    callback(false);
+
+                    callback(false)
                 } catch (err) {
                     if ( fs.existsSync(target) ) {
                         var stats = fs.lstatSync(target);
                         if ( stats.isDirectory() ) {
                             var d = new _(target).rm( function(err){
                                 callback(err);
-                            });
+                            })
                         } else {
                             fs.unlinkSync(target);
-                            callback(err);
+                            callback(err)
                         }
                     }
                 }
             } else {
-                //console.error(err);
-                callback(err);
+                console.error(err);
+                callback(err)
             }
         });
     } else {
         // Means that it did not find the release. Build and re mount.
-        callback('Found no release to mount for: ', source);
+        callback('Found no release to mount for: ', source)
     }
 };
 
@@ -483,21 +490,21 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         setContext('geena.utils.logger', logger);
         //check here for mount point source...
         var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
-
         var tmpSource = _(bundlesPath +'/'+ core.startingApp);
-        if ( fs.existsSync(tmpSource) && env == 'prod' || fs.existsSync(tmpSource) && env == 'stage' ) {
-            try {
-                var stats = fs.lstatSync(tmpSource);
-                if ( stats.isSymbolicLink() ) {
-                    source = _( fs.readlinkSync(tmpSource) );
-                } else {
-                    source = tmpSource;
-                }
-            } catch (err) {
-                //silently...
-                source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
-            }
-        }
+        console.log('fucking source ', tmpSource, project.packages[core.startingApp].release.target);
+//        if ( fs.existsSync(tmpSource) && env == 'prod' || fs.existsSync(tmpSource) && env == 'stage' ) {
+//            try {
+//                var stats = fs.lstatSync(tmpSource);
+//                if ( stats.isSymbolicLink() ) {
+//                    source = _( fs.readlinkSync(tmpSource) );
+//                } else {
+//                    source = tmpSource;
+//                }
+//            } catch (err) {
+//                //silently...
+//                source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
+//            }
+//        }
 
         var linkPath =  _( root +'/'+ project.packages[core.startingApp].release.link );
 
