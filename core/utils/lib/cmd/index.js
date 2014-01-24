@@ -51,7 +51,6 @@ cmd.getOptions = function() {
 };
 
 cmd.onExec = function() {
-
     cmd.msg = require( _(__dirname + '/msg.json') );
 
     var _this = this, ignore = function(){
