@@ -1,2 +1,8 @@
 @echo off
-node .geena %1 %2 %3
+SET _params=%*
+:: pass params to a subroutine
+CALL :sub "%_params%"
+GOTO :eof
+:sub
+
+node .geena %~n1
