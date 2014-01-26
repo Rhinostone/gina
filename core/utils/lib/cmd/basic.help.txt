@@ -28,20 +28,20 @@ $ geena <option>
 
 $ geena <option> <bundle_name> <arguments>
 [option]:
-    -i or --init
-    -d or --delete
-    -b or --build
-    -k or --kill or --stop
-    -r or --restart
-    -s or --start
-    -t or --status
+    -a or --add <bundle> <argument>
+    -d or --delete <bundle>
+    -b or --build <bundle>
+    -k or --kill or --stop <bundle>
+    -r or --restart <bundle>
+    -s or --start <bundle> [<argument>]
+    -t or --status <bundle>
 
 [arguments]:
     <add>   -t or --type [ blog | cms | app | ws ]
     <add>   -p or --port (auto -m standalone)
     <add>   -m or --mode [ shared | standalone ]
 
-    <start>     <app_name> [ dev | debug | stage or staging | prod ] [ --stack]
+    <start>     <app_name> [ dev | debug | stage or staging | prod ] [ --debug-brk=<port>]
     <status>    <app_name>
     <stop>      <app_name>
     <restart>   <app_name>

@@ -144,18 +144,16 @@ var AppCommand = {
         var found = false;
         for (var i=0; i<this.allowedArguments.length; ++i) {
             if (this.opt['argument'] == this.allowedArguments[i]) {
-                //Zif (typeof(this.opt['argument2']) &&)
-
                 found = true;
-                break;
+                break
             }
         }
         if (found || this.opt['argument'] == undefined) {
-            callback(true);
+            callback(true)
         } else {
             log(this.msg.default[2]
                         .replace("%arg%", this.opt['argument']));
-            callback(false);
+            callback(false)
         }
     },
     isAllowedType : function(opt, callback){
@@ -163,10 +161,10 @@ var AppCommand = {
         for (var i=0; i<this.allowedTypes.length; ++i) {
             if (opt['type'] == this.allowedTypes[i]) {
                 found = true;
-                break;
+                break
             }
         }
-        callback(found);
+        callback(found)
     },
     isMounted : function(bundle){
 
@@ -320,9 +318,10 @@ var AppCommand = {
     add : function(opt){
         log('adding app now...', opt);
     },
-    build : function(opt){
+    build : function(opt, argument){
         console.log('Releasing build...');
         //Getting project infos.
+        process.env.NODE_ENV = this.opt.argument;
         try {
             var project = require( _(getPath('root') + '/project.json') );
         } catch (err) {
