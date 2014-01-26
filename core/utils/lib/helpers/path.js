@@ -381,8 +381,10 @@ PathHelper = function(){
         var p = self.value;
         //console.log("starting copying ", p, " => ", target);
         cp(p, target)
-            .onComplete( function(err){
-                cb(err);
+            .onComplete( function(err, destination){
+                if (target == destination) {
+                    cb(err);
+                }
             });
     };
 
@@ -428,8 +430,8 @@ PathHelper = function(){
 
             if ( !stats.isDirectory() ) {
                 // 1) & 2) File => Dir (add if exist else, throw error).
-                copyFileToFile(source, destination, function(err){
-                    e.emit("cp#complete", err);
+                copyFileToFile(source, destination, 0, function(err){
+                    e.emit("cp#complete", err, destination);
                 });
             } else {
                 /**
@@ -454,7 +456,7 @@ PathHelper = function(){
 
                     browseCopy(source, destination, function(err){
                         console.log("copy Dir/ to Dir/ && Dir/ to Dir done");
-                        e.emit("cp#complete", err);
+                        e.emit("cp#complete", err, destination);
                     });
 
                 } else if (!childElementsOnly["source"] && childElementsOnly["destination"]) {
@@ -468,7 +470,7 @@ PathHelper = function(){
                     var target = new _(destination).mkdir(function(err, path){
                         browseCopy(source, path, function(err){
                             //console.log("copy Dir to Dir/ done");
-                            e.emit("cp#complete", err);
+                            e.emit("cp#complete", err, path);
                         });
                     });
                 } else {
@@ -488,7 +490,7 @@ PathHelper = function(){
                                         //console.log("copy Dir to Dir done");
                                         //removed = true;
                                         destination = null;
-                                        e.emit("cp#complete", err);
+                                        e.emit("cp#complete", err, path);
                                     });
                             });
                             //});
@@ -524,7 +526,7 @@ PathHelper = function(){
              * */
             onComplete : function(callback){
                 //We want it once for the object path.
-                e.on('cp#complete', function(err){
+                e.on('cp#complete', function(err, destination){
                     if (err) {
                         logger.error(
                             'geena',
@@ -534,7 +536,7 @@ PathHelper = function(){
                         );
                     }
                     console.log('cp() complete');
-                    callback(err);
+                    callback(err, destination);
                 });
             }
         };
@@ -781,7 +783,7 @@ PathHelper = function(){
         fs.exists(p, function(exists){
             console.log(" does it exists ? ", p, exists );
             if (!exists) {
-                console.log("done removing ", err, path);
+                console.log("done removing ", p);
                 callback(false, p);
             } else {
 
