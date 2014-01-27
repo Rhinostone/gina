@@ -23,7 +23,7 @@ var fs      = require('fs'),
     Module  = require('module'),
     utils   = require('geena').utils,
     //UtilsConfig = Utils.Config(),
-    //Dev     = Utils.Dev,
+//dev     = require(_(getPath('geena.core')'/dev') ),
     util    = require('util'),
     EventEmitter  = require('events').EventEmitter;
 

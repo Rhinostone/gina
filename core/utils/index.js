@@ -21,11 +21,11 @@
 //By default
 var utils = {
     Config  : require('./lib/config'),
-    //Dev     : require('./lib/dev'),
+    //dev     : require('./lib/dev'),//must be at the same level than geena.utils => geena.dev
     helpers : require('./lib/helpers'),
     //this one must move to Dev since it's dev related
     extend  : require('./lib/extend'),
-    generator : require('./lib/generator'),
+    generator : require('./lib/generator'),//move to geena.dev
     Proc    : require('./lib/proc'),
     logger  : require('./lib/logger'),
     cmd     : require('./lib/cmd')
