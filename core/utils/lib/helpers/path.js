@@ -1040,7 +1040,7 @@ PathHelper = function(){
     };
 
     getPaths = function(){
-        return 'âths: ' + JSON.stringify(_this.paths, null, 4);
+        return 'paths: ' + JSON.stringify(_this.paths, null, 4);
     };
 
 

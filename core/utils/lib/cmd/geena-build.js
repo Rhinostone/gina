@@ -37,7 +37,7 @@ buildBundle = function(project, bundle){
                 //will always build from sources by default.
                 if ( typeof(package['src']) != 'undefined' && fs.existsSync( _(self.root + '/' + package['src']) )) {
                     var sourcePath = _(conf.sources + '/' + bundle);
-                    var version;//by default.
+                    var version = undefined;//by default.
                     if ( fs.existsSync( _(sourcePath + '/config/app.json') ) ) {
                         var appConf = require( _(sourcePath + '/config/app.json'));
                         if ( typeof(appConf['version']) != 'undefined' ) {
@@ -47,6 +47,11 @@ buildBundle = function(project, bundle){
                         }
                     } else {
                         version = package.version
+                    }
+
+                    if (version == undefined) {
+                        console.log('You need a version reference to build.');
+                        process.exit(0);
                     }
                     var releasePath = _(conf.releases + '/' + bundle + '/' + version);
                     callback(false, {
@@ -89,21 +94,23 @@ buildBundle = function(project, bundle){
                     var i = self.i;
                     if (i == files.length) {
                         //end.
+                        // var patt = [];
+                        //var findAll = new _(target).grep(patt, function(){
+                        //
+                        // });
                         console.log("Build "+version+" ready.");
                         process.exit(0);
                     }
                     var from = new _(source +'/'+ files[i]);
                     var to = _(target +'/'+ files[i]);
 
-                    if ( files[i].substring(0,1) != '.' ) {
-                        from.cp(to, function(err){
-                            ++self.i;
-                            copy(source, target, files)
-                        })
-                    } else {
+
+
+                    //if ( !/.dev./.test(files[i]) && files[i].substring(0,1) != '.') {
+                    from.cp(to, function(err){
                         ++self.i;
                         copy(source, target, files)
-                    }
+                    })
                 };
 
                 var targetObj = new _(target);
