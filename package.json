@@ -32,7 +32,6 @@
   "main": "core/gna",
   "devDependencies": {},
   "scripts": {
-    "prepublish": "node script/pre_publish.js",
     "postinstall": "node script/post_install.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

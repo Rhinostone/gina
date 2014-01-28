@@ -97,6 +97,9 @@ var env;
 //Setting env.
 env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
 gna.env = process.env.NODE_ENV = env;
+gna.env.isWin32 = process.env.isWin32 = function(){
+    return (os.platform() == 'win32') ? true : false;
+};
 //Cahceless is also defined in the main config : Config::isCacheless().
 process.env.IS_CACHELESS = (env == "dev" || env == "debug") ? true : false;
 
@@ -335,7 +338,10 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
             abort('No bundle found for path: ' + path);
         } else {
             setContext('bundle', appName);
-            var bundleProcess = new Proc(appName, process);
+            //if ( !process.env.isWin32() ) {
+                var bundleProcess = new Proc(appName, process);
+                bundleProcess.register(appName, process.pid)
+            //}
             //what then ??
         }
 
@@ -464,15 +470,10 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
      * */
     gna.start = process.start = function(){
 
-        //Get bundle name.
-//        if (env == 'dev' || env == 'debug') {
-//            appName = p[p.length-2].split(".")[0];
-//        } else {
-//            //magic case...
-//            appName = p[p.length-2].split(".")[0];
-//        }
-        console.log('appName ', appName);
+
         var core    = gna.core;
+        //Get bundle name.
+        console.log('appName ', appName);
         core.startingApp = appName;
         core.executionPath =  root;
         core.geenaPath = geenaPath;
@@ -491,7 +492,8 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         //check here for mount point source...
         var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
         var tmpSource = _(bundlesPath +'/'+ core.startingApp);
-        console.log('fucking source ', tmpSource, project.packages[core.startingApp].release.target);
+// TODO - Remove this ...
+//        console.log('fucking source ', tmpSource, project.packages[core.startingApp].release.target);
 //        if ( fs.existsSync(tmpSource) && env == 'prod' || fs.existsSync(tmpSource) && env == 'stage' ) {
 //            try {
 //                var stats = fs.lstatSync(tmpSource);
