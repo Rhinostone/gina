@@ -14,6 +14,7 @@
  */
 var fs          = require('fs');
 var spawn       = require('child_process').spawn;
+var os          = require('os');
 var Winston     = require('winston');
 var logger      = require('../logger');
 var Proc        = require('../proc');
@@ -79,7 +80,6 @@ var AppCommand = {
             this.PID = new Proc('geena', process, false);
         }
         this.PID.setMaster();
-
 
         if (longCMD) {
             this.opt['argument'] = this.argv[4];
@@ -414,24 +414,21 @@ var AppCommand = {
                 //log("spawning ...", opt['argument']);
                 //console.log("command ", "node ",appPath, opt['argument'], JSON.stringify( getContext() ));
 
-                var params = [
-                    (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
-                    appPath,
-                    opt['argument']//,
-                    //JSON.stringify( getContext() )//Passing context to child.
-                ];
-                //console.log("found params ", params[0], params, opt);
-                if (!params[0]) params.splice(0,1);
-                //console.log("then new params ", params[0], params);
-
-
-                _this.prc = spawn('node', params,
-                {
-                    detached : true
-                });
-
-
-                //var bundleProcess = new Proc(_this.bundle, _this.prc);
+                _this.prc = spawn('node', [
+                        //"--debug-brk=5858",//what ever port you want.
+                        (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
+                        appPath,
+                        opt['argument']//,
+                        //JSON.stringify( getContext() )//Passing context to child.
+                    ],
+                    {
+                        detached : true
+                    }
+                );
+//                if ( os.platform() == 'win32' ) {
+//                    var bundleProcess = new Proc(_this.bundle, _this.prc);
+                    _this.PID.register(_this.bundle, _this.prc.pid);
+//                }
 
                 //On message.
                 _this.prc.stdout.setEncoding('utf8');//Set encoding.

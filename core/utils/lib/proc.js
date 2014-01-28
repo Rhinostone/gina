@@ -81,8 +81,10 @@ Proc = function(bundle, proc, usePidFile){
         //Create dir if needed.
         console.log("MKDIR  pathObj (pid:"+_this.proc.pid+") - ", _this.bundle);
         process.list = (process.list == undefined) ? {} : process.list;
-        _this.register(_this.bundle, _this.proc.pid);
+        process.pids = (process.pids == undefined) ? {} : process.pids;
 
+        _this.register(_this.bundle, _this.proc.pid);
+        console.log('registring ', _this.proc.pid);
         if (usePidFile) {
             pathObj.mkdir( function(err, path){
                 console.log('path created ('+path+') now saving PID ' +  bundle);
@@ -119,7 +121,14 @@ Proc = function(bundle, proc, usePidFile){
             // TODO - Send notification to admin or/and root to the Fatal Error Page.
 
             var root = getPath('root');
-            var version = process.getVersion(bundle);
+            try {
+                var version = process.getVersion(bundle);
+            } catch (err) {
+                var bundle = process.argv[3];
+                console.log("Bundle ", bundle," already running...");
+                dismiss(process.pid);
+            }
+
 
             var outPath = _(root + '/out.'+bundle+'.'+version+'.log');
             var errPath = _(root + '/out.'+bundle+'.'+version+'.log');
@@ -178,8 +187,9 @@ Proc = function(bundle, proc, usePidFile){
             });
 
             proc.on('SIGINT', function(code){
-                console.log("got exit code ", code);
+
                 if (code == undefined) var code = 0;
+                console.log("got exit code ", code, process.list);
                 proc.exit(code);//tigger exit event.
             });
 
@@ -191,10 +201,11 @@ Proc = function(bundle, proc, usePidFile){
                     //TODO - Have a delegate handler to allow the dev to do its stuff. Maybe it's already there if any dev can override.
                     console.log('Fix your shit...');
                 });
-
-                var bundle = _this.bundle;
+                console.log(err.stack);
+                var bundle = process.argv[3];
                 var pid = _this.getPidByBundleName(bundle);
-                var env =  this.argv[2] || 'prod';
+
+                var env =  process.env.NODE_ENV || 'prod';
                 //Wake up buddy !.
                 respawn(bundle, env, pid, function(err){
                     proc.exit(1);
@@ -208,10 +219,11 @@ Proc = function(bundle, proc, usePidFile){
                     code = 0;
                 }
 
-                var bundle = _this.bundle;
+                var bundle = process.argv[3];
+                console.log("@=>", _this.args);
                 var pid = _this.getPidByBundleName(bundle);
-                var env =  this.argv[2] || 'prod';
-
+                var env =  process.env.NODE_ENV || 'prod';
+                console.log('bundle ', bundle, ' vs ', pid, " => ", process.pid);
 
                 //console.log("got exit code ", "("+code+")", pid, " VS ", pid, " <=> geena: ", process.pid);
                 //code = code || 0;
@@ -225,9 +237,10 @@ Proc = function(bundle, proc, usePidFile){
             });
 
             proc.on('SIGHUP', function(code){
-                console.log("Hanging up !");
-                var bundle = this.argv[1];
-                var env =  this.argv[2] || 'prod';
+                console.log("Hanging up !", process.argv);
+
+                var bundle = process.argv[3];
+                var env =  process.env.NODE_ENV || 'prod';
                 var pid = _this.getPidByBundleName(bundle);
 
                 dismiss(pid);
@@ -302,15 +315,12 @@ Proc = function(bundle, proc, usePidFile){
     };
 
     this.getPidByBundleName = function(bundle){
-        var list = process.list;
-        var pid = null;
-        for (var b in list) {
-            if (list[b] == bundle) {
-                pid = b;
-                break;
-            }
-        }
-        return pid;
+        var list = process.pids;
+        console.log("list ", list, ':',  list[bundle]);
+        if ( typeof(list[bundle]) != "undefined")
+            return list[bundle]
+        else
+            return undefined
     };
 
     this.setMaster = function(bool){
@@ -325,6 +335,7 @@ Proc = function(bundle, proc, usePidFile){
         if ( bundle != 'geena' && _this.bundles.indexOf(bundle) == -1 ) {
             _this.bundles.push(bundle);
             process.list[pid] = bundle;
+            process.pids[bundle] = pid;
         }
     };
 
