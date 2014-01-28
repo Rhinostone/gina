@@ -32,24 +32,20 @@ die = function(){
 };
 module.exports = Helpers;
 
+
 /**
- * Get function arguments outside its context
- *
- * @return {array} result
- * */
-Object.defineProperty( Function.prototype, 'getArguments', {
+ * clone array
+ * @return {array} Return cloned array
+ **/
+Object.defineProperty( Array.prototype, 'clone', {
     writable:   false,
     enumerable: false,
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
-    value: function(){
-        var r =  new RegExp("\(([^\)]+)\)");
-        var found, i;
-        return ((found = this.toString().match(r)[0]),(i = found.indexOf('(')+1),(found).substring(i)).replace(/ /,'').split(/,/);
-    }
+    value: function(){ return this.slice(0) }
 });
 
-
+/***/
 Array.prototype.toString = function(){
     return this.join();
 };
