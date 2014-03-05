@@ -9,7 +9,6 @@ var PostInstall;
 
 //Imports
 var fs      = require("fs");
-//var util    = require("util");
 var utils   = require("./../core/utils");
 var os      = require("os");
 
@@ -27,11 +26,7 @@ PostInstall = function(){
     var init = function(){
         self.isWin32 = ( os.platform() == 'win32' ) ? true : false;
         self.path = _( __dirname.substring(0, (__dirname.length - "script".length)) );
-
-        if (self.isWin32)
-            createGeenaFileForWin32()
-        else
-            createGeenaFile()
+        createGeenaFileForPlatform();
 
         log("Geena's command line tool has been installed.");
     };
@@ -55,16 +50,21 @@ PostInstall = function(){
             utils.generator.createFileFromTemplate(source, target);
     };
 
-    var createGeenaFileForWin32 = function(){
+    var createGeenaFileForPlatform = function(){
         var name = require( _(self.path + 'package.json') ).name;
 
-        createGeenaFile('.' + name, function onFileCreated(err){
+        var filename = ( (self.isWin32) ? '.' : '' ) + name;
+
+        createGeenaFile(filename, function onFileCreated(err){
             if (err) console.error(err.stack);
 
-            var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
-            var source = _(self.path + 'core/template/command/geena.bat.tpl');
-            var target = _(appPath + name + '.bat');
-            utils.generator.createFileFromTemplate(source, target)
+            if (self.isWin32) {
+                var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
+                var source = _(self.path + 'core/template/command/geena.bat.tpl');
+                var target = _(appPath + name + '.bat');
+                utils.generator.createFileFromTemplate(source, target)
+            }
+
         })
     };
 
