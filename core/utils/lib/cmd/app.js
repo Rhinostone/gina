@@ -414,13 +414,21 @@ var AppCommand = {
                 //log("spawning ...", opt['argument']);
                 //console.log("command ", "node ",appPath, opt['argument'], JSON.stringify( getContext() ));
 
-                _this.prc = spawn('node', [
-                        //"--debug-brk=5858",//what ever port you want.
-                        (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
-                        appPath,
-                        opt['argument']//,
-                        //JSON.stringify( getContext() )//Passing context to child.
-                    ],
+                var params = [
+                    //"--debug-brk=5858",//what ever port you want.
+                    (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
+                    appPath,
+                    opt['argument']//,
+                    //JSON.stringify( getContext() )//Passing context to child.
+                ];
+
+                for (var i=0; i<params.length; ++i) {
+                    if (params[i] == '') {
+                        params.splice(i,1);
+                    }
+                }
+
+                _this.prc = spawn('node', params,
                     {
                         detached : true
                     }
@@ -435,6 +443,7 @@ var AppCommand = {
                 _this.prc.stdout.on('data', function(data){
                     if ( typeof(data) == "undefined" )
                         var data = "";
+
 
                     //Catching all console.log(..)
                     // TODO - Bind or prototype console.log => logger.trace(...) to have the same stack time/order
@@ -464,6 +473,7 @@ var AppCommand = {
                 //On error. Might be useless.
                 _this.prc.stderr.setEncoding('utf8');//Set encoding.
                 _this.prc.stderr.on('data', function(err){
+
                     logger.getPath('geena', function(pathErr, path){
                         if (!pathErr) {
                             var filename = _(path +'/'+ logger.getFilename('geena'));
