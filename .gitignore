@@ -1,0 +1,38 @@
+# Project
+/bundles
+
+# IDE
+.jshintrc
+.idea
+nbproject
+
+# Geena
+node_modules
+npm-debug.log
+releases
+bundles
+logs
+tmp
+cache
+src
+./src
+.gna
+*.log
+
+# SCM
+.svn
+.git
+
+# Desktop
+.DS_Store
+._.DS_Store
+desktop.ini
+
+# Capistrano
+Capfile
+/config
+
+# Misc
+/data
+/cgi-bin
+*.sock

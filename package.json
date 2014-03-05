@@ -1,0 +1,26 @@
+{
+  "name": "platform",
+  "version": "0.0.1",
+  "description": "AIKOS Platform",
+  "keywords" : [
+      "aikos",
+      "platform"
+  ],
+  "author": {
+    "name": "Rhinostone",
+    "email": "dev@rhinostone.com"
+  },
+  "dependencies": {
+      "tar"         : "0.1.18",
+      "amqplib"     : "0.1.0",
+      "geena"       : "0.0.8p7",
+      "geena.com"   : "",
+      "winston"     : "0.7.2"
+  },
+  "copyright": [
+    "Aikos"
+  ],
+  "engine": [
+    "node >=0.10.22"
+  ]
+}

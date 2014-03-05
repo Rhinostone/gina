@@ -1,0 +1,56 @@
+{
+    "use_https" : true,
+    "name" : "agent",
+    "middleware" : "express@3.4.0",
+    "npm" : true,
+    "packages" : {
+        "updater" : {
+            "comment" : "Updater bundle - Source path must be relative.",
+            "use_https" : false,
+            "version" : "v0.0.1",
+            "src" : "src/updater",
+            "repo" : {
+                "ssh" : "git@wgit.rhinostone.net:aikos/platform.updater.git",
+                "https" : "http://wgit.rhinostone.net:45980/aikos/platform.updater.git"
+            },
+            "release" : {
+                "version" : "v0.0.1",
+                "target" : "releases/updater/0.0.1",
+                "script" : "releases/updater/script/post_installation",
+                "link" : "bundles/updater"
+            }
+        },
+        "mobileAPI" : {
+            "comment" : "Mobile API bundle - Source path must be relative.",
+            "use_https" : false,
+            "version" : "0.0.1",
+            "src" : "src/mobileAPI",
+            "repo" : {
+                "ssh" : "git@wgit.rhinostone.net:aikos/plateform.mobileAPI.git",
+                "https" : "http://wgit.rhinostone.net:45980/aikos/plateform.mobileAPI.git"
+            },
+            "release" : {
+                "version" : "0.0.1",
+                "target" : "releases/mobileAPI/0.0.1",
+                "script" : "releases/mobileAPI/script/post_install",
+                "link" : "bundles/mobileAPI"
+            }
+        },
+        "shutdown" : {
+            "comment" : "shutdown bundle - Source path must be relative.",
+            "use_https" : true,
+            "version" : "v0.0.1",
+            "src" : "src/shutdown",
+            "repo" : {
+                "ssh" : "git@github.com:Rhinostone/geena.bundle.shutdown.git",
+                "https" : "https://github.com/Rhinostone/geena.bundle.shutdown.git"
+            },
+            "release" : {
+                "version" : "v0.0.1",
+                "target" : "releases/shutdown/0.0.1",
+                "script" : "releases/shutdown/0.0.1/script/post_install",
+                "link" : "bundles/shutdown"
+            }
+        }
+    }
+}
