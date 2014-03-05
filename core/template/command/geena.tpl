@@ -59,6 +59,7 @@ var begin = function(){
 
     var fs              = require("fs"),
         spawn           = require('child_process').spawn,
+        exec            = require('child_process').exec,
         allowed         = ["--clean", "-i","--install", "-u","--update", "-h", "--help"];
 
     //By default.
@@ -237,39 +238,46 @@ var begin = function(){
          * */
 
         clone : function(module, path, repo, tag, callback){
-            var cmd = spawn('git', [
-                'clone',
-                '-b',
-                tag,
-                repo,
-                path
-            ]);
+			var child = exec('git --version', function(error, stdout, stderr){
+				if (error) {
+					console.log('Git is required : ', stderr);
+					process.exit(-1);
+				} else {
+					var cmd = spawn('git', [
+						'clone',
+						'-b',
+						tag,
+						repo,
+						path
+					]);
 
-            cmd.stdout.setEncoding('utf8');
-            cmd.stdout.on('data', function(data){
-                var str = data.toString();
-                var lines = str.split(/(\r?\n)/g);
+					cmd.stdout.setEncoding('utf8');
+					cmd.stdout.on('data', function(data){
+						var str = data.toString();
+						var lines = str.split(/(\r?\n)/g);
 
-                console.log("clone... ", module);
-                console.log(lines.join(""));
-            });
+						console.log("clone... ", module);
+						console.log(lines.join(""));
+					});
 
-            cmd.stderr.on('data',function (err) {
-                var str = err.toString();
-                var lines = str.split(/(\r?\n)/g);
+					cmd.stderr.on('data',function (err) {
+						var str = err.toString();
+						var lines = str.split(/(\r?\n)/g);
 
-                console.error('[info] ');
-                console.error(str);
-            });
+						console.error('[info] ');
+						console.error(str);
+					});
 
-            cmd.on('close', function (code) {
-                if (!code) {
-                    console.log(module, ' submodule done with success');
-                    callback(false, module);
-                } else {
-                    callback('[error] '+ code);
-                }
-            });
+					cmd.on('close', function (code) {
+						if (!code) {
+							console.log(module, ' submodule done with success');
+							callback(false, module);
+						} else {
+							callback('[error] '+ code);
+						}
+					});
+				}
+			});
         },
 
         /**
@@ -341,120 +349,127 @@ var begin = function(){
          *
          * */
         pull : function(module, path, tag, callback){
-            if ( fs.existsSync(path) ) {
+			var child = exec('git --version', function(error, stdout, stderr){
+				if (error) {
+					console.log('Git is required : ', stderr);
+					process.exit(-1);
+				} else {
+					if ( fs.existsSync(path) ) {
 
-                tag = (typeof(tag) != "undefined" && tag != "") ? tag : "master";
+						tag = (typeof(tag) != "undefined" && tag != "") ? tag : "master";
 
-                //console.log("about to enter ", path);
-                process.chdir(path);//CD command like.
+						//console.log("about to enter ", path);
+						process.chdir(path);//CD command like.
 
-                var gitFetch = function(){
-                    var git = spawn('git', ['fetch']);
+						var gitFetch = function(){
+							var git = spawn('git', ['fetch']);
 
-                    git.stdout.setEncoding('utf8');
-                    git.stdout.on('data', function(data){
-                        var str = data.toString();
-                        var lines = str.split(/(\r?\n)/g);
-                        console.log(lines.join(""));
-                    });
+							git.stdout.setEncoding('utf8');
+							git.stdout.on('data', function(data){
+								var str = data.toString();
+								var lines = str.split(/(\r?\n)/g);
+								console.log(lines.join(""));
+							});
 
-                    git.stderr.on('data',function (err) {
-                        var str = err.toString();
-                        var lines = str.split(/(\r?\n)/g);
-                        console.log(lines.join(""));
-                    });
+							git.stderr.on('data',function (err) {
+								var str = err.toString();
+								var lines = str.split(/(\r?\n)/g);
+								console.log(lines.join(""));
+							});
 
-                    git.on('close', function (code) {
-                        if (!code) {
-                            console.log('Fetch command done.');
-                            //Trigger checkout command.
-                            gitCheckout();
+							git.on('close', function (code) {
+								if (!code) {
+									console.log('Fetch command done.');
+									//Trigger checkout command.
+									gitCheckout();
 
-                        } else {
-                            console.log('process exit with error code ' + code);
-                        }
-                    });
-                };
+								} else {
+									console.log('process exit with error code ' + code);
+								}
+							});
+						};
 
-                var gitCheckout = function(){
+						var gitCheckout = function(){
 
-                    var git = spawn('git', ['checkout', tag]);
+							var git = spawn('git', ['checkout', tag]);
 
-                    git.stdout.setEncoding('utf8');
-                    git.stdout.on('data', function(data){
-                        var str = data.toString();
-                        var lines = str.split(/(\r?\n)/g);
-                        console.log(lines.join(""));
-                    });
+							git.stdout.setEncoding('utf8');
+							git.stdout.on('data', function(data){
+								var str = data.toString();
+								var lines = str.split(/(\r?\n)/g);
+								console.log(lines.join(""));
+							});
 
-                    git.stderr.on('data',function (err) {
-                        var str = err.toString();
-                        var lines = str.split(/(\r?\n)/g);
+							git.stderr.on('data',function (err) {
+								var str = err.toString();
+								var lines = str.split(/(\r?\n)/g);
 
-                        if ( !str.match("Already on") ) {
-                            console.log(lines.join(""));
-                        }
+								if ( !str.match("Already on") ) {
+									console.log(lines.join(""));
+								}
 
-                    });
+							});
 
-                    git.on('close', function (code) {
-                        if (!code) {
-                            console.log('Checking out: ', "[" + module + "] " + tag);
-                            //Trigger pull command.
-                            gitPull();
+							git.on('close', function (code) {
+								if (!code) {
+									console.log('Checking out: ', "[" + module + "] " + tag);
+									//Trigger pull command.
+									gitPull();
 
-                        } else {
-                            console.log('process exit with error code ' + code);
-                        }
-                    });
-                };
+								} else {
+									console.log('process exit with error code ' + code);
+								}
+							});
+						};
 
 
-                var gitPull = function() {
-                    var git = spawn('git', ['pull', 'origin', tag]);
+						var gitPull = function() {
+							var git = spawn('git', ['pull', 'origin', tag]);
 
-                    git.stdout.setEncoding('utf8');
-                    git.stdout.on('data', function(data){
-                        var str = data.toString();
-                        var lines = str.split(/(\r?\n)/g);
-                        console.log(lines.join(""));
-                    });
+							git.stdout.setEncoding('utf8');
+							git.stdout.on('data', function(data){
+								var str = data.toString();
+								var lines = str.split(/(\r?\n)/g);
+								console.log(lines.join(""));
+							});
 
-                    git.stderr.on('data',function (err) {
-                        var str = err.toString();
-                        var lines = str.split(/(\r?\n)/g);
-                        if ( str.match("errno=Operation timed out") ) {
+							git.stderr.on('data',function (err) {
+								var str = err.toString();
+								var lines = str.split(/(\r?\n)/g);
+								if ( str.match("errno=Operation timed out") ) {
 
-                            console.log("\n[error] Could not connect to GitHub" +
-                                "\n 1) PLease check your firewall configuration and make sure Git ports are open" +
-                                "\n 2) Check if you are not behind a proxy");
+									console.log("\n[error] Could not connect to GitHub" +
+										"\n 1) PLease check your firewall configuration and make sure Git ports are open" +
+										"\n 2) Check if you are not behind a proxy");
 
-                            console.log(
-                                "If you are behind a proxy, you might have to contact your system administrator.");
+									console.log(
+										"If you are behind a proxy, you might have to contact your system administrator.");
 
-                            process.exit(1);
-                        } else {
-                            console.log(lines.join(""));
-                        }
-                    });
+									process.exit(1);
+								} else {
+									console.log(lines.join(""));
+								}
+							});
 
-                    git.on('close', function (code) {
-                        if (code) {
-                            console.log('process exit with error code ' + code);
-                            callback(false, module);
-                        } else {
-                            callback(true, module);
-                        }
-                    });
-                };
+							git.on('close', function (code) {
+								if (code) {
+									console.log('process exit with error code ' + code);
+									callback(false, module);
+								} else {
+									callback(true, module);
+								}
+							});
+						};
 
-                //Starting update.
-                gitFetch();
+						//Starting update.
+						gitFetch();
 
-            } else {
-                console.warn("[warn]: path not found ", path);
-                console.warn("Geena could not load ", module);
-            }
+					} else {
+						console.warn("[warn]: path not found ", path);
+						console.warn("Geena could not load ", module);
+					}
+				}
+			});
         },
         h : function(){ this.help();},
         help : function(){
