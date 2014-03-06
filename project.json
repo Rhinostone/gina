@@ -7,14 +7,14 @@
         "updater" : {
             "comment" : "Updater bundle - Source path must be relative.",
             "use_https" : false,
-            "version" : "v0.0.1",
+            "version" : "0.0.1",
             "src" : "src/updater",
             "repo" : {
                 "ssh" : "git@wgit.rhinostone.net:aikos/platform.updater.git",
                 "https" : "http://wgit.rhinostone.net:45980/aikos/platform.updater.git"
             },
             "release" : {
-                "version" : "v0.0.1",
+                "version" : "0.0.1",
                 "target" : "releases/updater/0.0.1",
                 "script" : "releases/updater/script/post_installation",
                 "link" : "bundles/updater"
