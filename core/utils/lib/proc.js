@@ -263,7 +263,11 @@ Proc = function(bundle, proc, usePidFile){
             var pid = _this.PID;
         }
         var path = _(_this.path + pid);
+        var bundleName = _this.getBundleNameByPid(pid);
         fs.unlinkSync(path);
+        if (bundleName != null) {
+            fs.unlinkSync(_(getPath('mountPath'))+'/'+bundleName);
+        }
         process.kill(pid, "SIGKILL");
     };
 
@@ -321,6 +325,18 @@ Proc = function(bundle, proc, usePidFile){
             return list[bundle]
         else
             return undefined
+    };
+
+    this.getBundleNameByPid = function(pid){
+        var list = process.pids;
+        var bundleName = null;
+        for (var index in list) {
+            if ( list[index] == pid ) {
+                bundleName = index;
+                break;
+            }
+        }
+        return bundleName;
     };
 
     this.setMaster = function(bool){
