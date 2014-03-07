@@ -374,11 +374,12 @@ var fs      = require('fs'),
                                     logger[msg.level](out);
                                     process.exit(1);
                                 } else {
-                                    logger[msg.level](out);
+                                    //logger[msg.level](out);
+                                    log(out);
                                 }
                             } catch(err) {
                                 //Check if level exists.
-                                callback('WEIRD CASE' + lg[i] + "\n" + err);//for the console print out.
+                                callback('WEIRD CASE' + lg[i] + "\n" + err.stack);//for the console print out.
                                 process.exit(1);
                             }
                         } else {

@@ -54,7 +54,6 @@ var AppCommand = {
         'cms',
         'app'
     ],
-
     /**
      * Run cmd
      *
@@ -64,50 +63,62 @@ var AppCommand = {
      * */
     run : function(options, message, longCMD){
 
-        //herited from gna.js.
+        //inherited from utils/index.
         var root = getPath('root');
-        this.argv = getContext('process.argv') || process.argv;
-
         this.options = options;
         this.msg = message;
-        this.opt['option'] = this.argv[2];
+        this.opt['option'] = process.argv[2];
 
-        if (this.argv[2] == '-s' || this.argv[2] == '--start') {
+        if (process.argv[2] == '-s' || process.argv[2] == '--start') {
+            //use registeredEnvs for this.....
+            var envFound = false;
+            var envs = ['dev', 'debug', 'stage', 'prod'];
+
+            if (envs.indexOf(process.argv[4]) > -1 ) {
+                envFound = true;
+            }
+
+            if (process.argv.length >= 5 && !envFound) {
+                this.env = 'prod';
+                process.argv.splice(4, 0, this.env);
+            }
+
             this.PID = new Proc('geena', process);
             //herited from gna.js.
-            this.bundle = this.argv[3].replace(/.js/, '');
+            this.bundle = process.argv[3].replace(/.js/, '');
+
         } else {
             this.PID = new Proc('geena', process, false);
         }
         this.PID.setMaster();
 
         if (longCMD) {
-            this.opt['argument'] = this.argv[4];
+            this.opt['argument'] = process.argv[4];
 
             if (this.opt['option'] == 'a' || this.opt['option'] == '-add') {
-                this.opt['type'] = this.argv[5];
+                this.opt['type'] = process.argv[5];
             }
         } else {
-            this.opt['argument'] =  this.argv[4];
+            this.opt['argument'] =  process.argv[4];
         }
 
         //Setting default env.
         if (this.opt['option'] != 's' && this.opt['option'] != '-start') {
-            if (typeof(this.argv[4]) != 'undefined') {
-                var env = this.argv[4];
+            if (typeof(process.argv[4]) != 'undefined') {
+                var env = process.argv[4];
                 this.opt['argument'] = env;
             } else {
                 var env = 'prod';
                 if (process.argv[4] != 'undefined') {
-                    this.argv[5] = this.argv[4]
+                    process.argv[5] = process.argv[4]
                 }
-                this.argv[4] = env;
+                process.argv[4] = env;
                 this.opt['argument'] = env;
             }
             this.env = env;
 
             if (process.argv[5] != undefined) {
-                var p = this.argv[5].split(/=/);
+                var p = process.argv[5].split(/=/);
                 this.opt[p[0]] = p[1];
             }
         }
@@ -345,10 +356,7 @@ var AppCommand = {
     remove : function(opt){
         log('deleting app now...', opt);
     },
-    //trash...
-//    kill : function(opt) {
-//        log('killing app now...', opt);
-//    },
+
     restart : function(opt){
         log('restarting app now...', opt);
     },
@@ -391,9 +399,8 @@ var AppCommand = {
                         });
 
                         logger.onMessage(data, function(msg){
-                            //Node exception.
-                            //logger.err(msg);
-                            loggerInstance.err(msg);
+                            //Node exception. Will lead to a log(msg)
+                            loggerInstance.err(msg)
                         });
                     }
                 });
@@ -418,9 +425,11 @@ var AppCommand = {
                     //"--debug-brk=5858",//what ever port you want.
                     (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
                     appPath,
-                    opt['argument']//,
-                    //JSON.stringify( getContext() )//Passing context to child.
+                    opt['argument'],
+                    JSON.stringify( getContext() )//Passing context to child.
                 ];
+
+
 
                 for (var i=0; i<params.length; ++i) {
                     if (params[i] == '') {
@@ -433,6 +442,7 @@ var AppCommand = {
                         detached : true
                     }
                 );
+
 //                if ( os.platform() == 'win32' ) {
 //                    var bundleProcess = new Proc(_this.bundle, _this.prc);
                     _this.PID.register(_this.bundle, _this.prc.pid);

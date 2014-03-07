@@ -603,6 +603,7 @@ Config  = function(opt){
                 "root"          : conf[bundle][env].executionPath,
                 "executionPath" : conf[bundle][env].executionPath,
                 "bundlesPath"   : conf[bundle][env].bundlesPath,
+                "mountPath"     : conf[bundle][env].mountPath,
                 "bundlePath"    : conf[bundle][env].bundlePath,
                 "modelsPath"    : conf[bundle][env].modelsPath,
                 "handlersPath"  : conf[bundle][env].handlersPath,
@@ -613,9 +614,9 @@ Config  = function(opt){
                 "bundle"        : bundle
             };
 
-
             files = whisper(reps, files);
             //console.error("bundles path ", conf[bundle][env].bundlesPath);
+
 
             conf[bundle][env].content   = files;
             conf[bundle][env].bundle    = bundle;

@@ -35,20 +35,28 @@ logger = utils.logger;
 // BO cooking..
 var startWithGeena = false;
 //copy & backup for utils/cmd/app.js.
-var tmp = JSON.stringify(process.argv);
-setContext('process.argv', JSON.parse(tmp) );
-tmp = null;
+var tmp = process.argv;
 
 // filter $ node.. o $ geena  with or without env
 if (process.argv.length >= 4) {
     startWithGeena = true;
+
     if (process.argv[1] == 'geena' || process.argv[1] == _(root + '/geena') ) {
+        //this test might be useless.
+        setContext('paths', JSON.parse(tmp[1]).paths);
         process.argv.splice(1, 1);
+        //And so on if you need to.
     } else {
-        process.argv.splice(1, 2);
+        setContext('paths', JSON.parse(tmp[3]).paths);//And so on if you need to.
+        //Cleaning process argv.
+        process.argv.splice(3);
     }
 }
-setPath('node', _(process.argv[0]) );
+tmp = null;
+
+setPath( 'node', _(process.argv[0]) );
+var root = getPath('root');
+/**
 var root = "";
 var getRoot = function(){
     var paths = _(__dirname).split('/');
@@ -64,7 +72,8 @@ var getRoot = function(){
 };
 
 var root = getRoot();
-setPath('root', root);
+setPath('root', root);*/
+
 gna.executionPath = root;
 
 var geenaPath = getPath('geena.core');
@@ -105,7 +114,8 @@ process.env.IS_CACHELESS = (env == "dev" || env == "debug") ? true : false;
 
 //console.log('ENV => ', env);
 //console.log('HOW  ', process.argv.length, process.argv);
-var bundlesPath = _(root + '/bundles');
+//var bundlesPath = _(root + '/bundles');
+var bundlesPath = getPath('mountPath');
 
 var p = new _(process.argv[1]).toUnixStyle().split("/");
 var isSym = false;
@@ -339,8 +349,8 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         } else {
             setContext('bundle', appName);
             //if ( !process.env.isWin32() ) {
-                var bundleProcess = new Proc(appName, process);
-                bundleProcess.register(appName, process.pid)
+            var bundleProcess = new Proc(appName, process);
+            bundleProcess.register(appName, process.pid)
             //}
             //what then ??
         }
@@ -450,6 +460,8 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 
     gna.getVersion = process.getVersion = function(bundle){
         var name = bundle || appName;
+        name = name.replace(/geena: /, '');
+
         if ( name != undefined) {
             try {
                 var str = fs.readFileSync( _(bundlesPath + '/' + bundle + '/config/app.json') ).toString();
@@ -485,28 +497,14 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 
         //Setting log paths.
         logger.init({
-            logs : _(core.executionPath + '/logs'),
+            //logs : _(core.executionPath + '/logs'),
+            logs : getPath('logsPath'),
             core: _(__dirname)
         });
         setContext('geena.utils.logger', logger);
         //check here for mount point source...
         var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
         var tmpSource = _(bundlesPath +'/'+ core.startingApp);
-// TODO - Remove this ...
-//        console.log('fucking source ', tmpSource, project.packages[core.startingApp].release.target);
-//        if ( fs.existsSync(tmpSource) && env == 'prod' || fs.existsSync(tmpSource) && env == 'stage' ) {
-//            try {
-//                var stats = fs.lstatSync(tmpSource);
-//                if ( stats.isSymbolicLink() ) {
-//                    source = _( fs.readlinkSync(tmpSource) );
-//                } else {
-//                    source = tmpSource;
-//                }
-//            } catch (err) {
-//                //silently...
-//                source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
-//            }
-//        }
 
         var linkPath =  _( root +'/'+ project.packages[core.startingApp].release.link );
 

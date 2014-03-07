@@ -72,6 +72,26 @@ utils.cmd.load = function(root, package){
 
     //Set geena path.
     setPath('geena.core', _(geenaPath +'/core'));
+
+    var defaultConf = require( _(geenaPath + '/core/template/conf/env.json') );
+    //mountPath
+    var bundlesPath = defaultConf['mountPath'];
+    bundlesPath = _(bundlesPath.replace('{executionPath}', root));
+
+    var tmpPath = defaultConf['tmpPath'];
+    tmpPath = _(tmpPath.replace('{executionPath}', root));
+
+    var logsPath = defaultConf['logsPath'];
+    logsPath = _(logsPath .replace('{executionPath}', root));
+
+    //To make it globally accessible when you are in the geena process.
+    var globalPaths = {
+        "logsPath"      : logsPath,
+        "tmpPath"       : tmpPath,
+        "mountPath"     : bundlesPath
+    };
+
+    setPath(globalPaths);
     utils.cmd.onExec();
 };
 
