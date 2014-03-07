@@ -1010,17 +1010,29 @@ PathHelper = function(){
      * */
     setPath = function(name, path){
 
-        if ( typeof(_this.userPaths) == "undefined" || typeof(_this.userPaths[name]) == "undefined" )  {
-            _this.userPaths[name] = _(path);
-            //PathHelper.userPaths = _this.userPaths;
-            //console.log("what is this ", Helpers, " VS ", _this.userPaths);
+        if ( typeof(name) == 'object') {
             var paths = getContext('paths');
-            logger.info("geena", "INFO:42", " 1) got config paths " +  paths+ " VS "+ _this.userPaths, __stack);
-
-            extend(true, paths, _this.userPaths);
-            //console.log("what is this ", paths);
+            for (var n in name) {
+                _this.userPaths[n] = _(name[n]);
+                extend(true, paths, _this.userPaths)
+            }
             setContext("paths", paths);
+
+        } else {
+            if ( typeof(_this.userPaths) == "undefined" || typeof(_this.userPaths[name]) == "undefined" )  {
+                _this.userPaths[name] = _(path);
+                //PathHelper.userPaths = _this.userPaths;
+                //console.log("what is this ", Helpers, " VS ", _this.userPaths);
+                var paths = getContext('paths');
+                logger.info("geena", "INFO:42", " 1) got config paths " +  paths+ " VS "+ _this.userPaths, __stack);
+
+                extend(true, paths, _this.userPaths);
+                //console.log("what is this ", paths);
+                setContext("paths", paths);
+            }
         }
+
+
     };
 
     /**
@@ -1040,7 +1052,8 @@ PathHelper = function(){
     };
 
     getPaths = function(){
-        return 'paths: ' + JSON.stringify(_this.paths, null, 4);
+        //return 'paths: ' + JSON.stringify(_this.paths, null, 4);
+        return getContext("paths")
     };
 
 
