@@ -78,8 +78,9 @@ utils.cmd.load = function(root, package){
     var bundlesPath = defaultConf['mountPath'];
     bundlesPath = _(bundlesPath.replace('{executionPath}', root));
 
-    var tmpPath = defaultConf['tmpPath'];
-    tmpPath = _(tmpPath.replace('{executionPath}', root));
+    //Set path for the global tmp repertory.
+    var gTmpPath = defaultConf['globalTmpPath'];
+    gTmpPath = _(gTmpPath.replace('{executionPath}', root));
 
     var logsPath = defaultConf['logsPath'];
     logsPath = _(logsPath .replace('{executionPath}', root));
@@ -87,7 +88,7 @@ utils.cmd.load = function(root, package){
     //To make it globally accessible when you are in the geena process.
     var globalPaths = {
         "logsPath"      : logsPath,
-        "tmpPath"       : tmpPath,
+        "globalTmpPath"       : gTmpPath,
         "mountPath"     : bundlesPath
     };
 

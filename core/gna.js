@@ -445,8 +445,10 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
     gna.getRunningBundlesSync = process.getRunningBundlesSync = function(){
 
         //TODO - Do that thru IPC or thru socket.
-        var conf = gna.getConfig();
-        var pidPath = _(conf.tmpPath +'/pid');
+        //Old lines who get Bundle Tmp path and not Project Tmp path.
+        //var conf = gna.getConfig();
+        //var pidPath = _(conf.tmpPath +'/pid');
+        var pidPath = _(getPath('globalTmpPath') +'/pid');
         var files = fs.readdirSync(pidPath);
         var content = [];
         for (var f=0; f<files.length; ++f) {
