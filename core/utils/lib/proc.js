@@ -259,11 +259,15 @@ Proc = function(bundle, proc, usePidFile){
 
 
     var dismiss = function(pid){
+        var bundleName = _this.getBundleNameByPid(pid);
         if (pid == undefined) {
             var pid = _this.PID;
         }
         var path = _(_this.path + pid);
         fs.unlinkSync(path);
+        if (bundleName != null) {
+            fs.unlinkSync( _(getPath('mountPath') + '/' + bundleName) );
+        }
         process.kill(pid, "SIGKILL");
     };
 
@@ -312,6 +316,20 @@ Proc = function(bundle, proc, usePidFile){
             );
             return null;
         }
+    };
+
+    this.getBundleNameByPid = function(Pid){
+        var list = process.pids;
+        var bundleName = null;
+        console.log("list ", list, ':',  list[bundle]);
+        for (var index in list) {
+            if (list[index] == Pid) {
+                bundleName = index;
+                break;
+            }
+        }
+
+        return bundleName;
     };
 
     this.getPidByBundleName = function(bundle){
