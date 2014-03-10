@@ -259,14 +259,14 @@ Proc = function(bundle, proc, usePidFile){
 
 
     var dismiss = function(pid){
-        var bundleName = _this.getBundleNameByPid(pid);
         if (pid == undefined) {
             var pid = _this.PID;
         }
-        var path = _(_this.path + pid);
         var bundleName = _this.getBundleNameByPid(pid);
+        var path = _(_this.path + pid);
+
         fs.unlinkSync(path);
-        if (bundleName != null) {
+        if (bundleName != undefined) {
             fs.unlinkSync( _(getPath('mountPath') + '/' + bundleName) );
         }
         process.kill(pid, "SIGKILL");
@@ -319,18 +319,13 @@ Proc = function(bundle, proc, usePidFile){
         }
     };
 
-    this.getBundleNameByPid = function(Pid){
-        var list = process.pids;
-        var bundleName = null;
-        console.log("list ", list, ':',  list[bundle]);
-        for (var index in list) {
-            if (list[index] == Pid) {
-                bundleName = index;
-                break;
-            }
-        }
-
-        return bundleName;
+    this.getBundleNameByPid = function(pid){
+        var list = process.list;
+        console.log("list ", list, ':',  list[pid]);
+        if ( typeof(list[pid]) != "undefined")
+            return list[pid]
+        else
+            return undefined
     };
 
     this.getPidByBundleName = function(bundle){
@@ -340,18 +335,6 @@ Proc = function(bundle, proc, usePidFile){
             return list[bundle]
         else
             return undefined
-    };
-
-    this.getBundleNameByPid = function(pid){
-        var list = process.pids;
-        var bundleName = null;
-        for (var index in list) {
-            if ( list[index] == pid ) {
-                bundleName = index;
-                break;
-            }
-        }
-        return bundleName;
     };
 
     this.setMaster = function(bool){
