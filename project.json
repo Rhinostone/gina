@@ -51,6 +51,21 @@
                 "script" : "releases/shutdown/0.0.1/script/post_install",
                 "link" : "bundles/shutdown"
             }
+        },
+        "updateCenter" : {
+            "use_https" : false,
+            "version" : "0.0.1",
+            "src" : "src/updateCenter",
+            "repo" : {
+                "ssh" : "git@wgit.rhinostone.net:HEAV/updatecenter.git",
+                "https" : "http://wgit.rhinostone.net:45980/HEAV/updatecenter.git"
+            },
+            "release" : {
+                "version" : "0.0.1",
+                "target" : "releases/updateCenter/0.0.1",
+                "script" : "releases/updateCenter/script/post_installation",
+                "link" : "bundles/updater"
+            }
         }
     }
 }
