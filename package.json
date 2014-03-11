@@ -13,6 +13,7 @@
   "dependencies": {
       "tar"         : "0.1.18",
       "amqplib"     : "0.1.0",
+      "geena"       : "0.0.8p7",
       "geena.com"   : "",
       "winston"     : "0.7.2"
   },
