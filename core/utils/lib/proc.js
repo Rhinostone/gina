@@ -264,11 +264,16 @@ Proc = function(bundle, proc, usePidFile){
         }
         var bundleName = _this.getBundleNameByPid(pid);
         var path = _(_this.path + pid);
-
-        fs.unlinkSync(path);
-        if (bundleName != undefined) {
-            fs.unlinkSync( _(getPath('mountPath') + '/' + bundleName) );
+        try {
+            fs.unlinkSync(path);
+            if (bundleName != undefined) {
+                fs.unlinkSync( _(getPath('mountPath') + '/' + bundleName) );
+            }
+        } catch (err) {
+            console.log('Final : ', err.stack)
+            //Means that it does not exists anymore.
         }
+
         process.kill(pid, "SIGKILL");
     };
 
