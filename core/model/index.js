@@ -130,15 +130,11 @@ Model = function(namespace){
     };
 
     this.connect = function(Connector, callback){
-        try {
-            var connector = new Connector( _this.getConfig(_connector) );
-            connector.onReady( function(err, conn){
-                callback(err, conn);
-            })
-        } catch (err){
-            console.error(err.stack);
-            callback(err)
-        }
+
+        var connector = new Connector( _this.getConfig(_connector) );
+        connector.onReady( function(err, conn){
+            callback(err, conn);
+        })
     };
 
     /**
