@@ -80,7 +80,8 @@ Proc = function(bundle, proc, usePidFile){
 //        console.log("about to create PID file under ", path, "["+bundle+"]");
         //Create dir if needed.
         console.log("MKDIR  pathObj (pid:"+_this.proc.pid+") - ", _this.bundle);
-        process.list = (process.list == undefined) ? {} : process.list;
+
+        process.list = (process.list == undefined) ? [] : process.list;
         process.pids = (process.pids == undefined) ? {} : process.pids;
 
         _this.register(_this.bundle, _this.proc.pid);
@@ -326,11 +327,13 @@ Proc = function(bundle, proc, usePidFile){
 
     this.getBundleNameByPid = function(pid){
         var list = process.list;
-        console.log("list ", list, ':',  list[pid]);
-        if ( typeof(list[pid]) != "undefined")
-            return list[pid]
-        else
-            return undefined
+
+        for (var i=0; i<list.length; ++i) {
+            console.log("list ", list, ':',  list[i][pid]);
+            if ( typeof(list[i][pid]) != "undefined")
+                return list[i][pid]
+        }
+        return undefined
     };
 
     this.getPidByBundleName = function(bundle){
@@ -351,10 +354,17 @@ Proc = function(bundle, proc, usePidFile){
     };
 
     this.register = function(bundle, pid) {
-        if ( bundle != 'geena' && _this.bundles.indexOf(bundle) == -1 ) {
-            _this.bundles.push(bundle);
-            process.list[pid] = bundle;
+        if ( bundle == 'geena' || bundle != 'geena' && _this.bundles.indexOf(bundle) == -1 ) {
+            if (bundle != 'geena') {
+                _this.bundles.push(bundle);
+            }
+
+            var list = {};
+            list[pid] = bundle;
+            process.list.push(list);//Running bundles.
             process.pids[bundle] = pid;
+
+            list = null;
         }
     };
 

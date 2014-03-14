@@ -90,7 +90,7 @@ var AppCommand = {
         } else {
             this.PID = new Proc('geena', process, false);
         }
-        this.PID.setMaster();
+        this.PID.setMaster(process.pid);
 
         if (longCMD) {
             this.opt['argument'] = process.argv[4];
@@ -420,7 +420,8 @@ var AppCommand = {
                 //console.log("spawning ...", opt, "\n VS \n");
                 //log("spawning ...", opt['argument']);
                 //console.log("command ", "node ",appPath, opt['argument'], JSON.stringify( getContext() ));
-
+                process.list = (process.list == undefined) ? [] : process.list;
+                setContext('processList', process.list);
                 var params = [
                     //"--debug-brk=5858",//what ever port you want.
                     (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',

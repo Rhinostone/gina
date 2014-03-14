@@ -44,10 +44,12 @@ if (process.argv.length >= 4) {
     if (process.argv[1] == 'geena' || process.argv[1] == _(root + '/geena') ) {
         //this test might be useless.
         setContext('paths', JSON.parse(tmp[1]).paths);
+        setContext('processList', JSON.parse(tmp[1]).processList);
         process.argv.splice(1, 1);
         //And so on if you need to.
     } else {
         setContext('paths', JSON.parse(tmp[3]).paths);//And so on if you need to.
+        setContext('processList', JSON.parse(tmp[3]).processList);
         //Cleaning process argv.
         process.argv.splice(3);
     }
@@ -349,6 +351,9 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         } else {
             setContext('bundle', appName);
             //if ( !process.env.isWin32() ) {
+            //to remove after merging geena processes into a single process.
+            var processList = getContext('processList');
+            process.list = processList;
             var bundleProcess = new Proc(appName, process);
             bundleProcess.register(appName, process.pid)
             //}
@@ -444,18 +449,20 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 
     gna.getRunningBundlesSync = process.getRunningBundlesSync = function(){
 
-        //TODO - Do that thru IPC or thru socket.
+        //TODO - Do that thru IPC or thru socket. ???
         //Old lines who get Bundle Tmp path and not Project Tmp path.
-        //var conf = gna.getConfig();
-        //var pidPath = _(conf.tmpPath +'/pid');
+
         var pidPath = _(getPath('globalTmpPath') +'/pid');
-        var files = fs.readdirSync(pidPath);
-        var content = [];
-        for (var f=0; f<files.length; ++f) {
-            content[f] = {};
-            content[f]['pid']  = files[f];
-            content[f]['name'] = fs.readFileSync( _(pidPath +'/'+ files[f]) ).toString();
-            content[f]['path'] = _(pidPath +'/'+ files[f]);
+        var list = process.list;
+        var content = [], e=0;
+        for (var i=list.length-1; i>=0; --i) {
+            for (var pid in list[i]) {
+                content[e] = {};
+                content[e]['pid']  = pid;
+                content[e]['name'] = list[i][pid];
+                content[e]['path'] = _(pidPath +'/'+ pid);
+                ++e;
+            }
         }
         return content;
     };
