@@ -4,6 +4,13 @@
     "middleware" : "express@3.4.0",
     "npm" : true,
     "packages" : {
+        "geena" : {
+            "version" : "008p7",
+            "src" : "node_modules/geena",
+            "repo" : {
+                "https" : "https://github.com/Rhinostone/geena.git"
+            }
+        },
         "updater" : {
             "comment" : "Updater bundle - Source path must be relative.",
             "use_https" : false,
