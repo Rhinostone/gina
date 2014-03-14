@@ -5,6 +5,7 @@
 .jshintrc
 .idea
 nbproject
+.metadata
 
 # Geena
 node_modules
