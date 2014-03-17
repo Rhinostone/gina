@@ -276,7 +276,12 @@ Model = function(namespace){
     return {
         onReady : function(callback){
             _this.on('ready', function(err, entities){
-                console.log("found entities ", entities);
+                //entities == null when the database server isn't start.
+                if ( typeof(entities) == 'undefined' ){
+                    console.log("No entities found, check if the database is started");
+                } else {
+                    console.log("found entities ", entities);
+                }
                 callback(err, entities );
             });
             init(namespace)
