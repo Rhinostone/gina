@@ -16,14 +16,19 @@
  * @api         Public
  */
 
-var Entity = function(configuration){
+var Entity = function(configuration, conn){
 
     var _this = this;
+    _this.conn = conn;
 
     this.getConfig = function(){
         console.log("{Entity}Entity super ON !", configuration);
         return configuration;
     };
+
+//    this.setConnection = function(conn){
+//        _this.conn = conn
+//    };
 
     this.getConnection = function(){
         return ( typeof(_this.conn) != 'undefined' ) ? _this.conn : null;

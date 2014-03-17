@@ -219,18 +219,19 @@ Model = function(namespace){
                         delete require.cache[_(filename, true)];
 
                     var ModelEntityClass = require(filename);
-                    var modelEntity = new ModelEntityClass( _this.getConfig(_connector) );
-                    if ( conn != undefined ) {
-                        modelEntity.conn = conn;
-                    }
+                    var modelEntity = new ModelEntityClass( _this.getConfig(_connector), conn );
 
                     if (process.env.IS_CACHELESS)
                         delete require.cache[_(entitiesPath + '/' + files[i], true)];
 
                     var EntityClass = require( _(entitiesPath + '/' + files[i]) );
-                    //EntityClass.getConfig = _this.getConfig;
 
-                    var entity = new EntityClass( _this.getConfig(_connector) );
+//                  var entity = new EntityClass(conn);
+                    var entity = new EntityClass();
+//                    if ( conn != undefined ) {
+//                        entity.conn = conn;
+//                    }
+
                     //Inherits.
                     utils.extend(true, entity, modelEntity );
                     //Overriding.
