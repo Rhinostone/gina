@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+
+/*
+ * This file is part of the geena package.
+ * Copyright (c) ${year} Rhinostone <geena@rhinostone.com>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+var fs  = require('fs');
+var net = require('net');
+
+
+//check for $HOME path, alert if empty
+var home = getUserHome();
+if (!home) {
+    console.error('No ' + ((process.platform == 'win32') ? 'USERPROFILE' : 'HOME') + ' path found.' )
+} else {
+    home = home + '/.geena'
+}
+
+var settings = home + '/settings.json';
+var frameworkConfig = home + '/framework/project.json';
+var executionPath = process.cwd();
+var binPath = __dirname;
+var geenaPath = (binPath.replace(/\\/g, '/')).replace('/bin', '');
+geenaPath = (process.platform == 'win32') ? geenaPath.replace(/\//g, '\\') : geenaPath;
+var pack = geenaPath + '/package.json';
+pack =  (process.platform == 'win32') ? pack.replace(/\//g, '\\') : pack;
+/**
+ * Checking settings
+ * */
+try {
+    settings = require(settings)
+} catch (err) {
+    console.log('geena: could not find ~/.geena/settings.json');
+    process.exit(1)
+}
+
+try {
+    pack = require(pack)
+} catch (err) {
+    console.log('geena: could not find "' + pack + '"');
+    process.exit(1)
+}
+
+
+
+console.log('context path is: ', executionPath );
+var port = 8124;
+if (
+    typeof(process.argv[2]) != 'undefined' && process.argv[2] == "start"
+    || typeof(process.argv[2]) != 'undefined' && process.argv[2] == "framework:start"
+) {
+    //Start framework & pass service options.
+    require(binPath + '/geena-cmd')({
+        binPath : binPath,
+        frameworkConfig : frameworkConfig,
+        geenaPath : geenaPath,
+        home : home,
+        port: port,
+        settings : settings,
+        pack : pack
+    })
+} else {
+    var version = pack.version;
+    var frameworkPath = geenaPath + '/node_modules/geena.framework/' + version;
+
+    require(frameworkPath + '/node_modules/colors');
+
+    //Connect to framework.
+    var client = net.connect({port: port},
+        function() { //'connect' listener
+            //console.log('client connected');
+            //Forwarding cmd.
+            client.write( JSON.stringify(process.argv) )
+            //client.write('world!\r\n')
+        }
+    );
+    client.on('data', function(data) {
+        //Acknowledging ready state.
+        //console.log(data.toString());
+        console.log(data.toString().rainbow);
+        client.end()
+    });
+
+    //client end event.
+    client.on('end', function() {
+        //console.log('geena: client disconnected')
+    });
+
+    client.on('error', function(err) {
+        console.log('Please, try to start framework with:\n$ geena start\n or\n$ geena framework:start')
+    })
+}
+
+
+/**
+var args = process.argv ;
+var node = args.shift(); // node
+var file = args.shift(); // this file
+
+var join = require('path').join;
+var sprintf = require('util').format;
+var cp = require('child_process');
+var executable = join(__dirname, sprintf('geena-%s', process.argv.shift()));
+
+args.unshift(node);
+args.unshift(file);
+
+require(executable);
+
+*/
+
+//check for .geena folder, and create if empty
+//if ( !fs.existsSync(home) ) {
+//    try {
+//
+//    } catch (err) {
+//        console.error('Could not create .geena folder '+ '\n' + err.stack);
+//    }
+//}
+
+//get execution path
+
+//forward command to cmd service
+
+function getUserHome() {
+    return process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME']
+}
