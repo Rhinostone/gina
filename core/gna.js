@@ -453,17 +453,25 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         //Old lines who get Bundle Tmp path and not Project Tmp path.
 
         var pidPath = _(getPath('globalTmpPath') +'/pid');
-        var list = process.list;
-        var content = [], e=0;
-        for (var i=list.length-1; i>=0; --i) {
-            for (var pid in list[i]) {
-                content[e] = {};
-                content[e]['pid']  = pid;
-                content[e]['name'] = list[i][pid];
-                content[e]['path'] = _(pidPath +'/'+ pid);
-                ++e;
-            }
+        var files = fs.readdirSync(pidPath);
+
+        for (var f=0; f<files.length; ++f) {
+            content[f] = {};
+            content[f]['pid']  = files[f];
+            content[f]['name'] = fs.readFileSync( _(pidPath +'/'+ files[f]) ).toString();
+            content[f]['path'] = _(pidPath +'/'+ files[f]);
         }
+//        var list = process.list;
+//        var content = [], e=0;
+//        for (var i=list.length-1; i>=0; --i) {
+//            for (var pid in list[i]) {
+//                content[e] = {};
+//                content[e]['pid']  = pid;
+//                content[e]['name'] = list[i][pid];
+//                content[e]['path'] = _(pidPath +'/'+ pid);
+//                ++e;
+//            }
+//        }
         return content;
     };
 
