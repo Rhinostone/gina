@@ -55,7 +55,7 @@ var begin = function(){
     var arg             = process.argv[2];
     //Config file for submodules.
     var modulesPackage  = './project.json';
-    var npmPackage = './package.json';
+    var npmPackage      = './package.json';
 
     var fs              = require("fs"),
         spawn           = require('child_process').spawn,
@@ -82,11 +82,11 @@ var begin = function(){
     };
 
     var hasPackage = function(path){
-        if (fs.existsSync(path + '/package.json')) {
+        if ( fs.existsSync(path + '/package.json') ) {
             var content = require(path + '/package.json');
-            return content;
+            return content
         } else {
-            return false;
+            return false
         }
     };
 
@@ -116,9 +116,9 @@ var begin = function(){
                     submodules[m].src =  ( submodules[m].src.substring(0,1) != '\/') ?
                                             '/' + submodules[m].src
                                             : submodules[m].src;
-                    var path = this.dir + submodules[m].src;
+                    var path = this.dir + submodules[m].src
                 } else {
-                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/')
                 }
 
             } else {
@@ -131,9 +131,9 @@ var begin = function(){
                 var m = list.shift();
                 //var path = _this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
                 if ( typeof(submodules[m]['src']) != 'undefined' && submodules[m]['src'] != "" ) {
-                    var path = this.dir + submodules[m].src;
+                    var path = this.dir + submodules[m].src
                 } else {
-                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/')
                 }
 
                 //Get dependencies.
@@ -141,16 +141,16 @@ var begin = function(){
                     for (var d in submodules[m]['dependencies']) {
                         //console.log("m ", m, "=> ", submodules[m]['dependencies'][d]);
                         submodules[d] = submodules[m]['dependencies'][d];
-                        list.push(d);
+                        list.push(d)
                     }
                 }
             }
 
 
             if ( typeof(submodules[m]['version']) != 'undefined' && submodules[m]['version'] != "" ) {
-                var tag = submodules[m].version;
+                var tag = submodules[m].version
             } else {
-                var tag = 'master';
+                var tag = 'master'
             }
 
             if (
@@ -158,11 +158,11 @@ var begin = function(){
                     || typeof(submodules[m]['use_https']) != 'undefined' && submodules[m]['use_https'] == 'true'
                     || this.useHttps && typeof(submodules[m]['use_https']) == "undefined"
                 ){
-                var repo = submodules[m].repo.https;
                 //console.log("Using HTTPS mode for " + m);
+                var repo = submodules[m].repo.https
             } else {
-                var repo = submodules[m].repo.ssh;
                 //console.log("Using SSH mode for " + m);
+                var repo = submodules[m].repo.ssh
             }
 
             try {
@@ -174,18 +174,18 @@ var begin = function(){
 
                         if (submodules[m]['release']['target']['link'] != undefined) {
                             if (list.length > 0) {
-                                _this.install(list);
+                                _this.install(list)
                             }
                         } else if (list.length > 0) {
-                            _this.install(list);
+                            _this.install(list)
                         }
                     });
                 } else if ( fs.existsSync(path) && fs.readdirSync(path).length > 0) {
                     console.warn("Submodule ["+ m +"] already installed. Won't override.");
                     if (list.length > 0) {
-                        _this.install(list);
+                        _this.install(list)
                     } else {
-                        this.end();
+                        this.end()
                     }
                 } else {
                     console.info(
@@ -199,7 +199,7 @@ var begin = function(){
                     _this.clone( m, path, repo, tag, function(err, module){
                         if (err) {
                             console.error(err, "this.clone( m, path, repo, tag, callback){...}");
-                            process.exit(1);
+                            process.exit(1)
                         }
 
                         //Unpack if bundle.
@@ -215,23 +215,23 @@ var begin = function(){
                                 if (submodules[m]['release']['target']['link'] != undefined) {
                                     //console.log(" => ",  submodules[m]['release'].link);
                                     if (list.length > 0) {
-                                        _this.install(list);
+                                        _this.install(list)
                                     }
                                 } else if (list.length > 0) {
-                                    _this.install(list);
+                                    _this.install(list)
                                 }
-                            });
+                            })
                         } else if (list.length > 0) {//Get next task in list.
-                            _this.install(list);
+                            _this.install(list)
                         } else {
-                            _this.end();
+                            _this.end()
                         }
 
 
                     });
                 }
             } catch (err) {
-                console.error(err, "this.clone() call");
+                console.error(err, "this.clone() call")
             }
 
 
@@ -250,7 +250,7 @@ var begin = function(){
             var child = exec('git --version', function(error, stdout, stderr){
                 if (error) {
                     console.log('Git is required : ', stderr);
-                    process.exit(-1);
+                    process.exit(-1)
                 } else {
                     var cmd = spawn('git', [
                         'clone',
@@ -266,7 +266,7 @@ var begin = function(){
                         var lines = str.split(/(\r?\n)/g);
 
                         console.log("clone... ", module);
-                        console.log(lines.join(""));
+                        console.log(lines.join(""))
                     });
 
                     cmd.stderr.on('data',function (err) {
@@ -274,7 +274,7 @@ var begin = function(){
                         var lines = str.split(/(\r?\n)/g);
 
                         console.error('[info] ');
-                        console.error(str);
+                        console.error(str)
                     });
 
                     cmd.on('close', function (code) {
@@ -299,7 +299,7 @@ var begin = function(){
                                     var lines = str.split(/(\r?\n)/g);
 
                                     console.log("running post install script... ", module);
-                                    console.log(lines.join(""));
+                                    console.log(lines.join(""))
                                 });
 
                                 cmd.stderr.on('data',function (err) {
@@ -307,24 +307,24 @@ var begin = function(){
                                     var lines = str.split(/(\r?\n)/g);
 
                                     console.error('[info] ');
-                                    console.error(str);
+                                    console.error(str)
                                 });
 
                                 cmd.on('close', function (code) {
                                     process.chdir(tmpCWD);
-                                    callback(false, module);
-                                });
+                                    callback(false, module)
+                                })
 
                             } else {
-                                callback(false, module);
+                                callback(false, module)
                             }
                         } else {
-                            callback('[error] '+ code);
+                            callback('[error] '+ code)
                         }
-                    });
+                    })
 
                 }
-            });
+            })
         },
 
         /**
@@ -347,9 +347,9 @@ var begin = function(){
                     submodules[m].src =  ( submodules[m].src.substring(0,1) != '\/') ?
                         '/' + submodules[m].src
                         : submodules[m].src;
-                    var path = this.dir + submodules[m].src;
+                    var path = this.dir + submodules[m].src
                 } else {
-                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/')
                 }
             } else {
                 //First case.
@@ -365,7 +365,7 @@ var begin = function(){
                     for (var d in submodules[m]['dependencies']) {
                         //console.log("m ", m, "=> ", submodules[m]['dependencies'][d]);
                         submodules[d] = submodules[m]['dependencies'][d];
-                        list.push(d);
+                        list.push(d)
                     }
                 }
 
@@ -376,20 +376,20 @@ var begin = function(){
                     submodules[m].src =  ( submodules[m].src.substring(0,1) != '\/') ?
                         '/' + submodules[m].src
                         : submodules[m].src;
-                    var path = this.dir + submodules[m].src;
+                    var path = this.dir + submodules[m].src
                 } else {
-                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/');
+                    var path = this.dir + '/node_modules/' + m.replace(/\//g, '/node_modules/')
                 }
             }
 
             _this.pull(m, path, tag, function(done, module){
                 //Get next task in list.
                 if (list.length > 0) {
-                    _this.update(list);
+                    _this.update(list)
                 } else {
-                    this.end('update');
+                    this.end('update')
                 }
-            });
+            })
         },
         /**
          * Pull command
@@ -399,7 +399,7 @@ var begin = function(){
             var child = exec('git --version', function(error, stdout, stderr){
                 if (error) {
                     console.log('Git is required : ', stderr);
-                    process.exit(-1);
+                    process.exit(-1)
                 } else {
                     if ( fs.existsSync(path) ) {
 
@@ -415,25 +415,25 @@ var begin = function(){
                             git.stdout.on('data', function(data){
                                 var str = data.toString();
                                 var lines = str.split(/(\r?\n)/g);
-                                console.log(lines.join(""));
+                                console.log(lines.join(""))
                             });
 
                             git.stderr.on('data',function (err) {
                                 var str = err.toString();
                                 var lines = str.split(/(\r?\n)/g);
-                                console.log(lines.join(""));
+                                console.log(lines.join(""))
                             });
 
                             git.on('close', function (code) {
                                 if (!code) {
                                     console.log('Fetch command done.');
                                     //Trigger checkout command.
-                                    gitCheckout();
+                                    gitCheckout()
 
                                 } else {
-                                    console.log('process exit with error code ' + code);
+                                    console.log('process exit with error code ' + code)
                                 }
-                            });
+                            })
                         };
 
                         var gitCheckout = function(){
@@ -444,7 +444,7 @@ var begin = function(){
                             git.stdout.on('data', function(data){
                                 var str = data.toString();
                                 var lines = str.split(/(\r?\n)/g);
-                                console.log(lines.join(""));
+                                console.log(lines.join(""))
                             });
 
                             git.stderr.on('data',function (err) {
@@ -452,21 +452,20 @@ var begin = function(){
                                 var lines = str.split(/(\r?\n)/g);
 
                                 if ( !str.match("Already on") ) {
-                                    console.log(lines.join(""));
+                                    console.log(lines.join(""))
                                 }
-
                             });
 
                             git.on('close', function (code) {
                                 if (!code) {
                                     console.log('Checking out: ', "[" + module + "] " + tag);
                                     //Trigger pull command.
-                                    gitPull();
+                                    gitPull()
 
                                 } else {
-                                    console.log('process exit with error code ' + code);
+                                    console.log('process exit with error code ' + code)
                                 }
-                            });
+                            })
                         };
 
 
@@ -477,7 +476,7 @@ var begin = function(){
                             git.stdout.on('data', function(data){
                                 var str = data.toString();
                                 var lines = str.split(/(\r?\n)/g);
-                                console.log(lines.join(""));
+                                console.log(lines.join(""))
                             });
 
                             git.stderr.on('data',function (err) {
@@ -492,32 +491,32 @@ var begin = function(){
                                     console.log(
                                         "If you are behind a proxy, you might have to contact your system administrator.");
 
-                                    process.exit(1);
+                                    process.exit(1)
                                 } else {
-                                    console.log(lines.join(""));
+                                    console.log(lines.join(""))
                                 }
                             });
 
                             git.on('close', function (code) {
                                 if (code) {
                                     console.log('process exit with error code ' + code);
-                                    callback(false, module);
+                                    callback(false, module)
 
                                 } else {
-                                    callback(true, module);
+                                    callback(true, module)
                                 }
                             });
                         };
 
                         //Starting update.
-                        gitFetch();
+                        gitFetch()
 
                     } else {
                         console.warn("[warn]: path not found ", path);
-                        console.warn("Geena could not load ", module);
+                        console.warn("Geena could not load ", module)
                     }
                 }
-            });
+            })
         },
         h : function(){ this.help();},
         help : function(){
@@ -533,7 +532,7 @@ var begin = function(){
                 "\n or" +
                 "\n     $ geena --update <version>" +
                 "\n\nNB.: leave <version> empty if you are looking for the latest.\n"
-            );
+            )
         },
 
         npmInstall : function(i, callback){
@@ -551,7 +550,7 @@ var begin = function(){
                 npm.stdout.on('data', function(data){
                     var str = data.toString();
                     var lines = str.split(/(\r?\n)/g);
-                    console.log(lines.join(""));
+                    console.log(lines.join(""))
                 });
 
                 npm.stderr.on('data',function (err) {
@@ -560,26 +559,26 @@ var begin = function(){
                     var lines = str.split(/(\r?\n)/g);
 
                     if ( !str.match("Already on") ) {
-                        console.log(lines.join(""));
+                        console.log(lines.join(""))
                     }
                 });
 
                 npm.on('close', function (code) {
                     if (!code) {
-                        console.log('NPM install done');
+                        console.log('NPM install done')
                         //... log transaction ??? maybe later..
                     } else {
-                        console.log('process exit with error code ' + code);
+                        console.log('process exit with error code ' + code)
                     }
-                    _this.npmInstall(i+1, callback);
-                });
+                    _this.npmInstall(i+1, callback)
+                })
             };
 
             //end.
             if ( typeof(module) == 'undefined' ) {
-                callback(false);
+                callback(false)
             } else {
-                npmInstall(i, callback);
+                npmInstall(i, callback)
             }
 
         },
@@ -590,24 +589,24 @@ var begin = function(){
             try {
                 for (var p=0; p<t.length; ++p) {
                     if (process.platform == 'win32' && p === 0) {
-                         path += t[p];
+                         path += t[p]
                     } else {
-                        path += '/' + t[p];
+                        path += '/' + t[p]
                     }
                     if ( !fs.existsSync(path) ) {
-                        fs.mkdirSync(path);
+                        fs.mkdirSync(path)
                     }
                 }
-                callback(false);
+                callback(false)
             } catch (err) {
-                callback(err);
+                callback(err)
             }
         },
         createPaths : function(paths, p, callback){
             var _this = this;
             if (p == paths.length-1) {
                 //end.
-                callback(false);
+                callback(false)
             }
 
             paths[p] = paths[p].replace(/\\/g, '\/');
@@ -617,8 +616,8 @@ var begin = function(){
                 if (err)
                     callback(err)
                 else
-                    _this.createPaths(paths, p+1, callback);
-            });
+                    _this.createPaths(paths, p+1, callback)
+            })
         },
         end : function(task){
 //            if (task == undefined) {
@@ -642,7 +641,7 @@ var begin = function(){
             if ( fs.existsSync(path) ) {
 
             } else {
-                console.error("Sorry, [./git/config] not found. Geena can not clean().");
+                console.error("Sorry, [./git/config] not found. Geena can not clean().")
             }
             //...TODO
         },
@@ -664,12 +663,12 @@ var begin = function(){
                     if (
                         typeof(dep.use_https) != "undefined" && dep.use_https == true
                         || typeof(dep.use_https) != "undefined" && dep.use_https == "true"
-                ) {
-                        _this.useHttps = true;
+                    ) {
+                        _this.useHttps = true
                     }
 
                     if ( typeof(dep['packages']) == "undefined") {
-                        dep['packages'] = {};
+                        dep['packages'] = {}
                     }
 
                     if (
@@ -682,20 +681,19 @@ var begin = function(){
                             if (d == 'packages')
                                 for (var p in dep[d]) _this.submodules['packages'][p] = dep['packages'][p];
                             else
-                                _this.submodules[d] = dep[d];
-
+                                _this.submodules[d] = dep[d]
                         }
                     } else {
-                        _this.submodules = dep;
+                        _this.submodules = dep
                     }
 
-                    callback(false);
+                    callback(false)
                 } catch (err) {
-                    callback(err);
+                    callback(err)
                 }
 
             } else {
-                callback(false);
+                callback(false)
             }
         },
         getNpmPackage : function(callback){
@@ -712,17 +710,17 @@ var begin = function(){
                         } else {
                             this.package[i] = d;
                         }
-                        ++i;
+                        ++i
                     }
 
                     this.npmInstall(0, function(err) {
-                        callback(err);
+                        callback(err)
                     });
                 } catch (err) {
-                    callback(err);
+                    callback(err)
                 }
             } else {
-                callback(false);
+                callback(false)
             }
         }
     };
@@ -731,7 +729,7 @@ var begin = function(){
 
     if (process.argv.length < 3) {
         console.log("Command geena must have argument(s) !");
-        console.log("usage: \n $ ./geena -i\n $ ./geena --install <version>\n $ ./geena --clean");
+        console.log("usage: \n $ ./geena -i\n $ ./geena --install <version>\n $ ./geena --clean")
     } else {
 
         //Get submodules config.
@@ -770,13 +768,13 @@ var begin = function(){
                                     if ( task == 'install' && subHandler.submodules['npm'] != undefined &&  subHandler.submodules['npm'] ) {
                                         subHandler.getNpmPackage( function(err){
                                             subHandler[i]();
-                                        });
+                                        })
 
                                     } else {
-                                        subHandler[i]();
+                                        subHandler[i]()
                                     }
                                 } catch(err) {
-                                    if (err) console.error(err,  subHandler[i]);
+                                    if (err) console.error(err,  subHandler[i])
                                 }
                             }
                         });
@@ -802,12 +800,12 @@ if (
 
         var utils = require("./node_modules/geena/core/utils");
         utils.log('Geena Command Line Tool \r\n'.rainbow);
-        utils.cmd.load(__dirname, "/node_modules/geena/package.json");
+        utils.cmd.load(__dirname, "/node_modules/geena/package.json")
     } catch (err) {
         console.error(err);
-        console.error(err.stack);
+        console.error(err.stack)
     }
 
 } else {
-    begin();
-};
+    begin()
+}
