@@ -1,0 +1,49 @@
+{
+    "use_https" : true,
+    "name" : "framework",
+    "middleware" : "express@3.4.0",
+    "npm" : true,
+    "packages" : {        
+        "geena" : {
+            "comment" : "Framework module - Source path must be relative.",
+            "version" : "0.1.0",
+            "src" : "node_modules/0.1.0/geena.framework",
+            "repo" : {
+                "ssh" : "git@wgit.rhinostone.net:geena/geena.module.framework.git",
+                "https" : "http://wgit.rhinostone.net:45980/geena/geena.module.framework.git"
+            }
+        },
+        "updater" : {
+            "comment" : "Updater bundle - Source path must be relative.",
+            "use_https" : false,
+            "version" : "0.0.1",
+            "src" : "src/updater",
+            "repo" : {
+                "ssh" : "git@github.com:Rhinostone/geena.bundle.updater.git",
+                "https" : "https://github.com/Rhinostone/geena.bundle.updater.git"
+            },
+            "release" : {
+                "version" : "0.0.1",
+                "target" : "releases/updater/0.0.1",
+                "script" : "releases/updater/script/post_installation",
+                "link" : "services/updater"
+            }
+        },
+        "shutdown" : {
+            "comment" : "shutdown bundle - Source path must be relative.",
+            "use_https" : true,
+            "version" : "0.0.1",
+            "src" : "src/shutdown",
+            "repo" : {
+                "ssh" : "git@github.com:Rhinostone/geena.bundle.shutdown.git",
+                "https" : "https://github.com/Rhinostone/geena.bundle.shutdown.git"
+            },
+            "release" : {
+                "version" : "0.0.1",
+                "target" : "releases/shutdown/0.0.1",
+                "script" : "releases/shutdown/0.0.1/script/post_install",
+                "link" : "services/shutdown"
+            }
+        }
+    }
+}

@@ -1,0 +1,15 @@
+{
+    "framework" : {
+    	"0.1" : ["0.1.0"]
+    },
+    "project" : {},
+    "bundle" : {
+    	"0.1" : {}    	
+	}, 
+	"services" : {
+		"0.1" : {
+			"shutdown" : "framework",
+			"updater" : "framework"
+		}			
+	}
+}

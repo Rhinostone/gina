@@ -24,13 +24,16 @@
   "dependencies": {
     "colors" : "",
     "express": "3.x",
-    "winston": "0.7.2",
-    "zmq" : ""
+    "winston": "0.7.2"
   },
   "engine": [
-    "node >=0.22"
+    "node >=0.25"
   ],
-  "main": "core/gna",
+  "preferGlobal": "true",
+  "bin": {
+    "geena" : "./bin/geena-cli"
+  },
+  "man" : "./doc/man",
   "devDependencies": {},
   "scripts": {
     "postinstall": "node script/post_install.js",

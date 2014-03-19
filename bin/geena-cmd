@@ -21,12 +21,7 @@ Cmd = function(opt) {
         self.binPath    = opt.binPath;
         self.package    = opt.pack;
         self.geenaPath  = opt.geenaPath;
-
-        try {
-
-        } catch (err) {
-
-        }
+        self.home       = opt.home;
 
         start()
     };
@@ -40,6 +35,12 @@ Cmd = function(opt) {
         //require(frameworkPath + '/node_modules/colors');
         var utils = require(frameworkPath + "/core/utils");
 
+        try {
+            var pack = require(frameworkPath + "/package.json")
+        } catch (err) {
+            console.log("geena: ", err.stack);
+            process.exit(1)
+        }
 
         var framework = net.createServer( function(conn){ //'connection' listener
             //feedback.
@@ -50,15 +51,20 @@ Cmd = function(opt) {
             //Receiving.
             conn.on('data', function(data){
 
-                //utils.cmd.load(__dirname, "/node_modules/geena/package.json")
-                console.log('geena: received ', data.toString() )
-                //Running.
-                //utils.cmd.load(__dirname, "/node_modules/geena/package.json")
-            });
+                console.log('geena: received ', data.toString() );
+
+                //Launch.
+                utils.cmd.load({
+                    geenaPath : frameworkPath,
+                    pack : pack,
+                    argv : data.toString(),
+                    client : conn,
+                    homePath : self.home
+                })
+            })
 
             //conn.write('geena: connection established\r\n');
-            conn.write('Geena Command Line Tool\r\n');
-
+            //conn.write('Geena Command Line Tool\r\n');
             //conn.pipe(conn)
         });
 

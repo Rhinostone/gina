@@ -10,6 +10,7 @@
 
 var fs  = require('fs');
 var net = require('net');
+var child = require('child_process');
 
 
 //check for $HOME path, alert if empty
@@ -21,21 +22,27 @@ if (!home) {
 }
 
 var settings = home + '/settings.json';
-var frameworkConfig = home + '/framework/project.json';
 var executionPath = process.cwd();
 var binPath = __dirname;
 var geenaPath = (binPath.replace(/\\/g, '/')).replace('/bin', '');
 geenaPath = (process.platform == 'win32') ? geenaPath.replace(/\//g, '\\') : geenaPath;
 var pack = geenaPath + '/package.json';
 pack =  (process.platform == 'win32') ? pack.replace(/\//g, '\\') : pack;
+
+var Helper = require(geenaPath + '/lib/utils/helper.js');
+var helper = new Helper();
 /**
  * Checking settings
+ *
+ * TODO - Do the same with list.json
  * */
 try {
     settings = require(settings)
 } catch (err) {
     console.log('geena: could not find ~/.geena/settings.json');
-    process.exit(1)
+    console.log('geena: creating '+ settings);
+    var source = geenaPath + '/resources/config/home/settings.json';
+    settings = require( helper.createSettingsFileSync(source, settings) )
 }
 
 try {
@@ -45,53 +52,66 @@ try {
     process.exit(1)
 }
 
+var version = pack.version;
+var frameworkPath = geenaPath + '/node_modules/geena.framework/' + version;
 
+/**
+ * Checking project config
+ *
+ * */
+var conf = helper.loadProjectConfiguration(home);
 
-console.log('context path is: ', executionPath );
 var port = 8124;
+
 if (
-    typeof(process.argv[2]) != 'undefined' && process.argv[2] == "start"
-    || typeof(process.argv[2]) != 'undefined' && process.argv[2] == "framework:start"
+    typeof(process.argv[2]) != 'undefined'
+        && process.argv[2] == "start"
+        && process.argv.length < 4
+    || typeof(process.argv[2]) != 'undefined'
+        && process.argv[2] == "framework:start"
 ) {
     //Start framework & pass service options.
     require(binPath + '/geena-cmd')({
         binPath : binPath,
-        frameworkConfig : frameworkConfig,
         geenaPath : geenaPath,
         home : home,
         port: port,
         settings : settings,
         pack : pack
     })
+} else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] == ".") {
+    //redirect to geena path: __dirname.
+    console.log('geena-cli is path: ', __dirname);
+    console.log('exec path is: ', executionPath );
 } else {
-    var version = pack.version;
-    var frameworkPath = geenaPath + '/node_modules/geena.framework/' + version;
 
-    require(frameworkPath + '/node_modules/colors');
+
+    //require(frameworkPath + '/node_modules/colors');
 
     //Connect to framework.
     var client = net.connect({port: port},
-        function() { //'connect' listener
-            //console.log('client connected');
+        function() {
             //Forwarding cmd.
             client.write( JSON.stringify(process.argv) )
+            console.log('Geena Command Line Tool\r\n');
             //client.write('world!\r\n')
         }
     );
     client.on('data', function(data) {
         //Acknowledging ready state.
-        //console.log(data.toString());
-        console.log(data.toString().rainbow);
+        console.log( data.toString() + '\n');
         client.end()
     });
 
     //client end event.
     client.on('end', function() {
         //console.log('geena: client disconnected')
+        process.exit(0)
     });
 
     client.on('error', function(err) {
-        console.log('Please, try to start framework with:\n$ geena start\n or\n$ geena framework:start')
+        console.log('If not started, try to start framework with:\n$ geena start')
+        process.exit(1)
     })
 }
 
