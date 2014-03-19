@@ -1,0 +1,14 @@
+{
+	"project": "framework",
+	"paths": {
+		"geena": "/usr/local/lib/node_modules/geena/node_modules/geena/core",
+		"utils": "/usr/local/lib/node_modules/geena/node_modules/geena/core/utils",
+		"root": "/usr/local/lib/node_modules/geena",
+		"env": "/Users/martinlutheretouman/.geena/0.1/aikos/platform/env.json",
+		"tmp": "/usr/local/lib/node_modules/geena/tmp"
+	},
+	"bundles": [
+		"shutdown",		
+		"updater"		
+	]
+}
