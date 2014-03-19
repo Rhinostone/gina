@@ -33,7 +33,7 @@
   "bin": {
     "geena" : "./bin/geena-cli"
   },
-  "man" : "./doc/man",
+  "man" : ["./doc/man/geena.1"],
   "devDependencies": {},
   "scripts": {
     "postinstall": "node script/post_install.js",

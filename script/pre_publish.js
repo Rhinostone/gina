@@ -9,7 +9,6 @@ var PrePublish;
 
 //Imports.
 var fs      = require('fs');
-var utils   = require('./../core/utils');
 //Don't use events here.
 
 PrePublish = function(){

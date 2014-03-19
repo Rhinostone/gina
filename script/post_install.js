@@ -9,7 +9,7 @@ var PostInstall;
 
 //Imports
 var fs      = require("fs");
-var utils   = require("./../core/utils");
+//var utils   = require("./../core/utils");
 var os      = require("os");
 
 
@@ -26,11 +26,16 @@ PostInstall = function(){
     var init = function(){
         self.isWin32 = ( os.platform() == 'win32' ) ? true : false;
         self.path = _( __dirname.substring(0, (__dirname.length - "script".length)) );
-        createGeenaFileForPlatform();
-
+        //createGeenaFileForPlatform();
+        createGeenaHome();
         log("Geena's command line tool has been installed.");
     };
 
+    var createGeenaHome = function(){
+        console.log('creating geena\'s homepath')
+    };
+
+/**
 
     //Creating framework command line file for nix.
     var createGeenaFile = function(win32Name, callback){
@@ -67,10 +72,8 @@ PostInstall = function(){
 
         })
     };
+*/
 
-    var createGeenaHome = function(){
-
-    };
 
     init()
 };
