@@ -50,6 +50,8 @@ if (process.argv.length >= 4) {
     } else {
         setContext('paths', JSON.parse(tmp[3]).paths);//And so on if you need to.
         setContext('processList', JSON.parse(tmp[3]).processList);
+        setContext('geenaProcess', JSON.parse(tmp[3]).geenaProcess);
+
         //Cleaning process argv.
         process.argv.splice(3);
     }
@@ -450,28 +452,55 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
     gna.getRunningBundlesSync = process.getRunningBundlesSync = function(){
 
         //TODO - Do that thru IPC or thru socket. ???
-        //Old lines who get Bundle Tmp path and not Project Tmp path.
-
         var pidPath = _(getPath('globalTmpPath') +'/pid');
         var files = fs.readdirSync(pidPath);
 
+        var name = '';
+        var indexTmp = null;
+
+        var content = [];
+        var contentGeena = [];
+        var shutdown = [];
+        var shutdownGeena = [];
+
+        var bundleGeenaPid = getContext('geenaProcess');
+
+        //Sort Bundle / Geena instance to get a array [BUNDLE,GEENA,SHUTDOWN,GEENASHUTDOWN].
         for (var f=0; f<files.length; ++f) {
-            content[f] = {};
-            content[f]['pid']  = files[f];
-            content[f]['name'] = fs.readFileSync( _(pidPath +'/'+ files[f]) ).toString();
-            content[f]['path'] = _(pidPath +'/'+ files[f]);
+
+            name = fs.readFileSync( _(pidPath +'/'+ files[f]) ).toString();
+
+            if ( name == "shutdown" ) {
+                shutdown[0] = {};
+                shutdown[0]['pid']  = files[f];
+                shutdown[0]['name'] = name;
+                shutdown[0]['path'] = _(pidPath +'/'+ files[f]);
+            } else if ( files[f] == bundleGeenaPid ){
+                shutdownGeena[0] = {};
+                shutdownGeena[0]['pid']  = files[f];
+                shutdownGeena[0]['name'] = name;
+                shutdownGeena[0]['path'] = _(pidPath +'/'+ files[f]);
+            } else if ( name == "geena" ) {
+                indexTmp = contentGeena.length;
+                contentGeena[indexTmp] = {};
+                contentGeena[indexTmp]['pid']  = files[f];
+                contentGeena[indexTmp]['name'] = name;
+                contentGeena[indexTmp]['path'] = _(pidPath +'/'+ files[f]);
+            } else {
+                indexTmp = content.length;
+                content[indexTmp] = {};
+                content[indexTmp]['pid']  = files[f];
+                content[indexTmp]['name'] = name;
+                content[indexTmp]['path'] = _(pidPath +'/'+ files[f]);
+            }
         }
-//        var list = process.list;
-//        var content = [], e=0;
-//        for (var i=list.length-1; i>=0; --i) {
-//            for (var pid in list[i]) {
-//                content[e] = {};
-//                content[e]['pid']  = pid;
-//                content[e]['name'] = list[i][pid];
-//                content[e]['path'] = _(pidPath +'/'+ pid);
-//                ++e;
-//            }
-//        }
+
+        //Remove GEENA instance, avoid killing geena bundle before/while bundle is remove.
+        //Bundle kill/remove geena instance himself.
+        //content = content.concat(contentGeena);
+        content = content.concat(shutdown);
+        content = content.concat(shutdownGeena);
+
         return content;
     };
 
