@@ -583,7 +583,7 @@ Config  = function(opt){
                     if (env != 'prod' && cacheless) delete require.cache[_(filename, true)];
 
                     //console.log("here ", name, " VS ", filename, "\n", conf[bundle][env].files[name]);
-                    files[name] = utils.extend( true, true, files[name], require(filename) );
+                    files[name] = utils.extend( true, files[name], require(filename) );
                     //console.log("Got filename ", name ,files[name]);
                 } catch (err) {
 
