@@ -229,12 +229,12 @@ Proc = function(bundle, proc, usePidFile){
                 //console.log("got exit code ", "("+code+")", pid, " VS ", pid, " <=> geena: ", process.pid);
                 //code = code || 0;
                 //var obj = logger.emerg('geena', 'UTILS:EMERG1', 'process exit code ' + code);
-                if (code == 0  && env != "debug" && env != "dev"/***/) {
+                //if (code == 0  && env != "debug" && env != "dev"/***/) {
                     // First child.
                     dismiss(pid);
                     // Then master.
                     dismiss(process.pid);
-                }
+                //}
             });
 
             proc.on('SIGHUP', function(code){
@@ -267,6 +267,11 @@ Proc = function(bundle, proc, usePidFile){
         var path = _(_this.path + pid);
         try {
             fs.unlinkSync(path);
+        } catch (err) {
+            console.log('Final : ', err.stack)
+            //Means that it does not exists anymore.
+        }
+        try {
             if (bundleName != undefined) {
                 fs.unlinkSync( _(getPath('mountPath') + '/' + bundleName) );
             }

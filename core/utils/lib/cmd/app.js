@@ -422,6 +422,7 @@ var AppCommand = {
                 //console.log("command ", "node ",appPath, opt['argument'], JSON.stringify( getContext() ));
                 process.list = (process.list == undefined) ? [] : process.list;
                 setContext('processList', process.list);
+                setContext('geenaProcess', process.pid);
                 var params = [
                     //"--debug-brk=5858",//what ever port you want.
                     (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
