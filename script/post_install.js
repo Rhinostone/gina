@@ -28,11 +28,16 @@ PostInstall = function(){
         self.path = _( __dirname.substring(0, (__dirname.length - "script".length)) );
         //createGeenaFileForPlatform();
         createGeenaHome();
+        removeSrc();
         log("Geena's command line tool has been installed.");
     };
 
     var createGeenaHome = function(){
         console.log('creating geena\'s homepath')
+    };
+
+    var removeSrc = function(){
+        console.log('removing src')
     };
 
 /**

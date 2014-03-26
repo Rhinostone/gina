@@ -1,0 +1,126 @@
+#!/bin/sh
+ 
+### BEGIN INIT INFO
+# Provides:          geena
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Put a short description of the service here
+# Description:       Put a long description of the service here
+### END INIT INFO
+
+
+NODE=/opt/node/bin/node
+DAEMON=/var/node/aikos/platform/geena
+DAEMON_NAME=aikos-platform
+
+CMD=/var/node/aikos/platform/geena
+
+ENV=stage
+START_ALL=/var/node/aikos/platform/start-all.sh
+
+
+SHUTDOWN=shutdown
+MAPI=mobileAPI
+BAPI=boxAPI
+
+LOG=/var/log/aikos
+PID=/var/run/aikos/platform.pid
+
+# This next line determines what user the script runs as.
+# Root generally not recommended but necessary if you are using the Raspberry Pi GPIO from Python.
+DAEMON_USER=root
+
+ 
+# The process ID of the script when it runs is stored here:
+PIDFILE=/var/run/$DAEMON_NAME.pid
+ 
+. /lib/lsb/init-functions
+ 
+do_start () {
+    log_daemon_msg "Starting $DAEMON_NAME daemon"
+
+    start-stop-daemon --background --start --quiet --pidfile $PID \
+        --make-pidfile --chuid $DAEMON_USER \
+        --exec /bin/bash -- -c "$START_ALL $ENV > $LOG/$DAEMON_NAME.log 2>&1"
+        #--exec /bin/bash -- -c "\$NODE $CMD --start $SHUTDOWN > $LOG/$SHUTDOWN.log 2>&1 | $NODE $CMD --start $MAPI > $LOG/$MAPI.log 2>&1"        
+
+    log_end_msg $?
+}
+
+do_stop () {
+
+    count="`ps -aefw | grep "geena" | grep -v " grep " |  wc -l`"
+
+    if test $count -gt 0 ; then
+        log_daemon_msg "Stopping $DAEMON_NAME daemon"  
+
+        start-stop-daemon --stop --verbose --oknodo \
+            --user $DAEMON_USER --chuid $DAEMON_USER \
+            --exec `ps -aefw | grep "geena" | grep -v " grep " | awk '{ print $2 > "/tmp/'$DAEMON_NAME'.pids" }' && kill -TERM $(cat /tmp/$DAEMON_NAME.pids) && rm /tmp/$DAEMON_NAME.pids && rm -f $PID`
+                    #--exec "`ps -aefw | grep "geena" | grep -v " grep " | awk '{ print $2 > "/tmp/'$DAEMON_NAME'.pids" }' && kill -9 $(cat /tmp/$DAEMON_NAME.pids) && rm /tmp/$DAEMON_NAME.pids && rm -f $PID`"
+                #errcode=$?
+            #return $errcode
+    else
+        log_daemon_msg "$DAEMON_NAME  is \033[33;31mnot running\033[0m"      
+    fi
+
+    log_end_msg $? 
+}
+
+do_status () {
+
+    count="`ps -aefw | grep "geena" | grep -v " grep " |  wc -l`"
+    ps -aefw | grep "geena" | grep -v " grep " | awk '{print ($9 && $9 != "-c") ? $9 : ""}' > /tmp/$DAEMON_NAME.pids  
+
+    if test $count -gt 0 ; then
+        pid="`cat $PID`"
+        log_daemon_msg "$DAEMON_NAME  is \033[33;34mrunning\033[0m [ $pid ]"
+
+        
+    else    
+        log_daemon_msg "$DAEMON_NAME  is \033[33;31mnot running\033[0m"
+    fi
+
+    for c in $(cat /tmp/$DAEMON_NAME.pids); do 
+        if test $c ; then
+            echo -n "=>" $c
+        fi
+        #ps -p 17996 -o comm=
+    done
+
+
+    if test $count -gt 0 ; then
+        rm /tmp/$DAEMON_NAME.pids
+    fi
+    #log_daemon_msg "counting $count"
+
+    
+
+    log_end_msg $?
+}
+
+case "$1" in
+ 
+    start|stop|force_stop)
+        do_${1}
+        ;;
+ 
+    restart|reload|force-reload)
+        do_stop
+        do_start
+        ;;
+
+    status)
+        do_status && exit $?        
+        ;;
+    *)
+	#N=/etc/init.d/$DAEMON_NAME 
+        echo "Usage: /etc/init.d/$DAEMON_NAME {start|stop|restart|status}"
+        exit 1
+        ;;
+ 
+esac
+
+exit 0
