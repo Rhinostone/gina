@@ -264,16 +264,17 @@ Proc = function(bundle, proc, usePidFile){
             var pid = _this.PID;
         }
         var bundleName = _this.getBundleNameByPid(pid);
-        var path = _(_this.path + pid);
+        var pathPID = _(_this.path + pid);
+        var pathBundle = _(getPath('mountPath') + '/' + bundleName);;
         try {
-            fs.unlinkSync(path);
+            fs.unlinkSync(pathPID);
         } catch (err) {
             console.log('Final : ', err.stack)
             //Means that it does not exists anymore.
         }
         try {
-            if (bundleName != undefined) {
-                fs.unlinkSync( _(getPath('mountPath') + '/' + bundleName) );
+            if (bundleName != undefined && fs.existsSync(pathBundle)) {
+                fs.unlinkSync(pathBundle);
             }
         } catch (err) {
             console.log('Final : ', err.stack)
