@@ -3,7 +3,7 @@
     "name" : "framework",
     "middleware" : "express@3.4.0",
     "npm" : true,
-    "packages" : {        
+    "packages" : {
         "geena" : {
             "comment" : "Framework module - Source path must be relative.",
             "version" : "0.1.0",
@@ -19,8 +19,8 @@
             "version" : "0.0.1",
             "src" : "src/updater",
             "repo" : {
-                "ssh" : "git@github.com:Rhinostone/geena.bundle.updater.git",
-                "https" : "https://github.com/Rhinostone/geena.bundle.updater.git"
+                "ssh" : "git@wgit.rhinostone.net:geena/geena.bundle.updater.git",
+                "https" : "http://wgit.rhinostone.net:45980/geena/geena.bundle.updater.git"
             },
             "release" : {
                 "version" : "0.0.1",

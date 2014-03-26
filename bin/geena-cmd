@@ -62,10 +62,6 @@ Cmd = function(opt) {
                     homePath : self.home
                 })
             })
-
-            //conn.write('geena: connection established\r\n');
-            //conn.write('Geena Command Line Tool\r\n');
-            //conn.pipe(conn)
         });
 
 
@@ -78,7 +74,20 @@ Cmd = function(opt) {
         });
 
         framework.listen(self.port, function(){ //'listening' listener
-            console.log('geena: framework started')
+            console.log('geena: framework started');
+            //Launch first time.
+            utils.cmd.load({
+                geenaPath : frameworkPath,
+                pack : pack,
+                argv : JSON.stringify(process.argv),
+                client : process.stdout,
+                isFromFramework : true,
+                homePath : self.home,
+                task : {
+                    topic : "framework",
+                    action : "start"
+                }
+            })
         })
     };
 

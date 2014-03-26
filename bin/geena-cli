@@ -21,7 +21,7 @@ if (!home) {
     home = home + '/.geena'
 }
 
-var settings = home + '/settings.json';
+
 var executionPath = process.cwd();
 var binPath = __dirname;
 var geenaPath = (binPath.replace(/\\/g, '/')).replace('/bin', '');
@@ -31,19 +31,6 @@ pack =  (process.platform == 'win32') ? pack.replace(/\//g, '\\') : pack;
 
 var Helper = require(geenaPath + '/lib/utils/helper.js');
 var helper = new Helper();
-/**
- * Checking settings
- *
- * TODO - Do the same with list.json
- * */
-try {
-    settings = require(settings)
-} catch (err) {
-    console.log('geena: could not find ~/.geena/settings.json');
-    console.log('geena: creating '+ settings);
-    var source = geenaPath + '/resources/config/home/settings.json';
-    settings = require( helper.createSettingsFileSync(source, settings) )
-}
 
 try {
     pack = require(pack)
@@ -68,7 +55,7 @@ if (
         && process.argv[2] == "start"
         && process.argv.length < 4
     || typeof(process.argv[2]) != 'undefined'
-        && process.argv[2] == "framework:start"
+        && process.argv[2] == 'framework:start'
 ) {
     //Start framework & pass service options.
     require(binPath + '/geena-cmd')({
@@ -76,10 +63,9 @@ if (
         geenaPath : geenaPath,
         home : home,
         port: port,
-        settings : settings,
         pack : pack
     })
-} else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] == ".") {
+} else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] == '.') {
     //redirect to geena path: __dirname.
     console.log('geena-cli is path: ', __dirname);
     console.log('exec path is: ', executionPath );
