@@ -1,15 +1,21 @@
 {
-    "framework" : {
+    "frameworks" : {
     	"0.1" : ["0.1.0"]
     },
-    "project" : {},
-    "bundle" : {
-    	"0.1" : {}    	
-	}, 
+    "projects" : [],
+    "bundles" : {
+    	"0.1" : {}
+	},
 	"services" : {
 		"0.1" : {
 			"shutdown" : "framework",
 			"updater" : "framework"
-		}			
-	}
+		}
+	},
+	"envs" : {
+        "0.1" : ["dev", "prod"]
+    },
+    "dev_env" : {
+        "0.1" : "dev"
+    }
 }

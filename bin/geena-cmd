@@ -12,7 +12,7 @@ var Cmd;
 var fs  = require('fs');
 var net = require('net');
 
-Cmd = function(opt) {
+Cmd = function(opt, help) {
 
     var self = this;
 
@@ -28,8 +28,13 @@ Cmd = function(opt) {
 
     var start = function(){
 
-        var version = self.package.version;
+        var version =  help.getEnvVar('GEENA_VERSION') || self.package.version;
         var frameworkPath = self.geenaPath + '/node_modules/geena.framework/' + version;
+
+        if ( !fs.existsSync(frameworkPath) ) {
+            console.log('geena: could not find version ' + version + '.\nFirst try:\n$ geena framework:install ' + version);
+            process.exit(1)
+        }
 
         //var modulesPath = self.geenaPath + '/node_modules';
         //require(frameworkPath + '/node_modules/colors');
@@ -41,6 +46,8 @@ Cmd = function(opt) {
             console.log("geena: ", err.stack);
             process.exit(1)
         }
+
+
 
         var framework = net.createServer( function(conn){ //'connection' listener
             //feedback.
@@ -55,7 +62,8 @@ Cmd = function(opt) {
 
                 //Launch.
                 utils.cmd.load({
-                    geenaPath : frameworkPath,
+                    geenaPath : self.geenaPath,
+                    frameworkPath : frameworkPath,
                     pack : pack,
                     argv : data.toString(),
                     client : conn,
@@ -77,7 +85,8 @@ Cmd = function(opt) {
             console.log('geena: framework started');
             //Launch first time.
             utils.cmd.load({
-                geenaPath : frameworkPath,
+                geenaPath : self.geenaPath,
+                frameworkPath : frameworkPath,
                 pack : pack,
                 argv : JSON.stringify(process.argv),
                 client : process.stdout,

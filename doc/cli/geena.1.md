@@ -5,8 +5,9 @@ geena(1) -- CLI
 **geena**
 
 ## SYNOPSIS
-**geena**	[ **-v** | **-h** ] [ **--debug-brk** ]
- 		[ **assetic**:**task**] [**arguments**]
+**geena**	[ **option** ]  
+**geena**	[ **assetic**:**task**] [ **arguments** ]   
+**geena**	[ **assetic**:**task**] [ **service** ] [ **arguments** ]
 
 ## DESCRIPTION
 Geena is a MVC & Events Driven Framework that allows you to create.
@@ -16,18 +17,30 @@ Geena is a MVC & Events Driven Framework that allows you to create.
 
 **-h**, **--help**			   Prints.
 
+## ASSETICS
+framework   
+env   
+project   
+bundle   
+model   
 
 ## ENVIRONMENT
 
-**--version**   
-		It is the default framework **version** used by Geena.
+**--version** | **GEENA_VERSION**   
+		Will override the default framework **version** used by Geena.
 
-**env**   
-    	It is the runtime environment.
+**--env** | **GEENA_ENV**   
+    	Will override the runtime environment.
 
-**node**   
-    	It is the **Node.js** version, the binary used by Geena.
+**--node-version** | **GEENA_NODE_VERSION**   
+    	Will override the **Node.js** version, the binary used by Geena.
         More than one version at the time can be used.
+
+**--debug-brk** | **GEENA_DEBUG_BRK**
+
+**--logs-path** | **GEENA_LOGS_PATH**
+
+**--tmp-path** | **GEENA_TMP_PATH**
 
 ## EXEMPLE
 
@@ -52,7 +65,7 @@ Copyright (c) 2009-{year} Rhinostone <geena@rhinostone.com>
 
 ## SEE ALSO
 
-**geena-framework**(1), **geena-project**(1), **geena-bundle**(1), **geena-model**(1)
+**geena-framework**(1), **geena-env**(1), **geena-project**(1), **geena-bundle**(1), **geena-model**(1)
 
 ## COLOPHON
 
