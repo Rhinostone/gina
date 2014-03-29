@@ -10,11 +10,19 @@
 
 var fs  = require('fs');
 var net = require('net');
-var child = require('child_process');
+//var child = require('child_process');
 
+
+var executionPath = process.cwd();
+var binPath = __dirname;
+var geenaPath = (binPath.replace(/\\/g, '/')).replace('/bin', '');
+geenaPath = (process.platform == 'win32') ? geenaPath.replace(/\//g, '\\') : geenaPath;
+
+var help = require(geenaPath + '/lib/utils/helper.js');
+help.filterArgs();
 
 //check for $HOME path, alert if empty
-var home = getUserHome();
+var home = help.getUserHome();
 if (!home) {
     console.error('No ' + ((process.platform == 'win32') ? 'USERPROFILE' : 'HOME') + ' path found.' )
 } else {
@@ -22,15 +30,9 @@ if (!home) {
 }
 
 
-var executionPath = process.cwd();
-var binPath = __dirname;
-var geenaPath = (binPath.replace(/\\/g, '/')).replace('/bin', '');
-geenaPath = (process.platform == 'win32') ? geenaPath.replace(/\//g, '\\') : geenaPath;
 var pack = geenaPath + '/package.json';
 pack =  (process.platform == 'win32') ? pack.replace(/\//g, '\\') : pack;
 
-var Helper = require(geenaPath + '/lib/utils/helper.js');
-var helper = new Helper();
 
 try {
     pack = require(pack)
@@ -39,14 +41,11 @@ try {
     process.exit(1)
 }
 
-var version = pack.version;
-var frameworkPath = geenaPath + '/node_modules/geena.framework/' + version;
-
 /**
  * Checking project config
  *
  * */
-var conf = helper.loadProjectConfiguration(home);
+//var conf = help.loadProjectConfiguration(home);
 
 var port = 8124;
 
@@ -64,15 +63,12 @@ if (
         home : home,
         port: port,
         pack : pack
-    })
+    }, help)
 } else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] == '.') {
     //redirect to geena path: __dirname.
     console.log('geena-cli is path: ', __dirname);
     console.log('exec path is: ', executionPath );
 } else {
-
-
-    //require(frameworkPath + '/node_modules/colors');
 
     //Connect to framework.
     var client = net.connect({port: port},
@@ -130,8 +126,31 @@ require(executable);
 
 //get execution path
 
-//forward command to cmd service
+//Don't forget to put'em in utils.helpers
 
-function getUserHome() {
-    return process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME']
-}
+//function getUserHome() {
+//    return process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME']
+//}
+
+//function filterArgs() {
+//    var evar = "";
+//    for (var a in process.argv) {
+//        if ( process.argv[a].indexOf('--') > -1 ) {
+//            evar = ( process.argv[a].replace(/--/, '') ).split(/=/);
+//            evar[0] = 'GEENA_' + evar[0].toUpperCase();
+//            process.env['' + evar[0]] = evar[1];
+//            //Remove from argv.
+//            process.argv.splice(a+1, 1)
+//        }
+//    }
+////    console.log("version: ", getEnvVar('GEENA_VERSION'));
+////    console.log('debug ', process.env);
+////    process.exit(0)
+//}
+
+//function getEnvVar(key){
+//    if ( typeof(process.env[key]) != "undefined" && process.env[key] != "") {
+//        return process.env[key]
+//    }
+//    return undefined
+//}
