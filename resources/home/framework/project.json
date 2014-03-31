@@ -6,8 +6,8 @@
     "packages" : {
         "geena" : {
             "comment" : "Framework module - Source path must be relative.",
-            "version" : "0.1.0",
-            "src" : "node_modules/0.1.0/geena.framework",
+            "version" : "{version}",
+            "src" : "node_modules/{version}/geena.framework",
             "repo" : {
                 "ssh" : "git@wgit.rhinostone.net:geena/geena.module.framework.git",
                 "https" : "http://wgit.rhinostone.net:45980/geena/geena.module.framework.git"
@@ -31,7 +31,6 @@
         },
         "shutdown" : {
             "comment" : "shutdown bundle - Source path must be relative.",
-            "use_https" : true,
             "version" : "0.0.1",
             "src" : "src/shutdown",
             "repo" : {

@@ -1,21 +1,21 @@
 {
     "frameworks" : {
-    	"0.1" : ["0.1.0"]
+    	"{release}" : ["{version}"]
     },
     "projects" : [],
     "bundles" : {
-    	"0.1" : {}
+    	"{release}" : {}
 	},
 	"services" : {
-		"0.1" : {
+		"{release}" : {
 			"shutdown" : "framework",
 			"updater" : "framework"
 		}
 	},
 	"envs" : {
-        "0.1" : ["dev", "prod"]
+        "{release}" : ["dev", "prod"]
     },
     "dev_env" : {
-        "0.1" : "dev"
+        "{release}" : "dev"
     }
 }
