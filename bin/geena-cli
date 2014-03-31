@@ -10,13 +10,13 @@
 
 var fs  = require('fs');
 var net = require('net');
-//var child = require('child_process');
+var child = require('child_process');
 
-
+var isWin32 = (process.platform == 'win32') ? true : false;
 var executionPath = process.cwd();
 var binPath = __dirname;
 var geenaPath = (binPath.replace(/\\/g, '/')).replace('/bin', '');
-geenaPath = (process.platform == 'win32') ? geenaPath.replace(/\//g, '\\') : geenaPath;
+geenaPath = (isWin32) ? geenaPath.replace(/\//g, '\\') : geenaPath;
 
 var help = require(geenaPath + '/lib/utils/helper.js');
 help.filterArgs();
@@ -24,14 +24,15 @@ help.filterArgs();
 //check for $HOME path, alert if empty
 var home = help.getUserHome();
 if (!home) {
-    console.error('No ' + ((process.platform == 'win32') ? 'USERPROFILE' : 'HOME') + ' path found.' )
+    console.error('No ' + ((isWin32) ? 'USERPROFILE' : 'HOME') + ' path found.')
 } else {
-    home = home + '/.geena'
+    help.setEnvVar('GEENA_HOME', home);
+    home = help.getEnvVar('GEENA_HOMEPATH') || home + '/.geena'
 }
 
 
 var pack = geenaPath + '/package.json';
-pack =  (process.platform == 'win32') ? pack.replace(/\//g, '\\') : pack;
+pack =  (isWin32) ? pack.replace(/\//g, '\\') : pack;
 
 
 try {
@@ -64,10 +65,37 @@ if (
         port: port,
         pack : pack
     }, help)
+
 } else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] == '.') {
+
     //redirect to geena path: __dirname.
-    console.log('geena-cli is path: ', __dirname);
+    console.log('framework path is: ', __dirname.replace(/bin/, ''));
+    console.log('geena-cli path is: ', __dirname);
     console.log('exec path is: ', executionPath );
+
+} else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] == 'open') {
+    //redirect to geena path: __dirname.
+    var openCmd = (isWin32) ?  'start' : 'open';
+
+    switch (process.argv[3]) {
+        case 'service':
+        case 'services':
+            child.exec(openCmd + ' ' + __dirname.replace(/bin/, '/services'));
+            break;
+
+        case 'geena':
+        case 'framework':
+            child.exec(openCmd + ' ' + __dirname.replace(/bin/, ''));
+            break;
+
+        case 'home':
+            if ( fs.existsSync(home) )
+                child.exec(openCmd + ' ' + home);
+            break;
+
+        default:
+            console.log('geena: Sorry, shortcut not indexed [' + process.argv[3] + ']' );
+    }
 } else {
 
     //Connect to framework.
@@ -114,43 +142,3 @@ args.unshift(file);
 require(executable);
 
 */
-
-//check for .geena folder, and create if empty
-//if ( !fs.existsSync(home) ) {
-//    try {
-//
-//    } catch (err) {
-//        console.error('Could not create .geena folder '+ '\n' + err.stack);
-//    }
-//}
-
-//get execution path
-
-//Don't forget to put'em in utils.helpers
-
-//function getUserHome() {
-//    return process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME']
-//}
-
-//function filterArgs() {
-//    var evar = "";
-//    for (var a in process.argv) {
-//        if ( process.argv[a].indexOf('--') > -1 ) {
-//            evar = ( process.argv[a].replace(/--/, '') ).split(/=/);
-//            evar[0] = 'GEENA_' + evar[0].toUpperCase();
-//            process.env['' + evar[0]] = evar[1];
-//            //Remove from argv.
-//            process.argv.splice(a+1, 1)
-//        }
-//    }
-////    console.log("version: ", getEnvVar('GEENA_VERSION'));
-////    console.log('debug ', process.env);
-////    process.exit(0)
-//}
-
-//function getEnvVar(key){
-//    if ( typeof(process.env[key]) != "undefined" && process.env[key] != "") {
-//        return process.env[key]
-//    }
-//    return undefined
-//}
