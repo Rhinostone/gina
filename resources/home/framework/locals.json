@@ -4,8 +4,8 @@
         "geena": "{geena.core}",
         "utils": "{geena.utils}",
         "root": "{geena}",
-        "env": "{homepath}/{release}/framework/env.json",
-        "tmp": "{geena}/tmp"
+        "env": "{homedir}/{release}/framework/env.json",
+        "tmp": "{tmpdir}"
     },
     "bundles": [
         "shutdown",

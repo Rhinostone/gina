@@ -1,5 +1,5 @@
 {
-	"version" : "{version}",
-	"env" : "{dev_env}",
-	"node_version" : "0.10.25"
+    "version": "{version}",
+    "env": "{dev_env}",
+    "node_version": "0.10.25"
 }

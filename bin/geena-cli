@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-
+'use strict';
 /*
  * This file is part of the geena package.
  * Copyright (c) ${year} Rhinostone <geena@rhinostone.com>
@@ -12,7 +12,9 @@ var fs  = require('fs');
 var net = require('net');
 var child = require('child_process');
 
-var isWin32 = (process.platform == 'win32') ? true : false;
+var isWin32 = (process.platform === 'win32') ? true : false;
+process.argv.push('--is-win32=' + isWin32);
+
 var executionPath = process.cwd();
 var binPath = __dirname;
 var geenaPath = (binPath.replace(/\\/g, '/')).replace('/bin', '');
@@ -51,7 +53,8 @@ try {
 var port = 8124;
 
 if (
-    typeof(process.argv[2]) != 'undefined'
+    typeof(
+    process.argv[2]) != 'undefined'
         && process.argv[2] == "start"
         && process.argv.length < 4
     || typeof(process.argv[2]) != 'undefined'
@@ -66,14 +69,14 @@ if (
         pack : pack
     }, help)
 
-} else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] == '.') {
+} else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] === '.') {
 
     //redirect to geena path: __dirname.
     console.log('framework path is: ', __dirname.replace(/bin/, ''));
     console.log('geena-cli path is: ', __dirname);
     console.log('exec path is: ', executionPath );
 
-} else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] == 'open') {
+} else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] === 'open') {
     //redirect to geena path: __dirname.
     var openCmd = (isWin32) ?  'start' : 'open';
 
@@ -90,23 +93,30 @@ if (
 
         case 'home':
             if ( fs.existsSync(home) )
-                child.exec(openCmd + ' ' + home);
+                child.exec(openCmd + ' ' + home)
+            else
+                console.log( (isWin32) ? 'geena: sorry, no USERPROFILE found' : 'geena: sorry, no HOME found')
             break;
 
         default:
             console.log('geena: Sorry, shortcut not indexed [' + process.argv[3] + ']' );
     }
+
+} else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] === 'exec') {
+    console.log('running exec on ', process.argv[3]);
+    child.exec(openCmd + ' ' + home)
 } else {
 
     //Connect to framework.
     var client = net.connect({port: port},
         function() {
             //Forwarding cmd.
-            client.write( JSON.stringify(process.argv) )
-            console.log('Geena Command Line Tool\r\n');
+            client.write( JSON.stringify(process.argv) );
+            console.log('Geena Command Line Tool\r\n')
             //client.write('world!\r\n')
         }
     );
+
     client.on('data', function(data) {
         //Acknowledging ready state.
         console.log( data.toString() + '\n');

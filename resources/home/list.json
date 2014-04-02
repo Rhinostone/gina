@@ -1,21 +1,21 @@
 {
-    "frameworks" : {
-    	"{release}" : ["{version}"]
+    "frameworks": {
+        "{release}": ["{version}"]
     },
-    "projects" : [],
-    "bundles" : {
-    	"{release}" : {}
-	},
-	"services" : {
-		"{release}" : {
-			"shutdown" : "framework",
-			"updater" : "framework"
-		}
-	},
-	"envs" : {
-        "{release}" : ["dev", "prod"]
+    "projects": [],
+    "bundles": {
+        "{release}": {}
     },
-    "dev_env" : {
-        "{release}" : "dev"
+    "services": {
+        "{release}": {
+            "shutdown": "framework",
+            "updater": "framework"
+        }
+    },
+    "envs": {
+        "{release}": ["dev", "prod"]
+    },
+    "dev_env": {
+        "{release}": "dev"
     }
 }
