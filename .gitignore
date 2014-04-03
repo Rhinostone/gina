@@ -37,3 +37,4 @@ Capfile
 /data
 /cgi-bin
 *.sock
+*.dump

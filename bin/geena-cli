@@ -20,7 +20,7 @@ var binPath = __dirname;
 var geenaPath = (binPath.replace(/\\/g, '/')).replace('/bin', '');
 geenaPath = (isWin32) ? geenaPath.replace(/\//g, '\\') : geenaPath;
 
-var help = require(geenaPath + '/lib/utils/helper.js');
+var help = require(geenaPath + '/utils/helper.js');
 help.filterArgs();
 
 //check for $HOME path, alert if empty
@@ -54,17 +54,17 @@ var port = 8124;
 
 if (
     typeof(
-    process.argv[2]) != 'undefined'
-        && process.argv[2] == "start"
-        && process.argv.length < 4
-    || typeof(process.argv[2]) != 'undefined'
-        && process.argv[2] == 'framework:start'
+    process.argv[2]) != 'undefined' &&
+    process.argv[2] == "start" &&
+    process.argv.length < 4 ||
+    typeof(process.argv[2]) != 'undefined' &&
+    process.argv[2] == 'framework:start'
 ) {
     //Start framework & pass service options.
     require(binPath + '/geena-cmd')({
         binPath : binPath,
         geenaPath : geenaPath,
-        home : home,
+        homedir : home,
         port: port,
         pack : pack
     }, help)
@@ -92,19 +92,17 @@ if (
             break;
 
         case 'home':
-            if ( fs.existsSync(home) )
+            if ( fs.existsSync(home) ) {
                 child.exec(openCmd + ' ' + home)
-            else
-                console.log( (isWin32) ? 'geena: sorry, no USERPROFILE found' : 'geena: sorry, no HOME found')
+            } else {
+                console.log((isWin32) ? 'geena: sorry, no USERPROFILE found' : 'geena: sorry, no HOME found')
+            }
             break;
 
         default:
             console.log('geena: Sorry, shortcut not indexed [' + process.argv[3] + ']' );
     }
 
-} else if (typeof(process.argv[2]) != 'undefined' && process.argv[2] === 'exec') {
-    console.log('running exec on ', process.argv[3]);
-    child.exec(openCmd + ' ' + home)
 } else {
 
     //Connect to framework.
