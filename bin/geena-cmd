@@ -18,13 +18,14 @@ var e = new EventEmitter();
 
 Cmd = function(opt, help) {
 
-    var self = {
-        onReady : function(callback){
-            e.once('cmd#complete', function(err){
-                callback(err)
-            })
-        }
-    };
+    var self = {};
+//    var self = {
+//        onReady : function(callback){
+//            e.once('cmd#complete', function(err){
+//                callback(err)
+//            })
+//        }
+//    };
 
     var init = function(opt){
         self.port       = opt.port;
@@ -33,36 +34,36 @@ Cmd = function(opt, help) {
         self.geenaPath  = opt.geenaPath;
         self.homedir    = opt.homedir;
 
-        loadInherited();
-        self.onReady( function(err){
+        //loadInherited();
+        //self.onReady( function(err){
             start()
-        })
+        //})
     };
     /**
      * Load inherited - Mostly for win32
      *
      * */
-    var loadInherited = function(){
-        var err = false;
-        var ops = {count: 0};
-        //will set process.env.abc
-        if (help.isWin32) {
-
-            //SystemRoot
-            ops.systemRoot = child.exec('echo %SystemRoot');
-            ops.systemRoot.on('data', function(data){
-                process.env.SystemRoot = (data) ? data : null;
-                ops.count++
-            });
-
-
-        } else {
-
-            process.env.SystemRoot = '/';
-
-            e.emit('cmd#complete', err)
-        }
-    };
+//    var loadInherited = function(){
+//        var err = false;
+//        var ops = {count: 0};
+//        //will set process.env.abc
+//        if (help.isWin32) {
+//
+//            //SystemRoot
+//            ops.systemRoot = child.exec('echo %SystemRoot');
+//            ops.systemRoot.on('data', function(data){
+//                process.env.SystemRoot = (data) ? data : null;
+//                ops.count++
+//            });
+//
+//
+//        } else {
+//
+//            process.env.SystemRoot = '/';
+//
+//            e.emit('cmd#complete', err)
+//        }
+//    };
 
 
 
@@ -78,7 +79,7 @@ Cmd = function(opt, help) {
 
         //var modulesPath = self.geenaPath + '/node_modules';
         //require(frameworkPath + '/node_modules/colors');
-        var utils = require(frameworkPath + "/core/utils");
+        var lib = require(frameworkPath + "/lib");
 
         try {
             var pack = require(frameworkPath + "/package.json")
@@ -99,7 +100,7 @@ Cmd = function(opt, help) {
                 console.log('geena: received ', data.toString() );
 
                 //Launch.
-                utils.cmd.load({
+                lib.cmd.load({
                     geenaPath : self.geenaPath,
                     frameworkPath : frameworkPath,
                     pack : pack,
@@ -123,7 +124,7 @@ Cmd = function(opt, help) {
             console.log('geena: framework started');
 
             //Launch first time.
-            utils.cmd.load({
+            lib.cmd.load({
                 geenaPath : self.geenaPath,
                 frameworkPath : frameworkPath,
                 pack : pack,

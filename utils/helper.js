@@ -11,6 +11,7 @@ helper = {
         if ( typeof(process.env['geena']) == 'undefined') {
             process['geena'] = {}
         }
+        var newArgv = {};
         for (var a in process.argv) {
             if ( process.argv[a].indexOf('--') > -1 ) {
                 evar = ( (process.argv[a].replace(/--/, ''))
@@ -19,9 +20,9 @@ helper = {
 
                 evar[0] = evar[0].toUpperCase();
                 if (
-                    !evar[0].substr(0, 6) === 'GENNA_'
-                    && !evar[0].substr(0, 7) === 'SYSTEM_'
-                    && !evar[0].substr(0, 5) === 'USER_'
+                    evar[0].substr(0, 6) !== 'GENNA_' &&
+                    evar[0].substr(0, 7) !== 'SYSTEM_' &&
+                    evar[0].substr(0, 5) !== 'USER_'
                 ) {
                     evar[0] = 'GEENA_' + evar[0]
                 }
@@ -34,16 +35,20 @@ helper = {
                 }
 
                 process.geena[evar[0]] = evar[1];
-                //Remove from argv.
-                process.argv.splice(a, 1)
+            } else {
+                newArgv[a] = process.argv[a]
             }
         }
-        //cleans also the rest
+
+        //Cleaning argv.
+        process.argv = newArgv;
+
+        //cleaning the rest.
         for (var e in process.env) {
             if (
-                e.substr(0, 6) === 'GENNA_'
-                || e.substr(0, 7) === 'SYSTEM_'
-                || e.substr(0, 5) === 'USER_'
+                e.substr(0, 6) === 'GENNA_' ||
+                e.substr(0, 7) === 'SYSTEM_' ||
+                e.substr(0, 5) === 'USER_'
             ) {
                 process['geena'][e] = process.env[e];
                 delete process.env[e]
@@ -54,9 +59,9 @@ helper = {
     setEnvVar : function(key, val){
 
         if (
-            typeof(process['geena']) != 'undefined'
-            && typeof(process['geena'][key]) != 'undefined'
-            && process['geena'][key] !== ''
+            typeof(process['geena']) != 'undefined' &&
+            typeof(process['geena'][key]) != 'undefined' &&
+            process['geena'][key] !== ''
         ) {
             throw new Error('wont\'t override env var ', key)
         } else {
@@ -67,9 +72,9 @@ helper = {
 
     getEnvVar : function(key){
         if (
-            typeof(process['geena']) != 'undefined'
-            && typeof(process['geena'][key]) != 'undefined'
-            && process['geena'][key] != ''
+            typeof(process['geena']) != 'undefined' &&
+            typeof(process['geena'][key]) != 'undefined' &&
+            process['geena'][key] != ''
         ) {
             return process['geena'][key]
         }
@@ -87,16 +92,15 @@ helper = {
             if (this.isWin32) {
                 return process.env.TEMP ||
                     process.env.TMP ||
-                    (process.env.SystemRoot || process.env.windir) + '\\temp';
+                    (process.env.SystemRoot || process.env.windir) + '\\temp'
             } else {
                 return process.env.TMPDIR ||
                     process.env.TMP ||
                     process.env.TEMP ||
-                    '/tmp';
+                    '/tmp'
             }
         }
-        return ( typeof(tmp) == 'function') ?  tmp() : tmp;
-
+        return ( typeof(tmp) == 'function') ?  tmp() : tmp
     },
     /**
      * Get run\lock path
