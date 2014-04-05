@@ -13,80 +13,52 @@ var fs      = require('fs');
 var net     = require('net');
 var child   = require('child_process');
 
-var EventEmitter = require('events').EventEmitter;
-var e = new EventEmitter();
+//var EventEmitter = require('events').EventEmitter;
+//var e = new EventEmitter();
 
-Cmd = function(opt, help) {
+Cmd = function(opt, help, runOffine) {
 
     var self = {};
-//    var self = {
-//        onReady : function(callback){
-//            e.once('cmd#complete', function(err){
-//                callback(err)
-//            })
-//        }
-//    };
+    var lib = {};
 
-    var init = function(opt){
+    var init = function(opt, runOffine){
         self.port       = opt.port;
         self.binPath    = opt.binPath;
         self.package    = opt.pack;
         self.geenaPath  = opt.geenaPath;
         self.homedir    = opt.homedir;
 
-        //loadInherited();
-        //self.onReady( function(err){
-            start()
-        //})
+        getWhatsNeeded();
+
+        if ( typeof(runOffine) != 'undefined' ) {
+            launchCmd()
+        } else {
+            launchFramework()
+        }
     };
-    /**
-     * Load inherited - Mostly for win32
-     *
-     * */
-//    var loadInherited = function(){
-//        var err = false;
-//        var ops = {count: 0};
-//        //will set process.env.abc
-//        if (help.isWin32) {
+
+
+    var launchFramework = function(){
+
+
+//        var version =  help.getEnvVar('GEENA_VERSION') || self.package.version;
+//        var frameworkPath = self.geenaPath + '/node_modules/geena.framework/' + version;
 //
-//            //SystemRoot
-//            ops.systemRoot = child.exec('echo %SystemRoot');
-//            ops.systemRoot.on('data', function(data){
-//                process.env.SystemRoot = (data) ? data : null;
-//                ops.count++
-//            });
-//
-//
-//        } else {
-//
-//            process.env.SystemRoot = '/';
-//
-//            e.emit('cmd#complete', err)
+//        if ( !fs.existsSync(frameworkPath) ) {
+//            console.log('geena: could not find version ' + version + '.\nFirst try:\n$ geena framework:install ' + version);
+//            process.exit(1)
 //        }
-//    };
-
-
-
-    var start = function(){
-
-        var version =  help.getEnvVar('GEENA_VERSION') || self.package.version;
-        var frameworkPath = self.geenaPath + '/node_modules/geena.framework/' + version;
-
-        if ( !fs.existsSync(frameworkPath) ) {
-            console.log('geena: could not find version ' + version + '.\nFirst try:\n$ geena framework:install ' + version);
-            process.exit(1)
-        }
-
-        //var modulesPath = self.geenaPath + '/node_modules';
-        //require(frameworkPath + '/node_modules/colors');
-        var lib = require(frameworkPath + "/lib");
-
-        try {
-            var pack = require(frameworkPath + "/package.json")
-        } catch (err) {
-            console.log("geena: ", err.stack);
-            process.exit(1)
-        }
+//
+//        //var modulesPath = self.geenaPath + '/node_modules';
+//        //require(frameworkPath + '/node_modules/colors');
+//        var lib = require(frameworkPath + "/lib");
+//
+//        try {
+//            var pack = require(frameworkPath + "/package.json")
+//        } catch (err) {
+//            console.log("geena: ", err.stack);
+//            process.exit(1)
+//        }
 
         var framework = net.createServer( function(conn){ //'connection' listener
             //feedback.
@@ -102,8 +74,8 @@ Cmd = function(opt, help) {
                 //Launch.
                 lib.cmd.load({
                     geenaPath : self.geenaPath,
-                    frameworkPath : frameworkPath,
-                    pack : pack,
+                    frameworkPath : self.frameworkPath,
+                    pack : self.pack,
                     argv : data.toString(),
                     client : conn,
                     homedir : self.homedir
@@ -115,6 +87,7 @@ Cmd = function(opt, help) {
         framework.on('error', function(err){
             if (err.code === 'EADDRINUSE') {
                 console.log('geena: framework is already running.')
+                //Checks if there is services to start anyway.
             } else {
                 console.log('geena: could not start framework. ', err.stack)
             }
@@ -126,8 +99,8 @@ Cmd = function(opt, help) {
             //Launch first time.
             lib.cmd.load({
                 geenaPath : self.geenaPath,
-                frameworkPath : frameworkPath,
-                pack : pack,
+                frameworkPath : self.frameworkPath,
+                pack : self.pack,
                 argv : JSON.stringify(process.argv),
                 client : process.stdout,
                 isFromFramework : true,
@@ -140,7 +113,54 @@ Cmd = function(opt, help) {
         })
     };
 
-    init(opt)
+    var launchCmd = function(){
+        var cmd = process.argv[2].split(':');
+        var topic = cmd[0];
+        var action = cmd[1];
+
+
+        lib.cmd.load({
+            geenaPath : self.geenaPath,
+            frameworkPath : self.frameworkPath,
+            pack : self.pack,
+            argv : JSON.stringify(process.argv),
+            client : process.stdout,
+            isFromFramework : true,
+            homedir : self.homedir,
+            task : {
+                topic : topic,
+                action : action
+            }
+        })
+    };
+
+    /**
+     * Load lib and stuffs
+     *
+     * */
+    var getWhatsNeeded = function(){
+        var version =  help.getEnvVar('GEENA_VERSION') || self.package.version;
+        var frameworkPath = self.geenaPath + '/node_modules/geena.framework/' + version;
+        self.frameworkPath = frameworkPath;
+
+        if ( !fs.existsSync(frameworkPath) ) {
+            console.log('geena: could not find version ' + version + '.\nFirst try:\n$ geena framework:install ' + version);
+            process.exit(1)
+        }
+
+        //var modulesPath = self.geenaPath + '/node_modules';
+        //require(frameworkPath + '/node_modules/colors');
+        lib = require(frameworkPath + "/lib");
+
+        try {
+            self.pack = require(frameworkPath + "/package.json")
+        } catch (err) {
+            console.log("geena: ", err.stack);
+            process.exit(1)
+        }
+    };
+
+    init(opt,runOffine)
 };
 
 module.exports = Cmd
