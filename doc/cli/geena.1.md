@@ -5,8 +5,8 @@ geena(1) -- CLI
 **geena**
 
 ## SYNOPSIS
-**geena**	[ **option** ]  
-**geena**	[ **assetic**:**task**] [ **arguments** ]   
+**geena**	[ **option** ]
+**geena**	[ **assetic**:**task**] [ **arguments** ]
 **geena**	[ **assetic**:**task**] [ **service** ] [ **arguments** ]
 
 ## DESCRIPTION
@@ -18,21 +18,22 @@ Geena is a MVC & Events Driven Framework that allows you to create.
 **-h**, **--help**			   Prints.
 
 ## ASSETICS
-framework   
-env   
-project   
-bundle   
-model   
+env
+framework
+project
+bundle
+model
+dev
 
 ## ENVIRONMENT
 
-**--version** | **GEENA_VERSION**   
+**--version** | **GEENA_VERSION**
 		Will override the default framework **version** used by Geena.
 
-**--env** | **GEENA_ENV**   
+**--env** | **GEENA_ENV**
     	Will override the runtime environment.
 
-**--node-version** | **GEENA_NODE_VERSION**   
+**--node-version** | **GEENA_NODE_VERSION**
     	Will override the **Node.js** version, the binary used by Geena.
         More than one version at the time can be used.
 
@@ -61,15 +62,15 @@ $ geena start
 Martin-Luther ETOUMAN was the original Author of **geena**. Stephane HEAV joined the project since version 0.1.0.
 
 ## COPYRIGHT
-Copyright (c) 2009-{year} Rhinostone <geena@rhinostone.com>
+Copyright (c) 2009-${year} Rhinostone <${email}>
 
 ## SEE ALSO
 
-**geena-framework**(1), **geena-env**(1), **geena-project**(1), **geena-bundle**(1), **geena-model**(1)
+**geena-env**(1), **geena-framework**(1), **geena-project**(1), **geena-bundle**(1), **geena-model**(1), **geena-dev**(1)
 
 ## COLOPHON
 
-This page is part of release {version} of the **geena** project. A description of the project,
+This page is part of release ${version} of the **geena** project. A description of the project,
 and informations about reporting bugs can be found on the official web site: [http://www.geenajs.com](http://www.geenajs.com)
 
 The project is also on GitHub: [https://github.com/rhinostone/geena](https://github.com/rhinostone/geena)

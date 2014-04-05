@@ -5,7 +5,7 @@ var fs = require('fs');
 var os = require('os');
 
 helper = {
-
+    protectedVars : [],
     filterArgs : function(){
         var evar = "";
         if ( typeof(process.env['geena']) == 'undefined') {
@@ -13,7 +13,7 @@ helper = {
         }
         var newArgv = {};
         for (var a in process.argv) {
-            if ( process.argv[a].indexOf('--') > -1 ) {
+            if ( process.argv[a].indexOf('--') > -1 && process.argv[a].indexOf('=') > -1) {
                 evar = ( (process.argv[a].replace(/--/, ''))
                             .replace(/-/, '_') )
                                 .split(/=/);
@@ -26,15 +26,20 @@ helper = {
                 ) {
                     evar[0] = 'GEENA_' + evar[0]
                 }
-                //boolean values.
+                //Boolean values.
                 if (evar[1] === "true") {
                     evar[1] = true
                 }
                 if (evar[1] === "false") {
                     evar[1] = false
                 }
+                //Avoid protected.
+                if (this.protectedVars.indexOf(evar[0]) == -1 ) {
+                    process.geena[evar[0]] = evar[1];
+                } else {
+                    throw new Error('warn: geena won\'t override protected env var [' +evar[0]+ '] or constant.')
+                }
 
-                process.geena[evar[0]] = evar[1];
             } else {
                 newArgv[a] = process.argv[a]
             }
@@ -43,10 +48,10 @@ helper = {
         //Cleaning argv.
         process.argv = newArgv;
 
-        //cleaning the rest.
+        //Cleaning the rest.
         for (var e in process.env) {
             if (
-                e.substr(0, 6) === 'GENNA_' ||
+                e.substr(0, 6) === 'GEENA_' ||
                 e.substr(0, 7) === 'SYSTEM_' ||
                 e.substr(0, 5) === 'USER_'
             ) {
@@ -56,17 +61,27 @@ helper = {
         }
     },
 
-    setEnvVar : function(key, val){
-
+    setEnvVar : function(key, val, isProtected){
+        key = key.toUpperCase();
+        if (
+            key.substr(0, 6) !== 'GEENA_' &&
+            key.substr(0, 7) !== 'SYSTEM_' &&
+            key.substr(0, 5) !== 'USER_'
+        ) {
+            key = 'USER_' + key
+        }
         if (
             typeof(process['geena']) != 'undefined' &&
             typeof(process['geena'][key]) != 'undefined' &&
             process['geena'][key] !== ''
         ) {
-            throw new Error('wont\'t override env var ', key)
+            throw new Error('wont\'t override env var '+ key)
         } else {
-            //write env var.
-            process['geena'][key] = val
+            //Write env var.
+            process['geena'][key] = val;
+            if ( typeof(isProtected) != 'undefined' && isProtected == true) {
+                this.protectedVars.push(key)
+            }
         }
     },
 
@@ -124,6 +139,10 @@ helper = {
      * */
     getLogDir : function(){
         return (this.isWin32) ? process.env.SystemRoot + '\\system32\\winevt\\logs'  : '/var/log'
+    },
+
+    getProtected : function(){
+        return this.protectedVars
     }
 };
 
