@@ -100,7 +100,7 @@ Model = function(namespace){
                         _this.connect( Connector, function onConnect(err, conn){
                             if (err) {
                                 console.error(err.stack);
-                                _this.emit('ready' ,err.stack, null);
+                                _this.emit('ready', err.stack, null);
                             } else {
                                 //Getting Entities Manager.
                                 if (process.env.IS_CACHELESS)
@@ -241,7 +241,7 @@ Model = function(namespace){
                     console.error(err.stack);
                     _this.emit('ready', err, null);
                 }
-
+                console.log('::::i '+i+' vs '+(files.length-1))
                 if (i == files.length-1) {
                     //finished.
                     _this.emit('ready', false, entitiesManager);
@@ -274,13 +274,13 @@ Model = function(namespace){
     };
 
     return {
-        onReady : function(callback){
-            _this.on('ready', function(err, entities){
+        onReady : function(callback) {
+            _this.on('ready', function(err, entities) {
                 //entities == null when the database server isn't start.
-                if ( typeof(entities) == 'undefined' ){
+                if ( typeof(entities) == 'undefined' || entities == null) {
                     console.log("No entities found, check if the database is started");
                 } else {
-                    console.log("found entities ", entities);
+                    console.log("!! found entities ", entities);
                 }
                 callback(err, entities );
             });

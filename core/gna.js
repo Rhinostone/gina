@@ -591,6 +591,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                                 var Model   = require('./model');
                                 for (var m in conf.content.connector) {
                                     //var apiModel    = new Model(config.bundle + "/api");
+                                    console.log('....model ', m+'Model');
                                     setContext(m+'Model',  new Model(conf.bundle + "/" + m));
                                 }
                             }
