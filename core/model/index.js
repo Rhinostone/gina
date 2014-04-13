@@ -19,19 +19,20 @@
 var Model;
 
 //Imports.
-var fs      = require('fs'),
-    Module  = require('module'),
-    utils   = require('geena').utils,
+var fs      = require('fs');
+var Module  = require('module');
+var utils   = require('geena').utils;
+var inherits = utils.inherits;
     //UtilsConfig = Utils.Config(),
 //dev     = require(_(getPath('geena.core')'/dev') ),
-    util    = require('util'),
+var util    = require('util'),
     EventEmitter  = require('events').EventEmitter;
 
 /**
  * Model Constructor
  * @constructor
  * */
-Model = function(namespace){
+Model = function(namespace) {
     var _this = this;
     var _configuration = null;
     var _connector = null;
@@ -47,7 +48,7 @@ Model = function(namespace){
      *
      * @private
      * */
-    var init = function(namespace){
+    var init = function(namespace) {
         //TODO - if instance...
 
 
@@ -74,6 +75,7 @@ Model = function(namespace){
 
         console.log("\nBundle", bundle);
         console.log("Model", model);
+        _this.name = model;
 
 
         getConfig(bundle, function onGetConfigDone(err, conf){
@@ -86,11 +88,15 @@ Model = function(namespace){
                 //For now, I just need the F..ing entity name.
                 var modelPath       = _(conf.path + '/' + modelDirName);
                 var entitiesPath    = _(modelPath + '/entities');
-                var connectorPath   = _(modelPath + '/lib/connector.js');
-
-                //Getting Entities Manager.
-                var exists = fs.existsSync(connectorPath);
-                //fs.exists(connectorPath, function (exists){
+                console.log('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
+                if (!fs.existsSync(entitiesPath)) {
+                    _this.emit('model#ready', 'no entities found for your model: [ ' + model + ' ]', model);
+                    //console.log("[ "+model+" ]no entities found...")
+                } else {
+                    var connectorPath   = _(modelPath + '/lib/connector.js');
+                    //Getting Entities Manager.
+                    var exists = fs.existsSync(connectorPath);
+                    //fs.exists(connectorPath, function (exists){
                     if (exists) {
                         if (process.env.IS_CACHELESS)
                             delete require.cache[_(connectorPath, true)];
@@ -100,7 +106,7 @@ Model = function(namespace){
                         _this.connect( Connector, function onConnect(err, conn){
                             if (err) {
                                 console.error(err.stack);
-                                _this.emit('ready', err.stack, null);
+                                _this.emit('model#ready', err.stack, null);
                             } else {
                                 //Getting Entities Manager.
                                 if (process.env.IS_CACHELESS)
@@ -118,10 +124,11 @@ Model = function(namespace){
                         var entitiesManager = new require(conf.path)()[model];
                         getModel(entitiesManager, modelPath, entitiesPath, undefined)
                     }
-                //});
+                    //});
+                }
 
             } else {
-                _this.emit('ready', 'no configuration found for your model: ' + model);
+                _this.emit('model#ready', 'no configuration found for your model: ' + model, model);
                 console.log("no configuration found...")
             }
         });
@@ -129,7 +136,7 @@ Model = function(namespace){
 
     };
 
-    this.connect = function(Connector, callback){
+    this.connect = function(Connector, callback) {
 
         var connector = new Connector( _this.getConfig(_connector) );
         connector.onReady( function(err, conn){
@@ -148,7 +155,7 @@ Model = function(namespace){
      *
      * @private
      * */
-    var getConfig = function(bundle, callback){
+    var getConfig = function(bundle, callback) {
         var configuration = config.getInstance(bundle);
 
         //console.log("getting for bundle ", bundle, configuration);
@@ -157,7 +164,7 @@ Model = function(namespace){
             if ( typeof(configuration) != 'undefined' ) {
                 var tmp = JSON.stringify(configuration);
                 tmp = JSON.parse(tmp);
-                console.log("getting for bundle ", bundle, tmp);
+                console.log("getting config for bundle ", bundle);
                 //Response.
                 var confObj = {
                     connector   : tmp.content.connector,
@@ -196,7 +203,7 @@ Model = function(namespace){
      * @param {string} entitiesPath
      * @param {object} [conn]
      * */
-    var getModel = function(entitiesManager, modelPath, entitiesPath, conn){
+    var getModel = function(entitiesManager, modelPath, entitiesPath, conn) {
         var suffix = 'Entity';
 
         var that = this;
@@ -207,7 +214,7 @@ Model = function(namespace){
             var entityName, exluded = ['index.js'];
 
             var produce = function(entityName, i){
-                console.log("producing ", files[i], i);
+                console.log("producing ", _this.name,":",entityName, i);
                 if (_locals == undefined) {
                     throw new Error("geena/utils/.gna not found.");
                 }
@@ -219,32 +226,30 @@ Model = function(namespace){
                         delete require.cache[_(filename, true)];
 
                     var ModelEntityClass = require(filename);
-                    var modelEntity = new ModelEntityClass( _this.getConfig(_connector), conn );
+                    //var modelEntity = new ModelEntityClass( _this.getConfig(_connector), conn );
 
                     if (process.env.IS_CACHELESS)
                         delete require.cache[_(entitiesPath + '/' + files[i], true)];
 
                     var EntityClass = require( _(entitiesPath + '/' + files[i]) );
+                    //var entity = new EntityClass();
 
-//                  var entity = new EntityClass(conn);
-                    var entity = new EntityClass();
-//                    if ( conn != undefined ) {
-//                        entity.conn = conn;
-//                    }
 
+                    var ab = inherits(EntityClass, ModelEntityClass);
                     //Inherits.
-                    utils.extend(true, entity, modelEntity );
+                    entity = new  ab( _this.getConfig(_connector), conn);
+
                     //Overriding.
                     entitiesManager[entityName] = entity;
                     //console.log("show me ", entityName, entitiesManager[entityName],"\n\n");
                 } catch (err) {
                     console.error(err.stack);
-                    _this.emit('ready', err, null);
+                    _this.emit('model#ready', err, undefined);
                 }
                 console.log('::::i '+i+' vs '+(files.length-1))
                 if (i == files.length-1) {
                     //finished.
-                    _this.emit('ready', false, entitiesManager);
+                    _this.emit('model#ready', false, entitiesManager);
                 }
                 ++that.i;
 
@@ -263,8 +268,7 @@ Model = function(namespace){
                             produce(entityName, that.i);
                         } else if (that.i == files.length-1) {
                             //console.log("All done !");
-                            _this.emit('ready', false, entitiesManager);
-                            ++that.i;
+                            _this.emit('model#ready', false, entitiesManager);
                         } else {
                             ++that.i;
                         }
@@ -273,14 +277,18 @@ Model = function(namespace){
         //});//EO Fs.readdir.
     };
 
+
     return {
         onReady : function(callback) {
-            _this.on('ready', function(err, entities) {
+
+            _this.on('model#ready', function(err, entities) {
                 //entities == null when the database server isn't start.
-                if ( typeof(entities) == 'undefined' || entities == null) {
-                    console.log("No entities found, check if the database is started");
+                if ( err ) {
+                    //var entityName = entities;
+                    console.log(err.stack)
+                    //console.log('No entities found for [ '+ _this.name +':'+ entityName +'].\n 1) Check if the database is started.\n2) Check if exists: /models/entities/'+ entityName);
                 } else {
-                    console.log("!! found entities ", entities);
+                    console.log('!! found entities ', entities);
                 }
                 callback(err, entities );
             });

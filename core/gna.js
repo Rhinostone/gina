@@ -589,11 +589,47 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                             if ( typeof(conf.content['connector']) != 'undefined' ) {
                                 // TODO - utils.loadModels();
                                 var Model   = require('./model');
-                                for (var m in conf.content.connector) {
-                                    //var apiModel    = new Model(config.bundle + "/api");
-                                    console.log('....model ', m+'Model');
-                                    setContext(m+'Model',  new Model(conf.bundle + "/" + m));
+                                var mObj = {};
+                                var models = conf.content.connector;
+
+                                for (var m in models) {
+                                    //e.g. var apiModel    = new Model(config.bundle + "/api");
+
+                                    //setContext(m+'Model',  new Model(conf.bundle + "/" + m));
+                                    console.log('....model ', m + 'Model');
+                                    mObj[m+'Model'] = new Model(conf.bundle + "/" + m);
+                                    mObj[m+'Model'].onReady( function(err, entities) {
+                                        //console.log('err: ', err);
+                                        if (!err) {
+                                            for (var e in entities) {
+                                                console.log('....entiti ', e);
+                                                //setContext(m+'Model.' + e , entities[e]);
+                                            }
+                                        } else {
+                                            console.error(err.stack)
+                                        }
+                                    })
+//                                    mObj[m+'Model'] = new Model(conf.bundle + "/" + m).onReady( function(err, entities) {
+//                                        for (var e = 0; e < models.length; ++e) {
+//                                            console.log('> got fucking model ', m+'Model.' + e)
+//                                        }
+//
+//                                    })
+
                                 }
+
+//                                for (var obj in mObj) {
+//                                    console.log('....model ', obj);
+//                                    //console.log(obj, ':',obj+'Model',' => ', mObj[obj][obj+'Model']);
+//                                    mObj[obj][obj+'Model'].onReady( function(err, entities) {
+//                                        if (!err) {
+//                                            for (var Entity in entities) {
+//                                                console.log('> got fucking model ', obj+'Model.' + Entity);
+//                                                setContext(m+'Model.' + Entity , entities[Entity]);
+//                                            }
+//                                        }
+//                                    })
+//                                }
                             }
 
                             logger.debug(
