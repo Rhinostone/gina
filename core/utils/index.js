@@ -22,6 +22,7 @@
 var utils = {
     Config  : require('./lib/config'),
     //dev     : require('./lib/dev'),//must be at the same level than geena.utils => geena.dev
+    inherits : require('./lib/inherits'),
     helpers : require('./lib/helpers'),
     //this one must move to Dev since it's dev related
     extend  : require('./lib/extend'),

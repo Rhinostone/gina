@@ -20,12 +20,12 @@ var Entity;
  * @api         Public
  */
 
-Entity = function(configuration, conn){
+Entity = function(configuration, conn) {
 
     var _this = this;
     _this.conn = conn;
 
-    this.getConfig = function(){
+    this.getConfig = function() {
         console.log("{Entity}Entity super ON !", configuration);
         return configuration
     }
@@ -34,9 +34,15 @@ Entity = function(configuration, conn){
 //        _this.conn = conn
 //    };
 
-    this.getConnection = function(){
+    this.getConnection = function() {
         return ( typeof(_this.conn) != 'undefined' ) ? _this.conn : null;
     }
+
+
+//    return {
+//        getConnection : _this.getConnection(),
+//        getConfig : _this.getConfig()
+//    }
 };
 
 //util.inherits(Entity, EventEmitter);
