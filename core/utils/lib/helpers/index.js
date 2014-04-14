@@ -24,6 +24,7 @@ var Helpers = {
         path        : require("./path")(),
         //Url         : require("./url")(),
         context     : require("./context")(),
+        models      : require("./models")(),
         text        : require("./text")()
 };
 
