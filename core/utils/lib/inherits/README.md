@@ -5,14 +5,14 @@
 **Version:** 0.0.1   
 **Compatibility:** ECMA-262   
 **Geena version:** 0.0.8p9   
-**Status:** testing
+**Status:** unstable
 
 
 
 ## Summary
 
 `inherits` uses `Object.create()` to allow a class **A** inherit properties from a class **B**  where **B** is the superclass.   
-The superclass (B) will override the targeted class (A).   
+The superclass (B) won't override the targeted class (A) properties if exists.   
 The result of the operation will return a class with both properties.    
 `inherits()` is a function from geena.utils. Althought, it can be required without having to install the [framework](https://github.com/rhinostone/geena).
 
@@ -73,7 +73,7 @@ console.log('Age: ', a.getAge());// 46
 ```tty
 is [ a ] instance of A ?  true
 is [ a ] instance of B ?  true
-Name:  Michael Jackson
+Name:  Julia Roberts
 Age:  46
 ```
 
