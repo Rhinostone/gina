@@ -60,23 +60,6 @@ tmp = null;
 
 setPath( 'node', _(process.argv[0]) );
 var root = getPath('root');
-/**
-var root = "";
-var getRoot = function(){
-    var paths = _(__dirname).split('/');
-    var newPath;
-    for (var i = paths.length; i>0; --i) {
-        paths.splice(paths.length-1, 1);
-        newPath = paths.join('/');
-        if ( fs.existsSync( newPath + '/project.json') || fs.existsSync( newPath + '/geena') && !fs.statSync( newPath + '/geena').isDirectory() || fs.existsSync( newPath + '/.gna') ) {
-            return newPath;
-            break;
-        }
-    }
-};
-
-var root = getRoot();
-setPath('root', root);*/
 
 gna.executionPath = root;
 
@@ -370,16 +353,17 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 
 
     var loadAllMpdels = function(conf, callback) {
+        //TODO - Reload using cacheless method for DEV env.
+
         if ( typeof(conf.content['connector']) != 'undefined' ) {
-            // TODO - utils.loadModels();
+            // TODO -  ? utils.loadModels();
             var Model   = require('./model');
             var mObj = {};
             var models = conf.content.connector;
-            var total = models.count();
             var entities = {};
-
             var connectorArray = models.toArray();
             var t = 0;
+
             var done = function(connector) {
                 if (connector in connectorArray) {
                     ++t
@@ -388,25 +372,20 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                     callback()
                 }
             }
+
             for (var c in models) {//c as connector name
                 //e.g. var apiModel    = new Model(config.bundle + "/api");
                 // => var apiModel = getContext('apiModel')
                 console.log('....model ', c + 'Model');
                 mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
-                mObj[c+'Model'].onReady( function(err, _connector, _entities) {
-                    if (!err) {
-                        for (var entity in _entities) {
-                            console.log('....entiti ', entity);
-                            entities[entity] =  _entities[entity];
-                            //setContext(m+'Model.' + e , entities[e] );
+                mObj[c+'Model'].onReady(
+                    function( err, _connector, _entities) {
+                        if (err) {
+                            console.error(err.stack)
                         }
-                        setContext(_connector+'Model', entities );
-                        done(_connector)
-                    } else {
-                        console.error(err.stack);
                         done(_connector)
                     }
-                })
+                )
             }
         }
     }
@@ -627,40 +606,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                     },
                     function(err, instance, express, conf) {
                         if (!err) {
-                            //TODO - Reload using cacheless method for DEV env.
-//                            //Loading models.
-//                            if ( typeof(conf.content['connector']) != 'undefined' ) {
-//                                // TODO - utils.loadModels();
-//                                var Model   = require('./model');
-//                                var mObj = {};
-//                                var models = conf.content.connector;
-//
-//                                for (var m in models) {
-//                                    //e.g. var apiModel    = new Model(config.bundle + "/api");
-//
-//                                    //setContext(m+'Model',  new Model(conf.bundle + "/" + m));
-//                                    console.log('....model ', m + 'Model');
-//                                    mObj[m+'Model'] = new Model(conf.bundle + "/" + m);
-//                                    mObj[m+'Model'].onReady( function(err, _entities) {
-//                                        //console.log('err: ', err);
-//                                        if (!err) {
-//                                            var entities = {};
-//                                            for (var entity in _entities) {
-//                                                console.log('....entiti ', entity);
-//                                                entities[entity] =  _entities[entity];
-//                                                //setContext(m+'Model.' + e , entities[e] );
-//                                            }
-//                                            setContext(m+'Model', entities );
-//                                        } else {
-//                                            console.error(err.stack)
-//                                        }
-//
-//
-//                                    })
-//                                }
-//                            }
 
-                            //were here....
                             logger.debug(
                                 'geena',
                                 'CORE:DEBUG:1',
