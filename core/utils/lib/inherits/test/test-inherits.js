@@ -1,7 +1,8 @@
-var inherits = require('../inherits');
+var inherits = require('../index');
 
 var A = function() {
     var _this = this;
+    this.gender = 'female';
     this.name = 'Julia Roberts';
     this.getName = function () {
         return _this.name;
@@ -37,18 +38,18 @@ exports['Has both instances'] = function(test) {
 }
 
 exports['Super overrides'] = function(test) {
-    test.equal(a.name, 'Michael Jackson');
-    test.equal(a.getName(), 'Michael Jackson');
+    test.equal(a.name, 'Julia Roberts');
+    test.equal(a.getName(), 'Julia Roberts');
     test.done()
 }
 
 exports['Can access both properties'] = function(test) {
-    test.equal(a.getName(), 'Michael Jackson');
+    test.equal(a.getName(), 'Julia Roberts');
     test.equal(a.getAge(), 46);
     test.done()
 }
 
 exports['Got arguments'] = function(test) {
-    test.equal(a.gender, 'male');
+    test.equal(a.gender, 'female');
     test.done()
 }
