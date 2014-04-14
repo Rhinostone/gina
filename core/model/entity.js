@@ -7,9 +7,6 @@
  */
 var Entity;
 
-//var util = require('util');
-//var EventEmitter = require('events').EventEmitter;
-
 /**
  * @class Model.{Model}.Entity class
  *
@@ -27,10 +24,11 @@ Entity = function(configuration, conn) {
         conn : conn
     };
 
-    this.getConfig = function() {
-        console.log("{Entity}Entity super ON !", configuration);
-        return configuration
-    }
+// should not be
+//    this.getConfig = function() {
+//        console.log("{Entity}Entity super ON !", configuration);
+//        return configuration
+//    }
 
 
     this.getConnection = function() {
@@ -38,6 +36,4 @@ Entity = function(configuration, conn) {
     }
 
 };
-
-//util.inherits(Entity, EventEmitter);
 module.exports = Entity

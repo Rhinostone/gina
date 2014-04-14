@@ -37,7 +37,7 @@ ModelHelper = function(models) {
         _this.models = models
     }
 
-    setModel = function(name, obj) {
+    this.setModel = function(name, obj) {
         if (arguments.length > 1) {
             if ( typeof(name) == 'undefined' || name == '' ) {
                 var name = 'global'
@@ -65,7 +65,7 @@ ModelHelper = function(models) {
         }
     }
 
-    init(models)
+    init(models);
 };
 
 module.exports = ModelHelper

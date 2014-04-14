@@ -22,6 +22,7 @@ var Model;
 var fs      = require('fs');
 var Module  = require('module');
 var utils   = require('geena').utils;
+var modelHelper = new utils.helpers.model();
 var inherits = utils.inherits;
     //UtilsConfig = Utils.Config(),
 //dev     = require(_(getPath('geena.core')'/dev') ),
@@ -52,14 +53,16 @@ Model = function(namespace) {
         namespace.shift();
         //Capitalize - Normalize
         if (namespace.length > 1) {
-            for (var i; i<namespace.length; ++i)
-                namespace[i] = namespace[i].substring(0, 1).toUpperCase() + namespace[i].substring(1);
+//            for (var i; i<namespace.length; ++i) {
+//                namespace[i] = namespace[i].substring(0, 1).toUpperCase() + namespace[i].substring(1);
+//            }
+
 
             var model = namespace.join(".");
         } else {
             //Dir name.
             var modelDirName = namespace[0];
-            namespace[0] = namespace[0].substring(0, 1).toUpperCase() + namespace[0].substring(1);
+            //namespace[0] = namespace[0].substring(0, 1).toUpperCase() + namespace[0].substring(1);
             var model = namespace[0];
         }
 
@@ -242,6 +245,7 @@ Model = function(namespace) {
                     var EntityClass = require( _(entitiesPath + '/' + files[i]) );
 
                     //Inherits.
+
                     var Entity = inherits(EntityClass, ModelEntityClass);
                     var entity = new Entity( _this.getConfig(_connector), conn);
                     entitiesManager[entityName] = entity;
@@ -266,7 +270,7 @@ Model = function(namespace) {
                     //console.log("TEsting entity exclusion ",  i + ": ", exluded.indexOf(files[i]) != -1 && files[i].match(/.js/), files[i]);
                     if ( files[that.i].match(/.js/) && exluded.indexOf(files[that.i]) == -1 && !files[that.i].match(/.json/)) {
                         entityName = files[that.i].replace(/.js/, "") + suffix;
-                        entityName = entityName.substring(0, 1).toUpperCase() + entityName.substring(1);
+                        //entityName = entityName.substring(0, 1).toUpperCase() + entityName.substring(1);
                         console.log("entityName  : ", entityName );
                         produce(entityName, that.i);
                     } else if (that.i == files.length-1) {
@@ -289,11 +293,12 @@ Model = function(namespace) {
             _this.on('model#ready', function(err, model, entities) {
                 //entities == null when the database server isn't start.
                 if ( err ) {
-                    //var entityName = entities;
                     console.log(err.stack)
                     //console.log('No entities found for [ '+ _this.name +':'+ entityName +'].\n 1) Check if the database is started.\n2) Check if exists: /models/entities/'+ entityName);
                 } else {
                     console.log('!! found entities ', entities);
+
+                    modelHelper.setModel(model, entities);
                 }
                 callback(err, model, entities);
             });
