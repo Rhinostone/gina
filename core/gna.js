@@ -582,7 +582,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                         executionPath   : core.executionPath,
                         conf            : obj.conf
                     },
-                    function(err, instance, express, conf){
+                    function(err, instance, express, conf) {
                         if (!err) {
                             //TODO - Reload using cacheless method for DEV env.
                             //Loading models.
@@ -603,33 +603,14 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                                         if (!err) {
                                             for (var e in entities) {
                                                 console.log('....entiti ', e);
-                                                //setContext(m+'Model.' + e , entities[e]);
+                                                //setContext(m+'Model.' + e , new entities[e](conf, conn) );
+                                                setContext(m+'Model.' + e , entities[e] );
                                             }
                                         } else {
                                             console.error(err.stack)
                                         }
                                     })
-//                                    mObj[m+'Model'] = new Model(conf.bundle + "/" + m).onReady( function(err, entities) {
-//                                        for (var e = 0; e < models.length; ++e) {
-//                                            console.log('> got fucking model ', m+'Model.' + e)
-//                                        }
-//
-//                                    })
-
                                 }
-
-//                                for (var obj in mObj) {
-//                                    console.log('....model ', obj);
-//                                    //console.log(obj, ':',obj+'Model',' => ', mObj[obj][obj+'Model']);
-//                                    mObj[obj][obj+'Model'].onReady( function(err, entities) {
-//                                        if (!err) {
-//                                            for (var Entity in entities) {
-//                                                console.log('> got fucking model ', obj+'Model.' + Entity);
-//                                                setContext(m+'Model.' + Entity , entities[Entity]);
-//                                            }
-//                                        }
-//                                    })
-//                                }
                             }
 
                             logger.debug(

@@ -5,7 +5,7 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-//'use strict';
+'use strict';
 var Inherits;
 
 /**
@@ -26,16 +26,16 @@ Inherits = function(a, b) {
         var err = check(a, b);
         if (!err) {
             var c = ( function() {
-                var cache = b;
+                var cache = a;
                 return function() {
-                    a.call(this);
+                    b.apply(this, arguments);
                     cache.apply(this, arguments)
                 }
             }());
 
-            a.prototype = {};
-            b.prototype = Object.create(a.prototype, {});
-            c.prototype = Object.create(b.prototype, {});
+            b.prototype = {};
+            a.prototype = Object.create(b.prototype, {});
+            c.prototype = Object.create(a.prototype, {});
 
             return c
         } else {

@@ -103,19 +103,22 @@ Model = function(namespace) {
 
                         var Connector = require(connectorPath);
 
-                        _this.connect( Connector, function onConnect(err, conn){
-                            if (err) {
-                                console.error(err.stack);
-                                _this.emit('model#ready', err.stack, null);
-                            } else {
-                                //Getting Entities Manager.
-                                if (process.env.IS_CACHELESS)
-                                    delete require.cache[_(conf.path, true)];
+                        _this.connect(
+                            Connector,
+                            function onConnect(err, conn) {
+                                if (err) {
+                                    console.error(err.stack);
+                                    _this.emit('model#ready', err.stack, null);
+                                } else {
+                                    //Getting Entities Manager.
+                                    if (process.env.IS_CACHELESS)
+                                        delete require.cache[_(conf.path, true)];
 
-                                var entitiesManager = new require(conf.path)()[model];
-                                getModel(entitiesManager, modelPath, entitiesPath, conn)
+                                    var entitiesManager = new require(conf.path)()[model];
+                                    getModel(entitiesManager, modelPath, entitiesPath, conn)
+                                }
                             }
-                        });
+                        );
                     } else {
                         //Means that no connector was found in models.
                         if (process.env.IS_CACHELESS)
@@ -232,16 +235,11 @@ Model = function(namespace) {
                         delete require.cache[_(entitiesPath + '/' + files[i], true)];
 
                     var EntityClass = require( _(entitiesPath + '/' + files[i]) );
-                    //var entity = new EntityClass();
 
-
-                    var ab = inherits(EntityClass, ModelEntityClass);
                     //Inherits.
-                    entity = new  ab( _this.getConfig(_connector), conn);
-
-                    //Overriding.
+                    var Entity = inherits(EntityClass, ModelEntityClass);
+                    var entity = new Entity( _this.getConfig(_connector), conn);
                     entitiesManager[entityName] = entity;
-                    //console.log("show me ", entityName, entitiesManager[entityName],"\n\n");
                 } catch (err) {
                     console.error(err.stack);
                     _this.emit('model#ready', err, undefined);
@@ -259,20 +257,21 @@ Model = function(namespace) {
             };//EO produce.
 
             if (that.i < files.length) {
-                    while (that.i < files.length) {
-                        //console.log("TEsting entity exclusion ",  i + ": ", exluded.indexOf(files[i]) != -1 && files[i].match(/.js/), files[i]);
-                        if ( files[that.i].match(/.js/) && exluded.indexOf(files[that.i]) == -1 && !files[that.i].match(/.json/)) {
-                            entityName = files[that.i].replace(/.js/, "") + suffix;
-                            entityName = entityName.substring(0, 1).toUpperCase() + entityName.substring(1);
-                            console.log("entityName  : ", entityName );
-                            produce(entityName, that.i);
-                        } else if (that.i == files.length-1) {
-                            //console.log("All done !");
-                            _this.emit('model#ready', false, entitiesManager);
-                        } else {
-                            ++that.i;
-                        }
-                    }//EO while.
+                while (that.i < files.length) {
+                    //console.log("TEsting entity exclusion ",  i + ": ", exluded.indexOf(files[i]) != -1 && files[i].match(/.js/), files[i]);
+                    if ( files[that.i].match(/.js/) && exluded.indexOf(files[that.i]) == -1 && !files[that.i].match(/.json/)) {
+                        entityName = files[that.i].replace(/.js/, "") + suffix;
+                        entityName = entityName.substring(0, 1).toUpperCase() + entityName.substring(1);
+                        console.log("entityName  : ", entityName );
+                        produce(entityName, that.i);
+                    } else if (that.i == files.length-1) {
+                        //console.log("All done !");
+                        _this.emit('model#ready', false, entitiesManager);
+                        ++that.i;
+                    } else {
+                        ++that.i;
+                    }
+                }//EO while.
             }
         //});//EO Fs.readdir.
     };
@@ -290,7 +289,7 @@ Model = function(namespace) {
                 } else {
                     console.log('!! found entities ', entities);
                 }
-                callback(err, entities );
+                callback(err, entities);
             });
             init(namespace)
         }
