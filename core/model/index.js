@@ -41,22 +41,13 @@ Model = function(namespace) {
     var utilsConfig = getContext('geena.utils.config');
 
 
-    /**
-     * Init
-     *
-     * @param {string} namesapce
-     *
-     * @private
-     * */
-    var init = function(namespace) {
-        //TODO - if instance...
-
-
+    var setup = function(namespace) {
         if ( typeof(namespace) == "undefined" || namespace == "") {
             log.error('geena', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
         }
 
         var namespace = namespace.split(/\//g);
+        _connector = namespace[1];//Has to be writtien the same for the connetor.json decalration or for the model folder
         var bundle = namespace[0];
         namespace.shift();
         //Capitalize - Normalize
@@ -71,13 +62,28 @@ Model = function(namespace) {
             namespace[0] = namespace[0].substring(0, 1).toUpperCase() + namespace[0].substring(1);
             var model = namespace[0];
         }
-        _connector = model.toLowerCase();
+
 
         console.log("\nBundle", bundle);
         console.log("Model", model);
-        _this.name = model;
+        _this.name = _connector;
+        _this.bundle = bundle;
+        _this.model = model;
+        _this.modelDirName = modelDirName;
+    };
 
-
+    /**
+     * Init
+     *
+     * @param {string} namesapce
+     *
+     * @private
+     * */
+    var init = function() {
+        //TODO - if instance...
+        var bundle = _this.bundle;
+        var model = _this.model;
+        var modelDirName = _this.modelDirName;
         getConfig(bundle, function onGetConfigDone(err, conf){
 
             if (!err) {
@@ -90,7 +96,7 @@ Model = function(namespace) {
                 var entitiesPath    = _(modelPath + '/entities');
                 console.log('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
                 if (!fs.existsSync(entitiesPath)) {
-                    _this.emit('model#ready', 'no entities found for your model: [ ' + model + ' ]', model);
+                    _this.emit('model#ready', 'no entities found for your model: [ ' + model + ' ]', _this.name, null);
                     //console.log("[ "+model+" ]no entities found...")
                 } else {
                     var connectorPath   = _(modelPath + '/lib/connector.js');
@@ -108,7 +114,7 @@ Model = function(namespace) {
                             function onConnect(err, conn) {
                                 if (err) {
                                     console.error(err.stack);
-                                    _this.emit('model#ready', err.stack, null);
+                                    _this.emit('model#ready', err.stack, _this.name, null);
                                 } else {
                                     //Getting Entities Manager.
                                     if (process.env.IS_CACHELESS)
@@ -131,7 +137,7 @@ Model = function(namespace) {
                 }
 
             } else {
-                _this.emit('model#ready', 'no configuration found for your model: ' + model, model);
+                _this.emit('model#ready', 'no configuration found for your model: ' + model, _this.name, null);
                 console.log("no configuration found...")
             }
         });
@@ -140,7 +146,6 @@ Model = function(namespace) {
     };
 
     this.connect = function(Connector, callback) {
-
         var connector = new Connector( _this.getConfig(_connector) );
         connector.onReady( function(err, conn){
             callback(err, conn);
@@ -242,12 +247,12 @@ Model = function(namespace) {
                     entitiesManager[entityName] = entity;
                 } catch (err) {
                     console.error(err.stack);
-                    _this.emit('model#ready', err, undefined);
+                    _this.emit('model#ready', err, _this.name, undefined);
                 }
                 console.log('::::i '+i+' vs '+(files.length-1))
                 if (i == files.length-1) {
                     //finished.
-                    _this.emit('model#ready', false, entitiesManager);
+                    _this.emit('model#ready', false, _this.name, entitiesManager);
                 }
                 ++that.i;
 
@@ -266,7 +271,7 @@ Model = function(namespace) {
                         produce(entityName, that.i);
                     } else if (that.i == files.length-1) {
                         //console.log("All done !");
-                        _this.emit('model#ready', false, entitiesManager);
+                        _this.emit('model#ready', false, _this.name, entitiesManager);
                         ++that.i;
                     } else {
                         ++that.i;
@@ -276,11 +281,12 @@ Model = function(namespace) {
         //});//EO Fs.readdir.
     };
 
+    setup(namespace);
 
     return {
         onReady : function(callback) {
 
-            _this.on('model#ready', function(err, entities) {
+            _this.on('model#ready', function(err, model, entities) {
                 //entities == null when the database server isn't start.
                 if ( err ) {
                     //var entityName = entities;
@@ -289,9 +295,9 @@ Model = function(namespace) {
                 } else {
                     console.log('!! found entities ', entities);
                 }
-                callback(err, entities);
+                callback(err, model, entities);
             });
-            init(namespace)
+            init()
         }
     }
 };
