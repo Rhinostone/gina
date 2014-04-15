@@ -124,8 +124,8 @@ Model = function(namespace) {
                                         delete require.cache[_(conf.path, true)];
 
                                     var entitiesManager = new require(conf.path)()[model];
-                                    //modelHelper.setConnection(model, conn);
-                                    getModel(entitiesManager, modelPath, entitiesPath, conn)
+                                    modelHelper.setConnection(model, conn);
+                                    getModelEntities(entitiesManager, modelPath, entitiesPath, conn)
                                 }
                             }
                         )
@@ -135,7 +135,7 @@ Model = function(namespace) {
                             delete require.cache[_(conf.path, true)];
 
                         var entitiesManager = new require(conf.path)()[model];
-                        getModel(entitiesManager, modelPath, entitiesPath, undefined)
+                        getModelEntities(entitiesManager, modelPath, entitiesPath, undefined)
                     }
                     //});
                 }
@@ -215,7 +215,7 @@ Model = function(namespace) {
      * @param {string} entitiesPath
      * @param {object} [conn]
      * */
-    var getModel = function(entitiesManager, modelPath, entitiesPath, conn) {
+    var getModelEntities = function(entitiesManager, modelPath, entitiesPath, conn) {
         var suffix = 'Entity';
 
         var that = this;

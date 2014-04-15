@@ -53,12 +53,13 @@ ModelHelper = function(models) {
                 extend(
                     _this.models[name]['getConnection'],
                     function() {
-                        return obj
+                        return _this.models[name]['_connection']
                     }
                 )
             } else {
+                _this.models[name]['_connection'] = obj;
                 _this.models[name]['getConnection'] = function() {
-                    return obj
+                    return _this.models[name]['_connection']
                 }
             }
         } else {
@@ -66,6 +67,7 @@ ModelHelper = function(models) {
             _this.models = arguments[0]
         }
     }
+
 
     this.setModel = function(name, obj) {
         if (arguments.length > 1) {
