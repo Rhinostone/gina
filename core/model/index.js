@@ -124,10 +124,11 @@ Model = function(namespace) {
                                         delete require.cache[_(conf.path, true)];
 
                                     var entitiesManager = new require(conf.path)()[model];
+                                    //modelHelper.setConnection(model, conn);
                                     getModel(entitiesManager, modelPath, entitiesPath, conn)
                                 }
                             }
-                        );
+                        )
                     } else {
                         //Means that no connector was found in models.
                         if (process.env.IS_CACHELESS)
@@ -297,7 +298,6 @@ Model = function(namespace) {
                     //console.log('No entities found for [ '+ _this.name +':'+ entityName +'].\n 1) Check if the database is started.\n2) Check if exists: /models/entities/'+ entityName);
                 } else {
                     console.log('!! found entities ', entities);
-
                     modelHelper.setModel(model, entities);
                 }
                 callback(err, model, entities);

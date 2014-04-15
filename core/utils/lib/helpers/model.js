@@ -15,6 +15,8 @@
  * */
 var ModelHelper;
 
+var extend = require('./../extend.js');
+
 ModelHelper = function(models) {
     var _this = this;
     /**
@@ -35,6 +37,34 @@ ModelHelper = function(models) {
             }
         }
         _this.models = models
+    }
+
+    this.setConnection = function(name, obj) {
+        if (arguments.length > 1) {
+            if ( typeof(name) == 'undefined' || name == '' ) {
+                var name = 'global'
+            }
+
+            if (typeof(_this.models[name]) == 'undefined') {
+                _this.models[name] = {}
+            }
+
+            if ( typeof(_this.models[name]['getConnection']) != "undefined") {
+                extend(
+                    _this.models[name]['getConnection'],
+                    function() {
+                        return obj
+                    }
+                )
+            } else {
+                _this.models[name]['getConnection'] = function() {
+                    return obj
+                }
+            }
+        } else {
+            //not sure...
+            _this.models = arguments[0]
+        }
     }
 
     this.setModel = function(name, obj) {
