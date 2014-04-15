@@ -20,19 +20,18 @@ var Entity;
 Entity = function(configuration, conn) {
 
     var _this = this;
-    var self = {
-        conn : conn
-    };
+    var self = {};
 
     this.setListeners = function(list) {
-        for (var l in list) {// ?
-
-        }
+//        for (var e=0; e<list.length; ++e) {
+//
+//        }
     }
 
     this.getConnection = function() {
-        return ( typeof(self.conn) != 'undefined' ) ? self.conn : null;
+        return ( typeof(conn) != 'undefined' ) ? conn : null;
     }
 
 };
+
 module.exports = Entity

@@ -26,8 +26,8 @@ var modelHelper = new utils.helpers.model();
 var inherits = utils.inherits;
     //UtilsConfig = Utils.Config(),
 //dev     = require(_(getPath('geena.core')'/dev') ),
-var util    = require('util'),
-    EventEmitter  = require('events').EventEmitter;
+var util    = require('util');
+var EventEmitter  = require('events').EventEmitter;
 
 /**
  * Model Constructor
@@ -244,12 +244,17 @@ Model = function(namespace) {
                         delete require.cache[_(entitiesPath + '/' + files[i], true)];
 
                     var EntityClass = require( _(entitiesPath + '/' + files[i]) );
-
                     //Inherits.
-
                     var Entity = inherits(EntityClass, ModelEntityClass);
+                    var EventEmitter  = require('events').EventEmitter;
+                    util.inherits(Entity, EventEmitter);
+                    //Entity = inherits(Entity, EventEmitter);
+                    for (var prop in Entity) {
+                        console.log('PROP FOUND ', prop);
+                    }
                     var entity = new Entity( _this.getConfig(_connector), conn);
                     entitiesManager[entityName] = entity;
+
                 } catch (err) {
                     console.error(err.stack);
                     _this.emit('model#ready', err, _this.name, undefined);
