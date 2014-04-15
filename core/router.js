@@ -23,7 +23,7 @@ var url     = require("url"),
     util    = require('util'),
     utils   = require('./utils');
 
-Router = function(env){
+Router = function(env) {
 
     this.name = 'Router';
     var _this = this;
@@ -36,13 +36,13 @@ Router = function(env){
      * */
     var init = function(){
         if ( typeof(Router.initialized) != "undefined" ) {
-            console.log("....instance already exists...");
-            return _this.getInstance();
+            console.log("....Router instance already exists...");
+            return _this.getInstance()
         } else {
             Router.initialized = true;
-            console.log("....creating new one...");
+            console.log("....creating new Router...")
         }
-    };
+    }
 
     /**
      * Check if rule has params
@@ -52,14 +52,14 @@ Router = function(env){
      *
      * @private
      * */
-    var hasParams = function(pathname){
+    var hasParams = function(pathname) {
         var patt = /:/;
-        return (patt.test(pathname)) ? true : false;
-    };
+        return ( patt.test(pathname) ) ? true : false
+    }
 
-    this.getInstance = function(){
-        return _this;
-    };
+    this.getInstance = function() {
+        return _this
+    }
 
     /**
      * Compare urls
@@ -70,7 +70,7 @@ Router = function(env){
      *
      * @return {object|false} routes
      * */
-    this.compareUrls = function(request, params, urlRouting){
+    this.compareUrls = function(request, params, urlRouting) {
 
         var uRe = params.url.split(/\//),
             uRo = urlRouting.split(/\//),
@@ -82,17 +82,16 @@ Router = function(env){
             //console.info("-----------------FOUND MATCHING SCORE", uRe.length, uRo.length);
             //console.info(uRe, uRo);
             for (var i=0; i<maxLen; ++i) {
-
                 if (uRe[i] === uRo[i])
-                    ++score;
+                    ++score
                 else if (hasParams(uRo[i]) && fitsWithRequirements(request, uRo[i], uRe[i], params))
-                    ++score;
+                    ++score
             }
         }
         r.past = (score === maxLen) ? true : false;
         r.request = request;
-        return r;
-    };
+        return r
+    }
 
     /**
      * Fits with requiremements
@@ -106,23 +105,26 @@ Router = function(env){
      *
      * @private
      * */
-    var fitsWithRequirements = function(request, urlVar, urlVal, params){
+    var fitsWithRequirements = function(request, urlVar, urlVal, params) {
 
         urlVar = urlVar.replace(/:/,"");
         var v = null;
 
         //console.info("ROUTE !!! ", urlVar, params.requirements);
-        if( typeof(params.requirements) != "undefined" && typeof(params.requirements[urlVar]) != "undefined" ){
+        if (
+            typeof(params.requirements) != "undefined" &&
+            typeof(params.requirements[urlVar]) != "undefined"
+            ) {
             v = urlVal.match(params.requirements[urlVar]);
             //console.info('does it match ?', v);
             //works with regex like "([0-9]*)"
             //console.log("PARAMMMMM !!! ", urlVar, params.requireclearments[urlVar], params.requirements);
-            if(v != null && v[0] !== ""){
-                request.params[urlVar] = v[0];
+            if (v != null && v[0] !== "") {
+                request.params[urlVar] = v[0]
             }
         }
-        return (v != null && v[0] == urlVal && v[0] !="") ? true : false;
-    };
+        return (v != null && v[0] == urlVal && v[0] !="") ? true : false
+    }
 
     /**
      * Load handlers
@@ -144,12 +146,16 @@ Router = function(env){
         try {
             if (cacheless) delete require.cache[_(handler, true)];
 
-            return {obj : fs.readFileSync(handler), file : action + '.js', name : action + 'Handler'};
+            return {
+                obj : fs.readFileSync(handler),
+                file : action + '.js',
+                name : action + 'Handler'
+            }
         } catch (err) {
-            return null;
+            return null
         }
 
-    };
+    }
 
     /**
      * Route on the fly
@@ -160,7 +166,7 @@ Router = function(env){
      *
      * @callback next
      * */
-    this.route = function(request, response, next, params){
+    this.route = function(request, response, next, params) {
 
         //Routing.
         var pathname        = url.parse(request.url).pathname,
@@ -175,7 +181,7 @@ Router = function(env){
         //TODO - to test
         if ( resHeaders.count() > 0 ) {
             for (var h in resHeaders)
-                response.header(h, resHeaders[h]);
+                response.header(h, resHeaders[h])
         }
 
         logger.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
@@ -191,7 +197,7 @@ Router = function(env){
             console.log("controller file is ", controllerFile);
             if (env != 'prod' && cacheless) delete require.cache[_(controllerFile, true)];
 
-            var controllerRequest  = require(controllerFile);
+            var controllerRequest  = require(controllerFile)
 
         } catch (err) {
             //Should be rended as a 500 err.
@@ -202,7 +208,7 @@ Router = function(env){
                 'Content-Length': data.length,
                 'Content-Type': 'text/plain'
             });
-            response.end(data);
+            response.end(data)
         }
 
         var options = {
@@ -246,4 +252,4 @@ Router = function(env){
 
 };
 
-module.exports = Router;
+module.exports = Router

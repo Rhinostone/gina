@@ -24,12 +24,11 @@ Entity = function(configuration, conn) {
         conn : conn
     };
 
-// should not be
-//    this.getConfig = function() {
-//        console.log("{Entity}Entity super ON !", configuration);
-//        return configuration
-//    }
+    this.setListeners = function(list) {
+        for (var l in list) {// ?
 
+        }
+    }
 
     this.getConnection = function() {
         return ( typeof(self.conn) != 'undefined' ) ? self.conn : null;

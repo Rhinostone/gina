@@ -326,7 +326,13 @@ var fs              = require('fs'),
                     }
 
                 //TODO - replace the string by the setting variable.
-                if (!matched /**&& pathname != '/favicon.ico'*/) {
+                if (!matched /**|| pathname == '/favicon.ico'*/) {
+
+                    if (pathname === '/favicon.ico') {
+                        response.writeHead(200, {'Content-Type': 'image/x-icon'} );
+                        response.end();
+                        console.Log('handled favicon.ico');
+                    }
                     logger.error(
                         'geena',
                         'SERVER:ERR:2',
@@ -337,16 +343,16 @@ var fs              = require('fs'),
                     if ( typeof(_this.conf[_this.appName].template) == "undefined" || !_this.conf[_this.appName].template) {
 
                         response.setHeader("Content-Type", "application/json");
-                        response.send('404', JSON.stringify({
+                        response.end('404', JSON.stringify({
                             status: 404,
                             error: "Error 404. Page not found : " + url.parse(request.url).pathname
                         }));
 
                     } else {
-                        response.send('404', 'Error 404. Page not found : ' + url.parse(request.url).pathname);
+                        response.end('404', 'Error 404. Page not found : ' + url.parse(request.url).pathname);
                     }
 
-                    response.end();
+                    //response.end();
                 }
             });//EO this.loadBundleConfiguration(this.appName, function(err, conf){
         });//EO this.instance
