@@ -25,7 +25,7 @@ var fs      = require("fs"),
     //Geena
     utils   = require("./utils");
 
-Controller = function(request, response, next, options){
+Controller = function(request, response, next, options) {
 
     //Public
     this.name       = "Controller";
@@ -40,7 +40,7 @@ Controller = function(request, response, next, options){
      * Controller Constructor
      * @constructor
      * */
-    var init = function(request, response, next){
+    var init = function(request, response, next) {
         _request = request, _response = response, _next = next;
         //console.log("...", _this instanceof Controller);
         if ( typeof(Controller.initialized) != "undefined" ) {
@@ -49,12 +49,12 @@ Controller = function(request, response, next, options){
         } else {
             console.log("class Controller NOT defined");
             Controller.initialized = true;
-            Controller.instance = _this;
+            Controller.instance = _this
         }
     };
 
-    this.getInstance = function(){
-        return Controller.instance;
+    this.getInstance = function() {
+        return Controller.instance
     };
 
     /**
@@ -64,7 +64,7 @@ Controller = function(request, response, next, options){
     *
     * @return {void}
     **/
-    this.handleResponse = function(response, autoRendered){
+    this.handleResponse = function(response, autoRendered) {
         _response = response;
         logger.info(
             'geena',
@@ -131,7 +131,7 @@ Controller = function(request, response, next, options){
      * @param {object} data
      * @return {void}
      * */
-    this.render = function(data){
+    this.render = function(data) {
 
         _this.app.isXmlHttpRequest = ( typeof(_request) != "undefined" && _request.xhr && _this.app.isXmlHttpRequest || _this.app.isXmlHttpRequest ) ? true : false;
 
@@ -146,7 +146,9 @@ Controller = function(request, response, next, options){
                 _response.render('layout' + data.page.ext, data);
             }
         } else {
-            _response.setHeader("Content-Type", "application/json");
+            if ( !_response.get('Content-Type') ) {
+                _response.setHeader("Content-Type", "application/json");
+            }
         }
         _response.end();
         _this.rendered = true;
@@ -158,27 +160,37 @@ Controller = function(request, response, next, options){
      * @param {object|string} jsonObj
      * @return {void}
      * */
-    this.renderJSON = function(jsonObj){
+    this.renderJSON = function(jsonObj) {
 
-        if(typeof(options) != "undefined" && typeof(options.charset) !="undefined"){
-            _response.setHeader("charset", options.charset);
+        try {
+
+            if(typeof(options) != "undefined" && typeof(options.charset) !="undefined"){
+                _response.setHeader("charset", options.charset);
+            }
+            if ( !_response.get('Content-Type') ) {
+                _response.setHeader("Content-Type", "application/json");
+            }
+
+            _response.end(JSON.stringify(jsonObj));
+            _this.rendered = true;
+        } catch (err) {
+            console.log(err.stack)
         }
 
-        _response.setHeader("Content-Type", "application/json");
-        _response.end(JSON.stringify(jsonObj));
-        _this.rendered = true;
     };
 
-    this.renderTEXT = function(content){
+    this.renderTEXT = function(content) {
         if ( typeof(content) != "string" ) {
             var content = content.toString();
         }
 
-        if(typeof(options) != "undefined" && typeof(options.charset) !="undefined"){
+        if(typeof(options) != "undefined" && typeof(options.charset) !="undefined") {
             _response.setHeader("charset", options.charset);
         }
+        if ( !_response.get('Content-Type') ) {
+            _response.setHeader("Content-Type", "text/plain");
+        }
 
-        _response.setHeader("Content-Type", "text/plain");
         _response.end(content);
         _this.rendered = true;
     };
@@ -190,7 +202,7 @@ Controller = function(request, response, next, options){
      * @param {string} value Data value to set
      * @return {void}
      * */
-    this.set = function(variable, value){
+    this.set = function(variable, value) {
         _this.data[variable] = value;
     };
 
@@ -200,11 +212,11 @@ Controller = function(request, response, next, options){
      * @param {String} variable Data name to set
      * @return {Object | String} data Data object or String
      * */
-    this.get = function(variable){
+    this.get = function(variable) {
         return _this.data[variable];
     };
 
-    var setRessources = function(viewConf, localRessources){
+    var setRessources = function(viewConf, localRessources) {
         var res = '',
             tmpRes = {},
             css = {
@@ -293,7 +305,7 @@ Controller = function(request, response, next, options){
      *
      * @private
      * */
-    var _getNodeRes = function(type, resStr, resArr, resObj){
+    var _getNodeRes = function(type, resStr, resArr, resObj) {
         //console.log('assigning ..... ', resStr);
         switch(type){
             case 'css':
@@ -346,32 +358,32 @@ Controller = function(request, response, next, options){
     /**
      * TODO -  Controller.setMeta()
      * */
-    this.setMeta = function(metaName, metacontent){
+    this.setMeta = function(metaName, metacontent) {
 
     };
 
-    this.getData = function(){
+    this.getData = function() {
         return utils.refToObj(_this.data);
     };
 
     /**
      * TODO -  Controller.redirect()
      * */
-    this.redirect = function(route){
+    this.redirect = function(route) {
 
     };
 
     /**
      * TODO -  Controller.forward404Unless()
      * */
-    this.forward404Unless = function(condition){
+    this.forward404Unless = function(condition) {
 
     };
 
     /**
      * TODO -  Controller.getParameter()
      * */
-    this.getParameter = function(paramName){
+    this.getParameter = function(paramName) {
         var params = _request.query;
         if ( typeof(params[paramName]) ){
             return params[paramName];
@@ -386,7 +398,7 @@ Controller = function(request, response, next, options){
      *
      * TODO - Protect result
      * */
-    this.getConfig = function(name){
+    this.getConfig = function(name) {
         var tmp = "";
         if ( typeof(name) != 'undefined' ) {
             try {
