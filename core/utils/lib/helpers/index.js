@@ -186,7 +186,7 @@ Object.defineProperty(global, '__column', {
 });
 
 Object.defineProperty( Object.prototype, 'toArray', {
-    writable:   false,
+    writable:   true,
     enumerable: false,
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
