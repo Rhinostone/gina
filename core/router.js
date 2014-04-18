@@ -21,7 +21,8 @@ var Router;
 var url     = require("url"),
     fs      = require("fs"),
     util    = require('util'),
-    utils   = require('./utils');
+    utils   = require('./utils'),
+    inherits = utils.inherits;
 
 Router = function(env) {
 
@@ -227,7 +228,9 @@ Router = function(env) {
         };
 
         var actionController = controllerRequest, parentController = new Controller(request, response, next, options);
+
         utils.extend( true, actionController, parentController);
+
         logger.debug('geena', 'ROUTER:DEBUG:1', 'About to contact Controller', __stack);
 //        var a = actionController[action];
 //        a(request, response, next);

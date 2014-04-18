@@ -23,7 +23,8 @@ var fs      = require("fs"),
     //Node
     util    = require('util'),
     //Geena
-    utils   = require("./utils");
+    utils   = require("./utils"),
+    extend  = utils.extend;
 
 Controller = function(request, response, next, options) {
 
@@ -43,19 +44,20 @@ Controller = function(request, response, next, options) {
     var init = function(request, response, next) {
         _request = request, _response = response, _next = next;
         //console.log("...", _this instanceof Controller);
+        getParams(request);
         if ( typeof(Controller.initialized) != "undefined" ) {
-            console.log("class Controller already defined");
-            return _this.getInstance();
+            //console.log("class Controller already defined");
+            return _this.getInstance()
         } else {
-            console.log("class Controller NOT defined");
+            //console.log("class Controller NOT defined");
             Controller.initialized = true;
             Controller.instance = _this
         }
-    };
+    }
 
     this.getInstance = function() {
         return Controller.instance
-    };
+    }
 
     /**
     * Handle Responses
@@ -98,7 +100,7 @@ Controller = function(request, response, next, options) {
 
             //Usefull or Useless not ?.
             instance.set('views', _this.app.bundlePath +'/template');
-            if(viewConf)
+            if (viewConf)
                 setRessources(viewConf, action);//css & js.
 
             content = action + ext;
@@ -111,7 +113,7 @@ Controller = function(request, response, next, options) {
             if (_this.rendered != true && autoRendered) {
                 data = _this.getData();
                 _this.render(data);
-                data = null;
+                data = null
             }
         } else {
 
@@ -120,7 +122,7 @@ Controller = function(request, response, next, options) {
                 //Webservices handling.
                 data = _this.getData();
                 _this.renderJSON(data);
-                data = null;
+                data = null
             }
         }
     };
@@ -143,16 +145,16 @@ Controller = function(request, response, next, options) {
                 //data.page.content = fs.readFileSync(this.app.bundlesPath + '/'+ this.app.appName + '/templates/' + data.page.content);
                 //data.page.content = ejs.compile(data.page.content);
                 //console.log('rendering datas...', data);
-                _response.render('layout' + data.page.ext, data);
+                _response.render('layout' + data.page.ext, data)
             }
         } else {
             if ( !_response.get('Content-Type') ) {
-                _response.setHeader("Content-Type", "application/json");
+                _response.setHeader("Content-Type", "application/json")
             }
         }
         _response.end();
-        _this.rendered = true;
-    };
+        _this.rendered = true
+    }
 
     /**
      * Render JSON
@@ -172,12 +174,12 @@ Controller = function(request, response, next, options) {
             }
 
             _response.end(JSON.stringify(jsonObj));
-            _this.rendered = true;
+            _this.rendered = true
         } catch (err) {
             console.log(err.stack)
         }
 
-    };
+    }
 
     this.renderTEXT = function(content) {
         if ( typeof(content) != "string" ) {
@@ -193,7 +195,7 @@ Controller = function(request, response, next, options) {
 
         _response.end(content);
         _this.rendered = true;
-    };
+    }
 
     /**
      * Set data
@@ -203,8 +205,8 @@ Controller = function(request, response, next, options) {
      * @return {void}
      * */
     this.set = function(variable, value) {
-        _this.data[variable] = value;
-    };
+        _this.data[variable] = value
+    }
 
     /**
      * Get data
@@ -213,8 +215,8 @@ Controller = function(request, response, next, options) {
      * @return {Object | String} data Data object or String
      * */
     this.get = function(variable) {
-        return _this.data[variable];
-    };
+        return _this.data[variable]
+    }
 
     var setRessources = function(viewConf, localRessources) {
         var res = '',
@@ -236,7 +238,7 @@ Controller = function(request, response, next, options) {
         //console.log('type of view conf ', typeof(viewConf));
         if( typeof(viewConf) != "object" ){
             cssStr = viewConf;
-            jsStr = viewConf;
+            jsStr = viewConf
         }
 
         //console.info('setting ressources for .... ', localRessources, viewConf);
@@ -249,14 +251,14 @@ Controller = function(request, response, next, options) {
                 tmpRes = _getNodeRes('css', cssStr, viewConf["default"]["stylesheets"], css);
                 cssStr = tmpRes.cssStr;
                 css = tmpRes.css;
-                tmpRes = null;
+                tmpRes = null
             }
             //Get js
             if( viewConf["default"]["javascripts"] ){
                 tmpRes = _getNodeRes('js', jsStr, viewConf["default"]["javascripts"], js);
                 jsStr = tmpRes.jsStr;
                 js = tmpRes.js;
-                tmpRes = null;
+                tmpRes = null
             }
         }
 
@@ -265,7 +267,7 @@ Controller = function(request, response, next, options) {
             //Css override test
             if(viewConf[localRessources]["override_css"] && viewConf[localRessources]["override_css"] == true || viewConf[localRessources]["override"] && viewConf[localRessources]["override"] == true){
                 cssStr = "";
-                css.content = [];
+                css.content = []
             }
             //Get css
             if( viewConf[localRessources]["stylesheets"] ){
@@ -273,25 +275,25 @@ Controller = function(request, response, next, options) {
                 tmpRes = _getNodeRes('css', cssStr, viewConf[localRessources]["stylesheets"], css);
                 cssStr = tmpRes.cssStr;
                 css = tmpRes.css;
-                tmpRes = null;
+                tmpRes = null
             }
             //js override test
             if( viewConf[localRessources]["override_js"] && viewConf[localRessources]["override_js"] == true || viewConf[localRessources]["override"] && viewConf[localRessources]["override"] == true ){
                 jsStr = "";
-                js.content = [];
+                js.content = []
             }
             //Get js
             if( viewConf[localRessources]["javascripts"] ){
                 tmpRes = _getNodeRes('js', jsStr, viewConf[localRessources]["javascripts"], js);
                 jsStr = tmpRes.jsStr;
                 js = tmpRes.js;
-                tmpRes = null;
+                tmpRes = null
             }
         }
         _this.set('page.stylesheets', cssStr);
-        _this.set('page.scripts', jsStr);
+        _this.set('page.scripts', jsStr)
         //console.info('setting ressources !! ', cssStr, jsStr);
-    };
+    }
 
     /**
      * Get node resources
@@ -319,17 +321,17 @@ Controller = function(request, response, next, options) {
                         css.type = (resArr[res].options.type) ? resArr[res].options.type : css.type;
                         if (!css.content[resArr[res]._]) {
                             css.content[resArr[res]._] = '<link href="'+ resArr[res]._ +'" media="'+ css.media +'" rel="'+ css.rel +'" type="'+ css.type +'">';
-                            resStr += '\n\t' + css.content[resArr[res]._];
+                            resStr += '\n\t' + css.content[resArr[res]._]
                         }
 
                     } else {
                         css.content[resArr[res]] = '<link href="'+ resArr[res] +'" media="screen" rel="'+ css.rel +'" type="'+ css.type +'">';
-                        resStr += '\n\t' + css.content[resArr[res]];
+                        resStr += '\n\t' + css.content[resArr[res]]
                     }
 
 
                 }
-                return { css : css, cssStr : resStr };
+                return { css : css, cssStr : resStr }
             break;
 
             case 'js':
@@ -345,50 +347,60 @@ Controller = function(request, response, next, options) {
 
                     } else {
                         js.content[resArr[res]] = '<script type="'+ js.type +'" src="'+ resArr[res] +'"></script>';
-                        resStr += '\n\t' + js.content[resArr[res]];
+                        resStr += '\n\t' + js.content[resArr[res]]
                     }
 
 
                 }
-                return { js : js, jsStr : resStr };
+                return { js : js, jsStr : resStr }
             break;
         }
-    };
+    }
 
     /**
      * TODO -  Controller.setMeta()
      * */
     this.setMeta = function(metaName, metacontent) {
 
-    };
+    }
 
     this.getData = function() {
-        return utils.refToObj(_this.data);
-    };
+        return utils.refToObj(_this.data)
+    }
 
     /**
      * TODO -  Controller.redirect()
      * */
     this.redirect = function(route) {
 
-    };
+    }
 
     /**
      * TODO -  Controller.forward404Unless()
      * */
     this.forward404Unless = function(condition) {
 
-    };
+    }
 
     /**
-     * TODO -  Controller.getParameter()
+     * Get Params
      * */
-    this.getParameter = function(paramName) {
-        var params = _request.query;
-        if ( typeof(params[paramName]) ){
-            return params[paramName];
-        }
-    };
+    var getParams = function(req) {
+
+        req.get = req.query;
+        req.post = req.body;
+
+        req.getParams = function() {
+            //copy.
+            var params = JSON.parse(JSON.stringify(req.params));
+            params = extend(params, req.get);
+            params = extend(params, req.post);
+            return params
+        };
+
+        delete req['query'];
+        delete req['body'];
+    }
 
     /**
      * Get config
@@ -404,17 +416,17 @@ Controller = function(request, response, next, options) {
             try {
                 //Protect it.
                 tmp = JSON.stringify(_this.app.conf.content[name]);
-                return JSON.parse(tmp);
+                return JSON.parse(tmp)
             } catch (err) {
-                return undefined;
+                return undefined
             }
         } else {
             tmp = JSON.stringify(_this.app.conf);
-            return JSON.parse(tmp);
+            return JSON.parse(tmp)
         }
     }
 
-    init(request, response, next);
+    init(request, response, next)
 };
 
 //Allow protected methods to be overridden.
@@ -422,4 +434,4 @@ Controller = function(request, response, next, options) {
 //Controller.render.prototype.overridable = true;
 //Controller.renderJson.prototype.overridable = true;
 
-module.exports = Controller;
+module.exports = Controller
