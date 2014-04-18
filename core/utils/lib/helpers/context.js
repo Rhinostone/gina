@@ -16,7 +16,7 @@
 var ContextHelper;
 
 var EventEmitter = require('events').EventEmitter;
-var extend = require('./../extend.js');
+var extend = require('./../extend');
 /**
  * ContextHelper Constructor
  * */

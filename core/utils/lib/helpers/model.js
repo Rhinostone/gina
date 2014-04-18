@@ -15,7 +15,7 @@
  * */
 var ModelHelper;
 
-var extend = require('./../extend.js');
+var extend = require('./../extend');
 
 ModelHelper = function(models) {
     var _this = this;
