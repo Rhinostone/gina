@@ -387,7 +387,7 @@ var begin = function(){
                 if (list.length > 0) {
                     _this.update(list)
                 } else {
-                    this.end('update')
+                    _this.end('update')
                 }
             })
         },
