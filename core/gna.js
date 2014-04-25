@@ -352,10 +352,10 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 
 
 
-    var loadAllMpdels = function(conf, callback) {
+    var loadAllModels = function(conf, callback) {
         //TODO - Reload using cacheless method for DEV env.
 
-        if ( typeof(conf.content['connector']) != 'undefined' ) {
+        if ( typeof(conf.content['connector']) != 'undefined' && conf.content['connector'] != null) {
             // TODO -  ? utils.loadModels();
             var Model   = require('./model');
             var mObj = {};
@@ -387,6 +387,8 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                     }
                 )
             }
+        } else {
+            callback()
         }
     }
 
@@ -403,7 +405,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 
         gna.initialized = true;
         e.on('init', function(instance, express, conf){
-            loadAllMpdels(
+            loadAllModels(
                 conf,
                 function() {
                     joinContext(conf.contexts);
