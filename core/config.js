@@ -587,11 +587,14 @@ Config  = function(opt){
                     //console.log("Got filename ", name ,files[name]);
                 } catch (err) {
 
-                    if ( fs.existsSync(filename) )
-                        files[name] = "malformed !!";
-                    else
+                    if ( fs.existsSync(filename) ) {
+                        //files[name] = "malformed !!";
+                        //throw new Error('[ '+name+' ] is malformed !!');
+                        log("[ " +filename + " ] is malformed !!");
+                        process.exit(1)
+                    } else {
                         files[name] = null;
-
+                    }
                     logger.warn('geena', 'SERVER:WARN:1', filename + err, __stack);
                     logger.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack);
                 }
