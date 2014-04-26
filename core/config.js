@@ -32,13 +32,13 @@ var fs              = require('fs'),
  * Config Constructor
  * @constructor
  * */
-Config  = function(opt){
+Config  = function(opt) {
 
     var _this = this;
     this.bundles = [];
     this.allBundles = [];
 
-    var init =  function(opt){
+    var init =  function(opt) {
 
         var env = opt.env;
         _this.startingApp = opt.startingApp;
@@ -71,14 +71,14 @@ Config  = function(opt){
         //Do some checking please.. like already has a PID ?.
         //if yes, join in case of standalone.. or create a new thread.
         _this.Host.setMaster(_this.startingApp);
-        getConf();
-    };
+        getConf()
+    }
 
-    var getConf = function(){
+    var getConf = function() {
 
         logger.debug('geena', 'CONFIG:DEBUG:2', 'Loading conf', __stack);
 
-        _this.Env.load( function(err, envConf){
+        _this.Env.load( function(err, envConf) {
             //logger.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 42', __stack);
             //logger.info('geena', 'CORE:INFO:42','on this Env LOAD!', __stack);
 
@@ -86,7 +86,7 @@ Config  = function(opt){
                 //Need to globalize some of them.
                 this.env = env;
                 this.envConf = envConf;
-                loadBundlesConfiguration( function(err){
+                loadBundlesConfiguration( function(err) {
                     //logger.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
 
                     //console.log("::: bundles ", _this.getBundles() );
@@ -120,14 +120,9 @@ Config  = function(opt){
                         },
                         //TODO - Replace by a property by bundle.
                         bundles : _this.bundlesConfiguration.allBundles
-                    }, function(err){
-//                        if (!err)
-//                            callback(false, Express(), Express, this.conf[this.appName]);
-//                        else
-//                            callback(err);
-
+                    }, function(err) {
                         _this.Env.loaded = true;
-                        _this.emit('complete', err, _this.bundlesConfiguration);
+                        _this.emit('complete', err, _this.bundlesConfiguration)
                     });
 
                     //callback(false, Express(), Express, this.conf[this.appName]);
@@ -138,7 +133,7 @@ Config  = function(opt){
                 }, _this.startingApp);//by default.
             }
         });
-    };
+    }
 
     /**
      * Get Instance
@@ -146,7 +141,7 @@ Config  = function(opt){
      * @param {string} [bundle]
      * @return {object|undefined} configuration|"undefined"
      * */
-    this.getInstance = function(bundle){
+    this.getInstance = function(bundle) {
         var configuration = ( typeof(_this.envConf) == "undefined" ) ? this.envConf : _this.envConf;
         var env = (typeof(_this.env) == "undefined") ? this.env : _this.env;
         _this.Env.parent = _this;
@@ -164,14 +159,14 @@ Config  = function(opt){
                 return configuration[bundle][_this.Env.get()];
             } catch (err) {
                 logger.error('geena', 'CONFIG:ERR:1', err, __stack);
-                return undefined;
+                return undefined
             }
         } else if ( typeof(configuration) != 'undefined' ) {
-            return configuration;
+            return configuration
         } else {
-            return undefined;
+            return undefined
         }
-    };
+    }
 
     /**
      * @class Env Sub class
@@ -183,7 +178,7 @@ Config  = function(opt){
      */
     this.Env = {
         template : require('./template/conf/env.json'),
-        load : function(callback){
+        load : function(callback) {
             try {
 
                 var envConf = "";
@@ -193,7 +188,7 @@ Config  = function(opt){
 
                 if (this.parent.userConf) {
 
-                    loadWithTemplate(this.parent.userConf, this.template, function(err, envConf){
+                    loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
                         _this.envConf = envConf;
                         //logger.warn('geena', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t') );
                         callback(false, envConf);
@@ -212,7 +207,7 @@ Config  = function(opt){
             }
         },
 
-        set : function(env){
+        set : function(env) {
             var found = false;
             logger.debug('geena', 'CONFIG:ENV:DEBUG:1', 'Setting Env',  __stack);
             var registeredEnvs = this.template.registeredEnvs;
@@ -238,29 +233,29 @@ Config  = function(opt){
          * Get active env
          * @return {String} env
          **/
-        get : function(){
-            return this.current;
+        get : function() {
+            return this.current
         },
 
         /**
          * Get env config
          * @return {Object} json conf
          **/
-        getConf : function(bundle, env){
+        getConf : function(bundle, env) {
             //console.log("get from ....", appName, env);
             if ( typeof(bundle) != 'undefined' && typeof(env) != 'undefined' )
                 return ( typeof(_this.envConf) != "undefined" ) ? _this.envConf[bundle][env] : null;
             else
                 return ( typeof(_this.envConf) != "undefined" ) ? _this.envConf : null;
         },
-        getDefault : function(){
+        getDefault : function() {
             return {
                 "env" : this.template.defEnv,
                 "ext" : this.template.defExt,
                 "registeredEnvs" : this.template.registeredEnvs
-            };
+            }
         }
-    };
+    }
     /**
      * Host Class
      *
@@ -275,22 +270,22 @@ Config  = function(opt){
          * @param {String} appName Application name
          * @return {Object} instance Instance of the master node
          * */
-        setMaster : function(appName){
-            if(typeof(this.master) == "undefined" && this.master !== ""){
-                this.master = appName;
+        setMaster : function(appName) {
+            if(typeof(this.master) == "undefined" && this.master !== "") {
+                this.master = appName
             }
         },
         /**
          * Get Master instance
          * @return {Object} instance Instance of the master node
          * */
-        getMaster : function(){
-            return this.master;
+        getMaster : function() {
+            return this.master
         },
-        isStandalone : function(){
-            return this.standaloneMode;
+        isStandalone : function() {
+            return this.standaloneMode
         }
-    };
+    }
 
     /**
      * Load config according to specific template
@@ -298,7 +293,7 @@ Config  = function(opt){
      * @param {String} template Path of the template to merge with
      * @return {Oject} JSON of the merged config
      **/
-    var loadWithTemplate = function(userConf, template, callback){
+    var loadWithTemplate = function(userConf, template, callback) {
 
         var content = userConf,
         //if nothing to merge.
@@ -377,10 +372,9 @@ Config  = function(opt){
                     if (content[app][env].port.http != masterPort) {
                         //console.log("should be ok !!");
                         isStandalone = false;
-                        _this.Host.standaloneMode = isStandalone;
-                        //console.log("PUSHING APPS ", app + "=>" + isStandalone);
+                        _this.Host.standaloneMode = isStandalone
                     } else if (app != _this.startingApp) {
-                        _this.bundles.push(app);
+                        _this.bundles.push(app)
                     }
                     _this.allBundles.push(app);
 
@@ -413,23 +407,7 @@ Config  = function(opt){
 
 
                     //console.error("reps ", reps);
-//                    var jess = JSON.stringify(newContent).replace(/\{(\w+)\}/g, function(s, key) {
-//                        return reps[key] || s;
-//                    });
-                    //console.log("damn path ", jess, null, 4);
-//                    newContent = JSON.parse(
-//                        JSON.stringify(newContent).replace(/\{(\w+)\}/g, function(s, key) {
-//                            return reps[key] || s;
-//                        })
-//                    );
-                    //console.warn("join context ", newContent);
-
                     newContent = whisper(reps, newContent);
-                    //console.error("blablabla ",newContent);
-                    //console.error("joined now ", newContent);
-                    //console.error("man.. ",  reps, "\n " + newContent[app][env]);
-                    //console.error("result ", _this.bundles,"\n",newContent[app][env]);
-                    //console.log("bundle list ", _this.bundles);
                 } else {
                     logger.warn(
                         'geena',
@@ -437,7 +415,7 @@ Config  = function(opt){
                         'Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath),
                         __stack
                     );
-                    callback('Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath) );
+                    callback('Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath) )
                 }
 
             }
@@ -463,26 +441,26 @@ Config  = function(opt){
             __stack
         );
         //return newContent;
-        callback(false, newContent);
-    };
+        callback(false, newContent)
+    }
 
-    var isFileInProject = function(file){
+    var isFileInProject = function(file) {
 
         try {
             var usrConf = require(_this.executionPath +'/'+ file +'.json');
-            return true;
+            return true
         } catch(err) {
             logger.warn('geena', 'CONF:HOST:WARN:1', err, __stack);
-            return false;
+            return false
         }
-    };
+    }
 
     /**
      * Get Registered bundles sharing the same port #
      *
      * @return {array} bundles
      * */
-    this.getBundles = function(){
+    this.getBundles = function() {
 
         //Registered apps only.
         logger.debug(
@@ -492,10 +470,10 @@ Config  = function(opt){
             __stack
         );
 
-        return _this.bundles;
-    };
+        return _this.bundles
+    }
 
-    this.getAllBundles = function(){
+    this.getAllBundles = function() {
         //Registered apps only.
         logger.debug(
             'geena',
@@ -503,18 +481,18 @@ Config  = function(opt){
             'Pushing ALL apps ' + JSON.stringify(_this.allBundles, null, '\t'),
             __stack
         );
-        return _this.allBundles;
-    };
+        return _this.allBundles
+    }
 
     /**
      * Load Apps Configuration
      *
      * TODO - simplify / optimize
      * */
-    var loadBundlesConfiguration = function(callback, bundle){
+    var loadBundlesConfiguration = function(callback, bundle) {
 
         if ( typeof(bundle) == "undefined") {
-            var bundle = _this.startingApp;
+            var bundle = _this.startingApp
         }
 
         var bundles = _this.getBundles();
@@ -528,7 +506,7 @@ Config  = function(opt){
 
         } else {
             var callback = arguments[0];
-            var bundle = "";
+            var bundle = ""
         }
         //console.log("bundle list ", _this.bundles);
         //Framework config files.
@@ -574,7 +552,7 @@ Config  = function(opt){
                         files[name] = require(filename);
                         //console.log("watch out !!", files[name][bundle]);
                     }
-                    tmp = "";
+                    tmp = ""
                 }
 
                 try {
@@ -583,7 +561,7 @@ Config  = function(opt){
                     if (env != 'prod' && cacheless) delete require.cache[_(filename, true)];
 
                     //console.log("here ", name, " VS ", filename, "\n", conf[bundle][env].files[name]);
-                    files[name] = utils.extend( true, files[name], require(filename) );
+                    files[name] = utils.extend( true, files[name], require(filename) )
                     //console.log("Got filename ", name ,files[name]);
                 } catch (err) {
 
@@ -593,10 +571,10 @@ Config  = function(opt){
                         log("[ " +filename + " ] is malformed !!");
                         process.exit(1)
                     } else {
-                        files[name] = null;
+                        files[name] = null
                     }
                     logger.warn('geena', 'SERVER:WARN:1', filename + err, __stack);
-                    logger.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack);
+                    logger.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack)
                 }
             }//EO for (name
 
@@ -618,31 +596,28 @@ Config  = function(opt){
             };
 
             files = whisper(reps, files);
-            //console.error("bundles path ", conf[bundle][env].bundlesPath);
-
-
             conf[bundle][env].content   = files;
             conf[bundle][env].bundle    = bundle;
             conf[bundle][env].env       = env;
 
-            files = {};
+            files = {}
 
         }//EO for each app
 
         //We always return something.
-        callback(false);
-    };
+        callback(false)
+    }
 
     /**
      * Check is cache is disabled
      *
      * @return {boolean} isUsingCache
      * */
-    this.isCacheless = function(){
+    this.isCacheless = function() {
         var env = _this.Env.get();
         //Also defined in core/gna.
-        return (env == "dev" || env == "debug") ? true : false;
-    };
+        return (env == "dev" || env == "debug") ? true : false
+    }
     /**
      * Refresh for cachless mode
      *
@@ -651,7 +626,7 @@ Config  = function(opt){
      * @callback callback
      * @param {boolean|string} err
      * */
-    this.refresh = function(bundle, callback){
+    this.refresh = function(bundle, callback) {
         var env = _this.Env.get();
         var conf = _this.envConf;
 
@@ -663,34 +638,34 @@ Config  = function(opt){
             if ( typeof(files) == 'object' && files.count() > 0 ) {
                 for (var f=0; f<files.length; ++f) {
                     path = _(modelsPath + '/' + files[f], true);
-                    delete require.cache[path];
+                    delete require.cache[path]
                 }
 
                 var Model   = require('./model');
                 for (var m in conf[bundle][env].content.connector) {
-                    setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m));
+                    setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m))
                 }
             }
         } catch (err) {
-            console.log(err.stack);
+            console.log(err.stack)
         }
 
         //Reload conf.
-        loadBundlesConfiguration( function(err){
+        loadBundlesConfiguration( function(err) {
             if (!err) {
-                callback(false);
+                callback(false)
             } else {
-                callback(err);
+                callback(err)
             }
         }, bundle)
 
-    };//EO refresh.
+    }//EO refresh.
 
 
     if (!opt) {
         //Interface
         return {
-            getInstance : function(bundle){
+            getInstance : function(bundle) {
                 return _this.getInstance(bundle)
             },
             isCacheless : function() {
@@ -698,16 +673,16 @@ Config  = function(opt){
                 return _this.isCacheless()
             },
             refresh : function(bundle, callback) {
-                _this.refresh(bundle, function(){
-                    callback();
-                });
+                _this.refresh(bundle, function() {
+                    callback()
+                })
             },
             Env : _this.Env,
             Host : _this.Host,
-            setBundles : function(bundles){
-                _this.bundles = bundles;
+            setBundles : function(bundles) {
+                _this.bundles = bundles
             }
-        };
+        }
 
     } else {
 
@@ -719,19 +694,19 @@ Config  = function(opt){
         init(opt);
 
         return {
-            onReady : function(callback){
-                _this.once('complete', function(err, config){
-                    callback(err, config);
-                });
+            onReady : function(callback) {
+                _this.once('complete', function(err, config) {
+                    callback(err, config)
+                })
             },
-            getInstance : function(bundle){
-                return _this.getInstance(bundle);
+            getInstance : function(bundle) {
+                return _this.getInstance(bundle)
             }
-        };
+        }
     }
 
 
 };
 
 util.inherits(Config, EventEmitter);
-module.exports = Config;
+module.exports = Config
