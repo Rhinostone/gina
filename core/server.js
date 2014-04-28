@@ -278,7 +278,10 @@ var fs              = require('fs'),
                     Router          = require('./router.js'),
                     isRoute         = {};
 
+                var hasViews = ( typeof(_this.conf[_this.appName].content['views']) != 'undefined' ) ? true : false;
+
                 var router = new Router(_this.env);
+                router.setMiddlewareInstance(_this.instance);
 
                 //Middleware configuration.
                 request.setEncoding(_this.conf[_this.appName].encoding);
@@ -297,7 +300,7 @@ var fs              = require('fs'),
                     for (var rule in _this.routing) {
                         //console.log("\nrules ", rule);
 
-                        if (typeof(_this.routing[rule]["param"]) == "undefined")
+                        if (typeof(_this.routing[rule]['param']) == 'undefined')
                             break;
 
                         //Preparing params to relay to the router.
@@ -328,10 +331,10 @@ var fs              = require('fs'),
                 //TODO - replace the string by the setting variable.
                 if (!matched /**|| pathname == '/favicon.ico'*/) {
 
-                    if (pathname === '/favicon.ico') {
+                    if (pathname === '/favicon.ico' && !hasViews) {
                         response.writeHead(200, {'Content-Type': 'image/x-icon'} );
                         response.end();
-                        console.Log('handled favicon.ico');
+                        //console.Log('handled favicon.ico');
                     }
                     logger.error(
                         'geena',
@@ -340,19 +343,17 @@ var fs              = require('fs'),
                         __stack
                     );
 
-                    if ( typeof(_this.conf[_this.appName].template) == "undefined" || !_this.conf[_this.appName].template) {
-
-                        response.setHeader("Content-Type", "application/json");
-                        response.end('404', JSON.stringify({
+                    if ( !hasViews ) {
+                        response.writeHead(404, { 'Content-Type': 'application/json'} );
+                        response.end(JSON.stringify({
                             status: 404,
                             error: "Error 404. Page not found : " + url.parse(request.url).pathname
                         }));
 
                     } else {
-                        response.end('404', 'Error 404. Page not found : ' + url.parse(request.url).pathname);
+                        response.writeHead(404, { 'Content-Type': 'text/html'} );
+                        response.end('Error 404. Page not found : ' + url.parse(request.url).pathname)
                     }
-
-                    //response.end();
                 }
             });//EO this.loadBundleConfiguration(this.appName, function(err, conf){
         });//EO this.instance

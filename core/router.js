@@ -57,24 +57,17 @@ Router = function(env) {
         var patt = /:/;
         return ( patt.test(pathname) ) ? true : false
     }
+    this.setMiddlewareInstance = function(instance) {
+        _this.middlewareInstance = instance
+    }
 
     this.getInstance = function() {
         return _this
     }
 
-    /**
-     * Compare urls
-     *
-     * @param {object} request
-     * @param {object} params - Route params
-     * @param {string} urlRouting
-     *
-     * @return {object|false} routes
-     * */
-    this.compareUrls = function(request, params, urlRouting) {
-
+    var parseRouting = function(request, params, route) {
         var uRe = params.url.split(/\//),
-            uRo = urlRouting.split(/\//),
+            uRo = route.split(/\//),
             score = 0,
             r = {};
 
@@ -92,6 +85,32 @@ Router = function(env) {
         r.past = (score === maxLen) ? true : false;
         r.request = request;
         return r
+    }
+    /**
+     * Compare urls
+     *
+     * @param {object} request
+     * @param {object} params - Route params
+     * @param {string} urlRouting
+     *
+     * @return {object|false} routes
+     * */
+    this.compareUrls = function(request, params, urlRouting) {
+
+        if ( typeof(urlRouting) == 'object' ) {
+            var i = 0;
+            var res = {
+                past : false,
+                request : request
+            };
+            while (i < urlRouting.length && !res.past) {
+                res = parseRouting(request, params, urlRouting[i]);
+                ++i
+            }
+            return res
+        } else {
+            return parseRouting(request, params, urlRouting)
+        }
     }
 
     /**
@@ -173,7 +192,7 @@ Router = function(env) {
         var pathname        = url.parse(request.url).pathname,
             bundle          = params.param.app,
             action          = params.param.action,
-            Controller      = require("./controller");
+            SuperController = require("./controller");
 
         var cacheless = process.env.IS_CACHELESS;
         console.log("routing..", bundle, env,  Config.Env.getConf( bundle, env ));
@@ -189,16 +208,16 @@ Router = function(env) {
         //console.log("ACTION ON  ROUTING IS : " + action);
 
         //Getting superCleasses & extending it with super Models.
-        var controllerFile  = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js'),
-            handlersPath    = _(_conf[bundle][env].bundlesPath  +'/'+ bundle + '/handlers');
-        var controller;
+        var controllerFile  = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js');
+        var handlersPath    = _(_conf[bundle][env].bundlesPath  +'/'+ bundle + '/handlers');
+
 
 
         try {
             console.log("controller file is ", controllerFile);
             if (env != 'prod' && cacheless) delete require.cache[_(controllerFile, true)];
 
-            var controllerRequest  = require(controllerFile)
+            var Controller  = require(controllerFile)
 
         } catch (err) {
             //Should be rended as a 500 err.
@@ -207,7 +226,7 @@ Router = function(env) {
             var data = 'Error 500. Internal server error ' + '\nCould not complete ['+ action +' : function(req, res...] : ' + err.stack;
             response.writeHead(500, {
                 'Content-Length': data.length,
-                'Content-Type': 'text/plain'
+                'Content-Type': 'text/html'
             });
             response.end(data)
         }
@@ -218,41 +237,24 @@ Router = function(env) {
             bundlePath      : _conf[bundle][env].bundlesPath +'/'+ bundle,
             rootPath        : _this.executionPath,
             conf            : _conf[bundle][env],
-            ext             : (_conf[bundle][env].template) ? _conf[bundle][env].template.ext : Config.Env.getDefault().ext,
             handler         : loadHandler(handlersPath, action),
-            instance        : _this.instance,
-            //to remove later
-            templateEngine  : (typeof(_conf.templateEngine) != "undefined") ? _conf.templateEngine : null,
-            view            : (typeof(_conf[bundle][env].views) != "undefined") ? _conf[bundle][env].views : null,
+            instance        : _this.middlewareInstance,
+            views           : (typeof(_conf[bundle][env].content.views) != "undefined") ? _conf[bundle][env].content.views : null,
             webPath         : _this.executionPath
         };
 
-        var actionController = controllerRequest, parentController = new Controller(request, response, next, options);
-
-        utils.extend( true, actionController, parentController);
-
+        Controller = utils.inherits(Controller, SuperController);
+        var controller = new Controller(request, response, next);
         logger.debug('geena', 'ROUTER:DEBUG:1', 'About to contact Controller', __stack);
-//        var a = actionController[action];
-//        a(request, response, next);
-//        //actionController.handleResponse(response);
-//        //console.log("a ", a);
-//          if (/.render/.test( a.toString() ))
-//        if (a.toString().match(/.render/) ) {
-//            actionController.handleResponse(response, false);
-//        } else {
-//            actionController.handleResponse(response, true);
-//        }
 
-        actionController.handleResponse(response);//inverted.
-        actionController[action](request, response, next);
-
-        action = null;
-
-
+        controller[action](request, response, next);
+        if (!controller.rendered) {
+            controller.handleResponse(response, options);
+        }
+        action = null
     };//EO route()
 
-    init();
-
+    init()
 };
 
 module.exports = Router
