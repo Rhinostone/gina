@@ -142,7 +142,7 @@ utils.refToObj = function (arr){
             last = tmp[o];
         }
         //console.info('current obj ',obj);
-        data = extend(true, data, obj);
+        data = utils.extend(true, data, obj);
         //console.info('merged ', data);
         obj = {};
         curObj = {};

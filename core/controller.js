@@ -26,16 +26,15 @@ var fs      = require("fs"),
     utils   = require("./utils"),
     extend  = utils.extend;
 
-Controller = function(request, response, next, options) {
+Controller = function(request, response, next) {
+
+    var _this = this;
 
     //Public
     this.name       = "Controller";
     this.data       = {};
-    this.app        = options;
-
     //Private
     var _request, _response, _next;
-    var _this = this;
 
     /**
      * Controller Constructor
@@ -43,13 +42,10 @@ Controller = function(request, response, next, options) {
      * */
     var init = function(request, response, next) {
         _request = request, _response = response, _next = next;
-        //console.log("...", _this instanceof Controller);
         getParams(request);
         if ( typeof(Controller.initialized) != "undefined" ) {
-            //console.log("class Controller already defined");
             return _this.getInstance()
         } else {
-            //console.log("class Controller NOT defined");
             Controller.initialized = true;
             Controller.instance = _this
         }
@@ -66,7 +62,8 @@ Controller = function(request, response, next, options) {
     *
     * @return {void}
     **/
-    this.handleResponse = function(response, autoRendered) {
+    this.handleResponse = function(response, options) {
+        _this.app = options
         _response = response;
         logger.info(
             'geena',
@@ -88,10 +85,11 @@ Controller = function(request, response, next, options) {
             content         = '',
             //conf            = this.app.conf,
             data            = {},
-            ext             = _this.app.ext,
             handler         = _this.app.handler,
             instance        = _this.app.instance,
-            templateEngine  = _this.app.templateEngine,
+            templateEngine  = _this.app.views.default.engine || 'swig',
+            ext             = _this.app.views.default.ext || 'html',
+            templateDir     = _this.app.views.default.dir || _this.app.bundlePath + '/views',
             viewConf        = _this.app.views;
 
 
@@ -99,10 +97,13 @@ Controller = function(request, response, next, options) {
         if (templateEngine != null && viewConf != "undefined" && viewConf != null) {
 
             //Usefull or Useless not ?.
-            instance.set('views', _this.app.bundlePath +'/template');
+            instance.set('views', templateDir);
             if (viewConf)
                 setRessources(viewConf, action);//css & js.
 
+            if( !/\./.test(ext) ) {
+                ext = '.' + ext
+            }
             content = action + ext;
             //console.info('ACTION IS ', content);
             _this.set('page.content', content);
@@ -110,15 +111,15 @@ Controller = function(request, response, next, options) {
 
 
 
-            if (_this.rendered != true && autoRendered) {
+            if (_this.rendered != true ) {
                 data = _this.getData();
-                _this.render(data);
+                _this.render(data, request, response, next);
                 data = null
             }
         } else {
 
             //console.log("get header ", _this.rendered, autoRendered);
-            if (_this.rendered != true && autoRendered) {
+            if (_this.rendered != true) {
                 //Webservices handling.
                 data = _this.getData();
                 _this.renderJSON(data);
@@ -133,26 +134,23 @@ Controller = function(request, response, next, options) {
      * @param {object} data
      * @return {void}
      * */
-    this.render = function(data) {
+    this.render = function(data, request, response, next) {
 
-        _this.app.isXmlHttpRequest = ( typeof(_request) != "undefined" && _request.xhr && _this.app.isXmlHttpRequest || _this.app.isXmlHttpRequest ) ? true : false;
+        _this.app.isXmlHttpRequest = ( typeof(request) != "undefined" && request.xhr && _this.app.isXmlHttpRequest || _this.app.isXmlHttpRequest ) ? true : false;
 
-        if( typeof(_this.app.isXmlHttpRequest) == "undefined" || !_this.app.isXmlHttpRequest ){
+        if( typeof(_this.app.isXmlHttpRequest) == "undefined" || !_this.app.isXmlHttpRequest ) {
             data.page.handler = (_this.app.handler != null) ? '<script type="text/javascript" src="/'+ _this.app.appName + '/handlers/' + _this.app.handler.file +'"></script>' : '';
             //console.log('HANDLER SRC _____',data.page.handler);
 
             if (data.page.content) {
-                //data.page.content = fs.readFileSync(this.app.bundlesPath + '/'+ this.app.appName + '/templates/' + data.page.content);
-                //data.page.content = ejs.compile(data.page.content);
-                //console.log('rendering datas...', data);
                 _response.render('layout' + data.page.ext, data)
             }
         } else {
-            if ( !_response.get('Content-Type') ) {
-                _response.setHeader("Content-Type", "application/json")
+            if ( !response.get('Content-Type') ) {
+                response.setHeader("Content-Type", "application/json")
             }
         }
-        _response.end();
+        response.end();
         _this.rendered = true
     }
 
@@ -166,7 +164,7 @@ Controller = function(request, response, next, options) {
 
         try {
 
-            if(typeof(options) != "undefined" && typeof(options.charset) !="undefined"){
+            if(typeof(options) != "undefined" && typeof(options.charset) != "undefined"){
                 _response.setHeader("charset", options.charset);
             }
             if ( !_response.get('Content-Type') ) {
@@ -428,10 +426,5 @@ Controller = function(request, response, next, options) {
 
     init(request, response, next)
 };
-
-//Allow protected methods to be overridden.
-//Controller.prototype.extends = utils.extends;
-//Controller.render.prototype.overridable = true;
-//Controller.renderJson.prototype.overridable = true;
 
 module.exports = Controller
