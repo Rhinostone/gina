@@ -223,7 +223,7 @@ Router = function(env) {
             instance        : _this.instance,
             //to remove later
             templateEngine  : (typeof(_conf.templateEngine) != "undefined") ? _conf.templateEngine : null,
-            view            : (typeof(_conf[bundle][env].view) != "undefined") ? _conf[bundle][env].view : null,
+            view            : (typeof(_conf[bundle][env].views) != "undefined") ? _conf[bundle][env].views : null,
             webPath         : _this.executionPath
         };
 

@@ -90,7 +90,7 @@ Model = function(namespace) {
         getConfig(bundle, function onGetConfigDone(err, conf){
 
             if (!err) {
-                _configuration = conf.connector;
+                _configuration = conf.connectors;
                 console.log("CONF READY ", model, conf.path);
                 //TODO - More controls...
 
@@ -179,7 +179,7 @@ Model = function(namespace) {
                 console.log("getting config for bundle ", bundle);
                 //Response.
                 var confObj = {
-                    connector   : tmp.content.connector,
+                    connectors   : tmp.content.connectors,
                     path        : tmp.modelsPath,
                     locals      : locals
                 };

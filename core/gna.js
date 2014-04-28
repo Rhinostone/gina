@@ -355,11 +355,11 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
     var loadAllModels = function(conf, callback) {
         //TODO - Reload using cacheless method for DEV env.
 
-        if ( typeof(conf.content['connector']) != 'undefined' && conf.content['connector'] != null) {
+        if ( typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null) {
             // TODO -  ? utils.loadModels();
             var Model   = require('./model');
             var mObj = {};
-            var models = conf.content.connector;
+            var models = conf.content.connectors;
             var entities = {};
             var connectorArray = models.toArray();
             var t = 0;

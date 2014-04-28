@@ -92,7 +92,7 @@ Controller = function(request, response, next, options) {
             handler         = _this.app.handler,
             instance        = _this.app.instance,
             templateEngine  = _this.app.templateEngine,
-            viewConf        = _this.app.view;
+            viewConf        = _this.app.views;
 
 
         //Only if templates are handled. Will handle swigg by default.

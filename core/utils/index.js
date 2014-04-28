@@ -34,7 +34,6 @@ var utils = {
 
 
 //Load optionals via settings.json => utils > use.
-//utils.Ssi = require('./lib/ssi');
 //utils.Generator = require('./lib/generator');
 
 /**
