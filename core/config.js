@@ -578,6 +578,11 @@ Config  = function(opt) {
                 }
             }//EO for (name
 
+            //Set default keys/values for views
+            if ( typeof(files['views'].default.static) == 'undefined' ) {
+                files['views'].default.static =  _(appPath +'/views/statics')
+            }
+
             //Constants to be exposed in configuration files.
             var reps = {
                 //TODO - remove this duplicate ?
@@ -587,13 +592,15 @@ Config  = function(opt) {
                 "mountPath"     : conf[bundle][env].mountPath,
                 "bundlePath"    : conf[bundle][env].bundlePath,
                 "modelsPath"    : conf[bundle][env].modelsPath,
-                "handlersPath"  : conf[bundle][env].handlersPath,
-                "staticPath"    : conf[bundle][env].staticPath,
                 "logsPath"      : conf[bundle][env].logsPath,
                 "tmpPath"       : conf[bundle][env].tmpPath,
+                "handlersPath"  : _(appPath +'/views/handlers'),
                 "env"           : env,
-                "bundle"        : bundle
+                "bundle"        : bundle,
+                "theme"         : files['views'].default.theme
             };
+
+
 
             files = whisper(reps, files);
             conf[bundle][env].content   = files;
