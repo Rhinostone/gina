@@ -204,6 +204,10 @@ var fs              = require('fs'),
         callback(true);
     },
 
+    hasViews : function(bundle) {
+        return ( typeof(this.conf[bundle].content['views']) != 'undefined' ) ? true : false;
+    },
+
     /**
      * Configure applications
      *
@@ -223,31 +227,33 @@ var fs              = require('fs'),
         this.instance.set('env', this.env);
 
         var app = this.instance, _this = this;
-
-        var apps = this.bundles, path;
+        app.use(Express.bodyParser());//in order to get POST params
+        var path, theme = '';
+        var apps = this.bundles;
+        var hasViews;
+        var aliases = undefined;
         //Do it for each app.
         for (var i=0; i<apps.length; ++i) {
-            path = (typeof(this.conf[apps[i]]["staticPath"]) != "undefined")
-                ? this.executionPath + this.conf[apps[i]].staticPath
-                : '/static';
-
-            //console.log(" static found ? ", path, fs.existsSync( _(path) ));
-            //Only applies when static folder exists.
-            if (fs.existsSync( _(path) )) {
-                app.configure(this.env, function() {
-                    //console.info('Configuring middleware for the prod environment.', _this.conf[_this.appName].bundlesPath);
-                    app.use(Express.bodyParser());//in order to get POST params
-                    //Configuring path
-                    app.use("/js", Express.static(path + '/js'));
-                    app.use("/css", Express.static(path + '/theme_default/css'));
-                    app.use("/images", Express.static(path + '/theme_default/images'));
-                    app.use("/assets", Express.static(path + '/assets', { maxAge: 3600000 }));//60 min of caching (=3600000)
-
-                    //Setting frontend handlers: like we said, only when statics path is defined.
-                    app.use("/"+ apps[i] +"/handlers", Express.static(_this.conf[apps[i]].bundlesPath +'/'+ apps[i] +'/handlers'));
-                });
-
+            hasViews = this.hasViews(apps[i]);
+            if (hasViews ) { // configure statics only if bundle has views
+                //default is mandatory: you would have to loop again to support all pages/topics
+                path = this.conf[apps[i]].content['views'].default.static;
+                aliases = this.conf[apps[i]].content['views'].default.aliases;
                 logger.notice('geena', 'SERVER:NOTICE:3', 'Server runing with static folder: ' + path);
+                if ( typeof(aliases) != 'undefined' && fs.existsSync( _(path) )) {
+                    app.configure( this.env, function() {
+                        //Configuring path
+                        for (var a in aliases) {
+                            var k = a;
+                            a = (a.substring(0, 1) != '/') ? '/'+ a : a;
+                            console.log('express using ', a, ' => ', aliases[k]);
+                            app.use(a, Express.static(aliases[k]) );
+                            //app.use("/css", express.static(path + '/theme_default/css'));
+                        }
+                        //app.use("/css", Express.static("/Workflow/www/vitrinedemo.com/src/frontend/views/ressources/default_theme/css") );
+                    })
+                }
+
             } else {
                 logger.notice('geena', 'SERVER:NOTICE:3', 'Server runing without static folder ');
             }
@@ -278,7 +284,7 @@ var fs              = require('fs'),
                     Router          = require('./router.js'),
                     isRoute         = {};
 
-                var hasViews = ( typeof(_this.conf[_this.appName].content['views']) != 'undefined' ) ? true : false;
+                var hasViews = _this.hasViews(_this.appName);
 
                 var router = new Router(_this.env);
                 router.setMiddlewareInstance(_this.instance);

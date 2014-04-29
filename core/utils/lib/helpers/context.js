@@ -20,66 +20,62 @@ var extend = require('./../extend');
 /**
  * ContextHelper Constructor
  * */
-ContextHelper = function(contexts){
+ContextHelper = function(contexts) {
 
     var _this = this;
 
-    var init = function(contexts){
+    var init = function(contexts) {
         if ( typeof(ContextHelper.initialized) != "undefined" ) {
-            //console.log("class ContextHelper already initialized");
-            return ContextHelper.instance;
+            return ContextHelper.instance
         } else {
-            //console.log("class ContextHelper NOT initialized");
             ContextHelper.initialized = true;
-            ContextHelper.instance = _this;
+            ContextHelper.instance = _this
         }
 
         if ( typeof(contexts) == 'undefined' ) {
             var contexts = {
                 paths : {}
-            };
+            }
         }
-        _this.contexts = contexts;
-    };
+        _this.contexts = contexts
+    }
 
-    joinContext = function(context){
-        //console.log("adding new context\n",_this.topics, "\nVS\n", topic);
-        extend(true, _this.contexts, context);
-    };
+    joinContext = function(context) {
+        extend(true, _this.contexts, context)
+    }
 
-    setContext = function(name, obj){
+    setContext = function(name, obj) {
 
         if (arguments.length > 1) {
             //console.log("Globla setter active ", name, obj);
             //if (type)
             if ( typeof(name) == 'undefined' || name == '' ) {
-                var name = 'global';
+                var name = 'global'
             }
 
             if ( typeof(_this.contexts[name]) != "undefined") {
-                extend(_this.contexts[name], obj);
+                extend(_this.contexts[name], obj)
             } else {
-                _this.contexts[name] = obj;
+                _this.contexts[name] = obj
             }
         } else {
             //console.log("setting context ", arguments[0]);
-            _this.contexts = arguments[0];
+            _this.contexts = arguments[0]
         }
-    };
+    }
 
-    getContext = function(name){
+    getContext = function(name) {
         //console.log("getting ", name, _this.contexts.content[name], _this.contexts);
         if ( typeof(name) != 'undefined' ) {
             try {
-                return _this.contexts[name];
-                //return _this.contexts.content[name];
+                return _this.contexts[name]
             } catch (err) {
-                return undefined;
+                return undefined
             }
         } else {
-            return _this.contexts;
+            return _this.contexts
         }
-    };
+    }
 
     /**
      * Whisper
@@ -90,32 +86,16 @@ ContextHelper = function(contexts){
      *
      * @return {object} revealed
      * */
-    whisper = function(dictionary, replaceable){
-        //console.error("hum ?? ",  replaceable , " \nDIco", dictionary);
-//        if (process.platform == 'win32') {
-//            //replaceable = ( JSON.stringify(replaceable, null, 4) ).replace(/\//g, '\\');
-//            //replaceable = ( JSON.stringify(replaceable) ).replace(/\//g, '_');
-//            replaceable = JSON.stringify(replaceable, null, 1).replace(/\//g, '\\');
+    whisper = function(dictionary, replaceable) {
         replaceable = JSON.stringify(replaceable, null, 2);
-//        } else {
-//            replaceable = ( JSON.stringify(replaceable) );
-//        }
-        //dictionary = dictionary.replace(/\\/g, '_');
-//        console.error("poutin !! ", replaceable.replace(/\{(\w+)\}/g, function(s, key) {
-//            return dictionary[key] || s;
-//        }));
-//        console.error("poutin ", replaceable.replace(/\{(\w+)\}/g, function(s, key) {
-//            return dictionary[key] || s;
-//        })  );
-        //process.exit(42);
         return JSON.parse(
             replaceable.replace(/\{(\w+)\}/g, function(s, key) {
                 return dictionary[key] || s;
             })
-        );
-    };
+        )
+    }
 
-    init(contexts);
+    init(contexts)
 };
 
 module.exports = ContextHelper;
