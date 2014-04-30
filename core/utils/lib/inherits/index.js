@@ -25,11 +25,25 @@ Inherits = function(a, b) {
     var init = function(a, b) {
         var err = check(a, b);
         if (!err) {
+
             var c = ( function() {
                 var cache = a;
                 return function() {
-                    b.apply(this, arguments);
-                    cache.apply(this, arguments)
+                    //super class
+                    var s = function(){};
+                    s.apply(b, arguments);
+                    b.apply(s, arguments);
+                    for (var prop in s.protected) {
+                        this[prop] = s.protected[prop]
+                    }
+
+                    if ( typeof(s.protected) != 'undefined' ) {
+                        cache.apply(this, arguments);
+                        delete s.protected
+                    } else { //public mode
+                        b.apply(this, arguments);
+                        cache.apply(this, arguments);
+                    }
                 }
             }());
 

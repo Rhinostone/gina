@@ -209,9 +209,7 @@ Router = function(env) {
 
         //Getting superCleasses & extending it with super Models.
         var controllerFile  = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js');
-        var handlersPath    = _(_conf[bundle][env].bundlesPath  +'/'+ bundle + '/handlers');
-
-
+        var handlersPath    = _(_conf[bundle][env].content.views);
 
         try {
             console.log("controller file is ", controllerFile);
@@ -226,7 +224,7 @@ Router = function(env) {
             var data = 'Error 500. Internal server error ' + '\nCould not complete ['+ action +' : function(req, res...] : ' + err.stack;
             response.writeHead(500, {
                 'Content-Length': data.length,
-                'Content-Type': 'text/html'
+                'Content-Type': 'text/plain'
             });
             response.end(data)
         }
@@ -239,18 +237,14 @@ Router = function(env) {
             conf            : _conf[bundle][env],
             handler         : loadHandler(handlersPath, action),
             instance        : _this.middlewareInstance,
-            views           : (typeof(_conf[bundle][env].content.views) != "undefined") ? _conf[bundle][env].content.views : null,
-            webPath         : _this.executionPath
+            views           : (typeof(_conf[bundle][env].content.views) != "undefined") ? _conf[bundle][env].content.views : null
         };
 
         Controller = utils.inherits(Controller, SuperController);
         var controller = new Controller(request, response, next);
-        logger.debug('geena', 'ROUTER:DEBUG:1', 'About to contact Controller', __stack);
-
+        controller.setOptions(options);
+        // about to contact Controller'
         controller[action](request, response, next);
-        if (!controller.rendered) {
-            controller.handleResponse(response, options);
-        }
         action = null
     };//EO route()
 

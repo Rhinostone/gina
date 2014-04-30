@@ -69,23 +69,6 @@ if ( typeof(geenaPath) == 'undefined') {
     setPath('geena.core', geenaPath);
 }
 
-//console.log("before.. ", root );
-
-//if ( logger == undefined ) {
-//    logger = gna.utils.logger;
-//    var loggerInstance = new (Winston.Logger)({
-//        levels : logger.custom.levels,
-//        transports : [
-//            new (Winston.transports.Console)({
-//                colorize: true
-//            })
-//        ],
-//        colors : logger.custom.colors
-//    });
-//    setContext('geena.utils.logger', loggerInstance);
-//}
-
-
 setContext('geena.utils', utils);
 
 var envs = ["dev", "debug", "stage", "prod"];
@@ -93,7 +76,8 @@ var env;
 //Setting env.
 env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
 gna.env = process.env.NODE_ENV = env;
-gna.env.isWin32 = process.env.isWin32 = function(){
+
+gna.env.isWin32 = process.env.isWin32 = function() {
     return (os.platform() == 'win32') ? true : false;
 };
 //Cahceless is also defined in the main config : Config::isCacheless().
@@ -262,7 +246,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
 
 
 
-gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, project){
+gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
     //console.log("project ", project);
 
@@ -283,11 +267,11 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
             path = (env == 'dev' || env == 'debug') ? packs[appName].src : packs[appName].release.target;
         } else {
             //path = ( process.argv[0] == 'node' ) ? process.argv[2] : process.argv[1];
-            path = process.argv[1];
+            path = process.argv[1]
         }
     } else {
         //path = ( process.argv[0] == 'node' ) ? process.argv[2] : process.argv[1];
-        path = _(process.argv[1]);
+        path = _(process.argv[1])
     }
 
 
@@ -296,7 +280,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
     var search;
     if ( (/index.js/).test(path) || p[p.length-1] == 'index') {
         var self;
-        path = ( self = path.split('/') ).splice(0, self.length-1).join('/');
+        path = ( self = path.split('/') ).splice(0, self.length-1).join('/')
     }
     //console.error('fuck ', env,  startWithGeena, process.argv, path);
     try {
@@ -346,7 +330,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         }
 
     } catch (err) {
-        abort(err);
+        abort(err)
     }
     // BO Cooking...
 
@@ -392,6 +376,11 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         }
     }
 
+//    var configureMiddleware = function (instance, middleware) {
+//        var type = intanceOf(middleware);
+//
+//
+//    }
 
     //EO cooking
 
@@ -401,10 +390,11 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
      * @callback callback
      *
      * */
-    gna.onInitialize = process.onInitialize = function(callback){
+    gna.onInitialize = process.onInitialize = function(callback) {
 
         gna.initialized = true;
-        e.on('init', function(instance, express, conf){
+        e.on('init', function(instance, express, conf) {
+
             loadAllModels(
                 conf,
                 function() {
@@ -416,64 +406,65 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                                 //Protect it.
                                 tmp = JSON.stringify(conf.content[name]);
                                 console.warn("parsing ", conf.content);
-                                return JSON.parse(tmp);
+                                return JSON.parse(tmp)
                             } catch (err) {
                                 console.error(err.stack);
-                                return undefined;
+                                return undefined
                             }
                         } else {
                             //console.error("config!!!! ", conf);
                             tmp = JSON.stringify(conf);
-                            return JSON.parse(tmp);
+                            return JSON.parse(tmp)
                         }
                     };
                     try {
+                        //configureMiddleware(instance, express);
                         callback(e, instance, express)
                     } catch (err) {
                         // TODO Output this to the error logger.
-                        console.log('Could not complete initialization: ', err.stack);
+                        console.log('Could not complete initialization: ', err.stack)
                     }
-                })
-
+                }
+            )
         })
-    };
+    }
 
-    gna.getShutdownConnector = process.getShutdownConnector = function(callback){
+    gna.getShutdownConnector = process.getShutdownConnector = function(callback) {
         var connPath = _(bundlesPath +'/'+ appName + '/config/connector.json');
-        fs.readFile(connPath, function onRead(err, content){
+        fs.readFile(connPath, function onRead(err, content) {
             try {
-                callback(err, JSON.parse(content).httpClient.shutdown);
+                callback(err, JSON.parse(content).httpClient.shutdown)
             } catch (err) {
-                callback(err);
+                callback(err)
             }
-        });
-    };
+        })
+    }
 
-    gna.getShutdownConnectorSync = process.getShutdownConnectorSync = function(){
+    gna.getShutdownConnectorSync = process.getShutdownConnectorSync = function() {
         var connPath = _(bundlesPath +'/'+ appName + '/config/connector.json');
         try {
             var content = fs.readFileSync(connPath);
-            return JSON.parse(content).httpClient.shutdown;
+            return JSON.parse(content).httpClient.shutdown
         } catch (err) {
-            return undefined;
+            return undefined
         }
-    };
+    }
 
-    gna.getMountedBundles = process.getMountedBundles = function(callback){
-        fs.readdir(bundlesPath, function onRead(err, files){
-            callback(err, files);
-        });
-    };
+    gna.getMountedBundles = process.getMountedBundles = function(callback) {
+        fs.readdir(bundlesPath, function onRead(err, files) {
+            callback(err, files)
+        })
+    }
 
-    gna.getMountedBundlesSync = process.getMountedBundlesSync = function(){
+    gna.getMountedBundlesSync = process.getMountedBundlesSync = function() {
         try {
-            return fs.readdirSync(bundlesPath);
-        } catch (err){
-            return err.stack;
+            return fs.readdirSync(bundlesPath)
+        } catch (err) {
+            return err.stack
         }
-    };
+    }
 
-    gna.getRunningBundlesSync = process.getRunningBundlesSync = function(){
+    gna.getRunningBundlesSync = process.getRunningBundlesSync = function() {
 
         //TODO - Do that thru IPC or thru socket. ???
         var pidPath = _(getPath('globalTmpPath') +'/pid');
@@ -525,10 +516,10 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
         content = content.concat(shutdown);
         content = content.concat(shutdownGeena);
 
-        return content;
-    };
+        return content
+    }
 
-    gna.getVersion = process.getVersion = function(bundle){
+    gna.getVersion = process.getVersion = function(bundle) {
         var name = bundle || appName;
         name = name.replace(/geena: /, '');
 
@@ -536,22 +527,21 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
             try {
                 var str = fs.readFileSync( _(bundlesPath + '/' + bundle + '/config/app.json') ).toString();
                 var version = JSON.parse(str).version;
-                return version;
-            } catch (err){
-                return err;
+                return version
+            } catch (err) {
+                return err
             }
         } else {
-            return undefined;
+            return undefined
         }
-    };
+    }
 
     /**
      * Start server
      *
      * @param {string} [executionPath]
      * */
-    gna.start = process.start = function(){
-
+    gna.start = process.start = function() {
 
         var core    = gna.core;
         //Get bundle name.
@@ -562,7 +552,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 
         //Inherits parent (geena) context.
         if ( typeof(process.argv[3]) != 'undefined' ) {
-            setContext( JSON.parse(process.argv[3]) );
+            setContext( JSON.parse(process.argv[3]) )
         }
 
         //Setting log paths.
@@ -578,7 +568,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 
         var linkPath =  _( root +'/'+ project.packages[core.startingApp].release.link );
 
-        gna.mount( bundlesPath, source, linkPath, function onBundleMounted(mountErr){
+        gna.mount( bundlesPath, source, linkPath, function onBundleMounted(mountErr) {
             var config = new Config({
                 env             : env,
                 executionPath   : core.executionPath,
@@ -624,7 +614,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
 
                             //On user conf complete.
                             e.on('complete', function(instance){
-                                server.init(instance);
+                                server.init(instance)
                             });
 
 
@@ -635,7 +625,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                                 if (!gna.initialized) {
                                     e.emit('complete', instance);
                                 }
-                                console.error('mounted!! ', conf.bundle, process.pid);
+                                console.error('mounted!! ', conf.bundle, process.pid)
                                 // -- EO
                             } else {
                                 logger.error(
@@ -644,7 +634,7 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                                         'Could not mount bundle ' + core.startingApp + '. ' + err + '\n' + err.stack,
                                     err.stack
                                 );
-                                abort(err);
+                                abort(err)
                             }
 
                         } else {
@@ -657,34 +647,33 @@ gna.getProjectConfiguration( function onDoneGettingProjectConfiguration(err, pro
                     })
             })//EO config.
         })//EO mount.
-    };
+    }
 
     /**
      * Stop server
      * */
-    gna.stop = process.stop = function(pid, code){
+    gna.stop = process.stop = function(pid, code) {
         log("stoped server");
         if(typeof(code) != "undefined")
             process.exit(code);
 
         process.exit()
-    };
+    }
 
     /**
      * Get Status
      * */
-    gna.status = process.status = function(bundle){
+    gna.status = process.status = function(bundle) {
         log("getting server status")
-    };
+    }
     /**
      * Restart server
      * */
-    gna.restart = process.restart = function(){
+    gna.restart = process.restart = function() {
         log("starting server")
-    };
+    }
 
 
 });//EO onDoneGettingProjectConfiguration.
 
-
-module.exports = gna;
+module.exports = gna
