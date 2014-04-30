@@ -43,6 +43,7 @@ Config  = function(opt) {
         var env = opt.env;
         _this.startingApp = opt.startingApp;
         _this.executionPath = opt.executionPath;
+        _this.task = opt.task || 'run'; // to be aible to filter later on non run task
 
         logger.debug('geena', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
 
@@ -493,7 +494,7 @@ Config  = function(opt) {
         var env         = _this.Env.get();
 
         var tmp         = '';
-        var tmpName     = '';
+        //var tmpName     = '';
         var filename    = '';
         var err         = false;
 
@@ -501,29 +502,35 @@ Config  = function(opt) {
         conf[bundle].cacheless = cacheless;
         conf[bundle][env].executionPath = getContext("paths").root;
 
-        var appPath = _(conf[bundle][env].bundlesPath + '/' + bundle);
+        if (_this.task != 'run' && env == 'prod') { // like for build
+            //getting src path instead
+            var appPath = _(conf[bundle][env].sources + '/' + bundle)
+        } else {
+            var appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
+        }
+
         var files = {};
         for (var name in  conf[bundle][env].files) {
             //Server only because of the shared mode VS the standalone mode.
             if (name == 'routing') continue;
 
             if (env != 'prod') {
-
-                tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
-                //console.log("tmp .. ", tmp);
-                filename = _(appPath + '/config/' + tmp);
-                //Can't do a thing without.
-                if ( fs.existsSync(filename) ) {
-                    //console.log("app conf is ", filename);
-                    if (cacheless) delete require.cache[_(filename, true)];
-
-                    tmpName = name +'_'+ env;//?? maybe useless.
-                    files[name] = require(filename);
-                    //console.log("watch out !!", files[name][bundle]);
-                }
-                tmp = ''
+                tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json')
+            } else {
+                tmp = conf[bundle][env].files[name]
             }
 
+            filename = _(appPath + '/config/' + tmp);
+            //Can't do a thing without.
+            if ( fs.existsSync(filename) ) {
+                //console.log("app conf is ", filename);
+                if (cacheless) delete require.cache[_(filename, true)];
+
+                //tmpName = name +'_'+ env;//?? maybe useless.
+                files[name] = require(filename);
+                //console.log("watch out !!", files[name][bundle]);
+            }
+            tmp = '';
             try {
 
                 filename = appPath + '/config/' + conf[bundle][env].files[name];

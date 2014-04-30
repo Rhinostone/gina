@@ -5,13 +5,14 @@ var GEENA_PATH = _( getPath('geena.core') );
 var Config = require( _( GEENA_PATH + '/config') );
 //var util = require('util');
 
-buildBundle = function(project, bundle){
+buildBundle = function(project, bundle) {
 
     var self = this;
-
-    var init = function(project, bundle){
+    self.task = 'build';//important for later in config init
+    var init = function(project, bundle) {
         self.root = getPath('root');
         self.env = process.env.NODE_ENV;
+
 
         if ( typeof(bundle) != 'undefined' ) {
             console.log('building', bundle);
@@ -23,15 +24,16 @@ buildBundle = function(project, bundle){
         }
     };
 
-    var getSourceInfos = function(package, bundle, callback){
+    var getSourceInfos = function( package, bundle, callback) {
         var config = new Config({
             env             : self.env,
             executionPath   : self.root,
             startingApp     : bundle,
-            geenaPath       : GEENA_PATH
+            geenaPath       : GEENA_PATH,
+            task            : self.task
         });
 
-        config.onReady( function onConfigReady(err, obj){
+        config.onReady( function onConfigReady(err, obj) {
             var conf = self.conf = obj.conf[bundle][self.env];
             try {
                 //will always build from sources by default.
@@ -73,13 +75,13 @@ buildBundle = function(project, bundle){
         })
     };
 
-    var buildBundleFromSources = function(project, bundle){
+    var buildBundleFromSources = function(project, bundle) {
 
         //build(bundle, releasePath, version);
         try {
             var package = project.packages[bundle];
 
-            getSourceInfos(package, bundle, function(err, opt){
+            getSourceInfos(package, bundle, function(err, opt) {
                 if (err) {
                     console.error(err.stack);
                     process.exit(0);
@@ -90,12 +92,12 @@ buildBundle = function(project, bundle){
                 var version = opt.version;
                 self.i = 0;
 
-                var copy = function(source, target, files){
+                var copy = function(source, target, files) {
                     var i = self.i;
                     if (i == files.length) {
                         //end.
                         // var patt = [];
-                        //var findAll = new _(target).grep(patt, function(){
+                        //var findAll = new _(target).grep(patt, function() {
                         //
                         // });
                         console.log("Build "+version+" ready.");
@@ -115,7 +117,7 @@ buildBundle = function(project, bundle){
 
                 var targetObj = new _(target);
                 targetObj.rm( function(err){
-                    fs.readdir(source, function(err, files){
+                    fs.readdir(source, function(err, files) {
                         if (!err) {
                             targetObj.mkdir(function(err){
                                 if (!err) {
