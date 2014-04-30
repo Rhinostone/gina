@@ -74,7 +74,7 @@ var AppCommand = {
             var envFound = false;
             var envs = ['dev', 'debug', 'stage', 'prod'];
 
-            if (envs.indexOf(process.argv[4]) > -1 ) {
+            if (envs.indexOf(process.argv[4]) > -1) {
                 envFound = true;
             }
 
@@ -282,6 +282,7 @@ var AppCommand = {
 
             case '-b':
             case '--build':
+
                 _this.isAllowedArgument(opt, function(found){
                     if (found) {
                         _this.build(opt.option);

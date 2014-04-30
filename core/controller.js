@@ -450,7 +450,8 @@ Controller = function(request, response, next) {
         set : _this.set,
         setMeta : _this.setMeta,
         getConfig : _this.getConfig,
-        redirect : _this.redirect
+        redirect : _this.redirect,
+        getData : _this.getData
         //getParams : _this.getParams
     };
 
