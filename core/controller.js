@@ -28,13 +28,13 @@ var fs      = require("fs"),
 
 Controller = function(request, response, next) {
 
-    var _this = this;
-
-    //Public
+    //public
     this.name       = "Controller";
     this.data       = {};
-    //Private
-    var _options    = {};
+
+    //private
+    var _this = this;
+    var _options;
     var _request, _response, _next;
 
     /**
@@ -44,20 +44,28 @@ Controller = function(request, response, next) {
     var init = function(request, response, next) {
         _request = request, _response = response, _next = next;
         getParams(request);
-        if ( typeof(Controller.initialized) != "undefined" ) {
-            return _this.getInstance()
+        if ( typeof(Controller.initialized) != 'undefined' ) {
+            return getInstance()
         } else {
             Controller.initialized = true;
-            Controller.instance = _this;
+            Controller.instance = _this
         }
     }
 
-    this.setOptions = function(options) {
-        _options = options
+    var getInstance = function() {
+        _options = Controller.instance._options;
+        if ( typeof(_this.protected['setOptions']) != 'undefined' ) {
+            delete _this.protected['setOptions'] // used once on init
+        }
+        return Controller.instance
     }
 
-    this.getInstance = function() {
-        return Controller.instance
+    this.setOptions = function(options) {
+        _options = Controller.instance._options = options
+    }
+
+    this.hasOptions = function() {
+        return ( typeof(_options) != 'undefined') ? true : false
     }
 
     /**
@@ -432,17 +440,19 @@ Controller = function(request, response, next) {
         }
     }
 
+    //protected
     this.protected =  {
-        setOptions : _this.setOptions,
+        setOptions : _this.setOptions, //used only once on new instance
+        hasOptions : _this.hasOptions,
         render : _this.render,
         renderJSON : _this.renderJSON,
         renderTEXT : _this.renderTEXT,
         set : _this.set,
         setMeta : _this.setMeta,
         getConfig : _this.getConfig,
-        getParams : _this.getParams,
         redirect : _this.redirect
-    }
+        //getParams : _this.getParams
+    };
 
     init(request, response, next);
 };
