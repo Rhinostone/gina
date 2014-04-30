@@ -43,7 +43,7 @@ exports['Super overrides'] = function(test) {
     test.done()
 }
 
-exports['Can access both properties'] = function(test) {
+exports['Can access public members'] = function(test) {
     test.equal(a.getName(), 'Julia Roberts');
     test.equal(a.getAge(), 46);
     test.done()

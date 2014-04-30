@@ -34,6 +34,7 @@ Controller = function(request, response, next) {
     this.name       = "Controller";
     this.data       = {};
     //Private
+    var _options    = {};
     var _request, _response, _next;
 
     /**
@@ -47,7 +48,7 @@ Controller = function(request, response, next) {
             return _this.getInstance()
         } else {
             Controller.initialized = true;
-            Controller.instance = _this
+            Controller.instance = _this;
         }
     }
 
@@ -56,14 +57,15 @@ Controller = function(request, response, next) {
     }
 
     /**
+     * TODO - remove this
     * Handle Responses
     *
     * @param {object} response
     *
     * @return {void}
     **/
-    this.handleResponse = function(response, options) {
-        _this.app = options
+    this.handleResponse = function(response) {
+        var options = getOptions()
         _response = response;
         logger.info(
             'geena',
@@ -111,7 +113,7 @@ Controller = function(request, response, next) {
 
 
 
-            if (_this.rendered != true ) {
+            if (_this.rendered != true && _this.autoRender ) {
                 data = _this.getData();
                 _this.render(data, request, response, next);
                 data = null
@@ -134,25 +136,29 @@ Controller = function(request, response, next) {
      * @param {object} data
      * @return {void}
      * */
+
     this.render = function(data, request, response, next) {
 
-        _this.app.isXmlHttpRequest = ( typeof(request) != "undefined" && request.xhr && _this.app.isXmlHttpRequest || _this.app.isXmlHttpRequest ) ? true : false;
-
-        if( typeof(_this.app.isXmlHttpRequest) == "undefined" || !_this.app.isXmlHttpRequest ) {
-            data.page.handler = (_this.app.handler != null) ? '<script type="text/javascript" src="/'+ _this.app.appName + '/handlers/' + _this.app.handler.file +'"></script>' : '';
-            //console.log('HANDLER SRC _____',data.page.handler);
-
-            if (data.page.content) {
-                _response.render('layout' + data.page.ext, data)
-            }
-        } else {
-            if ( !response.get('Content-Type') ) {
-                response.setHeader("Content-Type", "application/json")
-            }
-        }
-        response.end();
-        _this.rendered = true
     }
+//    this.render = function(data, request, response, next) {
+//
+//        _this.app.isXmlHttpRequest = ( typeof(request) != "undefined" && request.xhr && _this.app.isXmlHttpRequest || _this.app.isXmlHttpRequest ) ? true : false;
+//
+//        if( typeof(_this.app.isXmlHttpRequest) == "undefined" || !_this.app.isXmlHttpRequest ) {
+//            data.page.handler = (_this.app.handler != null) ? '<script type="text/javascript" src="/'+ _this.app.appName + '/handlers/' + _this.app.handler.file +'"></script>' : '';
+//            //console.log('HANDLER SRC _____',data.page.handler);
+//
+//            if (data.page.content) {
+//                _response.render('layout' + data.page.ext, data)
+//            }
+//        } else {
+//            if ( !response.get('Content-Type') ) {
+//                response.setHeader("Content-Type", "application/json")
+//            }
+//        }
+//        _this.rendered = true;
+//        response.end()
+//    }
 
     /**
      * Render JSON
@@ -170,9 +176,8 @@ Controller = function(request, response, next) {
             if ( !_response.get('Content-Type') ) {
                 _response.setHeader("Content-Type", "application/json");
             }
-
-            _response.end(JSON.stringify(jsonObj));
-            _this.rendered = true
+            _this.rendered = true;
+            _response.end(JSON.stringify(jsonObj))
         } catch (err) {
             console.log(err.stack)
         }
@@ -190,9 +195,8 @@ Controller = function(request, response, next) {
         if ( !_response.get('Content-Type') ) {
             _response.setHeader("Content-Type", "text/plain");
         }
-
-        _response.end(content);
         _this.rendered = true;
+        _response.end(content);
     }
 
     /**
@@ -424,7 +428,12 @@ Controller = function(request, response, next) {
         }
     }
 
-    init(request, response, next)
+    init(request, response, next);
+    return {
+        setOptions : function(options) {
+            _options = options
+        }
+    }
 };
 
 module.exports = Controller

@@ -1,4 +1,3 @@
-
 var inherits = require('../index.js');// Not needed if the framework installed
 
 var A = function() {
@@ -30,4 +29,4 @@ console.log('is [ a ] instance of A ? ', a instanceof A);// true
 console.log('is [ a ] instance of B ? ', a instanceof B);// true
 console.log('Name: ', a.getName());// Julia Roberts
 console.log('Age: ', a.getAge());// 46
-console.log('Gender: ', a.getGender());// female
+console.log('Gender: ', a.getGender() );// female
