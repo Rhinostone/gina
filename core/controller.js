@@ -52,6 +52,10 @@ Controller = function(request, response, next) {
         }
     }
 
+    this.setOptions = function(options) {
+        _options = options
+    }
+
     this.getInstance = function() {
         return Controller.instance
     }
@@ -428,12 +432,19 @@ Controller = function(request, response, next) {
         }
     }
 
-    init(request, response, next);
-    return {
-        setOptions : function(options) {
-            _options = options
-        }
+    this.protected =  {
+        setOptions : _this.setOptions,
+        render : _this.render,
+        renderJSON : _this.renderJSON,
+        renderTEXT : _this.renderTEXT,
+        set : _this.set,
+        setMeta : _this.setMeta,
+        getConfig : _this.getConfig,
+        getParams : _this.getParams,
+        redirect : _this.redirect
     }
+
+    init(request, response, next);
 };
 
 module.exports = Controller
