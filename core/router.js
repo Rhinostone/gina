@@ -189,10 +189,10 @@ Router = function(env) {
     this.route = function(request, response, next, params) {
 
         //Routing.
-        var pathname        = url.parse(request.url).pathname,
-            bundle          = params.param.app,
-            action          = params.param.action,
-            SuperController = require("./controller");
+        var pathname        = url.parse(request.url).pathname;
+        var bundle          = params.param.app;
+        var action          = params.param.action;
+        var SuperController = require('./controller');
 
         var cacheless = process.env.IS_CACHELESS;
         console.log("routing..", bundle, env,  Config.Env.getConf( bundle, env ));
@@ -209,7 +209,7 @@ Router = function(env) {
 
         //Getting superCleasses & extending it with super Models.
         var controllerFile  = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js');
-        var handlersPath    = _(_conf[bundle][env].content.views);
+        var handlersPath    = _conf[bundle][env].content.views.default.aliases.handlers;
 
         try {
             console.log("controller file is ", controllerFile);
