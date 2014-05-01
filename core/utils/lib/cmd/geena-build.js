@@ -1,11 +1,11 @@
-var buildBundle;
+var BuildBundle;
 var fs = require('fs');
 var utils = getContext('geena.utils');
 var GEENA_PATH = _( getPath('geena.core') );
 var Config = require( _( GEENA_PATH + '/config') );
 //var util = require('util');
 
-buildBundle = function(project, bundle) {
+BuildBundle = function(project, bundle) {
 
     var self = this;
     self.task = 'build';//important for later in config init
@@ -161,4 +161,4 @@ buildBundle = function(project, bundle) {
 //    }
 };
 
-module.exports = buildBundle;
+module.exports = BuildBundle;

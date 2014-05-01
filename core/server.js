@@ -314,7 +314,7 @@ var fs              = require('fs'),
             })
         }
     },
-    //TODO - might move to some other place
+    //TODO - might move to some other place.. like to utils
     throwError : function(res, code, msg) {
         var hasViews = this.hasViews(this.appName);
 
