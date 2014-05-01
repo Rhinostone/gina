@@ -87,35 +87,34 @@ ContextHelper = function(contexts) {
      * @return {object} revealed
      * */
     whisper = function(dictionary, replaceable) {
-        var replace = function(dic, rep) {
-            rep = JSON.stringify(rep, null, 2)
-            return JSON.parse(rep.replace(/\{(\w+)\}/g, function(s, key) {
-                return dic[key] || s;
-            }))
-        }
-        var parse = function (dictionary, obj) {
-            for (var k in obj) {
-                if ( typeof(obj[k]) == 'object') {
-                    //obj[k] = JSON.stringify(obj[k], null, 2);
-                    parse(dictionary, obj[k], replaceable)
-                } else {
-                    obj[k] = replace(dictionary, obj[k]);
-                }
-            }
-            return obj
-        }
+//        var replace = function(dic, rep) {
+//            rep = JSON.stringify(rep, null, 2)
+//            return JSON.parse(rep.replace(/\{(\w+)\}/g, function(s, key) {
+//                return dic[key] || s;
+//            }))
+//        }
+//        var parse = function (dictionary, obj) {
+//            for (var k in obj) {
+//                if ( typeof(obj[k]) == 'object') {
+//                    //obj[k] = JSON.stringify(obj[k], null, 2);
+//                    parse(dictionary, obj[k], replaceable)
+//                } else {
+//                    obj[k] = replace(dictionary, obj[k]);
+//                }
+//            }
+//            return obj
+//        }
+//
+//        replaceable = parse(dictionary, replaceable);
+//        console.log('parsing: ', replaceable);
+//        return replaceable;
 
-        replaceable = parse(dictionary, replaceable);
-        console.log('parsing: ', replaceable);
-        return replaceable;
-
-
-//        replaceable = JSON.stringify(replaceable, null, 2);
-//        return JSON.parse(
-//            replaceable.replace(/\{(\w+)\}/g, function(s, key) {
-//                return dictionary[key] || s;
-//            })
-//        )
+        replaceable = JSON.stringify(replaceable, null, 2);
+        return JSON.parse(
+            replaceable.replace(/\{(\w+)\}/g, function(s, key) {
+                return dictionary[key] || s;
+            })
+        )
     }
 
     init(contexts)

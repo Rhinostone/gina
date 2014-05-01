@@ -37,9 +37,7 @@ $ geena <option> <bundle_name> <arguments>
     -t or --status <bundle>
 
 [arguments]:
-    <add>   -t or --type [ blog | cms | app | ws ]
-    <add>   -p or --port (auto -m standalone)
-    <add>   -m or --mode [ shared | standalone ]
+    <add>   -wv or --with-views
 
     <start>     <app_name> [ dev | debug | stage or staging | prod ] [ --debug-brk=<port>]
     <status>    <app_name>

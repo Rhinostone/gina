@@ -584,6 +584,7 @@ Config  = function(opt) {
         var reps = {
             //TODO - remove this duplicate ?
             "root"          : conf[bundle][env].executionPath,
+            "env"           : env,
             "executionPath" : conf[bundle][env].executionPath,
             "bundlesPath"   : conf[bundle][env].bundlesPath,
             "mountPath"     : conf[bundle][env].mountPath,
