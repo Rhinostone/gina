@@ -13,8 +13,6 @@ AddBundle = function(opt, project, env, bundle) {
     var self = this;
     self.task = 'add';//important for later in config init
 
-
-
     var init = function(opt, project, env, bundle) {
         self.root = getPath('root');
         self.env = process.env.NODE_ENV;
@@ -29,57 +27,6 @@ AddBundle = function(opt, project, env, bundle) {
         }
     }
 
-
-    var getSourceInfos = function( package, bundle, callback) {
-        var config = new Config({
-            env             : self.env,
-            executionPath   : self.root,
-            startingApp     : bundle,
-            geenaPath       : GEENA_PATH,
-            task            : self.task
-        });
-
-        config.onReady( function onConfigReady(err, obj) {
-            var conf = self.conf = obj.conf[bundle][self.env];
-            try {
-                //will always build from sources by default.
-                if ( typeof(package['src']) != 'undefined' && fs.existsSync( _(self.root + '/' + package['src']) )) {
-                    var sourcePath = _(conf.sources + '/' + bundle);
-                    var version = undefined;//by default.
-                    if ( fs.existsSync( _(sourcePath + '/config/app.json') ) ) {
-                        var appConf = require( _(sourcePath + '/config/app.json'));
-                        if ( typeof(appConf['version']) != 'undefined' ) {
-                            version = appConf['version']
-                        } else {
-                            package.version
-                        }
-                    } else {
-                        version = package.version
-                    }
-
-                    if (version == undefined) {
-                        console.log('You need a version reference to build.');
-                        process.exit(0);
-                    }
-                    var releasePath = _(conf.releases + '/' + bundle + '/' + version);
-                    callback(false, {
-                        src     : sourcePath,
-                        target  : releasePath,
-                        version : version
-                    })
-                } else if ( typeof(package['repo']) != 'undefined' ) {
-                    //relies on configuration.
-                    console.log('build from repo is a feature in progress.');
-                    process.exit(0);
-                } else {
-                    console.log('No source reference found for build. Need to add [src] or [repo]');
-                    process.exit(0);
-                }
-            } catch (err) {
-                callback(err);
-            }
-        })
-    }
     /**
      * Save project.json
      *
@@ -248,6 +195,58 @@ AddBundle = function(opt, project, env, bundle) {
             process.exit(1)
         }
     }
+
+//    var getSourceInfos = function( package, bundle, callback) {
+//        var config = new Config({
+//            env             : self.env,
+//            executionPath   : self.root,
+//            startingApp     : bundle,
+//            geenaPath       : GEENA_PATH,
+//            task            : self.task
+//        });
+//
+//        config.onReady( function onConfigReady(err, obj) {
+//            var conf = self.conf = obj.conf[bundle][self.env];
+//            try {
+//                //will always build from sources by default.
+//                if ( typeof(package['src']) != 'undefined' && fs.existsSync( _(self.root + '/' + package['src']) )) {
+//                    var sourcePath = _(conf.sources + '/' + bundle);
+//                    var version = undefined;//by default.
+//                    if ( fs.existsSync( _(sourcePath + '/config/app.json') ) ) {
+//                        var appConf = require( _(sourcePath + '/config/app.json'));
+//                        if ( typeof(appConf['version']) != 'undefined' ) {
+//                            version = appConf['version']
+//                        } else {
+//                            package.version
+//                        }
+//                    } else {
+//                        version = package.version
+//                    }
+//
+//                    if (version == undefined) {
+//                        console.log('You need a version reference to build.');
+//                        process.exit(0);
+//                    }
+//                    var releasePath = _(conf.releases + '/' + bundle + '/' + version);
+//                    callback(false, {
+//                        src     : sourcePath,
+//                        target  : releasePath,
+//                        version : version
+//                    })
+//                } else if ( typeof(package['repo']) != 'undefined' ) {
+//                    //relies on configuration.
+//                    console.log('build from repo is a feature in progress.');
+//                    process.exit(0);
+//                } else {
+//                    console.log('No source reference found for build. Need to add [src] or [repo]');
+//                    process.exit(0);
+//                }
+//            } catch (err) {
+//                callback(err);
+//            }
+//        })
+//    }
+
 
     init(opt, project, env, bundle);
 //    return {

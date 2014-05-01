@@ -30,19 +30,19 @@ Inherits = function(a, b) {
                 var cache = a;
                 return function() {
                     //super class
-                    var s = function(){};
-                    s.apply(b, arguments);
-                    b.apply(s, arguments);
-                    for (var prop in s.protected) {
-                        this[prop] = s.protected[prop]
+                    this.s = function(){};
+                    this.s.apply(b, arguments);
+                    b.apply(this.s, arguments);
+                    for (var prop in this.s.protected) {
+                        this[prop] = this.s.protected[prop]
                     }
 
-                    if ( typeof(s.protected) != 'undefined' ) {
+                    if ( typeof(this.s.protected) != 'undefined' ) {
                         cache.apply(this, arguments);
-                        delete s.protected
+                        delete this.s
                     } else { //public mode
                         b.apply(this, arguments);
-                        cache.apply(this, arguments);
+                        cache.apply(this, arguments)
                     }
                 }
             }());
