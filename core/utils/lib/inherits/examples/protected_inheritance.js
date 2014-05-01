@@ -38,7 +38,9 @@ var B = function(gender) {//Super Class
 };
 
 
-var a = new ( inherits(A, B) )('male');
+var A = inherits(A, B);
+var a = new A('male');
+
 console.log('is [ a ] instance of A ? ', a instanceof A);// => true
 console.log('is [ a ] instance of B ? ', a instanceof B);// => true
 console.log('Name: ', a.getName() );// => Michael Jackson
