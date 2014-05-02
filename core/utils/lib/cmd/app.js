@@ -106,18 +106,19 @@ var AppCommand = {
 
         //Setting default env.
         if (this.opt['option'] != 's' && this.opt['option'] != '-start') {
-//            if (typeof(process.argv[4]) != 'undefined') {
-//                var env = process.argv[4];
-//                this.opt['argument'] = env;
-//            } else {
+            if (typeof(process.argv[4]) != 'undefined') {
+                var env = process.argv[4]
+            } else {
                 var env = 'prod';
+                //Todo - clean it
 //                if (process.argv[4] != 'undefined') {
 //                    process.argv[5] = process.argv[4]
 //                }
 //                process.argv[4] = env;
 //                this.opt['argument'] = env;
-            //}
+            }
             this.env = env;
+            this.opt['argument'] = env;
 
             if (process.argv[5] != undefined) {
                 var p = process.argv[5].split(/=/);

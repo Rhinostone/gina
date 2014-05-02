@@ -61,7 +61,16 @@ Controller = function(request, response, next) {
     }
 
     this.setOptions = function(options) {
-        _options = Controller.instance._options = options
+        _options = Controller.instance._options = options;
+
+        if ( typeof(_options.views) != 'undefiend' && typeof(_options.action) != 'undefiend' ) {
+            var action = _options.action;
+            var ext = _options.views.default.ext || 'html';
+            var content = action + ext;
+            _this.set('page.ext', ext);
+            _this.set('page.content', content);
+            _this.set('page.ext', ext);
+        }
     }
 
     this.hasOptions = function() {
@@ -97,7 +106,6 @@ Controller = function(request, response, next) {
         var action          = _this.app.action,
             appName         = _this.app.appName,
             content         = '',
-            //conf            = this.app.conf,
             data            = {},
             handler         = _this.app.handler,
             instance        = _this.app.instance,
@@ -429,13 +437,13 @@ Controller = function(request, response, next) {
         if ( typeof(name) != 'undefined' ) {
             try {
                 //Protect it.
-                tmp = JSON.stringify(_this.app.conf.content[name]);
+                tmp = JSON.stringify(_options.conf.content[name]);
                 return JSON.parse(tmp)
             } catch (err) {
                 return undefined
             }
         } else {
-            tmp = JSON.stringify(_this.app.conf);
+            tmp = JSON.stringify(_options.conf);
             return JSON.parse(tmp)
         }
     }

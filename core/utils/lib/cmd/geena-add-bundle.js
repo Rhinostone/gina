@@ -64,60 +64,103 @@ AddBundle = function(opt, project, env, bundle) {
 
             //erase if exists
             if ( typeof(content.packages[bundle]) != 'undefined' ) {
-                delete content.packages[bundle]
+                rl.setPrompt('Bundle [ '+bundle+' ] already exists. Should I erase ? (yes|no) > ');
+                rl.prompt();
+
+                rl.on('line', function(line) {
+                    switch( line.trim().toLowerCase() ) {
+                        case 'y':
+                        case 'yes':
+                            delete content.packages[bundle];
+                            proceed()
+                            break;
+                        case 'n':
+                        case 'no':
+                            process.exit(0);
+                            break;
+                        default:
+                            console.log('Please, write "yes" to proceed or "no" to cancel. ');
+                            break;
+                    }
+                    rl.prompt();
+                }).on('close', function() {
+                    console.log('Have a great day!');
+                    process.exit(0);
+                });
+
             }
 
-            //add new !
-            content.packages[bundle] = {
-                "comment" : "Your comment goes here.",
-                "version" : "001",
-                "src" : "src/" + bundle,
-                "release" : {
-                    "version" : "0.0.1",
-                    "target" : "releases/"+ bundle +"/0.0.1",
-                    "link" : "bundles/"+ bundle
-                }
-            };
-
-            saveProjectFile(project, content, function doneSaving(err) {
-                if ( err && old != content) {//roolback
-                    fs.writeFileSync(project, data)
-                } else {
-                    //createBundle(content.packages[bundle], bundle)
-                    content = require(env);
-                    old = content;
-                    //saveEnvFile(env, content, bundle)
-                }
-            });
-
-            var saveEnvFile = function(env, content, bundle) {
-                //get last port
-
-                content[bundle] = {
-                    "dev" : {
-                        "host" : "127.0.0.1",
-                        "port" : {
-                            "http" : 3130,
-                            "https" : 3033
-                        }
-                    },
-                    "stage" : {
-                        "host" : "127.0.0.1",
-                        "port" : {
-                            "http" : 3130,
-                            "https" : 3033
-                        }
-                    },
-                    "prod" : {
-                        "host" : "127.0.0.1",
-                        "port" : {
-                            "http" : 3130,
-                            "https" : 3033
-                        }
+            var proceed = function() {
+                //add new !
+                content.packages[bundle] = {
+                    "comment" : "Your comment goes here.",
+                    "version" : "001",
+                    "src" : "src/" + bundle,
+                    "release" : {
+                        "version" : "0.0.1",
+                        "target" : "releases/"+ bundle +"/0.0.1",
+                        "link" : "bundles/"+ bundle
                     }
                 };
-            }
 
+                saveProjectFile(project, content, function doneSaving(err) {
+                    if ( err && old != content) {//roolback
+                        fs.writeFileSync(project, data)
+                    } else {
+                        createBundle(content.packages[bundle], bundle)
+                        content = require(env);
+                        old = content;
+                        saveEnvFile(env, content, bundle)
+                    }
+                });
+
+                var saveEnvFile = function(env, content, bundle) {
+                    if ( typeof(content[bundle]) != 'undefined' ) {
+                        delete content[bundle]
+                    }
+                    //get last port
+                    var last = 0;
+                    var list = [];
+                    for (var b in content) {
+                        for (var e in content[b]) { //env
+                            if ( typeof(content[b]['http']) != 'undefined' ) {
+                                last = ~~content[b]['http'];
+                                list.push(last)
+                            }
+                        }
+                    }
+
+                    for (var i=0; i<1000; ++i) {
+                        last += 1;
+                        if ( list.indexOf(last) <0 ) {
+                            break;
+                        }
+                    }
+
+                    //TODO - Check if port is not in use before
+
+                    content[bundle] = {
+                        "dev" : {
+                            "host" : "127.0.0.1",
+                            "port" : {
+                                "http" : last
+                            }
+                        },
+                        "stage" : {
+                            "host" : "127.0.0.1",
+                            "port" : {
+                                "http" : last
+                            }
+                        },
+                        "prod" : {
+                            "host" : "127.0.0.1",
+                            "port" : {
+                                "http" : last
+                            }
+                        }
+                    };
+                }
+            }
         } catch (err) {
             console.error(err.stack)
         }
