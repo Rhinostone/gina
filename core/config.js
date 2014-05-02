@@ -545,39 +545,39 @@ Config  = function(opt) {
                     log("[ " +filename + " ] is malformed !!");
                     process.exit(1)
                 } else {
-                    files[name] = null
+                    files[name] = undefined
                 }
                 err = _err;
+                console.error(err.stack);
                 logger.warn('geena', 'SERVER:WARN:1', filename + err, __stack);
-                logger.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack)
+                //logger.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack)
             }
         }//EO for (name
 
+        var hasViews = (typeof(files['views']) != 'undefined' && typeof(files['views']['default']) != 'undefined') ? true : false;
         //Set default keys/values for views
-        if ( typeof(files['views'].default.view) == 'undefined' ) {
+        if ( hasViews &&  typeof(files['views'].default.view) == 'undefined' ) {
             files['views'].default.view =  _(appPath +'/views')
         }
-        if ( typeof(files['views'].default.static) == 'undefined' ) {
+        if ( hasViews && typeof(files['views'].default.static) == 'undefined' ) {
             files['views'].default.static =  _(appPath +'/views/statics')
         }
 
-        files['views'].default = whisper(
-            {
-                "view" : files['views'].default.view
-            }, files['views'].default
-        );
+        //applies only for views
+        if (hasViews &&  typeof(files['views'].default.view) != 'undefined' ) {
+            files['views'].default = whisper(
+                {
+                    "view" : files['views'].default.view
+                }, files['views'].default
+            );
 
-        var defaultAliases = {
-            "css" : "{static}/css",
-            "images" : "{static}/images",
-            "handlers" : "{view}/handlers",
-            "js" : "{view}/js",
-            "assets" : "{root}/assets"
-        };
-        if ( typeof(files['views'].default.aliases) == 'undefined' ) {
-            files['views'].default.aliases = defaultAliases
-        } else if ( typeof(files['views'].default.aliases) != 'undefined') {
-            files['views'].default.aliases = utils.extend(true, files['views'].default.aliases, defaultAliases)
+            var defaultAliases = {
+                "css" : "{static}/css",
+                "images" : "{static}/images",
+                "handlers" : "{view}/handlers",
+                "js" : "{view}/js",
+                "assets" : "{root}/assets"
+            };
         }
 
         //Constants to be exposed in configuration files.
@@ -594,11 +594,17 @@ Config  = function(opt) {
             "tmpPath"       : conf[bundle][env].tmpPath,
             "handlersPath"  : _(appPath +'/views/handlers'),
             "env"           : env,
-            "bundle"        : bundle,
-            "theme"         : files['views'].default.theme,
-            "view"          : files['views'].default.view,
-            "static"        : files['views'].default.static
+            "bundle"        : bundle
         };
+
+        if ( hasViews && typeof(files['views'].default.aliases) == 'undefined' ) {
+            files['views'].default.aliases = defaultAliases
+        } else if ( hasViews && typeof(files['views'].default.aliases) != 'undefined') {
+            files['views'].default.aliases = utils.extend(true, files['views'].default.aliases, defaultAliases);
+            reps["theme"] = files['views'].default.theme;
+            reps["view" ] = files['views'].default.theme;
+            reps["static"] = files['views'].default.static;
+        }
 
         files = whisper(reps, files);
         conf[bundle][env].content   = files;

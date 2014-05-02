@@ -240,26 +240,26 @@ var AppCommand = {
         log("checking... ", p, " && ", d, " => ", this.bundleDir);
         //process.exit(42);
         //Checking root.
-        fs.exists(d, function(exists){
+        fs.exists(d, function(exists) {
             if (exists) {
                 //checking app directory.
-                fs.stat(p, function(err, stats){
+                fs.stat(p, function(err, stats) {
 
                     if (err) {
-                        callback(false);
+                        callback(err)
                     } else {
 
                         if ( stats.isDirectory() ) {
-                            callback(true);
+                            callback(false)
                         } else {
-                            callback(false);
+                            callback('[ '+ d +' ] is not a directory')
                         }
                     }
                 });
             } else {
-                callback(false);
+                callback('[ '+ d +' ] does not exists')
             }
-        });
+        })
     },
     map : function(opt){
         var _this = this;
@@ -389,7 +389,13 @@ var AppCommand = {
     start : function(opt){
         var _this = this;
 
-        this.isRealApp( function(real){
+        this.isRealApp( function(err) {
+            var real = false;
+            if (err) {
+                console.error(err.stack)
+            } else {
+                real = true
+            }
 
             var loggerInstance = new (Winston.Logger)({
                 levels : logger.custom.levels,
@@ -583,12 +589,11 @@ var AppCommand = {
     stop : function(opt){
         var _this = this, row = "";
 
-        this.isRealApp( function(real){
-            if (!real) {
+        this.isRealApp( function(err){
+            if (err) {
+                console.error(err.stack);
                 log(_this.msg.app[4].replace("%app%", _this.bundle));
                 process.exit(1);
-            } else {
-                //look for pid and kill it
             }
         });
     }
