@@ -48,7 +48,7 @@ Model = function(namespace) {
         }
 
         var namespace = namespace.split(/\//g);
-        _connector = namespace[1];//Has to be writtien the same for the connetor.json decalration or for the model folder
+        _connector = namespace[1];//Has to be writtien the same for the connetors.json decalration or for the model folder
         var bundle = namespace[0];
         namespace.shift();
         //Capitalize - Normalize

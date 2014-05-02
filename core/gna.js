@@ -221,6 +221,10 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
 
                     callback(false)
                 } catch (err) {
+                    if (err) {
+                        log(err);
+                        process.exit(1)
+                    }
                     if ( fs.existsSync(target) ) {
                         var stats = fs.lstatSync(target);
                         if ( stats.isDirectory() ) {
@@ -569,6 +573,10 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         var linkPath =  _( root +'/'+ project.packages[core.startingApp].release.link );
 
         gna.mount( bundlesPath, source, linkPath, function onBundleMounted(mountErr) {
+            if (mountErr) {
+                console.error(mountErr.stack);
+                process.exit(1)
+            }
             var config = new Config({
                 env             : env,
                 executionPath   : core.executionPath,
