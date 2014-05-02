@@ -106,9 +106,9 @@ var AppCommand = {
 
         //Setting default env.
         if (this.opt['option'] != 's' && this.opt['option'] != '-start') {
-            if (typeof(process.argv[4]) != 'undefined') {
-                var env = process.argv[4]
-            } else {
+//            if (typeof(process.argv[4]) != 'undefined') {
+//                var env = process.argv[4//                this.opt['argument'] = env;
+//            } //else {
                 var env = 'prod';
                 //Todo - clean it
 //                if (process.argv[4] != 'undefined') {
@@ -116,7 +116,7 @@ var AppCommand = {
 //                }
 //                process.argv[4] = env;
 //                this.opt['argument'] = env;
-            }
+            //}
             this.env = env;
             this.opt['argument'] = env;
 
@@ -133,7 +133,7 @@ var AppCommand = {
             logs    : _(this.options.root + '/logs'),
             core    : _(this.options.core)
         });
-
+        process.env.NODE_ENV = this.env;
         //console.log("=> setting my core ", this.options.core);;
         this.isAllowedOption(this.opt);
     },
