@@ -63,9 +63,12 @@ Controller = function(request, response, next) {
     this.setOptions = function(options) {
         _options = Controller.instance._options = options;
 
-        if ( typeof(_options.views) != 'undefiend' && typeof(_options.action) != 'undefiend' ) {
+        if ( typeof(_options.views) != 'undefined' && typeof(_options.action) != 'undefined' ) {
             var action = _options.action;
-            var ext = _options.views.default.ext || 'html';
+            var ext = 'html';
+            if ( typeof(_options.views.default) != 'undefined' ) {
+                ext = _options.views.default.ext || ext;
+            }
             if( !/\./.test(ext) ) {
                 ext = '.' + ext
             }
