@@ -211,7 +211,7 @@ Router = function(env) {
         //Getting superCleasses & extending it with super Models.
         var controllerFile  = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js');
         if (hasViews) {
-            var handlersPath = _conf[bundle][env].content.views.default.aliases.handlers
+            var handlersPath    = _conf[bundle][env].content.views.default.aliases.handlers;
         }
 
         try {
