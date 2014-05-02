@@ -65,7 +65,10 @@ Controller = function(request, response, next) {
 
         if ( typeof(_options.views) != 'undefiend' && typeof(_options.action) != 'undefiend' ) {
             var action = _options.action;
-            var ext = _options.views.default.ext || 'html';
+            var ext = _options.views.default.ext || 'html';
+            if( !/\./.test(ext) ) {
+                ext = '.' + ext
+            }
             var content = action + ext;
             _this.set('page.ext', ext);
             _this.set('page.content', content);
@@ -106,6 +109,7 @@ Controller = function(request, response, next) {
         var action          = _this.app.action,
             appName         = _this.app.appName,
             content         = '',
+            //conf            = this.app.conf,
             data            = {},
             handler         = _this.app.handler,
             instance        = _this.app.instance,
