@@ -220,7 +220,7 @@ AddBundle = function(opt, project, env, bundle) {
 
         if (source == self.source && typeof(list) == 'undefined') {//root
             var list = [];// root list
-            for (var l=0; l<files.length-1; ++l) {
+            for (var l=0; l<files.length; ++l) {
                 list[l] = _(self.source +'/'+ files[l])
             }
         }
@@ -246,9 +246,9 @@ AddBundle = function(opt, project, env, bundle) {
                 }
             }
 
-            if (f == files.length-1 && list.length == 0) {
+            if (f == files.length-1 && list.length == 0) { //end of all
                 console.info('Bundle [ '+bundle+' ] has been added to your project with succcess ;)');
-                process.exit(0);
+                process.exit(0)
             }
         }
     }
