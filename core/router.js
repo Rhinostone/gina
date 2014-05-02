@@ -238,9 +238,9 @@ Router = function(env) {
             bundlePath      : _conf[bundle][env].bundlesPath +'/'+ bundle,
             rootPath        : _this.executionPath,
             conf            : _conf[bundle][env],
-            handler         : loadHandler(handlersPath, action),
+            handler         : ( hasViews ) ? loadHandler(handlersPath, action) : undefined,
             instance        : _this.middlewareInstance,
-            views           : ( hasViews) != "undefined" ? _conf[bundle][env].content.views : undefined
+            views           : ( hasViews ) ? _conf[bundle][env].content.views : undefined
         };
 
 
