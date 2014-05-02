@@ -39,24 +39,124 @@ AddBundle = function(opt, project, env, bundle) {
 
         try {
             fs.writeFileSync(projectPath, data);
-            callback(false)
+            callback(false, data)
         } catch (err) {
-            callback(err)
+            callback(err, undefined)
         }
     }
 
-    var saveEnvFile = function(envPath, content, callback) {
+    var saveEnvFile = function(env, content, bundle, project) {
+        if ( typeof(content[bundle]) != 'undefined' ) {
+            delete content[bundle]
+        }
+        //get last port
+        var last = 0;
+        var list = [];
+        for (var b in content) {
+            for (var e in content[b]) { //env
+                if ( typeof(content[b][self.env]['port']['http']) != 'undefined' ) {
+                    last = ~~content[b][self.env]['port']['http'];
+                    list.push(last)
+                }
+            }
+        }
+
+        for (var i=0; i<1000; ++i) {
+            if ( list.indexOf(last) <0 ) {
+                last = last+1;
+                break;
+            }
+        }
+
+        //TODO - Check if port is not in use before
+        content[bundle] = {
+            "dev" : {
+                "host" : "127.0.0.1",
+                "port" : {
+                    "http" : last
+                }
+            },
+            "stage" : {
+                "host" : "127.0.0.1",
+                "port" : {
+                    "http" : last
+                }
+            },
+            "prod" : {
+                "host" : "127.0.0.1",
+                "port" : {
+                    "http" : last
+                }
+            }
+        };
+
         var data = JSON.stringify(content, null, 4);
 
         try {
-            fs.writeFileSync(envPath, data);
-            callback(false)
+            fs.writeFileSync(env, data);
+            createBundle(bundle, require(project).packages[bundle])
         } catch (err) {
-            callback(err)
+            conole.log(err.stack);
+            process.exit(1)
         }
     }
 
+    /**
+     * Create bundle default sources under /src
+     *
+     * @param {string} bundle
+     * @param {object} project
+     * */
+    var createBundle = function(bundle, project) {
+        project.src = self.root +'/'+ project.src;
+        var sample = new _(GEENA_PATH +'/template/samples/bundle/');
+        var target = _(project.src);
+        sample.cp(target, function done(err) {
+            if (err) {
+                console.error(err.stack);
+                process.exit(1)
+            }
+
+            // Browse, parse and replace keys
+            self.source = _(target);
+            browse(self.source, bundle)
+        })
+    }
+
     var makeBundle = function(project, env, bundle) {
+
+        var proceed = function() {
+            //add new !
+            content.packages[bundle] = {
+                "comment" : "Your comment goes here.",
+                "version" : "001",
+                "src" : "src/" + bundle,
+                "release" : {
+                    "version" : "0.0.1",
+                    "target" : "releases/"+ bundle +"/0.0.1",
+                    "link" : "bundles/"+ bundle
+                }
+            };
+
+            saveProjectFile(project, content, function doneSaving(e) {
+                if ( e && old != content) {//roolback
+                    fs.writeFileSync(project, data)
+                } else {
+                    //createBundle(content.packages[bundle], bundle);
+                    content = require(env);
+                    old = content;
+                    try {
+                        saveEnvFile(env, content, bundle, project)
+                    } catch (err) {
+                        fs.writeFileSync( env, JSON.stringify(old, null, 4) );
+                    }
+
+                }
+            });
+
+
+        };
+
         try {
             //add infos to project.json
             var content = require(project);
@@ -64,6 +164,9 @@ AddBundle = function(opt, project, env, bundle) {
 
             //erase if exists
             if ( typeof(content.packages[bundle]) != 'undefined' ) {
+                delete content.packages[bundle];
+                proceed()
+                /**
                 rl.setPrompt('Bundle [ '+bundle+' ] already exists. Should I erase ? (yes|no) > ');
                 rl.prompt();
 
@@ -86,81 +189,13 @@ AddBundle = function(opt, project, env, bundle) {
                 }).on('close', function() {
                     console.log('Have a great day!');
                     process.exit(0);
-                });
+                });*/
 
+            } else {
+                proceed()
             }
 
-            var proceed = function() {
-                //add new !
-                content.packages[bundle] = {
-                    "comment" : "Your comment goes here.",
-                    "version" : "001",
-                    "src" : "src/" + bundle,
-                    "release" : {
-                        "version" : "0.0.1",
-                        "target" : "releases/"+ bundle +"/0.0.1",
-                        "link" : "bundles/"+ bundle
-                    }
-                };
 
-                saveProjectFile(project, content, function doneSaving(err) {
-                    if ( err && old != content) {//roolback
-                        fs.writeFileSync(project, data)
-                    } else {
-                        createBundle(content.packages[bundle], bundle)
-                        content = require(env);
-                        old = content;
-                        saveEnvFile(env, content, bundle)
-                    }
-                });
-
-                var saveEnvFile = function(env, content, bundle) {
-                    if ( typeof(content[bundle]) != 'undefined' ) {
-                        delete content[bundle]
-                    }
-                    //get last port
-                    var last = 0;
-                    var list = [];
-                    for (var b in content) {
-                        for (var e in content[b]) { //env
-                            if ( typeof(content[b]['http']) != 'undefined' ) {
-                                last = ~~content[b]['http'];
-                                list.push(last)
-                            }
-                        }
-                    }
-
-                    for (var i=0; i<1000; ++i) {
-                        last += 1;
-                        if ( list.indexOf(last) <0 ) {
-                            break;
-                        }
-                    }
-
-                    //TODO - Check if port is not in use before
-
-                    content[bundle] = {
-                        "dev" : {
-                            "host" : "127.0.0.1",
-                            "port" : {
-                                "http" : last
-                            }
-                        },
-                        "stage" : {
-                            "host" : "127.0.0.1",
-                            "port" : {
-                                "http" : last
-                            }
-                        },
-                        "prod" : {
-                            "host" : "127.0.0.1",
-                            "port" : {
-                                "http" : last
-                            }
-                        }
-                    };
-                }
-            }
         } catch (err) {
             console.error(err.stack)
         }
@@ -173,38 +208,49 @@ AddBundle = function(opt, project, env, bundle) {
 //        })
     }
 
+
     /**
-     * Create bundle default sources under /src
+     * Browse sources
+     *
+     * @param {string} source
+     * @param {string} bundle
      * */
-    var createBundle = function(conf, bundle) {
-        conf.src = self.root +'/'+ conf.src;
-        var sample = new _(GEENA_PATH +'/template/samples/bundle/');
-        var target = _(conf.src);
-        sample.cp(target , function done(err) {
-            if (err) {
-                console.error(err.stack);
-                process.exit(1)
-            }
-
-            // Browse, parse and replace keys
-            self.source = target;
-            browse(self.source, bundle)
-        })
-    }
-
-    var browse = function(source, bundle) {
+    var browse = function(source, bundle, list) {
         var files = fs.readdirSync(source);
 
-        for (var f=0; f < files.length; ++f) {
-            newSource = source +'/'+ files[f];
-            if ( fs.statSync(newSource).isDirectory() ) {
-                browse(newSource, bundle)
-            } else {
-                parse(newSource)
+        if (source == self.source && typeof(list) == 'undefined') {//root
+            var list = [];// root list
+            for (var l=0; l<files.length-1; ++l) {
+                list[l] = _(self.source +'/'+ files[l])
             }
         }
-        //end
-        console.info('Bundle [ '+bundle+' ] has been added to your project with succcess ;)')
+
+        if (!files && list.indexOf(source) > -1) {
+            list.splice( list.indexOf(source), 1 )
+        }
+
+        for (var f=0; f < files.length; ++f) {
+            newSource = _(source +'/'+ files[f]);
+            if ( fs.statSync(newSource).isDirectory() ) {
+                browse(newSource, bundle, list)
+            } else {
+                list = parse(newSource, list)
+            }
+
+            if ( f == files.length-1) { //end of current dir
+                var p = newSource.split('/');
+                p.splice(p.length -1);
+                newSource = p.join('/');
+                if (list != undefined && list.indexOf(newSource) > -1) {
+                    list.splice( list.indexOf(newSource), 1 )
+                }
+            }
+
+            if (f == files.length-1 && list.length == 0) {
+                console.info('Bundle [ '+bundle+' ] has been added to your project with succcess ;)');
+                process.exit(0);
+            }
+        }
     }
 
     /**
@@ -213,7 +259,7 @@ AddBundle = function(opt, project, env, bundle) {
      * @param {string} file - File to parse
      * @param {}
      * */
-    var parse = function(file) {
+    var parse = function(file, list) {
         console.log('replacing: ', file);
         try {
             var f;
@@ -222,7 +268,7 @@ AddBundle = function(opt, project, env, bundle) {
 
             if ( isJS ) {
                 var contentFile = fs.readFileSync(file, 'utf8').toString();
-                //var occurrence = contentFile.replace(/{Bundle}/)
+                //var contentFile = require(file).toSource();
                 var dic = {
                     "Bundle" : self.bundle.substring(0, 1).toUpperCase() + self.bundle.substring(1),
                     "bundle" : self.bundle
@@ -230,8 +276,13 @@ AddBundle = function(opt, project, env, bundle) {
 
                 contentFile = whisper(dic, contentFile);//data
                 //rewrite file
-                fs.writeFileSync(file, JSON.stringify(contentFile, null, 4))
+                fs.writeFileSync(file, contentFile)
             }
+
+            if ( list != undefined && list.indexOf(file) > -1) { //end of current dir
+                list.splice( list.indexOf(file), 1 )
+            }
+            return list
 
         } catch(err) {
             console.error(err.stack);
