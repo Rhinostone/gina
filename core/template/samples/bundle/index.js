@@ -1,5 +1,6 @@
 /**
  * {Bundle} bundle
+ *
  * */
-{bundle} = require('geena');
+var {bundle} = require('geena');
 {bundle}.start();
