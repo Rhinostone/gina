@@ -547,9 +547,8 @@ Config  = function(opt) {
                 } else {
                     files[name] = undefined
                 }
-                err = _err;
-                console.error(err.stack);
-                logger.warn('geena', 'SERVER:WARN:1', filename + err, __stack);
+                console.error(_err.stack);
+                logger.warn('geena', 'SERVER:WARN:1', filename + _err, __stack);
                 //logger.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack)
             }
         }//EO for (name

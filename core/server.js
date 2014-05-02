@@ -211,8 +211,15 @@ var fs              = require('fs'),
                 }
 
                 var matched         = false,
-                    Router          = require('./router.js'),
                     isRoute         = {};
+                try {
+                    Router          = require('./router.js');
+                } catch(err) {
+                    if (err) {
+                        console.error(err.stack);
+                        process.exit(1)
+                    }
+                }
 
                 var hasViews = _this.hasViews(_this.appName);
 
