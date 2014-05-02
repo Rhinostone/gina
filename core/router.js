@@ -240,7 +240,7 @@ Router = function(env) {
             conf            : _conf[bundle][env],
             handler         : loadHandler(handlersPath, action),
             instance        : _this.middlewareInstance,
-            views           : ( hasViews) != "undefined") ? _conf[bundle][env].content.views : undefined
+            views           : ( hasViews) != "undefined" ? _conf[bundle][env].content.views : undefined
         };
 
 
