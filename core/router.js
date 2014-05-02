@@ -193,6 +193,7 @@ Router = function(env) {
         var bundle          = params.param.app;
         var action          = params.param.action;
         var SuperController = require('./controller');
+        var hasViews        = ( typeof(_conf[bundle][env].content.views) != 'undefined' ) ? true : false;
 
         var cacheless = process.env.IS_CACHELESS;
         console.log("routing..", bundle, env,  Config.Env.getConf( bundle, env ));
@@ -209,7 +210,9 @@ Router = function(env) {
 
         //Getting superCleasses & extending it with super Models.
         var controllerFile  = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js');
-        var handlersPath    = _conf[bundle][env].content.views.default.aliases.handlers;
+        if (hasViews) {
+            var handlersPath    = _conf[bundle][env].content.views.default.aliases.handlers;
+        }
 
         try {
             console.log("controller file is ", controllerFile);
@@ -237,8 +240,9 @@ Router = function(env) {
             conf            : _conf[bundle][env],
             handler         : loadHandler(handlersPath, action),
             instance        : _this.middlewareInstance,
-            views           : (typeof(_conf[bundle][env].content.views) != "undefined") ? _conf[bundle][env].content.views : null
+            views           : ( hasViews) != "undefined") ? _conf[bundle][env].content.views : undefined
         };
+
 
         Controller = utils.inherits(Controller, SuperController);
         var controller = new Controller(request, response, next);
