@@ -76,6 +76,7 @@ Controller = function(request, response, next) {
             _this.set('page.ext', ext);
             _this.set('page.content', content);
             _this.set('page.ext', ext);
+            _this.set('page.handler', _options.handler);
         }
     }
 
