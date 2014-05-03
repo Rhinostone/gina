@@ -360,13 +360,27 @@ var AppCommand = {
     build : function(opt, argument){
         console.log('Releasing build...');
         //Getting project infos.
-        process.env.NODE_ENV = this.env;
         try {
             var project = require( _(getPath('root') + '/project.json') );
         } catch (err) {
             console.error(err.stack);
         }
 
+        var bundle = this.bundle;
+        try {
+            //is Real bundle ?.
+            if ( typeof(bundle) != 'undefined' && typeof(project.packages[bundle]) != 'undefined') {
+                var buildCmd = require('./geena-build')(project, bundle);
+            } else {
+                var buildCmd = require('./geena-build')(project);
+            }
+        } catch (err) {
+            console.error(err.stack);
+        }
+
+    },
+    initProject : function(opt, argument){
+        console.log('Creating new project...');
         var bundle = this.bundle;
         try {
             //is Real bundle ?.
