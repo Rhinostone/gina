@@ -66,20 +66,7 @@ var fs              = require('fs'),
     init : function(instance){
         var _this = this;
         this.instance = instance;
-
-        logger.debug(
-            'geena',
-            'SERVER:DEBUG:11',
-            'Server init in progress',
-            __stack
-        );
-
-        logger.notice(
-            'geena',
-            'SERVER:NOTICE:1',
-            'Init ['+ this.appName +'] on port : ['+ this.conf[this.appName].port.http + ']'
-        );
-
+        //console.log('['+ this.appName +'] on port : ['+ this.conf[this.appName].port.http + ']');
         this.onRoutesLoaded( function(success) {//load all registered routes in routing.json
             logger.debug(
                 'geena',
@@ -93,7 +80,6 @@ var fs              = require('fs'),
                 _this.onRequest()
             }
         })
-
     },
     /**
      * onRoutesLoaded
@@ -121,6 +107,7 @@ var fs              = require('fs'),
         //console.info('\nENVi : ', this.env, '\nPORT :', this.conf[this.appName].port,  '\nBUNDLE :', this.appName, '\nBundles ', apps, apps.length);
         //Standalone or shared instance mode. It doesn't matter.
         for (var i=0; i<apps.length; ++i) {
+
 
             var appPath = _(this.conf[apps[i]].bundlesPath+ '/' + apps[i]);
             appName =  apps[i];
@@ -290,24 +277,26 @@ var fs              = require('fs'),
             });//EO this.loadBundleConfiguration(this.appName, function(err, conf){
         });//EO this.instance
 
-        /**
+
         console.log(
-            "\nPID: " + process.pid,
-            "\nPORT: " + this.conf[this.appName].port.http,
-            "\nPATHS: " + getPaths()
-        );*/
+            '\nbundle: [ ' + this.appName +' ]',
+            '\nport: ' + this.conf[this.appName].port.http,
+            '\npid: ' + process.pid
+        );
 
         this.instance.listen(this.conf[this.appName].port.http);//By Default 8888
     },
     loadBundleConfiguration : function(req, bundle, callback) {
+
+        if ( /\/favicon\.ico/.test(url.parse(req.url).pathname) ) {
+            callback(false)
+        }
 
         var _this = this;
         //var config  = getContext('geena.config');
         var config = require('./config')();
         config.setBundles(this.bundles);
         var conf = config.getInstance(bundle);
-
-        //console.log("bundle [", bundle, "] VS config ", config.getInstance(bundle) );
         var cacheless = config.isCacheless();
         console.log("is cacheless ", cacheless);
         //Reloading assets & files.
