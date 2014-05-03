@@ -93,7 +93,7 @@ AddBundle = function(opt, project, env, bundle) {
         var data = JSON.parse(JSON.stringify(self.projectData, null, 4));
         data.packages[self.bundle] = {
             "comment" : "Your comment goes here.",
-            "version" : "001",
+            "tag" : "001",
             "src" : "src/" + bundle,
             "release" : {
                 "version" : "0.0.1",
@@ -242,8 +242,9 @@ AddBundle = function(opt, project, env, bundle) {
             var f;
             f =(f=file.split(/\//))[f.length-1];
             var isJS = /\.js/.test(f.substring(f.length-3));
+            var isJSON = /\.js/.test(f.substring(f.length-5));
 
-            if ( isJS ) {
+            if ( isJS || isJSON && /config\/app\.json/.test(file) ) {
                 var contentFile = fs.readFileSync(file, 'utf8').toString();
                 //var contentFile = require(file).toSource();
                 var dic = {
