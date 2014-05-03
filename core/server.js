@@ -263,7 +263,6 @@ var fs              = require('fs'),
                     if (pathname === '/favicon.ico' && !hasViews) {
                         response.writeHead(200, {'Content-Type': 'image/x-icon'} );
                         response.end();
-                        //console.Log('handled favicon.ico');
                     }
                     logger.error(
                         'geena',
@@ -280,6 +279,7 @@ var fs              = require('fs'),
 
         console.log(
             '\nbundle: [ ' + this.appName +' ]',
+            '\nenv: [ '+ this.env +' ]',
             '\nport: ' + this.conf[this.appName].port.http,
             '\npid: ' + process.pid
         );
@@ -293,7 +293,6 @@ var fs              = require('fs'),
         }
 
         var _this = this;
-        //var config  = getContext('geena.config');
         var config = require('./config')();
         config.setBundles(this.bundles);
         var conf = config.getInstance(bundle);

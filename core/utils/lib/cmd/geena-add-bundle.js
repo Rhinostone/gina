@@ -40,11 +40,11 @@ AddBundle = function(opt, project, env, bundle) {
                     rollback(err)
                 }
 
-                //createBundle(bundle, require(project).packages[bundle])
                 saveProjectFile( function doneSavingProject(err, content) {
                     if ( err ) {
                         rollback(err)
                     }
+                    self.conf = content.packages[self.bundle];
                     //erase if exists
                     if ( typeof(content.packages[self.bundle]) != 'undefined' ) {
 
@@ -56,7 +56,7 @@ AddBundle = function(opt, project, env, bundle) {
                                 case 'y':
                                 case 'yes':
                                     delete content.packages[bundle];
-                                    createBundle(content.packages[self.bundle]);
+                                    createBundle();
                                     break;
                                 case 'n':
                                 case 'no':
@@ -64,113 +64,23 @@ AddBundle = function(opt, project, env, bundle) {
                                     break;
                                 default:
                                     console.log('Please, write "yes" to proceed or "no" to cancel. ');
+                                    rl.prompt();
                                     break;
                             }
-                            rl.prompt()
                         }).on('close', function() {
                             console.log('exiting bundle installation');
                             process.exit(0)
                         })
 
                     } else {
-                        proceed()
+                        createBundle()
                     }
-
                 })
             })
         } catch (err) {
             fs.writeFileSync( env, JSON.stringify(old, null, 4) );
         }
     }
-
-    /**
-     var makeBundle = function(project, env, bundle) {
-
-        var proceed = function() {
-            //add new !
-            content.packages[bundle] = {
-                "comment" : "Your comment goes here.",
-                "version" : "001",
-                "src" : "src/" + bundle,
-                "release" : {
-                    "version" : "0.0.1",
-                    "target" : "releases/"+ bundle +"/0.0.1",
-                    "link" : "bundles/"+ bundle
-                }
-            };
-
-
-            saveProjectFile(project, content, function doneSaving(e) {
-                if ( e && old != content) {//roolback
-                    fs.writeFileSync(project, data)
-                } else {
-                    //createBundle(content.packages[bundle], bundle);
-                    content = require(env);
-                    old = content;
-                    try {
-                        saveEnvFile(env, content, bundle, project)
-                    } catch (err) {
-                        fs.writeFileSync( env, JSON.stringify(old, null, 4) );
-                    }
-
-                }
-            });
-
-
-        };
-
-        try {
-            //add infos to project.json
-            var content = require(project);
-            var old = content;
-
-            //erase if exists
-            if ( typeof(content.packages[bundle]) != 'undefined' ) {
-                //delete content.packages[bundle];
-                //proceed()
-
-                rl.setPrompt('Bundle [ '+bundle+' ] already exists. Should I erase ? (yes|no) > ');
-                rl.prompt();
-
-                rl.on('line', function(line) {
-                    switch( line.trim().toLowerCase() ) {
-                        case 'y':
-                        case 'yes':
-                            delete content.packages[bundle];
-                            proceed()
-                            break;
-                        case 'n':
-                        case 'no':
-                            process.exit(0);
-                            break;
-                        default:
-                            console.log('Please, write "yes" to proceed or "no" to cancel. ');
-                            break;
-                    }
-                    rl.prompt();
-                }).on('close', function() {
-                    console.log('Have a great day!');
-                    process.exit(0);
-                });
-
-            } else {
-                proceed()
-            }
-
-
-        } catch (err) {
-            console.error(err.stack)
-        }
-
-
-//        getSourceInfos(package, bundle, function(err, opt) {
-//            if (err) {
-//                console.error(err.stack);
-//                process.exit(0)
-//            }
-//
-//        })
-    }*/
 
     /**
      * Save project.json
@@ -180,10 +90,20 @@ AddBundle = function(opt, project, env, bundle) {
      *
      * */
     var saveProjectFile = function(callback) {
-        var data = JSON.stringify(self.projectData, null, 4);
+        var data = JSON.parse(JSON.stringify(self.projectData, null, 4));
+        data.packages[self.bundle] = {
+            "comment" : "Your comment goes here.",
+            "version" : "001",
+            "src" : "src/" + bundle,
+            "release" : {
+                "version" : "0.0.1",
+                "target" : "releases/"+ bundle +"/0.0.1",
+                "link" : "bundles/"+ bundle
+            }
+        };
         try {
-            fs.writeFileSync(self.project, data);
-            callback(false, JSON.parse(data))
+            fs.writeFileSync(self.project, JSON.stringify(data, null, 4));
+            callback(false, data)
         } catch (err) {
             callback(err, undefined)
         }
@@ -201,7 +121,7 @@ AddBundle = function(opt, project, env, bundle) {
 
 
         //get last port
-        var last = 0;
+        var last = 3100;
         for (var b in content) {
             for (var e in content[b]) { //env
                 for (p in content[b][e]['port']) {//protocol
@@ -250,10 +170,11 @@ AddBundle = function(opt, project, env, bundle) {
      * @param {string} bundle
      * @param {object} project
      * */
-    var createBundle = function(project) {
-        project.src = self.root +'/'+ project.src;
+    var createBundle = function() {
+        var conf = self.conf
+        var src = self.root +'/'+ conf.src;
         var sample = new _(GEENA_PATH +'/template/samples/bundle/');
-        var target = _(project.src);
+        var target = _(src);
         sample.cp(target, function done(err) {
             if (err) {
                 rollback(err)
