@@ -80,6 +80,8 @@ var AppCommand = {
             if (envs.indexOf(process.argv[4]) > -1) {
                 envFound = true;
                 this.env = process.argv[4]
+            } else {
+                process.argv[4] = this.env
             }
 
             if (process.argv.length >= 5 && !envFound) {
@@ -358,7 +360,7 @@ var AppCommand = {
     build : function(opt, argument){
         console.log('Releasing build...');
         //Getting project infos.
-        process.env.NODE_ENV = this.opt.argument;
+        process.env.NODE_ENV = this.env;
         try {
             var project = require( _(getPath('root') + '/project.json') );
         } catch (err) {

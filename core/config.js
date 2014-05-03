@@ -535,8 +535,12 @@ Config  = function(opt) {
 
                 filename = appPath + '/config/' + conf[bundle][env].files[name];
                 if (env != 'prod' && cacheless) delete require.cache[_(filename, true)];
+                if ( fs.existsSync(filename) ) {
+                    files[name] = utils.extend( true, files[name], require(filename) )
+                } else {
+                    files[name] = undefined
+                }
 
-                files[name] = utils.extend( true, files[name], require(filename) )
             } catch (_err) {
 
                 if ( fs.existsSync(filename) ) {
