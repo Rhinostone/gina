@@ -22,7 +22,7 @@
  */
 
 var cmd = {},
-    count = process.argv.length - 2;
+    argCount = process.argv.length - 2;
 
 cmd.option = [];
 cmd.setOption = function(option){
@@ -58,21 +58,15 @@ cmd.onExec = function() {
         return;
     };
 
-    if (count <= 0) {
+    if (argCount <= 0) {
         log("Command geena must have argument(s) !"
                 +"\nTry this to get help: geena -h");
-    } else if (count == 1) {
+    } else if (argCount == 1) {
         var p = _(__dirname + '/basic.js');
         cmd.Basic = require(p).run(cmd.getOptions(), cmd.msg);
-    } else if (count >= 2 && count <4 || count == 4) {
-        var longcmd = (count>2) ? true : false;
-        if (
-            count == 2 && process.argv[2] == '-a'
-            || count == 2 && process.argv[2] == '--add'
-        ) {
-            log("geena: argument(s) mismatch !"
-                    +"\nTry this to get help: geena -h");
-        } else if (count == 4 && process.argv[2] != '-s' && process.argv[2] != '--start') {
+    } else if (argCount >= 2 && argCount <4 || argCount == 4) {
+        var longcmd = (argCount>2) ? true : false;
+        if (argCount == 4 && process.argv[2] != '-s' && process.argv[2] != '--start') {
             ignore();
         } else {
             var p = _(__dirname + '/app.js');
