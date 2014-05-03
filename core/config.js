@@ -806,30 +806,30 @@ Config  = function(opt) {
         //Reload models.
         var modelsPath = _(conf[bundle][env].modelsPath);
         var path;
-        try {
-            var files = fs.readdirSync(modelsPath);
-            if ( typeof(files) == 'object' && files.count() > 0 ) {
-                for (var f=0; f<files.length; ++f) {
-                    path = _(modelsPath + '/' + files[f], true);
-                    delete require.cache[path]
-                }
+        fs.exists(modelsPath, function(exists) {
+            if (exists) {
+                var files = fs.readdirSync(modelsPath);
+                if ( typeof(files) == 'object' && files.count() > 0 ) {
+                    for (var f=0; f<files.length; ++f) {
+                        path = _(modelsPath + '/' + files[f], true);
+                        delete require.cache[path]
+                    }
 
-                var Model   = require('./model');
-                for (var m in conf[bundle][env].content.connectors) {
-                    setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m))
+                    var Model   = require('./model');
+                    for (var m in conf[bundle][env].content.connectors) {
+                        setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m))
+                    }
                 }
             }
-        } catch (err) {
-            console.log(err.stack)
-        }
 
-        //Reload conf.
-        loadBundleConfig( bundle, function(err) {
-            if (!err) {
-                callback(false)
-            } else {
-                callback(err)
-            }
+            //Reload conf.
+            loadBundleConfig( bundle, function(err) {
+                if (!err) {
+                    callback(false)
+                } else {
+                    callback(err)
+                }
+            })
         })
 
     }//EO refresh.

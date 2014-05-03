@@ -94,6 +94,7 @@ var AppCommand = {
         } else {
             this.PID = new Proc('geena', process, false);
         }
+
         this.PID.setMaster(process.pid);
 
         if (longCMD) {

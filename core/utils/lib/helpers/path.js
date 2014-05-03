@@ -224,7 +224,17 @@ PathHelper = function(){
             //console.log("new val !! ", self.value);
         }
         return self;
-    };
+    }
+
+    _.prototype.existsSync = function() {
+        return fs.existsSync(self.value)
+    }
+
+    _.prototype.exists = function(callback) {
+        fs.exists(self.value, function(exists) {
+            callback(exists)
+        })
+    }
 
     /**
      * _.mkdir() Create a folder if doesn't exists, else return path
