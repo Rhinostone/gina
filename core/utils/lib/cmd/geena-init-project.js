@@ -19,12 +19,12 @@ iniProject = function(name) {
 
         var file = new _(self.root + '/project.json');
         var exists = file.existsSync();
-        console.log('?? exists ? ', exists);
-        //if ( !exists ) {
+        if ( !exists ) {
             createFile( file.toString() )
-        //} else {
-        //    console.log('[ '+ file +' ] already exists. Do you want to override ? (yes|no) >')
-        //}
+        } else {
+            console.log('[ aborted ] a project already exists in this location: '+ file);
+            process.exit(0)
+        }
     }
 
     var createFile = function(target) {

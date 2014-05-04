@@ -103,7 +103,7 @@ Router = function(env) {
                 past : false,
                 request : request
             };
-            while (i < urlRouting.length && !res.past) {
+            while (i < urlRouting.count() && !res.past) {
                 res = parseRouting(request, params, urlRouting[i]);
                 ++i
             }
