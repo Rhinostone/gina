@@ -1,6 +1,4 @@
 {
-    "use_https" : false,
     "name" : "{project}",
-    "npm" : true,
-    "packages" : {}
+    "bundles" : {}
 }

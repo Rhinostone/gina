@@ -79,7 +79,7 @@ BuildBundle = function(project, bundle) {
 
         //build(bundle, releasePath, version);
         try {
-            var package = project.packages[bundle];
+            var package = project.bundles[bundle];
 
             getSourceInfos(package, bundle, function(err, opt) {
                 if (err) {

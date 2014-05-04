@@ -31,18 +31,18 @@ var fs = require('fs'),
         '-u',
         '--update',
         '-i',
-        '--install',
+        '--init',
         '-v',
         '-v',
         '--version'
     ],
-    run : function(options, message){
+    run : function(options, message) {
         this.options = options;
         this.msg = message;
         this.arg = process.argv[2];
         var isAllowed = this.isAllowedOption(this.arg);
     },
-    isAllowedOption : function(arg){
+    isAllowedOption : function(arg) {
         var found = false;
         for (var i=0; i<this.allowedOptions.length; ++i) {
             if (arg == this.allowedOptions[i]) {
@@ -57,7 +57,7 @@ var fs = require('fs'),
         }
 
     },
-    map : function(arg){
+    map : function(arg) {
         switch(arg){
             case '-v':
             case '--version':
@@ -69,21 +69,27 @@ var fs = require('fs'),
                 this.getHelp();
                 break;
 
-            case '-u':
-            case '--update':
-                this.update();
+            case '-i':
+            case '--init':
+                this.initProject();
                 break;
 
-            case '-i':
-            case '--install':
-                this.install();
-                break;
+//            case '-u':
+//            case '--update':
+//                this.update();
+//                break;
         }
     },
-    getHelp : function(){
+    getHelp : function() {
         log('\n' + fs.readFileSync(__dirname + '/' +this.msg.basic[0]));
     },
-    getVersion : function(){
+    initProject : function() {
+        var project = process.argv[3];
+        if ( typeof(projet) == 'undefined' ) {
+            log('project name is undefiend')
+        }
+    },
+    getVersion : function() {
         var vers = "",
             version = {
             "number"    : this.options.version,
@@ -100,10 +106,7 @@ var fs = require('fs'),
             log(this.msg.basic[5]);
         }
     },
-    install : function(){
-        log('Geena already installed.');
-    },
-    update : function(){
+    update : function() {
         log('Update batch is not ready yet.');
     }
 };
