@@ -15,15 +15,10 @@ $ geena <option>
     -h or --help
     -v or --version
 
+$ geena <option>
 [project options]:
-    -i or --init or --install (needs project.json)
-    -d or --delete
+    -i or --init <project_name>
     -b or --build (will build all bundles at once)
-    -k or --kill or --stop
-    -r or --restart
-    -s or --start
-    -t or --status
-    -u or --update
 
 
 $ geena <option> <bundle_name> <arguments>
@@ -31,10 +26,8 @@ $ geena <option> <bundle_name> <arguments>
     -a or --add <bundle> <argument>
     -d or --delete <bundle>
     -b or --build <bundle>
-    -k or --kill or --stop <bundle>
     -r or --restart <bundle>
     -s or --start <bundle> [<argument>]
-    -t or --status <bundle>
 
 [arguments]:
     <add>   -wv or --with-views

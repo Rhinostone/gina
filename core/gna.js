@@ -147,19 +147,19 @@ gna.getProjectConfiguration = function (callback){
             //console.log('PROCESS: ', process.argv );
             //console.log(" now loading....", modulesPackage);
             //console.log('content ', dep);
-            if ( typeof(dep['packages']) == "undefined") {
-                dep['packages'] = {};
+            if ( typeof(dep['bundles']) == "undefined") {
+                dep['bundles'] = {};
             }
 
             if (
-                typeof(dep['packages']) != "undefined"
-                    && typeof(project['packages']) != "undefined"
+                typeof(dep['bundles']) != "undefined"
+                    && typeof(project['bundles']) != "undefined"
                 ) {
 
                 for (var d in dep) {
 
-                    if (d == 'packages')
-                        for (var p in dep[d]) project['packages'][p] = dep['packages'][p];
+                    if (d == 'bundles')
+                        for (var p in dep[d]) project['bundles'][p] = dep['bundles'][p];
                     else
                         project[d] = dep[d];
 
@@ -260,7 +260,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
     //gna.project = project;
     var appName;
 
-    var packs = project.packages;
+    var packs = project.bundles;
     if (startWithGeena) {
         //auto path ?
         //var isPath = (/\//).test(process.argv[3]);
@@ -567,10 +567,10 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         });
         setContext('geena.utils.logger', logger);
         //check here for mount point source...
-        var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.packages[core.startingApp].src) : _( root +'/'+ project.packages[core.startingApp].release.target );
+        var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.bundles[core.startingApp].src) : _( root +'/'+ project.bundles[core.startingApp].release.target );
         var tmpSource = _(bundlesPath +'/'+ core.startingApp);
 
-        var linkPath =  _( root +'/'+ project.packages[core.startingApp].release.link );
+        var linkPath =  _( root +'/'+ project.bundles[core.startingApp].release.link );
 
         gna.mount( bundlesPath, source, linkPath, function onBundleMounted(mountErr) {
             if (mountErr) {

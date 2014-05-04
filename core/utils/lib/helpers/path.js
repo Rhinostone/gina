@@ -227,11 +227,11 @@ PathHelper = function(){
     }
 
     _.prototype.existsSync = function() {
-        return fs.existsSync(self.value)
+        return fs.existsSync(this.value)
     }
 
     _.prototype.exists = function(callback) {
-        fs.exists(self.value, function(exists) {
+        fs.exists(this.value, function(exists) {
             callback(exists)
         })
     }

@@ -15,12 +15,14 @@ AddBundle = function(opt, project, env, bundle) {
 
     var init = function(opt, project, env, bundle) {
         self.root = getPath('root');
-        self.env = process.env.NODE_ENV;
         self.opt = opt;
 
         self.project = project;
         self.projectData = require(project);
         self.env = env;
+        if ( !fs.existsSync(env) ) {
+            fs.writeFileSync(env, '{}')
+        }
         self.envData = require(env);
 
         if ( typeof(bundle) != 'undefined' ) {
@@ -44,41 +46,44 @@ AddBundle = function(opt, project, env, bundle) {
                     if ( err ) {
                         rollback(err)
                     }
-                    self.conf = content.packages[self.bundle];
+                    self.conf = content.bundles[self.bundle];
+                    createBundle();
+//                    self.conf = content.bundles[self.bundle];
+
                     //erase if exists
-                    if ( typeof(content.packages[self.bundle]) != 'undefined' ) {
-
-                        rl.setPrompt('Bundle [ '+ self.bundle +' ] already exists. Should I erase ? (yes|no) > ');
-                        rl.prompt();
-
-                        rl.on('line', function(line) {
-                            switch( line.trim().toLowerCase() ) {
-                                case 'y':
-                                case 'yes':
-                                    delete content.packages[bundle];
-                                    createBundle();
-                                    break;
-                                case 'n':
-                                case 'no':
-                                    process.exit(0);
-                                    break;
-                                default:
-                                    console.log('Please, write "yes" to proceed or "no" to cancel. ');
-                                    rl.prompt();
-                                    break;
-                            }
-                        }).on('close', function() {
-                            console.log('exiting bundle installation');
-                            process.exit(0)
-                        })
-
-                    } else {
-                        createBundle()
-                    }
+//                    if ( typeof(content.bundles[self.bundle]) != 'undefined' ) {
+//
+//                        rl.setPrompt('Bundle [ '+ self.bundle +' ] already exists. Should I erase ? (yes|no) > ');
+//                        rl.prompt();
+//
+//                        rl.on('line', function(line) {
+//                            switch( line.trim().toLowerCase() ) {
+//                                case 'y':
+//                                case 'yes':
+//                                    delete content.bundles[bundle];
+//                                    createBundle();
+//                                    break;
+//                                case 'n':
+//                                case 'no':
+//                                    process.exit(0);
+//                                    break;
+//                                default:
+//                                    console.log('Please, write "yes" to proceed or "no" to cancel. ');
+//                                    rl.prompt();
+//                                    break;
+//                            }
+//                        }).on('close', function() {
+//                            console.log('exiting bundle installation');
+//                            process.exit(0)
+//                        })
+//
+//                    } else {
+//                        createBundle()
+//                    }
                 })
             })
         } catch (err) {
-            fs.writeFileSync( env, JSON.stringify(old, null, 4) );
+            rollback(err)
         }
     }
 
@@ -91,7 +96,7 @@ AddBundle = function(opt, project, env, bundle) {
      * */
     var saveProjectFile = function(callback) {
         var data = JSON.parse(JSON.stringify(self.projectData, null, 4));
-        data.packages[self.bundle] = {
+        data.bundles[self.bundle] = {
             "comment" : "Your comment goes here.",
             "tag" : "001",
             "src" : "src/" + bundle,
@@ -109,8 +114,7 @@ AddBundle = function(opt, project, env, bundle) {
         }
     }
 
-    var saveEnvFile = function(callback) {
-        var bundle = self.bundle;
+    var addEnvInfo = function(callback) {
         var content = self.envData;
 
         if ( typeof(content[bundle]) != 'undefined' ) {
@@ -161,6 +165,41 @@ AddBundle = function(opt, project, env, bundle) {
             callback(false)
         } catch (err) {
             callback(err)
+        }
+    }
+
+    var saveEnvFile = function(callback) {
+        var bundle = self.bundle;
+        var content = self.envData;
+
+        if ( typeof(content) != 'undefined' && typeof(content[bundle]) != 'undefined' ) {
+
+            rl.setPrompt('Bundle [ '+ bundle +' ] already exists. Should I erase ? (yes|no) > ');
+            rl.prompt();
+
+            rl.on('line', function(line) {
+                switch( line.trim().toLowerCase() ) {
+                    case 'y':
+                    case 'yes':
+                        delete content[bundle];
+                        addEnvInfo(callback);
+                        break;
+                    case 'n':
+                    case 'no':
+                        process.exit(0);
+                        break;
+                    default:
+                        console.log('Please, write "yes" to proceed or "no" to cancel. ');
+                        rl.prompt();
+                        break;
+                }
+            }).on('close', function() {
+                console.log('exiting bundle installation');
+                process.exit(0)
+            })
+
+        } else {
+            addEnvInfo(callback)
         }
     }
 

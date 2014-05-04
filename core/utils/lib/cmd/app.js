@@ -29,15 +29,17 @@ var AppCommand = {
         '--build',
         '-d',
         '--delete',
+        '-i',
+        '--init',
         '-s',
         '--start',
-        '-k',
-        '--kill',
-        '--stop',
-        '-r',
-        '--restart',
-        '-t',
-        '--status'
+        //'-k',
+        //'--kill',
+        //'--stop',
+        //'-r',
+        //'--restart',
+        //'-t',
+        //'--status'
     ],
     allowedArguments : [
         '-t',
@@ -198,7 +200,7 @@ var AppCommand = {
 
         try {
             //This is mostly for dev.
-            var pkg = require( _(this.options.root + '/project.json') ).packages;
+            var pkg = require( _(this.options.root + '/project.json') ).bundles;
             if (
                 pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && env == 'dev'
                 || pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && env == 'debug'
@@ -286,7 +288,7 @@ var AppCommand = {
                         log(msg);
                     }
                 });
-            break;
+                break;
 
             case '-b':
             case '--build':
@@ -297,23 +299,33 @@ var AppCommand = {
                     }
                     return false;
                 });
-            break;
+                break;
 
             case '-d':
             case '--delete':
                 this.remove(opt);
             break;
 
+            case '-i':
+            case '--init':
+                _this.isAllowedArgument(opt, function(found){
+                    if (found) {
+                        _this.initProject(opt.option);
+                    }
+                    return false;
+                });
+                break;
+
             case '-k':
             case '--kill':
             case '--stop':
                 this.kill(opt);
-            break;
+                break;
 
             case '-r':
             case '--restart':
                 this.restart(opt);
-            break;
+                break;
 
             case '-s':
             case '--start':
@@ -323,13 +335,12 @@ var AppCommand = {
                     }
                     return false;
                 });
-
-            break;
+                break;
 
             case '-t':
             case '--status':
                 this.getStatus(opt);
-            break;
+                break;
         }
     },
     abort : function(code, err){
@@ -369,30 +380,24 @@ var AppCommand = {
         var bundle = this.bundle;
         try {
             //is Real bundle ?.
-            if ( typeof(bundle) != 'undefined' && typeof(project.packages[bundle]) != 'undefined') {
-                var buildCmd = require('./geena-build')(project, bundle);
+            if ( typeof(bundle) != 'undefined' && typeof(project.bundles[bundle]) != 'undefined') {
+                var buildCmd = require('./geena-build')(project, bundle)
             } else {
-                var buildCmd = require('./geena-build')(project);
+                var buildCmd = require('./geena-build')(project)
             }
         } catch (err) {
-            console.error(err.stack);
+            console.error(err.stack)
         }
 
     },
-    initProject : function(opt, argument){
-        console.log('Creating new project...');
-        var bundle = this.bundle;
+    initProject : function() {
+        var project = process.argv[3];
         try {
-            //is Real bundle ?.
-            if ( typeof(bundle) != 'undefined' && typeof(project.packages[bundle]) != 'undefined') {
-                var buildCmd = require('./geena-build')(project, bundle);
-            } else {
-                var buildCmd = require('./geena-build')(project);
-            }
+            console.log('creating new project...');
+            var initCmd = require('./geena-init-project')(project)
         } catch (err) {
-            console.error(err.stack);
+            console.error(err.stack)
         }
-
     },
     remove : function(opt){
         log('deleting app now...', opt);

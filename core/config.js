@@ -311,7 +311,7 @@ Config  = function(opt) {
         //console.log("bundle list ", _this.bundles);
         var root = new _(_this.executionPath).toUnixStyle();
         try {
-            var pkg = require(_(root + '/project.json')).packages;
+            var pkg = require(_(root + '/project.json')).bundles;
         } catch (err) {
             callback(err);
         } //bundlesPath will be default.
