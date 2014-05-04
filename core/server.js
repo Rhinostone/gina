@@ -86,13 +86,14 @@ var fs              = require('fs'),
      *
      *
      * */
-    onRoutesLoaded : function(callback){
+    onRoutesLoaded : function(callback, reload){
         //console.info("Trigged onRoutesLoaded");
 
         //console.info('ENV : ', this.conf[this.appName].env, '\n routing file\n ', this.conf[this.appName].files);
-        var config = getContext('geena.config');
-        //var config = require('./config')();
+        //var config = getContext('geena.config');
+        var config = require('./config')();
         var conf =  config.getInstance(this.appName);
+        var cacheless = config.isCacheless();
         var _this       = this,
             env         = this.env,
             cacheless   = this.cacheless,
@@ -104,11 +105,12 @@ var fs              = require('fs'),
             tmpContent  = "",
             tmpName     = "";
 
+        if (cacheless) {
+            this.routing = {}
+        }
         //console.info('\nENVi : ', this.env, '\nPORT :', this.conf[this.appName].port,  '\nBUNDLE :', this.appName, '\nBundles ', apps, apps.length);
         //Standalone or shared instance mode. It doesn't matter.
         for (var i=0; i<apps.length; ++i) {
-
-
             var appPath = _(this.conf[apps[i]].bundlesPath+ '/' + apps[i]);
             appName =  apps[i];
 
@@ -116,27 +118,27 @@ var fs              = require('fs'),
             if (!this.isStandalone && i == 0) appName = apps[i];
             //console.log("trying..",  _(this.conf[apps[i]].bundlesPath) );
             try {
-                if (env != 'prod') {
+                filename = _(appPath + '/config/' + _this.conf[apps[i]].files.routing);
+                if (cacheless) {
 
                     var tmpContent = _this.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
                     //console.log("tmp .. ", tmp);
-                    filename = _(appPath + '/config/' + tmpContent);
+                    tmpName = _(appPath + '/config/' + tmpContent);
                     //Can't do a thing without.
-                    if ( fs.existsSync(filename) ) {
+                    if ( fs.existsSync(tmpName) ) {
                         //console.log("app conf is ", filename);
+                        filename = tmpName;
                         if (cacheless) delete require.cache[_(filename, true)];
 
-                        tmpName = name +'_'+ env;//?? maybe useless.
+                        //tmpName = name +'_'+ env;//?? maybe useless.
                         _this.routing = require(filename);
                         tmpContent = "";
                     }
                 }
-                filename = _(appPath + '/config/' + _this.conf[apps[i]].files.routing);
 
-                //console.log("!!! my files ", filename);
                 try {
-                    if (env != 'prod' && cacheless) {
-                        delete require.cache[_(filename, true)];
+                    if (cacheless) {
+                        delete require.cache[_(filename, true)]
                     }
 
                     tmp = require(filename);
@@ -146,7 +148,8 @@ var fs              = require('fs'),
                     }
 
                     if (_this.routing.count() > 0) {
-                        _this.routing = utils.extend(true, true, tmp, _this.routing);
+                        //_this.routing = utils.extend(true, true, tmp, _this.routing);
+                        _this.routing = utils.extend(true, _this.routing, tmp);
                     } else {
                         _this.routing = tmp;
                     }
@@ -299,13 +302,18 @@ var fs              = require('fs'),
         var cacheless = config.isCacheless();
         console.log("is cacheless ", cacheless);
         //Reloading assets & files.
-        if (!cacheless) {
+        if (!cacheless) { // all but dev & debug
             callback(false)
         } else {
             config.refresh(bundle, function(err) {
                 if (err) logger.error('geena', 'SERVER:ERR:5', err, __stack);
                 //TODO - refresh at the same time routing.
-                callback(false, conf)
+                _this.onRoutesLoaded( function(success) {//load all registered routes in routing.json
+                    if (!success) {
+                        console.error('routes not loaded properly')
+                    }
+                    callback(false, conf)
+                }, true)
             })
         }
     },
