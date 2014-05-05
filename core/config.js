@@ -484,7 +484,7 @@ Config  = function(opt) {
         return _this.allBundles
     }
 
-    var loadBundleConfig = function(bundle, callback) {
+    var loadBundleConfig = function(bundle, callback, reload) {
         if ( typeof(bundle) == "undefined") {
             var bundle = _this.startingApp
         }
@@ -492,7 +492,7 @@ Config  = function(opt) {
         var cacheless   = _this.isCacheless();
         var conf        = _this.envConf;
         var env         = _this.Env.get();
-
+        var routing     = {};
         var tmp         = '';
         //var tmpName     = '';
         var filename    = '';
@@ -512,7 +512,22 @@ Config  = function(opt) {
         var files = {};
         for (var name in  conf[bundle][env].files) {
             //Server only because of the shared mode VS the standalone mode.
-            if (name == 'routing') continue;
+            if (name == 'routing' && cacheless && typeof(reload) != 'undefined') {
+                tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
+                filename = _(appPath + '/config/' + tmp);
+                if ( fs.existsSync(filename) ) {
+                    delete require.cache[_(filename, true)];
+                    routing = require(filename);
+                    routing = utils.extend( true, files[name], require(filename) )
+                } else {
+                    filename = appPath + '/config/' + conf[bundle][env].files[name];
+                    delete require.cache[_(filename, true)];
+                    routing = require(filename);
+                }
+
+            } else if (name == 'routing') {
+                continue;
+            }
 
             if (env != 'prod') {
                 tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json')
@@ -614,7 +629,7 @@ Config  = function(opt) {
         conf[bundle][env].bundle    = bundle;
         conf[bundle][env].env       = env;
 
-        callback(err, files)
+        callback(err, files, routing)
     }
 
     /**
@@ -638,152 +653,6 @@ Config  = function(opt) {
             })
         }//EO for each app
     }
- //    var loadBundlesConfiguration = function(callback, bundle) {
-//
-//        if ( typeof(bundle) == "undefined") {
-//            var bundle = _this.startingApp
-//        }
-//
-//        var bundles = _this.getBundles();
-//
-//        //logger.info('geena', 'CORE:INFO:42','go ninja  !!!!' + bundles , __stack);
-//        if (arguments.length > 1) {
-//            var bundle = arguments[1];
-//            var callback = arguments[0];
-//            //if (!_this.Host.isStandalone())
-//             //   bundles = bundles.splice(bundles.indexOf(bundle), 1);
-//
-//        } else {
-//            var callback = arguments[0];
-//            var bundle = ""
-//        }
-//        //console.log("bundle list ", _this.bundles);
-//        //Framework config files.
-//        var name        = "",
-//            tmpName     = "",
-//            files       = {},
-//            appPath     = "",
-//            modelsPath  = "",
-//            filename    = "",
-//            tmp         = "",
-//            env         =  _this.Env.get();
-//
-//        var cacheless = _this.isCacheless(), conf = _this.envConf;
-//
-//
-//        //For each bundles.
-//        for (var i=0; i<bundles.length; ++i) {
-//
-//            bundle = bundles[i];
-//            conf[bundle][env].bundles = bundles;
-//            conf[bundle].cacheless = cacheless;
-//            conf[bundle][env].executionPath = getContext("paths").root;
-//
-//            appPath = _(conf[bundle][env].bundlesPath + '/' + bundle);
-//            modelsPath = _(conf[bundle][env].modelsPath);
-//            //files = conf[bundle][env].files;
-//
-//            for (var name in  conf[bundle][env].files) {
-//                //Server only because of the shared mode VS the standalone mode.
-//                if (name == 'routing') continue;
-//
-//                if (env != 'prod') {
-//
-//                    tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
-//                    //console.log("tmp .. ", tmp);
-//                    filename = _(appPath + '/config/' + tmp);
-//                    //Can't do a thing without.
-//                    if ( fs.existsSync(filename) ) {
-//                        //console.log("app conf is ", filename);
-//                        if (cacheless) delete require.cache[_(filename, true)];
-//
-//                        tmpName = name +'_'+ env;//?? maybe useless.
-//                        files[name] = require(filename);
-//                        //console.log("watch out !!", files[name][bundle]);
-//                    }
-//                    tmp = ""
-//                }
-//
-//                try {
-//
-//                    filename = appPath + '/config/' + conf[bundle][env].files[name];
-//                    if (env != 'prod' && cacheless) delete require.cache[_(filename, true)];
-//
-//                    //console.log("here ", name, " VS ", filename, "\n", conf[bundle][env].files[name]);
-//                    files[name] = utils.extend( true, files[name], require(filename) )
-//                    //console.log("Got filename ", name ,files[name]);
-//                } catch (err) {
-//
-//                    if ( fs.existsSync(filename) ) {
-//                        //files[name] = "malformed !!";
-//                        //throw new Error('[ '+name+' ] is malformed !!');
-//                        log("[ " +filename + " ] is malformed !!");
-//                        process.exit(1)
-//                    } else {
-//                        files[name] = null
-//                    }
-//                    logger.warn('geena', 'SERVER:WARN:1', filename + err, __stack);
-//                    logger.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack)
-//                }
-//            }//EO for (name
-//
-//            //Set default keys/values for views
-//            if ( typeof(files['views'].default.view) == 'undefined' ) {
-//                files['views'].default.view =  _(appPath +'/views')
-//            }
-//            if ( typeof(files['views'].default.static) == 'undefined' ) {
-//                files['views'].default.static =  _(appPath +'/views/statics')
-//            }
-//
-//            files['views'].default = whisper(
-//                {
-//                    "view" : files['views'].default.view
-//                }, files['views'].default
-//            );
-//
-//            var defaultAliases = {
-//                "css" : "{static}/css",
-//                "images" : "{static}/images",
-//                "handlers" : "{view}/handlers",
-//                "js" : "{view}/js",
-//                "assets" : "{root}/assets"
-//            };
-//            if ( typeof(files['views'].default.aliases) == 'undefined' ) {
-//                files['views'].default.aliases = defaultAliases
-//            } else if ( typeof(files['views'].default.aliases) != 'undefined') {
-//                files['views'].default.aliases = utils.extend(true, files['views'].default.aliases, defaultAliases)
-//            }
-//
-//            //Constants to be exposed in configuration files.
-//            var reps = {
-//                //TODO - remove this duplicate ?
-//                "root"          : conf[bundle][env].executionPath,
-//                "executionPath" : conf[bundle][env].executionPath,
-//                "bundlesPath"   : conf[bundle][env].bundlesPath,
-//                "mountPath"     : conf[bundle][env].mountPath,
-//                "bundlePath"    : conf[bundle][env].bundlePath,
-//                "modelsPath"    : conf[bundle][env].modelsPath,
-//                "logsPath"      : conf[bundle][env].logsPath,
-//                "tmpPath"       : conf[bundle][env].tmpPath,
-//                "handlersPath"  : _(appPath +'/views/handlers'),
-//                "env"           : env,
-//                "bundle"        : bundle,
-//                "theme"         : files['views'].default.theme,
-//                "view"          : files['views'].default.view,
-//                "static"        : files['views'].default.static
-//            };
-//
-//            files = whisper(reps, files);
-//            conf[bundle][env].content   = files;
-//            conf[bundle][env].bundle    = bundle;
-//            conf[bundle][env].env       = env;
-//            files = {}
-//
-//        }//EO for each app
-//
-//        //We always return something.
-//        callback(false)
-//    }
 
     /**
      * Check is cache is disabled
@@ -827,13 +696,13 @@ Config  = function(opt) {
             }
 
             //Reload conf.
-            loadBundleConfig( bundle, function(err) {
+            loadBundleConfig( bundle, function(err, files, routing) {
                 if (!err) {
-                    callback(false)
+                    callback(false, routing)
                 } else {
                     callback(err)
                 }
-            })
+            }, true)
         })
 
     }//EO refresh.
@@ -850,8 +719,8 @@ Config  = function(opt) {
                 return _this.isCacheless()
             },
             refresh : function(bundle, callback) {
-                _this.refresh(bundle, function() {
-                    callback()
+                _this.refresh(bundle, function(err, routing) {
+                    callback(err, routing)
                 })
             },
             Env : _this.Env,

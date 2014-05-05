@@ -86,7 +86,7 @@ var fs              = require('fs'),
      *
      *
      * */
-    onRoutesLoaded : function(callback, reload){
+    onRoutesLoaded : function(callback) {
         //console.info("Trigged onRoutesLoaded");
 
         //console.info('ENV : ', this.conf[this.appName].env, '\n routing file\n ', this.conf[this.appName].files);
@@ -190,7 +190,7 @@ var fs              = require('fs'),
         this.instance.all('*', function(request, response, next){
             console.log('calling back..');
             //Only for dev & debug.
-            _this.loadBundleConfiguration(request, _this.appName, function(err, conf) {
+            _this.loadBundleConfiguration(request, response, next, _this.appName, function(err, conf, req, res, next) {
 
                 if (conf) {//for cacheless mode
                     _this.conf[_this.appName] = conf
@@ -217,23 +217,21 @@ var fs              = require('fs'),
                 router.setMiddlewareInstance(_this.instance);
 
                 //Middleware configuration.
-                request.setEncoding(_this.conf[_this.appName].encoding);
+                req.setEncoding(_this.conf[_this.appName].encoding);
 
                 if ( _this.routing == null || _this.routing.count() == 0 ) {
                     logger.error(
                         'geena',
                         'SERVER:ERR:1',
-                        'Malformed routing or Null value for application [' + _this.appName + '] => ' + request.originalUrl,
+                        'Malformed routing or Null value for application [' + _this.appName + '] => ' + req.originalUrl,
                         __stack
                     );
-                    _this.throwError(response, 500, 'Internal server error\nMalformed routing or Null value for application [' + _this.appName + '] => ' + request.originalUrl);
+                    _this.throwError(response, 500, 'Internal server error\nMalformed routing or Null value for application [' + _this.appName + '] => ' + req.originalUrl);
                 }
 
-                var params = {}, pathname = url.parse(request.url).pathname;
+                var params = {}, pathname = url.parse(req.url).pathname;
                 out:
                     for (var rule in _this.routing) {
-                        //console.log("\nrules ", rule);
-
                         if (typeof(_this.routing[rule]['param']) == 'undefined')
                             break;
 
@@ -241,11 +239,11 @@ var fs              = require('fs'),
                         params = {
                             requirements : _this.routing[rule].requirements,
                             url : pathname,
-                            param : _this.routing[rule].param
+                            param : _this.routing[rule].param,
+                            bundle: _this.appName
                         };
                         //Parsing for the right url.
-                        //console.log("urls \n", _this.routing[rule].url);
-                        isRoute = router.compareUrls(request, params, _this.routing[rule].url);
+                        isRoute = router.compareUrls(req, params, _this.routing[rule].url);
                         if (pathname === _this.routing[rule].url || isRoute.past) {
 
                             logger.debug(
@@ -254,8 +252,8 @@ var fs              = require('fs'),
                                 'Server routing to '+ pathname,
                                 __stack
                             );
-                            request = isRoute.request;
-                            router.route(request, response, next, params);
+
+                            router.route(req, res, next, params);
                             matched = true;
                             isRoute = {};
                             break out;
@@ -264,17 +262,11 @@ var fs              = require('fs'),
 
                 if (!matched) {
                     if (pathname === '/favicon.ico' && !hasViews) {
-                        response.writeHead(200, {'Content-Type': 'image/x-icon'} );
-                        response.end();
+                        rese.writeHead(200, {'Content-Type': 'image/x-icon'} );
+                        res.end();
                     }
-                    logger.error(
-                        'geena',
-                        'SERVER:ERR:2',
-                        'caught 404 request ' + url.parse(request.url).pathname,
-                        __stack
-                    );
 
-                    _this.throwError(response, 404, 'Page not found\n' + url.parse(request.url).pathname)
+                    _this.throwError(res, 404, 'Page not found\n' + url.parse(req.url).pathname)
                 }
             });//EO this.loadBundleConfiguration(this.appName, function(err, conf){
         });//EO this.instance
@@ -289,7 +281,7 @@ var fs              = require('fs'),
 
         this.instance.listen(this.conf[this.appName].port.http);//By Default 8888
     },
-    loadBundleConfiguration : function(req, bundle, callback) {
+    loadBundleConfiguration : function(req, res, next, bundle, callback) {
 
         if ( /\/favicon\.ico/.test(url.parse(req.url).pathname) ) {
             callback(false)
@@ -305,15 +297,11 @@ var fs              = require('fs'),
         if (!cacheless) { // all but dev & debug
             callback(false)
         } else {
-            config.refresh(bundle, function(err) {
+            config.refresh(bundle, function(err, routing) {
                 if (err) logger.error('geena', 'SERVER:ERR:5', err, __stack);
                 //TODO - refresh at the same time routing.
-                _this.onRoutesLoaded( function(success) {//load all registered routes in routing.json
-                    if (!success) {
-                        console.error('routes not loaded properly')
-                    }
-                    callback(false, conf)
-                }, true)
+                _this.routing = routing;
+                callback(false, conf, req, res, next)
             })
         }
     },

@@ -159,7 +159,7 @@ Router = function(env) {
 
         //Routing.
         var pathname        = url.parse(request.url).pathname;
-        var bundle          = params.param.app;
+        var bundle          = params.bundle;
         var action          = params.param.action;
         var SuperController = require('./controller');
         var hasViews        = ( typeof(_conf[bundle][env].content.views) != 'undefined' ) ? true : false;
