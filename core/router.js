@@ -147,33 +147,6 @@ Router = function(env) {
     }
 
     /**
-     * Load handlers
-     * TODO - Load all application handler from server at once
-     * TODO - Means that if we have 2 bundles for the same app, we should load handlers for both of them
-     *
-     * @param {string} path
-     * @param {string} action - Controller action
-     *
-     * @return {object|undefined} handlerObject
-     *
-     * @private
-     * */
-    var loadHandler = function(path, action){
-        var handler = path +'/'+ action + '.js';//CONFIGURATION : settings.script_ext
-        var cacheless = Config.isCacheless();
-
-        //console.info('!!about to add handler ', handler);
-        try {
-            if (cacheless) delete require.cache[_(handler, true)];
-
-            return handler
-        } catch (err) {
-            return null
-        }
-
-    }
-
-    /**
      * Route on the fly
      *
      * @param {object} request
@@ -206,9 +179,6 @@ Router = function(env) {
 
         //Getting superCleasses & extending it with super Models.
         var controllerFile = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js');
-        if (hasViews) {
-            var handlersPath = _conf[bundle][env].content.views.default.aliases.handlers
-        }
 
         try {
             console.log("controller file is ", controllerFile);
@@ -234,7 +204,6 @@ Router = function(env) {
             bundlePath      : _conf[bundle][env].bundlesPath +'/'+ bundle,
             rootPath        : _this.executionPath,
             conf            : _conf[bundle][env],
-            handler         : ( hasViews ) ? loadHandler(handlersPath, action) : undefined,
             instance        : _this.middlewareInstance,
             views           : ( hasViews ) ? _conf[bundle][env].content.views : undefined
         };
