@@ -211,9 +211,9 @@ Router = function(env) {
 
         Controller = utils.inherits(Controller, SuperController);
         var controller = new Controller(request, response, next);
-        if ( !controller.hasOptions() ) {
-            controller.setOptions(options)// used once and destroyed
-        }
+        controller.setOptions(options);
+
+
         // about to contact Controller'
         controller[action](request, response, next);
         action = null

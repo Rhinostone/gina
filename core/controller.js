@@ -30,7 +30,7 @@ Controller = function(request, response, next) {
 
     //public
     this.name       = "Controller";
-    this.data       = {};
+    this._data      = {};
 
     //private
     var _this = this;
@@ -44,6 +44,7 @@ Controller = function(request, response, next) {
     var init = function(request, response, next) {
         _request = request, _response = response, _next = next;
         getParams(request);
+
         if ( typeof(Controller.initialized) != 'undefined' ) {
             return getInstance()
         } else {
@@ -54,9 +55,7 @@ Controller = function(request, response, next) {
 
     var getInstance = function() {
         _options = Controller.instance._options;
-        if ( typeof(_this.protected['setOptions']) != 'undefined' ) {
-            delete _this.protected['setOptions'] // used once on init
-        }
+        _this._data = Controller.instance._data;
         return Controller.instance
     }
 
@@ -232,7 +231,7 @@ Controller = function(request, response, next) {
      * @return {void}
      * */
     this.set = function(variable, value) {
-        _this.data[variable] = value
+        _this._data[variable] = value
     }
 
     /**
@@ -242,7 +241,7 @@ Controller = function(request, response, next) {
      * @return {Object | String} data Data object or String
      * */
     this.get = function(variable) {
-        return _this.data[variable]
+        return _this._data[variable]
     }
 
     var setRessources = function(viewConf, localRessources) {
@@ -392,7 +391,7 @@ Controller = function(request, response, next) {
     }
 
     this.getData = function() {
-        return utils.refToObj(_this.data)
+        return utils.refToObj(_this._data)
     }
 
     /**
