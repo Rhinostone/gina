@@ -21,7 +21,7 @@ var fs = require('fs');
 var Events = require('events');
 var Path = require('path');
 
-var extend = require('./../extend');
+var merge = require('./../merge');
 var ContextHelper = require('./context');
 var e =  new Events.EventEmitter();
 var logger = require('./../logger');
@@ -1024,7 +1024,7 @@ PathHelper = function(){
             var paths = getContext('paths');
             for (var n in name) {
                 _this.userPaths[n] = _(name[n]);
-                extend(true, paths, _this.userPaths)
+                merge(true, paths, _this.userPaths)
             }
             setContext("paths", paths);
 
@@ -1036,7 +1036,7 @@ PathHelper = function(){
                 var paths = getContext('paths');
                 logger.info("geena", "INFO:42", " 1) got config paths " +  paths+ " VS "+ _this.userPaths, __stack);
 
-                extend(true, paths, _this.userPaths);
+                merge(true, paths, _this.userPaths);
                 //console.log("what is this ", paths);
                 setContext("paths", paths);
             }

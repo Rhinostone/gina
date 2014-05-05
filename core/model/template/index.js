@@ -22,6 +22,7 @@ var Model;
 var fs      = require('fs'),
     Module  = require('module')
     utils   = require('geena.utils'),
+    merge   = utils.merge,
     //Dev     = Utils.Dev,
     util    = require('util'),
     EventEmitter  = require('events').EventEmitter,
@@ -113,7 +114,7 @@ Model = function(namespace){
                                         console.log("Factory is ",  EntityFactory);
 
                                         //var Entity = new Entity();
-                                        Utils.extend(true, Entity, EntityFactory);
+                                        merge(true, Entity, EntityFactory);
                                         console.log("\nEntity CONTENT ", Entity, " \nVS\n", EntityFactory);
 
                                     } else {
@@ -124,7 +125,7 @@ Model = function(namespace){
                                 }
 
                                 //Entity = new entitiesManager[model]();
-                                //Utils.extend(true, _this, Entity);
+                                //utils.merge(true, _this, Entity);
                                 console.log("EntityManager  \n",  entitiesManager,"\n VS \n",  EntityFactory);
                                 if (i == files.length-1) {
                                     console.log("All done !");

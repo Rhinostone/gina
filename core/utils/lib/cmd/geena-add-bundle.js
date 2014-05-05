@@ -127,7 +127,7 @@ AddBundle = function(opt, project, env, bundle) {
         for (var b in content) {
             for (var e in content[b]) { //env
                 for (p in content[b][e]['port']) {//protocol
-                    if (last < ~~content[b][e]['port'][p]) {
+                    if (last <= ~~content[b][e]['port'][p]) {
                         last = ~~content[b][e]['port'][p]+1
                     }
                 }

@@ -19,12 +19,10 @@
 var Controller;
 
 //Imports.
-var fs      = require("fs"),
-    //Node
-    util    = require('util'),
-    //Geena
-    utils   = require("./utils"),
-    extend  = utils.extend;
+var fs      = require("fs");
+var utils   = require("./utils");
+var merge  = utils.merge;
+var swig = require('swig');
 
 Controller = function(request, response, next) {
 
@@ -162,7 +160,7 @@ Controller = function(request, response, next) {
      * */
 
     this.render = function(data, request, response, next) {
-
+        var tpl = swig.compileFile('/path/to/template.html');
     }
 //    this.render = function(data, request, response, next) {
 //
@@ -419,8 +417,8 @@ Controller = function(request, response, next) {
         req.getParams = function() {
             //copy.
             var params = JSON.parse(JSON.stringify(req.params));
-            params = extend(params, req.get);
-            params = extend(params, req.post);
+            params = merge(params, req.get);
+            params = merge(params, req.post);
             return params
         };
 

@@ -16,7 +16,7 @@
 var ContextHelper;
 
 var EventEmitter = require('events').EventEmitter;
-var extend = require('./../extend');
+var merge = require('./../merge');
 /**
  * ContextHelper Constructor
  * */
@@ -41,7 +41,7 @@ ContextHelper = function(contexts) {
     }
 
     joinContext = function(context) {
-        extend(true, _this.contexts, context)
+        merge(true, _this.contexts, context)
     }
 
     setContext = function(name, obj) {
@@ -54,7 +54,7 @@ ContextHelper = function(contexts) {
             }
 
             if ( typeof(_this.contexts[name]) != "undefined") {
-                extend(_this.contexts[name], obj)
+                merge(_this.contexts[name], obj)
             } else {
                 _this.contexts[name] = obj
             }
@@ -87,27 +87,6 @@ ContextHelper = function(contexts) {
      * @return {object} revealed
      * */
     whisper = function(dictionary, replaceable) {
-//        var replace = function(dic, rep) {
-//            rep = JSON.stringify(rep, null, 2)
-//            return JSON.parse(rep.replace(/\{(\w+)\}/g, function(s, key) {
-//                return dic[key] || s;
-//            }))
-//        }
-//        var parse = function (dictionary, obj) {
-//            for (var k in obj) {
-//                if ( typeof(obj[k]) == 'object') {
-//                    //obj[k] = JSON.stringify(obj[k], null, 2);
-//                    parse(dictionary, obj[k], replaceable)
-//                } else {
-//                    obj[k] = replace(dictionary, obj[k]);
-//                }
-//            }
-//            return obj
-//        }
-//
-//        replaceable = parse(dictionary, replaceable);
-//        console.log('parsing: ', replaceable);
-//        return replaceable;
 
         replaceable = JSON.stringify(replaceable, null, 2);
         return JSON.parse(

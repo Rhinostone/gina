@@ -21,12 +21,13 @@
 var Config;
 
 //Imports.
-var fs              = require('fs'),
-    util            = require('util'),
-    Events          = require('events'),
-    EventEmitter    = require('events').EventEmitter,
-    utils           = require("./utils"),
-    logger          = utils.logger;
+var fs              = require('fs');
+var util            = require('util');
+var Events          = require('events');
+var EventEmitter    = require('events').EventEmitter;
+var utils           = require("./utils");
+var merge           = utils.merge;
+var logger          = utils.logger;
 
 /**
  * Config Constructor
@@ -389,7 +390,7 @@ Config  = function(opt) {
 //                    );
                     //console.log("Merging..."+ app, "\n", content[app][env], "\n AND \n", template[app][env]);
                     //Mergin user's & template.
-                    newContent[app][env] = utils.extend(
+                    newContent[app][env] = merge(
                         true,
                         content[app][env],
                         template["{bundle}"]["{env}"]
@@ -518,7 +519,7 @@ Config  = function(opt) {
                 if ( fs.existsSync(filename) ) {
                     delete require.cache[_(filename, true)];
                     routing = require(filename);
-                    routing = utils.extend( true, files[name], require(filename) )
+                    routing = merge( true, files[name], require(filename) )
                 } else {
                     filename = appPath + '/config/' + conf[bundle][env].files[name];
                     delete require.cache[_(filename, true)];
@@ -551,7 +552,7 @@ Config  = function(opt) {
                 filename = appPath + '/config/' + conf[bundle][env].files[name];
                 if (env != 'prod' && cacheless) delete require.cache[_(filename, true)];
                 if ( fs.existsSync(filename) ) {
-                    files[name] = utils.extend( true, files[name], require(filename) )
+                    files[name] = merge( true, files[name], require(filename) )
                 } else {
                     files[name] = undefined
                 }
@@ -618,7 +619,7 @@ Config  = function(opt) {
         if ( hasViews && typeof(files['views'].default.aliases) == 'undefined' ) {
             files['views'].default.aliases = defaultAliases
         } else if ( hasViews && typeof(files['views'].default.aliases) != 'undefined') {
-            files['views'].default.aliases = utils.extend(true, files['views'].default.aliases, defaultAliases);
+            files['views'].default.aliases = merge(true, files['views'].default.aliases, defaultAliases);
             reps["theme"] = files['views'].default.theme;
             reps["view" ] = files['views'].default.theme;
             reps["static"] = files['views'].default.static;

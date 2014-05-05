@@ -468,36 +468,7 @@ Config = function() {
         } else {
             return null;
         }
-    };
-
-
-//    var getContext = function(name){
-//
-//        if ( typeof(name) != 'undefined' ) {
-//            try {
-//                return conf.content[name];
-//            } catch (err) {
-//                return undefined;
-//            }
-//        } else {
-//            return conf;
-//        }
-//    };
-//
-//    var setContext = function(name, obj){
-//        if ( typeof(name) == 'undefined' || name == '' ) {
-//            var name = 'global';
-//        }
-//
-//        if ( typeof(conf.content[name]) != "undefined") {
-//            Extend(conf.content[name], obj);
-//        } else {
-//            conf.content[name] = obj;
-//        }
-//    };
-
-    //init();
+    }
 };
 
-
-module.exports = Config;
+module.exports = Config
