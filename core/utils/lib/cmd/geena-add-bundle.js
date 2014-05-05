@@ -48,38 +48,36 @@ AddBundle = function(opt, project, env, bundle) {
                     }
                     self.conf = content.bundles[self.bundle];
                     createBundle();
-//                    self.conf = content.bundles[self.bundle];
-
                     //erase if exists
-//                    if ( typeof(content.bundles[self.bundle]) != 'undefined' ) {
-//
-//                        rl.setPrompt('Bundle [ '+ self.bundle +' ] already exists. Should I erase ? (yes|no) > ');
-//                        rl.prompt();
-//
-//                        rl.on('line', function(line) {
-//                            switch( line.trim().toLowerCase() ) {
-//                                case 'y':
-//                                case 'yes':
-//                                    delete content.bundles[bundle];
-//                                    createBundle();
-//                                    break;
-//                                case 'n':
-//                                case 'no':
-//                                    process.exit(0);
-//                                    break;
-//                                default:
-//                                    console.log('Please, write "yes" to proceed or "no" to cancel. ');
-//                                    rl.prompt();
-//                                    break;
-//                            }
-//                        }).on('close', function() {
-//                            console.log('exiting bundle installation');
-//                            process.exit(0)
-//                        })
-//
-//                    } else {
-//                        createBundle()
-//                    }
+                    if ( typeof(content.bundles[self.bundle]) != 'undefined' ) {
+
+                        rl.setPrompt('Bundle [ '+ self.bundle +' ] already exists. Do you want to override ? (yes|no) > ');
+                        rl.prompt();
+
+                        rl.on('line', function(line) {
+                            switch( line.trim().toLowerCase() ) {
+                                case 'y':
+                                case 'yes':
+                                    delete content.bundles[bundle];
+                                    createBundle();
+                                    break;
+                                case 'n':
+                                case 'no':
+                                    process.exit(0);
+                                    break;
+                                default:
+                                    console.log('Please, write "yes" to proceed or "no" to cancel. ');
+                                    rl.prompt();
+                                    break;
+                            }
+                        }).on('close', function() {
+                            console.log('exiting bundle installation');
+                            process.exit(0)
+                        })
+
+                    } else {
+                        createBundle()
+                    }
                 })
             })
         } catch (err) {
