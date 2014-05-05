@@ -33,6 +33,9 @@ var AppCommand = {
         '--init',
         '-s',
         '--start',
+        '-av',
+        '-a -v',
+        '--add-views'
         //'-k',
         //'--kill',
         //'--stop',
@@ -49,9 +52,7 @@ var AppCommand = {
         '--stack',
         'stage',
         'staging',
-        'prod',
-        '-wv', //when adding bundle
-        '--with-views' //when adding bundle
+        'prod'
     ],
     allowedTypes : [
         'blog',
@@ -158,7 +159,7 @@ var AppCommand = {
             log(this.msg.default[0].replace(
                 "%command%",
                 "geena " + opt['option']
-            ) + this.msg.app[3]);
+            ) +'\n'+ this.msg.app[3]);
         }
     },
     isAllowedArgument : function(opt, callback){
@@ -337,16 +338,22 @@ var AppCommand = {
                 });
                 break;
 
+            case '-av':
+            case '-a -v':
+            case '--add-views':
+                this.addViews();
+                break;
+
             case '-t':
             case '--status':
                 this.getStatus(opt);
                 break;
         }
     },
-    abort : function(code, err){
+    abort : function(code, err) {
 
     },
-    add : function(opt){
+    add : function(opt) {
         try {
             var project = _(getPath('root') + '/project.json');
             var envDotJson = _(getPath('root') + '/env.json');
@@ -364,9 +371,27 @@ var AppCommand = {
                 var addCmd = require('./geena-add-bundle')(opt, project, envDotJson, bundle)
             }
         } catch (err) {
-            console.error(err.stack)
+            console.error(err.stack);
+            process.exit(1)
         }
 
+    },
+    addViews : function() {
+        var _this = this;
+        this.isRealApp( function(err) {
+            var real = false;
+            if (err) {
+                console.error(err.stack);
+                process.exit(1)
+            }
+
+            try {
+                var addViews = require('./geena-add-views')(_this.bundle, _this.env)
+            } catch (err) {
+                console.error(err.stack);
+                process.exit(1)
+            }
+        })
     },
     build : function(opt, argument){
         console.log('Releasing build...');
@@ -386,7 +411,8 @@ var AppCommand = {
                 var buildCmd = require('./geena-build')(project)
             }
         } catch (err) {
-            console.error(err.stack)
+            console.error(err.stack);
+            process.exit(1)
         }
 
     },
@@ -396,7 +422,8 @@ var AppCommand = {
             console.log('creating new project...');
             var initCmd = require('./geena-init-project')(project)
         } catch (err) {
-            console.error(err.stack)
+            console.error(err.stack);
+            process.exit(1)
         }
     },
     remove : function(opt){

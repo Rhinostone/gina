@@ -32,7 +32,9 @@ var fs = require('fs'),
         '--update',
         '-i',
         '--init',
-        '-v',
+        '-av',
+        '-a -v',
+        '--add-views',
         '-v',
         '--version'
     ],
@@ -74,6 +76,12 @@ var fs = require('fs'),
                 this.initProject();
                 break;
 
+            case '-av':
+            case '-a -v':
+            case '--add-views':
+                this.addViews();
+                break;
+
 //            case '-u':
 //            case '--update':
 //                this.update();
@@ -87,6 +95,11 @@ var fs = require('fs'),
         var project = process.argv[3];
         if ( typeof(projet) == 'undefined' ) {
             log('project name is undefiend')
+        }
+    },
+    addViews : function() {
+        if ( typeof(this.bundle) == 'undefined' ) {
+            log('bundle name is undefiend')
         }
     },
     getVersion : function() {
