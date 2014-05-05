@@ -3,7 +3,6 @@ var fs = require('fs');
 var utils = getContext('geena.utils');
 var GEENA_PATH = _( getPath('geena.core') );
 var Config = require( _( GEENA_PATH + '/config') );
-//var util = require('util');
 
 BuildBundle = function(project, bundle) {
 
@@ -106,8 +105,6 @@ BuildBundle = function(project, bundle) {
                     var from = new _(source +'/'+ files[i]);
                     var to = _(target +'/'+ files[i]);
 
-
-
                     //if ( !/.dev./.test(files[i]) && files[i].substring(0,1) != '.') {
                     from.cp(to, function(err){
                         ++self.i;
@@ -161,4 +158,4 @@ BuildBundle = function(project, bundle) {
 //    }
 };
 
-module.exports = BuildBundle;
+module.exports = BuildBundle
