@@ -563,7 +563,7 @@ Config  = function(opt) {
             files['views'].default.view =  _(appPath +'/views')
         }
         if ( hasViews && typeof(files['views'].default.static) == 'undefined' ) {
-            files['views'].default.static =  _(appPath +'/views/statics')
+            files['views'].default.static =  _(appPath +'/views')
         }
 
         //applies only for views
@@ -578,8 +578,8 @@ Config  = function(opt) {
                 "css" : "{static}/css",
                 "images" : "{static}/images",
                 "handlers" : "{view}/handlers",
-                "js" : "{view}/js",
-                "assets" : "{root}/assets"
+                "scripts" : "{view}/scripts",
+                "assets" : "{root}/assets/{bundle}"
             };
         }
 

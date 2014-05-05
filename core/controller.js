@@ -75,7 +75,6 @@ Controller = function(request, response, next) {
             var content = action + ext;
             _this.set('page.ext', ext);
             _this.set('page.content', content);
-            _this.set('page.handler', _options.handler);
         }
     }
 
@@ -112,9 +111,7 @@ Controller = function(request, response, next) {
         var action          = _this.app.action,
             appName         = _this.app.appName,
             content         = '',
-            //conf            = this.app.conf,
             data            = {},
-            handler         = _this.app.handler,
             instance        = _this.app.instance,
             templateEngine  = _this.app.views.default.engine || 'swig',
             ext             = _this.app.views.default.ext || 'html',

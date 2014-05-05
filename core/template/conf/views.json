@@ -1,0 +1,8 @@
+{
+    "default" : {
+        "layout" : "{static}/html/layout.html",
+        "http-metas" : { "content-type": "text/html" },
+        "stylesheets" : [ "/css/default.css" ],
+        "javascripts" : []
+    }
+}
