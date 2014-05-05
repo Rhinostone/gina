@@ -20,16 +20,16 @@
 
 //By default
 var utils = {
-    Config  : require('./lib/config'),
+    Config      : require('./lib/config'),
     //dev     : require('./lib/dev'),//must be at the same level than geena.utils => geena.dev
-    inherits : require('./lib/inherits'),
-    helpers : require('./lib/helpers'),
+    inherits    : require('./lib/inherits'),
+    helpers     : require('./lib/helpers'),
     //this one must move to Dev since it's dev related
-    extend  : require('./lib/extend'),
-    generator : require('./lib/generator'),//move to geena.dev
-    Proc    : require('./lib/proc'),
-    logger  : require('./lib/logger'),
-    cmd     : require('./lib/cmd')
+    merge       : require('./lib/merge'),
+    generator   : require('./lib/generator'),//move to geena.dev
+    Proc        : require('./lib/proc'),
+    logger      : require('./lib/logger'),
+    cmd         : require('./lib/cmd')
 };
 
 
@@ -142,7 +142,7 @@ utils.refToObj = function (arr){
             last = tmp[o];
         }
         //console.info('current obj ',obj);
-        data = utils.extend(true, data, obj);
+        data = utils.merge(true, data, obj);
         //console.info('merged ', data);
         obj = {};
         curObj = {};

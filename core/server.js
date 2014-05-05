@@ -9,6 +9,7 @@ var fs              = require('fs'),
     Express         = require('express'),
     url             = require('url'),
     utils           = require('./utils'),
+    merge           = utils.merge
     Proc            = utils.Proc,
     Server          = {
     conf : {},
@@ -148,8 +149,7 @@ var fs              = require('fs'),
                     }
 
                     if (_this.routing.count() > 0) {
-                        //_this.routing = utils.extend(true, true, tmp, _this.routing);
-                        _this.routing = utils.extend(true, _this.routing, tmp);
+                        _this.routing = merge(true, _this.routing, tmp);
                     } else {
                         _this.routing = tmp;
                     }

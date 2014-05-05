@@ -15,7 +15,7 @@
  * */
 var ModelHelper;
 
-var extend = require('./../extend');
+var merge = require('./../merge');
 
 ModelHelper = function(models) {
     var _this = this;
@@ -50,7 +50,7 @@ ModelHelper = function(models) {
             }
 
             if ( typeof(_this.models[name]['getConnection']) != "undefined") {
-                extend(
+                merge(
                     _this.models[name]['getConnection'],
                     function() {
                         return _this.models[name]['_connection']
@@ -76,7 +76,7 @@ ModelHelper = function(models) {
             }
 
             if ( typeof(_this.models[name]) != "undefined") {
-                extend(_this.models[name], obj)
+                merge(_this.models[name], obj)
             } else {
                 _this.models[name] = obj
             }
