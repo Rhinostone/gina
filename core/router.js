@@ -159,18 +159,14 @@ Router = function(env) {
      * @private
      * */
     var loadHandler = function(path, action){
-        var handler = path +'/'+ action + '.js',//CONFIGURATION : settings.script_ext
-            cacheless = Config.isCacheless();
+        var handler = path +'/'+ action + '.js';//CONFIGURATION : settings.script_ext
+        var cacheless = Config.isCacheless();
 
         //console.info('!!about to add handler ', handler);
         try {
             if (cacheless) delete require.cache[_(handler, true)];
 
-            return {
-                obj : fs.readFileSync(handler),
-                file : action + '.js',
-                name : action + 'Handler'
-            }
+            return handler
         } catch (err) {
             return null
         }
