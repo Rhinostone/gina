@@ -380,12 +380,6 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         }
     }
 
-//    var configureMiddleware = function (instance, middleware) {
-//        var type = intanceOf(middleware);
-//
-//
-//    }
-
     //EO cooking
 
     /**
@@ -397,7 +391,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
     gna.onInitialize = process.onInitialize = function(callback) {
 
         gna.initialized = true;
-        e.on('init', function(instance, express, conf) {
+        e.on('init', function(instance, middleware, conf) {
 
             loadAllModels(
                 conf,
@@ -423,7 +417,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                     };
                     try {
                         //configureMiddleware(instance, express);
-                        callback(e, instance, express)
+                        callback(e, instance, middleware)
                     } catch (err) {
                         // TODO Output this to the error logger.
                         console.log('Could not complete initialization: ', err.stack)
@@ -604,7 +598,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                         executionPath   : core.executionPath,
                         conf            : obj.conf
                     },
-                    function(err, instance, express, conf) {
+                    function(err, instance, middleware, conf) {
                         if (!err) {
 
                             logger.debug(
@@ -628,7 +622,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
                             if (!mountErr) {
                                 // -- BO
-                                e.emit('init', instance, express, conf);
+                                e.emit('init', instance, middleware, conf);
                                 //In case there is no user init.
                                 if (!gna.initialized) {
                                     e.emit('complete', instance);

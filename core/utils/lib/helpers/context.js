@@ -86,14 +86,19 @@ ContextHelper = function(contexts) {
      *
      * @return {object} revealed
      * */
-    whisper = function(dictionary, replaceable) {
-
-        replaceable = JSON.stringify(replaceable, null, 2);
-        return JSON.parse(
-            replaceable.replace(/\{(\w+)\}/g, function(s, key) {
+    whisper = function(dictionary, replaceable, rule) {
+        if ( typeof(rule) != 'undefined') {
+            return replaceable.replace(rule, function(s, key) {
                 return dictionary[key] || s;
             })
-        )
+        } else {
+            replaceable = JSON.stringify(replaceable, null, 2);
+            return JSON.parse(
+                replaceable.replace(/\{(\w+)\}/g, function(s, key) {
+                    return dictionary[key] || s;
+                })
+            )
+        }
     }
 
     init(contexts)

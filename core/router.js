@@ -209,7 +209,7 @@ Router = function(env) {
         };
 
 
-        Controller = utils.inherits(Controller, SuperController);
+        Controller = inherits(Controller, SuperController);
         var controller = new Controller(request, response, next);
         controller.setOptions(options);
 
