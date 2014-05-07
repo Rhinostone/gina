@@ -575,27 +575,27 @@ Config  = function(opt) {
 
         var hasViews = (typeof(files['views']) != 'undefined' && typeof(files['views']['default']) != 'undefined') ? true : false;
         //Set default keys/values for views
-        if ( hasViews &&  typeof(files['views'].default.view) == 'undefined' ) {
-            files['views'].default.view =  _(appPath +'/views')
+        if ( hasViews &&  typeof(files['views'].default.views) == 'undefined' ) {
+            files['views'].default.views =  _(appPath +'/views')
         }
-        if ( hasViews && typeof(files['views'].default.static) == 'undefined' ) {
-            files['views'].default.static =  _(appPath +'/views')
+
+        if ( hasViews && typeof(files['views'].default.html) == 'undefined' ) {
+            files['views'].default.html =  _(appPath +'/views/html')
         }
 
         //applies only for views
-        if (hasViews &&  typeof(files['views'].default.view) != 'undefined' ) {
+        if (hasViews &&  typeof(files['views'].default.views) != 'undefined' ) {
             files['views'].default = whisper(
                 {
-                    "view" : files['views'].default.view
+                    "views" : files['views'].default.views,
+                    "html" : files['views'].default.html
                 }, files['views'].default
             );
 
             var defaultAliases = {
-                "css" : "{static}/css",
-                "images" : "{static}/images",
-                "handlers" : "{view}/handlers",
-                "scripts" : "{view}/scripts",
-                "assets" : "{root}/assets/{bundle}"
+                "css" : "{views}/css",
+                "images" : "{views}/images",
+                "scripts" : "{views}/scripts"
             };
         }
 
@@ -611,18 +611,16 @@ Config  = function(opt) {
             "modelsPath"    : conf[bundle][env].modelsPath,
             "logsPath"      : conf[bundle][env].logsPath,
             "tmpPath"       : conf[bundle][env].tmpPath,
-            "handlersPath"  : _(appPath +'/views/handlers'),
             "env"           : env,
             "bundle"        : bundle
         };
 
-        if ( hasViews && typeof(files['views'].default.aliases) == 'undefined' ) {
-            files['views'].default.aliases = defaultAliases
-        } else if ( hasViews && typeof(files['views'].default.aliases) != 'undefined') {
-            files['views'].default.aliases = merge(true, files['views'].default.aliases, defaultAliases);
-            reps["theme"] = files['views'].default.theme;
-            reps["view" ] = files['views'].default.theme;
-            reps["static"] = files['views'].default.static;
+        if ( hasViews && typeof(files['views'].default.statics) == 'undefined' ) {
+            files['views'].default.statics = defaultAliases
+        } else if ( hasViews && typeof(files['views'].default.statics) != 'undefined') {
+            files['views'].default.statics = merge(true, files['views'].default.statics, defaultAliases);
+            reps["theme"] = files['views'].default.views;
+            reps["views"] = files['views'].default.views;
         }
 
         files = whisper(reps, files);

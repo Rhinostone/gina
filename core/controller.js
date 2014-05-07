@@ -31,7 +31,7 @@ Controller = function(request, response, next) {
     this._data      = {};
 
     //private
-    var _this = this;
+    var self = this;
     var _options;
     var _request, _response, _next;
 
@@ -47,14 +47,32 @@ Controller = function(request, response, next) {
             return getInstance()
         } else {
             Controller.initialized = true;
-            Controller.instance = _this
+            Controller.instance = self
         }
     }
 
     var getInstance = function() {
         _options = Controller.instance._options;
-        _this._data = Controller.instance._data;
+        self._data = Controller.instance._data;
         return Controller.instance
+    }
+
+    var hasViews = function() {
+        return ( typeof(_options.views) != 'undefined' ) ? true : false;
+    }
+
+    var throwError = function(res, code, msg) {
+
+        if ( !hasViews() ) {
+            res.writeHead(code, { 'Content-Type': 'application/json'} );
+            res.end(JSON.stringify({
+                status: code,
+                error: 'Error '+ code +'. '+ msg
+            }))
+        } else {
+            res.writeHead(code, { 'Content-Type': 'text/html'} );
+            res.end('Error '+ code +'. '+ msg)
+        }
     }
 
     this.setOptions = function(options) {
@@ -69,11 +87,18 @@ Controller = function(request, response, next) {
             if( !/\./.test(ext) ) {
                 ext = '.' + ext
             }
+
             var content = action + ext;
-            _this.set('page.ext', ext);
-            _this.set('page.content', content);
-            _this.set('page.action', action);
+            self.set('page.ext', ext);
+            self.set('page.content', content);
+            self.set('page.action', action);
+            self.set('page.title', action);
         }
+
+        //TODO - detect when to use swig
+        swig.setDefaults({
+            loader: swig.loaders.fs(_options.views.default.views)
+        })
     }
 
     this.hasOptions = function() {
@@ -81,93 +106,65 @@ Controller = function(request, response, next) {
     }
 
     /**
-     * TODO - remove this
-    * Handle Responses
-    *
-    * @param {object} response
-    *
-    * @return {void}
-    **/
-    this.handleResponse = function(response) {
-        var options = getOptions()
-        _response = response;
-        logger.info(
-            'geena',
-            'CONTROLLER:FACTORY:INFO:1',
-            'bundle Path  is: '+ _this.app.bundlePath,
-            __stack
-        );
-
-        logger.info(
-            'geena',
-            'CONTROLLER:FACTORY:INFO:2',
-            'Action  is: '+ _this.app.action,
-            __stack
-        );
-
-        _this.rendered      = false;
-        var action          = _this.app.action,
-            appName         = _this.app.appName,
-            content         = '',
-            data            = {},
-            instance        = _this.app.instance,
-            templateEngine  = _this.app.views.default.engine || 'swig',
-            ext             = _this.app.views.default.ext || 'html',
-            templateDir     = _this.app.views.default.dir || _this.app.bundlePath + '/views',
-            viewConf        = _this.app.views;
-
-
-        //Only if templates are handled. Will handle swigg by default.
-        if (templateEngine != null && viewConf != "undefined" && viewConf != null) {
-
-            //Usefull or Useless not ?.
-            instance.set('views', templateDir);
-            if (viewConf)
-                setRessources(viewConf, action);//css & js.
-
-            if( !/\./.test(ext) ) {
-                ext = '.' + ext
-            }
-            content = action + ext;
-            //console.info('ACTION IS ', content);
-            _this.set('page.content', content);
-            _this.set('page.ext', ext);
-
-
-
-            if (_this.rendered != true && _this.autoRender ) {
-                data = _this.getData();
-                _this.render(data, request, response, next);
-                data = null
-            }
-        } else {
-
-            //console.log("get header ", _this.rendered, autoRendered);
-            if (_this.rendered != true) {
-                //Webservices handling.
-                data = _this.getData();
-                _this.renderJSON(data);
-                data = null
-            }
-        }
-    };
-
-    /**
-     * Render HTML templates Swigg by default
+     * Render HTML templates : Swig is the default template engine
      *
-     * @param {object} data
+     * @param {object} _data
      * @return {void}
      * */
+    this.render = function(_data) {
+        setRessources(_options.views, _data.page.action);
+        var data = merge(true, _data, self.getData() );
+        var path = _(_options.views.default.html + '/' + data.page.content);
 
-    this.render = function(data, request, response, next) {
-        var tpl = swig.compileFile('/path/to/template.html');
+        var dic = {};
+        for (var d in data.page) {
+            dic['page.'+d] = data.page[d]
+        }
+
+        fs.readFile(path, function (err, content) {
+            if (err) {
+                throwError(_response, 500, err.stack);
+                return
+            }
+
+            try {
+                content = swig.compile(content.toString())(data)
+            } catch (err) {
+                throwError(_response, 500, '[ '+path+' ]\n' + err.stack);
+                return
+            }
+
+            dic['page.content'] = content;
+
+            fs.readFile(_options.views.default.layout, function(err, layout) {
+                if (err) {
+                    throwError(_response, 500, err.stack);
+                    return;
+                }
+                layout = layout.toString();
+                layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+
+                //swig.render(layout);
+                _response.writeHead(200, { 'Content-Type': 'text/html' });
+                _response.end(layout);
+            })
+        })
+    }
+
+    /**
+     * Set Layout path
+     *
+     * @param {string} filename
+     * */
+    this.setLayout = function(filename) {//means path
+        _options.views.default.layout = filename
     }
 //    this.render = function(data, request, response, next) {
 //
-//        _this.app.isXmlHttpRequest = ( typeof(request) != "undefined" && request.xhr && _this.app.isXmlHttpRequest || _this.app.isXmlHttpRequest ) ? true : false;
+//        self.app.isXmlHttpRequest = ( typeof(request) != "undefined" && request.xhr && self.app.isXmlHttpRequest || self.app.isXmlHttpRequest ) ? true : false;
 //
-//        if( typeof(_this.app.isXmlHttpRequest) == "undefined" || !_this.app.isXmlHttpRequest ) {
-//            data.page.handler = (_this.app.handler != null) ? '<script type="text/javascript" src="/'+ _this.app.appName + '/handlers/' + _this.app.handler.file +'"></script>' : '';
+//        if( typeof(self.app.isXmlHttpRequest) == "undefined" || !self.app.isXmlHttpRequest ) {
+//            data.page.handler = (self.app.handler != null) ? '<script type="text/javascript" src="/'+ self.app.appName + '/handlers/' + self.app.handler.file +'"></script>' : '';
 //            //console.log('HANDLER SRC _____',data.page.handler);
 //
 //            if (data.page.content) {
@@ -178,7 +175,7 @@ Controller = function(request, response, next) {
 //                response.setHeader("Content-Type", "application/json")
 //            }
 //        }
-//        _this.rendered = true;
+//        self.rendered = true;
 //        response.end()
 //    }
 
@@ -198,7 +195,7 @@ Controller = function(request, response, next) {
             if ( !_response.get('Content-Type') ) {
                 _response.setHeader("Content-Type", "application/json");
             }
-            _this.rendered = true;
+            self.rendered = true;
             _response.end(JSON.stringify(jsonObj))
         } catch (err) {
             console.log(err.stack)
@@ -217,7 +214,7 @@ Controller = function(request, response, next) {
         if ( !_response.get('Content-Type') ) {
             _response.setHeader("Content-Type", "text/plain");
         }
-        _this.rendered = true;
+        self.rendered = true;
         _response.end(content);
     }
 
@@ -229,7 +226,7 @@ Controller = function(request, response, next) {
      * @return {void}
      * */
     this.set = function(variable, value) {
-        _this._data[variable] = value
+        self._data[variable] = value
     }
 
     /**
@@ -239,7 +236,7 @@ Controller = function(request, response, next) {
      * @return {Object | String} data Data object or String
      * */
     this.get = function(variable) {
-        return _this._data[variable]
+        return self._data[variable]
     }
 
     var setRessources = function(viewConf, localRessources) {
@@ -251,34 +248,32 @@ Controller = function(request, response, next) {
                 type    : "text/css",
                 content : []
             },
-            cssStr = '',
+            cssStr = ' ',
             js  = {
                 type    : "text/javascript",
                 content : []
             },
-            jsStr = '';
+            jsStr = ' ';
 
         //intercept errors in case of malformed config
-        //console.log('type of view conf ', typeof(viewConf));
-        if( typeof(viewConf) != "object" ){
+        if ( typeof(viewConf) != "object" ) {
             cssStr = viewConf;
             jsStr = viewConf
         }
 
-        //console.info('setting ressources for .... ', localRessources, viewConf);
         //Getting global/default css
         //Default will be completed OR overriden by locals - if options are set to "override_css" : "true" or "override" : "true"
-        if( viewConf["default"] ){
+        if( viewConf["default"] ) {
             //console.info('found default ', ["default"]);
             //Get css
-            if( viewConf["default"]["stylesheets"] ){
+            if( viewConf["default"]["stylesheets"] ) {
                 tmpRes = _getNodeRes('css', cssStr, viewConf["default"]["stylesheets"], css);
                 cssStr = tmpRes.cssStr;
                 css = tmpRes.css;
                 tmpRes = null
             }
             //Get js
-            if( viewConf["default"]["javascripts"] ){
+            if( viewConf["default"]["javascripts"] ) {
                 tmpRes = _getNodeRes('js', jsStr, viewConf["default"]["javascripts"], js);
                 jsStr = tmpRes.jsStr;
                 js = tmpRes.js;
@@ -287,14 +282,14 @@ Controller = function(request, response, next) {
         }
 
         //Check if local css exists
-        if( viewConf[localRessources] ){
+        if( viewConf[localRessources] ) {
             //Css override test
             if(viewConf[localRessources]["override_css"] && viewConf[localRessources]["override_css"] == true || viewConf[localRessources]["override"] && viewConf[localRessources]["override"] == true){
                 cssStr = "";
                 css.content = []
             }
             //Get css
-            if( viewConf[localRessources]["stylesheets"] ){
+            if( viewConf[localRessources]["stylesheets"] ) {
                 //console.info('case ', viewConf[localRessources]["stylesheets"], localRessources);
                 tmpRes = _getNodeRes('css', cssStr, viewConf[localRessources]["stylesheets"], css);
                 cssStr = tmpRes.cssStr;
@@ -307,16 +302,16 @@ Controller = function(request, response, next) {
                 js.content = []
             }
             //Get js
-            if( viewConf[localRessources]["javascripts"] ){
+            if( viewConf[localRessources]["javascripts"] ) {
                 tmpRes = _getNodeRes('js', jsStr, viewConf[localRessources]["javascripts"], js);
                 jsStr = tmpRes.jsStr;
                 js = tmpRes.js;
                 tmpRes = null
             }
         }
-        _this.set('page.stylesheets', cssStr);
-        _this.set('page.scripts', jsStr)
-        //console.info('setting ressources !! ', cssStr, jsStr);
+
+        self.set('page.stylesheets', cssStr);
+        self.set('page.scripts', jsStr)
     }
 
     /**
@@ -389,7 +384,7 @@ Controller = function(request, response, next) {
     }
 
     this.getData = function() {
-        return utils.refToObj(_this._data)
+        return utils.refToObj(self._data)
     }
 
     /**
@@ -456,18 +451,18 @@ Controller = function(request, response, next) {
 
     //protected
     this.protected =  {
-        setOptions : _this.setOptions, //used only once on new instance
-        hasOptions : _this.hasOptions,
-        render : _this.render,
-        renderJSON : _this.renderJSON,
-        renderTEXT : _this.renderTEXT,
-        set : _this.set,
-        setMeta : _this.setMeta,
-        getConfig : _this.getConfig,
-        redirect : _this.redirect,
-        getData : _this.getData,
-        setRessources : setRessources
-        //getParams : _this.getParams
+        setOptions : self.setOptions,
+        hasOptions : self.hasOptions,
+        render : self.render,
+        renderJSON : self.renderJSON,
+        renderTEXT : self.renderTEXT,
+        set : self.set,
+        setMeta : self.setMeta,
+        getConfig : self.getConfig,
+        redirect : self.redirect,
+        getData : self.getData,
+        setRessources : setRessources,
+        setLayout : self.setLayout
     };
 
     init(request, response, next);

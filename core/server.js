@@ -1,12 +1,13 @@
 /**
- * Server Class
+ * Express Server Class
  *
  * @package     Geena
  * @author      Rhinostone
  */
 var fs              = require('fs'),
+    path            = require("path"),
     EventEmitter    = require('events').EventEmitter,
-    Express         = require('express'),
+    express         = require('express'),
     url             = require('url'),
     utils           = require('./utils'),
     merge           = utils.merge
@@ -47,7 +48,6 @@ var fs              = require('fs'),
         if (!this.isStandalone) {
             //Only load the related conf / env.
             this.conf[this.appName] = options.conf[this.appName][this.env];
-
             this.conf[this.appName].bundlesPath = options.conf[this.appName][this.env].bundlesPath;
             this.conf[this.appName].modelsPath =  options.conf[this.appName][this.env].modelsPath;
         } else {
@@ -61,12 +61,13 @@ var fs              = require('fs'),
                 this.conf[apps[i]].modelsPath = options.conf[apps[i]][this.env].modelsPath;
             }
         }
-        callback(false, Express(), Express, this.conf[this.appName]);
+        callback(false, express(), express, this.conf[this.appName]);
     },
 
     init : function(instance){
         var _this = this;
         this.instance = instance;
+
         //console.log('['+ this.appName +'] on port : ['+ this.conf[this.appName].port.http + ']');
         this.onRoutesLoaded( function(success) {//load all registered routes in routing.json
             logger.debug(
@@ -88,13 +89,11 @@ var fs              = require('fs'),
      *
      * */
     onRoutesLoaded : function(callback) {
-        //console.info("Trigged onRoutesLoaded");
 
-        //console.info('ENV : ', this.conf[this.appName].env, '\n routing file\n ', this.conf[this.appName].files);
-        //var config = getContext('geena.config');
         var config = require('./config')();
         var conf =  config.getInstance(this.appName);
         var cacheless = config.isCacheless();
+
         var _this       = this,
             env         = this.env,
             cacheless   = this.cacheless,
@@ -187,90 +186,48 @@ var fs              = require('fs'),
                 next();
             });*/
 
-        this.instance.all('*', function(request, response, next){
+        this.instance.all('*', function(request, response, next) {
             console.log('calling back..');
-            //Only for dev & debug.
-            _this.loadBundleConfiguration(request, response, next, _this.appName, function(err, conf, req, res, next) {
 
-                if (conf) {//for cacheless mode
-                    _this.conf[_this.appName] = conf
-                }
+            //Only for dev & debug.
+            _this.loadBundleConfiguration(request, response, next, _this.appName, function(err, req, res, next) {
 
                 if (err) {
                     _this.throwError(response, 500, 'Internal server error\n'+ err.stack)
                 }
 
-                var matched         = false,
-                    isRoute         = {};
-                try {
-                    Router          = require('./router.js');
-                } catch(err) {
-                    if (err) {
-                        console.error(err.stack);
-                        process.exit(1)
-                    }
-                }
+                var conf = _this.conf[_this.appName];
+                var pathname = url.parse(req.url).pathname;
+                var uri = pathname.split('/');
+                var key = uri.splice(1, 1)[0];
+                //statick filter
+                if ( typeof(conf.content.views.default.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
+                    uri = uri.join('/');
+                    var filename = path.join(conf.content.views.default.statics[key], uri);
+                    fs.exists(filename, function(exists) {
+                        if(exists) {
+                            if (fs.statSync(filename).isDirectory()) filename += '/index.html';
+                            fs.readFile(filename, "binary", function(err, file) {
+                                if (err) {
+                                    res.writeHead(500, {"Content-Type": "text/plain"});
+                                    res.write(err.stack + "\n");
+                                    res.end();
+                                    return
+                                }
 
-                var hasViews = _this.hasViews(_this.appName);
-
-                var router = new Router(_this.env);
-                router.setMiddlewareInstance(_this.instance);
-
-                //Middleware configuration.
-                req.setEncoding(_this.conf[_this.appName].encoding);
-
-                if ( _this.routing == null || _this.routing.count() == 0 ) {
-                    logger.error(
-                        'geena',
-                        'SERVER:ERR:1',
-                        'Malformed routing or Null value for application [' + _this.appName + '] => ' + req.originalUrl,
-                        __stack
-                    );
-                    _this.throwError(response, 500, 'Internal server error\nMalformed routing or Null value for application [' + _this.appName + '] => ' + req.originalUrl);
-                }
-
-                var params = {}, pathname = url.parse(req.url).pathname;
-                out:
-                    for (var rule in _this.routing) {
-                        if (typeof(_this.routing[rule]['param']) == 'undefined')
-                            break;
-
-                        //Preparing params to relay to the router.
-                        params = {
-                            requirements : _this.routing[rule].requirements,
-                            url : pathname,
-                            param : _this.routing[rule].param,
-                            bundle: _this.appName
-                        };
-                        //Parsing for the right url.
-                        isRoute = router.compareUrls(req, params, _this.routing[rule].url);
-                        if (pathname === _this.routing[rule].url || isRoute.past) {
-
-                            logger.debug(
-                                'geena',
-                                'SERVER:DEBUG:4',
-                                'Server routing to '+ pathname,
-                                __stack
-                            );
-
-                            router.route(req, res, next, params);
-                            matched = true;
-                            isRoute = {};
-                            break out;
-                        }
-                    }
-
-                if (!matched) {
-                    if (pathname === '/favicon.ico' && !hasViews) {
-                        rese.writeHead(200, {'Content-Type': 'image/x-icon'} );
-                        res.end();
-                    }
-
-                    _this.throwError(res, 404, 'Page not found\n' + url.parse(req.url).pathname)
+                                res.writeHead(200);
+                                res.write(file, "binary");
+                                res.end()
+                            });
+                        } else {
+                            _this.handle(req, res, next, pathname)
+                        }//EO exists
+                    })//EO static filter
+                } else {
+                    _this.handle(req, res, next, pathname)
                 }
             });//EO this.loadBundleConfiguration(this.appName, function(err, conf){
         });//EO this.instance
-
 
         console.log(
             '\nbundle: [ ' + this.appName +' ]',
@@ -287,25 +244,98 @@ var fs              = require('fs'),
             callback(false)
         }
 
-        var _this = this;
         var config = require('./config')();
         config.setBundles(this.bundles);
         var conf = config.getInstance(bundle);
+        if ( typeof(conf) != 'undefined') {//for cacheless mode
+            this.conf[bundle] = conf
+        }
         var cacheless = config.isCacheless();
-        console.log("is cacheless ", cacheless);
         //Reloading assets & files.
         if (!cacheless) { // all but dev & debug
             callback(false)
         } else {
+            var _this = this;
             config.refresh(bundle, function(err, routing) {
                 if (err) logger.error('geena', 'SERVER:ERR:5', err, __stack);
-                //TODO - refresh at the same time routing.
+                //refreshes routing at the same time.
                 _this.routing = routing;
-                callback(false, conf, req, res, next)
+                callback(false, req, res, next)
             })
         }
     },
-    //TODO - might move to some other place.. like to utils
+
+    handle : function(req, res, next, pathname) {
+        var _this = this;
+
+        var matched         = false,
+            isRoute         = {};
+        try {
+            Router          = require('./router.js');
+        } catch(err) {
+                console.error(err.stack);
+                process.exit(1)
+        }
+
+        var hasViews = this.hasViews(this.appName);
+
+        var router = new Router(this.env);
+        router.setMiddlewareInstance(this.instance);
+
+        //Middleware configuration.
+        req.setEncoding(this.conf[this.appName].encoding);
+
+        if ( this.routing == null || this.routing.count() == 0 ) {
+            logger.error(
+                'geena',
+                'SERVER:ERR:1',
+                    'Malformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl,
+                __stack
+            );
+            this.throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl);
+        }
+
+        var params = {};
+        out:
+            for (var rule in this.routing) {
+                if (typeof(this.routing[rule]['param']) == 'undefined')
+                    break;
+
+                //Preparing params to relay to the router.
+                params = {
+                    requirements : this.routing[rule].requirements,
+                    url : pathname,
+                    param : _this.routing[rule].param,
+                    bundle: _this.appName
+                };
+                //Parsing for the right url.
+                isRoute = router.compareUrls(req, params, this.routing[rule].url);
+                if (pathname === this.routing[rule].url || isRoute.past) {
+
+                    logger.debug(
+                        'geena',
+                        'SERVER:DEBUG:4',
+                            'Server routing to '+ pathname,
+                        __stack
+                    );
+
+                    router.route(req, res, next, params);
+                    matched = true;
+                    isRoute = {};
+                    break out;
+                }
+            }
+
+        if (!matched) {
+            if (pathname === '/favicon.ico' && !hasViews) {
+                rese.writeHead(200, {'Content-Type': 'image/x-icon'} );
+                res.end()
+            }
+
+            this.throwError(res, 404, 'Page not found\n' + pathname)
+        }
+    },
+    //TODO - might move to some other place... like to utils
     throwError : function(res, code, msg) {
         var hasViews = this.hasViews(this.appName);
 
