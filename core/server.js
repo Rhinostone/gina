@@ -108,7 +108,7 @@ var fs              = require('fs'),
         if (cacheless) {
             this.routing = {}
         }
-        //console.info('\nENVi : ', this.env, '\nPORT :', this.conf[this.appName].port,  '\nBUNDLE :', this.appName, '\nBundles ', apps, apps.length);
+
         //Standalone or shared instance mode. It doesn't matter.
         for (var i=0; i<apps.length; ++i) {
             var appPath = _(this.conf[apps[i]].bundlesPath+ '/' + apps[i]);
@@ -116,21 +116,18 @@ var fs              = require('fs'),
 
             //Specific case.
             if (!this.isStandalone && i == 0) appName = apps[i];
-            //console.log("trying..",  _(this.conf[apps[i]].bundlesPath) );
+
             try {
                 filename = _(appPath + '/config/' + _this.conf[apps[i]].files.routing);
                 if (cacheless) {
 
                     var tmpContent = _this.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
-                    //console.log("tmp .. ", tmp);
                     tmpName = _(appPath + '/config/' + tmpContent);
                     //Can't do a thing without.
                     if ( fs.existsSync(tmpName) ) {
-                        //console.log("app conf is ", filename);
                         filename = tmpName;
                         if (cacheless) delete require.cache[_(filename, true)];
 
-                        //tmpName = name +'_'+ env;//?? maybe useless.
                         _this.routing = require(filename);
                         tmpContent = "";
                     }
@@ -152,9 +149,7 @@ var fs              = require('fs'),
                     } else {
                         _this.routing = tmp;
                     }
-
-                    //console.log("making route for ", apps[i], "\n", _this.routing);
-                    tmp = {};
+                    tmp = {}
                 } catch (err) {
                     this.routing = null;
                     logger.error('geena', 'SERVER:ERR:2', err, __stack);
@@ -167,7 +162,6 @@ var fs              = require('fs'),
             }
 
         }//EO for.
-        //console.log("found routing ", _this.routing);
         callback(true)
     },
 

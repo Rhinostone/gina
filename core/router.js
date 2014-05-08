@@ -161,6 +161,7 @@ Router = function(env) {
         var pathname        = url.parse(request.url).pathname;
         var bundle          = params.bundle;
         var action          = params.param.action;
+        var namespace       = params.param.namespace;
         var SuperController = require('./controller');
         var hasViews        = ( typeof(_conf[bundle][env].content.views) != 'undefined' ) ? true : false;
 
@@ -178,13 +179,14 @@ Router = function(env) {
         //console.log("ACTION ON  ROUTING IS : " + action);
 
         //Getting superCleasses & extending it with super Models.
-        var controllerFile = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controllers.js');
+        var controllerFile = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controller.js');
 
         try {
-            console.log("controller file is ", controllerFile);
-            if (env != 'prod' && cacheless) delete require.cache[_(controllerFile, true)];
+            // TODO - namespace handling
+            //if ( typeof(namespace) != 'undefined' ) {
 
-            var Controller  = require(controllerFile)
+            if (cacheless) delete require.cache[_(controllerFile, true)];
+            var Controller  = require(controllerFile);
 
         } catch (err) {
             //Should be rended as a 500 err.
@@ -195,7 +197,8 @@ Router = function(env) {
                 'Content-Length': data.length,
                 'Content-Type': 'text/plain'
             });
-            response.end(data)
+            response.end(data);
+            process.exit(1);
         }
 
         var options = {
@@ -208,14 +211,16 @@ Router = function(env) {
             views           : ( hasViews ) ? _conf[bundle][env].content.views : undefined
         };
 
+        // about to contact Controller'
+        if ( typeof(namespace) != 'undefined' && namespace == 'framework' ) { //framework controller filter
+            Controller = SuperController.prototype[namespace];
+        }
 
         Controller = inherits(Controller, SuperController);
         var controller = new Controller(request, response, next);
         controller.setOptions(options);
 
-
-        // about to contact Controller'
-        controller[action](request, response, next);
+        controller[action](request, response, next)
         action = null
     };//EO route()
 

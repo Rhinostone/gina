@@ -493,7 +493,15 @@ Config  = function(opt) {
         var cacheless   = _this.isCacheless();
         var conf        = _this.envConf;
         var env         = _this.Env.get();
-        var routing     = {};
+        var routing     = {
+            "geena-doc": {
+                "url": "/@doc",
+                "param": {
+                    "namespace" : "framework",
+                    "action": "doc"
+                }
+            }
+        };
         var tmp         = '';
         //var tmpName     = '';
         var filename    = '';
@@ -518,13 +526,28 @@ Config  = function(opt) {
                 filename = _(appPath + '/config/' + tmp);
                 if ( fs.existsSync(filename) ) {
                     delete require.cache[_(filename, true)];
-                    routing = require(filename);
-                    routing = merge( true, files[name], require(filename) )
+                    try {
+                        routing = merge( true, routing, require(filename) );
+                        routing = merge( true, files[name], require(filename) )
+                    } catch (err) {
+                        console.log(err.stack);
+                        process.exit(1)
+                    }
+
                 } else {
                     filename = appPath + '/config/' + conf[bundle][env].files[name];
                     delete require.cache[_(filename, true)];
-                    routing = require(filename);
+                    routing = merge( true, routing, require(filename) );
                 }
+                //setting app param
+                /**
+                for (var route in routing) {
+                    for (var param in routing[route]) {
+                        if (param == 'param' && typesof(routing[route][param].app) == 'undefined') {
+                            routing[route][param].app = bundle
+                        }
+                    }
+                }*/
 
             } else if (name == 'routing') {
                 continue;

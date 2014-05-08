@@ -72,6 +72,7 @@ utils.cmd.load = function(root, package){
 
     //Set geena path.
     setPath('geena.core', _(geenaPath +'/core'));
+    setPath('geena.documentation', _(geenaPath +'/documentation'));
 
     var defaultConf = require( _(geenaPath + '/core/template/conf/env.json') );
     //mountPath
