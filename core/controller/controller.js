@@ -20,7 +20,7 @@ var Controller;
 
 //Imports.
 var fs      = require("fs");
-var utils   = require("./utils");
+var utils   = require("./../utils");
 var merge  = utils.merge;
 var swig = require('swig');
 
@@ -95,9 +95,19 @@ Controller = function(request, response, next) {
             self.set('page.title', action);
         }
 
+
         //TODO - detect when to use swig
+        var dir = self.views || _options.views.default.views;
         swig.setDefaults({
-            loader: swig.loaders.fs(_options.views.default.views)
+            loader: swig.loaders.fs(dir)
+        })
+    }
+
+    this.setViewsLocation = function(dir) {
+        _options.views.default.views = dir;
+        _options.views.default.html = _(dir + '/html');
+        swig.setDefaults({
+            loader: swig.loaders.fs(dir)
         })
     }
 
@@ -112,7 +122,7 @@ Controller = function(request, response, next) {
      * @return {void}
      * */
     this.render = function(_data) {
-        setRessources(_options.views, _data.page.action);
+        self.setRessources(_options.views, _data.page.action);
         var data = merge(true, _data, self.getData() );
         var path = _(_options.views.default.html + '/' + data.page.content);
 
@@ -239,7 +249,7 @@ Controller = function(request, response, next) {
         return self._data[variable]
     }
 
-    var setRessources = function(viewConf, localRessources) {
+    this.setRessources = function(viewConf, localRessources) {
         var res = '',
             tmpRes = {},
             css = {
@@ -267,14 +277,14 @@ Controller = function(request, response, next) {
             //console.info('found default ', ["default"]);
             //Get css
             if( viewConf["default"]["stylesheets"] ) {
-                tmpRes = _getNodeRes('css', cssStr, viewConf["default"]["stylesheets"], css);
+                tmpRes = getNodeRes('css', cssStr, viewConf["default"]["stylesheets"], css);
                 cssStr = tmpRes.cssStr;
                 css = tmpRes.css;
                 tmpRes = null
             }
             //Get js
             if( viewConf["default"]["javascripts"] ) {
-                tmpRes = _getNodeRes('js', jsStr, viewConf["default"]["javascripts"], js);
+                tmpRes = getNodeRes('js', jsStr, viewConf["default"]["javascripts"], js);
                 jsStr = tmpRes.jsStr;
                 js = tmpRes.js;
                 tmpRes = null
@@ -291,7 +301,7 @@ Controller = function(request, response, next) {
             //Get css
             if( viewConf[localRessources]["stylesheets"] ) {
                 //console.info('case ', viewConf[localRessources]["stylesheets"], localRessources);
-                tmpRes = _getNodeRes('css', cssStr, viewConf[localRessources]["stylesheets"], css);
+                tmpRes = getNodeRes('css', cssStr, viewConf[localRessources]["stylesheets"], css);
                 cssStr = tmpRes.cssStr;
                 css = tmpRes.css;
                 tmpRes = null
@@ -303,7 +313,7 @@ Controller = function(request, response, next) {
             }
             //Get js
             if( viewConf[localRessources]["javascripts"] ) {
-                tmpRes = _getNodeRes('js', jsStr, viewConf[localRessources]["javascripts"], js);
+                tmpRes = getNodeRes('js', jsStr, viewConf[localRessources]["javascripts"], js);
                 jsStr = tmpRes.jsStr;
                 js = tmpRes.js;
                 tmpRes = null
@@ -326,7 +336,7 @@ Controller = function(request, response, next) {
      *
      * @private
      * */
-    var _getNodeRes = function(type, resStr, resArr, resObj) {
+    var getNodeRes = function(type, resStr, resArr, resObj) {
         //console.log('assigning ..... ', resStr);
         switch(type){
             case 'css':
@@ -406,14 +416,14 @@ Controller = function(request, response, next) {
      * */
     var getParams = function(req) {
 
-        req.get = req.query;
-        req.post = req.body;
+        req.get = req.query || {};
+        req.post = req.body || {};
 
         req.getParams = function() {
             //copy.
             var params = JSON.parse(JSON.stringify(req.params));
-            params = merge(params, req.get);
-            params = merge(params, req.post);
+            params = merge(true, params, req.get);
+            params = merge(true, params, req.post);
             return params
         };
 
@@ -445,11 +455,8 @@ Controller = function(request, response, next) {
         }
     }
 
-    this.renderDocumentation = function(req, res) {
 
-    }
-
-    //protected
+/**    //protected
     this.protected =  {
         setOptions : self.setOptions,
         hasOptions : self.hasOptions,
@@ -463,7 +470,7 @@ Controller = function(request, response, next) {
         getData : self.getData,
         setRessources : setRessources,
         setLayout : self.setLayout
-    };
+    };*/
 
     init(request, response, next);
 };

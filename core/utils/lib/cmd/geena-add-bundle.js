@@ -11,9 +11,15 @@ var rl = readline.createInterface(process.stdin, process.stdout);
 AddBundle = function(opt, project, env, bundle) {
 
     var self = this;
+    var reserved = [ 'framework' ];
     self.task = 'add';//important for later in config init
 
     var init = function(opt, project, env, bundle) {
+
+        if ( reserved.indexOf(bundle) > -1 ) {
+            console.log('[ '+bundle+' ] is a reserved name. Please, try something else.');
+            process.exit(1)
+        }
         self.root = getPath('root');
         self.opt = opt;
 
