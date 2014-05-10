@@ -95,12 +95,13 @@ Controller = function(request, response, next) {
             self.set('page.title', action);
         }
 
-
-        //TODO - detect when to use swig
-        var dir = self.views || _options.views.default.views;
-        swig.setDefaults({
-            loader: swig.loaders.fs(dir)
-        })
+        if ( hasViews() ) {
+            //TODO - detect when to use swig
+            var dir = self.views || _options.views.default.views;
+            swig.setDefaults({
+                loader: swig.loaders.fs(dir)
+            })
+        }
     }
 
     this.setViewsLocation = function(dir) {

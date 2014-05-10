@@ -195,7 +195,7 @@ var fs              = require('fs'),
                 var uri = pathname.split('/');
                 var key = uri.splice(1, 1)[0];
                 //statick filter
-                if ( typeof(conf.content.views.default.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
+                if ( _this.hasViews(_this.appName) && typeof(conf.content.views.default.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
                     uri = uri.join('/');
                     var filename = path.join(conf.content.views.default.statics[key], uri);
                     fs.exists(filename, function(exists) {
