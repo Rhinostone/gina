@@ -416,11 +416,8 @@ Controller = function(request, response, next) {
      * Get Params
      * */
     var getParams = function(req) {
-
-        //req.get = req.query || {};
-        //req.post = req.body || {};
-        req.get = JSON.parse(JSON.stringify(req.query)) || {};
-        req.post = JSON.parse(JSON.stringify(req.body)) || {};
+        req.get = (req.query) ? JSON.parse(JSON.stringify(req.query)) : {};
+        req.post = (req.body) ? JSON.parse(JSON.stringify(req.body)) : {};
 
         req.getParams = function() {
             //copy.

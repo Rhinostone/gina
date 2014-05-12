@@ -707,6 +707,7 @@ Config  = function(opt) {
         var modelsPath = _(conf[bundle][env].modelsPath);
         var path;
         fs.exists(modelsPath, function(exists) {
+
             if (exists) {
                 var files = fs.readdirSync(modelsPath);
                 if ( typeof(files) == 'object' && files.count() > 0 ) {
