@@ -180,7 +180,7 @@ var fs              = require('fs'),
                 next();
             });*/
 
-        this.instance.all('*', function(request, response, next) {
+        this.instance.all('*', function onInstance(request, response, next) {
             console.log('calling back..');
 
             //Only for dev & debug.

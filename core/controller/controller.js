@@ -42,8 +42,6 @@ Controller = function(request, response, next) {
      * */
     var init = function(request, response, next) {
         _request = request, _response = response, _next = next;
-        getParams(request);
-
         if ( typeof(Controller.initialized) != 'undefined' ) {
             return getInstance()
         } else {
@@ -78,7 +76,7 @@ Controller = function(request, response, next) {
 
     this.setOptions = function(options) {
         _options = Controller.instance._options = options;
-
+        getParams(_request);
         if ( typeof(_options.views) != 'undefined' && typeof(_options.action) != 'undefined' ) {
             var action = _options.action;
             var ext = 'html';
@@ -419,8 +417,10 @@ Controller = function(request, response, next) {
      * */
     var getParams = function(req) {
 
-        req.get = req.query || {};
-        req.post = req.body || {};
+        //req.get = req.query || {};
+        //req.post = req.body || {};
+        req.get = JSON.parse(JSON.stringify(req.query)) || {};
+        req.post = JSON.parse(JSON.stringify(req.body)) || {};
 
         req.getParams = function() {
             //copy.
