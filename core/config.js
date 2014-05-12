@@ -606,10 +606,15 @@ Config  = function(opt) {
             files['views'].default.html =  _(appPath +'/views/html')
         }
 
+        if ( hasViews && typeof(files['views'].default.theme) == 'undefined' ) {
+            files['views'].default.theme =  'default_theme'
+        }
+
         //applies only for views
         if (hasViews &&  typeof(files['views'].default.views) != 'undefined' ) {
             files['views'].default = whisper(
                 {
+                    "theme" : files['views'].default.theme,
                     "views" : files['views'].default.views,
                     "html" : files['views'].default.html
                 }, files['views'].default
@@ -642,7 +647,7 @@ Config  = function(opt) {
             files['views'].default.statics = defaultAliases
         } else if ( hasViews && typeof(files['views'].default.statics) != 'undefined') {
             files['views'].default.statics = merge(true, files['views'].default.statics, defaultAliases);
-            reps["theme"] = files['views'].default.views;
+            reps["theme"] = files['views'].default.theme;
             reps["views"] = files['views'].default.views;
         }
 

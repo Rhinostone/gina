@@ -275,6 +275,7 @@ var AppCommand = {
         switch (opt['option']){
             case '-a':
             case '--add':
+                this.env = 'dev';
                 this.isAllowedArgument(opt, function(found) {
                     if (found) {
                         _this.add(opt);
@@ -304,6 +305,7 @@ var AppCommand = {
 
             case '-d':
             case '--delete':
+                this.env = 'dev';
                 this.remove(opt);
             break;
 
@@ -341,11 +343,13 @@ var AppCommand = {
             case '-av':
             case '-a -v':
             case '--add-views':
+                this.env = 'dev';
                 this.addViews();
                 break;
 
             case '-t':
             case '--status':
+                this.env = 'dev';
                 this.getStatus(opt);
                 break;
         }
