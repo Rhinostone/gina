@@ -6,13 +6,13 @@ var Config = require( _( GEENA_PATH + '/config') );
 var readline = require('readline');
 var rl = readline.createInterface(process.stdin, process.stdout);
 
-AddViews = function(bundle) {
+AddViews = function(bundle, env) {
     var self = this;
 
-    var init = function(bundle) {
+    var init = function(bundle, env) {
         self.task = 'add-views';
         self.bundle = bundle;
-        self.env = 'dev';
+        self.env = env;
         self.root = getPath('root');
         self.project = require(self.root + '/project.json').bundles[bundle];
         console.log('adding views for [ ' + bundle + ' ]');
@@ -30,7 +30,6 @@ AddViews = function(bundle) {
                 process.exit(1)
             }
 
-            //self.config = config;
             self.src = config.conf[self.bundle][self.env].bundlePath;
             addConfFile()
         })
@@ -95,7 +94,7 @@ AddViews = function(bundle) {
         })
     }
 
-    init(bundle)
+    init(bundle, env)
 };
 
 module.exports = AddViews;

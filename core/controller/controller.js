@@ -19,10 +19,11 @@
 var Controller;
 
 //Imports.
-var fs      = require("fs");
-var utils   = require("./../utils");
-var merge  = utils.merge;
-var swig = require('swig');
+var fs      = require('fs');
+var utils   = require('./../utils');
+var merge   = utils.merge;
+var merge   = utils.merge;
+var swig    = require('swig');
 
 Controller = function(request, response, next) {
 
@@ -123,6 +124,7 @@ Controller = function(request, response, next) {
      * @return {void}
      * */
     this.render = function(_data) {
+        _data = merge(true, _data, self.getData() );
         self.setRessources(_options.views, _data.page.action);
         var data = merge(true, _data, self.getData() );
         var path = _(_options.views.default.html + '/' + data.page.content);
