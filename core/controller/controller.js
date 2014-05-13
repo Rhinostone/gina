@@ -95,6 +95,9 @@ Controller = function(request, response, next) {
         }
 
         if ( hasViews() ) {
+            self.set('file', _options.file);
+            self.set('page.title', _options.file);
+
             //TODO - detect when to use swig
             var dir = self.views || _options.views.default.views;
             swig.setDefaults({
