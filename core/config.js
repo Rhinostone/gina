@@ -548,6 +548,21 @@ Config  = function(opt) {
                         }
                     }
                 }*/
+                if ( typeof(conf[bundle][env].content['views']) != 'undefined' ) {
+                    for (var rule in routing) {
+                        routing[rule].param.file = routing[rule].param.action;
+                        var tmpRouting = [];
+                        for (var i = 0, len = routing[rule].param.file.length; i < len; ++i) {
+                            if (/[A-Z]/.test(routing[rule].param.file.charAt(i))) {
+                                tmpRouting[0] = routing[rule].param.file.substring(0, i);
+                                tmpRouting[1] = '-' + (routing[rule].param.file.charAt(i)).toLocaleLowerCase();
+                                tmpRouting[2] = routing[rule].param.file.substring(i + 1);
+                                routing[rule].param.file = tmpRouting[0] + tmpRouting[1] + tmpRouting[2];
+                                ++i;
+                            }
+                        }
+                    }
+                }
 
             } else if (name == 'routing') {
                 continue;
