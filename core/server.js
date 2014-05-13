@@ -142,6 +142,10 @@ var fs              = require('fs'),
                     //Adding important properties.
                     for (var rule in tmp){
                         tmp[rule].param.app = apps[i];
+                        if( this.hasViews(apps[i])) {
+                            tmp[rule].param.file = this.actionToView(tmp[rule].param.action);
+                        }
+
                     }
 
                     if (_this.routing.count() > 0) {
@@ -343,6 +347,21 @@ var fs              = require('fs'),
             res.writeHead(code, { 'Content-Type': 'text/html'} );
             res.end('Error '+ code +'. '+ msg)
         }
+    },
+
+    actionToView : function (str) {
+        var count=0;
+        var tmp = [];
+        for (var i= 0, len=str.length; i<len; ++i) {
+            if(/[A-Z]/.test(str.charAt(i))) {
+                tmp[0] = str.substring(0,i);
+                tmp[1] = '-'+(str.charAt(i)).toLocaleLowerCase();
+                tmp[2] = str.substring(i+1);
+                str = tmp[0]+tmp[1]+tmp[2];
+                ++i;
+            }
+        }
+        return str;
     }
 };
 
