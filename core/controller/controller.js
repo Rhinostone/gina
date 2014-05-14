@@ -60,7 +60,7 @@ Controller = function(request, response, next) {
         return ( typeof(_options.views) != 'undefined' ) ? true : false;
     }
 
-    var throwError = function(res, code, msg) {
+    this.throwError = function(res, code, msg) {
 
         if ( !hasViews() ) {
             res.writeHead(code, { 'Content-Type': 'application/json'} );
@@ -137,14 +137,14 @@ Controller = function(request, response, next) {
 
         fs.readFile(path, function (err, content) {
             if (err) {
-                throwError(_response, 500, err.stack);
+                this.throwError(_response, 500, err.stack);
                 return
             }
 
             try {
                 content = swig.compile(content.toString())(data)
             } catch (err) {
-                throwError(_response, 500, '[ '+path+' ]\n' + err.stack);
+                this.throwError(_response, 500, '[ '+path+' ]\n' + err.stack);
                 return
             }
 
@@ -152,7 +152,7 @@ Controller = function(request, response, next) {
 
             fs.readFile(_options.views.default.layout, function(err, layout) {
                 if (err) {
-                    throwError(_response, 500, err.stack);
+                    this.throwError(_response, 500, err.stack);
                     return;
                 }
                 layout = layout.toString();

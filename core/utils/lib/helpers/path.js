@@ -4,7 +4,7 @@
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
- */
+ */477
 
 /**
  * PathHelper
@@ -347,7 +347,7 @@ PathHelper = function(){
             onComplete : function(callback){
                 //console.log("listeners ", e.listeners('mkdir#complete') );
                 //We want it once for the object path.
-                e.on('mkdir#complete#'+self.value, function(err, path){
+                e.once('mkdir#complete#'+self.value, function(err, path){
 
                     if (err) {
                         logger.error(
@@ -536,7 +536,7 @@ PathHelper = function(){
              * */
             onComplete : function(callback){
                 //We want it once for the object path.
-                e.on('cp#complete', function(err, destination){
+                e.once('cp#complete', function(err, destination){
                     if (err) {
                         logger.error(
                             'geena',
@@ -762,7 +762,7 @@ PathHelper = function(){
              * */
             onComplete : function(callback){
                 //We want it once for the object path.
-                e.on('mv#complete', function(err, path){
+                e.once('mv#complete', function(err, path){
                     if (err) {
                         logger.error(
                             'geena',
@@ -824,7 +824,7 @@ PathHelper = function(){
              * @event rm#onComplete
              * */
             onComplete : function(callback){
-                e.on('rm#complete', function(err, path){
+                e.once('rm#complete', function(err, path){
                     if (err) {
                         logger.error(
                             'geena',
@@ -917,7 +917,7 @@ PathHelper = function(){
 
         if (source == undefined) {
             if (folders.length > 0) {
-                removeFolders(folders.reverse(), 0, 0, callback);
+                removeFolders(folders.reverse(), 0, 0, callback)
             } else {
                 callback(false, list[list.length -1])
             }
