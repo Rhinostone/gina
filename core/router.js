@@ -161,6 +161,7 @@ Router = function(env) {
         var pathname        = url.parse(request.url).pathname;
         var bundle          = params.bundle;
         var action          = params.param.action;
+        var actionFile          = params.param.file;
         var namespace       = params.param.namespace;
         var SuperController = require('./controller');
         var hasViews        = ( typeof(_conf[bundle][env].content.views) != 'undefined' ) ? true : false;
@@ -203,6 +204,7 @@ Router = function(env) {
 
         var options = {
             action          : action,
+            file            : actionFile,
             bundle          : bundle,//module
             bundlePath      : _conf[bundle][env].bundlesPath +'/'+ bundle,
             rootPath        : _this.executionPath,
