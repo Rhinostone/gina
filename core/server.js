@@ -195,45 +195,15 @@ var fs              = require('fs'),
             });*/
 
         this.instance.all('*', function onInstance(request, response, next) {
-            console.log('calling back..');
+
 
             //Only for dev & debug.
-            _this.loadBundleConfiguration(request, response, next, _this.appName, function(err, req, res, next) {
-
+            _this.loadBundleConfiguration(request, response, next, _this.appName, function(err, pathname, req, res, next) {
+                console.log('calling back..');
                 if (err) {
                     _this.throwError(response, 500, 'Internal server error\n'+ err.stack)
                 }
-
-                var conf = _this.conf[_this.appName];
-                var pathname = url.parse(req.url).pathname;
-                var uri = pathname.split('/');
-                var key = uri.splice(1, 1)[0];
-                //statick filter
-                if ( _this.hasViews(_this.appName) && typeof(conf.content.views.default.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
-                    uri = uri.join('/');
-                    var filename = path.join(conf.content.views.default.statics[key], uri);
-                    fs.exists(filename, function(exists) {
-                        if(exists) {
-                            if (fs.statSync(filename).isDirectory()) filename += '/index.html';
-                            fs.readFile(filename, "binary", function(err, file) {
-                                if (err) {
-                                    res.writeHead(500, {"Content-Type": "text/plain"});
-                                    res.write(err.stack + "\n");
-                                    res.end();
-                                    return
-                                }
-
-                                res.writeHead(200);
-                                res.write(file, "binary");
-                                res.end()
-                            });
-                        } else {
-                            _this.handle(req, res, next, pathname)
-                        }//EO exists
-                    })//EO static filter
-                } else {
-                    _this.handle(req, res, next, pathname)
-                }
+                _this.handle(req, res, next, pathname)
             });//EO this.loadBundleConfiguration(this.appName, function(err, conf){
         });//EO this.instance
 
@@ -247,9 +217,10 @@ var fs              = require('fs'),
         this.instance.listen(this.conf[this.appName].port.http);//By Default 8888
     },
     loadBundleConfiguration : function(req, res, next, bundle, callback) {
-
-        if ( /\/favicon\.ico/.test(url.parse(req.url).pathname) ) {
-            callback(false)
+        var _this = this;
+        var pathname = url.parse(req.url).pathname;
+        if ( /\/favicon\.ico/.test(pathname) ) {
+            callback(false, pathname, req, res, next)
         }
 
         var config = require('./config')();
@@ -259,16 +230,77 @@ var fs              = require('fs'),
             this.conf[bundle] = conf
         }
         var cacheless = config.isCacheless();
+
+        var uri = pathname.split('/');
+        var key = uri.splice(1, 1)[0];
+        //statick filter
+        if ( _this.hasViews(bundle) && typeof(conf.content.views.default.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
+            uri = uri.join('/');
+            var filename = path.join(conf.content.views.default.statics[key], uri);
+            fs.exists(filename, function(exists) {
+                if(exists) {
+                    if (fs.statSync(filename).isDirectory()) filename += '/index.html';
+                    fs.readFile(filename, "binary", function(err, file) {
+                        if (err) {
+                            res.writeHead(500, {"Content-Type": "text/plain"});
+                            res.write(err.stack + "\n");
+                            res.end();
+                            return
+                        }
+
+                        res.writeHead(200);
+                        res.write(file, "binary");
+                        res.end()
+                    });
+                } else {
+                    _this.onBundleConfigLoaded({
+                        err : false,
+                        cacheless : cacheless,
+                        pathname : pathname,
+                        req : req,
+                        res : res,
+                        conf : config,
+                        next : next,
+                        callback : callback
+                    })
+                }//EO exists
+            })//EO static filter
+        } else {
+            this.onBundleConfigLoaded({
+                err : false,
+                cacheless : cacheless,
+                pathname : pathname,
+                req : req,
+                res : res,
+                conf : config,
+                next : next,
+                callback : callback
+            })
+        }
+
+    },
+
+    onBundleConfigLoaded : function(options) {
+        var err = options.err;
+        var cacheless = options.cacheless;
+        var pathname = options.pathname;
+        var req = options.req;
+        var res = options.res;
+        var config = options.conf;
+        var next = options.next;
+        var callback = options.callback;
+
         //Reloading assets & files.
         if (!cacheless) { // all but dev & debug
-            callback(false)
+            callback(err, pathname, req, res, next)
         } else {
             var _this = this;
             config.refresh(bundle, function(err, routing) {
                 if (err) logger.error('geena', 'SERVER:ERR:5', err, __stack);
                 //refreshes routing at the same time.
                 _this.routing = routing;
-                callback(false, req, res, next)
+
+                callback(err, pathname, req, res, next)
             })
         }
     },
