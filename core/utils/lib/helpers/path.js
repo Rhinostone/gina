@@ -916,7 +916,11 @@ PathHelper = function(){
         }
 
         if (source == undefined) {
-            removeFolders( folders.reverse(), 0, 0, callback );
+            if (folders.length > 0) {
+                removeFolders(folders.reverse(), 0, 0, callback);
+            } else {
+                callback(false, list[list.length -1])
+            }
         } else {
             //console.log("stat: ", source, " ["+i+"]");
             fs.stat(source, function(err, stats){
