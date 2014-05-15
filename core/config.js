@@ -659,7 +659,9 @@ Config  = function(opt) {
         };
 
         if ( hasViews && typeof(files['views'].default.statics) == 'undefined' ) {
-            files['views'].default.statics = defaultAliases
+            files['views'].default.statics = defaultAliases;
+            reps["theme"] = files['views'].default.theme;
+            reps["views"] = files['views'].default.views;
         } else if ( hasViews && typeof(files['views'].default.statics) != 'undefined') {
             files['views'].default.statics = merge(true, files['views'].default.statics, defaultAliases);
             reps["theme"] = files['views'].default.theme;
