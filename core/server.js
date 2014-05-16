@@ -67,6 +67,13 @@ var fs              = require('fs'),
     init : function(instance){
         var _this = this;
         this.instance = instance;
+        try {
+            this.validHeads =  fs.readFileSync(getPath('geena.core') + '/mime.types').toString();
+            this.validHeads = JSON.parse(this.validHeads)
+        } catch(err) {
+            log(err.stack);
+            process.exit(1)
+        }
 
         //console.log('['+ this.appName +'] on port : ['+ this.conf[this.appName].port.http + ']');
         this.onRoutesLoaded( function(success) {//load all registered routes in routing.json
@@ -216,6 +223,14 @@ var fs              = require('fs'),
 
         this.instance.listen(this.conf[this.appName].port.http);//By Default 8888
     },
+    getHead : function(file) {
+        var s = file.split(/\./);
+        var type = 'plain/text';
+        if( typeof(this.validHeads[s[s.length-1]]) != 'undefiend' ) {
+            type = this.validHeads[s[s.length-1]]
+        }
+        return type
+    },
     loadBundleConfiguration : function(req, res, next, bundle, callback) {
         var _this = this;
         var pathname = url.parse(req.url).pathname;
@@ -248,8 +263,9 @@ var fs              = require('fs'),
                             return
                         }
 
-                        res.writeHead(200);
-                        res.write(file, "binary");
+                        res.setHeader("Content-Type", _this.getHead(filename));
+                        res.writeHead(200)
+                        res.write(file, 'binary');
                         res.end()
                     });
                 } else {
