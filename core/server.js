@@ -262,11 +262,12 @@ var fs              = require('fs'),
                             res.end();
                             return
                         }
-
-                        res.setHeader("Content-Type", _this.getHead(filename));
-                        res.writeHead(200)
-                        res.write(file, 'binary');
-                        res.end()
+                        if (!res.headersSent) {
+                            res.setHeader("Content-Type", _this.getHead(filename));
+                            res.writeHead(200)
+                            res.write(file, 'binary');
+                            res.end()
+                        }
                     });
                 } else {
                     _this.onBundleConfigLoaded({
@@ -402,8 +403,10 @@ var fs              = require('fs'),
                 error: 'Error '+ code +'. '+ msg
             }))
         } else {
-            res.writeHead(code, { 'Content-Type': 'text/html'} );
-            res.end('Error '+ code +'. '+ msg)
+            if (!res.headersSent) {
+                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.end('Error '+ code +'. '+ msg)
+            }
         }
     }
 };
