@@ -166,7 +166,7 @@ Router = function(env) {
         var SuperController = require('./controller');
         var hasViews        = ( typeof(_conf[bundle][env].content.views) != 'undefined' ) ? true : false;
 
-        var cacheless = process.env.IS_CACHELESS;
+        var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
         console.log("routing..", bundle, env,  Config.Env.getConf( bundle, env ));
         //Middleware Filters when declared.
         var resHeaders = Config.Env.getConf( bundle, env ).server.response.header;
@@ -210,7 +210,8 @@ Router = function(env) {
             rootPath        : _this.executionPath,
             conf            : _conf[bundle][env],
             instance        : _this.middlewareInstance,
-            views           : ( hasViews ) ? _conf[bundle][env].content.views : undefined
+            views           : ( hasViews ) ? _conf[bundle][env].content.views : undefined,
+            cacheless       : cacheless
         };
 
         // about to contact Controller'

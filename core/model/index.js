@@ -40,6 +40,7 @@ Model = function(namespace) {
     var _locals = null;
     var config = getContext('geena.config');
     var utilsConfig = getContext('geena.utils.config');
+    var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
 
 
     var setup = function(namespace) {
@@ -107,7 +108,7 @@ Model = function(namespace) {
                     var exists = fs.existsSync(connectorPath);
                     //fs.exists(connectorPath, function (exists){
                     if (exists) {
-                        if (process.env.IS_CACHELESS)
+                        if (cacheless)
                             delete require.cache[_(connectorPath, true)];
 
                         var Connector = require(connectorPath);
@@ -120,7 +121,7 @@ Model = function(namespace) {
                                     _this.emit('model#ready', err.stack, _this.name, null);
                                 } else {
                                     //Getting Entities Manager.
-                                    if (process.env.IS_CACHELESS)
+                                    if (cacheless)
                                         delete require.cache[_(conf.path, true)];
 
                                     var entitiesManager = new require(conf.path)()[model];
@@ -131,7 +132,7 @@ Model = function(namespace) {
                         )
                     } else {
                         //Means that no connector was found in models.
-                        if (process.env.IS_CACHELESS)
+                        if (cacheless)
                             delete require.cache[_(conf.path, true)];
 
                         var entitiesManager = new require(conf.path)()[model];
@@ -234,13 +235,13 @@ Model = function(namespace) {
 
                 var filename = _locals.paths.geena + '/model/entity.js';
                 try {
-                    if (process.env.IS_CACHELESS)
+                    if (cacheless)
                         delete require.cache[_(filename, true)];
 
                     var ModelEntityClass = require(filename);
                     //var modelEntity = new ModelEntityClass( _this.getConfig(_connector), conn );
 
-                    if (process.env.IS_CACHELESS)
+                    if (cacheless)
                         delete require.cache[_(entitiesPath + '/' + files[i], true)];
 
                     var EntityClass = require( _(entitiesPath + '/' + files[i]) );

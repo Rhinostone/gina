@@ -655,8 +655,25 @@ Config  = function(opt) {
             "logsPath"      : conf[bundle][env].logsPath,
             "tmpPath"       : conf[bundle][env].tmpPath,
             "env"           : env,
-            "bundle"        : bundle
+            "bundle"        : bundle,
+            "host"          : conf[bundle][env].host
         };
+
+        var ports = conf[bundle][env].port;
+        for (var p in ports) {
+            reps[p+'Port'] = ports[p]
+        }
+
+        var localEnv = conf[bundle][env].executionPath + '/env.local.json';
+        if ( env == 'dev' && fs.existsSync(localEnv) ) {
+            conf[bundle][env] = merge(true, require(localEnv), conf[bundle][env]);
+            var envKeys = conf[bundle][env];
+            for (var k in envKeys) {
+                if ( typeof(envKeys[k]) != 'object' && typeof(envKeys[k]) != 'array' ) {
+                    reps[k] = envKeys[k]
+                }
+            }
+        }
 
         if ( hasViews && typeof(files['views'].default.statics) == 'undefined' ) {
             files['views'].default.statics = defaultAliases;
