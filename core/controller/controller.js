@@ -102,7 +102,8 @@ Controller = function(request, response, next) {
             var dir = self.views || _options.views.default.views;
             swig.setDefaults({
                 loader: swig.loaders.fs(dir)
-            })
+            });
+            self.engine = swig;
         }
     }
 

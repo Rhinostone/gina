@@ -219,10 +219,16 @@ Router = function(env) {
         }
 
         Controller = inherits(Controller, SuperController);
-        var controller = new Controller(request, response, next);
-        controller.setOptions(options);
+        try {
+            var controller = new Controller(request, response, next);
+            controller.setOptions(options);
+            controller[action](request, response, next)
+        } catch (err) {
+            var superController = new SuperController(request, response, next);
+            superController.setOptions(options);
+            superController.throwError(response, 500, err.stack);
+        }
 
-        controller[action](request, response, next)
         action = null
     };//EO route()
 
