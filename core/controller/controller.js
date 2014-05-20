@@ -60,6 +60,10 @@ Controller = function(request, response, next) {
         return ( typeof(_options.views) != 'undefined' ) ? true : false;
     }
 
+    this.isCacheless = function() {
+        return _options.cacheless
+    }
+
     this.throwError = function(res, code, msg) {
 
         if ( !hasViews() ) {
@@ -145,7 +149,7 @@ Controller = function(request, response, next) {
             try {
                 content = swig.compile(content.toString())(data)
             } catch (err) {
-                this.throwError(_response, 500, '[ '+path+' ]\n' + err.stack);
+                self.throwError(_response, 500, '[ '+path+' ]\n' + err.stack);
                 return
             }
 
