@@ -667,13 +667,14 @@ Config  = function(opt) {
         var localEnv = conf[bundle][env].executionPath + '/env.local.json';
         if ( env == 'dev' && fs.existsSync(localEnv) ) {
             conf[bundle][env] = merge(true, require(localEnv), conf[bundle][env]);
-            var envKeys = conf[bundle][env];
-            for (var k in envKeys) {
-                if ( typeof(envKeys[k]) != 'object' && typeof(envKeys[k]) != 'array' ) {
-                    reps[k] = envKeys[k]
-                }
+        }
+        var envKeys = conf[bundle][env];
+        for (var k in envKeys) {
+            if ( typeof(envKeys[k]) != 'object' && typeof(envKeys[k]) != 'array' ) {
+                reps[k] = envKeys[k]
             }
         }
+
 
         if ( hasViews && typeof(files['views'].default.statics) == 'undefined' ) {
             files['views'].default.statics = defaultAliases;

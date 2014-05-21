@@ -335,7 +335,7 @@ var fs              = require('fs'),
         }
 
         var hasViews = this.hasViews(this.appName);
-
+        console.log('about to route to ', pathname);
         var router = new Router(this.env);
         router.setMiddlewareInstance(this.instance);
 
