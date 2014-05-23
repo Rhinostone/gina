@@ -104,9 +104,11 @@ Controller = function(request, response, next) {
 
             //TODO - detect when to use swig
             var dir = self.views || _options.views.default.views;
-            swig.setDefaults({
-                loader: swig.loaders.fs(dir)
-            });
+            var swigOptions = {
+                loader: swig.loaders.fs(dir),
+                cache: (_options.cacheless) ? false : 'memory'
+            };
+            swig.setDefaults(swigOptions);
             self.engine = swig;
         }
     }
@@ -139,7 +141,10 @@ Controller = function(request, response, next) {
         for (var d in data.page) {
             dic['page.'+d] = data.page[d]
         }
-
+        // please, do not put any slashes when including...
+        // ex.:
+        //      html/inc/_partial.html (GOOD)
+        //      /html/inc/_partial.html (BAD)
         fs.readFile(path, function (err, content) {
             if (err) {
                 this.throwError(_response, 500, err.stack);
@@ -163,7 +168,6 @@ Controller = function(request, response, next) {
                 layout = layout.toString();
                 layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
 
-                //swig.render(layout);
                 _response.writeHead(200, { 'Content-Type': 'text/html' });
                 _response.end(layout);
             })
