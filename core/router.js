@@ -182,26 +182,6 @@ Router = function(env) {
         //Getting superCleasses & extending it with super Models.
         var controllerFile = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controller.js');
 
-        try {
-            // TODO - namespace handling
-            //if ( typeof(namespace) != 'undefined' ) {
-
-            if (cacheless) delete require.cache[_(controllerFile, true)];
-            var Controller  = require(controllerFile);
-
-        } catch (err) {
-            //Should be rended as a 500 err.
-            logger.error('geena', 'ROUTER:ERR:1', 'Could not complete ['+ action +' : function(req, res)...] : ' + err.stack , __stack);
-
-            var data = 'Error 500. Internal server error ' + '\nCould not complete ['+ action +' : function(req, res...] : ' + err.stack;
-            response.writeHead(500, {
-                'Content-Length': data.length,
-                'Content-Type': 'text/plain'
-            });
-            response.end(data);
-            process.exit(1);
-        }
-
         var options = {
             action          : action,
             file            : actionFile,
@@ -213,6 +193,21 @@ Router = function(env) {
             views           : ( hasViews ) ? _conf[bundle][env].content.views : undefined,
             cacheless       : cacheless
         };
+
+        try {
+            // TODO - namespace handling
+            //if ( typeof(namespace) != 'undefined' ) {
+
+            if (cacheless) delete require.cache[_(controllerFile, true)];
+            var Controller  = require(controllerFile)
+        } catch (err) {
+            var superController = new SuperController(request, response, next);
+            superController.setOptions(options);
+            console.log(err.stack);
+            superController.throwError(response, 500, err.stack);
+            process.exit(1)
+        }
+
 
         // about to contact Controller'
         if ( typeof(namespace) != 'undefined' && namespace == 'framework' ) { //framework controller filter
