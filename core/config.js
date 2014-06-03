@@ -568,14 +568,6 @@ Config  = function(opt) {
                 continue;
             }
 
-//            if (env != 'prod') {
-//                tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json')
-//            } else {
-//                tmp = conf[bundle][env].files[name]
-//            }
-//
-//            filename = _(appPath + '/config/' + tmp);
-
             if (cacheless) {
                 tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
                 filename = _(appPath + '/config/' + tmp);
@@ -584,11 +576,13 @@ Config  = function(opt) {
                 }
                 delete require.cache[_(filename, true)];
                 tmp = '';
+            } else {
+                filename = _(appPath +'/config/'+ conf[bundle][env].files[name])
             }
 
             //Can't do a thing without.
             try {
-                files[name] = require(filename);
+                files[name] = require(filename)
             } catch (_err) {
 
                 if ( fs.existsSync(filename) ) {
@@ -597,8 +591,8 @@ Config  = function(opt) {
                 } else {
                     files[name] = undefined
                 }
-                console.error(_err.stack);
-                logger.warn('geena', 'SERVER:WARN:1', filename + _err, __stack);
+                //console.error(_err.stack);
+                //logger.warn('geena', 'SERVER:WARN:1', filename + _err, __stack);
                 //logger.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack)
             }
 
@@ -621,7 +615,6 @@ Config  = function(opt) {
 
         //Constants to be exposed in configuration files.
         var reps = {
-            //TODO - remove this duplicate ?
             "root"          : conf[bundle][env].executionPath,
             "env"           : env,
             "executionPath" : conf[bundle][env].executionPath,

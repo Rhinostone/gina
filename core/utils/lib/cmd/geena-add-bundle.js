@@ -106,7 +106,6 @@ AddBundle = function(opt, project, env, bundle) {
             "src" : "src/" + bundle,
             "release" : {
                 "version" : "0.0.1",
-                "target" : "releases/"+ bundle +"/0.0.1",
                 "link" : "bundles/"+ bundle
             }
         };

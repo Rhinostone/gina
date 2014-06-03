@@ -13,12 +13,13 @@ BuildBundle = function(project, bundle) {
         self.env = process.env.NODE_ENV;
 
 
+
         if ( typeof(bundle) != 'undefined' ) {
-            console.log('building', bundle);
+            console.log('building', bundle, '[ '+ self.env +' ]');
             // TODO add origin of the build.
             buildBundleFromSources(project, bundle);
         } else {
-            console.log('building whole project');
+            console.log('building whole project: [ '+ self.env +' ]');
             //buildProjectFromSources(project);
         }
     };
@@ -38,23 +39,24 @@ BuildBundle = function(project, bundle) {
                 //will always build from sources by default.
                 if ( typeof(package['src']) != 'undefined' && fs.existsSync( _(self.root + '/' + package['src']) )) {
                     var sourcePath = _(conf.sources + '/' + bundle);
-                    var version = undefined;//by default.
+
+                    if ( typeof(package.release.version) == 'undefined' && typeof(package.tag) != 'undefined') {
+                        package.release.version = package.tag
+                    }
+                    var version = package.release.version;//by default.
                     if ( fs.existsSync( _(sourcePath + '/config/app.json') ) ) {
                         var appConf = require( _(sourcePath + '/config/app.json'));
                         if ( typeof(appConf['version']) != 'undefined' ) {
                             version = appConf['version']
-                        } else {
-                            package.version
                         }
-                    } else {
-                        version = package.version
                     }
 
                     if (version == undefined) {
                         console.log('You need a version reference to build.');
-                        process.exit(0);
+                        process.exit(1);
                     }
-                    var releasePath = _(conf.releases + '/' + bundle + '/' + version);
+
+                    var releasePath = _(conf.releases + '/'+ bundle +'/' + self.env +'/'+ version);
                     callback(false, {
                         src     : sourcePath,
                         target  : releasePath,
@@ -89,6 +91,7 @@ BuildBundle = function(project, bundle) {
                 var source  = opt.src;
                 var target  = opt.target;
                 var version = opt.version;
+                var ignoreList = ['^.*'];
                 self.i = 0;
 
                 var copy = function(source, target, files) {
