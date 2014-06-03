@@ -568,38 +568,30 @@ Config  = function(opt) {
                 continue;
             }
 
-            if (env != 'prod') {
-                tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json')
-            } else {
-                tmp = conf[bundle][env].files[name]
-            }
+//            if (env != 'prod') {
+//                tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json')
+//            } else {
+//                tmp = conf[bundle][env].files[name]
+//            }
+//
+//            filename = _(appPath + '/config/' + tmp);
 
-            filename = _(appPath + '/config/' + tmp);
-            //Can't do a thing without.
-            if ( fs.existsSync(filename) ) {
-                //console.log("app conf is ", filename);
-                if (cacheless) delete require.cache[_(filename, true)];
-
-                //tmpName = name +'_'+ env;//?? maybe useless.
-                files[name] = require(filename);
-                //console.log("watch out !!", files[name][bundle]);
-            }
-            tmp = '';
-            try {
-
-                filename = appPath + '/config/' + conf[bundle][env].files[name];
-                if (env != 'prod' && cacheless) delete require.cache[_(filename, true)];
-                if ( fs.existsSync(filename) ) {
-                    files[name] = merge( true, files[name], require(filename) )
-                } else {
-                    files[name] = undefined
+            if (cacheless) {
+                tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
+                filename = _(appPath + '/config/' + tmp);
+                if (!fs.existsSync(filename) ) {
+                    filename = _(appPath +'/config/'+ conf[bundle][env].files[name])
                 }
+                delete require.cache[_(filename, true)];
+                tmp = '';
+            }
 
+            //Can't do a thing without.
+            try {
+                files[name] = require(filename);
             } catch (_err) {
 
                 if ( fs.existsSync(filename) ) {
-                    //files[name] = "malformed !!";
-                    //throw new Error('[ '+name+' ] is malformed !!');
                     log("[ " +filename + " ] is malformed !!");
                     process.exit(1)
                 } else {
@@ -609,6 +601,7 @@ Config  = function(opt) {
                 logger.warn('geena', 'SERVER:WARN:1', filename + _err, __stack);
                 //logger.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack)
             }
+
         }//EO for (name
 
         var hasViews = (typeof(files['views']) != 'undefined' && typeof(files['views']['default']) != 'undefined') ? true : false;
@@ -625,22 +618,6 @@ Config  = function(opt) {
             files['views'].default.theme =  'default_theme'
         }
 
-        //applies only for views
-        if (hasViews &&  typeof(files['views'].default.views) != 'undefined' ) {
-            files['views'].default = whisper(
-                {
-                    "theme" : files['views'].default.theme,
-                    "views" : files['views'].default.views,
-                    "html" : files['views'].default.html
-                }, files['views'].default
-            );
-
-            var defaultAliases = {
-                "css" : "{views}/css",
-                "images" : "{views}/images",
-                "scripts" : "{views}/scripts"
-            };
-        }
 
         //Constants to be exposed in configuration files.
         var reps = {
@@ -654,6 +631,9 @@ Config  = function(opt) {
             "modelsPath"    : conf[bundle][env].modelsPath,
             "logsPath"      : conf[bundle][env].logsPath,
             "tmpPath"       : conf[bundle][env].tmpPath,
+            "views"         : files['views'].default.views,
+            "html"          : files['views'].default.html,
+            "theme"         : files['views'].default.theme,
             "env"           : env,
             "bundle"        : bundle,
             "host"          : conf[bundle][env].host
@@ -676,17 +656,13 @@ Config  = function(opt) {
         }
 
 
-        if ( hasViews && typeof(files['views'].default.statics) == 'undefined' ) {
-            files['views'].default.statics = defaultAliases;
-            reps["theme"] = files['views'].default.theme;
-            reps["views"] = files['views'].default.views;
-        } else if ( hasViews && typeof(files['views'].default.statics) != 'undefined') {
-            files['views'].default.statics = merge(true, files['views'].default.statics, defaultAliases);
-            reps["theme"] = files['views'].default.theme;
-            reps["views"] = files['views'].default.views;
+        if ( typeof(files['statics']) != 'undefined') {
+            var defaultAliases = require(getPath('geena.core') +'/template/conf/statics.json');
+            files['statics'] = merge(true, files['statics'], defaultAliases)
         }
 
         files = whisper(reps, files);
+
         conf[bundle][env].content   = files;
         conf[bundle][env].bundle    = bundle;
         conf[bundle][env].env       = env;

@@ -249,9 +249,9 @@ var fs              = require('fs'),
         var uri = pathname.split('/');
         var key = uri.splice(1, 1)[0];
         //statick filter
-        if ( _this.hasViews(bundle) && typeof(conf.content.views.default.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
+        if ( _this.hasViews(bundle) && typeof(conf.content.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
             uri = uri.join('/');
-            var filename = path.join(conf.content.views.default.statics[key], uri);
+            var filename = path.join(conf.content.statics[key], uri);
             fs.exists(filename, function(exists) {
                 if(exists) {
                     if (fs.statSync(filename).isDirectory()) filename += '/index.html';
