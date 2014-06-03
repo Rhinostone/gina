@@ -4,7 +4,7 @@
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
- */477
+ */
 
 /**
  * PathHelper
@@ -32,10 +32,10 @@ e.setMaxListeners(100);
  * PathHelper Constructor
  * @constructor
  * */
-PathHelper = function(){
+PathHelper = function() {
 
     this.paths = [];
-    this.userPaths = {} ;
+    this.userPaths = {};
     var _this = this;
     /**
      * _
@@ -45,9 +45,9 @@ PathHelper = function(){
      *
      * @return {string|object} converted
      * */
-    _ = function(path, force){
+    _ = function(path, force) {
         if ( typeof(force) == undefined) {
-            force = _this.force = false;
+            force = _this.force = false
         }
         path = Path.normalize(path);
         var isConstructor = false;
@@ -55,7 +55,7 @@ PathHelper = function(){
             // except in in EcmaScript 5 strict mode.
             && !this.previouslyConstructedBy_) {
             isConstructor = true;
-            this.previouslyConstructedBy_ = true;
+            this.previouslyConstructedBy_ = true
         }
 
         if ( typeof(path) != 'undefined' && path != '' ) {
@@ -75,7 +75,7 @@ PathHelper = function(){
                     this.isWindowsStyle = true;
                     this.key = path;
                     if (_this.paths.indexOf(path) < 0 ) {
-                        _this.paths.push(p);
+                        _this.paths.push(p)
                     }
                 } else {
                     //console.log("linux style");
@@ -85,10 +85,10 @@ PathHelper = function(){
                     //console.log("path ", p);
                     this.key = path;
                     if (_this.paths.indexOf(path) < 0 ) {
-                        _this.paths.push(p);
+                        _this.paths.push(p)
                     }
                 }
-                return this;
+                return this
 
             } else {
                 //Means that we are not in an object context.
@@ -101,20 +101,20 @@ PathHelper = function(){
 
 
                     if ( _this.paths.indexOf(path) < 0) {
-                        _this.paths.push(path);
+                        _this.paths.push(path)
                     }
 
 
                 } else {
                     path = path.replace(/\\/g, "/");
                     if (_this.paths.indexOf(path) < 0) {
-                        _this.paths.push(path);
+                        _this.paths.push(path)
                     }
                 }
-                return path;
+                return path
             }
         }
-        return null;
+        return null
     };
 
     _.prototype.sep = Path.sep;
@@ -130,14 +130,12 @@ PathHelper = function(){
      * Then
      * myPathObj.toString()
      * */
-    _.prototype.toString = function(){
+    _.prototype.toString = function() {
         var self = this;
         var path = self.value;
         var i = _this.paths.indexOf(path);
-        //var i = self.key;
-        //console.log("path *******", path, i , self.value);
-        return ( i > -1 ) ? _this.paths[i] : path;
-    };
+        return ( i > -1 ) ? _this.paths[i] : path
+    }
 
     /**
      * _.toArray() Convert path object to array
@@ -149,38 +147,38 @@ PathHelper = function(){
      * Then
      * myPathObj.toArray()
      * */
-    _.prototype.toArray = function(){
+    _.prototype.toArray = function() {
         var self = this;
         var arr = toArray(self);
 
-        arr.first = function(){
+        arr.first = function() {
             return arr[0];
-        };
+        }
 
-        arr.index = function(i){
+        arr.index = function(i) {
             if ( typeof(arr[i]) != 'undefiend')
                 return arr[i];
             else
                 return undefined;
+        }
+
+        arr.last = function() {
+            return arr[arr.length-1]
         };
 
-        arr.last = function(){
-            return arr[arr.length-1];
-        };
+        return arr
+    }
 
-        return arr;
-    };
-
-    var toArray = function(self){
+    var toArray = function(self) {
         var reg = new RegExp(/[,;/]/g);
         //Last replace just in case. I hate Windows.
         //The first element will be the letter of the drive. Windows only.
         return (typeof(self.isWindowsStyle) != "undefined" && self.isWindowsStyle == true)
             ? self.value.replace(/\\/g, "/").split(reg)
             : self.value.replace(/\\/g, "/").split(reg).splice(1);
-    };
+    }
 
-    var stringPathToArray = function(path){
+    var stringPathToArray = function(path) {
         if ( typeof(path) == 'undefined' || typeof(path) != 'string') {
             logger.warn(
                 'geena',
@@ -188,7 +186,7 @@ PathHelper = function(){
                 'Path.stringPathToArray(path): path is empty or wrong type.',
                 __stack
             );
-            return undefined;
+            return undefined
         }
         var reg = new RegExp(/[,;/]/g);
         var isWindowsStyle = (process.platform == "win32") ? true : false;
@@ -197,33 +195,32 @@ PathHelper = function(){
             ? path.replace(/\\/g, "/").split(reg)
             : path.replace(/\\/g, "/").split(reg).splice(1);
 
-        arr.first = function(){
-            return arr[0];
-        };
+        arr.first = function() {
+            return arr[0]
+        }
 
-        arr.index = function(i){
+        arr.index = function(i) {
             if ( typeof(arr[i]) != 'undefiend')
                 return arr[i];
             else
                 return undefined;
+        }
+
+        arr.last = function() {
+            return arr[arr.length-1]
         };
 
-        arr.last = function(){
-            return arr[arr.length-1];
-        };
+        return arr
+    }
 
-        return arr;
-    };
-
-    var cleanSlashes = function(self){
+    var cleanSlashes = function(self) {
         var path = self.value;
         var a = toArray(self);
         if (a[a.length-1] == '') {
             a.splice(a.length-1, 1);
-            self.value = self.start + a.join(Path.sep);
-            //console.log("new val !! ", self.value);
+            self.value = self.start + a.join(Path.sep)
         }
-        return self;
+        return self
     }
 
     _.prototype.existsSync = function() {
@@ -242,20 +239,18 @@ PathHelper = function(){
      * @param {string} permission Folder permission
      * @callback callback
      * */
-    _.prototype.mkdir = function(permission, callback){
+    _.prototype.mkdir = function(permission, callback) {
         if ( typeof(permission) == "function") {
             var callback = permission;
-            var permission = 0777;
+            var permission = 0777
         }
         var self = this;
         self = cleanSlashes(self);
 
         //Enter dir & start rm.
-        //console.log("enter path: ", self.value);
-        fs.exists(self.value, function(exists){
-            //console.log('about to create folder: ', self.value, exists);
+        fs.exists(self.value, function(exists) {
             if (exists) {
-                callback(false, self.value);
+                callback(false, self.value)
             } else {
                 var p = self.value;
 
@@ -266,34 +261,31 @@ PathHelper = function(){
                             console.error("Debug needed mkdir on existing folder !! ", err);
                            // console.warn("MKDIR ERR: silently ignored.. ", path);
                            //callback("MKDIR ERR: silently ignored.. ");
-                            process.exit(1);
+                            process.exit(1)
                         } else {
-                            //console.log("Woo ", "["+p+"]", " VS ","["+path+"]", (typeof(callback) != 'undefined'), ( typeof(self.created) ),(p == path  && typeof(callback) != 'undefined' && typeof(self.created) == 'undefined' ));
+
                             if (p == path  && typeof(callback) != 'undefined' && typeof(self.created) == 'undefined' ) {
-                                //console.log("Daa");
                                 if (typeof(callback) != 'undefined') {
-                                    //console.log("what's wrong with mkdir ?? " + "[" + self.value +"]" + err);
-                                    //self.created = true;
-                                    callback(err, path);
+                                    callback(err, path)
                                 } else {
-                                    console.log("no callback defined for mkdir ", path);
+                                    console.log("no callback defined for mkdir ", path)
                                 }
                             }
                         }
-
-                    });
+                    })
             }//EO exists.
-        });
-    };
+        })
+    }
 
-    var mkdirEnd = function(self, err, path){
+    var mkdirEnd = function(self, err, path) {
         if (!err) {
-            e.emit('mkdir#complete#'+self.value, false, path);
+            e.emit('mkdir#complete#'+self.value, false, path)
         } else {
-            e.emit('mkdir#complete#'+self.value, err, path);
+            e.emit('mkdir#complete#'+self.value, err, path)
         }
-    };
-    var mkdir = function(self, permission, pathArr, i, path){
+    }
+
+    var mkdir = function(self, permission, pathArr, i, path) {
 
         var addFolder = function(self, permission, pathArr, i, path) {
 
@@ -303,7 +295,7 @@ PathHelper = function(){
                 } else {
                     mkdirEnd(self, err)
                 }
-            });
+            })
         };
 
         //by default.
@@ -328,26 +320,26 @@ PathHelper = function(){
                 path += '/' + pathArr[i]
             }
 
-            fs.exists(path, function(exists){
+            fs.exists(path, function(exists) {
                 if (!exists) {
-                    addFolder(self, permission, pathArr, i, path);
+                    addFolder(self, permission, pathArr, i, path)
                 } else {
-                    mkdir(self, permission, pathArr, i, path);
+                    mkdir(self, permission, pathArr, i, path)
                 }
-            });
+            })
         } else {
             //console.log("calling end on ", self.value);
-            mkdirEnd(self, false, path);
+            mkdirEnd(self, false, path)
         }
         return {
             /**
              * Complete event
              * @event mkdir#onComplete
              * */
-            onComplete : function(callback){
+            onComplete : function(callback) {
                 //console.log("listeners ", e.listeners('mkdir#complete') );
                 //We want it once for the object path.
-                e.once('mkdir#complete#'+self.value, function(err, path){
+                e.once('mkdir#complete#'+self.value, function(err, path) {
 
                     if (err) {
                         logger.error(
@@ -355,13 +347,13 @@ PathHelper = function(){
                             'UTILS:PATH:ERROR:8',
                             ''+err,
                             __stack
-                        );
+                        )
                     }
-                    callback(err, path);
-                });
+                    callback(err, path)
+                })
             }
-        };
-    };
+        }
+    }
 
 
     /**
@@ -378,27 +370,30 @@ PathHelper = function(){
      *  })
      *
      * @param {string} target
+     * @param {array} ignore
      *
      * @callback callback
      * @param {string} errResponse
      * @param {string} [pathResponse]
      * */
 
-    _.prototype.cp = function(target, cb){
-        //var self = _;
+    _.prototype.cp = function(target, ignored, cb) {
+        if ( typeof(ignored) == 'undefined') {
+            var cb = ignored
+        }
         var self = this;
         //Enter dir & start rm.
         var p = self.value;
         //console.log("starting copying ", p, " => ", target);
-        cp(p, target)
-            .onComplete( function(err, destination){
+        cp(p, target, ignored)
+            .onComplete( function(err, destination) {
                 if (target == destination) {
                     cb(err);
                 }
             });
-    };
+    }
 
-    var cp = function(source, destination){
+    var cp = function(source, destination, ignored) {
 
         /**
          * BO Targeting folder content..
@@ -412,10 +407,10 @@ PathHelper = function(){
         find = s.substr(s.length-1, 1);
         if ( find == '\/') {
             source = s.substr(0, s.length-1);
-            childElementsOnly['source'] = true;
+            childElementsOnly['source'] = true
         } else {
             source = s;
-            childElementsOnly['source'] = false;
+            childElementsOnly['source'] = false
         }
 
         // ending char : / or \
@@ -423,26 +418,26 @@ PathHelper = function(){
         find = d.substr(d.length-1, 1);
         if ( find == '\/') {
             destination = d.substr(0, d.length-1);
-            childElementsOnly['destination'] = true;
+            childElementsOnly['destination'] = true
         } else {
             destination = d;
-            childElementsOnly['destination'] = false;
+            childElementsOnly['destination'] = false
         }
         /**
          * EO Targeting folder content..
          * */
 
-            //Define strategy.
-        fs.lstat(source, function(err, stats){
+        //Define strategy.
+        fs.lstat(source, function(err, stats) {
             // 1) File => Dir (add if exist else, throw error).
             // 2) File => File (create or replace if exists).
             // 3) Dir => Dir (create or replace if exists).
 
             if ( !stats.isDirectory() ) {
                 // 1) & 2) File => Dir (add if exist else, throw error).
-                copyFileToFile(source, destination, 0, function(err){
-                    e.emit("cp#complete", err, destination);
-                });
+                copyFileToFile(source, destination, 0, function(err) {
+                    e.emit("cp#complete", err, destination)
+                }, ignored)
             } else {
                 /**
                  * 3) Dir => Dir (create or replace if exists).
@@ -466,8 +461,8 @@ PathHelper = function(){
 
                     browseCopy(source, destination, function(err){
                         console.log("copy Dir/ to Dir/ && Dir/ to Dir done");
-                        e.emit("cp#complete", err, destination);
-                    });
+                        e.emit("cp#complete", err, destination)
+                    })
 
                 } else if (!childElementsOnly["source"] && childElementsOnly["destination"]) {
                     method = "3B";
@@ -477,36 +472,31 @@ PathHelper = function(){
                     destination += '/' + folder;
 
                     //console.log("MKDIR createDir");
-                    var target = new _(destination).mkdir(function(err, path){
-                        browseCopy(source, path, function(err){
+                    var target = new _(destination).mkdir( function(err, path) {
+                        browseCopy(source, path, function(err) {
                             //console.log("copy Dir to Dir/ done");
-                            e.emit("cp#complete", err, path);
-                        });
-                    });
+                            e.emit("cp#complete", err, path)
+                        })
+                    })
                 } else {
                     //3C.
                     console.log("....calling method ", method);
-                    var onRemoved = function(err, target){
+                    var onRemoved = function(err, target) {
                         // err: 99% means that it doesn't exist. Well, we don't care do we ?.
                         console.log("someshit has been triggered ! ", target);
-                        //if (!err) console.log(" rm done, using same object ";
                         if (!err) {
-//                            console.log(" rm done, using same object ");
-//                            console.log(" about to create path ", destination);
-//                            console.log("MKDIR createDir ");
 
-                            var target = new _(destination).mkdir(function(err, path){
-                                    browseCopy(source, path, function(err){
+                            var target = new _(destination).mkdir(function(err, path) {
+                                    browseCopy(source, path, function(err) {
                                         //console.log("copy Dir to Dir done");
                                         //removed = true;
                                         destination = null;
-                                        e.emit("cp#complete", err, path);
-                                    });
-                            });
-                            //});
+                                        e.emit("cp#complete", err, path)
+                                    })
+                            })
                         } else {
                             console.error("onRemoved error: som'was wrong ");
-                            process.exit(1);
+                            process.exit(1)
                         }
                     };
 
@@ -514,14 +504,11 @@ PathHelper = function(){
                     fs.exists(d, function(exists){
                         console.log("about to remove !! ", d, exists);
                         if (exists) {
-                            rm(d).onComplete( onRemoved );
+                            rm(d).onComplete( onRemoved )
                         } else {
-                            onRemoved(false, d);
+                            onRemoved(false, d)
                         }
-                    });
-
-
-
+                    })
                 }
 //               console.error("Copy strategy 3C: Could not create directory for copy");
             }
@@ -534,9 +521,9 @@ PathHelper = function(){
              * Complete event
              * @event cp#onComplete
              * */
-            onComplete : function(callback){
+            onComplete : function(callback) {
                 //We want it once for the object path.
-                e.once('cp#complete', function(err, destination){
+                e.once('cp#complete', function(err, destination) {
                     if (err) {
                         logger.error(
                             'geena',
@@ -546,23 +533,22 @@ PathHelper = function(){
                         );
                     }
                     console.log('cp() complete');
-                    callback(err, destination);
-                });
+                    callback(err, destination)
+                })
             }
-        };
+        }
+    }
 
-    };
-
-    var readContent = function(source, target, callback){
-        fs.readdir(source, function(err, files){
+    var readContent = function(source, target, callback) {
+        fs.readdir(source, function(err, files) {
             var list = [], listTo = [];
             for (var i=0; i<files.length; ++i) {
                 list[i]     = _(source +'/'+ files[i]);
-                listTo[i]   = _(target +'/'+ files[i]);
+                listTo[i]   = _(target +'/'+ files[i])
             }
-            callback(list, listTo);
-        });
-    };
+            callback(list, listTo)
+        })
+    }
 
     /**
      * browse & copy
@@ -583,21 +569,19 @@ PathHelper = function(){
      * */
 
     var end = function(callback, err) {
-        //console.log("it's over !!");
         callback(err);
-    };
+    }
 
-    var browseCopy = function(sourceDir, destinationDir, callback, list, listTo, i){
+    var browseCopy = function(sourceDir, destinationDir, callback, list, listTo, i) {
         var list = ( typeof(list) != 'undefined' ) ? list : [];
         var listTo = ( typeof(listTo) != 'undefined' ) ? listTo : [];
         var i = ( typeof(i) != 'undefined' ) ? i : 0;
 
 
         if (sourceDir == undefined || destinationDir == undefined) {
-            end(callback, false);
+            end(callback, false)
         } else {
-            //console.log("browsing ", sourceDir, " => ", destinationDir, " ["+i+"]");
-            fs.stat(sourceDir, function(err, stats){
+            fs.stat(sourceDir, function(err, stats) {
 
                 if ( stats.isDirectory() ) {
                     if ( typeof(list[i]) == 'undefined' ) {
@@ -606,33 +590,31 @@ PathHelper = function(){
                     }
                     var createDir = new _(destinationDir);
 
-                    createDir.mkdir( function(err, path){
+                    createDir.mkdir( function(err, path) {
                         if (!err) {
-                            readContent(sourceDir, destinationDir, function(_list, _listTo){
+                            readContent(sourceDir, destinationDir, function(_list, _listTo) {
 
                                 for (var p=0; p<_list.length; ++p) {
                                     list.push(_list[p]);
-                                    listTo.push(_listTo[p]);
+                                    listTo.push(_listTo[p])
                                 }
                                 ++i;
-                                browseCopy(list[i], listTo[i], callback, list, listTo, i);
-                            });
+                                browseCopy(list[i], listTo[i], callback, list, listTo, i)
+                            })
                         } else {
-                            console.error(err);
+                            console.error(err)
                         }
-                    });
+                    })
 
                 } else {
-                    //console.log("copy in progress: ", sourceDir, destinationDir);
-                    copyFileToFile(sourceDir, destinationDir, i, function(err, file, i){
+                    copyFileToFile(sourceDir, destinationDir, i, function(err, file, i) {
                         ++i;
-                        //console.log("browsing ", i, " of ", listTo);
-                        browseCopy(list[i], listTo[i], callback, list, listTo, i);
-                    });
+                        browseCopy(list[i], listTo[i], callback, list, listTo, i)
+                    })
                 }
-            });
+            })
         }
-    };
+    }
 
     /**
      * Copy file to  file
@@ -646,16 +628,16 @@ PathHelper = function(){
      * @param {bool|string} err
      *
      * */
-    var copyFileToFile = function(source, destination, i, callback){
+    var copyFileToFile = function(source, destination, i, callback, ignored) {
 
-        fs.lstat(destination, function(err, stats){
+        fs.lstat(destination, function(err, stats) {
 
             //Means that nothing exists. Needs create.
             if (err) {
-                startCopy(source, destination, i, function(err, i){
+                startCopy(source, destination, i, function(err, i) {
                     //TODO - log error.
-                    callback(err, source, i);
-                });
+                    callback(err, source, i)
+                })
             } else {
 
                 if ( stats.isDirectory() ) {
@@ -664,55 +646,55 @@ PathHelper = function(){
                     destination += path
                 }
 
-                fs.exists(destination, function(replaceFlag){
+                fs.exists(destination, function(replaceFlag) {
                     if (replaceFlag) {
-                        fs.unlink(destination, function(err){
+                        fs.unlink(destination, function(err) {
                             //TODO - log error.
-                            startCopy(source, destination, i, function(err, i){
+                            startCopy(source, destination, i, function(err, i) {
 
-                                callback(err, source, i);
-                            });
-                        });
+                                callback(err, source, i)
+                            })
+                        })
                     } else {
-                        startCopy(source, destination, i, function(err, i){
+                        startCopy(source, destination, i, function(err, i) {
                             //TODO - log error.
-                            callback(err, source, i);
-                        });
+                            callback(err, source, i)
+                        })
                     }
-                });
+                })
             }//EO if (err)
-        });
+        })
 
-        var startCopy = function(source, destination, i, callback){
+        var startCopy = function(source, destination, i, callback) {
 
-            copyFile(source, destination, i, function(err, i){
+            copyFile(source, destination, i, function(err, i) {
                 if (err) {
                     logger.error(
                         'geena',
                         'UTILS:PATH:ERROR:4',
                         err,
                         __stack
-                    );
+                    )
                 }
-                callback(err, i);
-            });
-        };
-    };
+                callback(err, i)
+            })
+        }
+    }
 
-    var copyFile = function(source, destination, i, callback){
+    var copyFile = function(source, destination, i, callback) {
         var sourceStream = fs.createReadStream(source);
         var destinationStream = fs.createWriteStream(destination);
 
         sourceStream
             .pipe(destinationStream)
-            .on('error', function(){
+            .on('error', function() {
                 var err = 'Error on Path.cp(...): Not found ' + source +' or ' + destination;
-                callback(err, i);
+                callback(err, i)
             })
-            .on('close', function(){
-                callback(false, i);
-            });
-    };
+            .on('close', function() {
+                callback(false, i)
+            })
+    }
 
 
     /**
@@ -725,57 +707,53 @@ PathHelper = function(){
      * @param {string} [pathResponse]
      * */
 
-    _.prototype.mv = function(target, callback){
+    _.prototype.mv = function(target, callback) {
 
         var self = this;
         //Enter dir & start rm.
         var p = self.value;
-        //console.log("mouving from ", p, " to ", target);
         mv(self, target)
             .onComplete( function(err, path){
                 if (p == path && typeof(callback) != 'undefined') {
-                    callback(err);
+                    callback(err)
                 }
-            });
-    };
+            })
+    }
 
-
-
-    var mv = function(self, target){
+    var mv = function(self, target) {
         //console.log("starting mv/copy from ", self.value, " to ", target);
         var task = new _(self.value);
-        task.cp(target, function(err){
+        task.cp(target, function(err) {
             if (err) console.error(err);
 
             console.log("cp done... now unlinking source ", self.value);
             rm(self.value).onComplete( function(err, path){
                 console.log('fuckn rm() complete');
-                e.emit('mv#complete', err, path);
-            });
-        });/**.onComplete( function(err){
-            e.emit('mv#complete', err, path);
-        });*/
+                e.emit('mv#complete', err, path)
+            })
+        });
+
         return {
             /**
              * Complete event
              * @event mv#onComplete
              * */
-            onComplete : function(callback){
+            onComplete : function(callback) {
                 //We want it once for the object path.
-                e.once('mv#complete', function(err, path){
+                e.once('mv#complete', function(err, path) {
                     if (err) {
                         logger.error(
                             'geena',
                             'UTILS:PATH:ERROR:10',
                             err,
                             __stack
-                        );
+                        )
                     }
-                    callback(err, path);
-                });
+                    callback(err, path)
+                })
             }
-        };
-    };
+        }
+    }
 
 
     /**
@@ -785,37 +763,31 @@ PathHelper = function(){
      * @param {string} errResponse
      * @param {string} [pathResponse]
      * */
-    _.prototype.rm = function(callback){
+    _.prototype.rm = function(callback) {
         var self = this;
         //Enter dir & start rm.
         self = cleanSlashes(self);
         var p = self.value;
-        fs.exists(p, function(exists){
+        fs.exists(p, function(exists) {
             console.log(" does it exists ? ", p, exists );
             if (!exists) {
                 console.log("done removing ", p);
-                callback(false, p);
+                callback(false, p)
+
             } else {
-
-                rm(p).onComplete( function(err, path){
+                rm(p).onComplete( function(err, path) {
                     console.log("done removing... ", err);
-                    //if (p == path  && typeof(callback) != 'undefined' && typeof(self.created) == 'undefined' ) {
-                    //    self.created = true;
-                    callback(err, path);
-                    //}
-                });
+                    callback(err, path)
+                })
             }
-        });
+        })
+    }
 
+    var rm = function(source) {
 
-
-    };
-
-    var rm = function(source){
-
-        browseRemove(source,  function(err, path){
+        browseRemove(source,  function(err, path) {
             console.log('rm done...', err, path, " VS ", source);
-            e.emit('rm#complete', err, path);
+            e.emit('rm#complete', err, path)
         });
 
         return {
@@ -823,23 +795,23 @@ PathHelper = function(){
              * Complete event
              * @event rm#onComplete
              * */
-            onComplete : function(callback){
-                e.once('rm#complete', function(err, path){
+            onComplete : function(callback) {
+                e.once('rm#complete', function(err, path) {
                     if (err) {
                         logger.error(
                             'geena',
                             'UTILS:PATH:ERROR:6',
                             err,
                             __stack
-                        );
+                        )
                     }
                     //console.log('calling back now...', err, path);
                     //This one is listened by several rm().
-                    callback(err, path);
-                });
+                    callback(err, path)
+                })
             }
-        };
-    };
+        }
+    }
 
     /**
      * Remove file, symlinks or folders recursively
@@ -865,54 +837,51 @@ PathHelper = function(){
     var removeFolders = function(list, l, i, callback) {
 
         if ( typeof(list[l]) == "undefined") {
-            //console.log("done for good ", list[l-1][list[l-1].length -1], list);
-            callback(false, list[l-1][list[l-1].length -1]);
+            callback(false, list[l-1][list[l-1].length -1])
         } else {
-            //console.log(i, list[l].length-1, (i === list[l].length-1));
             if (i === list[l].length-1 ) {
                 i = 0;
-                //console.log("huers", i, l, list[l][i]);
-                fs.rmdir(list[l][i], function(err){
+                fs.rmdir(list[l][i], function(err) {
                     if (err) callback(err);
 
                     ++l;
-                    removeFolders(list, l, i, callback);
-                });
+                    removeFolders(list, l, i, callback)
+                })
 
             } else {
                 ++i;
-                //console.log("huers", i, l, list[l][i]);
-                fs.rmdir(list[l][i], function(err){
+                fs.rmdir(list[l][i], function(err) {
                     if (err) callback(err);
 
-                    removeFolders(list, l, i, callback);
-                });
+                    removeFolders(list, l, i, callback)
+                })
             }
         }
-    };
+    }
 
 
-    var readContentToRemove = function(source, list, cb){
-        fs.readdir(source, function(err, files){
+    var readContentToRemove = function(source, list, cb) {
+        fs.readdir(source, function(err, files) {
             if (!err) {
                 if ( typeof(files) != 'undefined') {
                     for (var f=0; f<files.length; ++f) {
-                        list.push( _(source +'/'+ files[f]) );
+                        list.push( _(source +'/'+ files[f]) )
                     }
                 }
-                cb(list);
+                cb(list)
             } else {
-                console.error(err);
+                console.error(err)
             }
-        });
-    };
+        })
+    }
 
-    var browseRemove = function(source, callback, list, folders, i){
+    var browseRemove = function(source, callback, list, folders, i) {
         var list = ( typeof(list) != 'undefined' ) ? list : [];
         var folders = ( typeof(folders) != 'undefined' ) ? folders : [];
         var i = ( typeof(i) != 'undefined' ) ? i : 0;
+
         if (list.length === 0) {
-            list.push(source);
+            list.push(source)
         }
 
         if (source == undefined) {
@@ -922,51 +891,46 @@ PathHelper = function(){
                 callback(false, list[list.length -1])
             }
         } else {
-            //console.log("stat: ", source, " ["+i+"]");
-            fs.stat(source, function(err, stats){
+
+            fs.stat(source, function(err, stats) {
                 if (!err) {
                     if ( stats.isDirectory() ) {
 
                         if (folders.length == 0) {
                             folders[0] = [];
-                            folders[0].push(source);
+                            folders[0].push(source)
                         } else {
                             //console.log("want it !! ", source, " VS ", folders[0][0], folders[0][0].length );
                             var l =  source.substring( (folders[0][0].length) ).match(/\//g);
                             if (l == null) {
-                                l = 0;
+                                l = 0
                             } else {
-                                l = l.length;
+                                l = l.length
                             }
                             if ( typeof(folders[l]) == 'undefined') {
-                                folders[l] = [];
+                                folders[l] = []
                             }
-                            //console.error("le beau ", source, " vs ", folders[0][0].toString().length, " & ", source.length, ':', l);
-                            folders[l].push(source);
+                            folders[l].push(source)
                         }
-                        //console.log("about to read dir: ", i, source);
+
                         readContentToRemove(source, list, function(_list){
                             ++i;
-                            //console.log("now browsing next source: ", list[i]);
-                            browseRemove(_list[i], callback, _list, folders, i);
-                        });
+                            browseRemove(_list[i], callback, _list, folders, i)
+                        })
 
                     } else {
-                        //console.log("about to read file: ", i, source);
-                        removeFile(source, function(err){
-                            //console.log("done reading file: ", i, source);
+                        removeFile(source, function(err) {
                             ++i;
-                            //console.log("now browsing next source: ", list[i]);
-                            browseRemove(list[i], callback, list, folders, i);
-                        });
+                            browseRemove(list[i], callback, list, folders, i)
+                        })
                     }
                 } else {
-                    console.error(err);
+                    console.error(err)
                 }
 
-            });
+            })
         }
-    };
+    }
 
     /**
      * Remove file
@@ -983,8 +947,6 @@ PathHelper = function(){
      * */
 
     var removeFile = function(filename, callback) {
-        //console.log("removing ", i, filename);
-        //callback(false);
         fs.unlink(filename, function(err){
             if (err) {
                 logger.emerg(
@@ -993,36 +955,31 @@ PathHelper = function(){
                     'Locked file error: ' + filename,
                     __stack
                 );
-                callback(err);
+                callback(err)
             } else {
-                callback(false);
+                callback(false)
             }
-        });
-    };
+        })
+    }
 
-
-
-    _.prototype.toUnixStyle = function(){
-        //var self = _;
+    _.prototype.toUnixStyle = function() {
         var self = this;
         var i = _this.paths.indexOf(self.value);
         return ( i > -1 ) ? _this.paths[i].replace(/\\/g, "/") : self.value;
-    };
+    }
 
-    _.prototype.toWin32Style = function(){
-        //var self = _;
+    _.prototype.toWin32Style = function() {
         var self = this;
         var i = _this.paths.indexOf(self.value);
-        //var i = self.key;
         return ( i > -1 ) ? _this.paths[i].replace(/\//g, "\\") : self.value;
-    };
+    }
 
     /**
      * Set path by name
      * @param {String} name Path name
      * @return {String}
      * */
-    setPath = function(name, path){
+    setPath = function(name, path) {
 
         if ( typeof(name) == 'object') {
             var paths = getContext('paths');
@@ -1030,7 +987,7 @@ PathHelper = function(){
                 _this.userPaths[n] = _(name[n]);
                 merge(true, paths, _this.userPaths)
             }
-            setContext("paths", paths);
+            setContext("paths", paths)
 
         } else {
             if ( typeof(_this.userPaths) == "undefined" || typeof(_this.userPaths[name]) == "undefined" )  {
@@ -1041,37 +998,29 @@ PathHelper = function(){
                 logger.info("geena", "INFO:42", " 1) got config paths " +  paths+ " VS "+ _this.userPaths, __stack);
 
                 merge(true, paths, _this.userPaths);
-                //console.log("what is this ", paths);
-                setContext("paths", paths);
+                setContext("paths", paths)
             }
         }
-
-
-    };
+    }
 
     /**
      * Get path by name
      * @param {String} name Path name
      * @return {String} path
      * */
-    getPath = function(name){
-
+    getPath = function(name) {
         var paths = getContext('paths');
-        //console.log("2) tryng to get path for ", name + ' : ' + paths[name]);
         if ( typeof(paths[name]) != "undefined" ) {
-            return paths[name];
+            return paths[name]
         } else {
-            return undefined;
+            return undefined
         }
-    };
+    }
 
-    getPaths = function(){
-        //return 'paths: ' + JSON.stringify(_this.paths, null, 4);
+    getPaths = function() {
         return getContext("paths")
-    };
-
-
+    }
 
 };//EO PathHelper.
 
-module.exports = PathHelper;
+module.exports = PathHelper

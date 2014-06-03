@@ -109,7 +109,7 @@ BuildBundle = function(project, bundle) {
                     var to = _(target +'/'+ files[i]);
 
                     //if ( !/.dev./.test(files[i]) && files[i].substring(0,1) != '.') {
-                    from.cp(to, function(err){
+                    from.cp(to,  function(err){
                         ++self.i;
                         copy(source, target, files)
                     })
