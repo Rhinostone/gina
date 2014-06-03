@@ -17,23 +17,38 @@ var os      = require("os");
  * Post install constructor
  * @constructor
  * */
-PostInstall = function(){
+PostInstall = function() {
 
     var self = this;
 
     //Initialize post installation scripts.
 
-    var init = function(){
+    var init = function() {
         self.isWin32 = ( os.platform() == 'win32' ) ? true : false;
         self.path = _( __dirname.substring(0, (__dirname.length - "script".length)) );
-        createGeenaFileForPlatform();
+        createVersionFile(function onFileCreated(err) {
+            if (err) {
+                console.error(err.stack)
+            }
 
-        log("Geena's command line tool has been installed.");
-    };
+            createGeenaFileForPlatform();
+            log("Geena's command line tool has been installed.");
+        })
+    }
 
+    var createVersionFile = function(callback) {
+        var version = require( _(self.path + 'package.json') ).version;
+        var target = _(self.path + '/VERSION');
+        try {
+            fs.writeFileSync(target, version);
+            callback(false)
+        } catch(err) {
+            callback(err)
+        }
+    }
 
     //Creating framework command line file for nix.
-    var createGeenaFile = function(win32Name, callback){
+    var createGeenaFile = function(win32Name, callback) {
         var name = require( _(self.path + 'package.json') ).name;
         var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
         var source = _(self.path + 'core/template/command/geena.tpl');
@@ -42,20 +57,20 @@ PostInstall = function(){
             target = _(appPath + win32Name)
         }
         //Will override.
-        if ( typeof(callback) != 'udnefined')
+        if ( typeof(callback) != 'undefined')
             utils.generator.createFileFromTemplate(source, target, function onGeenaFileCreated(err){
                 callback(err)
             })
         else
             utils.generator.createFileFromTemplate(source, target);
-    };
+    }
 
-    var createGeenaFileForPlatform = function(){
+    var createGeenaFileForPlatform = function() {
         var name = require( _(self.path + 'package.json') ).name;
 
         var filename = ( (self.isWin32) ? '.' : '' ) + name;
 
-        createGeenaFile(filename, function onFileCreated(err){
+        createGeenaFile(filename, function onFileCreated(err) {
             if (err) console.error(err.stack);
 
             if (self.isWin32) {
@@ -65,12 +80,10 @@ PostInstall = function(){
                 utils.generator.createFileFromTemplate(source, target)
             }
 
-        })
-    };
+        });
+    }
 
-    var createGeenaHome = function(){
-
-    };
+    //var createGeenaHome = function() { };
 
     init()
 };
