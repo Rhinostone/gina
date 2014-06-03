@@ -14,7 +14,6 @@
  */
 
 var fs = require('fs');
-var vers = '0.0.9';
 
 try {
 

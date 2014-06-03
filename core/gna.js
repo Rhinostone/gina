@@ -13,8 +13,6 @@
  * @author     Rhinostone <geena@rhinostone.com>
  */
 
-
-
 var gna     = {core:{}};
 var fs      = require('fs');
 var Config  = require('./config');
@@ -252,29 +250,23 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
 
 gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
-    //console.log("project ", project);
-
     if (err) console.error(err.stack);
 
-//    if (gna.project == undefined) {
-    //gna.project = project;
-    var appName;
+    var appName, path;
 
     var packs = project.bundles;
     if (startWithGeena) {
-        //auto path ?
-        //var isPath = (/\//).test(process.argv[3]);
         if (!isPath) {
-            // env ?
-            //_(bundlesPath + '/' + process.argv[3] + '/index'
             appName = process.argv[1];
-            path = (env == 'dev' || env == 'debug') ? packs[appName].src : packs[appName].release.target;
+            if ( typeof(packs[appName].release.version) == 'undefined' && typeof(packs[appName].tag) != 'undefined') {
+                packs[appName].release.version = packs[appName].tag
+            }
+            packs[appName].release.target = 'releases/'+ appName +'/' + env +'/'+ packs[appName].release.version;
+            path = (env == 'dev' || env == 'debug') ? packs[appName].src : packs[appName].release.target
         } else {
-            //path = ( process.argv[0] == 'node' ) ? process.argv[2] : process.argv[1];
             path = process.argv[1]
         }
     } else {
-        //path = ( process.argv[0] == 'node' ) ? process.argv[2] : process.argv[1];
         path = _(process.argv[1])
     }
 
@@ -286,7 +278,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         var self;
         path = ( self = path.split('/') ).splice(0, self.length-1).join('/')
     }
-    //console.error('fuck ', env,  startWithGeena, process.argv, path);
+
     try {
         //finding app.
         var target, source, tmp;
@@ -301,7 +293,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 tmp = packs[bundle].release.target.replace(/\//g, '').replace(/\\/g, '');
                 if ( !appName && tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
                     appName = bundle;
-                    break;
+                    break
                 }
             } else if (
                 typeof(packs[bundle].src) != 'undefined' && env == 'dev'
@@ -309,28 +301,25 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 ) {
 
                 tmp = packs[bundle].src.replace(/\//g, '').replace(/\\/g, '');
-                if ( /**!appName &&*/ tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
+                if ( tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
                     appName = bundle;
-                    break;
+                    break
                 }
             } else {
-                abort('Path mismatched with env: ' + path);
+                abort('Path mismatched with env: ' + path)
             }
             // else, not a bundle
         }
 
         if (appName == undefined) {
-            abort('No bundle found for path: ' + path);
+            abort('No bundle found for path: ' + path)
         } else {
             setContext('bundle', appName);
-            //if ( !process.env.isWin32() ) {
             //to remove after merging geena processes into a single process.
             var processList = getContext('processList');
             process.list = processList;
             var bundleProcess = new Proc(appName, process);
             bundleProcess.register(appName, process.pid)
-            //}
-            //what then ??
         }
 
     } catch (err) {
@@ -560,7 +549,13 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
             core: _(__dirname)
         });
         setContext('geena.utils.logger', logger);
+
         //check here for mount point source...
+        if ( typeof(project.bundles[core.startingApp].release.version) == 'undefined' && typeof(project.bundles[core.startingApp].tag) != 'undefined') {
+            project.bundles[core.startingApp].release.version = project.bundles[core.startingApp].tag
+        }
+        project.bundles[core.startingApp].release.target = 'releases/'+ core.startingApp +'/' + env +'/'+ project.bundles[core.startingApp].release.version;
+
         var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.bundles[core.startingApp].src) : _( root +'/'+ project.bundles[core.startingApp].release.target );
         var tmpSource = _(bundlesPath +'/'+ core.startingApp);
 

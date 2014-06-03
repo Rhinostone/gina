@@ -411,8 +411,10 @@ var AppCommand = {
             //is Real bundle ?.
             if ( typeof(bundle) != 'undefined' && typeof(project.bundles[bundle]) != 'undefined') {
                 var buildCmd = require('./geena-build')(project, bundle)
-            } else {
+            } else if (bundle == undefined) {
                 var buildCmd = require('./geena-build')(project)
+            } else {
+                console.error('Bundle [ '+ bundle +' ] not found.')
             }
         } catch (err) {
             console.error(err.stack);
