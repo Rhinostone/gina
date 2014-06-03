@@ -8,6 +8,7 @@ nbproject
 /tmp
 /cache
 .gna
+node_modules
 
 # SCM
 .svn
@@ -16,10 +17,6 @@ nbproject
 # Desktop
 .DS_Store
 desktop.ini
-
-# Capistrano
-Capfile
-/config
 
 # Misc
 /data
