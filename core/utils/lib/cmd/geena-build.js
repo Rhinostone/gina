@@ -92,12 +92,10 @@ BuildBundle = function(project, bundle) {
                 var target  = opt.target;
                 var version = opt.version;
                 var ignoreList = [
-                    /^\./,
-                    /\.dev\.json$/
-                ];//all but files starting with "."
-//                var ignoreList = [];
-//                ignoreList.push(/^\./);
-//                ignoreList.push(/\.dev\.json$/);
+                    /^\./, //all but files starting with "."
+                    /\.dev\.json$/ //not all ending with ".dev.json"
+                ];
+
 
                 self.i = 0;
 
