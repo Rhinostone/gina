@@ -29,7 +29,7 @@ var B = function(gender) {//Super Class
 
     this.protected = { // exposed to derived
         say : function(song) {
-            console.log('playing ' + song)
+            return 'playing ' + song
         },
         getAge : _this.getAge,
         getGender : _this.getGender
@@ -38,17 +38,6 @@ var B = function(gender) {//Super Class
 };
 
 var a = new ( inherits(A, B) )('male');
-
-exports['Object created'] = function(test) {
-    test.equal( typeof(a), 'object' );
-    test.done()
-}
-
-exports['Has both instances'] = function(test) {
-    test.equal(a instanceof A, true);
-    test.equal(a instanceof B, true);
-    test.done()
-}
 
 exports['Can access protected members'] = function(test) {
     test.equal(a.name, 'Michael Jackson');
@@ -61,7 +50,9 @@ exports['Public members from Super are forbidden'] = function(test) {
     test.done()
 }
 
-exports['Got arguments'] = function(test) {
+exports['Got arguments from child'] = function(test) {
     test.equal(a.getGender(), 'male');
+    var lyric = 'some song on the juke box';
+    test.equal(a.say(lyric), 'playing ' + lyric);
     test.done()
 }
