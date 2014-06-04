@@ -486,38 +486,21 @@ PathHelper = function() {
                         console.log("someshit has been triggered ! ", target);
                         if (!err) {
 
-                            var passed = false;
-                            if ( typeof(ignored) != 'undefined') {
+                            var isIgnored = false;
+                            if ( typeof(source) != 'undefined') {
                                 var f, p = source.split('/');
                                 f = p[p.length-1];
                                 for (var r= 0; r<ignored.length; ++r) {
                                     if ( typeof(ignored[r]) == 'object' ) {
                                         if (ignored[r].test(f)) {
-                                            browseCopy(source, target, ignored, function(err) {
-                                                //console.log("copy Dir to Dir done");
-                                                //removed = true;
-                                                destination = null;
-                                                e.emit("cp#complete", err, target)
-                                            })
-                                        } else {
-                                            passed = true
+                                            isIgnored = true
                                         }
                                     } else if (f === ignored[r]) {
-                                        browseCopy(source, target, ignored, function(err) {
-                                            //console.log("copy Dir to Dir done");
-                                            //removed = true;
-                                            destination = null;
-                                            e.emit("cp#complete", err, target)
-                                        })
-                                    } else {
-                                        passed = true
+                                        isIgnored = true
                                     }
                                 }
-                            } else {
-                                passed = true
                             }
-
-                            if (passed) {
+                            if (!isIgnored) {
                                 var target = new _(destination).mkdir( function(err, path) {
 
                                     browseCopy(source, path, ignored, function(err) {
@@ -526,6 +509,31 @@ PathHelper = function() {
                                         destination = null;
                                         e.emit("cp#complete", err, path)
                                     })
+                                })
+                            } else {
+                                var oldSource = source, oldDestination = destination;
+
+                                source = source.split('/');
+                                source = source.splice(0, source.length-1);
+                                source = source.join('/');
+                                destination = destination.split('/');
+                                destination = destination.splice(0, destination.length-1);
+                                destination = destination.join('/');
+
+                                readContent(source, destination, function(_list, _listTo) {
+                                    var i = 0, list = [], listTo = [];
+                                    _list = _list.splice(_list.indexOf(oldSource)+1);
+                                    _listTo = _listTo.splice(_listTo.indexOf(oldDestination)+1);
+                                    for (var p=0; p<_list.length; ++p) {
+
+                                        list.push(_list[p]);
+                                        listTo.push(_listTo[p])
+                                    }
+
+                                    browseCopy(list[i], listTo[i], ignored, function(err){
+                                        e.emit("cp#complete", err, listTo[i]);
+                                        destination = null
+                                    }, list, listTo, i)
                                 })
                             }
 
@@ -620,34 +628,22 @@ PathHelper = function() {
 
                 if ( stats.isDirectory() ) {
 
-                    var passed = false;
-                    if ( typeof(ignored) != 'undefined') {
-                        if ( typeof(list[i]) == 'undefined' ) {
-                            list[i] = sourceDir;
-                            listTo[i] = destinationDir;
-                        }
+                    var isIgnored = false;
+                    if ( typeof(sourceDir) != 'undefined') {
                         var f, p = sourceDir.split('/');
                         f = p[p.length-1];
                         for (var r= 0; r<ignored.length; ++r) {
                             if ( typeof(ignored[r]) == 'object' ) {
                                 if (ignored[r].test(f)) {
-                                    ++i;
-                                    browseCopy(list[i], listTo[i], ignored, callback, list, listTo, i)
-                                } else {
-                                    passed = true
+                                    isIgnored = true
                                 }
                             } else if (f === ignored[r]) {
-                                ++i;
-                                browseCopy(list[i], listTo[i], ignored, callback, list, listTo, i)
-                            } else {
-                                passed = true
+                                isIgnored = true
                             }
                         }
-                    } else {
-                        passed = true
                     }
 
-                    if (passed) {
+                    if (!isIgnored) {
                         if ( typeof(list[i]) == 'undefined' ) {
                             list[i] = sourceDir;
                             listTo[i] = destinationDir;
@@ -670,6 +666,9 @@ PathHelper = function() {
                                 console.error(err)
                             }
                         })
+                    }  else {
+                        ++i;
+                        browseCopy(list[i], listTo[i], ignored, callback, list, listTo, i)
                     }
 
                 } else {
@@ -697,28 +696,23 @@ PathHelper = function() {
      *
      * */
     var copyFileToFile = function(source, destination, i, callback, ignored) {
-        var passed = false;
+        var isIgnored = false;
         if ( typeof(ignored) != 'undefined') {
             var f, p = source.split('/');
             f = p[p.length-1];
             for (var r= 0; r<ignored.length; ++r) {
                 if ( typeof(ignored[r]) == 'object' ) {
                     if (ignored[r].test(f)) {
-                        callback(false, source, i)
-                    } else {
-                        passed = true
+                        isIgnored = true
                     }
                 } else if (f === ignored[r]) {
-                    callback(false, source, i)
-                } else {
-                    passed = true
+                    isIgnored = true
                 }
             }
-        } else {
-            passed = true
         }
 
-        if (passed) {
+
+        if (!isIgnored) {
             fs.lstat(destination, function(err, stats) {
 
                 //Means that nothing exists. Needs create.
@@ -753,6 +747,8 @@ PathHelper = function() {
                     })
                 }//EO if (err)
             })
+        } else {
+            callback(false, source, i)
         }
 
         var startCopy = function(source, destination, i, callback) {

@@ -91,7 +91,14 @@ BuildBundle = function(project, bundle) {
                 var source  = opt.src;
                 var target  = opt.target;
                 var version = opt.version;
-                var ignoreList = [/^\./];//all but files starting with "."
+                var ignoreList = [
+                    /^\./,
+                    /\.dev\.json$/
+                ];//all but files starting with "."
+//                var ignoreList = [];
+//                ignoreList.push(/^\./);
+//                ignoreList.push(/\.dev\.json$/);
+
                 self.i = 0;
 
                 var copy = function(source, target, files) {
