@@ -51,14 +51,26 @@ var AppCommand = {
         'debug',
         '--stack',
         'stage',
-        'staging',
         'prod'
     ],
+    envs : ['dev', 'debug', 'stage', 'prod'],
     allowedTypes : [
         'blog',
         'cms',
         'app'
     ],
+    checkEnv : function() {
+        var envFound = false;
+        var envs = this.envs;
+
+        if (envs.indexOf(process.argv[4]) > -1) {
+            envFound = true;
+            this.env = process.argv[4]
+        } else {
+            process.argv[4] = this.env
+        }
+        return envFound
+    },
     /**
      * Run cmd
      *
@@ -77,15 +89,16 @@ var AppCommand = {
 
         if (process.argv[2] == '-s' || process.argv[2] == '--start') {
             //use registeredEnvs for this.....
-            var envFound = false;
-            var envs = ['dev', 'debug', 'stage', 'prod'];
-
-            if (envs.indexOf(process.argv[4]) > -1) {
-                envFound = true;
-                this.env = process.argv[4]
-            } else {
-                process.argv[4] = this.env
-            }
+            var envFound = this.checkEnv();
+//            var envFound = false;
+//            var envs = this.envs;
+//
+//            if (envs.indexOf(process.argv[4]) > -1) {
+//                envFound = true;
+//                this.env = process.argv[4]
+//            } else {
+//                process.argv[4] = this.env
+//            }
 
             if (process.argv.length >= 5 && !envFound) {
                 this.env = 'prod';
@@ -112,27 +125,10 @@ var AppCommand = {
             this.opt['argument'] =  process.argv[4];
         }
 
-        //Setting default env.
-//        if (this.opt['option'] != 's' && this.opt['option'] != '-start') {
-////            if (typeof(process.argv[4]) != 'undefined') {
-////                var env = process.argv[4//                this.opt['argument'] = env;
-////            } //else {
-//                var env = 'prod';
-//                //Todo - clean it
-////                if (process.argv[4] != 'undefined') {
-////                    process.argv[5] = process.argv[4]
-////                }
-////                process.argv[4] = env;
-////                this.opt['argument'] = env;
-//            //}
-//            this.env = env;
-//            this.opt['argument'] = env;
-//
-            if (process.argv[5] != undefined && process.argv[5].indexOf('=')) {
-                var p = process.argv[5].split(/=/);
-                this.opt[p[0]] = p[1];
-            }
-//        }
+        if (process.argv[5] != undefined && process.argv[5].indexOf('=')) {
+            var p = process.argv[5].split(/=/);
+            this.opt[p[0]] = p[1];
+        }
 
         this.bundle = process.argv[3].replace(/.js/, '');
         //Setting log paths.
