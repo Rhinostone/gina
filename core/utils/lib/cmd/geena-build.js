@@ -9,8 +9,13 @@ BuildBundle = function(project, bundle) {
     var self = this;
     self.task = 'build';//important for later in config init
     var init = function(project, bundle) {
+        console.log('init once !!');
         self.root = getPath('root');
         self.env = process.env.NODE_ENV;
+        self.ignoreList = [
+            /^\./, //all but files starting with "."
+            /\.dev\.json$/ //not all ending with ".dev.json"
+        ];
 
 
 
@@ -91,29 +96,18 @@ BuildBundle = function(project, bundle) {
                 var source  = opt.src;
                 var target  = opt.target;
                 var version = opt.version;
-                var ignoreList = [
-                    /^\./, //all but files starting with "."
-                    /\.dev\.json$/ //not all ending with ".dev.json"
-                ];
-
+                var ignoreList = self.ignoreList;
 
                 self.i = 0;
-
                 var copy = function(source, target, files) {
                     var i = self.i;
                     if (i == files.length) {
-                        //end.
-                        // var patt = [];
-                        //var findAll = new _(target).grep(patt, function() {
-                        //
-                        // });
                         console.log("Build "+version+" ready.");
                         process.exit(0);
                     }
                     var from = new _(source +'/'+ files[i]);
                     var to = _(target +'/'+ files[i]);
 
-                    //if ( !/.dev./.test(files[i]) && files[i].substring(0,1) != '.') {
                     from.cp(to, ignoreList, function(err) {
                         ++self.i;
                         copy(source, target, files)

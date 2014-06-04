@@ -199,7 +199,7 @@ Config = function() {
                 } else {
                     fs.mkdir(gnaFolder, 0777, function(err){
                         if (err) {
-                            logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
+                            console.error(err.stack);
                             callback(err);
                         } else {
                             //Creating content.
@@ -287,16 +287,16 @@ Config = function() {
         fs.exists(path, function(exists){
             if (exists) {
                 fs.lstat(path, function(err, stats){
-                    if (err) logger.error('geena', 'UTILS:CONFIG:ERR:11', err, __stack);
+                    if (err) console.error(err.stack);
 
                     if ( stats.isSymbolicLink() ) fs.unlink(path, function(err){
                         if (err) {
-                            logger.error('geena', 'UTILS:CONFIG:ERR:7', err, __stack);
+                            console.error(err.stack);
                             callback(err);
                         } else {
                             //Trigger.
                             onSymlinkRemoved(_this.paths, function(err){
-                                if (err) logger.error('geena', 'UTILS:CONFIG:ERR:9', err, __stack);
+                                if (err) console.error(err.stack);
 
                                 callback(false);
                             });

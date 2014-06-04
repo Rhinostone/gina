@@ -33,17 +33,17 @@ Inherits = function(a, b) {
                     this.s = function(){};
                     this.s.apply(b, arguments);
                     b.apply(this.s, arguments);
-                    for (var prop in this.s.protected) {
-                        this[prop] = this.s.protected[prop]
+                    if (this.s.protected != undefined) {
+                        for (var prop in this.s.protected) {
+                            this[prop] = this.s.protected[prop]
+                        }
+                    } else {
+                        for (var prop in this.s) {
+                            this[prop] = this.s[prop]
+                        }
                     }
-
-                    if ( typeof(this.s.protected) != 'undefined' ) {
-                        cache.apply(this, arguments);
-                        delete this.s
-                    } else { //public mode
-                        b.apply(this, arguments);
-                        cache.apply(this, arguments)
-                    }
+                    cache.apply(this, arguments);
+                    delete this.s
                 }
             }());
 
