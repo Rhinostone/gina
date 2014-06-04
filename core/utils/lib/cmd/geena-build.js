@@ -91,7 +91,7 @@ BuildBundle = function(project, bundle) {
                 var source  = opt.src;
                 var target  = opt.target;
                 var version = opt.version;
-                var ignoreList = ['^.*'];
+                var ignoreList = [/^\./];//all but files starting with "."
                 self.i = 0;
 
                 var copy = function(source, target, files) {
@@ -109,17 +109,17 @@ BuildBundle = function(project, bundle) {
                     var to = _(target +'/'+ files[i]);
 
                     //if ( !/.dev./.test(files[i]) && files[i].substring(0,1) != '.') {
-                    from.cp(to,  function(err){
+                    from.cp(to, ignoreList, function(err) {
                         ++self.i;
                         copy(source, target, files)
                     })
                 };
 
                 var targetObj = new _(target);
-                targetObj.rm( function(err){
+                targetObj.rm( function(err) {
                     fs.readdir(source, function(err, files) {
                         if (!err) {
-                            targetObj.mkdir(function(err){
+                            targetObj.mkdir(function(err) {
                                 if (!err) {
                                     copy(source, target, files)
                                 } else {
@@ -140,15 +140,15 @@ BuildBundle = function(project, bundle) {
 
     };
 
-    var buildProjectFromSources = function(project){
+    var buildProjectFromSources = function(project) {
 
     };
 
-    var buildBundleFromRepo = function(project, bundle){
+    var buildBundleFromRepo = function(project, bundle) {
 
     };
 
-    var buildProjectFromRepo = function(project){
+    var buildProjectFromRepo = function(project) {
 
     };
 

@@ -370,7 +370,7 @@ PathHelper = function() {
      *  })
      *
      * @param {string} target
-     * @param {array} ignore
+     * @param {array} [ ignored ] - Ignored list
      *
      * @callback callback
      * @param {string} errResponse
@@ -378,8 +378,9 @@ PathHelper = function() {
      * */
 
     _.prototype.cp = function(target, ignored, cb) {
-        if ( typeof(ignored) == 'undefined') {
-            var cb = ignored
+        if ( typeof(ignored) == 'function') {
+            var cb = ignored;
+            ignored = undefined
         }
         var self = this;
         //Enter dir & start rm.
@@ -459,7 +460,7 @@ PathHelper = function() {
                     method = "3A";
                     console.log("....calling method ", method);
 
-                    browseCopy(source, destination, function(err){
+                    browseCopy(source, destination, ignored, function(err){
                         console.log("copy Dir/ to Dir/ && Dir/ to Dir done");
                         e.emit("cp#complete", err, destination)
                     })
@@ -471,9 +472,8 @@ PathHelper = function() {
                     var folder = new _(source).toArray().last();
                     destination += '/' + folder;
 
-                    //console.log("MKDIR createDir");
                     var target = new _(destination).mkdir( function(err, path) {
-                        browseCopy(source, path, function(err) {
+                        browseCopy(source, path, ignored, function(err) {
                             //console.log("copy Dir to Dir/ done");
                             e.emit("cp#complete", err, path)
                         })
@@ -486,14 +486,49 @@ PathHelper = function() {
                         console.log("someshit has been triggered ! ", target);
                         if (!err) {
 
-                            var target = new _(destination).mkdir(function(err, path) {
-                                    browseCopy(source, path, function(err) {
+                            var passed = false;
+                            if ( typeof(ignored) != 'undefined') {
+                                var f, p = source.split('/');
+                                f = p[p.length-1];
+                                for (var r= 0; r<ignored.length; ++r) {
+                                    if ( typeof(ignored[r]) == 'object' ) {
+                                        if (ignored[r].test(f)) {
+                                            browseCopy(source, target, ignored, function(err) {
+                                                //console.log("copy Dir to Dir done");
+                                                //removed = true;
+                                                destination = null;
+                                                e.emit("cp#complete", err, target)
+                                            })
+                                        } else {
+                                            passed = true
+                                        }
+                                    } else if (f === ignored[r]) {
+                                        browseCopy(source, target, ignored, function(err) {
+                                            //console.log("copy Dir to Dir done");
+                                            //removed = true;
+                                            destination = null;
+                                            e.emit("cp#complete", err, target)
+                                        })
+                                    } else {
+                                        passed = true
+                                    }
+                                }
+                            } else {
+                                passed = true
+                            }
+
+                            if (passed) {
+                                var target = new _(destination).mkdir( function(err, path) {
+
+                                    browseCopy(source, path, ignored, function(err) {
                                         //console.log("copy Dir to Dir done");
                                         //removed = true;
                                         destination = null;
                                         e.emit("cp#complete", err, path)
                                     })
-                            })
+                                })
+                            }
+
                         } else {
                             console.error("onRemoved error: som'was wrong ");
                             process.exit(1)
@@ -556,6 +591,7 @@ PathHelper = function() {
      * @param {string} method
      * @param {string} sourceDir
      * @param {string} destinationDir
+     * @param {array} [ ignored ]
      *
      * @callback callback
      *
@@ -572,11 +608,10 @@ PathHelper = function() {
         callback(err);
     }
 
-    var browseCopy = function(sourceDir, destinationDir, callback, list, listTo, i) {
+    var browseCopy = function(sourceDir, destinationDir, ignored, callback, list, listTo, i) {
         var list = ( typeof(list) != 'undefined' ) ? list : [];
         var listTo = ( typeof(listTo) != 'undefined' ) ? listTo : [];
         var i = ( typeof(i) != 'undefined' ) ? i : 0;
-
 
         if (sourceDir == undefined || destinationDir == undefined) {
             end(callback, false)
@@ -584,36 +619,69 @@ PathHelper = function() {
             fs.stat(sourceDir, function(err, stats) {
 
                 if ( stats.isDirectory() ) {
-                    if ( typeof(list[i]) == 'undefined' ) {
-                        list[i] = sourceDir;
-                        listTo[i] = destinationDir;
-                    }
-                    var createDir = new _(destinationDir);
 
-                    createDir.mkdir( function(err, path) {
-                        if (!err) {
-                            readContent(sourceDir, destinationDir, function(_list, _listTo) {
-
-                                for (var p=0; p<_list.length; ++p) {
-                                    list.push(_list[p]);
-                                    listTo.push(_listTo[p])
-                                }
-                                ++i;
-                                browseCopy(list[i], listTo[i], callback, list, listTo, i)
-                            })
-                        } else {
-                            console.error(err)
+                    var passed = false;
+                    if ( typeof(ignored) != 'undefined') {
+                        if ( typeof(list[i]) == 'undefined' ) {
+                            list[i] = sourceDir;
+                            listTo[i] = destinationDir;
                         }
-                    })
+                        var f, p = sourceDir.split('/');
+                        f = p[p.length-1];
+                        for (var r= 0; r<ignored.length; ++r) {
+                            if ( typeof(ignored[r]) == 'object' ) {
+                                if (ignored[r].test(f)) {
+                                    ++i;
+                                    browseCopy(list[i], listTo[i], ignored, callback, list, listTo, i)
+                                } else {
+                                    passed = true
+                                }
+                            } else if (f === ignored[r]) {
+                                ++i;
+                                browseCopy(list[i], listTo[i], ignored, callback, list, listTo, i)
+                            } else {
+                                passed = true
+                            }
+                        }
+                    } else {
+                        passed = true
+                    }
+
+                    if (passed) {
+                        if ( typeof(list[i]) == 'undefined' ) {
+                            list[i] = sourceDir;
+                            listTo[i] = destinationDir;
+                        }
+
+                        var createDir = new _(destinationDir);
+
+                        createDir.mkdir( function(err, path) {
+                            if (!err) {
+                                readContent(sourceDir, destinationDir, function(_list, _listTo) {
+
+                                    for (var p=0; p<_list.length; ++p) {
+                                        list.push(_list[p]);
+                                        listTo.push(_listTo[p])
+                                    }
+                                    ++i;
+                                    browseCopy(list[i], listTo[i], ignored, callback, list, listTo, i)
+                                })
+                            } else {
+                                console.error(err)
+                            }
+                        })
+                    }
 
                 } else {
                     copyFileToFile(sourceDir, destinationDir, i, function(err, file, i) {
                         ++i;
-                        browseCopy(list[i], listTo[i], callback, list, listTo, i)
-                    })
+                        browseCopy(list[i], listTo[i], ignored, callback, list, listTo, i)
+                    }, ignored)
                 }
             })
         }
+
+
     }
 
     /**
@@ -629,41 +697,63 @@ PathHelper = function() {
      *
      * */
     var copyFileToFile = function(source, destination, i, callback, ignored) {
-
-        fs.lstat(destination, function(err, stats) {
-
-            //Means that nothing exists. Needs create.
-            if (err) {
-                startCopy(source, destination, i, function(err, i) {
-                    //TODO - log error.
-                    callback(err, source, i)
-                })
-            } else {
-
-                if ( stats.isDirectory() ) {
-                    var str;
-                    var path = '/'+ (str = source.split(/\//g))[str.length-1];
-                    destination += path
+        var passed = false;
+        if ( typeof(ignored) != 'undefined') {
+            var f, p = source.split('/');
+            f = p[p.length-1];
+            for (var r= 0; r<ignored.length; ++r) {
+                if ( typeof(ignored[r]) == 'object' ) {
+                    if (ignored[r].test(f)) {
+                        callback(false, source, i)
+                    } else {
+                        passed = true
+                    }
+                } else if (f === ignored[r]) {
+                    callback(false, source, i)
+                } else {
+                    passed = true
                 }
+            }
+        } else {
+            passed = true
+        }
 
-                fs.exists(destination, function(replaceFlag) {
-                    if (replaceFlag) {
-                        fs.unlink(destination, function(err) {
-                            //TODO - log error.
+        if (passed) {
+            fs.lstat(destination, function(err, stats) {
+
+                //Means that nothing exists. Needs create.
+                if (err) {
+                    startCopy(source, destination, i, function(err, i) {
+                        //TODO - log error.
+                        callback(err, source, i)
+                    })
+                } else {
+
+                    if ( stats.isDirectory() ) {
+                        var str;
+                        var path = '/'+ (str = source.split(/\//g))[str.length-1];
+                        destination += path
+                    }
+
+                    fs.exists(destination, function(replaceFlag) {
+                        if (replaceFlag) {
+                            fs.unlink(destination, function(err) {
+                                //TODO - log error.
+                                startCopy(source, destination, i, function(err, i) {
+
+                                    callback(err, source, i)
+                                })
+                            })
+                        } else {
                             startCopy(source, destination, i, function(err, i) {
-
+                                //TODO - log error.
                                 callback(err, source, i)
                             })
-                        })
-                    } else {
-                        startCopy(source, destination, i, function(err, i) {
-                            //TODO - log error.
-                            callback(err, source, i)
-                        })
-                    }
-                })
-            }//EO if (err)
-        })
+                        }
+                    })
+                }//EO if (err)
+            })
+        }
 
         var startCopy = function(source, destination, i, callback) {
 
@@ -682,6 +772,7 @@ PathHelper = function() {
     }
 
     var copyFile = function(source, destination, i, callback) {
+
         var sourceStream = fs.createReadStream(source);
         var destinationStream = fs.createWriteStream(destination);
 
