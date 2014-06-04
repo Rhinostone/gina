@@ -25,7 +25,6 @@ Inherits = function(a, b) {
     var init = function(a, b) {
         var err = check(a, b);
         if (!err) {
-
             var c = ( function() {
                 var cache = a;
                 return function() {
@@ -41,7 +40,9 @@ Inherits = function(a, b) {
                         for (var prop in this.s) {
                             this[prop] = this.s[prop]
                         }
+                        b.apply(this, arguments);
                     }
+
                     cache.apply(this, arguments);
                     delete this.s
                 }

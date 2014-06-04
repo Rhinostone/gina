@@ -411,7 +411,8 @@ var AppCommand = {
                 if ( typeof(project.bundles[bundle]['script']) != 'undefined' && typeof(project.bundles[bundle]['script']['build']) != 'undefined') {
                     var CustomBuild = require(_(getPath('root') +'/'+ project.bundles[bundle].src + '/' + project.bundles[bundle].script.build));
                     CustomBuild = inherits(CustomBuild, BuildCmd);
-                    var buildCmd = new CustomBuild(project, bundle)
+                    var buildCmd = new CustomBuild(project, bundle);
+                    buildCmd.init()
                 } else {
                     var buildCmd = new BuildCmd(project, bundle)
                 }

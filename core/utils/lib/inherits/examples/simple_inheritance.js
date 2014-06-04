@@ -1,26 +1,32 @@
 var inherits = require('../index.js');// Not needed if the framework installed
 
 var A = function() {
-    var _this = this;
+    var self = this;
     this.gender = 'female';
     this.name = 'Julia Roberts';
     this.getName = function () {
-        return _this.name;
+        return self.name;
     };
+    this.age = 32;
+    this.init()
 };
 
 var B = function(gender) {//Super Class
-    var _this = this;
+    var self = this;
     this.gender = gender || 'female';
     this.name = 'Michael Jackson';
     this.age = 46;
 
+    this.init = function() {
+        console.log(self.age);
+    }
+
     this.getAge = function () {
-        return _this.age;
+        return self.age;
     };
 
     this.getGender = function() {
-        return _this.gender
+        return self.gender
     }
 };
 

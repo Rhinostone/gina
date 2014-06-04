@@ -7,25 +7,30 @@ var Config = require( _( GEENA_PATH + '/config') );
 BuildBundle = function(project, bundle) {
 
     var self = this;
-    self.task = 'build';//important for later in config init
-    var init = function(project, bundle) {
-        console.log('init once !!');
-        self.root = getPath('root');
-        self.env = process.env.NODE_ENV;
-        self.ignoreList = [
-            /^\./, //all but files starting with "."
-            /\.dev\.json$/ //not all ending with ".dev.json"
-        ];
+    this.task = 'build';//important for later in config init
+    this.init = function() {
+        if (self.initialized == undefined) {
+            console.log('init once !!');
+            self.initialized = true;
+            self.root = getPath('root');
+            self.env = process.env.NODE_ENV;
+
+            if (self.ignoreList == undefined) {
+                self.ignoreList = [
+                    /^\./, //all but files starting with "."
+                    /\.dev\.json$/ //not all ending with ".dev.json"
+                ];
+            }
 
 
-
-        if ( typeof(bundle) != 'undefined' ) {
-            console.log('building', bundle, '[ '+ self.env +' ]');
-            // TODO add origin of the build.
-            buildBundleFromSources(project, bundle);
-        } else {
-            console.log('building whole project: [ '+ self.env +' ]');
-            //buildProjectFromSources(project);
+            if ( typeof(bundle) != 'undefined' ) {
+                console.log('building', bundle, '[ '+ self.env +' ]');
+                // TODO add origin of the build.
+                buildBundleFromSources(project, bundle);
+            } else {
+                console.log('building whole project: [ '+ self.env +' ]');
+                //buildProjectFromSources(project);
+            }
         }
     };
 
@@ -151,7 +156,7 @@ BuildBundle = function(project, bundle) {
 
     };
 
-    init(project, bundle);
+
 //    return {
 //        onComplete : function(err){
 //
