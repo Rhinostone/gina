@@ -22,7 +22,6 @@ var Controller;
 var fs      = require('fs');
 var utils   = require('./../utils');
 var merge   = utils.merge;
-var merge   = utils.merge;
 var swig    = require('swig');
 
 Controller = function(request, response, next) {

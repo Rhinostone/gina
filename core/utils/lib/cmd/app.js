@@ -18,6 +18,7 @@ var os          = require('os');
 var Winston     = require('winston');
 var logger      = require('../logger');
 var Proc        = require('../proc');
+var inherits    = require('../inherits');
 //var generator   = require('../generator');
 
 var AppCommand = {
@@ -406,7 +407,15 @@ var AppCommand = {
         try {
             //is Real bundle ?.
             if ( typeof(bundle) != 'undefined' && typeof(project.bundles[bundle]) != 'undefined') {
-                var buildCmd = require('./geena-build')(project, bundle)
+                var BuildCmd = require('./geena-build');
+                if ( typeof(project.bundles[bundle]['script']) != 'undefined' && typeof(project.bundles[bundle]['script']['build']) != 'undefined') {
+                    var CustomBuild = require(_(getPath('root') +'/'+ project.bundles[bundle].src + '/' + project.bundles[bundle].script.build));
+                    CustomBuild = inherits(CustomBuild, BuildCmd);
+                    var buildCmd = new CustomBuild(project, bundle)
+                } else {
+                    var buildCmd = new BuildCmd(project, bundle)
+                }
+
             } else if (bundle == undefined) {
                 var buildCmd = require('./geena-build')(project)
             } else {
