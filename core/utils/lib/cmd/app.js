@@ -18,6 +18,7 @@ var os          = require('os');
 var Winston     = require('winston');
 var logger      = require('../logger');
 var Proc        = require('../proc');
+var EventEmitter  = require('events').EventEmitter;
 var inherits    = require('../inherits');
 //var generator   = require('../generator');
 

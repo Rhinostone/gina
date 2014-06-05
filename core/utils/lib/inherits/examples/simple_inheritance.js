@@ -7,8 +7,8 @@ var A = function() {
     this.getName = function () {
         return self.name;
     };
-    this.age = 32;
-    this.init()
+
+    this.init();
 };
 
 var B = function(gender) {//Super Class
@@ -23,10 +23,10 @@ var B = function(gender) {//Super Class
 
     this.getAge = function () {
         return self.age;
-    };
+    }
 
     this.getGender = function() {
-        return self.gender
+        return self.gender;
     }
 };
 
