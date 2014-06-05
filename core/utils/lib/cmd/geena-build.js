@@ -7,20 +7,19 @@ var Config = require( _( GEENA_PATH + '/config') );
 BuildBundle = function(project, bundle) {
 
     var self = this;
+    // define all default
     this.task = 'build';//important for later in config init
+    this.ignoreList = [
+        /^\./, //all but files starting with "."
+        /\.dev\.json$/ //not all ending with ".dev.json"
+    ];
+
     this.init = function() {
         if (self.initialized == undefined) {
             console.log('init once !!');
             self.initialized = true;
             self.root = getPath('root');
             self.env = process.env.NODE_ENV;
-
-            if (self.ignoreList == undefined) {
-                self.ignoreList = [
-                    /^\./, //all but files starting with "."
-                    /\.dev\.json$/ //not all ending with ".dev.json"
-                ];
-            }
 
 
             if ( typeof(bundle) != 'undefined' ) {
@@ -31,6 +30,9 @@ BuildBundle = function(project, bundle) {
                 console.log('building whole project: [ '+ self.env +' ]');
                 //buildProjectFromSources(project);
             }
+        }
+        this.onComplete = function() {
+
         }
     };
 

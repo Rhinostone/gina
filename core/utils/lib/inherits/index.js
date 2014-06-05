@@ -29,7 +29,7 @@ Inherits = function(a, b) {
                 var cache = a;
                 return function() {
                     //super class
-                    this.s = function(){};
+                    this.s = function() {};
                     this.s.apply(b, arguments);
                     b.apply(this.s, arguments);
                     if (this.s.protected != undefined) {
@@ -48,7 +48,11 @@ Inherits = function(a, b) {
                 }
             }());
 
-            b.prototype = {};
+            //make it compatible with node.js classes like EventEmitter
+            if (b.prototype == undefined) {
+                b.prototype = {}
+            }
+
             a.prototype = Object.create(b.prototype, {});
             c.prototype = Object.create(a.prototype, {});
 
