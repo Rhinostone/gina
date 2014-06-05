@@ -105,23 +105,6 @@ BuildBundle = function(project, bundle) {
 
                 var ignoreList = self.ignoreList;
 
-//                self.i = 0;
-//                var copy = function(source, target, files) {
-//                    var i = self.i;
-//                    if (i == files.length) {
-//                        console.log("Build "+version+" ready.");
-//                        //process.exit(0);
-//                    }
-//                    var from = new _(source +'/'+ files[i]);
-//                    var to = _(target +'/'+ files[i]);
-//
-//                    from
-//                        .cp(to, ignoreList, function(err) {
-//                            ++self.i;
-//                            //copy(source, target, files)
-//                        })
-//                };
-
                 var targetObj = new _(target);
                 targetObj.rm( function(err) {
 
@@ -129,19 +112,6 @@ BuildBundle = function(project, bundle) {
                     .cp(target, ignoreList, function(err) {
                         self.emit('build#complete', err, version)
                     })
-//                    fs.readdir(source, function(err, files) {
-//                        if (!err) {
-//                            targetObj.mkdir(function(err) {
-//                                if (!err) {
-//                                    copy(source, target, files)
-//                                } else {
-//                                    self.emit('build#complete', err)
-//                                }
-//                            })
-//                        } else {
-//                            console.error(err.stack)
-//                        }
-//                    })
                 })
             })
         } catch (err) {

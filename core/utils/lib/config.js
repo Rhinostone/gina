@@ -121,13 +121,9 @@ Config = function() {
 
                             } catch (err) {
                                 //Means that the file was not found..
-                                //Create brand new.
-
                                 err = _this.__dirname  + '/.gna/locals.json: project configuration file not found. \n' + err;
                             }
                         }
-
-                        //console.log("got here so far ", project, file, _this.paths.root, "\n", config);
                     }
 
                     callback(false, config);

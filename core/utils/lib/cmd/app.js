@@ -109,7 +109,6 @@ var AppCommand = {
 
             this.PID = new Proc('geena', process);
             //herited from gna.js.
-            //this.bundle = process.argv[3].replace(/.js/, '');
 
         } else {
             this.PID = new Proc('geena', process, false);
@@ -186,48 +185,44 @@ var AppCommand = {
         }
         callback(found)
     },
-    isMounted : function(bundle){
 
-    },
     isRealApp : function(callback){
         var _this = this;
         var allClear = false;
         var p, d;
-        var app = this.bundle;
+        var bundle = this.bundle;
         var env = this.env;
 
 
         try {
             //This is mostly for dev.
             var pkg = require( _(this.options.root + '/project.json') ).bundles;
+            if ( typeof(pkg[bundle].release.version) == 'undefined' && typeof(pkg[bundle].tag) != 'undefined') {
+                pkg[bundle].release.version = pkg[bundle].tag
+            }
             if (
-                pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && env == 'dev'
-                || pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && env == 'debug'
+                pkg[bundle] != 'undefined' && pkg[bundle]['src'] != 'undefined' && env == 'dev'
+                || pkg[bundle] != 'undefined' && pkg[bundle]['src'] != 'undefined' && env == 'debug'
                 ) {
-                var path = pkg[app].src;
+                var path = pkg[bundle].src;
 
-                p = _( this.options.root +"/"+ path );//path.replace('/' + app, '')
+                p = _( this.options.root +"/"+ path );//path.replace('/' + bundle, '')
                 d = _( this.options.root +"/"+ path + '/index.js' );
-                this.bundleDir = path.replace('/' + app, '');
+                this.bundleDir = path.replace('/' + bundle, '');
                 setContext("bundle_dir", this.bundleDir);
                 this.bundlesPath =  _( this.options.root +"/"+ this.bundleDir );
                 this.bundleInit = d;
 
             } else {
-                //Use releases for prod.
-                var path = pkg[app].release.target;
-                var version = pkg[app].release.version;
-                p = _( this.options.root +"/"+ path );//path.replace('/' + app, '')
+                //Others releases.
+                var path = 'releases/'+ bundle +'/' + env +'/'+ pkg[bundle].release.version;
+                var version = pkg[bundle].release.version;
+                p = _( this.options.root +"/"+ path );//path.replace('/' + bundle, '')
                 d = _( this.options.root +"/"+ path + '/index.js' );
 
-                //this.bundleDir = path.replace('/' + app + '/' + version, '');
                 this.bundleDir = path;
                 this.bundlesPath = _(this.options.root + '/'+ this.bundleDir);
-//                p = _(this.options.root + '/'+this.bundleDir+'/' + this.bundle);
-//                d = _(this.options.root + '/'+this.bundleDir+'/' + this.bundle + '/index.js');
                 this.bundleInit = d;
-//                var path = pkg[app].release.target;
-//                console.error('use release');
             }
 
         } catch (err) {
@@ -248,7 +243,7 @@ var AppCommand = {
         //Checking root.
         fs.exists(d, function(exists) {
             if (exists) {
-                //checking app directory.
+                //checking bundle directory.
                 fs.stat(p, function(err, stats) {
 
                     if (err) {
@@ -501,19 +496,12 @@ var AppCommand = {
 
             } else {
 
-                //var bundlePath = _(_this.bundlesPath);
-                //var appPath = ( new RegExp(_this.bundleDir+'\/').test(bundlePath) ) ? bundlePath : bundlePath +"\/" + _this.bundleDir;
                 var appPath = _this.bundleInit;
                 var isPath = (/\//).test(appPath);
                 if (!isPath) {
                     appPath = _(_this.bundlesPath +'/'+ appPath + '/index');
                 }
 
-                //var appPath = 'releases/agent/0.0.7-dev/index';
-
-                //console.log("spawning ...", opt, "\n VS \n");
-                //log("spawning ...", opt['argument']);
-                //console.log("command ", "node ",appPath, opt['argument'], JSON.stringify( getContext() ));
                 process.list = (process.list == undefined) ? [] : process.list;
                 setContext('processList', process.list);
                 setContext('geenaProcess', process.pid);
@@ -538,11 +526,7 @@ var AppCommand = {
                         detached : true
                     }
                 );
-
-//                if ( os.platform() == 'win32' ) {
-//                    var bundleProcess = new Proc(_this.bundle, _this.prc);
-                    _this.PID.register(_this.bundle, _this.prc.pid);
-//                }
+                _this.PID.register(_this.bundle, _this.prc.pid);
 
                 //On message.
                 _this.prc.stdout.setEncoding('utf8');//Set encoding.

@@ -1,10 +1,10 @@
 var inherits = require('../index.js');// Not needed if the framework installed
 
 var A = function() {
-    var _this = this;
+    var self = this;
     this.name = 'Michael Jackson';
     this.getName = function () {
-        return _this.name
+        return self.name
     };
 
     this.say('some song on the juke box')// => playing some song on the juke box
@@ -12,7 +12,7 @@ var A = function() {
 
 
 var B = function(gender) {//Super Class
-    var _this = this;
+    var self = this;
     //var self = {}; for private ?
     this.gender = gender || 'female';
     this.name = 'Julia Roberts';
@@ -20,19 +20,19 @@ var B = function(gender) {//Super Class
 
 
     this.getAge = function () {
-        return _this.age;
+        return self.age;
     }
 
     this.getGender = function() {
-        return _this.gender
+        return self.gender
     }
 
     this.protected = { // exposed to derived
         say : function(song) {
             console.log('playing ' + song)
         },
-        getAge : _this.getAge,
-        getGender : _this.getGender
+        getAge : self.getAge,
+        getGender : self.getGender
     }
 
 };
