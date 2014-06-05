@@ -14,10 +14,11 @@ BuildBundle = function(project, bundle) {
         /\.dev\.json$/ //not all ending with ".dev.json"
     ];
 
+
     this.init = function() {
         if (self.initialized == undefined) {
-            console.log('init once !!');
             self.initialized = true;
+            console.log('init once !!');
             self.root = getPath('root');
             self.env = process.env.NODE_ENV;
 
@@ -31,9 +32,7 @@ BuildBundle = function(project, bundle) {
                 //buildProjectFromSources(project);
             }
         }
-        this.onComplete = function() {
-
-        }
+        return self
     };
 
     var getSourceInfos = function( package, bundle, callback) {
@@ -103,40 +102,46 @@ BuildBundle = function(project, bundle) {
                 var source  = opt.src;
                 var target  = opt.target;
                 var version = opt.version;
+
                 var ignoreList = self.ignoreList;
 
-                self.i = 0;
-                var copy = function(source, target, files) {
-                    var i = self.i;
-                    if (i == files.length) {
-                        console.log("Build "+version+" ready.");
-                        process.exit(0);
-                    }
-                    var from = new _(source +'/'+ files[i]);
-                    var to = _(target +'/'+ files[i]);
-
-                    from.cp(to, ignoreList, function(err) {
-                        ++self.i;
-                        copy(source, target, files)
-                    })
-                };
+//                self.i = 0;
+//                var copy = function(source, target, files) {
+//                    var i = self.i;
+//                    if (i == files.length) {
+//                        console.log("Build "+version+" ready.");
+//                        //process.exit(0);
+//                    }
+//                    var from = new _(source +'/'+ files[i]);
+//                    var to = _(target +'/'+ files[i]);
+//
+//                    from
+//                        .cp(to, ignoreList, function(err) {
+//                            ++self.i;
+//                            //copy(source, target, files)
+//                        })
+//                };
 
                 var targetObj = new _(target);
                 targetObj.rm( function(err) {
-                    fs.readdir(source, function(err, files) {
-                        if (!err) {
-                            targetObj.mkdir(function(err) {
-                                if (!err) {
-                                    copy(source, target, files)
-                                } else {
-                                    console.log(err.stack);
-                                    process.exit(0)
-                                }
-                            })
-                        } else {
-                            console.error(err.stack)
-                        }
+
+                var sourceObj = new _(source)
+                    .cp(target, ignoreList, function(err) {
+                        self.emit('build#complete', err, version)
                     })
+//                    fs.readdir(source, function(err, files) {
+//                        if (!err) {
+//                            targetObj.mkdir(function(err) {
+//                                if (!err) {
+//                                    copy(source, target, files)
+//                                } else {
+//                                    self.emit('build#complete', err)
+//                                }
+//                            })
+//                        } else {
+//                            console.error(err.stack)
+//                        }
+//                    })
                 })
             })
         } catch (err) {
@@ -146,25 +151,26 @@ BuildBundle = function(project, bundle) {
 
     };
 
-    var buildProjectFromSources = function(project) {
-
-    };
-
-    var buildBundleFromRepo = function(project, bundle) {
-
-    };
-
-    var buildProjectFromRepo = function(project) {
-
-    };
-
-
-//    return {
-//        onComplete : function(err){
+//    var buildProjectFromSources = function(project) {
 //
-//            init(project, bundle);
-//        }
-//    }
+//    };
+//
+//    var buildBundleFromRepo = function(project, bundle) {
+//
+//    };
+//
+//    var buildProjectFromRepo = function(project) {
+//
+//    };
+
+    this.onComplete = function(callback) {
+        self.once('build#complete', function(err, version) {
+            if (!err) console.log("Build "+version+" ready.");
+
+            callback(err)
+        })
+    };
+
 };
 
 module.exports = BuildBundle

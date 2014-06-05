@@ -392,6 +392,7 @@ PathHelper = function() {
                     cb(err);
                 }
             });
+
     }
 
     var cp = function(source, destination, ignored) {
@@ -580,6 +581,23 @@ PathHelper = function() {
                 })
             }
         }
+//        this.onComplete = function(callback) {
+//            //We want it once for the object path.
+//            e.once('cp#complete', function(err, destination) {
+//                if (err) {
+//                    logger.error(
+//                        'geena',
+//                        'UTILS:PATH:ERROR:7',
+//                        err,
+//                        __stack
+//                    );
+//                }
+//                console.log('cp() complete');
+//                callback(err, destination)
+//            })
+//        };
+
+        //return this
     }
 
     var readContent = function(source, target, callback) {
