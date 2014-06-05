@@ -509,7 +509,10 @@ Config  = function(opt) {
         conf[bundle].cacheless = cacheless;
         conf[bundle][env].executionPath = getContext("paths").root;
 
-        if (_this.task != 'run' && env == 'prod') { // like for build
+        if (
+            _this.task != 'run' && env == 'prod' ||
+            _this.task == 'build' && env != 'dev'
+        ) { // like for build
             //getting src path instead
             var appPath = _(conf[bundle][env].sources + '/' + bundle)
         } else {
@@ -673,7 +676,7 @@ Config  = function(opt) {
         //For each bundles.
         for (var i=0; i<bundles.length; ++i) {
             bundle = bundles[i];
-            loadBundleConfig(bundle, function(){
+            loadBundleConfig(bundle, function() {
                 --count;
                 if (count == 0) {
                     //We always return something.
