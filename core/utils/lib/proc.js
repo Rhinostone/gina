@@ -116,31 +116,31 @@ Proc = function(bundle, proc, usePidFile){
         var loggerInstance = getContext('logger');
         loggerInstance["trace"]('Fatal error !');
         //console.log("Exiting and re spawning : ", bundle, env);
-        if (env == 'prod') {//won't loop forever for others env.
-            // TODO - Count the restarts and prevent unilimited loop
-            // TODO - Send notification to admin or/and root to the Fatal Error Page.
+        // TODO - Count the restarts and prevent unilimited loop
+        // TODO - Send notification to admin or/and root to the Fatal Error Page.
 
-            var root = getPath('root');
-            try {
-                var version = process.getVersion(bundle);
-            } catch (err) {
-                var bundle = process.argv[3];
-                //var port = self.getBundlePortByBundleName(bundle);
-                //console.log("Bundle ", bundle," already running or port[ "+port+" ] is taken by another process...");
-                console.log("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
-                dismiss(process.pid);
-            }
+        var root = getPath('root');
+        try {
+            var version = process.getVersion(bundle);
+        } catch (err) {
+            var bundle = process.argv[3];
+            //var port = self.getBundlePortByBundleName(bundle);
+            //console.log("Bundle ", bundle," already running or port[ "+port+" ] is taken by another process...");
+            loggerInstance["trace"]("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
+            dismiss(process.pid);
+        }
 
 
-            var outPath = _(root + '/out.'+bundle+'.'+version+'.log');
-            var errPath = _(root + '/out.'+bundle+'.'+version+'.log');
-            var nodePath = getPath('node');
-            var geenaPath = _(root + '/geena');
+        var outPath = _(root + '/out.'+bundle+'.'+version+'.log');
+        var errPath = _(root + '/out.'+bundle+'.'+version+'.log');
+        var nodePath = getPath('node');
+        var geenaPath = _(root + '/geena');
 
+        if (env == 'prod') { //won't loop forever for others env.
 
             var opt = process.getShutdownConnectorSync();
             //Should kill existing one..
-            opt.path = '/'+bundle + '/restart/'+ pid +'/' + env;
+            opt.path = '/' + bundle + '/restart/' + pid + '/' + env;
 
             var HttpClient = require('geena.com').Http;
             var httpClient = new HttpClient();
@@ -148,7 +148,7 @@ Proc = function(bundle, proc, usePidFile){
             if (httpClient) {
                 //httpClient.query(opt);
                 //We are not waiting for anything particular...do we ?
-                httpClient.query(opt, function(err, msg){
+                httpClient.query(opt, function (err, msg) {
                     //Now start new bundle.
                     callback(err);
                 });
@@ -157,6 +157,7 @@ Proc = function(bundle, proc, usePidFile){
                 console.error(err);
                 callback(err);
             }
+
         } else {
             callback(false);
         }

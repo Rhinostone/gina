@@ -111,6 +111,7 @@ var AppCommand = {
             //herited from gna.js.
 
         } else {
+            var envFound = this.checkEnv();
             this.PID = new Proc('geena', process, false);
         }
 
@@ -289,10 +290,15 @@ var AppCommand = {
             case '--build':
 
                 _this.isAllowedArgument(opt, function(found){
-                    if (found) {
+                    if (found && _this.env != 'dev') {
                         _this.build(opt.option);
+                    } else {
+                        var msg = _this.msg.app[5]
+                            .replace("%env%", _this.env)
+                            .replace("%bundle%", _this.bundle);
+
+                        log(msg);
                     }
-                    return false;
                 });
                 break;
 
@@ -390,7 +396,8 @@ var AppCommand = {
             }
         })
     },
-    build : function(opt, argument){
+    build : function(opt, argument) {
+
         console.log('Releasing build...');
         //Getting project infos.
         try {
