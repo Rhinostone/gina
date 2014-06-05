@@ -89,10 +89,6 @@ Config  = function(opt) {
                 this.envConf = envConf;
                 loadBundlesConfiguration( function(err) {
                     //logger.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
-
-                    //console.log("::: bundles ", _this.getBundles() );
-
-                    //console.log("found this ",  JSON.stringify(_this.getInstance(), null, '\t'));
                     _this.bundlesConfiguration = {
                         env             : _this.Env.get(),
                         conf            : _this.getInstance(),
@@ -109,6 +105,7 @@ Config  = function(opt) {
                     var geenaPath = opt.geenaPath;
                     var utilsConfig = new utils.Config();
                     setContext('geena.utils.config', utilsConfig);
+                    //var pack = require(opt.executionPath + '/env.json')
 
                     utilsConfig.set('geena', 'locals.json', {
                         project : utilsConfig.getProjectName(),
@@ -119,7 +116,8 @@ Config  = function(opt) {
                             env     : opt.executionPath + '/env.json',
                             tmp     : opt.executionPath + '/tmp'
                         },
-                        //TODO - Replace by a property by bundle.
+                        //ports : ports,
+                        //TODO - Replace property by bundle.
                         bundles : _this.bundlesConfiguration.allBundles
                     }, function(err) {
                         _this.Env.loaded = true;

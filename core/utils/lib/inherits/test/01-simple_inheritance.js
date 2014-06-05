@@ -1,22 +1,22 @@
 var inherits = require('../index');
 
 var A = function() {
-    var _this = this;
+    var self = this;
     this.gender = 'female';
     this.name = 'Julia Roberts';
     this.getName = function () {
-        return _this.name;
+        return self.name;
     };
 };
 
 var B = function(gender) {//Super Class
-    var _this = this;
+    var self = this;
     this.gender = gender;
     this.name = 'Michael Jackson';
     this.age = 46;
 
     this.getAge = function () {
-        return _this.age;
+        return self.age;
     };
 
     this.getGender = function() {

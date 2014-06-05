@@ -61,6 +61,7 @@ var fs              = require('fs'),
                 this.conf[apps[i]].modelsPath = options.conf[apps[i]][this.env].modelsPath;
             }
         }
+
         callback(false, express(), express, this.conf[this.appName]);
     },
 
@@ -126,6 +127,7 @@ var fs              = require('fs'),
 
             try {
                 filename = _(appPath + '/config/' + _this.conf[apps[i]].files.routing);
+
                 if (cacheless) {
 
                     var tmpContent = _this.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
@@ -135,15 +137,16 @@ var fs              = require('fs'),
                         filename = tmpName;
                         if (cacheless) delete require.cache[_(filename, true)];
 
-                        _this.routing = require(filename);
+                        this.routing = require(filename);
                         tmpContent = "";
                     }
                 }
 
                 try {
-                    if (cacheless) {
-                        delete require.cache[_(filename, true)]
-                    }
+//                    if (cacheless) {
+//                        delete require.cache[_(filename, true)]
+//                    }
+//
 
                     tmp = require(filename);
                     //Adding important properties.
@@ -152,23 +155,23 @@ var fs              = require('fs'),
                         if( this.hasViews(apps[i])) {
                             tmp[rule].param.file = tmp[rule].param.action;
                             var tmpRouting = [];
-                            for (var i = 0, len = tmp[rule].param.file.length; i < len; ++i) {
-                                if (/[A-Z]/.test(tmp[rule].param.file.charAt(i))) {
-                                    tmpRouting[0] = tmp[rule].param.file.substring(0, i);
-                                    tmpRouting[1] = '-' + (tmp[rule].param.file.charAt(i)).toLocaleLowerCase();
-                                    tmpRouting[2] = tmp[rule].param.file.substring(i + 1);
+                            for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
+                                if (/[A-Z]/.test(tmp[rule].param.file.charAt(r))) {
+                                    tmpRouting[0] = tmp[rule].param.file.substring(0, r);
+                                    tmpRouting[1] = '-' + (tmp[rule].param.file.charAt(r)).toLocaleLowerCase();
+                                    tmpRouting[2] = tmp[rule].param.file.substring(r + 1);
                                     tmp[rule].param.file = tmpRouting[0] + tmpRouting[1] + tmpRouting[2];
-                                    ++i;
+                                    ++r
                                 }
                             }
                         }
 
                     }
 
-                    if (_this.routing.count() > 0) {
-                        _this.routing = merge(true, _this.routing, tmp);
+                    if (this.routing.count() > 0) {
+                        this.routing = merge(true, this.routing, tmp);
                     } else {
-                        _this.routing = tmp;
+                        this.routing = tmp;
                     }
                     tmp = {}
                 } catch (err) {
@@ -221,7 +224,9 @@ var fs              = require('fs'),
             '\npid: ' + process.pid
         );
 
+
         this.instance.listen(this.conf[this.appName].port.http);//By Default 8888
+
     },
     getHead : function(file) {
         var s = file.split(/\./);

@@ -19,7 +19,7 @@ var Config  = require('./config');
 var utils   = require('./utils');
 
 var Proc    = utils.Proc;
-var server  = require('./server');
+var server  = require('./server');//TODO require('./server').http
 var Winston = require('./../node_modules/winston');
 var EventEmitter = require('events').EventEmitter;
 var e = new EventEmitter();
@@ -49,7 +49,6 @@ if (process.argv.length >= 4) {
         setContext('paths', JSON.parse(tmp[3]).paths);//And so on if you need to.
         setContext('processList', JSON.parse(tmp[3]).processList);
         setContext('geenaProcess', JSON.parse(tmp[3]).geenaProcess);
-
         //Cleaning process argv.
         process.argv.splice(3);
     }
@@ -69,7 +68,8 @@ if ( typeof(geenaPath) == 'undefined') {
 
 setContext('geena.utils', utils);
 
-var envs = ["dev", "debug", "stage", "prod"];
+var envs = ['dev', 'debug', 'stage', 'prod'];
+var protocols = ['http']; // will support https for the 0.0.10
 var env;
 //Setting env.
 env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
@@ -257,14 +257,14 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
     var packs = project.bundles;
     if (startWithGeena) {
         if (!isPath) {
-            appName = process.argv[1];
+            appName = getContext('bundle');
             if ( typeof(packs[appName].release.version) == 'undefined' && typeof(packs[appName].tag) != 'undefined') {
                 packs[appName].release.version = packs[appName].tag
             }
             packs[appName].release.target = 'releases/'+ appName +'/' + env +'/'+ packs[appName].release.version;
             path = (env == 'dev' || env == 'debug') ? packs[appName].src : packs[appName].release.target
         } else {
-            path = process.argv[1]
+            path = _(process.argv[1])
         }
     } else {
         path = _(process.argv[1])
@@ -290,7 +290,13 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                     || typeof(packs[bundle].release) != 'undefined' && env == 'stage'
                 ) {
 
+
+                if ( typeof(packs[bundle].release.version) == 'undefined' && typeof(packs[bundle].tag) != 'undefined') {
+                    packs[bundle].release.version = packs[bundle].tag
+                }
+                packs[bundle].release.target = 'releases/'+ bundle +'/' + env +'/'+ packs[bundle].release.version;
                 tmp = packs[bundle].release.target.replace(/\//g, '').replace(/\\/g, '');
+
                 if ( !appName && tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
                     appName = bundle;
                     break
@@ -312,6 +318,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         }
 
         if (appName == undefined) {
+            setContext('bundle', undefined);
             abort('No bundle found for path: ' + path)
         } else {
             setContext('bundle', appName);
@@ -528,14 +535,30 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
      *
      * @param {string} [executionPath]
      * */
-    gna.start = process.start = function() {
+    gna.start = process.start = function() { //TODO - Add protocol in arguments
 
         var core    = gna.core;
         //Get bundle name.
+//        if (appName == undefined) {
+//            var appName = getContext('bundle')
+//        }
         console.log('appName ', appName);
         core.startingApp = appName;
         core.executionPath =  root;
         core.geenaPath = geenaPath;
+
+//        var port;
+//
+//        if (protocol == undefined || protocol != undefined && protocols.indexOf(protocol) < 0) {
+//            if (protocols.indexOf(protocol) < 0) {
+//                throw Error('protocol '+ protocol + ' not supported.');
+//                process.exit(1)
+//            }
+//            var protocol = 'http'
+//        }
+//
+//        var envVars = require(root + '/env.json')[appName];
+//        port = envVars.env[protocol];
 
         //Inherits parent (geena) context.
         if ( typeof(process.argv[3]) != 'undefined' ) {
@@ -594,6 +617,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                         conf            : obj.conf
                     },
                     function(err, instance, middleware, conf) {
+
                         if (!err) {
 
                             logger.debug(

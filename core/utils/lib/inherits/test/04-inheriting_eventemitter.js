@@ -14,9 +14,7 @@ var B = function() {//Super Class
     }
 
     var incrementYears = function() {
-
-        process.stdout.write('.');
-
+        //process.stdout.write('.');
         if(self.age < 36) {
             ++self.age;
             setTimeout(incrementYears, 500)
@@ -54,7 +52,7 @@ exports['Is instance of these 3: A, B & EventEmitter'] = function(test) {
 }
 
 exports['Can create events'] = function(test) {
-    process.stdout.write('  testing events, please wait .');
+    process.stdout.write('  testing events, please wait...');
     a.onYearsPast( function() {
         test.equal(a.getAge(), 36);
         test.done()
