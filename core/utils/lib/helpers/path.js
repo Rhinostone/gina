@@ -488,7 +488,7 @@ PathHelper = function() {
                         if (!err) {
 
                             var isIgnored = false;
-                            if ( typeof(source) != 'undefined') {
+                            if ( typeof(source) != 'undefined' && ignored != undefined) {
                                 var f, p = source.split('/');
                                 f = p[p.length-1];
                                 for (var r= 0; r<ignored.length; ++r) {
@@ -647,7 +647,7 @@ PathHelper = function() {
                 if ( stats.isDirectory() ) {
 
                     var isIgnored = false;
-                    if ( typeof(sourceDir) != 'undefined') {
+                    if ( typeof(sourceDir) != 'undefined' && ignored != undefined) {
                         var f, p = sourceDir.split('/');
                         f = p[p.length-1];
                         for (var r= 0; r<ignored.length; ++r) {
@@ -715,7 +715,7 @@ PathHelper = function() {
      * */
     var copyFileToFile = function(source, destination, i, callback, ignored) {
         var isIgnored = false;
-        if ( typeof(ignored) != 'undefined') {
+        if ( typeof(ignored) != 'undefined' && ignored != undefined) {
             var f, p = source.split('/');
             f = p[p.length-1];
             for (var r= 0; r<ignored.length; ++r) {

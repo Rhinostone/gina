@@ -12,6 +12,7 @@ var fs              = require('fs'),
     utils           = require('./utils'),
     merge           = utils.merge
     Proc            = utils.Proc,
+
     Server          = {
     conf : {},
     routing : {},
@@ -254,7 +255,7 @@ var fs              = require('fs'),
         var uri = pathname.split('/');
         var key = uri.splice(1, 1)[0];
         //statick filter
-        if ( /**this.hasViews(bundle) &&*/ typeof(conf.content.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
+        if ( typeof(conf.content.statics) != 'undefined' &&  typeof(conf.content.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
             uri = uri.join('/');
             var filename = path.join(conf.content.statics[key], uri);
             fs.exists(filename, function(exists) {
@@ -275,7 +276,7 @@ var fs              = require('fs'),
                         }
                     });
                 } else {
-                    _this.onBundleConfigLoaded({
+                    _this.onBundleConfigLoaded(bundle, {
                         err : false,
                         cacheless : cacheless,
                         pathname : pathname,
@@ -288,7 +289,7 @@ var fs              = require('fs'),
                 }//EO exists
             })//EO static filter
         } else {
-            this.onBundleConfigLoaded({
+            this.onBundleConfigLoaded(bundle, {
                 err : false,
                 cacheless : cacheless,
                 pathname : pathname,
@@ -302,7 +303,7 @@ var fs              = require('fs'),
 
     },
 
-    onBundleConfigLoaded : function(options) {
+    onBundleConfigLoaded : function(bundle, options) {
         var err = options.err;
         var cacheless = options.cacheless;
         var pathname = options.pathname;
@@ -329,7 +330,6 @@ var fs              = require('fs'),
 
     handle : function(req, res, next, pathname) {
         var _this = this;
-
         var matched         = false,
             isRoute         = {};
         try {

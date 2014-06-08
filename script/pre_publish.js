@@ -12,37 +12,43 @@ var fs      = require('fs');
 var utils   = require('./../core/utils');
 //Don't use events here.
 
-PrePublish = function(){
+PrePublish = function() {
     var self = this;
     this.path = _( __dirname.substring(0, (__dirname.length - "script".length)) );
     //this.projectPath = _( __dirname.substring(0, (__dirname.length - "node_modules/geena/script".length)) );
 
-    var init = function(){
+    var init = function() {
         self.tasksCount = 0;
         run()
     },
-    count = function(){
+    count = function() {
         return self.tasksCount;
     },
     /**
      * Run tasks - Will run in order of declaration
      * */
-    run = function(){
+    run = function() {
         var i = 0;
         var err = false;
         var errors = [];
         var funcs = [];
         for(var t in self){
             if( typeof(self[t]) == 'function') {
-                try {
-                    var func = 'self.' + t + '()';
-                    console.log('Running: ', func);
-                    eval(func);
-                    ++self.taskCount
-                } catch (err) {
-                    //console.error(err.stack)
-                    errors.push(err)
-                }
+                console.log('Running: ', 'self.' + t + '()');
+                //getting arguments
+
+                console.log('Arguments: ', hasCallback(self[t]));
+                self[t]()
+
+//                try {
+//                    var func = 'self.' + t + '()';
+//                    console.log('Running: ', func);
+//                    eval(func);
+//                    ++self.taskCount
+//                } catch (err) {
+//                    //console.error(err.stack)
+//                    errors.push(err)
+//                }
             }
             ++i;
             if (i == self.length) {
@@ -54,18 +60,41 @@ PrePublish = function(){
             //TODO display details.
         }
     },
-    changeVersionNumber = function(callback){
+    hasCallback = function(func) {
+        var found = false;
+        var funcString = func.toString();
+        var args = funcString.match(/^\s*function\s+(?:\w*\s*)?\((.*?)\)/);
+        args = args ? (args[1] ? args[1].trim().split(/\s*,\s*/) : []) : null;
 
+        if (args.length > 0) {
+            var cb;
+            for (var a = 0; a < args.length; ++a) {
+                console.log('......checking ', args[a]);
+                cb = funcString.match(/callback\s*\(/g);
+                if (cb) {
+                    console.log('.......??? ', cb)
+                    return args[a]
+                }
+            }
+        }
+
+        return found
     };
 
-    this.removeComments = function(){ console.log('removin comments...')};
-    this.removeConsoleLog = function(){
+
+    this.runTests = function(callback) {
+        console.log('running tests');
+        //callback(false)
+    }
+
+    this.removeComments = function() { console.log('removin comments...')};
+    this.removeConsoleLog = function() {
 
     };
     /**
      * Write version number in the VERSION file
      * */
-    this.setVersion = function(){
+    this.setVersion = function() {
         try {
             var version = require( _(self.path + 'package.json') ).version;
             var path = _(self.path + 'VERSION');
