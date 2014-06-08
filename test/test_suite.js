@@ -68,14 +68,14 @@ var TestSuite = function() {
                 //console.log('loading [ ' + filename +' ]\n');
                 loadScripts(filename)
             } else if ( passed ) {
-                console.log('suite is : ', files[f]);
-                if (files[f] == '01-init_new_project.js') {
+                //console.log('suite is : ', files[f]);
+                //if (files[f] == '01-init_new_project.js') {
                     var Suite = require(filename);
                     if ( typeof(Suite) == 'function') {
                         Suite = inherits(Suite, self.Suite);
                         new Suite(self.config, exports)
                     }
-                }
+                //}
             }
         }
     }
