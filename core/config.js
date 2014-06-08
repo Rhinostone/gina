@@ -35,43 +35,46 @@ var logger          = utils.logger;
  * */
 Config  = function(opt) {
 
-    var _this = this;
+    var self = this;
     this.bundles = [];
     this.allBundles = [];
 
     var init =  function(opt) {
-
+        if ( typeof(Config.initialized) == 'undefined' ) {
+            Config.initialized = true;
+            Config.instance = self
+        }
         var env = opt.env;
-        _this.startingApp = opt.startingApp;
-        _this.executionPath = opt.executionPath;
-        _this.task = opt.task || 'run'; // to be aible to filter later on non run task
+        self.startingApp = opt.startingApp;
+        self.executionPath = opt.executionPath;
+        self.task = opt.task || 'run'; // to be aible to filter later on non run task
 
         logger.debug('geena', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
 
-        _this.userConf = false;
-        var path = _(_this.executionPath + '/env.json');
+        self.userConf = false;
+        var path = _(self.executionPath + '/env.json');
 
         if ( fs.existsSync(path) ) {
 
-            _this.userConf = require(path);
+            self.userConf = require(path);
 
             logger.debug(
                 'geena',
                 'CONFIG:DEBUG:6',
                 'Applicaiton config file loaded ['
-                    + _(_this.executionPath + '/env.json') + ']',
+                    + _(self.executionPath + '/env.json') + ']',
                 __stack
             );
         }
 
-        _this.Env.parent = _this;
-        if (env != 'undefined') _this.Env.set(env);
+        self.Env.parent = self;
+        if (env != 'undefined') self.Env.set(env);
 
-        _this.Host.parent = _this;
+        self.Host.parent = self;
 
         //Do some checking please.. like already has a PID ?.
         //if yes, join in case of standalone.. or create a new thread.
-        _this.Host.setMaster(_this.startingApp);
+        self.Host.setMaster(self.startingApp);
         getConf()
     }
 
@@ -79,25 +82,25 @@ Config  = function(opt) {
 
         logger.debug('geena', 'CONFIG:DEBUG:2', 'Loading conf', __stack);
 
-        _this.Env.load( function(err, envConf) {
+        self.Env.load( function(err, envConf) {
             //logger.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 42', __stack);
             //logger.info('geena', 'CORE:INFO:42','on this Env LOAD!', __stack);
 
-            if ( typeof(_this.Env.loaded) == "undefined") {
+            if ( typeof(self.Env.loaded) == "undefined") {
                 //Need to globalize some of them.
-                this.env = env;
-                this.envConf = envConf;
+                self.env = Config.instance.env = env;
+                self.envConf = Config.instance.envconf = envConf;
                 loadBundlesConfiguration( function(err) {
                     //logger.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
-                    _this.bundlesConfiguration = {
-                        env             : _this.Env.get(),
-                        conf            : _this.getInstance(),
-                        bundles         : _this.getBundles(),
-                        allBundles      : _this.getAllBundles(),
-                        isStandalone    : _this.Host.isStandalone()
+                    self.bundlesConfiguration = {
+                        env             : self.Env.get(),
+                        conf            : self.getInstance(),
+                        bundles         : self.getBundles(),
+                        allBundles      : self.getAllBundles(),
+                        isStandalone    : self.Host.isStandalone()
                     };
 
-                    //console.error("found bundles ", _this.bundlesConfiguration.bundles);
+                    //console.error("found bundles ", self.bundlesConfiguration.bundles);
 
                     //TODO - Don't override if syntax is ok - no mixed paths.
                     //Set paths for utils. Override for now.
@@ -105,7 +108,6 @@ Config  = function(opt) {
                     var geenaPath = opt.geenaPath;
                     var utilsConfig = new utils.Config();
                     setContext('geena.utils.config', utilsConfig);
-                    //var pack = require(opt.executionPath + '/env.json')
 
                     utilsConfig.set('geena', 'locals.json', {
                         project : utilsConfig.getProjectName(),
@@ -116,20 +118,14 @@ Config  = function(opt) {
                             env     : opt.executionPath + '/env.json',
                             tmp     : opt.executionPath + '/tmp'
                         },
-                        //ports : ports,
                         //TODO - Replace property by bundle.
-                        bundles : _this.bundlesConfiguration.allBundles
+                        bundles : self.bundlesConfiguration.allBundles
                     }, function(err) {
-                        _this.Env.loaded = true;
-                        _this.emit('complete', err, _this.bundlesConfiguration)
-                    });
+                        self.Env.loaded = true;
+                        self.emit('complete', err, self.bundlesConfiguration)
+                    })
 
-                    //callback(false, Express(), Express, this.conf[this.appName]);
-
-                    //_this.Env.loaded = true;
-                    //_this.emit('complete', false, _this.bundlesConfiguration);
-                    //isFileInProject(conf[env]["files"]);
-                }, _this.startingApp);//by default.
+                }, self.startingApp);//by default.
             }
         });
     }
@@ -140,22 +136,26 @@ Config  = function(opt) {
      * @param {string} [bundle]
      * @return {object|undefined} configuration|"undefined"
      * */
-    this.getInstance = function(bundle) {
-        var configuration = ( typeof(_this.envConf) == "undefined" ) ? this.envConf : _this.envConf;
-        var env = (typeof(_this.env) == "undefined") ? this.env : _this.env;
-        _this.Env.parent = _this;
-        if (env != 'undefined')
-            _this.Env.set(_this.env);
 
-        _this.Host.parent = _this;
+     this.getInstance = function(bundle) {
+
+         self = Config.instance;
+         var configuration = self.envConf;
+         var env = self.env;
+
+        self.Env.parent = self;
+        if (env != 'undefined')
+            self.Env.set(self.env);
+
+        self.Host.parent = self;
 
         //Do some checking please.. like already has a PID ?.
         //if yes, join in case of standalone.. or create a new thread.
-        _this.Host.setMaster(bundle);
+        self.Host.setMaster(bundle);
         if ( typeof(bundle) != 'undefined' && typeof(configuration) != 'undefined' ) {
 
             try {
-                return configuration[bundle][_this.Env.get()];
+                return configuration[bundle][self.Env.get()];
             } catch (err) {
                 logger.error('geena', 'CONFIG:ERR:1', err, __stack);
                 return undefined
@@ -188,14 +188,14 @@ Config  = function(opt) {
                 if (this.parent.userConf) {
 
                     loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
-                        _this.envConf = envConf;
+                        self.envConf = envConf;
                         //logger.warn('geena', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t') );
                         callback(false, envConf);
                     });
                 } else {
 
                     envConf = this.template;
-                    _this.envConf = envConf;
+                    self.envConf = envConf;
                     //logger.warn('geena', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t'));
                     callback(false, envConf);
                 }
@@ -243,9 +243,9 @@ Config  = function(opt) {
         getConf : function(bundle, env) {
             //console.log("get from ....", appName, env);
             if ( typeof(bundle) != 'undefined' && typeof(env) != 'undefined' )
-                return ( typeof(_this.envConf) != "undefined" ) ? _this.envConf[bundle][env] : null;
+                return ( typeof(self.envConf) != "undefined" ) ? self.envConf[bundle][env] : null;
             else
-                return ( typeof(_this.envConf) != "undefined" ) ? _this.envConf : null;
+                return ( typeof(self.envConf) != "undefined" ) ? self.envConf : null;
         },
         getDefault : function() {
             return {
@@ -299,16 +299,16 @@ Config  = function(opt) {
             newContent = content;
 
         var isStandalone = true,
-            env = _this.Env.get(),
+            env = self.Env.get(),
             appsPath = "",
             modelsPath = "";
 
 
         //Pushing default app first.
-        _this.bundles.push(_this.startingApp);//This is a JSON.push.
+        self.bundles.push(self.startingApp);//This is a JSON.push.
         //console.log(" CONTENT TO BE SURE ", app, JSON.stringify(content, null, 4));
-        //console.log("bundle list ", _this.bundles);
-        var root = new _(_this.executionPath).toUnixStyle();
+        //console.log("bundle list ", self.bundles);
+        var root = new _(self.executionPath).toUnixStyle();
         try {
             var pkg = require(_(root + '/project.json')).bundles;
         } catch (err) {
@@ -363,28 +363,28 @@ Config  = function(opt) {
                 appsPath = appsPath.replace(/\{executionPath\}/g, root);
                 //modelsPath = modelsPath.replace(/\{executionPath\}/g, mPath);
 
-                //console.log("My env ", env, _this.executionPath, JSON.stringify(template, null, '\t') );
+                //console.log("My env ", env, self.executionPath, JSON.stringify(template, null, '\t') );
                 //Existing app and port sharing => != standalone.
                 if ( fs.existsSync(appsPath) ) {
-                    var masterPort = content[_this.startingApp][env].port.http;
+                    var masterPort = content[self.startingApp][env].port.http;
                     //Check if standalone or shared instance
                     if (content[app][env].port.http != masterPort) {
                         //console.log("should be ok !!");
                         isStandalone = false;
-                        _this.Host.standaloneMode = isStandalone
-                    } else if (app != _this.startingApp) {
-                        _this.bundles.push(app)
+                        self.Host.standaloneMode = isStandalone
+                    } else if (app != self.startingApp) {
+                        self.bundles.push(app)
                     }
-                    _this.allBundles.push(app);
+                    self.allBundles.push(app);
 
 //                    console.log(
 //                        "\nenv                  => " + env,
 //                        "\napp parsed           => " + app,
-//                        "\napp is Standalone    => " + _this.Host.isStandalone(),
-//                        "\nstarting app         => " + _this.startingApp,
+//                        "\napp is Standalone    => " + self.Host.isStandalone(),
+//                        "\nstarting app         => " + self.startingApp,
 //                        "\napp port             => " + content[app][env].port.http,
-//                        "\nmaster port          => " + masterPort + '  ' + content[_this.startingApp][env].port.http,
-//                        "\nRegisterd bundles    => " + _this.bundles
+//                        "\nmaster port          => " + masterPort + '  ' + content[self.startingApp][env].port.http,
+//                        "\nRegisterd bundles    => " + self.bundles
 //                    );
                     //console.log("Merging..."+ app, "\n", content[app][env], "\n AND \n", template[app][env]);
                     //Mergin user's & template.
@@ -431,7 +431,7 @@ Config  = function(opt) {
         );
 
         //Means all apps sharing the same process.
-        if (!isStandalone) _this.Host.standaloneMode = isStandalone;
+        if (!isStandalone) self.Host.standaloneMode = isStandalone;
 
         logger.debug(
             'geena',
@@ -446,7 +446,7 @@ Config  = function(opt) {
     var isFileInProject = function(file) {
 
         try {
-            var usrConf = require(_this.executionPath +'/'+ file +'.json');
+            var usrConf = require(self.executionPath +'/'+ file +'.json');
             return true
         } catch(err) {
             logger.warn('geena', 'CONF:HOST:WARN:1', err, __stack);
@@ -465,11 +465,11 @@ Config  = function(opt) {
         logger.debug(
             'geena',
             'CONFIG:DEBUG:4',
-            'Pushing apps ' + JSON.stringify(_this.bundles, null, '\t'),
+            'Pushing apps ' + JSON.stringify(self.bundles, null, '\t'),
             __stack
         );
 
-        return _this.bundles
+        return self.bundles
     }
 
     this.getAllBundles = function() {
@@ -477,20 +477,20 @@ Config  = function(opt) {
         logger.debug(
             'geena',
             'CONFIG:DEBUG:5',
-            'Pushing ALL apps ' + JSON.stringify(_this.allBundles, null, '\t'),
+            'Pushing ALL apps ' + JSON.stringify(self.allBundles, null, '\t'),
             __stack
         );
-        return _this.allBundles
+        return self.allBundles
     }
 
     var loadBundleConfig = function(bundle, callback, reload) {
         if ( typeof(bundle) == "undefined") {
-            var bundle = _this.startingApp
+            var bundle = self.startingApp
         }
-        var bundles     = _this.getBundles();
-        var cacheless   = _this.isCacheless();
-        var conf        = _this.envConf;
-        var env         = _this.Env.get();
+        var bundles     = self.getBundles();
+        var cacheless   = self.isCacheless();
+        var conf        = self.envConf;
+        var env         = self.Env.get();
         var routing     = {
             "geena-doc": {
                 "url": "/@doc",
@@ -509,14 +509,19 @@ Config  = function(opt) {
         conf[bundle].cacheless = cacheless;
         conf[bundle][env].executionPath = getContext("paths").root;
 
-        if (
-            _this.task != 'run' && env == 'prod' ||
-            _this.task == 'build' && env != 'dev'
-        ) { // like for build
-            //getting src path instead
-            var appPath = _(conf[bundle][env].sources + '/' + bundle)
-        } else {
+//        if (
+//            self.task != 'run' && env == 'prod' ||
+//            self.task == 'build' && env != 'dev'
+//        ) { // like for build
+//            //getting src path instead
+//            var appPath = _(conf[bundle][env].sources + '/' + bundle)
+//        } else {
+//            var appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
+//        }
+        if ( self.task == 'run' && env != 'dev' ) {
             var appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
+        } else { //getting src path instead
+            var appPath = _(conf[bundle][env].sources + '/' + bundle)
         }
 
         var files = {};
@@ -541,14 +546,6 @@ Config  = function(opt) {
                     routing = merge( true, routing, require(filename) );
                 }
                 //setting app param
-                /**
-                for (var route in routing) {
-                    for (var param in routing[route]) {
-                        if (param == 'param' && typesof(routing[route][param].app) == 'undefined') {
-                            routing[route][param].app = bundle
-                        }
-                    }
-                }*/
                 if ( typeof(conf[bundle][env].content['views']) != 'undefined' ) {
                     for (var rule in routing) {
                         routing[rule].param.file = routing[rule].param.action;
@@ -625,13 +622,16 @@ Config  = function(opt) {
             "modelsPath"    : conf[bundle][env].modelsPath,
             "logsPath"      : conf[bundle][env].logsPath,
             "tmpPath"       : conf[bundle][env].tmpPath,
-            "views"         : files['views'].default.views,
-            "html"          : files['views'].default.html,
-            "theme"         : files['views'].default.theme,
             "env"           : env,
             "bundle"        : bundle,
             "host"          : conf[bundle][env].host
         };
+
+        if (hasViews && typeof(files['views'].default) != 'undefined') {
+            reps["views"] = files['views'].default.views;
+            reps["html"] = files['views'].default.html;
+            reps["theme"] = files['views'].default.theme;
+        }
 
         var ports = conf[bundle][env].port;
         for (var p in ports) {
@@ -671,8 +671,9 @@ Config  = function(opt) {
      * */
      var loadBundlesConfiguration = function(callback) {
 
-        var bundles = _this.getBundles();
+        var bundles = self.getBundles();
         var count = bundles.length;
+        var bundle = undefined;
         //For each bundles.
         for (var i=0; i<bundles.length; ++i) {
             bundle = bundles[i];
@@ -692,7 +693,7 @@ Config  = function(opt) {
      * @return {boolean} isUsingCache
      * */
     this.isCacheless = function() {
-        var env = _this.Env.get();
+        var env = Config.instance.Env.get();
         //Also defined in core/gna.
         return (env == "dev" || env == "debug") ? true : false
     }
@@ -705,8 +706,8 @@ Config  = function(opt) {
      * @param {boolean|string} err
      * */
     this.refresh = function(bundle, callback) {
-        var env = _this.Env.get();
-        var conf = _this.envConf;
+        var env = self.Env.get();
+        var conf = self.envConf;
 
         //Reload models.
         var modelsPath = _(conf[bundle][env].modelsPath);
@@ -745,21 +746,21 @@ Config  = function(opt) {
         //Interface
         return {
             getInstance : function(bundle) {
-                return _this.getInstance(bundle)
+                return self.getInstance(bundle)
             },
             isCacheless : function() {
                 //logger.info('geena', 'CORE:INFO:42','ninja conf  !!!!' + this.envConf, __stack);
-                return _this.isCacheless()
+                return self.isCacheless()
             },
             refresh : function(bundle, callback) {
-                _this.refresh(bundle, function(err, routing) {
+                self.refresh(bundle, function(err, routing) {
                     callback(err, routing)
                 })
             },
-            Env : _this.Env,
-            Host : _this.Host,
+            Env : self.Env,
+            Host : self.Host,
             setBundles : function(bundles) {
-                _this.bundles = bundles
+                self.bundles = bundles
             }
         }
 
@@ -774,12 +775,12 @@ Config  = function(opt) {
 
         return {
             onReady : function(callback) {
-                _this.once('complete', function(err, config) {
+                self.once('complete', function(err, config) {
                     callback(err, config)
                 })
             },
             getInstance : function(bundle) {
-                return _this.getInstance(bundle)
+                return self.getInstance(bundle)
             }
         }
     }

@@ -92,15 +92,6 @@ var AppCommand = {
         if (process.argv[2] == '-s' || process.argv[2] == '--start') {
             //use registeredEnvs for this.....
             var envFound = this.checkEnv();
-//            var envFound = false;
-//            var envs = this.envs;
-//
-//            if (envs.indexOf(process.argv[4]) > -1) {
-//                envFound = true;
-//                this.env = process.argv[4]
-//            } else {
-//                process.argv[4] = this.env
-//            }
 
             if (process.argv.length >= 5 && !envFound) {
                 this.env = 'prod';
@@ -119,10 +110,6 @@ var AppCommand = {
 
         if (longCMD) {
             this.opt['argument'] = process.argv[4];
-
-//            if (this.opt['option'] == 'a' || this.opt['option'] == '-add') {
-//                this.opt['type'] = process.argv[5];
-//            }
         } else {
             this.opt['argument'] =  process.argv[4];
         }
@@ -419,11 +406,15 @@ var AppCommand = {
                     var buildCmd = new CustomBuild(project, bundle);
                     buildCmd.init()
                 } else {
-                    var buildCmd = new BuildCmd(project, bundle)
+
+                    BuildCmd = inherits( BuildCmd, EventEmitter);
+                    var buildCmd = new BuildCmd(project, bundle);
+                    buildCmd.init()
                 }
 
             } else if (bundle == undefined) {
-                var buildCmd = require('./geena-build')(project)
+                var buildCmd = require('./geena-build')(project);
+                buildCmd.init()
             } else {
                 console.error('Bundle [ '+ bundle +' ] not found.')
             }
