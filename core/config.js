@@ -649,8 +649,9 @@ Config  = function(opt) {
             }
         }
 
-
-        if ( typeof(files['statics']) != 'undefined') {
+        if (hasViews && typeof(files['statics']) == 'undefined') {
+            files['statics'] = require(getPath('geena.core') +'/template/conf/statics.json')
+        } else if ( typeof(files['statics']) != 'undefined' ) {
             var defaultAliases = require(getPath('geena.core') +'/template/conf/statics.json');
             files['statics'] = merge(true, files['statics'], defaultAliases)
         }
