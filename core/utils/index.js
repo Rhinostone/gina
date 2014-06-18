@@ -89,7 +89,7 @@ utils.cmd.load = function(root, package){
     //To make it globally accessible when you are in the geena process.
     var globalPaths = {
         "logsPath"      : logsPath,
-        "globalTmpPath"       : gTmpPath,
+        "globalTmpPath" : gTmpPath,
         "mountPath"     : bundlesPath
     };
 

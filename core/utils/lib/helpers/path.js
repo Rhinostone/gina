@@ -10,7 +10,7 @@
  * PathHelper
  *
  * @package     Geena.Utils.Helpers
- * @author      Rhinostone <geena@rhinostone.com>
+ * @author      Rhinzostone <geena@rhinostone.com>
  * @api public
  *
  * TODO - Put debug logs
@@ -24,7 +24,6 @@ var Path = require('path');
 var merge = require('./../merge');
 var ContextHelper = require('./context');
 var e =  new Events.EventEmitter();
-var logger = require('./../logger');
 //Reminder: let listeners be removed by the V8 garbage collector.
 e.setMaxListeners(100);
 
@@ -180,12 +179,7 @@ PathHelper = function() {
 
     var stringPathToArray = function(path) {
         if ( typeof(path) == 'undefined' || typeof(path) != 'string') {
-            logger.warn(
-                'geena',
-                'UTILS:PATH:WARN:2',
-                'Path.stringPathToArray(path): path is empty or wrong type.',
-                __stack
-            );
+            console.warn('Path.stringPathToArray(path): path is empty or wrong type.');
             return undefined
         }
         var reg = new RegExp(/[,;/]/g);
@@ -230,6 +224,31 @@ PathHelper = function() {
     _.prototype.exists = function(callback) {
         fs.exists(this.value, function(exists) {
             callback(exists)
+        })
+    }
+
+    /**
+     * Check if a file is present under a certain dir
+     *
+     * */
+    _.prototype.hasFile = function(search, callback) {
+        var self = this;
+        var p = self.value;
+        fs.lstat(p, function(err, stats) {
+            if (err) callback(err);
+
+            if ( !stats.isDirectory() ) {
+                callback(new Error(p +' is not a directory'))
+            } else {
+                fs.readdir(p, function(err, files) {
+                    for(var f=0; f<files.length; ++f) {
+                        if (search == files[f]) {
+                            callback(false, true)
+                            break
+                        }
+                    }
+                })
+            }
         })
     }
 
@@ -342,12 +361,7 @@ PathHelper = function() {
                 e.once('mkdir#complete#'+self.value, function(err, path) {
 
                     if (err) {
-                        logger.error(
-                            'geena',
-                            'UTILS:PATH:ERROR:8',
-                            ''+err,
-                            __stack
-                        )
+                        console.error(err.stack)
                     }
                     callback(err, path)
                 })
@@ -369,33 +383,37 @@ PathHelper = function() {
      *
      *  })
      *
-     * @param {string} target
-     * @param {array} [ ignored ] - Ignored list
+     * @ram {string} target
+     * @param {array} [ excluded ] - Excluded list
      *
      * @callback callback
      * @param {string} errResponse
      * @param {string} [pathResponse]
      * */
 
-    _.prototype.cp = function(target, ignored, cb) {
-        if ( typeof(ignored) == 'function') {
-            var cb = ignored;
-            ignored = undefined
+    _.prototype.cp = function(target, excluded, cb) {
+        if ( typeof(excluded) == 'function') {
+            var cb = excluded;
+            excluded = undefined
         }
         var self = this;
         //Enter dir & start rm.
         var p = self.value;
         //console.log("starting copying ", p, " => ", target);
-        cp(p, target, ignored)
-            .onComplete( function(err, destination) {
-                if (target == destination) {
+        cp(p, target, excluded)
+            .onComplete( function(err, destination, method) {
+
+//                if (target == destination ||
+//                    typeof(method) != 'undefined'
+//                ) {
+
                     cb(err);
-                }
+                //}
             });
 
     }
 
-    var cp = function(source, destination, ignored) {
+    var cp = function(source, destination, excluded) {
 
         /**
          * BO Targeting folder content..
@@ -439,7 +457,7 @@ PathHelper = function() {
                 // 1) & 2) File => Dir (add if exist else, throw error).
                 copyFileToFile(source, destination, 0, function(err) {
                     e.emit("cp#complete", err, destination)
-                }, ignored)
+                }, excluded)
             } else {
                 /**
                  * 3) Dir => Dir (create or replace if exists).
@@ -461,9 +479,9 @@ PathHelper = function() {
                     method = "3A";
                     console.log("....calling method ", method);
 
-                    browseCopy(source, destination, ignored, function(err){
+                    browseCopy(source, destination, excluded, function(err){
                         console.log("copy Dir/ to Dir/ && Dir/ to Dir done");
-                        e.emit("cp#complete", err, destination)
+                        e.emit("cp#complete", err, destination, method)
                     })
 
                 } else if (!childElementsOnly["source"] && childElementsOnly["destination"]) {
@@ -474,9 +492,9 @@ PathHelper = function() {
                     destination += '/' + folder;
 
                     var target = new _(destination).mkdir( function(err, path) {
-                        browseCopy(source, path, ignored, function(err) {
-                            //console.log("copy Dir to Dir/ done");
-                            e.emit("cp#complete", err, path)
+                        browseCopy(source, path, excluded, function(err) {
+                            console.log("copy Dir to Dir/ done");
+                            e.emit("cp#complete", err, path, method)
                         })
                     })
                 } else {
@@ -484,31 +502,31 @@ PathHelper = function() {
                     console.log("....calling method ", method);
                     var onRemoved = function(err, target) {
                         // err: 99% means that it doesn't exist. Well, we don't care do we ?.
-                        console.log("someshit has been triggered ! ", target);
+                        console.log("somee shieshit has been triggered ! ", target);
                         if (!err) {
 
-                            var isIgnored = false;
-                            if ( typeof(source) != 'undefined' && ignored != undefined) {
+                            var isExcluded = false;
+                            if ( typeof(source) != 'undefined' && excluded != undefined) {
                                 var f, p = source.split('/');
                                 f = p[p.length-1];
-                                for (var r= 0; r<ignored.length; ++r) {
-                                    if ( typeof(ignored[r]) == 'object' ) {
-                                        if (ignored[r].test(f)) {
-                                            isIgnored = true
+                                for (var r= 0; r<excluded.length; ++r) {
+                                    if ( typeof(excluded[r]) == 'object' ) {
+                                        if (excluded[r].test(f)) {
+                                            isExcluded = true
                                         }
-                                    } else if (f === ignored[r]) {
-                                        isIgnored = true
+                                    } else if (f === excluded[r]) {
+                                        isExcluded = true
                                     }
                                 }
                             }
-                            if (!isIgnored) {
+                            if (!isExcluded) {
                                 var target = new _(destination).mkdir( function(err, path) {
 
-                                    browseCopy(source, path, ignored, function(err) {
+                                    browseCopy(source, path, excluded, function(err) {
                                         //console.log("copy Dir to Dir done");
                                         //removed = true;
                                         destination = null;
-                                        e.emit("cp#complete", err, path)
+                                        e.emit("cp#complete", err, path, method)
                                     })
                                 })
                             } else {
@@ -531,8 +549,8 @@ PathHelper = function() {
                                         listTo.push(_listTo[p])
                                     }
 
-                                    browseCopy(list[i], listTo[i], ignored, function(err){
-                                        e.emit("cp#complete", err, listTo[i]);
+                                    browseCopy(list[i], listTo[i], excluded, function(err){
+                                        e.emit("cp#complete", err, listTo[i], method);
                                         destination = null
                                     }, list, listTo, i)
                                 })
@@ -567,17 +585,12 @@ PathHelper = function() {
              * */
             onComplete : function(callback) {
                 //We want it once for the object path.
-                e.once('cp#complete', function(err, destination) {
+                e.once('cp#complete', function(err, destination, method) {
                     if (err) {
-                        logger.error(
-                            'geena',
-                            'UTILS:PATH:ERROR:7',
-                            err,
-                            __stack
-                        );
+                        console.error(err.stack)
                     }
-                    console.log('cp() complete');
-                    callback(err, destination)
+                    console.log('cp() completed copy to: ', method);
+                    callback(err, destination, method)
                 })
             }
         }
@@ -617,7 +630,7 @@ PathHelper = function() {
      * @param {string} method
      * @param {string} sourceDir
      * @param {string} destinationDir
-     * @param {array} [ ignored ]
+     * @param {array} [ excluded ]
      *
      * @callback callback
      *
@@ -634,7 +647,7 @@ PathHelper = function() {
         callback(err);
     }
 
-    var browseCopy = function(sourceDir, destinationDir, ignored, callback, list, listTo, i) {
+    var browseCopy = function(sourceDir, destinationDir, excluded, callback, list, listTo, i) {
         var list = ( typeof(list) != 'undefined' ) ? list : [];
         var listTo = ( typeof(listTo) != 'undefined' ) ? listTo : [];
         var i = ( typeof(i) != 'undefined' ) ? i : 0;
@@ -646,22 +659,22 @@ PathHelper = function() {
 
                 if ( stats.isDirectory() ) {
 
-                    var isIgnored = false;
-                    if ( typeof(sourceDir) != 'undefined' && ignored != undefined) {
+                    var isExcluded = false;
+                    if ( typeof(sourceDir) != 'undefined' && excluded != undefined) {
                         var f, p = sourceDir.split('/');
                         f = p[p.length-1];
-                        for (var r= 0; r<ignored.length; ++r) {
-                            if ( typeof(ignored[r]) == 'object' ) {
-                                if (ignored[r].test(f)) {
-                                    isIgnored = true
+                        for (var r= 0; r<excluded.length; ++r) {
+                            if ( typeof(excluded[r]) == 'object' ) {
+                                if (excluded[r].test(f)) {
+                                    isExcluded = true
                                 }
-                            } else if (f === ignored[r]) {
-                                isIgnored = true
+                            } else if (f === excluded[r]) {
+                                isExcluded = true
                             }
                         }
                     }
 
-                    if (!isIgnored) {
+                    if (!isExcluded) {
                         if ( typeof(list[i]) == 'undefined' ) {
                             list[i] = sourceDir;
                             listTo[i] = destinationDir;
@@ -678,7 +691,7 @@ PathHelper = function() {
                                         listTo.push(_listTo[p])
                                     }
                                     ++i;
-                                    browseCopy(list[i], listTo[i], ignored, callback, list, listTo, i)
+                                    browseCopy(list[i], listTo[i], excluded, callback, list, listTo, i)
                                 })
                             } else {
                                 console.error(err)
@@ -686,14 +699,14 @@ PathHelper = function() {
                         })
                     }  else {
                         ++i;
-                        browseCopy(list[i], listTo[i], ignored, callback, list, listTo, i)
+                        browseCopy(list[i], listTo[i], excluded, callback, list, listTo, i)
                     }
 
                 } else {
                     copyFileToFile(sourceDir, destinationDir, i, function(err, file, i) {
                         ++i;
-                        browseCopy(list[i], listTo[i], ignored, callback, list, listTo, i)
-                    }, ignored)
+                        browseCopy(list[i], listTo[i], excluded, callback, list, listTo, i)
+                    }, excluded)
                 }
             })
         }
@@ -713,24 +726,24 @@ PathHelper = function() {
      * @param {bool|string} err
      *
      * */
-    var copyFileToFile = function(source, destination, i, callback, ignored) {
-        var isIgnored = false;
-        if ( typeof(ignored) != 'undefined' && ignored != undefined) {
+    var copyFileToFile = function(source, destination, i, callback, excluded) {
+        var isExcluded = false;
+        if ( typeof(excluded) != 'undefined' && excluded != undefined) {
             var f, p = source.split('/');
             f = p[p.length-1];
-            for (var r= 0; r<ignored.length; ++r) {
-                if ( typeof(ignored[r]) == 'object' ) {
-                    if (ignored[r].test(f)) {
-                        isIgnored = true
+            for (var r= 0; r<excluded.length; ++r) {
+                if ( typeof(excluded[r]) == 'object' ) {
+                    if (excluded[r].test(f)) {
+                        isExcluded = true
                     }
-                } else if (f === ignored[r]) {
-                    isIgnored = true
+                } else if (f === excluded[r]) {
+                    isExcluded = true
                 }
             }
         }
 
 
-        if (!isIgnored) {
+        if (!isExcluded) {
             fs.lstat(destination, function(err, stats) {
 
                 //Means that nothing exists. Needs create.
@@ -773,12 +786,7 @@ PathHelper = function() {
 
             copyFile(source, destination, i, function(err, i) {
                 if (err) {
-                    logger.error(
-                        'geena',
-                        'UTILS:PATH:ERROR:4',
-                        err,
-                        __stack
-                    )
+                    console.error(err.stack)
                 }
                 callback(err, i)
             })
@@ -847,19 +855,13 @@ PathHelper = function() {
                 //We want it once for the object path.
                 e.once('mv#complete', function(err, path) {
                     if (err) {
-                        logger.error(
-                            'geena',
-                            'UTILS:PATH:ERROR:10',
-                            err,
-                            __stack
-                        )
+                        console.error(err.stack)
                     }
                     callback(err, path)
                 })
             }
         }
     }
-
 
     /**
      * rm
@@ -903,12 +905,7 @@ PathHelper = function() {
             onComplete : function(callback) {
                 e.once('rm#complete', function(err, path) {
                     if (err) {
-                        logger.error(
-                            'geena',
-                            'UTILS:PATH:ERROR:6',
-                            err,
-                            __stack
-                        )
+                        console.error(err.stack)
                     }
                     //console.log('calling back now...', err, path);
                     //This one is listened by several rm().
@@ -1054,12 +1051,7 @@ PathHelper = function() {
     var removeFile = function(filename, callback) {
         fs.unlink(filename, function(err){
             if (err) {
-                logger.emerg(
-                    'geena',
-                    'UTILS:PATH:EMERG:1',
-                    'Locked file error: ' + filename,
-                    __stack
-                );
+                console.error(err.stack);
                 callback(err)
             } else {
                 callback(false)
@@ -1100,8 +1092,7 @@ PathHelper = function() {
                 //PathHelper.userPaths = _this.userPaths;
                 //console.log("what is this ", Helpers, " VS ", _this.userPaths);
                 var paths = getContext('paths');
-                logger.info("geena", "INFO:42", " 1) got config paths " +  paths+ " VS "+ _this.userPaths, __stack);
-
+                //console.info(" 1) got config paths " +  paths + " VS "+ _this.userPaths, __stack);
                 merge(true, paths, _this.userPaths);
                 setContext("paths", paths)
             }

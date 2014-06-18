@@ -9,7 +9,7 @@ BuildBundle = function(project, bundle) {
     var self = this;
     // define all default
     this.task = 'build';//important for later in config init
-    this.ignoreList = [
+    this.excluded = [
         /^\./, //all but files starting with "."
         /\.dev\.json$/ //not all ending with ".dev.json"
     ];
@@ -103,13 +103,13 @@ BuildBundle = function(project, bundle) {
                 var target  = opt.target;
                 var version = opt.version;
 
-                var ignoreList = self.ignoreList;
+                var excluded = self.excluded;
 
                 var targetObj = new _(target);
                 targetObj.rm( function(err) {
 
                 var sourceObj = new _(source)
-                    .cp(target, ignoreList, function(err) {
+                    .cp(target, excluded, function(err) {
                         self.emit('build#complete', err, version)
                     })
                 })
