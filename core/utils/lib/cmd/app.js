@@ -31,6 +31,8 @@ var AppCommand = {
         '--build',
         '-d',
         '--delete',
+        '--deploy',
+        '--deploy-init',
         '-i',
         '--init',
         '-s',
@@ -65,9 +67,9 @@ var AppCommand = {
         var envFound = false;
         var envs = this.envs;
 
-        if (envs.indexOf(process.argv[4]) > -1) {
+        if (envs.indexOf(process.argv[4]) > -1 || envs.indexOf(process.argv[3]) > -1) {
             envFound = true;
-            this.env = process.argv[4]
+            this.env = process.argv[4] || process.argv[3]
         } else {
             process.argv[4] = this.env
         }
@@ -127,7 +129,6 @@ var AppCommand = {
             core    : _(this.options.core)
         });
         process.env.NODE_ENV = this.env;
-        //console.log("=> setting my core ", this.options.core);;
         this.isAllowedOption(this.opt);
     },
     isAllowedOption : function(opt){
@@ -175,7 +176,7 @@ var AppCommand = {
     },
 
     isRealApp : function(callback){
-        var _this = this;
+        var self = this;
         var allClear = false;
         var p, d;
         var bundle = this.bundle;
@@ -251,21 +252,21 @@ var AppCommand = {
         })
     },
     map : function(opt){
-        var _this = this;
+        var self = this;
 
-        switch (opt['option']){
+        switch (opt['option']) {
             case '-a':
             case '--add':
                 this.env = 'dev';
                 this.isAllowedArgument(opt, function(found) {
                     if (found) {
-                        _this.add(opt);
+                        self.add(opt);
                     } else {
-                        var msg = _this.msg.app[2]
+                        var msg = self.msg.app[2]
                                 .replace("%type%", opt['type'])
                                 .replace("%command%", 'geena '
                                 + opt['option'] +' '
-                                + _this.bundle
+                                + self.bundle
                                 +' '+ opt['argument']
                                 +' '+ opt['type']);
                         log(msg);
@@ -276,13 +277,13 @@ var AppCommand = {
             case '-b':
             case '--build':
 
-                _this.isAllowedArgument(opt, function(found){
-                    if (found && _this.env != 'dev') {
-                        _this.build(opt.option);
+                self.isAllowedArgument(opt, function(found){
+                    if (found && self.env != 'dev') {
+                        self.build(opt.option);
                     } else {
-                        var msg = _this.msg.app[5]
-                            .replace("%env%", _this.env)
-                            .replace("%bundle%", _this.bundle);
+                        var msg = self.msg.app[5]
+                            .replace("%env%", self.env)
+                            .replace("%bundle%", self.bundle);
 
                         log(msg);
                     }
@@ -295,11 +296,21 @@ var AppCommand = {
                 this.remove(opt);
             break;
 
+            case '--deploy':
+            case '--deploy-init':
+                self.isAllowedArgument(opt, function(found){
+                    if (found) {
+                        self.deploy(opt.option);
+                    }
+                    return false;
+                });
+                break;
+
             case '-i':
             case '--init':
-                _this.isAllowedArgument(opt, function(found){
+                self.isAllowedArgument(opt, function(found){
                     if (found) {
-                        _this.initProject(opt.option);
+                        self.initProject(opt.option);
                     }
                     return false;
                 });
@@ -318,9 +329,9 @@ var AppCommand = {
 
             case '-s':
             case '--start':
-                _this.isAllowedArgument(opt, function(found){
+                self.isAllowedArgument(opt, function(found){
                     if (found) {
-                        _this.start(opt);
+                        self.start(opt);
                     }
                     return false;
                 });
@@ -367,7 +378,7 @@ var AppCommand = {
 
     },
     addViews : function() {
-        var _this = this;
+        var self = this;
         this.isRealApp( function(err) {
             var real = false;
             if (err) {
@@ -376,7 +387,7 @@ var AppCommand = {
             }
 
             try {
-                var addViews = require('./geena-add-views')(_this.bundle, _this.env)
+                var addViews = require('./geena-add-views')(self.bundle, self.env)
             } catch (err) {
                 console.error(err.stack);
                 process.exit(1)
@@ -434,19 +445,49 @@ var AppCommand = {
             process.exit(1)
         }
     },
-    remove : function(opt){
+    remove : function(opt) {
         log('deleting app now...', opt);
     },
 
-    restart : function(opt){
+    deploy : function(opt) {
+        console.log('env ?? ', this.env, opt);
+        opt = opt.replace(/(--deploy-|--deploy)/, '');
+
+        // loading options
+        try {
+            var conf = require(getPath('root') + '/deploy/' + this.env + '.json');
+            conf.env = this.env;
+        } catch(err) {
+            console.error(err.stack);
+            process.exit(1);
+        }
+
+        var path = getPath('root') + '/deploy/'+ (opt||this.env) + '.js';
+
+        if ( !fs.existsSync(path) ) {
+            console.warn(path + ' not found');
+        } else {
+            var Script = require( path );
+            if (opt == 'init') {
+                var DeployInit = require('./geena-deploy');
+                DeployInit = inherits(DeployInit, EventEmitter);
+                Script = inherits(Script, DeployInit);
+            } else {
+                Script = inherits(Script, EventEmitter);
+            }
+
+            var script = new Script(conf);
+        }
+    },
+    restart : function(opt) {
         log('restarting app now...', opt);
     },
     /**
      * Start  server
      * @param {object} opt Options
      * */
-    start : function(opt){
-        var _this = this;
+    start : function(opt) {
+        var self = this;
 
         this.isRealApp( function(err) {
             var real = false;
@@ -481,7 +522,7 @@ var AppCommand = {
                                 "level"     : "err",
                                 "profile"   : logger.getEnv(),
                                 "message"   : "SERVER:EMERG:1",
-                                "explicit"  : "" + _this.msg.app[4].replace("%app%", _this.bundle)
+                                "explicit"  : "" + self.msg.app[4].replace("%app%", self.bundle)
                             }
                         });
 
@@ -494,10 +535,10 @@ var AppCommand = {
 
             } else {
 
-                var appPath = _this.bundleInit;
+                var appPath = self.bundleInit;
                 var isPath = (/\//).test(appPath);
                 if (!isPath) {
-                    appPath = _(_this.bundlesPath +'/'+ appPath + '/index');
+                    appPath = _(self.bundlesPath +'/'+ appPath + '/index');
                 }
 
                 process.list = (process.list == undefined) ? [] : process.list;
@@ -519,16 +560,16 @@ var AppCommand = {
                     }
                 }
 
-                _this.prc = spawn('node', params,
+                self.prc = spawn('node', params,
                     {
                         detached : true
                     }
                 );
-                _this.PID.register(_this.bundle, _this.prc.pid);
+                self.PID.register(self.bundle, self.prc.pid);
 
                 //On message.
-                _this.prc.stdout.setEncoding('utf8');//Set encoding.
-                _this.prc.stdout.on('data', function(data){
+                self.prc.stdout.setEncoding('utf8');//Set encoding.
+                self.prc.stdout.on('data', function(data){
                     if ( typeof(data) == "undefined" )
                         var data = "";
 
@@ -559,8 +600,8 @@ var AppCommand = {
 
 
                 //On error. Might be useless.
-                _this.prc.stderr.setEncoding('utf8');//Set encoding.
-                _this.prc.stderr.on('data', function(err){
+                self.prc.stderr.setEncoding('utf8');//Set encoding.
+                self.prc.stderr.on('data', function(err){
 
                     logger.getPath('geena', function(pathErr, path){
                         if (!pathErr) {
@@ -635,12 +676,12 @@ var AppCommand = {
      * @param {Object} opt Options
      * */
     stop : function(opt){
-        var _this = this, row = "";
+        var self = this, row = "";
 
         this.isRealApp( function(err){
             if (err) {
                 console.error(err.stack);
-                log(_this.msg.app[4].replace("%app%", _this.bundle));
+                log(self.msg.app[4].replace("%app%", self.bundle));
                 process.exit(1);
             }
         });

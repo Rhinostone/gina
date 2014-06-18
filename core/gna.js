@@ -75,9 +75,11 @@ var env;
 env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
 gna.env = process.env.NODE_ENV = env;
 
-gna.env.isWin32 = process.env.isWin32 = function() {
-    return (os.platform() == 'win32') ? true : false;
-};
+//gna.env.isWin32 = process.env.isWin32 = function() {
+//    return (os.platform() == 'win32') ? true : false;
+//};
+gna.env.isWin32 = process.env.isWin32 = isWin32
+
 //Cahceless is also defined in the main config : Config::isCacheless().
 process.env.IS_CACHELESS = (env == "dev" || env == "debug") ? true : false;
 

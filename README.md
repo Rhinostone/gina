@@ -12,4 +12,5 @@ You can install this module using npm:
 You can also install it via GitHub:
 
 ```$ git clone https://github.com/rhinostone/geena.git ./node_modules/geena```
+
 ```$ node ./node_modules/geena/script/post_install.js```
