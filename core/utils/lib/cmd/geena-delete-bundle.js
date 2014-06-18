@@ -23,32 +23,94 @@ DeleteBundle = function(opt, project, env, bundle) {
         self.root = getPath('root');
         self.opt = opt;
 
-        self.project = project;
-        self.projectData = require(project);
-        self.env = env;
+        try {
+            self.project = project;
+            self.projectData = require(project);
+            self.env = env;
+            if ( !fs.existsSync(env) ) {
+                fs.writeFileSync(env, '{}')
+            }
+            self.envData = require(env);
 
-        //deleteBundle(bundle)
+            if ( typeof(self.projectData.bundles[bundle]) != 'undefined' ) {
+                self.bundle = bundle;
+                console.log('removing', bundle);
+
+                if ( fs.existsSync(_(self.root+'/src/'+self.bundle+'/script/delete.js')) ) {
+                    try {
+                        var script = require(_(self.root+'/src/'+self.bundle+'/script/delete.js'))( function postDeleteFinished () {
+                            deleteBundle()
+                        })
+                    } catch (err) {
+                        console.log(err.stack)
+                    }
+                } else {
+                    deleteBundle()
+                }
+
+            } else {
+                console.error('Bundle [ '+bundle+' ] does not exist !');
+                process.exit(0);
+            }
+        } catch (err) {
+            console.error(err.stack);
+            process.exit(1)
+        }
     }
 
-    var deleteBundle = function(bundle) {
-        //remove all files & infos
-
-        //from logs
-        //from tmp
-        //from cache
-
-        //in locals
-
-        //in env.json
-
-        //in project.json
+    var deleteBundle = function() {
+        removeFromLogs( function logsRemoved (err) {
+            if (err) {
+                console.error(err.stack);
+            }
+            cleanFile( function logsRemoved (err) {
+                if (err) {
+                    console.error(err.stack);
+                }
+                if (fs.existsSync(_(self.root+'/src/'+self.bundle))) {
+                    var bundlePath = new _(self.root+'/src/'+self.bundle);
+                    bundlePath.rm( function bundleRemoved (err) {
+                        if (err) {
+                            console.log(err.stack)
+                        }
+                        console.log('Bundle ['+bundle+'] has been removed to your project with success.');
+                        process.exit(0)
+                    })
+                } else {
+                    process.exit(0)
+                }
+            })
+        })
     }
 
-    var removeFromLogs = function(path) {
-
+    var cleanFile = function (callback) {
+        try {
+            if ( typeof(self.envData[self.bundle]) != 'undefined' ) {
+                delete(self.envData[self.bundle]);
+                fs.writeFileSync(self.env, JSON.stringify(self.envData, null, 4))
+            }
+            if ( typeof(self.projectData.bundles[self.bundle]) != 'undefined' ) {
+                delete(self.projectData.bundles[self.bundle]);
+                fs.writeFileSync(self.project, JSON.stringify(self.projectData, null, 4))
+            }
+            callback()
+        } catch (err) {
+            callback(err)
+        }
     }
 
-
+    var removeFromLogs = function(callback) {
+        var logsPath = _(self.root+'/logs/'+self.bundle);
+        console.log('!!!!!!!!!!!!!!!!!!!',logsPath,fs.existsSync(logsPath))
+        if ( fs.existsSync(logsPath) ) {
+            logsPath = new _(self.root+'/logs/'+self.bundle);
+            logsPath.rm( function logsRemoved (err) {
+                callback(err)
+            })
+        } else {
+            callback()
+        }
+    }
 
     init(opt, project, env, bundle);
 };

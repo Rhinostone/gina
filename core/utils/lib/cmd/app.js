@@ -355,27 +355,16 @@ var AppCommand = {
 
     },
     add : function(opt) {
-        try {
-            var project = _(getPath('root') + '/project.json');
-            var envDotJson = _(getPath('root') + '/env.json');
-        } catch (err) {
-            console.error(err.stack)
-        }
-
+        var project = _(getPath('root') + '/project.json');
+        var envDotJson = _(getPath('root') + '/env.json');
         var bundle = this.bundle;
-        try {
-            //is Real bundle ?.
-            if ( typeof(bundle) != 'undefined' && fs.existsSync(project[bundle]) ) {
-                //existing app
-                console.error('Bundle [ '+bundle+' ] already exists !')
-            } else {
-                var addCmd = require('./geena-add-bundle')(opt, project, envDotJson, bundle)
-            }
-        } catch (err) {
-            console.error(err.stack);
-            process.exit(1)
-        }
 
+        //is Real bundle ?.
+        if ( typeof(bundle) != 'undefined' ) {
+            var addCmd = require('./geena-add-bundle')(opt, project, envDotJson, bundle)
+        } else {
+            console.log('bundle is undefined !')
+        }
     },
     addViews : function() {
         var self = this;
@@ -446,7 +435,16 @@ var AppCommand = {
         }
     },
     remove : function(opt) {
-        log('deleting app now...', opt);
+        var project = _(getPath('root') + '/project.json');
+        var envDotJson = _(getPath('root') + '/env.json');
+        var bundle = this.bundle;
+
+        //is Real bundle ?.
+        if ( typeof(bundle) != 'undefined' ) {
+            var addCmd = require('./geena-delete-bundle')(opt, project, envDotJson, bundle)
+        } else {
+            console.log('bundle is undefined !')
+        }
     },
 
     deploy : function(opt) {
