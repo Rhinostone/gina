@@ -404,7 +404,6 @@ var AppCommand = {
                     CustomBuild = inherits( CustomBuild, EventEmitter);
 
                     var buildCmd = new CustomBuild(project, bundle);
-                    buildCmd.init()
                 } else {
 
                     BuildCmd = inherits( BuildCmd, EventEmitter);
@@ -435,15 +434,51 @@ var AppCommand = {
         }
     },
     remove : function(opt) {
-        var project = _(getPath('root') + '/project.json');
-        var envDotJson = _(getPath('root') + '/env.json');
-        var bundle = this.bundle;
+        try {
+            var bundle = this.bundle;
+            var project = _(getPath('root') + '/project.json');
+            var projectData = require(project);
+            var envPath = _(getPath('root') + '/env.json');
+            var isWorking = true;
 
-        //is Real bundle ?.
-        if ( typeof(bundle) != 'undefined' ) {
-            var addCmd = require('./geena-delete-bundle')(opt, project, envDotJson, bundle)
-        } else {
-            console.log('bundle is undefined !')
+            if (!fs.existsSync(_(getPath('root')+'/bundles/'+bundle))) {
+                var pids = fs.readdirSync(getPath('root')+'/tmp/pid');
+                var i = pids.length-1;
+                var tmpContent = null;
+                while ( i >= 0 && tmpContent == null) {
+                    tmpContent = fs.readFileSync(getPath('root')+'/tmp/pid/'+pids[i]);
+                    if (tmpContent != bundle) {
+                        tmpContent = null
+                    }
+                }
+                if (tmpContent == null) {
+                    isWorking = false
+                }
+            }
+
+            if ( typeof(bundle) != 'undefined' && typeof(projectData.bundles[bundle]) != 'undefined' && !isWorking) {
+                var DeleteCmd = require('./geena-delete-bundle');
+                var deleteCmd = null;
+                if ( typeof(projectData.bundles[bundle]['script']) != 'undefined' && typeof(projectData.bundles[bundle]['script']['delete']) != 'undefined') {
+                    var CustomDelete = require(_(getPath('root') +'/'+ projectData.bundles[bundle].src + '/' + projectData.bundles[bundle].script.delete));
+                    CustomDelete = inherits(CustomDelete, DeleteCmd);
+                    CustomDelete = inherits(CustomDelete, EventEmitter);
+                    deleteCmd = new CustomDelete(project, envPath, bundle)
+                } else {
+                    DeleteCmd = inherits(DeleteCmd, EventEmitter);
+                    deleteCmd = new DeleteCmd(project, envPath, bundle);
+                    deleteCmd.init()
+                }
+            } else if (bundle == undefined) {
+                console.log('bundle is undefined !')
+            } else if (typeof(projectData.bundles[bundle]) == 'undefined') {
+                console.error('Bundle [ '+bundle+' ] does not exist !')
+            } else {
+                console.error('Please, stop Bundle [ '+bundle+' ] before removing !')
+            }
+        } catch (err) {
+            console.error(err.stack);
+            process.exit(1)
         }
     },
 
