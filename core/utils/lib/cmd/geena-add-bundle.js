@@ -272,7 +272,7 @@ AddBundle = function(opt, project, env, bundle) {
             }
 
             if (f == files.length-1 && list.length == 0) { //end of all
-                console.info('Bundle [ '+bundle+' ] has been added to your project with succcess ;)');
+                console.info('Bundle [ '+bundle+' ] has been added to your project with success ;)');
                 process.exit(0)
             }
         }
