@@ -413,6 +413,10 @@ PathHelper = function() {
 
     }
 
+//    _.prototype.find = function(target, exlided, cb) {
+//
+//    }
+
     var cp = function(source, destination, excluded) {
 
         /**
