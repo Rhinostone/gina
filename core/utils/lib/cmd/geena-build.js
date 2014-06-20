@@ -15,25 +15,34 @@ BuildBundle = function(project, bundle) {
     ];
 
 
-    this.init = function() {
+    this.init = this.onInitialize = function(cb) {
+
         if (self.initialized == undefined) {
             self.initialized = true;
-            console.log('init once !!');
-            self.root = getPath('root');
-            self.env = process.env.NODE_ENV;
-
-
-            if ( typeof(bundle) != 'undefined' ) {
-                console.log('building', bundle, '[ '+ self.env +' ]');
-                // TODO add origin of the build.
-                buildBundleFromSources(project, bundle);
+            if (typeof(cb) != 'undefined' && typeof(cb) == 'function') {
+                cb(proceedInit)
             } else {
-                console.log('building whole project: [ '+ self.env +' ]');
-                //buildProjectFromSources(project);
+                proceedInit()
             }
         }
-        return self
+
+        return self;
     };
+
+    var proceedInit = function() {
+        console.log('init once !!');
+        self.root = getPath('root');
+        self.env = process.env.NODE_ENV;
+
+        if ( typeof(bundle) != 'undefined' ) {
+            console.log('building', bundle, '[ '+ self.env +' ]');
+            // TODO add origin of the build.
+            buildBundleFromSources(project, bundle);
+        } else {
+            console.log('building whole project: [ '+ self.env +' ]');
+            //buildProjectFromSources(project);
+        }
+    }
 
     var getSourceInfos = function( package, bundle, callback) {
         var config = new Config({
@@ -133,12 +142,19 @@ BuildBundle = function(project, bundle) {
 //
 //    };
 
+//    this.onInitialize = function(callback) {
+//        callback(self.init);
+//        return self
+//    };
+
     this.onComplete = function(callback) {
         self.once('build#complete', function(err, version) {
             if (!err) console.log("Build "+version+" ready.");
 
             callback(err)
-        })
+        });
+
+        return self
     };
 
 };

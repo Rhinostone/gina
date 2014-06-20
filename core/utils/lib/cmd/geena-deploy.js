@@ -114,7 +114,9 @@ Deploy = function(opt) {
                 console.log('init done with sucess')
             }
             callback(err)
-        })
+        });
+
+        return self
     }
 
     init()
