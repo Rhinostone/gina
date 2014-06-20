@@ -413,10 +413,6 @@ PathHelper = function() {
 
     }
 
-//    _.prototype.find = function(target, exlided, cb) {
-//
-//    }
-
     var cp = function(source, destination, excluded) {
 
         /**
@@ -867,6 +863,7 @@ PathHelper = function() {
         }
     }
 
+
     /**
      * rm
      *
@@ -1096,7 +1093,8 @@ PathHelper = function() {
                 //PathHelper.userPaths = _this.userPaths;
                 //console.log("what is this ", Helpers, " VS ", _this.userPaths);
                 var paths = getContext('paths');
-                //console.info(" 1) got config paths " +  paths + " VS "+ _this.userPaths, __stack);
+                console.log.info(" 1) got config paths " +  paths+ " VS "+ _this.userPaths, __stack);
+
                 merge(true, paths, _this.userPaths);
                 setContext("paths", paths)
             }

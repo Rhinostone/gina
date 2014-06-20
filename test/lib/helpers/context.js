@@ -18,7 +18,6 @@ var ContextHelper;
 var os = require('os');
 var EventEmitter = require('events').EventEmitter;
 var merge = require('./../merge');
-
 /**
  * ContextHelper Constructor
  * */
@@ -94,30 +93,12 @@ ContextHelper = function(contexts) {
                 return dictionary[key] || s;
             })
         } else {
-
-            if (typeof(replaceable) != 'function') {
-                replaceable = JSON.stringify(replaceable, null, 2);
-                return JSON.parse(
-                    replaceable.replace(/\{(\w+)\}/g, function(s, key) {
-                        return dictionary[key] || s;
-                    })
-                )
-            } else { // mixing class and object
-                var rep = {};
-                for (var k in replaceable) {
-                    if ( typeof(replaceable[k]) != 'function') {
-                        rep[k] = replaceable[k]
-                    }
-                }
-
-                rep = whisper(dictionary, rep, rule)
-                for (var k in replaceable) {
-                    if ( typeof(rep[k]) != 'undefined') {
-                        replaceable[k] = rep[k]
-                    }
-                }
-                return replaceable
-            }
+            replaceable = JSON.stringify(replaceable, null, 2);
+            return JSON.parse(
+                replaceable.replace(/\{(\w+)\}/g, function(s, key) {
+                    return dictionary[key] || s;
+                })
+            )
         }
     }
 
@@ -125,7 +106,7 @@ ContextHelper = function(contexts) {
         return (os.platform() == 'win32') ? true : false;
     }
 
-    init(contexts)
+        init(contexts)
 };
 
 module.exports = ContextHelper;
