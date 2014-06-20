@@ -13,41 +13,85 @@ Deploy = function(opt) {
 
     this.env = opt.env;
 
+    this.init = this.onInitialize = function(cb) {
+
+        if (self.initialized == undefined) {
+            self.initialized = true;
+
+            if (typeof(cb) != 'undefined' && typeof(cb) == 'function') {
+                cb(init)
+            } else {
+                init()
+            }
+        }
+
+        return self
+    }
+
     var init = function() {
+        console.log('init once !!');
 
-        if ( typeof(Deploy.instance) == 'undefined') {
-            if ( typeof(opt['set']) != 'undefined') {
+        // main init code goes here...
+        if ( typeof(opt['set']) != 'undefined') {
 
-                var dic = {};
-                for (var k in opt['set']) {
-                    //normalizing home path alias (nixes only)
-                    if (k == 'target' && opt['set'][k] === '~/') {
-                        opt['set'][k] = '~'
-                    }
-                    //in case you forgot, deploy is excluded
-                    if (k == 'exlude' && opt['set'][k].indexOf('deploy') < 0) {
-                        opt['set'][k].push('deploy')
-                    }
-
-                    self[k] = opt['set'][k];
-                    dic[k] = opt['set'][k];
+            var dic = {};
+            for (var k in opt['set']) {
+                //normalizing home path alias (nixes only)
+                if (k == 'target' && opt['set'][k] === '~/') {
+                    opt['set'][k] = '~'
                 }
 
-
-                if ( typeof(self['shared_path']) == 'undefined') {
-                    self['shared_path'] = self.target + '/shared'
-                }
-
-                if ( typeof(self['releases_path']) == 'undefined') {
-                    self['releases_path'] = self.target + '/releases'
-                }
-
-                self = whisper(dic, self)
+                self[k] = opt['set'][k];
+                dic[k] = opt['set'][k];
             }
 
-            Deploy.instance = self;
+
+            if ( typeof(self['shared_path']) == 'undefined') {
+                self['shared_path'] = self.target + '/shared'
+            }
+
+            if ( typeof(self['releases_path']) == 'undefined') {
+                self['releases_path'] = self.target + '/releases'
+            }
+
+            self = whisper(dic, self)
         }
+
+        Deploy.instance = self;
+        self.emit('init#completed', false);
     }
+
+//    var init = function() {
+//
+//        if ( typeof(Deploy.instance) == 'undefined') {
+//            if ( typeof(opt['set']) != 'undefined') {
+//
+//                var dic = {};
+//                for (var k in opt['set']) {
+//                    //normalizing home path alias (nixes only)
+//                    if (k == 'target' && opt['set'][k] === '~/') {
+//                        opt['set'][k] = '~'
+//                    }
+//
+//                    self[k] = opt['set'][k];
+//                    dic[k] = opt['set'][k];
+//                }
+//
+//
+//                if ( typeof(self['shared_path']) == 'undefined') {
+//                    self['shared_path'] = self.target + '/shared'
+//                }
+//
+//                if ( typeof(self['releases_path']) == 'undefined') {
+//                    self['releases_path'] = self.target + '/releases'
+//                }
+//
+//                self = whisper(dic, self)
+//            }
+//
+//            Deploy.instance = self;
+//        }
+//    }
 
     this.run = function(cmdline) {
 
@@ -111,15 +155,13 @@ Deploy = function(opt) {
     this.onComplete = function(callback) {
         self.once('deploy#init' , function(err) {
             if (!err) {
-                console.log('init done with sucess')
+                console.log('init completed')
             }
             callback(err)
         });
 
         return self
     }
-
-    init()
 };
 
 module.exports = Deploy

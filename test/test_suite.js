@@ -9,8 +9,8 @@ var TestSuite;
 
 // Imports.
 var fs = require('fs');
-var helpers = require('helpers');
-var inherits = require('inherits');
+var helpers = require('./lib/helpers');
+var inherits = require('./lib/inherits');
 
 var TestSuite = function() {
     var self = this;

@@ -505,12 +505,12 @@ var AppCommand = {
                 var DeployInit = require('./geena-deploy');
                 DeployInit = inherits(DeployInit, EventEmitter);
                 Script = inherits(Script, DeployInit)
-
             } else {
                 Script = inherits(Script, EventEmitter)
             }
 
             var script = new Script(conf);
+            script.init()
         }
     },
     restart : function(opt) {

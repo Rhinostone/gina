@@ -20,16 +20,16 @@ BuildBundle = function(project, bundle) {
         if (self.initialized == undefined) {
             self.initialized = true;
             if (typeof(cb) != 'undefined' && typeof(cb) == 'function') {
-                cb(proceedInit)
+                cb(init)
             } else {
-                proceedInit()
+                init()
             }
         }
 
-        return self;
-    };
+        return self
+    }
 
-    var proceedInit = function() {
+    var init = function() {
         console.log('init once !!');
         self.root = getPath('root');
         self.env = process.env.NODE_ENV;
@@ -140,11 +140,6 @@ BuildBundle = function(project, bundle) {
 //
 //    var buildProjectFromRepo = function(project) {
 //
-//    };
-
-//    this.onInitialize = function(callback) {
-//        callback(self.init);
-//        return self
 //    };
 
     this.onComplete = function(callback) {
