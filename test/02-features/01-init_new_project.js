@@ -20,7 +20,8 @@ InitProject = function(conf, exports) {
     var makeProject = function(callback) {
         var path = _( workspace.toString() );
         process.chdir(path);//CD command like.
-        var init = spawn('./geena', [ '--init', self.projectName ]);
+        var cmd = (isWin32()) ? 'geena' : './geena';
+        var init = spawn(cmd, [ '--init', self.projectName ]);
         var success = false;
 
         init.stdout.setEncoding('utf8');
