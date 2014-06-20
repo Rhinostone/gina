@@ -23,20 +23,26 @@ AddBundle = function(opt, project, env, bundle) {
         self.root = getPath('root');
         self.opt = opt;
 
-        self.project = project;
-        self.projectData = require(project);
-        self.env = env;
-        if ( !fs.existsSync(env) ) {
-            fs.writeFileSync(env, '{}')
-        }
-        self.envData = require(env);
+        try {
+            self.project = project;
+            self.projectData = require(project);
+            self.env = env;
+            if ( !fs.existsSync(env) ) {
+                fs.writeFileSync(env, '{}')
+            }
+            self.envData = require(env);
 
-        if ( typeof(bundle) != 'undefined' ) {
-            self.bundle = bundle;
-            console.log('adding', bundle);
-            makeBundle()
-        } else {
-            console.log('bundle is undefined !')
+            if ( typeof(self.projectData.bundles[bundle]) == 'undefined' ) {
+                self.bundle = bundle;
+                console.log('adding', bundle);
+                makeBundle()
+            } else {
+                console.error('Bundle [ '+bundle+' ] already exists !');
+                process.exit(0);
+            }
+        } catch (err) {
+            console.error(err.stack);
+            process.exit(1)
         }
     }
 
