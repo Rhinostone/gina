@@ -8,7 +8,7 @@ nbproject
 /tmp
 /cache
 .gna
-node_modules
+./node_modules*
 VERSION
 # SCM
 .svn
