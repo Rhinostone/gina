@@ -415,7 +415,6 @@ var AppCommand = {
                     CustomBuild = inherits( CustomBuild, EventEmitter);
 
                     var buildCmd = new CustomBuild(project, bundle);
-                    buildCmd.init()
                 } else {
 
                     BuildCmd = inherits( BuildCmd, EventEmitter);
@@ -455,14 +454,14 @@ var AppCommand = {
 
         // loading options
         try {
-            var conf = require(getPath('root') + '/deploy/' + this.env + '.json');
+            var conf = require(getPath('root') + '/deploy/' + this.env + '/config.json');
             conf.env = this.env;
         } catch(err) {
             console.error(err.stack);
             process.exit(1);
         }
 
-        var path = getPath('root') + '/deploy/'+ (opt||this.env) + '.js';
+        var path = getPath('root') + '/deploy/'+ this.env + '/'+(opt||'script')+'.js';
 
         if ( !fs.existsSync(path) ) {
             console.warn(path + ' not found');
@@ -471,9 +470,10 @@ var AppCommand = {
             if (opt == 'init') {
                 var DeployInit = require('./geena-deploy');
                 DeployInit = inherits(DeployInit, EventEmitter);
-                Script = inherits(Script, DeployInit);
+                Script = inherits(Script, DeployInit)
+
             } else {
-                Script = inherits(Script, EventEmitter);
+                Script = inherits(Script, EventEmitter)
             }
 
             var script = new Script(conf);

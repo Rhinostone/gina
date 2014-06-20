@@ -104,14 +104,20 @@ ContextHelper = function(contexts) {
                 )
             } else { // mixing class and object
                 var rep = {};
-                for (var f in replaceable) {
-                    if ( typeof(replaceable[f]) != 'function') {
-                        rep[f] = replaceable[f]
+                for (var k in replaceable) {
+                    if ( typeof(replaceable[k]) != 'function') {
+                        rep[k] = replaceable[k]
                     }
                 }
-                return merge(true, whisper(dictionary, rep, rule), replaceable)
-            }
 
+                rep = whisper(dictionary, rep, rule)
+                for (var k in replaceable) {
+                    if ( typeof(rep[k]) != 'undefined') {
+                        replaceable[k] = rep[k]
+                    }
+                }
+                return replaceable
+            }
         }
     }
 

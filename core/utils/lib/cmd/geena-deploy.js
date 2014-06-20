@@ -6,30 +6,46 @@ var helpers = require('../helpers');
 
 Deploy = function(opt) {
 
-    var self = this;
+    var self =  Deploy.instance || this;
+
+
     var error = false;
 
-
-
     this.env = opt.env;
-    this.target = 'deploy@staging.vitrinedemo.com';
 
     var init = function() {
 
         if ( typeof(Deploy.instance) == 'undefined') {
             if ( typeof(opt['set']) != 'undefined') {
+
                 var dic = {};
                 for (var k in opt['set']) {
+                    //normalizing home path alias (nixes only)
+                    if (k == 'target' && opt['set'][k] === '~/') {
+                        opt['set'][k] = '~'
+                    }
+                    //in case you forgot, deploy is excluded
+                    if (k == 'exlude' && opt['set'][k].indexOf('deploy') < 0) {
+                        opt['set'][k].push('deploy')
+                    }
+
                     self[k] = opt['set'][k];
-                    dic[k] = opt['set'][k]
+                    dic[k] = opt['set'][k];
+                }
+
+
+                if ( typeof(self['shared_path']) == 'undefined') {
+                    self['shared_path'] = self.target + '/shared'
+                }
+
+                if ( typeof(self['releases_path']) == 'undefined') {
+                    self['releases_path'] = self.target + '/releases'
                 }
 
                 self = whisper(dic, self)
             }
+
             Deploy.instance = self;
-            return self;
-        } else {
-            return Deploy.instance
         }
     }
 
@@ -39,17 +55,19 @@ Deploy = function(opt) {
             throw new Error('Windows platform not supported yet for command line forward');
             process.exit(1)
         }
-        var cmd = spawn('ssh', [ self.target, cmdline ]);
+
+        var cmd = spawn('ssh', [ self.user +'@'+ self.server, cmdline ]);
 
         var result;
         var hasCalledBack = false;
+        var e = this;
 
         cmd.stdout.on('data', function(data) {
             var str = data.toString();
             var lines = str.split(/(\r?\n)/g);
             result = lines.join("");
 
-            self.emit('deploy#data', result);
+            e.emit('deploy#data', result);
         });
 
         // Errors are readable in the onComplete callback
@@ -57,42 +75,37 @@ Deploy = function(opt) {
             var str = err.toString();
             error = str;
 
-            self.emit('deploy#err', str);
+            e.emit('deploy#err', str);
         });
 
         cmd.on('close', function (code) {
             //console.log('closing...', code);
             if (code == 0 ) {
-                self.emit('deploy#completed', error, result);
+                e.emit('deploy#completed', error, result);
             } else {
                 err = new Error('project init encountered an error: ' + error);
-                self.emit('deploy#completed', error, result)
+                e.emit('deploy#completed', error, result)
             }
         });
 
-        var _this = this;
-
-
         this.onData = function(callback) {
 
-            self.on('deploy#data', function(data) {
+            e.on('deploy#data', function(data) {
                 callback(data)
             });
 
-            self.on('deploy#err', function(err, data) {
+            e.on('deploy#err', function(err, data) {
                 callback(err, data)
             });
-
-            return _this
         }
 
         this.onComplete = function(callback) {
-            self.once('deploy#completed', function(err, data) {
+            e.once('deploy#completed', function(err, data) {
                 callback(err, data)
-            })
+            });
         };
 
-        return this
+        return this;
     }
 
     this.onComplete = function(callback) {
