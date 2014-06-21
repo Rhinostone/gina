@@ -8,8 +8,9 @@ Deploy = function(opt) {
 
     var self =  Deploy.instance || this;
 
-
     var error = false;
+
+    var hosts = {};
 
     this.env = opt.env;
 
@@ -54,106 +55,109 @@ Deploy = function(opt) {
                 self['releases_path'] = self.target + '/releases'
             }
 
+            if ( typeof(self['host']) == 'undefined') {
+                self['host'] = self.user +'@'+ self.server
+            }
+
             self = whisper(dic, self)
         }
 
         Deploy.instance = self;
-        self.emit('init#completed', false);
+
+        self.emit('init#complete', false)
     }
 
-//    var init = function() {
-//
-//        if ( typeof(Deploy.instance) == 'undefined') {
-//            if ( typeof(opt['set']) != 'undefined') {
-//
-//                var dic = {};
-//                for (var k in opt['set']) {
-//                    //normalizing home path alias (nixes only)
-//                    if (k == 'target' && opt['set'][k] === '~/') {
-//                        opt['set'][k] = '~'
-//                    }
-//
-//                    self[k] = opt['set'][k];
-//                    dic[k] = opt['set'][k];
-//                }
-//
-//
-//                if ( typeof(self['shared_path']) == 'undefined') {
-//                    self['shared_path'] = self.target + '/shared'
-//                }
-//
-//                if ( typeof(self['releases_path']) == 'undefined') {
-//                    self['releases_path'] = self.target + '/releases'
-//                }
-//
-//                self = whisper(dic, self)
-//            }
-//
-//            Deploy.instance = self;
-//        }
-//    }
+    this.getIgnoreList = function() {
+        var list = [];
+        var path = getPath('root') + '/deploy/' + self.env + '/.ignore';
 
-    this.run = function(cmdline) {
+        if ( fs.existsSync(path) ) {
+            var arr = fs.readFileSync(path).toString().split(/\n/);
+            var tmp =''
+            for (var i=0; i<arr.length; ++i) {
+                tmp = arr[i].trim();
+                if ( tmp.substr(0, 1) != "#" && tmp!= '') {
+                    if (tmp.indexOf('#') > -1) {
+                        tmp = tmp.substr(0, tmp.indexOf('#')).trim()
+                    }
+                    list.push(tmp)
+                }
+            }
+        }
+        return list;
+    }
 
+
+    this.run = function(cmdline, runLocal) {
+        var cmd;
         if ( isWin32() ) {
             throw new Error('Windows platform not supported yet for command line forward');
             process.exit(1)
         }
+        if ( typeof(runLocal) != 'undefined' && runLocal == true ) {
+            // cmdline must be an array !!
+            cmd = spawn(cmdline.splice(0,1).toString(), cmdline);
+        } else {
+            cmd = spawn('ssh', [ self.host, cmdline ]);
+        }
 
-        var cmd = spawn('ssh', [ self.user +'@'+ self.server, cmdline ]);
 
-        var result;
+        var result, error = false;
         var hasCalledBack = false;
-        var e = this;
+        var e = self;
 
         cmd.stdout.on('data', function(data) {
             var str = data.toString();
             var lines = str.split(/(\r?\n)/g);
             result = lines.join("");
-
-            e.emit('deploy#data', result);
+            //result += data;
+            e.emit('run#data', result);
         });
+        //cmd.stdout.pipe(process.stdout);
 
         // Errors are readable in the onComplete callback
         cmd.stderr.on('data',function (err) {
             var str = err.toString();
             error = str;
-
-            e.emit('deploy#err', str);
+            e.emit('run#err', str);
         });
 
         cmd.on('close', function (code) {
             //console.log('closing...', code);
             if (code == 0 ) {
-                e.emit('deploy#completed', error, result);
+                e.emit('run#complete', error, result);
             } else {
-                err = new Error('project init encountered an error: ' + error);
-                e.emit('deploy#completed', error, result)
+                error = new Error('project init encountered an error: ' + error);
+                e.emit('run#complete', error, result)
             }
         });
 
         this.onData = function(callback) {
 
-            e.on('deploy#data', function(data) {
+            e.on('run#data', function(data) {
                 callback(data)
             });
 
-            e.on('deploy#err', function(err, data) {
+            e.on('run#err', function(err, data) {
                 callback(err, data)
             });
+
+            return e
         }
 
         this.onComplete = function(callback) {
-            e.once('deploy#completed', function(err, data) {
+            e.once('run#complete', function(err, data) {
                 callback(err, data)
             });
+
+            return e
         };
 
-        return this;
+        return self;
     }
 
     this.onComplete = function(callback) {
-        self.once('deploy#init' , function(err) {
+        self.once('init#complete' , function(err) {
             if (!err) {
                 console.log('init completed')
             }

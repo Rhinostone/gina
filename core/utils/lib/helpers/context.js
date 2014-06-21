@@ -89,31 +89,29 @@ ContextHelper = function(contexts) {
      * @return {object} revealed
      * */
     whisper = function(dictionary, replaceable, rule) {
+        var s, key;
         if ( typeof(rule) != 'undefined') {
             return replaceable.replace(rule, function(s, key) {
                 return dictionary[key] || s;
             })
         } else {
 
-            if (typeof(replaceable) != 'function') {
+            if ( typeof(replaceable) != 'function' &&  /Object/.test(replaceable.constructor) ) {
                 replaceable = JSON.stringify(replaceable, null, 2);
                 return JSON.parse(
                     replaceable.replace(/\{(\w+)\}/g, function(s, key) {
                         return dictionary[key] || s;
                     })
                 )
-            } else { // mixing class and object
-                var rep = {};
-                for (var k in replaceable) {
-                    if ( typeof(replaceable[k]) != 'function') {
-                        rep[k] = replaceable[k]
-                    }
-                }
-
-                rep = whisper(dictionary, rep, rule)
-                for (var k in replaceable) {
-                    if ( typeof(rep[k]) != 'undefined') {
-                        replaceable[k] = rep[k]
+            } else { // mixing with classes
+                for (var attr in replaceable) {
+                    if ( typeof(replaceable[attr]) != 'function') {
+                        replaceable[attr] = (typeof(replaceable[attr]) != 'string' && typeof(replaceable[attr]) != 'object') ? JSON.stringify(replaceable[attr], null, 2) : replaceable[attr];
+                        if (replaceable[attr] && typeof(replaceable[attr]) != 'object') {
+                            replaceable[attr] = replaceable[attr].replace(/\{(\w+)\}/g, function(s, key) {
+                                return dictionary[key] || s;
+                            })
+                        }
                     }
                 }
                 return replaceable

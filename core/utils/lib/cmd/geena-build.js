@@ -116,11 +116,10 @@ BuildBundle = function(project, bundle) {
 
                 var targetObj = new _(target);
                 targetObj.rm( function(err) {
-
-                var sourceObj = new _(source)
-                    .cp(target, excluded, function(err) {
-                        self.emit('build#complete', err, version)
-                    })
+                    var sourceObj = new _(source)
+                        .cp(target, excluded, function(err) {
+                            self.emit('build#complete', err, version)
+                        })
                 })
             })
         } catch (err) {

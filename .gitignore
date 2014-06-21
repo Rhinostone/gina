@@ -13,6 +13,7 @@ VERSION
 # SCM
 .svn
 .git
+test/workspace
 
 # Desktop
 .DS_Store
