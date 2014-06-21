@@ -495,22 +495,19 @@ var AppCommand = {
             process.exit(1);
         }
 
-        var path = getPath('root') + '/deploy/'+ this.env + '/'+(opt||'script')+'.js';
+        var root = getPath('root') + '/deploy';
+        var file = (opt) ? opt : 'script'; // init, or custom script
 
-        if ( !fs.existsSync(path) ) {
-            console.warn(path + ' not found');
-        } else {
+        var path = ( typeof(conf.strategy) != 'undefined' && opt == '' ) ? root +'/bin/'+ conf.strategy + '.js' : root +'/'+ this.env + '/' + file+'.js';
+
+        if ( fs.existsSync(path) ) {
             var Script = require( path );
-            if (opt == 'init') {
-                var DeployInit = require('./geena-deploy');
-                DeployInit = inherits(DeployInit, EventEmitter);
-                Script = inherits(Script, DeployInit)
-            } else {
-                Script = inherits(Script, EventEmitter)
-            }
+            var DeployInit = require('./geena-deploy');
+
+            DeployInit = inherits(DeployInit, EventEmitter);
+            Script = inherits(Script, DeployInit);
 
             var script = new Script(conf);
-            script.init()
         }
     },
     restart : function(opt) {
