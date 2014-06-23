@@ -10,36 +10,44 @@ DeleteBundle = function(project, env, bundle) {
     var reserved = [ 'framework' ];
     self.task = 'delete';//important for later in config init
 
-    this.init = function() {
+    this.init = this.onInitialize = function (cb) {
         if (self.initialized == undefined) {
             self.initialized = true;
-
-            if ( reserved.indexOf(bundle) > -1 ) {
-                console.log('[ '+bundle+' ] is a reserved name. Please, try something else.');
-                process.exit(1)
-            }
-            self.root = getPath('root');
-
-            try {
-                self.project = project;
-                self.projectData = require(project);
-                self.env = env;
-                if ( !fs.existsSync(env) ) {
-                    fs.writeFileSync(env, '{}')
-                }
-                self.envData = require(env);
-
-                self.bundle = bundle;
-
-                console.log('removing', bundle);
-
-                deleteBundle()
-            } catch (err) {
-                console.error(err.stack);
-                process.exit(1)
+            if (typeof(cb) != 'undefined' && typeof(cb) == 'function') {
+                cb(init)
+            } else {
+                init()
             }
         }
+
         return self
+    }
+
+    var init = function() {
+        if ( reserved.indexOf(bundle) > -1 ) {
+            console.log('[ '+bundle+' ] is a reserved name. Please, try something else.');
+            process.exit(1)
+        }
+        self.root = getPath('root');
+
+        try {
+            self.project = project;
+            self.projectData = require(project);
+            self.env = env;
+            if ( !fs.existsSync(env) ) {
+                fs.writeFileSync(env, '{}')
+            }
+            self.envData = require(env);
+
+            self.bundle = bundle;
+
+            console.log('removing', bundle);
+
+            deleteBundle()
+        } catch (err) {
+            console.error(err.stack);
+            process.exit(1)
+        }
     }
 
     var deleteBundle = function() {
@@ -100,6 +108,7 @@ DeleteBundle = function(project, env, bundle) {
         self.once('delete#complete', function(err) {
             callback(err)
         })
+        return self
     }
 };
 
