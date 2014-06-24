@@ -32,22 +32,50 @@ AddBundle = function(opt, project, env, bundle) {
             }
             self.envData = require(env);
 
-            if ( typeof(self.projectData.bundles[bundle]) == 'undefined' ) {
-                self.bundle = bundle;
-                console.log('adding', bundle);
-                makeBundle()
-            } else {
-                console.error('Bundle [ '+bundle+' ] already exists !');
-                process.exit(0);
-            }
+            self.bundle = bundle;
+            console.log('adding', bundle);
+            run()
+
         } catch (err) {
             console.error(err.stack);
             process.exit(1)
         }
     }
 
-    var makeBundle = function() {
+    var run = function() {
+        if ( typeof(self.projectData.bundles[self.bundle]) == 'undefined' ) {
+            makeBundle()
+        } else {
+            rl.setPrompt('Bundle [ '+ self.bundle +' ] already exists. Do you want to override ? (yes|no) > ');
+            rl.prompt();
 
+            rl.on('line', function(line) {
+                switch( line.trim().toLowerCase() ) {
+                    case 'y':
+                    case 'yes':
+                        delete self.projectData.bundles[self.bundle];
+                        var conf = self.conf;
+                        var src = _(self.root +'/'+ conf.src +'/'+ self.bundle);
+                        fs.rmdirSync(src);
+                        makeBundle();
+                        break;
+                    case 'n':
+                    case 'no':
+                        process.exit(0);
+                        break;
+                    default:
+                        console.log('Please, write "yes" to proceed or "no" to cancel. ');
+                        rl.prompt();
+                        break;
+                }
+            }).on('close', function() {
+                console.log('exiting bundle installation');
+                process.exit(0)
+            })
+        }
+    }
+
+    var makeBundle = function() {
         try {
             saveEnvFile(function doneSavingEnv(err){
                 if (err) {
@@ -60,36 +88,6 @@ AddBundle = function(opt, project, env, bundle) {
                     }
                     self.conf = content.bundles[self.bundle];
                     createBundle();
-                    //erase if exists
-                    if ( typeof(content.bundles[self.bundle]) != 'undefined' ) {
-
-                        rl.setPrompt('Bundle [ '+ self.bundle +' ] already exists. Do you want to override ? (yes|no) > ');
-                        rl.prompt();
-
-                        rl.on('line', function(line) {
-                            switch( line.trim().toLowerCase() ) {
-                                case 'y':
-                                case 'yes':
-                                    delete content.bundles[bundle];
-                                    createBundle();
-                                    break;
-                                case 'n':
-                                case 'no':
-                                    process.exit(0);
-                                    break;
-                                default:
-                                    console.log('Please, write "yes" to proceed or "no" to cancel. ');
-                                    rl.prompt();
-                                    break;
-                            }
-                        }).on('close', function() {
-                            console.log('exiting bundle installation');
-                            process.exit(0)
-                        })
-
-                    } else {
-                        createBundle()
-                    }
                 })
             })
         } catch (err) {
