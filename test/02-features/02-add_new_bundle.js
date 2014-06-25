@@ -27,8 +27,8 @@ AddBundle = function(conf, exports) {
         var path = _( workspace.toString() );
         process.chdir(path);//CD command like.
 
-        var outFile = _(__dirname+'/add_out.log');
-        var errFile = _(__dirname+'/add_err.log');
+        var outFile = _(__dirname+'/out.log');
+        var errFile = _(__dirname+'/err.log');
         var out = fs.openSync(outFile, 'a');
         var err = fs.openSync(errFile, 'a');
 
@@ -56,11 +56,13 @@ AddBundle = function(conf, exports) {
         init.on('close', function (code) {
             try {
                 if (fs.existsSync(errFile)) {
-                    init.emit('stderr', code, fs.readFileSync(errFile));
+                    init.emit('stderr', fs.readFileSync(errFile));
+                    fs.closeSync(err);
                     fs.unlinkSync(errFile)
                 }
                 if (fs.existsSync(outFile)) {
                     init.emit('stdout', code, fs.readFileSync(outFile));
+                    fs.closeSync(out);
                     fs.unlinkSync(outFile)
                 }
             } catch (err) {
