@@ -11,50 +11,68 @@ InitProject = function(conf, exports) {
     var tmp = conf.tmp;
     var workspace = new _(conf.target);
 
-    var fileCreated = false;
-    var hasDefaultStructure = false;
+    var makeProjectDone = false;
+    var testProjectStructureDone = false;
+    self.projectCreated = false;
+    self.projectDefaultStructure = false;
 
     this.projectName = 'my_project'; // will be shared ib others tests
 
 
     var makeProject = function(callback) {
+        makeProjectDone = true;
+
         var path = _( workspace.toString() );
         process.chdir(path);//CD command like.
-        var cmd = (isWin32()) ? 'geena' : './geena';
-        var init = spawn(cmd, [ '--init', self.projectName ]);
-        var success = false;
 
-        init.stdout.setEncoding('utf8');
-        init.stdout.on('data', function(data) {
+        var outFile = _(__dirname+'/out.log');
+        var errFile = _(__dirname+'/err.log');
+        var out = fs.openSync(outFile, 'a');
+        var err = fs.openSync(errFile, 'a');
+
+        var cmd = (isWin32()) ? '.geena' : './geena';
+        var init = spawn('node', [ cmd, '--init', self.projectName ], {stdio: [ 'ignore', out, err ]});
+
+        //init.stdout.setEncoding('utf8');
+        init.on('stdout', function(code, data) {
             var str = data.toString();
             var lines = str.split(/(\r?\n)/g);
-            //console.log(lines.join(""));
-            if (/project \[ my_project \] ready/.test(lines)) {
-                success = true;
+            if (/project \[ my_project \] ready/.test(lines) && !code) {
+                callback(false)
+            } else {
+                callback('project init process stopped with error code ' + code)
             }
         });
 
-        init.stderr.on('data',function (err) {
-
+        init.on('stderr',function (err) {
             var str = err.toString();
             var lines = str.split(/(\r?\n)/g);
-
-            if ( !str.match("Already on") ) {
+            if (!str.match("Already on") ) {
                 console.log(lines.join(""))
             }
         });
 
         init.on('close', function (code) {
-            if (!code && success) {
-                callback(false)
-            } else {
-                callback('project init process stopped with error code ' + code)
+            try {
+                if (fs.existsSync(errFile)) {
+                    init.emit('stderr', fs.readFileSync(errFile));
+                    fs.closeSync(err);
+                    fs.unlinkSync(errFile)
+                }
+                if (fs.existsSync(outFile)) {
+                    init.emit('stdout', code, fs.readFileSync(outFile));
+                    fs.closeSync(out);
+                    fs.unlinkSync(outFile)
+                }
+            } catch (err) {
+                callback(err.stack)
             }
         })
-    };
+    }
 
     var testProjectStructure = function(callback) {
         try {
+            testProjectStructureDone = true;
             var project = require(_(workspace.toString() + '/project.json') );
             var isConform = true;
             if (
@@ -67,25 +85,25 @@ InitProject = function(conf, exports) {
         } catch(err) {
             callback(err)
         }
-    };
+    }
 
     exports['Project Init'] = {
 
         setUp: function (callback) {
-            if (!fileCreated) {
+            if (!makeProjectDone) {
                 makeProject( function(err){
                     if (!err) {
-                        fileCreated = true
+                        self.projectCreated = true
                     }
                     callback()
                 })
-            } else if (!hasDefaultStructure) {
+            } else if (!testProjectStructureDone) {
                 testProjectStructure( function(err, isConform) {
                     if (!err) {
-                        hasDefaultStructure = isConform
+                        self.projectDefaultStructure = isConform
                     }
-                });
-                callback()
+                    callback()
+                })
             } else {
                 callback()
             }
@@ -97,12 +115,12 @@ InitProject = function(conf, exports) {
 //        },
 
         'Had created project file' : function(test) {
-            test.equal(fileCreated, true);
+            test.equal(self.projectCreated, true);
             test.done()
         },
 
         'Project has default structure' : function(test) {
-            test.equal(hasDefaultStructure, true);
+            test.equal(self.projectDefaultStructure, true);
             test.done()
         }
     }
