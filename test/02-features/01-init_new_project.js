@@ -11,109 +11,65 @@ InitProject = function(conf, exports) {
     var tmp = conf.tmp;
     var workspace = new _(conf.target);
 
-    var fileCreated = false;
-    var hasDefaultStructure = false;
-    self.makeProjectDone = false;
-    self.testProjectStructureDone = false;
+    var makeProjectDone = false;
+    var testProjectStructureDone = false;
+    self.projectCreated = false;
+    self.projectDefaultStructure = false;
+
     this.projectName = 'my_project'; // will be shared ib others tests
 
 
     var makeProject = function(callback) {
-        self.makeProjectDone = true;
+        makeProjectDone = true;
 
-        if (isWin32()) {
-            makeProjectWin32(callback)
-        } else {
-            makeProjectDefault(callback)
-        }
-
-    }
-
-    var makeProjectDefault = function(callback) {
         var path = _( workspace.toString() );
         process.chdir(path);//CD command like.
 
-        var success = false;
-        var init = spawn('./geena', [ '--init', self.projectName ]);
+        var outFile = _(__dirname+'/init_out.log');
+        var errFile = _(__dirname+'/init_err.log');
+        var out = fs.openSync(outFile, 'a');
+        var err = fs.openSync(errFile, 'a');
 
-        init.stdout.setEncoding('utf8');
-        init.stdout.on('data', function(data) {
+        var init = spawn('node', [ '.geena', '--init', self.projectName ], {stdio: [ 'ignore', out, err ]});
+
+        //init.stdout.setEncoding('utf8');
+        init.on('stdout', function(code, data) {
             var str = data.toString();
             var lines = str.split(/(\r?\n)/g);
-            //console.log(lines.join(""));
-            if (/project \[ my_project \] ready/.test(lines)) {
-                success = true;
+            if (/project \[ my_project \] ready/.test(lines) && !code) {
+                callback(false)
+            } else {
+                callback('project init process stopped with error code ' + code)
             }
         });
 
-        init.stderr.on('data',function (err) {
+        init.on('stderr',function (err) {
             var str = err.toString();
             var lines = str.split(/(\r?\n)/g);
-
-            if ( !str.match("Already on") ) {
+            if (!str.match("Already on") ) {
                 console.log(lines.join(""))
             }
         });
 
         init.on('close', function (code) {
-            if (!code && success) {
-                callback(false)
-            } else {
-                callback('project init process stopped with error code ' + code)
-            }
-        })
-    }
-
-    var makeProjectWin32 = function(callback) {
-        var path = _( workspace.toString() );
-        process.chdir(path);//CD command like.
-
-        var outFile = _(__dirname+'/out.log');
-        var errFile = _(__dirname+'/err.log');
-        var out = fs.openSync(outFile, 'a');
-        var err = fs.openSync(errFile, 'a');
-
-        var success = false;
-        var init = spawn('node', [ '.geena', '--init', self.projectName ], {stdio: [ 'ignore', out, err ]});
-
-
-        init.on('close', function (code) {
-//            setTimeout( function closedSpawn () {
             try {
-                var str;
-                var lines;
-                if (fs.existsSync(outFile)) {
-                    str = fs.readFileSync(outFile).toString();
-                    lines = str.split(/(\r?\n)/g);
-                    if (/project \[ my_project \] ready/.test(lines)) {
-                        success = true
-                    }
-                    fs.unlinkSync(outFile)
-                }
                 if (fs.existsSync(errFile)) {
-                    str = fs.readFileSync(errFile).toString();
-                    lines = str.split(/(\r?\n)/g);
-
-                    if ( !str.match("Already on") ) {
-                        console.log(lines.join(""))
-                    }
+                    init.emit('stderr', code, fs.readFileSync(errFile));
                     fs.unlinkSync(errFile)
                 }
-                if (!code && success) {
-                    callback(false)
-                } else {
-                    callback('project init process stopped with error code ' + code)
+                if (fs.existsSync(outFile)) {
+                    init.emit('stdout', code, fs.readFileSync(outFile));
+                    fs.unlinkSync(outFile)
                 }
             } catch (err) {
                 callback(err.stack)
             }
-//            }, 2000)
         })
     }
 
     var testProjectStructure = function(callback) {
         try {
-            self.testProjectStructureDone = true;
+            testProjectStructureDone = true;
             var project = require(_(workspace.toString() + '/project.json') );
             var isConform = true;
             if (
@@ -131,20 +87,20 @@ InitProject = function(conf, exports) {
     exports['Project Init'] = {
 
         setUp: function (callback) {
-            if (!self.makeProjectDone) {
+            if (!makeProjectDone) {
                 makeProject( function(err){
                     if (!err) {
-                        fileCreated = true
+                        self.projectCreated = true
                     }
                     callback()
                 })
-            } else if (!self.testProjectStructureDone) {
+            } else if (!testProjectStructureDone) {
                 testProjectStructure( function(err, isConform) {
                     if (!err) {
-                        hasDefaultStructure = isConform
+                        self.projectDefaultStructure = isConform
                     }
                     callback()
-                });
+                })
             } else {
                 callback()
             }
@@ -156,12 +112,12 @@ InitProject = function(conf, exports) {
 //        },
 
         'Had created project file' : function(test) {
-            test.equal(fileCreated, true);
+            test.equal(self.projectCreated, true);
             test.done()
         },
 
         'Project has default structure' : function(test) {
-            test.equal(hasDefaultStructure, true);
+            test.equal(self.projectDefaultStructure, true);
             test.done()
         }
     }
