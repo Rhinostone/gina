@@ -7,11 +7,8 @@ var helpers = require('../helpers');
 Deploy = function(opt) {
 
     var self =  Deploy.instance || this;
-
     var error = false;
-
     var hosts = {};
-
     this.env = opt.env;
 
     this.init = this.onInitialize = function(cb) {
@@ -41,6 +38,19 @@ Deploy = function(opt) {
                 if (k == 'target' && opt['set'][k] === '~/') {
                     opt['set'][k] = '~'
                 }
+                // by default
+                if (k == 'target') {
+                    self['releases_path'] = opt['set'][k] +'/releases';
+                    dic['releases_path'] = opt['set'][k] +'/releases';
+                    if (opt.set.release != 'undefined') {
+                        self.release = opt.set.release
+                    } else {
+                        self.release = self.makeReleaseNumber()
+                    }
+                    self['release_path'] = self['releases_path'] + '/' + self.release;
+                    dic['release_path'] = self['releases_path'] + '/' + self.release;
+                }
+
 
                 self[k] = opt['set'][k];
                 dic[k] = opt['set'][k];
@@ -51,15 +61,18 @@ Deploy = function(opt) {
                 self['shared_path'] = self.target + '/shared'
             }
 
-            if ( typeof(self['releases_path']) == 'undefined') {
-                self['releases_path'] = self.target + '/releases'
+            if ( typeof(self['shared']) == 'undefined') {
+                self['shared'] = []
             }
+
 
             if ( typeof(self['host']) == 'undefined') {
                 self['host'] = self.user +'@'+ self.server
             }
 
-            self = whisper(dic, self)
+
+            self = whisper(dic, self);
+            opt = whisper(dic, opt);
         }
 
         Deploy.instance = self;
@@ -87,6 +100,9 @@ Deploy = function(opt) {
         return list;
     }
 
+    this.makeReleaseNumber = function() {
+        return 1123456;
+    }
 
     this.run = function(cmdline, runLocal) {
         var cmd;
@@ -110,10 +126,8 @@ Deploy = function(opt) {
             var str = data.toString();
             var lines = str.split(/(\r?\n)/g);
             result = lines.join("");
-            //result += data;
             e.emit('run#data', result);
         });
-        //cmd.stdout.pipe(process.stdout);
 
         // Errors are readable in the onComplete callback
         cmd.stderr.on('data',function (err) {
@@ -125,10 +139,27 @@ Deploy = function(opt) {
         cmd.on('close', function (code) {
             //console.log('closing...', code);
             if (code == 0 ) {
-                e.emit('run#complete', error, result);
+                if (runLocal) {
+                    e.emit('run#complete', error, result)
+                } else {
+                    setTimeout( function onClose() {
+                        e.emit('run#complete', error, result)
+                    }, 150)
+                }
+
+
             } else {
-                error = new Error('project init encountered an error: ' + error);
-                e.emit('run#complete', error, result)
+                //error = new Error('project init encountered an error: ' + error);
+                //console.error(error);
+                //process.exit(code);
+                if (runLocal) {
+                    e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
+                } else {
+                    setTimeout( function onClose() {
+                        e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
+                    }, 150)
+                }
+
             }
         });
 
@@ -163,6 +194,40 @@ Deploy = function(opt) {
             }
             callback(err)
         });
+
+        self.once('deploy#complete' , function(err) {
+            if (!err) {
+                console.log('deploy completed')
+            }
+            callback(err)
+        });
+
+
+        return self
+    }
+
+    this.runOnDeployedTasks = function(t) {
+        if ( typeof(opt.tasks) != 'undefined' && typeof(opt.tasks.onDeployed) != 'undefined' && opt.tasks.onDeployed.length > 0) {
+            var tasks = opt.tasks.onDeployed;
+            var t = t || 0;
+            if (t > tasks.length-1) {
+                self.emit('deploy#complete', false)
+            } else {
+                console.info('running: '+ tasks[t]);
+                self
+                    .run(tasks[t])
+                    .onComplete( function(err, msg) {
+                        if (!err) {
+                            self.runOnDeployedTasks(t+1)
+                        } else {
+                            console.error(err.message);
+                            process.exit(1)
+                        }
+                    })
+            }
+        } else {
+            self.emit('deploy#complete', false)
+        }
 
         return self
     }
