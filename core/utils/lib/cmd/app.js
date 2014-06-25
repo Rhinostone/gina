@@ -439,21 +439,25 @@ var AppCommand = {
             var project = _(getPath('root') + '/project.json');
             var projectData = require(project);
             var envPath = _(getPath('root') + '/env.json');
-            var isWorking = true;
+            var isWorking = false;
 
             if (!fs.existsSync(_(getPath('root')+'/bundles/'+bundle))) {
-                var pids = fs.readdirSync(getPath('root')+'/tmp/pid');
-                var i = pids.length-1;
-                var tmpContent = null;
-                while ( i >= 0 && tmpContent == null) {
-                    tmpContent = fs.readFileSync(getPath('root')+'/tmp/pid/'+pids[i]);
-                    if (tmpContent != bundle) {
-                        tmpContent = null
+                if (fs.existsSync(_(getPath('root')+'/tmp/pid'))) {
+                    var pids = fs.readdirSync(getPath('root')+'/tmp/pid');
+                    var i = pids.length-1;
+                    var tmpContent = null;
+                    while ( i >= 0 && tmpContent == null) {
+                        tmpContent = fs.readFileSync(getPath('root')+'/tmp/pid/'+pids[i]);
+                        if (tmpContent != bundle) {
+                            tmpContent = null
+                        }
+                    }
+                    if (tmpContent == null) {
+                        isWorking = false
                     }
                 }
-                if (tmpContent == null) {
-                    isWorking = false
-                }
+            } else {
+                isWorking = true
             }
 
             if ( typeof(bundle) != 'undefined' && typeof(projectData.bundles[bundle]) != 'undefined' && !isWorking) {

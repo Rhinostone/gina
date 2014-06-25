@@ -43,28 +43,110 @@ InstallTest = function(conf, exports) {
         })
     }
 
+//    var runNpmInstall = function(m, callback) {
+//
+//        var path = _( workspace.toString() + '/node_modules/geena' );
+//        process.chdir(path);//CD command like.
+//
+//        var npmInstall = function(callback) {
+//            var npmCmd = ( isWin32() ) ? "npm.cmd" : "npm";
+//            var npm = spawn(npmCmd, [ 'install', self.modules[m] ]);
+//            console.log('\nNow installing: ' + self.modules[m] );
+//            npm.stdout.setEncoding('utf8');
+//            npm.stdout.on('data', function(data) {
+//                var str = data.toString();
+//                var lines = str.split(/(\r?\n)/g);
+//                //console.log(lines.join(""))
+//
+//            });
+//
+//            npm.stderr.on('data',function (err) {
+//
+//                var str = err.toString();
+//                var lines = str.split(/(\r?\n)/g);
+//
+////                if ( !str.match("Already on") ) {
+////                    console.log(lines.join(""))
+////                }
+//                process.stdout.write('.');
+//            });
+//
+//            npm.on('close', function (code) {
+//                process.stdout.write('\n');
+//                if (!code) {
+//                    if (m < self.modules.length-1) {
+//                        ++m;
+//                        runNpmInstall(m, callback)
+//                    } else {
+//                        runPostInstall(callback)
+//                    }
+//
+//                } else {
+//                    //console.log('process exit with error code ' + code)
+//                    callback('process stopped with error code ' + code)
+//                }
+//            })
+//        }(callback);
+//
+//        var runPostInstall = function(callback) {
+//
+//            var path = _( workspace.toString() + '/node_modules/geena' );
+//            process.chdir(path);//CD command like.
+//            var pi = spawn('node', [ 'script/post_install.js' ]);
+//
+//            pi.stdout.setEncoding('utf8');
+//            pi.stdout.on('data', function(data) {
+//                var str = data.toString();
+//                var lines = str.split(/(\r?\n)/g);
+//                console.log(lines.join(""))
+//            });
+//
+//            pi.stderr.on('data',function (err) {
+//
+//                var str = err.toString();
+//                var lines = str.split(/(\r?\n)/g);
+//
+//                if ( !str.match("Already on") ) {
+//                    console.log(lines.join(""))
+//                }
+//            });
+//
+//            pi.on('close', function (code) {
+//                if (!code) {
+//                    self.postInstallDone = true;
+//                    callback(false)
+//                } else {
+//                    callback('post install process stopped with error code ' + code)
+//                }
+//            })
+//        }
+//    }
+
     var runNpmInstall = function(m, callback) {
 
         var path = _( workspace.toString() + '/node_modules/geena' );
         process.chdir(path);//CD command like.
 
         var npmInstall = function(callback) {
+
+            var outFile = _(__dirname+'/out.log');
+            var errFile = _(__dirname+'/err.log');
+            var out = fs.openSync(outFile, 'a');
+            var err = fs.openSync(errFile, 'a');
+
             var npmCmd = ( isWin32() ) ? "npm.cmd" : "npm";
-            var npm = spawn(npmCmd, [ 'install', self.modules[m] ]);
+            var npm = spawn(npmCmd, [ 'install', self.modules[m] ], {stdio: [ 'ignore', out, err ]});
             console.log('\nNow installing: ' + self.modules[m] );
-            npm.stdout.setEncoding('utf8');
-            npm.stdout.on('data', function(data) {
+
+            npm.on('stdout', function(data) {
                 var str = data.toString();
                 var lines = str.split(/(\r?\n)/g);
-                //console.log(lines.join(""))
-
+//                console.log(lines.join(""))
             });
 
-            npm.stderr.on('data',function (err) {
-
+            npm.on('stderr',function (err) {
                 var str = err.toString();
                 var lines = str.split(/(\r?\n)/g);
-
 //                if ( !str.match("Already on") ) {
 //                    console.log(lines.join(""))
 //                }
@@ -72,18 +154,32 @@ InstallTest = function(conf, exports) {
             });
 
             npm.on('close', function (code) {
-                process.stdout.write('\n');
-                if (!code) {
-                    if (m < self.modules.length-1) {
-                        ++m;
-                        runNpmInstall(m, callback)
-                    } else {
-                        runPostInstall(callback)
+                try {
+                    //process.stdout.write('\n');
+                    if (fs.existsSync(errFile)) {
+                        npm.emit('stderr', fs.readFileSync(errFile));
+                        fs.closeSync(err);
+                        fs.unlinkSync(errFile)
                     }
+                    if (fs.existsSync(outFile)) {
+                        npm.emit('stdout', fs.readFileSync(outFile));
+                        fs.closeSync(out);
+                        fs.unlinkSync(outFile)
+                    }
+                    if (!code) {
+                        if (m < self.modules.length-1) {
+                            ++m;
+                            runNpmInstall(m, callback)
+                        } else {
+                            runPostInstall(callback)
+                        }
 
-                } else {
-                    //console.log('process exit with error code ' + code)
-                    callback('process stopped with error code ' + code)
+                    } else {
+                        //console.log('process exit with error code ' + code)
+                        callback('process stopped with error code ' + code)
+                    }
+                } catch (err) {
+                    callback(err.stack)
                 }
             })
         }(callback);
@@ -92,17 +188,22 @@ InstallTest = function(conf, exports) {
 
             var path = _( workspace.toString() + '/node_modules/geena' );
             process.chdir(path);//CD command like.
-            var pi = spawn('node', [ 'script/post_install.js' ]);
 
-            pi.stdout.setEncoding('utf8');
-            pi.stdout.on('data', function(data) {
+
+            var outFile = _(__dirname+'/out.log');
+            var errFile = _(__dirname+'/err.log');
+            var out = fs.openSync(outFile, 'a');
+            var err = fs.openSync(errFile, 'a');
+
+            var pi = spawn('node', [ 'script/post_install.js' ], {stdio: [ 'ignore', out, err ]});
+
+            pi.on('stdout', function(data) {
                 var str = data.toString();
                 var lines = str.split(/(\r?\n)/g);
                 console.log(lines.join(""))
             });
 
-            pi.stderr.on('data',function (err) {
-
+            pi.on('stderr',function (err) {
                 var str = err.toString();
                 var lines = str.split(/(\r?\n)/g);
 
@@ -112,16 +213,29 @@ InstallTest = function(conf, exports) {
             });
 
             pi.on('close', function (code) {
-                if (!code) {
-                    self.postInstallDone = true;
-                    callback(false)
-                } else {
-                    callback('post install process stopped with error code ' + code)
+                try {
+                    if (fs.existsSync(errFile)) {
+                        pi.emit('stderr', fs.readFileSync(errFile));
+                        fs.closeSync(err);
+                        fs.unlinkSync(errFile)
+                    }
+                    if (fs.existsSync(outFile)) {
+                        pi.emit('stdout', fs.readFileSync(outFile));
+                        fs.closeSync(out);
+                        fs.unlinkSync(outFile)
+                    }
+                    if (!code) {
+                        self.postInstallDone = true;
+                        callback(false)
+                    } else {
+                        callback('post install process stopped with error code ' + code)
+                    }
+                } catch (err) {
+                    callback(err.stack)
                 }
             })
         }
     }
-
 
     var hasBinary = function(callback) {
         var file = ( isWin32() ) ? 'geena.bat' : 'geena';
