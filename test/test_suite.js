@@ -69,7 +69,7 @@ var TestSuite = function() {
                 loadScripts(filename)
             } else if ( passed ) {
                 //console.log('suite is : ', files[f]);
-//                if (files[f] == '02-add_new_bundle.js') {
+//                if (files[f] == '01-init_new_project.js') {
                     var Suite = require(filename);
                     if ( typeof(Suite) == 'function') {
                         Suite = inherits(Suite, self.Suite);

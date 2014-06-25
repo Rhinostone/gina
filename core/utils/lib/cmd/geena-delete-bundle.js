@@ -65,7 +65,7 @@ DeleteBundle = function(project, env, bundle) {
                         if (err) {
                             console.log(err.stack)
                         }
-                        console.log('Bundle ['+bundle+'] has been removed to your project with success.');
+                        console.log('Bundle [ '+bundle+' ] has been removed to your project with success.');
                         self.emit('delete#complete', err)
                     })
                 } else {

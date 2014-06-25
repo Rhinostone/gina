@@ -11,110 +11,66 @@ AddBundle = function(conf, exports) {
     var tmp = conf.tmp;
     var workspace = new _(conf.target);
 
-    self.addBundleDone = false;
-    self.testBundleStructureDone = false;
-    self.testJSONFilesDone = false;
-    var bundleCreated = false;
-    var hasDefaultStructure = false;
-    var projectFilesUpdated = false;
+    var addBundleDone = false;
+    var testBundleStructureDone = false;
+    var testJSONFilesDone = false;
+
+    self.bundleCreated = false;
+    self.bundleDefaultStructure = false;
+    self.projectFilesBundleAdded = false;
 
     this.bundleName = 'my_bundle'; // will be shared ib others tests
 
     var addBundle = function(callback) {
-        self.addBundleDone = true;
+        addBundleDone = true;
 
-        if (isWin32()) {
-            addBundleWin32(callback)
-        } else {
-            addBundleDefault(callback)
-        }
-
-    }
-
-    var addBundleDefault = function(callback) {
         var path = _( workspace.toString() );
         process.chdir(path);//CD command like.
 
-        var success = false;
-        var init = spawn('./geena', [ '--add', self.bundleName ]);
+        var outFile = _(__dirname+'/add_out.log');
+        var errFile = _(__dirname+'/add_err.log');
+        var out = fs.openSync(outFile, 'a');
+        var err = fs.openSync(errFile, 'a');
 
-        init.stdout.setEncoding('utf8');
-        init.stdout.on('data', function(data) {
+        var init = spawn('node', [ '.geena', '--add', self.bundleName ], {stdio: [ 'ignore', out, err ]});
+
+        //init.stdout.setEncoding('utf8');
+        init.on('stdout', function(code, data) {
             var str = data.toString();
             var lines = str.split(/(\r?\n)/g);
-            //console.log(lines.join(""));
-            if (/Bundle \[ my_bundle \] has been added to your project with success/.test(lines)) {
-                success = true;
+            if (/Bundle \[ my_bundle \] has been added to your project with success/.test(lines) && !code) {
+                callback(false)
+            } else {
+                callback('bundle add process stopped with error code ' + code)
             }
         });
 
-        init.stderr.on('data',function (err) {
+        init.on('stderr',function (err) {
             var str = err.toString();
             var lines = str.split(/(\r?\n)/g);
-
-            if ( !str.match("Already on") ) {
+            if (!str.match("Already on") ) {
                 console.log(lines.join(""))
             }
         });
 
         init.on('close', function (code) {
-            if (!code && success) {
-                callback(false)
-            } else {
-                callback('bundle add process stopped with error code ' + code)
-            }
-        })
-    }
-
-    var addBundleWin32 = function(callback) {
-        var path = _( workspace.toString() );
-        process.chdir(path);//CD command like.
-
-        var outFile = _(__dirname+'/out.log');
-        var errFile = _(__dirname+'/err.log');
-        var out = fs.openSync(outFile, 'a');
-        var err = fs.openSync(errFile, 'a');
-
-        var success = false;
-        var init = spawn('node', [ '.geena', '--add', self.bundleName ], {stdio: [ 'ignore', out, err ]});
-
-
-        init.on('close', function (code) {
-//            setTimeout( function closedSpawn () {
             try {
-                var str;
-                var lines;
-                if (fs.existsSync(outFile)) {
-                    str = fs.readFileSync(outFile).toString();
-                    lines = str.split(/(\r?\n)/g);
-                    if (/Bundle \[ my_bundle \] has been added to your project with success/.test(lines)) {
-                        success = true
-                    }
-                    fs.unlinkSync(outFile)
-                }
                 if (fs.existsSync(errFile)) {
-                    str = fs.readFileSync(errFile).toString();
-                    lines = str.split(/(\r?\n)/g);
-
-                    if ( !str.match("Already on") ) {
-                        console.log(lines.join(""))
-                    }
+                    init.emit('stderr', code, fs.readFileSync(errFile));
                     fs.unlinkSync(errFile)
                 }
-                if (!code && success) {
-                    callback(false)
-                } else {
-                    callback('bundle add process stopped with error code ' + code)
+                if (fs.existsSync(outFile)) {
+                    init.emit('stdout', code, fs.readFileSync(outFile));
+                    fs.unlinkSync(outFile)
                 }
             } catch (err) {
                 callback(err.stack)
             }
-//            }, 2000)
         })
     }
 
     var testBundleStructure = function(callback) {
-        self.testBundleStructureDone = true;
+        testBundleStructureDone = true;
         try {
             var srcPath = conf.geena +'/core/template/samples/bundle';
             var src = new _( srcPath);
@@ -142,8 +98,7 @@ AddBundle = function(conf, exports) {
         } catch(err) {
             callback(err)
         }
-    };
-
+    }
     var compareFilesBundle = function (srcRoot, dstRoot, element) {
         try {
             var srcPath = srcRoot;
@@ -208,12 +163,14 @@ AddBundle = function(conf, exports) {
         } catch(err) {
             return err
         }
-    };
+    }
 
     var testJSONFiles = function(callback) {
-        self.testJSONFilesDone = true;
+        testJSONFilesDone = true;
         try {
+            delete require.cache[_(workspace + '/project.json', true)];
             var project = require(_(workspace + '/project.json') );
+            delete require.cache[_(workspace + '/env.json', true)];
             var env = require(_(workspace + '/env.json') );
             var isConform = true;
 
@@ -225,7 +182,7 @@ AddBundle = function(conf, exports) {
                     "version": "0.0.1",
                     "link": "bundles/" + self.bundleName
                 }
-            }
+            };
             var envDataCmp = {
                 "dev" : {
                     "host" : "127.0.0.1",
@@ -245,7 +202,7 @@ AddBundle = function(conf, exports) {
                         "http" : 3100
                     }
                 }
-            }
+            };
 
             if (typeof(project['bundles']) != 'undefined' && typeof(project['bundles'][self.bundleName]) != 'undefined') {
                 isConform = isConform && compareObjectJson(project['bundles'][self.bundleName], projectDataCmp);
@@ -264,8 +221,7 @@ AddBundle = function(conf, exports) {
         } catch(err) {
             callback(err)
         }
-    };
-
+    }
     var compareObjectJson = function(element1, element2) {
         if (typeof(element1) == 'object' && typeof(element2) == 'object') {
             var index;
@@ -282,32 +238,32 @@ AddBundle = function(conf, exports) {
         } else {
             return (element1 == element2)
         }
-    };
+    }
 
     exports['Bundle Add'] = {
 
         setUp: function (callback) {
-            if (!self.addBundleDone) {
-                addBundle( function(err){
+            if (!addBundleDone) {
+                addBundle(function (err) {
                     if (!err) {
-                        bundleCreated = true
+                        self.bundleCreated = true
                     }
                     callback()
                 })
-            } else if (!self.testBundleStructureDone) {
-                testBundleStructure( function(err, isConform) {
+            } else if (!testBundleStructureDone) {
+                testBundleStructure(function (err, isConform) {
                     if (!err) {
-                        hasDefaultStructure = isConform
+                        self.bundleDefaultStructure = isConform
                     }
                     callback()
-                });
-            } else if (!self.testJSONFilesDone) {
-                testJSONFiles( function(err, isConform) {
+                })
+            } else if (!testJSONFilesDone) {
+                testJSONFiles(function (err, isConform) {
                     if (!err) {
-                        projectFilesUpdated = isConform
+                        self.projectFilesBundleAdded = isConform
                     }
                     callback()
-                });
+                })
             } else {
                 callback()
             }
@@ -319,17 +275,17 @@ AddBundle = function(conf, exports) {
 //        },
 
         'Had created bundle file' : function(test) {
-            test.equal(bundleCreated, true);
+            test.equal(self.bundleCreated, true);
             test.done()
         },
 
         'Bundle has default structure' : function(test) {
-            test.equal(hasDefaultStructure, true);
+            test.equal(self.bundleDefaultStructure, true);
             test.done()
         },
 
         'Project file has been updated' : function(test) {
-            test.equal(projectFilesUpdated, true);
+            test.equal(self.projectFilesBundleAdded, true);
             test.done()
         }
     }
