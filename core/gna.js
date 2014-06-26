@@ -20,7 +20,7 @@ var utils   = require('./utils');
 
 var Proc    = utils.Proc;
 var server  = require('./server');//TODO require('./server').http
-var Winston = require('./../node_modules/winston');
+var Winston = require('winston');
 var EventEmitter = require('events').EventEmitter;
 var e = new EventEmitter();
 gna.initialized = process.initialized = false;
