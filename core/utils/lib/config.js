@@ -19,7 +19,7 @@ var EventEmitter = require('events').EventEmitter;
  * */
 Config = function() {
 
-    var _this = this, mainConfig;
+    var self = this, mainConfig;
     //this.value = getContext("utils.config.value");
     try {
         this.paths = getContext("paths");
@@ -41,17 +41,17 @@ Config = function() {
         //getting context path thru path helper.
         console.log("asking for dirname ", __dirname);
         var path = new _(__dirname).toUnixStyle();
-        _this.__dirname =  _( path.substring(0, (path.length - 4)) );
+        self.__dirname =  _( path.substring(0, (path.length - 4)) );
 
-        if ( _this.paths.utils == undefined)
-            _this.paths.utils = _this.__dirname
+        if ( self.paths.utils == undefined)
+            self.paths.utils = self.__dirname
 
-        //if (_this.paths == "undefined") {
+        //if (self.paths == "undefined") {
 
         //}
 
 
-        _this.get('geena', 'locals.json', function(err, obj){
+        self.get('geena', 'locals.json', function(err, obj){
 
             if( !err ) {
                 //console.log("LINSTING path ", obj.paths);
@@ -101,27 +101,27 @@ Config = function() {
                 try {
 
                     //You are under geena.utils/lib/...
-                    //console.log("getting in this value ?? ", project, file, _this.value);
-                    if ( typeof(_this.value) != "undefined" ) {
+                    //console.log("getting in this value ?? ", project, file, self.value);
+                    if ( typeof(self.value) != "undefined" ) {
 
                         try {
-                            config = _this.value;//????
+                            config = self.value;//????
                         } catch (err) {
-                            err = 'Utils.Config.get(...) : _this.value['+file+'] : key not found.\n' + err;
+                            err = 'Utils.Config.get(...) : self.value['+file+'] : key not found.\n' + err;
                         }
 
                     } else {
                         //Getting paths.
-                        if ( typeof(_this.paths.root) != "undefined" ) {
-                            //console.error("requiring :=> ",  _this.paths.root + '/.gna/locals.json');
+                        if ( typeof(self.paths.root) != "undefined" ) {
+                            //console.error("requiring :=> ",  self.paths.root + '/.gna/locals.json');
                             try {
-                                config = require(_this.paths.root  + '/.gna/' + file);
-                                _this.value = config;
-                                _this.paths = config["paths"];
+                                config = require(self.paths.root  + '/.gna/' + file);
+                                self.value = config;
+                                self.paths = config["paths"];
 
                             } catch (err) {
                                 //Means that the file was not found..
-                                err = _this.__dirname  + '/.gna/locals.json: project configuration file not found. \n' + err;
+                                err = self.__dirname  + '/.gna/locals.json: project configuration file not found. \n' + err;
                             }
                         }
                     }
@@ -148,14 +148,25 @@ Config = function() {
      *
      * @private
      * */
-    var getSync = function(project){
-        if ( typeof(_this.value) != "undefined" ) {
-            return _this.value;
+    this.getSync = function(project, file){
+        if (typeof(file) == 'undefined') {
+            var file = 'local.json'
+        }
+
+        if ( typeof(self.value) != "undefined" ) {
+            return self.value;
         } else {
+            var filename = self.paths.root +'/.gna/'+ file;
             try {
-                return require("../.gna/locals.json");
+                if ( fs.existsSync(filename) ) {
+                    return require(filename);
+                } else {
+                    return undefined
+                }
+
             } catch (err) {
-                logger.error('geena', 'UTILS:CONFIG:ERR:6', err, __stack);
+                //logger.error('geena', 'UTILS:CONFIG:ERR:6', err, __stack);
+                console.error(err.stack)
                 return null;
             }
         }
@@ -182,9 +193,9 @@ Config = function() {
         console.error("blabla conf..", file, content);
         var gnaFolder = content.paths.root + '/.gna';
 
-        _this.project = content.project;
+        self.project = content.project;
 
-        _this.paths = paths;
+        self.paths = paths;
 
         //Create path.
         try {
@@ -245,7 +256,7 @@ Config = function() {
 //                    * Will remove this row once the project generator is ready. *
 //                    ************************************************************/
 //                    //Remove all: start with symlink. in order to replace it.
-//                    var path = _this.paths.utils + '/.gna';
+//                    var path = self.paths.utils + '/.gna';
 //
 //                    removeSymlink(path, function(err){
 //                        if (err) logger.error('geena', 'UTILS:CONFIG:ERR:10', err, __stack);
@@ -291,7 +302,7 @@ Config = function() {
                             callback(err);
                         } else {
                             //Trigger.
-                            onSymlinkRemoved(_this.paths, function(err){
+                            onSymlinkRemoved(self.paths, function(err){
                                 if (err) console.error(err.stack);
 
                                 callback(false);
@@ -303,7 +314,7 @@ Config = function() {
                 //log & ignore. This is not a real issue.
                 logger.warn('geena', 'UTILS:CONFIG:WARN:1', 'Path not found: ' + path, __stack);
 
-                onSymlinkRemoved(_this.paths, function(err){
+                onSymlinkRemoved(self.paths, function(err){
                     if (err) logger.error('geena', 'UTILS:CONFIG:ERR:9', err, __stack);
 
                     callback(false);
@@ -406,7 +417,7 @@ Config = function() {
      * */
     var getVar = function(namespace, config) {
         if ( typeof(config) == "undefined" )
-            var config = getSync(app);
+            var config = self.getSync(app);
 
         if (config != null) {
             var split = namespace.split('.'), k=0;
@@ -433,7 +444,7 @@ Config = function() {
      * */
     var getPath = function(app, namespace, callback){
 
-        _this.get(app, function(err, config){
+        self.get(app, function(err, config){
             if (err) {
                 logger.error('geena', 'UTILS:CONFIG:ERR:4', err, __stack);
                 callback(err + 'Utils.Config.get(...)');

@@ -119,7 +119,8 @@ Config  = function(opt) {
                             tmp     : opt.executionPath + '/tmp'
                         },
                         //TODO - Replace property by bundle.
-                        bundles : self.bundlesConfiguration.allBundles
+                        bundles : self.bundlesConfiguration.allBundles,
+                        //envs :
                     }, function(err) {
                         self.Env.loaded = true;
                         self.emit('complete', err, self.bundlesConfiguration)
