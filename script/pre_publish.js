@@ -105,13 +105,15 @@ PrePublish = function() {
         var out = fs.openSync(outFile, 'a');
         var err = fs.openSync(errFile, 'a');
 
+        var result, error = false;
+
         var cmd;
         console.info('running: ' + cmdLine.join(' '));
         cmd = spawn(cmdLine.splice(0,1).toString(), cmdLine, { stdio: [ 'ignore', out, err ] });
         cmd.on('stdout', function(data) {
             var str = data.toString();
             var lines = str.split(/(\r?\n)/g).join('');
-
+            result = lines;
             cb(false, lines)
         });
 
@@ -142,7 +144,8 @@ PrePublish = function() {
                 }
 
             } catch (err) {
-                console.error(err.stack || err.message)
+                error = err.stack || err.message;
+                console.error(error)
             }
 
             if (code == 0 ) {
