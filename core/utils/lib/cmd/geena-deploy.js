@@ -219,19 +219,24 @@ Deploy = function(opt) {
 
             try {
                 var error = ( fs.existsSync(errFile) ) ? fs.readFileSync(errFile).toString() : undefined;
+                //closing
+                fs.closeSync(err);
+                fs.unlinkSync(errFile);
+
                 if (error) {
                     cmd.emit('stderr', new Buffer(error))
                 }
 
                 var data = ( fs.existsSync(outFile) ) ? fs.readFileSync(outFile).toString() : undefined;
+                //closing
+                fs.closeSync(out);
+                fs.unlinkSync(outFile);
+
                 if ( data ) {
                     cmd.emit('stdout', new Buffer(data))
                 }
-                //closing
-                fs.closeSync(err);
-                fs.unlinkSync(errFile);
-                fs.closeSync(out);
-                fs.unlinkSync(outFile)
+
+
             } catch (err) {
                 console.error(err.stack)
             }
@@ -286,7 +291,7 @@ Deploy = function(opt) {
             }
             callback(err)
         });
-        
+
         return self
     }
 

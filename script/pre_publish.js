@@ -9,8 +9,10 @@ var PrePublish;
 
 //Imports.
 var fs      = require('fs');
+var spawn   = require('child_process').spawn;
 var utils   = require('./../core/utils');
-//Don't use events here.
+
+var
 
 PrePublish = function() {
     var self = this;
@@ -19,7 +21,17 @@ PrePublish = function() {
 
     var init = function() {
         self.tasksCount = 0;
-        run()
+        var list = [], i = 0;
+        for(var t in self) {
+            if( typeof(self[t]) == 'function') {
+                list[i] = {
+                    func: self[t],
+                    cb: hasCallback(self[t])
+                }
+                ++i
+            }
+        }
+        run(list)
     },
     count = function() {
         return self.tasksCount;
@@ -27,37 +39,41 @@ PrePublish = function() {
     /**
      * Run tasks - Will run in order of declaration
      * */
-    run = function() {
-        var i = 0;
-        var err = false;
-        var errors = [];
-        var funcs = [];
-        for(var t in self){
-            if( typeof(self[t]) == 'function') {
-                console.log('Running: ', 'self.' + t + '()');
-                //getting arguments
+    run = function(list) {
 
-                console.log('Arguments: ', hasCallback(self[t]));
-                self[t]()
+        var i = self.tasksCount;
 
-//                try {
-//                    var func = 'self.' + t + '()';
-//                    console.log('Running: ', func);
-//                    eval(func);
-//                    ++self.taskCount
-//                } catch (err) {
-//                    //console.error(err.stack)
-//                    errors.push(err)
-//                }
-            }
-            ++i;
-            if (i == self.length) {
-                err = (errors.length > 0) ? errors : false;
-            }
+        if (i > list.length-1) {
+            process.exit(0)
         }
-        if (err) {
-            console.log('Pre Publish done with ('+err.length +') error(s).');
-            //TODO display details.
+
+        var err = false;
+        var cb = ( typeof(list[i].cb) != 'undefined' ) ? list[i].cb : false;
+
+        if (cb) {
+            list[i].func( function done(err, data) {
+                if (err) {
+                    console.error(err.stack||err.message);
+                    process.exit(1)
+                } else {
+                    if (data) {
+                        //var str = data.toString();
+                        console.info(data);
+                    }
+                    ++self.tasksCount;
+                    run(list)
+                }
+
+            })
+        } else {
+            try {
+                list[i].func();
+                ++self.tasksCount;
+                run(list)
+            } catch (err) {
+                console.error(err.stack);
+                process.exit(1)
+            }
         }
     },
     hasCallback = function(func) {
@@ -67,27 +83,93 @@ PrePublish = function() {
         args = args ? (args[1] ? args[1].trim().split(/\s*,\s*/) : []) : null;
 
         if (args.length > 0) {
-            var cb;
-            for (var a = 0; a < args.length; ++a) {
-                console.log('......checking ', args[a]);
-                cb = funcString.match(/callback\s*\(/g);
-                if (cb) {
-                    console.log('.......??? ', cb)
-                    return args[a]
-                }
-            }
+//            var cb;
+//            for (var a = 0; a < args.length; ++a) {
+//                console.log('......checking ', args[a]);
+//                cb = funcString.match(/(callback|cb)\s*\(/g);
+//                if (cb) {
+//                    //console.log('.......??? ', cb);
+//                    return args[a]
+//                }
+//            }
+            return args
         }
 
         return found
     };
 
 
-    this.runTests = function(callback) {
-        console.log('running tests');
-        //callback(false)
+    var exec = function(cmdLine, cb) {
+        var outFile = _('./out.log');
+        var errFile = _('./err.log');
+        var out = fs.openSync(outFile, 'a');
+        var err = fs.openSync(errFile, 'a');
+
+        var cmd;
+        console.info('running: ' + cmdLine.join(' '));
+        cmd = spawn(cmdLine.splice(0,1).toString(), cmdLine, { stdio: [ 'ignore', out, err ] });
+        cmd.on('stdout', function(data) {
+            var str = data.toString();
+            var lines = str.split(/(\r?\n)/g).join('');
+
+            cb(false, lines)
+        });
+
+        cmd.on('stderr', function (err) {
+            var str = err.toString();
+            error = str;
+            cb(str)
+        });
+
+        cmd.on('close', function (code) {
+
+            try {
+                var error = ( fs.existsSync(errFile) ) ? fs.readFileSync(errFile).toString() : undefined;
+                //closing
+                fs.closeSync(err);
+                fs.unlinkSync(errFile);
+
+                if (error) {
+                    cmd.emit('stderr', new Buffer(error))
+                }
+
+                var data = ( fs.existsSync(outFile) ) ? fs.readFileSync(outFile).toString() : undefined;
+                fs.closeSync(out);
+                fs.unlinkSync(outFile);
+
+                if ( data ) {
+                    cmd.emit('stdout', new Buffer(data))
+                }
+
+            } catch (err) {
+                console.error(err.stack || err.message)
+            }
+
+            if (code == 0 ) {
+                cb(error, result)
+            } else {
+                cb( new Error('Prepublish encountered an error: ' + error) )
+            }
+        })
     }
 
-    this.removeComments = function() { console.log('removin comments...')};
+    this.runTests = function(cb) {
+        if ( fs.existsSync(self.path+'/test') ) {
+            exec(['nodeunit', self.path+'/test'], function done(err, data) {
+                if ( /FAILURES\:/.test(data) || !/OK\:/.test(data) ) {
+                    console.info(data);
+                    cb(new Error('Tests failed !! See message above.'))
+                }
+                cb(err, data)
+            })
+            //exec('npm '++'test')
+            //cb(false)
+        } else {
+            cb(false)
+        }
+    }
+
+    this.removeComments = function() { console.log('removin comments ...')};
     this.removeConsoleLog = function() {
 
     };
@@ -95,6 +177,7 @@ PrePublish = function() {
      * Write version number in the VERSION file
      * */
     this.setVersion = function() {
+        console.log('setting version number ...');
         try {
             var version = require( _(self.path + 'package.json') ).version;
             var path = _(self.path + 'VERSION');
