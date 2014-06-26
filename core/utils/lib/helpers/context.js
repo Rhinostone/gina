@@ -96,14 +96,7 @@ ContextHelper = function(contexts) {
             })
         } else {
 
-            if ( typeof(replaceable) != 'function' &&  /Object/.test(replaceable.constructor) ) {
-                replaceable = JSON.stringify(replaceable, null, 2);
-                return JSON.parse(
-                    replaceable.replace(/\{(\w+)\}/g, function(s, key) {
-                        return dictionary[key] || s;
-                    })
-                )
-            } else { // mixing with classes
+            if ( typeof(replaceable) == 'object' &&  !/\[native code\]/.test(replaceable.constructor) ||  typeof(replaceable) == 'function' && /Object/.test(replaceable.constructor) ) { // /Object/.test(replaceable.constructor)
                 for (var attr in replaceable) {
                     if ( typeof(replaceable[attr]) != 'function') {
                         replaceable[attr] = (typeof(replaceable[attr]) != 'string' && typeof(replaceable[attr]) != 'object') ? JSON.stringify(replaceable[attr], null, 2) : replaceable[attr];
@@ -115,6 +108,13 @@ ContextHelper = function(contexts) {
                     }
                 }
                 return replaceable
+            } else { // mixing with classes
+                replaceable = JSON.stringify(replaceable, null, 2);
+                return JSON.parse(
+                    replaceable.replace(/\{(\w+)\}/g, function(s, key) {
+                        return dictionary[key] || s;
+                    })
+                )
             }
         }
     }
