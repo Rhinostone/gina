@@ -53,9 +53,9 @@ AddBundle = function(opt, project, env, bundle) {
                         rollback(err)
                     }
                     self.conf = content.bundles[self.bundle];
-                    createBundle();
+                    ///self.conf = self.projectData.bundles[self.bundle];
                     //erase if exists
-                    if ( typeof(content.bundles[self.bundle]) != 'undefined' ) {
+                    if ( typeof(self.projectData.bundles[self.bundle]) != 'undefined' ) {
 
                         rl.setPrompt('Bundle [ '+ self.bundle +' ] already exists. Do you want to override ? (yes|no) > ');
                         rl.prompt();
