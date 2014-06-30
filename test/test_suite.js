@@ -69,13 +69,13 @@ var TestSuite = function() {
                 loadScripts(filename)
             } else if ( passed ) {
                 //console.log('suite is : ', files[f]);
-//                if (files[f] == '00-install.js') {
+                if (files[f] == '02-add_new_bundle.js') {
                     var Suite = require(filename);
                     if ( typeof(Suite) == 'function') {
                         Suite = inherits(Suite, self.Suite);
                         new Suite(self.config, exports)
                     }
-//                }
+                }
             }
         }
     }
