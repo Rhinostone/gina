@@ -38,8 +38,9 @@
 //        //init.stdout.setEncoding('utf8');
 //        init.on('stdout', function(code, data) {
 //            var str = data.toString();
-//            var lines = str.split(/(\r?\n)/g);
-//            if (/Bundle \[ my_bundle \] has been added to your project with success/.test(lines) && !code) {
+//            //var lines = str.split(/(\r?\n)/g);
+//            var test = 'Bundle [ '+self.bundleName+' ] has been added to your project with success';
+//            if (str.match(test) && !code) {
 //                callback(false)
 //            } else {
 //                callback('bundle add process stopped with error code ' + code)
@@ -108,7 +109,7 @@
 //            var dstPath = dstRoot;
 //            if (element != '') {
 //                srcPath = srcPath+'/'+element;
-//                dstPath = dstRoot+'/'+element;
+//                dstPath = dstPath+'/'+element;
 //            }
 //            var srcStats = fs.statSync( _(srcPath));
 //            var dstStats = fs.statSync( _(dstPath));
@@ -143,22 +144,31 @@
 //                }
 //
 //            } else if (srcStats.isFile() && dstStats.isFile()) {
-//                srcData = fs.readFileSync(_(srcPath));
-//                dstData = fs.readFileSync(_(dstPath));
-//                srcData = (srcData.toString()).split(/(\r?\n)/g);
-//                dstData = (dstData.toString()).split(/(\r?\n)/g);
+//                var testIndexJs = self.bundleName+'/index.js';
+//                var testAppJson = self.bundleName+'/config/app.json';
+//                var testControllerJs = self.bundleName+'/controllers/oontroller.js';
+//                if (dstPath.match(testIndexJs) || dstPath.match(testAppJson) || dstPath.match(testControllerJs)) {
 //
-//                if (srcData.length==dstData.length) {
+//                    srcData = fs.readFileSync(_(srcPath));
+//                    dstData = fs.readFileSync(_(dstPath));
+//                    srcData = srcData.replace('{bundle}', self.bundleName);
+//                    srcData = (srcData.toString()).split(/(\r?\n)/g);
+//                    dstData = (dstData.toString()).split(/(\r?\n)/g);
 //
-//                    i = srcData.length-1;
-//                    for ( ; i >= 0 && isConform; --i) {
-//                        if (dstData[i] != srcData[i]) {
-//                            isConform = false
+//                    if (srcData.length == dstData.length) {
+//
+//                        i = srcData.length - 1;
+//                        for (; i >= 0 && isConform; --i) {
+//                            if (dstData[i] != srcData[i]) {
+//                                isConform = false
+//                            }
 //                        }
+//                        return isConform
+//                    } else {
+//                        return false
 //                    }
-//                    return isConform
 //                } else {
-//                    return false
+//                    return true
 //                }
 //            } else {
 //                return false

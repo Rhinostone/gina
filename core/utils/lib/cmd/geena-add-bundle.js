@@ -31,13 +31,9 @@ AddBundle = function(opt, project, env, bundle) {
         }
         self.envData = require(env);
 
-        if ( typeof(bundle) != 'undefined' ) {
-            self.bundle = bundle;
-            console.log('adding', bundle);
-            makeBundle()
-        } else {
-            console.log('bundle is undefined !')
-        }
+        self.bundle = bundle;
+        console.log('adding', bundle);
+        makeBundle()
     }
 
     var makeBundle = function() {
