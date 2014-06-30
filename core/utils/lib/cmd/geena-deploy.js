@@ -295,6 +295,10 @@ Deploy = function(opt) {
         return self
     }
 
+    var makeStartUpScript = function() {
+
+    }
+
     this.runOnDeployedTasks = function(t) {
         if ( typeof(opt.tasks) != 'undefined' && typeof(opt.tasks.onDeployed) != 'undefined' && opt.tasks.onDeployed.length > 0) {
             var tasks = opt.tasks.onDeployed;
