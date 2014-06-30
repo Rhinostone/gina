@@ -54,16 +54,18 @@ InitProject = function(conf, exports) {
 
         init.on('close', function (code) {
             try {
+                fs.closeSync(err);
                 if (fs.existsSync(errFile)) {
                     init.emit('stderr', fs.readFileSync(errFile));
-                    fs.closeSync(err);
                     fs.unlinkSync(errFile)
                 }
+                fs.closeSync(out);
+                var str = '';
                 if (fs.existsSync(outFile)) {
-                    init.emit('stdout', code, fs.readFileSync(outFile));
-                    fs.closeSync(out);
+                    str = fs.readFileSync(outFile);
                     fs.unlinkSync(outFile)
                 }
+                init.emit('stdout', code, str);
             } catch (err) {
                 callback(err.stack)
             }
