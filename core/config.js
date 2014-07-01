@@ -581,7 +581,24 @@ Config  = function(opt) {
 
             //Can't do a thing without.
             try {
-                files[name] = require(filename)
+                var main = _(appPath +'/config/'+ conf[bundle][env].files[name]);
+                if (cacheless) {
+                    tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
+                    filename = _(appPath + '/config/' + tmp);
+                    if (!fs.existsSync(filename) ) {
+                        filename = _(appPath +'/config/'+ conf[bundle][env].files[name]);
+
+                    }
+                    delete require.cache[_(filename, true)];
+                    files[name] = require(filename);
+                    tmp = '';
+                } else {
+                    filename = main
+                }
+
+                if ( fs.existsSync(main) ) {
+                    files[name] = merge(true, files[name], require(main));
+                }
             } catch (_err) {
 
                 if ( fs.existsSync(filename) ) {
