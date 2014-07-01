@@ -145,33 +145,36 @@ AddBundle = function(conf, exports) {
                 }
 
             } else if (srcStats.isFile() && dstStats.isFile()) {
-                return true
-//                var testIndexJs = self.bundleName+'/index.js';
-//                var testAppJson = self.bundleName+'/config/app.json';
-//                var testControllerJs = self.bundleName+'/controllers/oontroller.js';
-//                if (dstPath.match(testIndexJs) || dstPath.match(testAppJson) || dstPath.match(testControllerJs)) {
-//
-//                    srcData = fs.readFileSync(_(srcPath));
-//                    dstData = fs.readFileSync(_(dstPath));
-//                    srcData = srcData.replace('{bundle}', self.bundleName);
-//                    srcData = (srcData.toString()).split(/(\r?\n)/g);
-//                    dstData = (dstData.toString()).split(/(\r?\n)/g);
-//
-//                    if (srcData.length == dstData.length) {
-//
-//                        i = srcData.length - 1;
-//                        for (; i >= 0 && isConform; --i) {
-//                            if (dstData[i] != srcData[i]) {
-//                                isConform = false
-//                            }
-//                        }
-//                        return isConform
-//                    } else {
-//                        return false
-//                    }
-//                } else {
-//                    return true
-//                }
+                var testIndexJs = (new RegExp(self.bundleName+'/index.js')).test(dstPath);
+                var testAppJson = (new RegExp(self.bundleName+'/config/app.json')).test(dstPath);
+                var testControllerJs = (new RegExp(self.bundleName+'/controllers/oontroller.js')).test(dstPath);
+
+                if (testIndexJs || testAppJson || testControllerJs) {
+                    srcData = (fs.readFileSync(_(srcPath), 'utf8')).toString();
+                    dstData = (fs.readFileSync(_(dstPath), 'utf8')).toString();
+
+                    var upperBundleName = self.bundleName.substring(0, 1).toUpperCase() + self.bundleName.substring(1);
+
+                    srcData = srcData.replace(/\{bundle\}/g, self.bundleName);
+                    srcData = srcData.replace(/\{Bundle\}/g, upperBundleName);
+                    srcData = (srcData.toString()).split(/(\r?\n)/g);
+                    dstData = (dstData.toString()).split(/(\r?\n)/g);
+
+                    if (srcData.length == dstData.length) {
+
+                        i = srcData.length - 1;
+                        for (; i >= 0 && isConform; --i) {
+                            if (dstData[i] != srcData[i]) {
+                                isConform = false
+                            }
+                        }
+                        return isConform
+                    } else {
+                        return false
+                    }
+                } else {
+                    return true
+                }
             } else {
                 return false
             }
