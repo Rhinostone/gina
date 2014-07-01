@@ -156,16 +156,19 @@ InstallTest = function(conf, exports) {
             npm.on('close', function (code) {
                 try {
                     //process.stdout.write('\n');
+                    fs.closeSync(err);
                     if (fs.existsSync(errFile)) {
                         npm.emit('stderr', fs.readFileSync(errFile));
-                        fs.closeSync(err);
                         fs.unlinkSync(errFile)
                     }
+                    fs.closeSync(out);
+                    var str = '';
                     if (fs.existsSync(outFile)) {
-                        npm.emit('stdout', fs.readFileSync(outFile));
-                        fs.closeSync(out);
+                        str = fs.readFileSync(outFile);
                         fs.unlinkSync(outFile)
                     }
+                    npm.emit('stdout', code, str);
+
                     if (!code) {
                         if (m < self.modules.length-1) {
                             ++m;
@@ -214,16 +217,18 @@ InstallTest = function(conf, exports) {
 
             pi.on('close', function (code) {
                 try {
+                    fs.closeSync(err);
                     if (fs.existsSync(errFile)) {
                         pi.emit('stderr', fs.readFileSync(errFile));
-                        fs.closeSync(err);
                         fs.unlinkSync(errFile)
                     }
+                    fs.closeSync(out);
+                    var str = '';
                     if (fs.existsSync(outFile)) {
-                        pi.emit('stdout', fs.readFileSync(outFile));
-                        fs.closeSync(out);
+                        str = fs.readFileSync(outFile);
                         fs.unlinkSync(outFile)
                     }
+                    pi.emit('stdout', code, str);
                     if (!code) {
                         self.postInstallDone = true;
                         callback(false)

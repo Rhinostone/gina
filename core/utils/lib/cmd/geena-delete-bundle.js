@@ -54,21 +54,25 @@ DeleteBundle = function(project, env, bundle) {
         removeFromLogs( function logsRemoved (err) {
             if (err) {
                 console.error(err.stack);
+                process.exit(1)
             }
             cleanFile( function logsRemoved (err) {
                 if (err) {
                     console.error(err.stack);
+                    process.exit(1)
                 }
                 if (fs.existsSync(_(self.root+'/src/'+self.bundle))) {
                     var bundlePath = new _(self.root+'/src/'+self.bundle);
                     bundlePath.rm( function bundleRemoved (err) {
                         if (err) {
-                            console.log(err.stack)
+                            console.log(err.stack);
+                            process.exit(1)
                         }
                         console.log('Bundle [ '+bundle+' ] has been removed to your project with success.');
                         self.emit('delete#complete', err)
                     })
                 } else {
+                    console.log('Bundle [ '+bundle+' ] has been removed to your project with success.');
                     self.emit('delete#complete', err)
                 }
             })
