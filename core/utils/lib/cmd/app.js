@@ -452,8 +452,8 @@ var AppCommand = {
                             tmpContent = null
                         }
                     }
-                    if (tmpContent == null) {
-                        isWorking = false
+                    if (tmpContent != null) {
+                        isWorking = true
                     }
                 }
             } else {
@@ -473,7 +473,7 @@ var AppCommand = {
                     deleteCmd = new DeleteCmd(project, envPath, bundle);
                     deleteCmd.init()
                 }
-            } else if (bundle == undefined) {
+            } else if (typeof(bundle) == 'undefined') {
                 console.log('bundle is undefined !')
             } else if (typeof(projectData.bundles[bundle]) == 'undefined') {
                 console.error('Bundle [ '+bundle+' ] does not exist !')
