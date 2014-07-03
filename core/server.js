@@ -207,16 +207,16 @@ var fs              = require('fs'),
 
         this.instance.all('*', function onInstance(request, response, next) {
 
-            switch(request.method) {
-                case 'GET':
-                    break;
-                case 'POST':
-                    break;
-                case 'PUT':
-                    break;
-                case 'DELETE':
-                    break;
-            }
+//            switch(request.method) {
+//                case 'GET':
+//                    break;
+//                case 'POST':
+//                    break;
+//                case 'PUT':
+//                    break;
+//                case 'DELETE':
+//                    break;
+//            }
 //            this.throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl);
 
             //Only for dev & debug.
