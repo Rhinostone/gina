@@ -1,5 +1,5 @@
-var up  = new (require('./index.js'))();
 var rts  = require('./routing.json');
+var up  = new (require('./index.js'))({fqdn : 'toto.com'}, rts);
 var testMocks  = require('./mocks.json');
 
 
@@ -17,7 +17,7 @@ var mocksTest = function (target) {
             i = 0;
 
             for (; i < testMocks[index].length; ++i) {
-                res = path(rts, testMocks[index][i].route, testMocks[index][i].args);
+                res = up.path(testMocks[index][i].route, testMocks[index][i].args);
                 localWorked = localWorked && (res == testMocks[index][i].result);
                 console.log('route    : ' + testMocks[index][i].route);
                 console.log('args     :', testMocks[index][i].args);
@@ -52,7 +52,7 @@ mocksTest(/.*/)
 
 
 
-
 //var trueRTS  = require('../../config/routing.json');
-//var res = up.path(trueRTS, 'home', { "culture" : 'ger', "toto": "toto"});
+//var up2  = new (require('./index.js'))({fqdn : 'toto.com'}, trueRTS);
+//var res = up.path('home', { "culture" : 'ger', "toto": "toto"});
 //console.log('get      : ' + res);

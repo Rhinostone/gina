@@ -29,6 +29,7 @@ var utils = {
     generator   : require('./lib/generator'),//move to geena.dev
     Proc        : require('./lib/proc'),
     logger      : require('./lib/logger'),
+    url         : require('./lib/url'),
     cmd         : require('./lib/cmd')
 };
 
