@@ -390,9 +390,9 @@ var fs              = require('fs'),
             }
 
         var allowed = (typeof(_this.routing[rule].method) == 'undefined' || _this.routing[rule].method.indexOf(req.method) != -1)
-        if (!allowed) {
-            this.throwError(res, 405, 'Method Not Allowed for [' + this.appName + '] => ' + req.originalUrl);
-        }
+//        if (!allowed) {
+//            this.throwError(res, 405, 'Method Not Allowed for [' + this.appName + '] => ' + req.originalUrl);
+//        }
         if (!matched) {
             if (pathname === '/favicon.ico' && !hasViews) {
                 rese.writeHead(200, {'Content-Type': 'image/x-icon'} );
