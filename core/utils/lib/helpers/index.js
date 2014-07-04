@@ -22,7 +22,6 @@ var Helpers = {
         //Form        : require("./form")(),
         //I18n        : require("./i18n")(),
         path        : require("./path")(),
-        //Url         : require("./url")(),
         context     : require("./context")(),
         model      : require("./model"),
         text        : require("./text")()
