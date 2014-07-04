@@ -390,7 +390,6 @@ Config  = function(opt) {
                     //console.log("Merging..."+ app, "\n", content[app][env], "\n AND \n", template[app][env]);
                     //Mergin user's & template.
                     newContent[app][env] = merge(
-                        true,
                         content[app][env],
                         template["{bundle}"]["{env}"]
                     );

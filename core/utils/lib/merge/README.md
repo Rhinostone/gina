@@ -10,7 +10,7 @@
 Merges the contents of two or more objects together into the first object.
 `merge` is a function from geena.utils, but can be require without having to install the [framework](https://github.com/rhinostone/geena).
 
-**usage:** merge([deep], object1, [objectN])
+**usage:** merge([override], object1, [objectN])
 
 
 **N.B.:** The function allows you to merge json and literal objects.
