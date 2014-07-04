@@ -5,7 +5,7 @@
 var merge = require('../index');// Not needed if the framework installed
 
 var a = {
-    status: 'ko',
+    status: 'ok',
     msg: 'hello world !',
     page: {
         content: 'index.html',
@@ -23,6 +23,6 @@ var b = {
     }
 };
 
-var result = merge(a, b);
+var result = merge(true, a, b);
 
 console.log('result: ', JSON.stringify(result, null, 4));

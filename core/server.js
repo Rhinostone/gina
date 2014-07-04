@@ -119,7 +119,7 @@ var fs              = require('fs'),
         }
 
         //Standalone or shared instance mode. It doesn't matter.
-        for (var i=0; i<apps.length; ++i) {
+        for (var i=0; i<apps.count(); ++i) {
             var appPath = _(this.conf[apps[i]].bundlesPath+ '/' + apps[i]);
             appName =  apps[i];
 
