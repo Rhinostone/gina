@@ -1,7 +1,7 @@
 var merge = require('../index');// Not needed if the framework installed
 
 var a = {
-    status: 'ko',
+    status: 'ok',
     msg: 'hello world !',
     page: {
         content: 'index.html',
@@ -29,13 +29,27 @@ exports['b overrides a'] = function(test) {
 }
 
 exports['Deep override occured'] = function(test) {
+    var res = {
+        "status": "ko",
+            "msg": "hello Jane !",
+            "page": {
+            "content": "home.html",
+                "list": [
+                "apple",
+                "orange",
+                "mango"
+            ],
+                "action": "home",
+                "ext": ".html"
+        }
+    };
     var page = {
         "action": "home",
-        "content": "index.html",
+        "content": "home.html",
         "ext": ".html",
         "list" : ['apple', 'orange', 'mango']
     };
-    test.deepEqual(result.page, page);
+    test.deepEqual(result, res);
 
     test.done()
 }
