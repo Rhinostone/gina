@@ -43,12 +43,6 @@ exports['Deep override occured'] = function(test) {
                 "ext": ".html"
         }
     };
-    var page = {
-        "action": "home",
-        "content": "home.html",
-        "ext": ".html",
-        "list" : ['apple', 'orange', 'mango']
-    };
     test.deepEqual(result, res);
 
     test.done()
