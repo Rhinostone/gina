@@ -86,6 +86,9 @@ var fs              = require('fs'),
                 __stack
             );
 
+            if (_this.hasViews(_this.appName)) {
+                utils.url(_this.conf[_this.appName], _this.routing)
+            }
 
             if (success) {
                 _this.onRequest()
@@ -119,7 +122,7 @@ var fs              = require('fs'),
         }
 
         //Standalone or shared instance mode. It doesn't matter.
-        for (var i=0; i<apps.length); ++i) {
+        for (var i=0; i<apps.length; ++i) {
             var appPath = _(this.conf[apps[i]].bundlesPath+ '/' + apps[i]);
             appName =  apps[i];
 
@@ -206,24 +209,11 @@ var fs              = require('fs'),
             });*/
 
         this.instance.all('*', function onInstance(request, response, next) {
-
-//            switch(request.method) {
-//                case 'GET':
-//                    break;
-//                case 'POST':
-//                    break;
-//                case 'PUT':
-//                    break;
-//                case 'DELETE':
-//                    break;
-//            }
-//            this.throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl);
-
             //Only for dev & debug.
-            _this.loadBundleConfiguration(request, response, next, _this.appName, function(err, pathname, req, res, next) {
+            _this.loadBundleConfiguration(request, response, next, _this.appName, function (err, pathname, req, res, next) {
                 console.log('calling back..');
                 if (err) {
-                    _this.throwError(response, 500, 'Internal server error\n'+ err.stack)
+                    _this.throwError(response, 500, 'Internal server error\n' + err.stack)
                 }
                 _this.handle(req, res, next, pathname)
             });//EO this.loadBundleConfiguration(this.appName, function(err, conf){
@@ -399,12 +389,15 @@ var fs              = require('fs'),
                 }
             }
 
+        var allowed = (typeof(_this.routing[rule].method) == 'undefined' || _this.routing[rule].method.indexOf(req.method) != -1)
+        if (!allowed) {
+            this.throwError(res, 405, 'Method Not Allowed for [' + this.appName + '] => ' + req.originalUrl);
+        }
         if (!matched) {
             if (pathname === '/favicon.ico' && !hasViews) {
                 rese.writeHead(200, {'Content-Type': 'image/x-icon'} );
                 res.end()
             }
-
             this.throwError(res, 404, 'Page not found\n' + pathname)
         }
     },
