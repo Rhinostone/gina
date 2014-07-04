@@ -7,19 +7,22 @@ var merge = require('../index');// Not needed if the framework installed
 var a = {
     status: 'ko',
     msg: 'hello world !',
-    page : { content: 'index.html' }
-}
+    page: {
+        content: 'index.html',
+        list: ['apple', 'orange', 'mango']
+    }
+};
 
 var b = {
-    "status": "ok",
-    "msg": "hello world !",
+    "status": "ko",
+    "msg": "hello Jane !",
     "page": {
-        "action": "toto",
-        "ext" : ".html",
-        "content" : "home.html"
+        "action": "home",
+        "ext": ".html",
+        "content": "home.html"
     }
-}
+};
 
-var result = merge(true, a, b);
+var result = merge(a, b);
 
 console.log('result: ', JSON.stringify(result, null, 4));

@@ -12,6 +12,7 @@ Merge = function () {
      * */
     var init = browse = function () {
         var target = arguments[0] || {};
+
         var i = 1;
         var length = arguments.length;
         var deep = false;
