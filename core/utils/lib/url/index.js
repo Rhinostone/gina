@@ -17,12 +17,12 @@ Url = function(env, routes) {
     }
 
     // ON going, will return full url.
-    this.url = function(route, args) {
-        return self.base+self.path(route, args)
+    url = function(route, args) {
+        return self.base+path(route, args)
     }
 
     // Give route + arguments, Return url filled with argument.
-    this.path = function(route, args) {
+    path = function(route, args) {
         var url = 'undefined';
 
         // If the route exists.
