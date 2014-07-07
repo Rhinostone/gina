@@ -1,8 +1,3 @@
-/**
- * - Copies and preserve first object keys & values
- * - Adds new keys & values from others objects
- * */
-'use strict';
 var merge = require('../index');// Not needed if the framework installed
 
 var aNO = {
@@ -13,7 +8,6 @@ var aNO = {
         "mirror, mirror"
     ]
 };
-
 var bNO = {
     "actor": "tom hanks",
     "job": "actor",
@@ -22,7 +16,6 @@ var bNO = {
         "forrest gump"
     ]
 };
-
 var cNO = {
     "singer": "michael jackson",
     "job": "singer",
@@ -31,20 +24,24 @@ var cNO = {
         "The Wiz"
     ]
 };
-
 var resultNO = merge(aNO, bNO, cNO);
-console.log(JSON.stringify(resultNO, null, 4));
-//=>
-//{
-//    "actress": "julia roberts",
-//    "job": "actress",
-//    "films": [
-//        "pretty woman",
-//        "mirror, mirror"
-//    ],
-//    "actor": "tom hanks",
-//    "singer": "michael jackson"
-//}
+exports['Merge without override occured'] = function(test) {
+    var res = {
+        "actress": "julia roberts",
+        "job": "actress",
+        "films": [
+            "pretty woman",
+            "mirror, mirror"
+        ],
+        "actor": "tom hanks",
+        "singer": "michael jackson"
+    }
+    test.equal( typeof(resultNO), 'object' );
+    test.deepEqual(resultNO, res);
+
+    test.done()
+}
+
 
 var a = {
     "actress": "julia roberts",
@@ -54,7 +51,6 @@ var a = {
         "mirror, mirror"
     ]
 };
-
 var b = {
     "actor": "tom hanks",
     "job": "actor",
@@ -63,7 +59,6 @@ var b = {
         "forrest gump"
     ]
 };
-
 var c = {
     "singer": "michael jackson",
     "job": "singer",
@@ -72,17 +67,20 @@ var c = {
         "The Wiz"
     ]
 };
-
 var result = merge(true, a, b, c);
-console.log(JSON.stringify(result, null, 4));
-//=>
-//{
-//    "actress": "julia roberts",
-//    "job": "singer",
-//    "films": [
-//        "captain eo",
-//        "The Wiz"
-//    ],
-//    "actor": "tom hanks",
-//    "singer": "michael jackson"
-//}
+exports['Merge with override occured'] = function(test) {
+    var res = {
+        "actress": "julia roberts",
+        "job": "singer",
+        "films": [
+            "captain eo",
+            "The Wiz"
+        ],
+        "actor": "tom hanks",
+        "singer": "michael jackson"
+    }
+    test.equal( typeof(result), 'object' );
+    test.deepEqual(result, res);
+
+    test.done()
+}
