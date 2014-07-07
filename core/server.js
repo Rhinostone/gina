@@ -381,18 +381,18 @@ var fs              = require('fs'),
                             'Server routing to '+ pathname,
                         __stack
                     );
-
-                    router.route(req, res, next, params);
+                    var allowed = (typeof(this.routing[rule].method) == 'undefined' || this.routing[rule].method.length > 0 || this.routing[rule].method.indexOf(req.method) != -1)
+                    if (!allowed) {
+                        this.throwError(res, 405, 'Method Not Allowed for [' + this.appName + '] => ' + req.originalUrl)
+                    } else {
+                        router.route(req, res, next, params)
+                    }
                     matched = true;
                     isRoute = {};
                     break out;
                 }
             }
 
-        var allowed = (typeof(_this.routing[rule].method) == 'undefined' || _this.routing[rule].method.indexOf(req.method) != -1)
-//        if (!allowed) {
-//            this.throwError(res, 405, 'Method Not Allowed for [' + this.appName + '] => ' + req.originalUrl);
-//        }
         if (!matched) {
             if (pathname === '/favicon.ico' && !hasViews) {
                 rese.writeHead(200, {'Content-Type': 'image/x-icon'} );
