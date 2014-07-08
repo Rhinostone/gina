@@ -129,8 +129,8 @@ Config = function() {
                     callback(false, config);
 
                 } catch (err) {
-                    var err = '.gna/locals.json: project configuration file not found. \n' + err;
-                    logger.error('geena', 'UTILS:CONFIG:ERR:3', err, __stack);
+                    var err = new Error('.gna/locals.json: project configuration file not found. \n' + (err.stack||err.message));
+                    //logger.error('geena', 'UTILS:CONFIG:ERR:3', err, __stack);
                     callback(err);
                 }
                 break;
@@ -312,10 +312,12 @@ Config = function() {
                 });
             } else {
                 //log & ignore. This is not a real issue.
-                logger.warn('geena', 'UTILS:CONFIG:WARN:1', 'Path not found: ' + path, __stack);
+                //logger.warn('geena', 'UTILS:CONFIG:WARN:1', 'Path not found: ' + path, __stack);
+                console.warn( 'Path not found: ' + path, __stack);
 
                 onSymlinkRemoved(self.paths, function(err){
-                    if (err) logger.error('geena', 'UTILS:CONFIG:ERR:9', err, __stack);
+                    //if (err) logger.error('geena', 'UTILS:CONFIG:ERR:9', err, __stack);
+                    if (err) console.error(err.stack||err.message);
 
                     callback(false);
                 });
@@ -345,10 +347,12 @@ Config = function() {
                 p.rm(function(err, path){
                     //console.log("receives ", err, path);
                     if (err) {
-                        logger.error('geena', 'UTILS:CONFIG:ERR:8', err, __stack);
+                        //logger.error('geena', 'UTILS:CONFIG:ERR:8', err, __stack);
+                        console.error(err.stack||err.message);
                         callback(err);
                     } else {
-                        logger.info('geena', 'UTILS:CONFIG:INFO:1', path +': deleted with success !');
+                        //logger.info('geena', 'UTILS:CONFIG:INFO:1', path +': deleted with success !');
+                        console.info( path +': deleted with success !');
                         callback(false);
                     }
                 });
@@ -372,7 +376,8 @@ Config = function() {
             null,
             function(err){
                 if (err) {
-                    logger.error('geena', 'UTILS:CONFIG:ERR:2', err, __stack);
+                    //logger.error('geena', 'UTILS:CONFIG:ERR:2', err, __stack);
+                    console.error(err.stack||err.message);
                     callback(err);
                 } else {
                     callback(false);
@@ -446,7 +451,8 @@ Config = function() {
 
         self.get(app, function(err, config){
             if (err) {
-                logger.error('geena', 'UTILS:CONFIG:ERR:4', err, __stack);
+                //logger.error('geena', 'UTILS:CONFIG:ERR:4', err, __stack);
+                console.error(err.stack||err.message);
                 callback(err + 'Utils.Config.get(...)');
             }
 
@@ -454,8 +460,9 @@ Config = function() {
                 callback( false, getVar('paths.' + namespace, config) );
 
             } catch (err) {
-                var err = 'Config.getPath(app, cat, callback): cat not found';
-                logger.error('geena', 'UTILS:CONFIG:ERR:5', err, __stack);
+                var err = new Error('Config.getPath(app, cat, callback): cat not found');
+                //logger.error('geena', 'UTILS:CONFIG:ERR:5', err, __stack);
+
                 callback(err);
             }
         });

@@ -25,7 +25,7 @@ var Class = function(){
                 if (arguments.length > 0) {
                     this.init(arguments);
                 } else {
-                    this.init();
+                    this.init()
                 }
             }
 

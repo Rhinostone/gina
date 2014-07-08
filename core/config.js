@@ -27,7 +27,7 @@ var Events          = require('events');
 var EventEmitter    = require('events').EventEmitter;
 var utils           = require("./utils");
 var merge           = utils.merge;
-var logger          = utils.logger;
+//var logger          = utils.logger;
 
 /**
  * Config Constructor
@@ -49,7 +49,8 @@ Config  = function(opt) {
         self.executionPath = opt.executionPath;
         self.task = opt.task || 'run'; // to be aible to filter later on non run task
 
-        logger.debug('geena', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
+        //logger.debug('geena', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
+        console.debug('Initalizing config ', __stack);
 
         self.userConf = false;
         var path = _(self.executionPath + '/env.json');
@@ -58,13 +59,16 @@ Config  = function(opt) {
 
             self.userConf = require(path);
 
-            logger.debug(
-                'geena',
-                'CONFIG:DEBUG:6',
-                'Applicaiton config file loaded ['
+//            logger.debug(
+//                'geena',
+//                'CONFIG:DEBUG:6',
+//                'Applicaiton config file loaded ['
+//                    + _(self.executionPath + '/env.json') + ']',
+//                __stack
+//            );
+            console.debug('Applicaiton config file loaded ['
                     + _(self.executionPath + '/env.json') + ']',
-                __stack
-            );
+                __stack);
         }
 
         self.Env.parent = self;
@@ -80,7 +84,8 @@ Config  = function(opt) {
 
     var getConf = function() {
 
-        logger.debug('geena', 'CONFIG:DEBUG:2', 'Loading conf', __stack);
+        //logger.debug('geena', 'CONFIG:DEBUG:2', 'Loading conf', __stack);
+        console.debug('Loading conf', __stack);
 
         self.Env.load( function(err, envConf) {
             //logger.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 42', __stack);
@@ -158,7 +163,8 @@ Config  = function(opt) {
             try {
                 return configuration[bundle][self.Env.get()];
             } catch (err) {
-                logger.error('geena', 'CONFIG:ERR:1', err, __stack);
+                //logger.error('geena', 'CONFIG:ERR:1', err, __stack);
+                console.error(err.stack||err.message);
                 return undefined
             }
         } else if ( typeof(configuration) != 'undefined' ) {
@@ -202,14 +208,16 @@ Config  = function(opt) {
                 }
 
             } catch(err) {
-                logger.warn('geena', 'CONF:ENV:WARN:1', err, __stack);
+                //logger.warn('geena', 'CONF:ENV:WARN:1', err, __stack);
+                console.warn(err.stack||err.message);
                 callback(err);
             }
         },
 
         set : function(env) {
             var found = false;
-            logger.debug('geena', 'CONFIG:ENV:DEBUG:1', 'Setting Env',  __stack);
+            //logger.debug('geena', 'CONFIG:ENV:DEBUG:1', 'Setting Env',  __stack);
+            console.debug('Setting Env',  __stack);
             var registeredEnvs = this.template.registeredEnvs;
             for (var e=0; e<registeredEnvs.length; ++e) {
                 if (registeredEnvs[e] == env) {
@@ -223,7 +231,8 @@ Config  = function(opt) {
                 if (typeof(env) == "undefined") {
                     this.current = this.template.defEnv;
                 } else {
-                    logger.error('geena', 'CONFIG:ENV:ERR:1', 'Env: ' + env + '] not found');
+                    //logger.error('geena', 'CONFIG:ENV:ERR:1', 'Env: ' + env + '] not found');
+                    console.error(new Error('Env: ' + env + '] not found'));
                     process.exit(1);
                 }
             }
@@ -320,12 +329,13 @@ Config  = function(opt) {
         //For each app.
         for (var app in content) {
             //Checking if genuine app.
-            logger.debug(
-                'geena',
-                'CONFIG:DEBUG:4',
-                'Checking if application is registered ' + app,
-                __stack
-            );
+//            logger.debug(
+//                'geena',
+//                'CONFIG:DEBUG:4',
+//                'Checking if application is registered ' + app,
+//                __stack
+//            );
+            console.debug('Checking if application is registered ' + app, __stack);
 
             //Now check if you have a description for each bundle.
 //            if ( typeof(pkg[app]) == 'undefined' ) {
@@ -408,12 +418,14 @@ Config  = function(opt) {
                     //console.error("reps ", reps);
                     newContent = whisper(reps, newContent);
                 } else {
-                    logger.warn(
-                        'geena',
-                        'CONFIG:WARN:1',
-                        'Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath),
-                        __stack
-                    );
+//                    logger.warn(
+//                        'geena',
+//                        'CONFIG:WARN:1',
+//                        'Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath),
+//                        __stack
+//                    );
+                    console.warn( 'Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath),
+                        __stack);
                     callback('Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath) )
                 }
 
@@ -423,22 +435,27 @@ Config  = function(opt) {
         }//EO for.
 
 
-        logger.debug(
-            'geena',
-            'CONFIG:DEBUG:7',
-            'Env configuration loaded \n ' + newContent,
-            __stack
-        );
+//        logger.debug(
+//            'geena',
+//            'CONFIG:DEBUG:7',
+//            'Env configuration loaded \n ' + newContent,
+//            __stack
+//        );
+        console.debug('Env configuration loaded \n ' + newContent,
+            __stack);
 
         //Means all apps sharing the same process.
         if (!isStandalone) self.Host.standaloneMode = isStandalone;
 
-        logger.debug(
-            'geena',
-            'CONFIG:DEBUG:3',
-            'Is server running as a standalone instance ? ' + isStandalone,
-            __stack
-        );
+//        logger.debug(
+//            'geena',
+//            'CONFIG:DEBUG:3',
+//            'Is server running as a standalone instance ? ' + isStandalone,
+//            __stack
+//        );
+
+        console.debug('Is server running as a standalone instance ? ' + isStandalone,
+            __stack);
         //return newContent;
         callback(false, newContent)
     }
@@ -449,7 +466,8 @@ Config  = function(opt) {
             var usrConf = require(self.executionPath +'/'+ file +'.json');
             return true
         } catch(err) {
-            logger.warn('geena', 'CONF:HOST:WARN:1', err, __stack);
+            //logger.warn('geena', 'CONF:HOST:WARN:1', err, __stack);
+            console.warn(err.stack||err.message);
             return false
         }
     }
@@ -462,24 +480,25 @@ Config  = function(opt) {
     this.getBundles = function() {
 
         //Registered apps only.
-        logger.debug(
-            'geena',
-            'CONFIG:DEBUG:4',
-            'Pushing apps ' + JSON.stringify(self.bundles, null, '\t'),
-            __stack
-        );
-
+//        logger.debug(
+//            'geena',
+//            'CONFIG:DEBUG:4',
+//            'Pushing apps ' + JSON.stringify(self.bundles, null, '\t'),
+//            __stack
+//        );
+        console.debug('Pushing apps ' + JSON.stringify(self.bundles, null, '\t'), __stack);
         return self.bundles
     }
 
     this.getAllBundles = function() {
         //Registered apps only.
-        logger.debug(
-            'geena',
-            'CONFIG:DEBUG:5',
-            'Pushing ALL apps ' + JSON.stringify(self.allBundles, null, '\t'),
-            __stack
-        );
+//        logger.debug(
+//            'geena',
+//            'CONFIG:DEBUG:5',
+//            'Pushing ALL apps ' + JSON.stringify(self.allBundles, null, '\t'),
+//            __stack
+//        );
+        console.debug('Pushing ALL apps ' + JSON.stringify(self.allBundles, null, '\t'), __stack);
         return self.allBundles
     }
 
