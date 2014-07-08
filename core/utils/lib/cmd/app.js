@@ -16,7 +16,7 @@ var fs          = require('fs');
 var spawn       = require('child_process').spawn;
 var os          = require('os');
 var Winston     = require('winston');
-var logger      = require('../logger');
+//var logger      = require('../logger');
 var Proc        = require('../proc');
 var EventEmitter  = require('events').EventEmitter;
 var inherits    = require('../inherits');
@@ -123,11 +123,11 @@ var AppCommand = {
 
         this.bundle = process.argv[3].replace(/.js/, '');
         //Setting log paths.
-        logger.setEnv(this.env);
-        logger.init({
-            logs    : _(this.options.root + '/logs'),
-            core    : _(this.options.core)
-        });
+//        logger.setEnv(this.env);
+//        logger.init({
+//            logs    : _(this.options.root + '/logs'),
+//            core    : _(this.options.core)
+//        });
         process.env.NODE_ENV = this.env;
         this.isAllowedOption(this.opt);
     },
@@ -532,41 +532,42 @@ var AppCommand = {
                 real = true
             }
 
-            var loggerInstance = new (Winston.Logger)({
-                levels : logger.custom.levels,
-                transports : [
-                    new (Winston.transports.Console)({
-                        colorize: true
-                    })
-                ],
-                colors : logger.custom.colors
-            });
+//            var loggerInstance = new (Winston.Logger)({
+//                levels : logger.custom.levels,
+//                transports : [
+//                    new (Winston.transports.Console)({
+//                        colorize: true
+//                    })
+//                ],
+//                colors : logger.custom.colors
+//            });
 
-            setContext('logger', loggerInstance);
+            //setContext('logger', loggerInstance);
 
             if (!real) {
-                logger.getPath('geena', function(pathErr, path){
-                    if (!pathErr) {
-                        var filename = _(path +'/'+ logger.getFilename('geena'));
-                        var data = '[LOG]' + JSON.stringify({
-                            "filename" : filename,
-                            "env" : logger.getEnv(),
-                            "msg" : {
-                                "logger"    : "geena",
-                                "label"     : "SERVER:EMERG:1",
-                                "level"     : "err",
-                                "profile"   : logger.getEnv(),
-                                "message"   : "SERVER:EMERG:1",
-                                "explicit"  : "" + self.msg.app[4].replace("%app%", self.bundle)
-                            }
-                        });
-
-                        logger.onMessage(data, function(msg){
-                            //Node exception. Will lead to a log(msg)
-                            loggerInstance.err(msg)
-                        });
-                    }
-                });
+//                logger.getPath('geena', function(pathErr, path){
+//                    if (!pathErr) {
+//                        var filename = _(path +'/'+ logger.getFilename('geena'));
+//                        var data = '[LOG]' + JSON.stringify({
+//                            "filename" : filename,
+//                            "env" : logger.getEnv(),
+//                            "msg" : {
+//                                "logger"    : "geena",
+//                                "label"     : "SERVER:EMERG:1",
+//                                "level"     : "err",
+//                                "profile"   : logger.getEnv(),
+//                                "message"   : "SERVER:EMERG:1",
+//                                "explicit"  : "" + self.msg.app[4].replace("%app%", self.bundle)
+//                            }
+//                        });
+//
+//                        logger.onMessage(data, function(msg){
+//                            //Node exception. Will lead to a log(msg)
+//                            loggerInstance.err(msg)
+//                        });
+//                    }
+//                });
+                log(self.msg.app[4].replace("%app%", self.bundle))
 
             } else {
 
@@ -614,7 +615,8 @@ var AppCommand = {
                     if ( data.substr(0, 5) != "[LOG]" ) {
                         //console.log("traces => ", data);
                         var out = data;
-                        loggerInstance["trace"](out);//Not shared with the main flow...
+                        //loggerInstance["trace"](out);//Not shared with the main flow...
+                        console.info(out.toString());
                         //fix it...
                         //logger.warn('geena', 'CONSOLE:LOG:1', data);
                     } else {
@@ -624,11 +626,12 @@ var AppCommand = {
                         // TODO - Few exception to take in consideration.
                         //loggerInstance.onMessage(data, function(msg){
 
-                        logger.onMessage(data, function(msg){
-                            loggerInstance[msg.level](msg);
-
-                            //logger[msg.level](msg);
-                        });
+//                        logger.onMessage(data, function(msg){
+//                            loggerInstance[msg.level](msg);
+//
+//                            //logger[msg.level](msg);
+//                        });
+                        console.info(data.toString())
                     }
 
                 });
@@ -636,39 +639,40 @@ var AppCommand = {
 
                 //On error. Might be useless.
                 self.prc.stderr.setEncoding('utf8');//Set encoding.
-                self.prc.stderr.on('data', function(err){
+                self.prc.stderr.on('data', function(err) {
+                    console.error(data.toString());
 
-                    logger.getPath('geena', function(pathErr, path){
-                        if (!pathErr) {
-                            var filename = _(path +'/'+ logger.getFilename('geena'));
-                             //var test = JSON.stringify({"error" :err});
-                            //console.log("[TRACE]" + JSON.parse(test).error);
-                            /**
-                            var data = '[LOG]' + JSON.stringify({
-                                "filename" : filename,
-                                "env" : logger.getEnv(),
-                                "msg" : {
-                                    "logger"    : "geena",
-                                    "label"     : "SERVER:RUNTIME:ERR:2",
-                                    "level"     : "err",
-                                    "profile"   : logger.getEnv(),
-                                    "message"   : "SERVER:RUNTIME:ERR:2",
-                                    "explicit"  : "" + err
-                                }
-                            });*/
-
-
-
-                            //logger.onMessage(data, function(msg){
-                                //Node exception.
-                                //loggerInstance.err(msg);
-                            //});
-                            //logger.onMessage(data, function(msg){
-                                //Node exception.
-                                //loggerInstance.err(msg);
-                            //});/***/
-                        }
-                    });
+//                    logger.getPath('geena', function(pathErr, path){
+//                        if (!pathErr) {
+//                            var filename = _(path +'/'+ logger.getFilename('geena'));
+//                             //var test = JSON.stringify({"error" :err});
+//                            //console.log("[TRACE]" + JSON.parse(test).error);
+//                            /**
+//                            var data = '[LOG]' + JSON.stringify({
+//                                "filename" : filename,
+//                                "env" : logger.getEnv(),
+//                                "msg" : {
+//                                    "logger"    : "geena",
+//                                    "label"     : "SERVER:RUNTIME:ERR:2",
+//                                    "level"     : "err",
+//                                    "profile"   : logger.getEnv(),
+//                                    "message"   : "SERVER:RUNTIME:ERR:2",
+//                                    "explicit"  : "" + err
+//                                }
+//                            });*/
+//
+//
+//
+//                            //logger.onMessage(data, function(msg){
+//                                //Node exception.
+//                                //loggerInstance.err(msg);
+//                            //});
+//                            //logger.onMessage(data, function(msg){
+//                                //Node exception.
+//                                //loggerInstance.err(msg);
+//                            //});/***/
+//                        }
+//                    });
                     /**
                     logger.getPath('geena', function(pathErr, path){
                         if (!pathErr) {

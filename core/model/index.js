@@ -100,7 +100,7 @@ Model = function(namespace) {
                 var entitiesPath    = _(modelPath + '/entities');
                 console.log('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
                 if (!fs.existsSync(entitiesPath)) {
-                    _this.emit('model#ready', 'no entities found for your model: [ ' + model + ' ]', _this.name, null);
+                    _this.emit('model#ready', new Error('no entities found for your model: [ ' + model + ' ]'), _this.name, null);
                     //console.log("[ "+model+" ]no entities found...")
                 } else {
                     var connectorPath   = _(modelPath + '/lib/connector.js');
@@ -118,7 +118,7 @@ Model = function(namespace) {
                             function onConnect(err, conn) {
                                 if (err) {
                                     console.error(err.stack);
-                                    _this.emit('model#ready', err.stack, _this.name, null);
+                                    _this.emit('model#ready', err, _this.name, null);
                                 } else {
                                     //Getting Entities Manager.
                                     if (cacheless)
@@ -142,7 +142,7 @@ Model = function(namespace) {
                 }
 
             } else {
-                _this.emit('model#ready', 'no configuration found for your model: ' + model, _this.name, null);
+                _this.emit('model#ready', new Error('no configuration found for your model: ' + model), _this.name, null);
                 console.log("no configuration found...")
             }
         });
@@ -300,7 +300,7 @@ Model = function(namespace) {
             _this.on('model#ready', function(err, model, entities) {
                 //entities == null when the database server isn't start.
                 if ( err ) {
-                    console.log(err.stack)
+                    console.error(err.stack||err.message)
                     //console.log('No entities found for [ '+ _this.name +':'+ entityName +'].\n 1) Check if the database is started.\n2) Check if exists: /models/entities/'+ entityName);
                 } else {
                     console.log('!! found entities ', entities);

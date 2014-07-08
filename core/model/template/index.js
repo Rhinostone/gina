@@ -44,7 +44,8 @@ Model = function(namespace){
 
 
         if ( typeof(namespace) == "undefined" || namespace == "") {
-            logger.error('geena', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
+            //logger.error('geena', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
+            console.error(new Error('EEMPTY: Model namespace'));
         }
         var suffix = 'Entity';
         var namespace = namespace.split(/\//g);
@@ -89,7 +90,8 @@ Model = function(namespace){
                         console.log("producing ", files[i]);
 
                         utils.config.get('geena', 'project.json', function(err, config){
-                            if (err) logger.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
+                            //if (err) logger.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
+                            if (err) console.error(err.stack||err.message);
 
                             var filename = config.paths.geena + '/model/entityFactory.js';
 
@@ -121,7 +123,8 @@ Model = function(namespace){
                                         throw new Error('Geena.Model.getContext(...): [entityName] is undefined.');
                                     }
                                 } catch (err) {
-                                    logger.error('geena', 'MODEL:ERR:4', 'EEMPTY: EntitySuper\n' + err, __stack);
+                                    //logger.error('geena', 'MODEL:ERR:4', 'EEMPTY: EntitySuper\n' + err, __stack);
+                                    console.error( 'EEMPTY: EntitySuper\n' + (err.stack||err.message))
                                 }
 
                                 //Entity = new entitiesManager[model]();
@@ -212,7 +215,8 @@ Model = function(namespace){
         fs.readFile(filename, function (err, data){
 
             if (err) {
-                logger.error('geena', 'MODEL:ERR:3', err, __stack);
+                //logger.error('geena', 'MODEL:ERR:3', err, __stack);
+                console.error(err.stack||err.message);
                 callback(err);
             }
 

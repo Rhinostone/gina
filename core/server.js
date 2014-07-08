@@ -79,12 +79,13 @@ var fs              = require('fs'),
 
         //console.log('['+ this.appName +'] on port : ['+ this.conf[this.appName].port.http + ']');
         this.onRoutesLoaded( function(success) {//load all registered routes in routing.json
-            logger.debug(
-                'geena',
-                'SERVER:DEBUG:1',
-                'Routing loaded' + '\n'+ JSON.stringify(_this.routing, null, '\t'),
-                __stack
-            );
+//            logger.debug(
+//                'geena',
+//                'SERVER:DEBUG:1',
+//                'Routing loaded' + '\n'+ JSON.stringify(_this.routing, null, '\t'),
+//                __stack
+//            );
+            console.debug('Routing loaded' + '\n'+ JSON.stringify(_this.routing, null, '\t'))
 
 
             if (success) {
@@ -119,7 +120,7 @@ var fs              = require('fs'),
         }
 
         //Standalone or shared instance mode. It doesn't matter.
-        for (var i=0; i<apps.length); ++i) {
+        for (var i=0; i<apps.length; ++i) {
             var appPath = _(this.conf[apps[i]].bundlesPath+ '/' + apps[i]);
             appName =  apps[i];
 
@@ -177,12 +178,14 @@ var fs              = require('fs'),
                     tmp = {}
                 } catch (err) {
                     this.routing = null;
-                    logger.error('geena', 'SERVER:ERR:2', err, __stack);
+                    //logger.error('geena', 'SERVER:ERR:2', err, __stack);
+                    console.error(err.stack||err.message);
                     callback(false)
                 }
 
             } catch (err) {
-                logger.warn('geena', 'SERVER:WARN:2', err, __stack);
+                //logger.warn('geena', 'SERVER:WARN:2', err, __stack);
+                console.warn(err.stack||err.message);
                 callback(false)
             }
 
@@ -330,7 +333,8 @@ var fs              = require('fs'),
         } else {
             var _this = this;
             config.refresh(bundle, function(err, routing) {
-                if (err) logger.error('geena', 'SERVER:ERR:5', err, __stack);
+                //if (err) logger.error('geena', 'SERVER:ERR:5', err, __stack);
+                if (err) console.error(err.stack||err.message);
                 //refreshes routing at the same time.
                 _this.routing = routing;
 
@@ -359,12 +363,13 @@ var fs              = require('fs'),
         req.setEncoding(this.conf[this.appName].encoding);
 
         if ( this.routing == null || this.routing.count() == 0 ) {
-            logger.error(
-                'geena',
-                'SERVER:ERR:1',
-                    'Malformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl,
-                __stack
-            );
+//            logger.error(
+//                'geena',
+//                'SERVER:ERR:1',
+//                    'Malformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl,
+//                __stack
+//            );
+            console.error( 'Malformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl);
             this.throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl);
         }
 
@@ -385,13 +390,13 @@ var fs              = require('fs'),
                 isRoute = router.compareUrls(req, params, this.routing[rule].url);
                 if (pathname === this.routing[rule].url || isRoute.past) {
 
-                    logger.debug(
-                        'geena',
-                        'SERVER:DEBUG:4',
-                            'Server routing to '+ pathname,
-                        __stack
-                    );
-
+//                    logger.debug(
+//                        'geena',
+//                        'SERVER:DEBUG:4',
+//                            'Server routing to '+ pathname,
+//                        __stack
+//                    );
+                    console.debug( 'Server routing to '+ pathname);
                     router.route(req, res, next, params);
                     matched = true;
                     isRoute = {};

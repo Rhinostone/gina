@@ -14,24 +14,24 @@
  * @author      Rhinostone <geena@rhinostone.com>
  * */
 
-module.exports = function(){
+module.exports = function() {
     /**
-     * @log
-     * @param {string} log content to be printed by the terminal
+     * @function log
+     * @param {string} content to be printed by the terminal
      * */
-    log = function(){
+    log = function() {
 
-        var args = arguments, content = "";
+        var args = arguments, content = '';
         //console.log("arg: ", args);
-        //To handle loggin with coma speparated arguments.
+        //To handle logs with coma speparated arguments.
 
         for (var i=0; i<args.length; ++i) {
 
             if (args[i] instanceof Object) {
                 //console.log("\n...", args[i], args[i].toString());
-                content += JSON.stringify(args[i], null, '\t');
+                content += JSON.stringify(args[i], null, '\t')
             } else {
-                content += args[i];
+                content += args[i]
             }
         }
 
@@ -39,5 +39,5 @@ module.exports = function(){
         if (content != '')
             process.stdout.write(content + '\n');
     };
-    return false;
-};//EO ConsoleHelper.
+    return false
+}

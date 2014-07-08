@@ -42,7 +42,7 @@ var Proc;
 
 //Imports
 var fs      = require('fs');
-var logger  = require( _(__dirname + '/logger') );
+//var logger  = require( _(__dirname + '/logger') );
 var spawn = require('child_process').spawn;
 var UtilsConfig = require( _(__dirname + '/config'));
 /**
@@ -113,8 +113,8 @@ Proc = function(bundle, proc, usePidFile){
      * @param {boolean|string} err
      * */
     var respawn = function(bundle, env, pid, callback) {
-        var loggerInstance = getContext('logger');
-        loggerInstance["trace"]('Fatal error !');
+        //var loggerInstance = getContext('logger');
+        //loggerInstance["trace"]('Fatal error !');
         //console.log("Exiting and re spawning : ", bundle, env);
         // TODO - Count the restarts and prevent unilimited loop
         // TODO - Send notification to admin or/and root to the Fatal Error Page.
@@ -126,7 +126,8 @@ Proc = function(bundle, proc, usePidFile){
             var bundle = process.argv[3];
             //var port = self.getBundlePortByBundleName(bundle);
             //console.log("Bundle ", bundle," already running or port[ "+port+" ] is taken by another process...");
-            loggerInstance["trace"]("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
+            //loggerInstance["trace"]("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
+            console.log("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
             dismiss(process.pid);
         }
 
@@ -204,11 +205,12 @@ Proc = function(bundle, proc, usePidFile){
 //                    //TODO - Have a delegate handler to allow the dev to do its stuff. Maybe it's already there if any dev can override.
 //                    console.log('Fix your shit...');
 //                });
-                //console.log(err.stack);
-                var bundle = process.argv[3];
+                console.error(err.stack);
+                var bundle = self.bundle;
+                //console.log("@=>", self.args);
+                var env =  process.env.NODE_ENV || 'prod';
                 var pid = self.getPidByBundleName(bundle);
 
-                var env =  process.env.NODE_ENV || 'prod';
                 //Wake up buddy !.
                 respawn(bundle, env, pid, function(err) {
                     proc.exit(1)
@@ -221,10 +223,10 @@ Proc = function(bundle, proc, usePidFile){
                     code = 0;
                 }
 
-                var bundle = process.argv[3];
-                //console.log("@=>", self.args);
-                var pid = self.getPidByBundleName(bundle);
+                var bundle = self.bundle;
                 var env =  process.env.NODE_ENV || 'prod';
+                var pid = self.getPidByBundleName(bundle);
+
                 //console.log('bundle ', bundle, ' vs ', pid, " => ", process.pid);
 
                 //console.log("got exit code ", "("+code+")", pid, " VS ", pid, " <=> geena: ", process.pid);
@@ -242,7 +244,7 @@ Proc = function(bundle, proc, usePidFile){
             proc.on('SIGHUP', function(code){
                 console.log("Hanging up !", process.argv);
 
-                var bundle = process.argv[3];
+                var bundle = self.bundle;
                 var env =  process.env.NODE_ENV || 'prod';
                 var pid = self.getPidByBundleName(bundle);
 
@@ -316,12 +318,13 @@ Proc = function(bundle, proc, usePidFile){
         try{
             return self.PID;
         } catch (err) {
-            logger.error(
-                'geena',
-                'UTILS:PROC:ERR:2',
-                'Could not get PID for bundle: '+ self.bundle,
-                __stack
-            );
+//            logger.error(
+//                'geena',
+//                'UTILS:PROC:ERR:2',
+//                'Could not get PID for bundle: '+ self.bundle,
+//                __stack
+//            );
+            console.error('Could not get PID for bundle: '+ self.bundle + (err.stack||err.message));
             return null;
         }
     };
@@ -372,12 +375,14 @@ Proc = function(bundle, proc, usePidFile){
 
     //Init.
     if ( typeof(this.bundle) == "undefined" ) {
-        logger.warn(
-            'geena',
-            'UTILS:PROC:WARN:1',
-            'Invalid or undefined proc name . Proc naming Aborted',
-            __stack
-        );
+//        logger.warn(
+//            'geena',
+//            'UTILS:PROC:WARN:1',
+//            'Invalid or undefined proc name . Proc naming Aborted',
+//            __stack
+//        );
+        console.warn('Invalid or undefined proc name . Proc naming Aborted',
+            __stack)
     } else {
         init();
     }

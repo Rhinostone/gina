@@ -20,7 +20,7 @@ var utils   = require('./utils');
 
 var Proc    = utils.Proc;
 var server  = require('./server');//TODO require('./server').http
-var Winston = require('winston');
+//var Winston = require('winston');
 var EventEmitter = require('events').EventEmitter;
 var e = new EventEmitter();
 gna.initialized = process.initialized = false;
@@ -28,7 +28,7 @@ gna.utils = utils;
 setContext('geena.utils', utils);
 
 //Yes it's global...
-logger = utils.logger;
+//logger = utils.logger;
 
 // BO cooking..
 var startWithGeena = false;
@@ -367,7 +367,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 mObj[c+'Model'].onReady(
                     function( err, _connector, _entities) {
                         if (err) {
-                            console.error(err.stack)
+                            console.error(err.stack||err.message)
                         }
                         done(_connector)
                     }
@@ -568,12 +568,12 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         }
 
         //Setting log paths.
-        logger.init({
-            //logs : _(core.executionPath + '/logs'),
-            logs : getPath('logsPath'),
-            core: _(__dirname)
-        });
-        setContext('geena.utils.logger', logger);
+//        logger.init({
+//            //logs : _(core.executionPath + '/logs'),
+//            logs : getPath('logsPath'),
+//            core: _(__dirname)
+//        });
+//        setContext('geena.utils.logger', logger);
 
         //check here for mount point source...
         if ( typeof(project.bundles[core.startingApp].release.version) == 'undefined' && typeof(project.bundles[core.startingApp].tag) != 'undefined') {
@@ -604,8 +604,8 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
                 if (err) console.error(err, err.stack);
 
-                logger.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
-                logger.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
+//                logger.info('geena', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
+//                logger.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
 
 
                 server.setConf({
@@ -622,18 +622,18 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
                         if (!err) {
 
-                            logger.debug(
-                                'geena',
-                                'CORE:DEBUG:1',
-                                'Server conf loaded',
-                                __stack
-                            );
-
-                            logger.notice(
-                                'geena',
-                                'CORE:NOTICE:2',
-                                    'Starting [' + core.startingApp + '] instance'
-                            );
+//                            logger.debug(
+//                                'geena',
+//                                'CORE:DEBUG:1',
+//                                'Server conf loaded',
+//                                __stack
+//                            );
+//
+//                            logger.notice(
+//                                'geena',
+//                                'CORE:NOTICE:2',
+//                                    'Starting [' + core.startingApp + '] instance'
+//                            );
 
                             //On user conf complete.
                             e.on('complete', function(instance){
@@ -651,21 +651,24 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                 console.error('mounted!! ', conf.bundle, process.pid)
                                 // -- EO
                             } else {
-                                logger.error(
-                                    'geena',
-                                    'CORE:ERR:2',
-                                        'Could not mount bundle ' + core.startingApp + '. ' + err + '\n' + err.stack,
-                                    err.stack
-                                );
+//                                logger.error(
+//                                    'geena',
+//                                    'CORE:ERR:2',
+//                                        'Could not mount bundle ' + core.startingApp + '. ' + err + '\n' + err.stack,
+//                                    err.stack
+//                                );
+                                console.error( 'Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
+
                                 abort(err)
                             }
 
                         } else {
-                            logger.error(
-                                'geena',
-                                'CORE:ERROR:1',
-                                'Geena::Core.setConf() error. '+ err+ '\n' + err.stack
-                            )
+//                            logger.error(
+//                                'geena',
+//                                'CORE:ERROR:1',
+//                                'Geena::Core.setConf() error. '+ err+ '\n' + err.stack
+//                            )
+                            console.error(err.stack||err.message)
                         }
                     })
             })//EO config.

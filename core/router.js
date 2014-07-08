@@ -176,7 +176,8 @@ Router = function(env) {
                 response.header(h, resHeaders[h])
         }
 
-        logger.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
+        //logger.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
+        console.debug('ACTION ON  ROUTING IS : ' + action);
         //console.log("ACTION ON  ROUTING IS : " + action);
 
         //Getting superCleasses & extending it with super Models.
@@ -224,7 +225,7 @@ Router = function(env) {
             superController.setOptions(options);
             superController.throwError(response, 500, err.stack);
         }
-
+        eval('');
         action = null
     };//EO route()
 
