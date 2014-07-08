@@ -15,17 +15,9 @@ Merge = function () {
 
         var i = 1;
         var length = arguments.length;
-//        var deep = false;
         var override = false;
         var options, name, src, copy, copyIsArray, clone;
 
-        // Handle a deep copy situation
-//        if (typeof(target) === 'boolean') {
-//            deep = target;
-//            target = arguments[1] || (Array.isArray(arguments[1]) ? [] : {});
-//            // skip the boolean and the target
-//            i = 2
-//        }
         // Handle an override copy situation
         if (typeof(target) === 'boolean') {
             override = target;
@@ -55,7 +47,6 @@ Merge = function () {
 
                     // Recurse if we're merging plain objects or arrays
                     if (
-//                        deep &&
                         copy &&
                         (
                             isObject(copy) ||
