@@ -633,11 +633,6 @@ Config  = function(opt) {
         }//EO for (name
 
         var hasViews = (typeof(files['views']) != 'undefined' && typeof(files['views']['default']) != 'undefined') ? true : false;
-
-//        if (hasViews) {
-//            utils.url(conf[bundle][env], require(_(appPath + '/config/' + conf[bundle][env].files.routing)))
-//        }
-
         //Set default keys/values for views
         if ( hasViews &&  typeof(files['views'].default.views) == 'undefined' ) {
             files['views'].default.views =  _(appPath +'/views')

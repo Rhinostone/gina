@@ -5,8 +5,50 @@
 'use strict';
 var merge = require('../index');// Not needed if the framework installed
 
+var aNO = {
+    "actress": "julia roberts",
+    "job": "actress",
+    "films": [
+        "pretty woman",
+        "mirror, mirror"
+    ]
+};
+
+var bNO = {
+    "actor": "tom hanks",
+    "job": "actor",
+    "films": [
+        "philadelphia",
+        "forrest gump"
+    ]
+};
+
+var cNO = {
+    "singer": "michael jackson",
+    "job": "singer",
+    "films": [
+        "captain eo",
+        "The Wiz"
+    ]
+};
+
+var resultNO = merge(aNO, bNO, cNO);
+console.log(JSON.stringify(resultNO, null, 4));
+//=>
+//{
+//    "actress": "julia roberts",
+//    "job": "actress",
+//    "films": [
+//        "pretty woman",
+//        "mirror, mirror"
+//    ],
+//    "actor": "tom hanks",
+//    "singer": "michael jackson"
+//}
+
 var a = {
     "actress": "julia roberts",
+    "job": "actress",
     "films": [
         "pretty woman",
         "mirror, mirror"
@@ -15,6 +57,7 @@ var a = {
 
 var b = {
     "actor": "tom hanks",
+    "job": "actor",
     "films": [
         "philadelphia",
         "forrest gump"
@@ -23,21 +66,23 @@ var b = {
 
 var c = {
     "singer": "michael jackson",
+    "job": "singer",
     "films": [
         "captain eo",
         "The Wiz"
     ]
 };
 
-var result = merge(a, b, c);
+var result = merge(true, a, b, c);
 console.log(JSON.stringify(result, null, 4));
-// =>
-// {
-//     "actress": "julia roberts",
-//     "films": [
-//         "pretty woman",
-//         "mirror, mirror"
-//     ],
-//     "actor": "tom hanks",
-//     "singer": "michael jackson"
-// }
+//=>
+//{
+//    "actress": "julia roberts",
+//    "job": "singer",
+//    "films": [
+//        "captain eo",
+//        "The Wiz"
+//    ],
+//    "actor": "tom hanks",
+//    "singer": "michael jackson"
+//}

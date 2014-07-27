@@ -1,50 +1,124 @@
 var merge = require('../index');// Not needed if the framework installed
 
-var a = {
-    status: 'ok',
-    msg: 'hello world !',
-    page: {
-        content: 'index.html',
-        list: ['apple', 'orange', 'mango']
+var a = null;
+var b = null;
+var setVariable = function () {
+    a = {
+        status: 'ok',
+        msg: 'hello world !',
+        page: {
+            content: 'index.html',
+            list: ['apple', 'orange', 'mango']
+        }
+    };
+    b = {
+        "status": "ko",
+        "msg": "hello Jane !",
+        "page": {
+            "action": "home",
+            "ext": ".html",
+            "content": "home.html"
+        }
     }
 };
 
-var b = {
-    "status": "ko",
-    "msg": "hello Jane !",
-    "page": {
-        "action": "home",
-        "ext": ".html",
-        "content": "home.html"
-    }
-};
+setVariable();
+var AtoBwithOverride    = merge(true, a, b);
+setVariable();
+var BtoAwithOverride    = merge(true, b, a);
+setVariable();
+var AtoBwithoutOverride = merge(a, b);
+setVariable();
+var BtoAwithoutOverride = merge(b, a);
 
-var result = merge(true, a, b);
-
-exports['b overrides a'] = function(test) {
-    test.equal( typeof(result), 'object' );
-    test.equal( result.msg, 'hello Jane !');
-    test.equal( result.status, 'ko');
-    test.done()
-}
-
-exports['Deep override occured'] = function(test) {
+exports['Merge : A<-B with override'] = function(test) {
     var res = {
         "status": "ko",
-            "msg": "hello Jane !",
-            "page": {
+        "msg": "hello Jane !",
+        "page": {
             "content": "home.html",
-                "list": [
+            "list": [
                 "apple",
                 "orange",
                 "mango"
             ],
-                "action": "home",
-                "ext": ".html"
+            "action": "home",
+            "ext": ".html"
         }
     };
-    test.deepEqual(result, res);
+    test.equal( typeof(AtoBwithOverride), 'object' );
+    test.deepEqual(AtoBwithOverride, res);
+
+    test.done()
+}
+exports['Merge : B<-A with override'] = function(test) {
+    var res = {
+        "status": "ok",
+        "msg": "hello world !",
+        "page": {
+            "content": "index.html",
+            "list": [
+                "apple",
+                "orange",
+                "mango"
+            ],
+            "action": "home",
+            "ext": ".html"
+        }
+    };
+    test.equal( typeof(BtoAwithOverride), 'object' );
+    test.deepEqual(BtoAwithOverride, res);
+
+    test.done()
+}
+exports['Merge : A<-B without override'] = function(test) {
+    var res = {
+        "status": "ok",
+        "msg": "hello world !",
+        "page": {
+            "content": "index.html",
+            "list": [
+                "apple",
+                "orange",
+                "mango"
+            ],
+            "action": "home",
+            "ext": ".html"
+        }
+    };
+    test.equal( typeof(AtoBwithoutOverride), 'object' );
+    test.deepEqual(AtoBwithoutOverride, res);
+
+    test.done()
+}
+exports['Merge : B<-A without override'] = function(test) {
+    var res = {
+        "status": "ko",
+        "msg": "hello Jane !",
+        "page": {
+            "content": "home.html",
+            "list": [
+                "apple",
+                "orange",
+                "mango"
+            ],
+            "action": "home",
+            "ext": ".html"
+        }
+    };
+    test.equal( typeof(BtoAwithoutOverride), 'object' );
+    test.deepEqual(BtoAwithoutOverride, res);
 
     test.done()
 }
 
+exports['Compare : A<-B with override & B<-A without override'] = function(test) {
+    test.deepEqual(AtoBwithOverride, BtoAwithoutOverride);
+
+    test.done()
+}
+exports['Compare : B<-A with override & A<-B without override'] = function(test) {
+    test.deepEqual(AtoBwithoutOverride, BtoAwithOverride);
+
+    test.done()
+}
