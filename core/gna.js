@@ -17,6 +17,8 @@ var gna     = {core:{}};
 var fs      = require('fs');
 var Config  = require('./config');
 var utils   = require('./utils');
+//Yes it's global...
+console = utils.logger;
 
 var Proc    = utils.Proc;
 var Server  = require('./server');//TODO require('./server').http
@@ -27,8 +29,7 @@ gna.initialized = process.initialized = false;
 gna.utils = utils;
 setContext('geena.utils', utils);
 
-//Yes it's global...
-console = utils.logger;
+
 
 // BO cooking..
 var startWithGeena = false;
