@@ -97,12 +97,11 @@ Logger = function(opt) {
             if ( typeof(self[l]) != 'undefined' )
                 delete self[l];
 
-            self[l] = new Function('return '+write+'('+JSON.stringify(opt)+', "'+l+'", arguments);');
+            self[l] = new Function('return '+write+'('+JSON.stringify(opt)+', '+parse+', "'+l+'", arguments);');
         }
     }
 
-    var write = function(opt, l, args) {
-        //var opt = JSON.parse(opt);
+    var write = function(opt, parse, l, args) {
         var content = '';
         //console.log("arg: ", args);
         //To handle logs with coma speparated arguments.
