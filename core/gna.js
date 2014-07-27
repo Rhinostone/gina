@@ -19,7 +19,7 @@ var Config  = require('./config');
 var utils   = require('./utils');
 
 var Proc    = utils.Proc;
-var server  = require('./server');//TODO require('./server').http
+var Server  = require('./server');//TODO require('./server').http
 //var Winston = require('winston');
 var EventEmitter = require('events').EventEmitter;
 var e = new EventEmitter();
@@ -28,7 +28,7 @@ gna.utils = utils;
 setContext('geena.utils', utils);
 
 //Yes it's global...
-//logger = utils.logger;
+console = utils.logger;
 
 // BO cooking..
 var startWithGeena = false;
@@ -222,7 +222,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
                     callback(false)
                 } catch (err) {
                     if (err) {
-                        log(err);
+                        console.emerg(err.stack||err.message);
                         process.exit(1)
                     }
                     if ( fs.existsSync(target) ) {
@@ -249,7 +249,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
 };
 
 
-
+// get configuration
 gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
     if (err) console.error(err.stack);
@@ -608,19 +608,9 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 //                logger.info('geena', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
 
 
-                server.setConf({
-                        bundle          : core.startingApp,
-                        //Apps list.
-                        bundles         : obj.bundles,
-                        allBundles      : obj.allBundles,
-                        env             : obj.env,
-                        isStandalone    : isStandalone,
-                        executionPath   : core.executionPath,
-                        conf            : obj.conf
-                    },
-                    function(err, instance, middleware, conf) {
 
-                        if (!err) {
+                var initialize = function(err, instance, middleware, conf) {
+                    if (!err) {
 
 //                            logger.debug(
 //                                'geena',
@@ -635,42 +625,57 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 //                                    'Starting [' + core.startingApp + '] instance'
 //                            );
 
-                            //On user conf complete.
-                            e.on('complete', function(instance){
-                                server.init(instance)
-                            });
+                        //On user conf complete.
+                        e.on('complete', function(instance){
+                            server.start(instance)
+                        });
 
 
-                            if (!mountErr) {
-                                // -- BO
-                                e.emit('init', instance, middleware, conf);
-                                //In case there is no user init.
-                                if (!gna.initialized) {
-                                    e.emit('complete', instance);
-                                }
-                                console.error('mounted!! ', conf.bundle, process.pid)
-                                // -- EO
-                            } else {
+                        if (!mountErr) {
+                            // -- BO
+                            e.emit('init', instance, middleware, conf);
+                            //In case there is no user init.
+                            if (!gna.initialized) {
+                                e.emit('complete', instance);
+                            }
+                            console.error('mounted!! ', conf.bundle, process.pid)
+                            // -- EO
+                        } else {
 //                                logger.error(
 //                                    'geena',
 //                                    'CORE:ERR:2',
 //                                        'Could not mount bundle ' + core.startingApp + '. ' + err + '\n' + err.stack,
 //                                    err.stack
 //                                );
-                                console.error( 'Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
+                            console.error( 'Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
 
-                                abort(err)
-                            }
+                            abort(err)
+                        }
 
-                        } else {
+                    } else {
 //                            logger.error(
 //                                'geena',
 //                                'CORE:ERROR:1',
 //                                'Geena::Core.setConf() error. '+ err+ '\n' + err.stack
 //                            )
-                            console.error(err.stack||err.message)
-                        }
-                    })
+                        console.error(err.stack||err.message)
+                    }
+                };
+
+                var opt = {
+                    bundle          : core.startingApp,
+                    //Apps list.
+                    bundles         : obj.bundles,
+                    allBundles      : obj.allBundles,
+                    env             : obj.env,
+                    isStandalone    : isStandalone,
+                    executionPath   : core.executionPath,
+                    conf            : obj.conf
+                };
+
+                var server = new Server(opt);
+                server.onConfigured(initialize);
+
             })//EO config.
         })//EO mount.
     }
@@ -679,7 +684,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
      * Stop server
      * */
     gna.stop = process.stop = function(pid, code) {
-        log("stoped server");
+        console.log("stoped server");
         if(typeof(code) != "undefined")
             process.exit(code);
 
@@ -690,13 +695,13 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
      * Get Status
      * */
     gna.status = process.status = function(bundle) {
-        log("getting server status")
+        console.log("getting server status")
     }
     /**
      * Restart server
      * */
     gna.restart = process.restart = function() {
-        log("starting server")
+        console.log("starting server")
     }
 
 

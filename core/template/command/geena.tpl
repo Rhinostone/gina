@@ -16,12 +16,11 @@
 var fs = require('fs');
 
 try {
-
     require('./node_modules/geena/node_modules/colors');
     var utils = require("./node_modules/geena/core/utils");
-    utils.log('Geena Command Line Tool \r\n'.rainbow);
+    var console = utils.logger;
+    console.log('Geena Command Line Tool \r\n'.rainbow);
     utils.cmd.load(__dirname, "/node_modules/geena/package.json")
 } catch (err) {
-    console.error(err);
     console.error(err.stack)
 }

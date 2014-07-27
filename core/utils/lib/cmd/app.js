@@ -15,8 +15,8 @@
 var fs          = require('fs');
 var spawn       = require('child_process').spawn;
 var os          = require('os');
-var Winston     = require('winston');
-//var logger      = require('../logger');
+//var Winston     = require('winston');
+var console     = require('../logger');
 var Proc        = require('../proc');
 var EventEmitter  = require('events').EventEmitter;
 var inherits    = require('../inherits');
@@ -142,7 +142,7 @@ var AppCommand = {
         if (found) {
             this.map(opt);
         } else {
-            log(this.msg.default[0].replace(
+            console.error(this.msg.default[0].replace(
                 "%command%",
                 "geena " + opt['option']
             ) +'\n'+ this.msg.app[3]);
@@ -159,7 +159,7 @@ var AppCommand = {
         if (found || this.opt['argument'] == undefined) {
             callback(true)
         } else {
-            log(this.msg.default[2]
+            console.error(this.msg.default[2]
                         .replace("%arg%", this.opt['argument']));
             callback(false)
         }
@@ -227,7 +227,7 @@ var AppCommand = {
 
 
         //p = _(this.options.root + '/' + this.bundle + '.js'),
-        log("checking... ", p, " && ", d, " => ", this.bundleDir);
+        console.info("checking... ", p, " && ", d, " => ", this.bundleDir);
         //process.exit(42);
         //Checking root.
         fs.exists(d, function(exists) {
@@ -269,7 +269,7 @@ var AppCommand = {
                                 + self.bundle
                                 +' '+ opt['argument']
                                 +' '+ opt['type']);
-                        log(msg);
+                        console.error(msg);
                     }
                 });
                 break;
@@ -285,7 +285,7 @@ var AppCommand = {
                             .replace("%env%", self.env)
                             .replace("%bundle%", self.bundle);
 
-                        log(msg);
+                        console.error(msg);
                     }
                 });
                 break;
@@ -363,7 +363,7 @@ var AppCommand = {
         if ( typeof(bundle) != 'undefined' ) {
             var addCmd = require('./geena-add-bundle')(opt, project, envDotJson, bundle)
         } else {
-            console.log('bundle is undefined !')
+            console.warn('bundle is undefined !')
         }
     },
     addViews : function() {
@@ -385,7 +385,7 @@ var AppCommand = {
     },
     build : function(opt, argument) {
 
-        console.log('Releasing build...');
+        console.info('Releasing build...');
         //Getting project infos.
         try {
             var project = require( _(getPath('root') + '/project.json') );
@@ -515,7 +515,7 @@ var AppCommand = {
         }
     },
     restart : function(opt) {
-        log('restarting app now...', opt);
+        console.info('restarting app now...', opt);
     },
     /**
      * Start  server
@@ -567,7 +567,7 @@ var AppCommand = {
 //                        });
 //                    }
 //                });
-                log(self.msg.app[4].replace("%app%", self.bundle))
+                console.error(self.msg.app[4].replace("%app%", self.bundle))
 
             } else {
 
@@ -640,7 +640,7 @@ var AppCommand = {
                 //On error. Might be useless.
                 self.prc.stderr.setEncoding('utf8');//Set encoding.
                 self.prc.stderr.on('data', function(err) {
-                    console.error(data.toString());
+                    console.error(err.toString());
 
 //                    logger.getPath('geena', function(pathErr, path){
 //                        if (!pathErr) {
@@ -708,7 +708,7 @@ var AppCommand = {
 
     },
     getStatus : function(opt){
-        log('getting status for app now...', opt);
+        console.info('getting status for app now...', opt);
     },
     /**
      * Stop  server
@@ -720,7 +720,7 @@ var AppCommand = {
         this.isRealApp( function(err){
             if (err) {
                 console.error(err.stack);
-                log(self.msg.app[4].replace("%app%", self.bundle));
+                console.error(self.msg.app[4].replace("%app%", self.bundle));
                 process.exit(1);
             }
         });

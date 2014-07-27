@@ -28,7 +28,7 @@ var utils = {
     merge       : require('./lib/merge'),
     generator   : require('./lib/generator'),//move to geena.dev
     Proc        : require('./lib/proc'),
-    //logger      : require('./lib/logger'),
+    logger      : require('./lib/logger'),
     url         : require('./lib/url'),
     cmd         : require('./lib/cmd')
 };
@@ -98,10 +98,6 @@ utils.cmd.load = function(root, package){
     utils.cmd.onExec();
 };
 
-
-utils.log = function(content){
-    log(content);
-};
 
 // TODO - Should be in another handler.. closer to the view controller/handler
 utils.refToObj = function (arr){

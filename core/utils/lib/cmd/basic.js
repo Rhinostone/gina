@@ -55,7 +55,7 @@ var fs = require('fs'),
         if (found) {
             this.map(arg);
         } else {
-            log( this.msg.default[0].replace("%command%", "geena " + arg) );
+            console.warn( this.msg.default[0].replace("%command%", "geena " + arg) );
         }
 
     },
@@ -89,17 +89,17 @@ var fs = require('fs'),
         }
     },
     getHelp : function() {
-        log('\n' + fs.readFileSync(__dirname + '/' +this.msg.basic[0]));
+        console.info('\n' + fs.readFileSync(__dirname + '/' +this.msg.basic[0]));
     },
     initProject : function() {
         var project = process.argv[3];
         if ( typeof(projet) == 'undefined' ) {
-            log('project name is undefiend')
+            console.error('project name is undefiend')
         }
     },
     addViews : function() {
         if ( typeof(this.bundle) == 'undefined' ) {
-            log('bundle name is undefiend')
+            console.error('bundle name is undefiend')
         }
     },
     getVersion : function() {
@@ -114,13 +114,13 @@ var fs = require('fs'),
                 + version.number +' '+ version.platform +' '+ version.arch
                 + '\n' + version.copyright;
         if (typeof(this.options.version) != "undefined") {
-            log(vers);
+            console.info(vers);
         } else {
-            log(this.msg.basic[5]);
+            console.error(this.msg.basic[5]);
         }
     },
     update : function() {
-        log('Update batch is not ready yet.');
+        console.info('Update batch is not ready yet.');
     }
 };
 module.exports = BasicCommand;

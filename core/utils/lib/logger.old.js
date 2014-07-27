@@ -61,8 +61,8 @@ var fs      = require('fs'),
             if( typeof(this.env) == "undefined" ) {
                 this.setEnv(this.defConf.registeredEnvs[3]);//Supposed to be prod.
             } else if (!this.isRegisteredEnv(this.env)) {
-                log("Env not registered : " + this.env);
-                log("Try one of these : ",
+                console.log("Env not registered : " + this.env);
+                console.log("Try one of these : ",
                     this.defConf.registeredEnvs.toString().replace(/,/g,", ")
                 );
                 process.exit(1);//If no valid env.
@@ -253,7 +253,7 @@ var fs      = require('fs'),
         this.getPath(msg.logger, function(err, path){
 
             if (err) {
-                log(err);
+                console.error(err.stack||err.message);
             } else {
                 // console.log("level ", msg.level);
 
