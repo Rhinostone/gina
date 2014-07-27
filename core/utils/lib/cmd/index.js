@@ -54,12 +54,12 @@ cmd.onExec = function() {
     cmd.msg = require( _(__dirname + '/msg.json') );
 
     var _this = this, ignore = function(){
-        log(_this.msg.default[0].replace("%command%", cmd.getString()));
+        console.log(_this.msg.default[0].replace("%command%", cmd.getString()));
         return;
     };
 
     if (argCount <= 0) {
-        log("Command geena must have argument(s) !"
+        console.log("Command geena must have argument(s) !"
                 +"\nTry this to get help: geena -h");
     } else if (argCount == 1) {
         var p = _(__dirname + '/basic.js');

@@ -22,6 +22,7 @@ var url     = require("url"),
     fs      = require("fs"),
     util    = require('util'),
     utils   = require('./utils'),
+    console = utils.logger,
     inherits = utils.inherits;
 
 Router = function(env) {

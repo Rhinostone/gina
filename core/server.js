@@ -1,112 +1,118 @@
-/**
- * Express Server Class
- *
- * @package     Geena
- * @author      Rhinostone
- */
-var fs              = require('fs'),
-    path            = require("path"),
-    EventEmitter    = require('events').EventEmitter,
-    express         = require('express'),
-    url             = require('url'),
-    utils           = require('./utils'),
-    merge           = utils.merge
-    Proc            = utils.Proc,
+var Server;
 
-    Server          = {
-    conf : {},
-    routing : {},
-    activeChild : 0,
+
+//Imports.
+var fs              = require('fs');
+var path            = require("path");
+var util            = require('util');
+var EventEmitter    = require('events').EventEmitter;
+var express         = require('express');
+var url             = require('url');
+var Config          = require('./config');
+var Router          = require('./router');
+var utils           = require('./utils');
+var merge           = utils.merge;
+var Proc            = utils.Proc;
+var console         = utils.logger;
+
+Server = function(options) {
+    var self = this;
+
+
+    this.conf = {};
+    this.routing = {};
+    //this.activeChild = 0;
+
     /**
-    * Set Configuration
-    * @param {object} options Configuration
-    *
-    *
-    * @callback callback responseCallback
-    * @param {boolean} complete
-    * @public
-    */
-    setConf : function(options, callback){
+     * Set Configuration
+     * @param {object} options Configuration
+     *
+     *
+     * @callback callback responseCallback
+     * @param {boolean} complete
+     * @public
+     */
+    var init = function(options) {
 
-        var _this = this;
         //Starting app.
-        this.appName = options.bundle;
+        self.appName = options.bundle;
 
-        this.env = options.env;
-        this.cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
+        self.env = options.env;
+        self.cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
 
         //False => multiple apps sharing the same server (port).
-        this.isStandalone = options.isStandalone;
+        self.isStandalone = options.isStandalone;
 
-        this.executionPath = options.executionPath;
+        self.executionPath = options.executionPath;
 
         //console.log("Geena ", options);
-        this.bundles = options.bundles;
+        self.bundles = options.bundles;
 
         //console.log("!!Stand alone ? ", this.isStandalone, this.bundles, '\n'+options.conf);
         //console.log("CONF CONTENT \n",  options.conf[this.appName][this.env]);
 
-        if (!this.isStandalone) {
+        if (!self.isStandalone) {
             //Only load the related conf / env.
-            this.conf[this.appName] = options.conf[this.appName][this.env];
-            this.conf[this.appName].bundlesPath = options.conf[this.appName][this.env].bundlesPath;
-            this.conf[this.appName].modelsPath =  options.conf[this.appName][this.env].modelsPath;
+            self.conf[self.appName] = options.conf[self.appName][self.env];
+            self.conf[self.appName].bundlesPath = options.conf[self.appName][self.env].bundlesPath;
+            self.conf[self.appName].modelsPath =  options.conf[self.appName][self.env].modelsPath;
         } else {
 
-            //console.log("Running mode not handled yet..", this.appName, " VS ", this.bundles);
+            //console.log("Running mode not handled yet..", self.appName, " VS ", self.bundles);
             //Load all conf for the related apps & env.
-            var apps = this.bundles;
+            var apps = self.bundles;
             for (var i=0; i<apps.length; ++i) {
-                this.conf[apps[i]] = options.conf[apps[i]][this.env];
-                this.conf[apps[i]].bundlesPath = options.conf[apps[i]][this.env].bundlesPath;
-                this.conf[apps[i]].modelsPath = options.conf[apps[i]][this.env].modelsPath;
+                self.conf[apps[i]] = options.conf[apps[i]][self.env];
+                self.conf[apps[i]].bundlesPath = options.conf[apps[i]][self.env].bundlesPath;
+                self.conf[apps[i]].modelsPath = options.conf[apps[i]][self.env].modelsPath;
             }
         }
 
-        callback(false, express(), express, this.conf[this.appName]);
-    },
 
-    init : function(instance){
-        var _this = this;
-        this.instance = instance;
+        self.emit('configured', false, express(), express, self.conf[self.appName])
+    }
+
+
+    this.start = function() {
+
         try {
-            this.validHeads =  fs.readFileSync(getPath('geena.core') + '/mime.types').toString();
-            this.validHeads = JSON.parse(this.validHeads)
+            self.validHeads =  fs.readFileSync(getPath('geena.core') + '/mime.types').toString();
+            self.validHeads = JSON.parse(self.validHeads)
         } catch(err) {
-            log(err.stack);
+            console.error(err.stack||err.message);
             process.exit(1)
         }
 
-        //console.log('['+ this.appName +'] on port : ['+ this.conf[this.appName].port.http + ']');
-        this.onRoutesLoaded( function(success) {//load all registered routes in routing.json
-//            logger.debug(
+        //console.log('['+ self.appName +'] on port : ['+ self.conf[self.appName].port.http + ']');
+        onRoutesLoaded( function(success) {//load all registered routes in routing.json
+//            console.debug(
 //                'geena',
 //                'SERVER:DEBUG:1',
-//                'Routing loaded' + '\n'+ JSON.stringify(_this.routing, null, '\t'),
+//                'Routing loaded' + '\n'+ JSON.stringify(self.routing, null, '\t'),
 //                __stack
 //            );
-            console.debug('Routing loaded' + '\n'+ JSON.stringify(_this.routing, null, '\t'))
+            console.debug('Routing loaded' + '\n'+ JSON.stringify(self.routing, null, '\t'));
 
 
             if (success) {
-                _this.onRequest()
+                onRequest()
             }
         })
-    },
+    }
+
     /**
      * onRoutesLoaded
      *
      *
      * */
-    onRoutesLoaded : function(callback) {
+    var onRoutesLoaded = function(callback) {
 
-        var config = require('./config')();
-        var conf =  config.getInstance(this.appName);
+        var config = Config();
+        var conf =  config.getInstance(self.appName);
         var cacheless = config.isCacheless();
 
-        var _this       = this,
-            env         = this.env,
-            cacheless   = this.cacheless,
+        var env         = self.env,
+            cacheless   = self.cacheless,
             apps        = conf.bundles,
             filename    = "",
             appName     = "",
@@ -116,45 +122,41 @@ var fs              = require('fs'),
             tmpName     = "";
 
         if (cacheless) {
-            this.routing = {}
+            self.routing = {}
         }
 
         //Standalone or shared instance mode. It doesn't matter.
         for (var i=0; i<apps.length; ++i) {
-            var appPath = _(this.conf[apps[i]].bundlesPath+ '/' + apps[i]);
+            var appPath = _(self.conf[apps[i]].bundlesPath+ '/' + apps[i]);
             appName =  apps[i];
 
             //Specific case.
-            if (!this.isStandalone && i == 0) appName = apps[i];
+            if (!self.isStandalone && i == 0) appName = apps[i];
 
             try {
-                filename = _(appPath + '/config/' + _this.conf[apps[i]].files.routing);
+                filename = _(appPath + '/config/' + self.conf[apps[i]].files.routing);
 
                 if (cacheless) {
 
-                    var tmpContent = _this.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
+                    var tmpContent = self.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
                     tmpName = _(appPath + '/config/' + tmpContent);
                     //Can't do a thing without.
                     if ( fs.existsSync(tmpName) ) {
                         filename = tmpName;
                         if (cacheless) delete require.cache[_(filename, true)];
 
-                        this.routing = require(filename);
+                        self.routing = require(filename);
                         tmpContent = "";
                     }
                 }
 
                 try {
-//                    if (cacheless) {
-//                        delete require.cache[_(filename, true)]
-//                    }
-//
 
                     tmp = require(filename);
                     //Adding important properties.
                     for (var rule in tmp){
                         tmp[rule].param.app = apps[i];
-                        if( this.hasViews(apps[i])) {
+                        if( hasViews(apps[i])) {
                             tmp[rule].param.file = tmp[rule].param.action;
                             var tmpRouting = [];
                             for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
@@ -170,99 +172,85 @@ var fs              = require('fs'),
 
                     }
 
-                    if (this.routing.count() > 0) {
-                        this.routing = merge(true, this.routing, tmp);
+                    if (self.routing.count() > 0) {
+                        self.routing = merge(true, self.routing, tmp);
                     } else {
-                        this.routing = tmp;
+                        self.routing = tmp;
                     }
                     tmp = {}
                 } catch (err) {
-                    this.routing = null;
-                    //logger.error('geena', 'SERVER:ERR:2', err, __stack);
-                    console.error(err.stack||err.message);
+                    self.routing = null;
+                    console.error('geena', 'SERVER:ERR:2', err, __stack);
                     callback(false)
                 }
 
             } catch (err) {
-                //logger.warn('geena', 'SERVER:WARN:2', err, __stack);
-                console.warn(err.stack||err.message);
+                console.warn('geena', 'SERVER:WARN:2', err, __stack);
                 callback(false)
             }
 
         }//EO for.
         callback(true)
-    },
+    }
 
-    hasViews : function(bundle) {
-        return ( typeof(this.conf[bundle].content['views']) != 'undefined' ) ? true : false;
-    },
+    var hasViews = function(bundle) {
+        return ( typeof(self.conf[bundle].content['views']) != 'undefined' ) ? true : false;
+    }
 
-    onRequest : function(){
+    var onRequest = function() {
 
-        var _this = this, apps = this.bundles;
+        var apps = self.bundles;
 
-            /**
-             this.instance.all('*', function(req, res, next) {
+        /**
+         self.instance.all('*', function(req, res, next) {
                 res.header("Access-Control-Allow-Origin", "*");
                 res.header("Access-Control-Allow-Headers", "X-Requested-With");
                 next();
             });*/
 
-        this.instance.all('*', function onInstance(request, response, next) {
-
-//            switch(request.method) {
-//                case 'GET':
-//                    break;
-//                case 'POST':
-//                    break;
-//                case 'PUT':
-//                    break;
-//                case 'DELETE':
-//                    break;
-//            }
-//            this.throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl);
-
+        self.instance.all('*', function onInstance(request, response, next) {
             //Only for dev & debug.
-            _this.loadBundleConfiguration(request, response, next, _this.appName, function(err, pathname, req, res, next) {
+            loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, req, res, next) {
                 console.log('calling back..');
                 if (err) {
-                    _this.throwError(response, 500, 'Internal server error\n'+ err.stack)
+                    throwError(response, 500, 'Internal server error\n' + err.stack)
                 }
-                _this.handle(req, res, next, pathname)
-            });//EO this.loadBundleConfiguration(this.appName, function(err, conf){
+                handle(req, res, next, pathname)
+            })//EO this.loadBundleConfiguration(this.appName, function(err, conf){
         });//EO this.instance
 
         console.log(
-            '\nbundle: [ ' + this.appName +' ]',
-            '\nenv: [ '+ this.env +' ]',
-            '\nport: ' + this.conf[this.appName].port.http,
-            '\npid: ' + process.pid
+                '\nbundle: [ ' + self.appName +' ]',
+                '\nenv: [ '+ self.env +' ]',
+                '\nport: ' + self.conf[self.appName].port.http,
+                '\npid: ' + process.pid
         );
 
 
-        this.instance.listen(this.conf[this.appName].port.http);//By Default 8888
+        self.instance.listen(self.conf[self.appName].port.http);//By Default 8888
+    }
 
-    },
-    getHead : function(file) {
+    var getHead = function(file) {
         var s = file.split(/\./);
         var type = 'plain/text';
-        if( typeof(this.validHeads[s[s.length-1]]) != 'undefiend' ) {
-            type = this.validHeads[s[s.length-1]]
+        if( typeof(self.validHeads[s[s.length-1]]) != 'undefiend' ) {
+            type = self.validHeads[s[s.length-1]]
         }
         return type
-    },
-    loadBundleConfiguration : function(req, res, next, bundle, callback) {
-        var _this = this;
+    }
+
+    var loadBundleConfiguration = function(req, res, next, bundle, callback) {
+
         var pathname = url.parse(req.url).pathname;
         if ( /\/favicon\.ico/.test(pathname) ) {
             callback(false, pathname, req, res, next)
         }
 
-        var config = require('./config')();
-        config.setBundles(this.bundles);
+        var config = Config();
+        config.setBundles(self.bundles);
         var conf = config.getInstance(bundle);
         if ( typeof(conf) != 'undefined') {//for cacheless mode
-            this.conf[bundle] = conf
+            self.conf[bundle] = conf
         }
         var cacheless = config.isCacheless();
 
@@ -283,14 +271,14 @@ var fs              = require('fs'),
                             return
                         }
                         if (!res.headersSent) {
-                            res.setHeader("Content-Type", _this.getHead(filename));
+                            res.setHeader("Content-Type", getHead(filename));
                             res.writeHead(200)
                             res.write(file, 'binary');
                             res.end()
                         }
                     });
                 } else {
-                    _this.onBundleConfigLoaded(bundle, {
+                    onBundleConfigLoaded(bundle, {
                         err : false,
                         cacheless : cacheless,
                         pathname : pathname,
@@ -303,7 +291,7 @@ var fs              = require('fs'),
                 }//EO exists
             })//EO static filter
         } else {
-            this.onBundleConfigLoaded(bundle, {
+            onBundleConfigLoaded(bundle, {
                 err : false,
                 cacheless : cacheless,
                 pathname : pathname,
@@ -315,9 +303,9 @@ var fs              = require('fs'),
             })
         }
 
-    },
+    }
 
-    onBundleConfigLoaded : function(bundle, options) {
+    var onBundleConfigLoaded = function(bundle, options) {
         var err = options.err;
         var cacheless = options.cacheless;
         var pathname = options.pathname;
@@ -331,73 +319,69 @@ var fs              = require('fs'),
         if (!cacheless) { // all but dev & debug
             callback(err, pathname, req, res, next)
         } else {
-            var _this = this;
             config.refresh(bundle, function(err, routing) {
-                //if (err) logger.error('geena', 'SERVER:ERR:5', err, __stack);
-                if (err) console.error(err.stack||err.message);
+                if (err) console.error('geena', 'SERVER:ERR:5', err, __stack);
                 //refreshes routing at the same time.
-                _this.routing = routing;
+                self.routing = routing;
 
                 callback(err, pathname, req, res, next)
             })
         }
-    },
+    }
 
-    handle : function(req, res, next, pathname) {
-        var _this = this;
-        var matched         = false,
-            isRoute         = {};
-        try {
-            Router          = require('./router.js');
-        } catch(err) {
-                console.error(err.stack);
-                process.exit(1)
-        }
+    var handle = function(req, res, next, pathname) {
 
-        var hasViews = this.hasViews(this.appName);
+        var matched = false;
+        var isRoute = {};
+        var withViews = hasViews(self.appName);
+
         console.log('about to route to ', pathname);
-        var router = new Router(this.env);
-        router.setMiddlewareInstance(this.instance);
+
+        var router = new Router(self.env);
+        router.setMiddlewareInstance(self.instance);
 
         //Middleware configuration.
-        req.setEncoding(this.conf[this.appName].encoding);
+        req.setEncoding(self.conf[self.appName].encoding);
 
-        if ( this.routing == null || this.routing.count() == 0 ) {
-//            logger.error(
-//                'geena',
-//                'SERVER:ERR:1',
-//                    'Malformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl,
-//                __stack
-//            );
-            console.error( 'Malformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl);
-            this.throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + this.appName + '] => ' + req.originalUrl);
+        if ( self.routing == null || self.routing.count() == 0 ) {
+            console.error(
+                'geena',
+                'SERVER:ERR:1',
+                    'Malformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl,
+                __stack
+            );
+            throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl);
         }
 
         var params = {};
         out:
-            for (var rule in this.routing) {
-                if (typeof(this.routing[rule]['param']) == 'undefined')
+            for (var rule in self.routing) {
+                if (typeof(self.routing[rule]['param']) == 'undefined')
                     break;
 
                 //Preparing params to relay to the router.
                 params = {
-                    requirements : this.routing[rule].requirements,
+                    requirements : self.routing[rule].requirements,
                     url : pathname,
-                    param : _this.routing[rule].param,
-                    bundle: _this.appName
+                    param : self.routing[rule].param,
+                    bundle: self.appName
                 };
                 //Parsing for the right url.
-                isRoute = router.compareUrls(req, params, this.routing[rule].url);
-                if (pathname === this.routing[rule].url || isRoute.past) {
+                isRoute = router.compareUrls(req, params, self.routing[rule].url);
+                if (pathname === self.routing[rule].url || isRoute.past) {
 
-//                    logger.debug(
-//                        'geena',
-//                        'SERVER:DEBUG:4',
-//                            'Server routing to '+ pathname,
-//                        __stack
-//                    );
-                    console.debug( 'Server routing to '+ pathname);
-                    router.route(req, res, next, params);
+                    console.debug(
+                        'geena',
+                        'SERVER:DEBUG:4',
+                            'Server routing to '+ pathname,
+                        __stack
+                    );
+                    var allowed = (typeof(self.routing[rule].method) == 'undefined' || self.routing[rule].method.length > 0 || self.routing[rule].method.indexOf(req.method) != -1)
+                    if (!allowed) {
+                        throwError(res, 405, 'Method Not Allowed for [' + self.appName + '] => ' + req.originalUrl)
+                    } else {
+                        router.route(req, res, next, params)
+                    }
                     matched = true;
                     isRoute = {};
                     break out;
@@ -405,19 +389,18 @@ var fs              = require('fs'),
             }
 
         if (!matched) {
-            if (pathname === '/favicon.ico' && !hasViews) {
-                rese.writeHead(200, {'Content-Type': 'image/x-icon'} );
+            if (pathname === '/favicon.ico' && !withViews) {
+                res.writeHead(200, {'Content-Type': 'image/x-icon'} );
                 res.end()
             }
-
-            this.throwError(res, 404, 'Page not found\n' + pathname)
+            throwError(res, 404, 'Page not found\n' + pathname)
         }
-    },
-    //TODO - might move to some other place... like to utils
-    throwError : function(res, code, msg) {
-        var hasViews = this.hasViews(this.appName);
+    }
 
-        if ( !hasViews ) {
+    var throwError = function(res, code, msg) {
+        var withViews = hasViews(self.appName);
+
+        if ( !withViews ) {
             res.writeHead(code, { 'Content-Type': 'application/json'} );
             res.end(JSON.stringify({
                 status: code,
@@ -429,7 +412,22 @@ var fs              = require('fs'),
                 res.end('Error '+ code +'. '+ msg)
             }
         }
+    };
+
+
+    return {
+        onConfigured : function(callback) {
+            self.once('configured', function(err, instance, middleware, conf) {
+                callback(err, instance, middleware, conf)
+            });
+            init(options)
+        },
+        start : function(instance) {
+            self.instance = instance;
+            self.start(instance)
+        }
     }
 };
 
+util.inherits(Server, EventEmitter);
 module.exports = Server

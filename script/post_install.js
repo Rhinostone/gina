@@ -32,7 +32,7 @@ PostInstall = function() {
             }
 
             createGeenaFileForPlatform();
-            log("Geena's command line tool has been installed.");
+            console.log("Geena's command line tool has been installed.");
         })
     }
 

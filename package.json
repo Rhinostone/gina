@@ -11,7 +11,7 @@
     "geena project",
     "geena js"
   ],
-  "version": "0.0.9p6",
+  "version": "0.0.9p7",
   "repository" : {
     "type" : "git",
     "url" : "https://github.com/Rhinostone/geena.git"
@@ -23,7 +23,6 @@
   "copyright" : "Copyright (c) 2009-2014 Rhinostone <geena@rhinostone.com>",
   "dependencies": {
     "colors" : "",
-    "winston": "0.7.2",
     "express": "3.5",
     "swig": ""
   },

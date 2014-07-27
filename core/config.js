@@ -27,7 +27,7 @@ var Events          = require('events');
 var EventEmitter    = require('events').EventEmitter;
 var utils           = require("./utils");
 var merge           = utils.merge;
-//var logger          = utils.logger;
+var console         = utils.logger;
 
 /**
  * Config Constructor
@@ -620,7 +620,7 @@ Config  = function(opt) {
             } catch (_err) {
 
                 if ( fs.existsSync(filename) ) {
-                    log("[ " +filename + " ] is malformed !!");
+                    console.emerg("[ " +filename + " ] is malformed !!");
                     process.exit(1)
                 } else {
                     files[name] = undefined
