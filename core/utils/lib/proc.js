@@ -233,11 +233,13 @@ Proc = function(bundle, proc, usePidFile){
                 //code = code || 0;
                 //var obj = logger.emerg('geena', 'UTILS:EMERG1', 'process exit code ' + code);
                 //if (code == 0  && env != "debug" && env != "dev"/***/) {
-
+                for (var p=0; p<process.list.count(); p++) {
+                    dismiss(process.list[p].pid)
+                }
                     // First child.
-                    dismiss(pid);
+                    //dismiss(pid);
                     // Then master.
-                    dismiss(process.pid);
+                    //dismiss(process.pid);
                 //}
             });
 
@@ -277,8 +279,8 @@ Proc = function(bundle, proc, usePidFile){
         } catch (err) {
             //Means that it does not exists anymore.
         }
-
-        process.kill(pid, "SIGKILL");
+        process.kill(pid, "SIGINT");
+        //process.kill(pid, "SIGKILL");
     };
 
     /**
@@ -365,7 +367,8 @@ Proc = function(bundle, proc, usePidFile){
             }
 
             var list = {};
-            list[pid] = bundle;
+            list['pid'] = pid;
+            list['name'] = bundle;
             process.list.push(list);//Running bundles.
             process.pids[bundle] = pid;
 
