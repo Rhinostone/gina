@@ -168,7 +168,7 @@ Router = function(env) {
         var hasViews        = ( typeof(_conf[bundle][env].content.views) != 'undefined' ) ? true : false;
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
-        console.log("routing..", bundle, env,  Config.Env.getConf( bundle, env ));
+        console.debug("routing content : \n", bundle, env,  JSON.stringify( Config.Env.getConf( bundle, env ), null, 4) );
         //Middleware Filters when declared.
         var resHeaders = Config.Env.getConf( bundle, env ).server.response.header;
         //TODO - to test
@@ -179,7 +179,6 @@ Router = function(env) {
 
         //logger.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
         console.debug('ACTION ON  ROUTING IS : ' + action);
-        //console.log("ACTION ON  ROUTING IS : " + action);
 
         //Getting superCleasses & extending it with super Models.
         var controllerFile = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controller.js');

@@ -87,8 +87,20 @@ Logger = function(opt) {
      * @constructor
      * */
     var init = function() {
-        setDefaultLevels();
-        console.info('logger ready');
+        if ( typeof(Logger.initialized) != "undefined" ) {
+            console.log("....Logger instance already exists...");
+            return getInstance()
+        } else {
+            Logger.initialized = true;
+            Logger.instance = self;
+            setDefaultLevels()
+        }
+
+        console.info('Logger ready');
+    }
+
+    var getInstance = function() {
+        return Logger.instance
     }
 
     var setDefaultLevels = function() {
@@ -102,14 +114,14 @@ Logger = function(opt) {
     }
 
     var write = function(opt, parse, l, args) {
-        var content = '';
-        //console.log("arg: ", args);
+        var content = "";
         //To handle logs with coma speparated arguments.
         for (var i=0; i<args.length; ++i) {
             if (args[i] instanceof Function) {
-                content += args[i].toString() + ' '
+                content += args[i].toString() + ""
             } else if (args[i] instanceof Object) {
-                content += parse(args[i], '')
+                // careful, [ parse ] will be out of the main execution context: passing it for recursive use
+                content += parse(parse, args[i], "")
             } else {
                 content += args[i] + ' '
             }
@@ -128,13 +140,14 @@ Logger = function(opt) {
             for(var p=0; p<patt.length; ++p) {
                 content = content.replace(new RegExp(patt[p], 'g'), repl[patt[p]])
             }
+
             return process.stdout.write(content + '\n')
         }
     }
 
-    var parse = function(obj, str) {
+    var parse = function(parse, obj, str) {
         var l = 0, len = obj.count(), isArray = (obj instanceof Array) ? true : false;
-        str += (isArray) ? '[ ' : '{ ';
+        str += (isArray) ? '[ ' : '{';
 
         for (var attr in obj) {
             ++l;
@@ -144,21 +157,24 @@ Logger = function(opt) {
                 //str += attr +':'+ obj[attr].toString();
                 str += (l<len) ? ', ' : ''
             } else if (obj[attr] instanceof Object && !isArray) {
-                str += attr+': ';
-                str = parse(obj[attr], str) + ' '
+                str += '"'+attr+'": ';
+                str = parse(parse, obj[attr], str);
+                str += (l<len) ? ', ' : '';
             } else {
                 if (!isArray && typeof(obj[attr]) == 'string') {
-                    str += attr +": '"+ obj[attr] +"'"
+                    str += '"'+attr+'": "' + obj[attr]
+                            .replace(/\'/g, "\\'")
+                            .replace(/\"/g, '\\"') +'"';
                 } else if (isArray) {
-                    str += ( typeof(obj[attr]) != 'string' ) ? obj[attr] : "'"+ obj[attr] +"'"
+                    str += ( typeof(obj[attr]) != 'string' ) ? obj[attr] : '"'+ obj[attr] +'"'
                 } else {
-                    str += attr +': '+ obj[attr]
+                    str += '"'+attr+'": ' + obj[attr]
                 }
                 str += (l<len) ? ', ' : ''
             }
         }
 
-        str += (isArray) ? ' ]' : ' }';
+        str += (isArray) ? ' ]' : '}';
         return str + ' '
     }
 

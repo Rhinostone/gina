@@ -45,6 +45,7 @@ var fs      = require('fs');
 //var logger  = require( _(__dirname + '/logger') );
 var spawn = require('child_process').spawn;
 var UtilsConfig = require( _(__dirname + '/config'));
+var console = require( _(__dirname + '/logger'));
 /**
  * @constructor
  *
