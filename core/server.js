@@ -118,6 +118,7 @@ Server = function(options) {
             appName     = "",
             name        = "",
             tmp         = {},
+            main        = "",
             tmpContent  = "",
             tmpName     = "";
 
@@ -134,25 +135,35 @@ Server = function(options) {
             if (!self.isStandalone && i == 0) appName = apps[i];
 
             try {
-                filename = _(appPath + '/config/' + self.conf[apps[i]].files.routing);
+                main = _(appPath + '/config/' + self.conf[apps[i]].files.routing);
 
                 if (cacheless) {
 
-                    var tmpContent = self.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
-                    tmpName = _(appPath + '/config/' + tmpContent);
+                    filename = self.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
+                    filename = _(appPath + '/config/' + filename);
                     //Can't do a thing without.
-                    if ( fs.existsSync(tmpName) ) {
-                        filename = tmpName;
-                        if (cacheless) delete require.cache[_(filename, true)];
-
-                        self.routing = require(filename);
-                        tmpContent = "";
+                    if ( !fs.existsSync(filename) ) {
+                        filename = main;
+//                        filename = tmpName;
+//                        if (cacheless) delete require.cache[_(filename, true)];
+//
+//                        self.routing = require(filename);
+//                        tmpContent = "";
                     }
+                    delete require.cache[_(filename, true)];
                 }
+
+                if (filename != main) {
+                    if (cacheless) delete require.cache[_(filename, true)];
+                    self.routing = merge(true, require(main), require(filename));
+                } else {
+                    self.routing = require(filename);
+                }
+
 
                 try {
 
-                    tmp = require(filename);
+                    tmp = self.routing;
                     //Adding important properties.
                     for (var rule in tmp){
                         tmp[rule].param.app = apps[i];
