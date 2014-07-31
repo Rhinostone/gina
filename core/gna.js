@@ -639,7 +639,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                             if (!gna.initialized) {
                                 e.emit('complete', instance);
                             }
-                            console.error('mounted!! ', conf.bundle, process.pid)
+                            console.info('mounted!! ', conf.bundle, process.pid)
                             // -- EO
                         } else {
 //                                logger.error(
