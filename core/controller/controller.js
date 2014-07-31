@@ -131,9 +131,10 @@ Controller = function(request, response, next) {
      * @return {void}
      * */
     this.render = function(_data) {
-        _data = merge(true, _data, self.getData() );
+        _data = merge(true, self.getData(), _data);
         self.setRessources(_options.views, _data.page.action);
-        var data = merge(true, _data, self.getData() );
+        var data = merge(true, self.getData(), _data);
+
         var path = _(_options.views.default.html + '/' + data.page.content);
 
         var dic = {};

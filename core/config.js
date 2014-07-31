@@ -544,26 +544,35 @@ Config  = function(opt) {
         }
 
         var files = {};
+        var main = '';
         for (var name in  conf[bundle][env].files) {
+
             //Server only because of the shared mode VS the standalone mode.
             if (name == 'routing' && cacheless && typeof(reload) != 'undefined') {
+                main = _(appPath +'/config/'+ conf[bundle][env].files[name]);
                 tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
                 filename = _(appPath + '/config/' + tmp);
-                if ( fs.existsSync(filename) ) {
-                    delete require.cache[_(filename, true)];
-                    try {
-                        routing = merge( true, routing, require(filename) );
-                        routing = merge( true, files[name], require(filename) )
-                    } catch (err) {
-                        console.log(err.stack);
-                        process.exit(1)
-                    }
-
-                } else {
-                    filename = appPath + '/config/' + conf[bundle][env].files[name];
-                    delete require.cache[_(filename, true)];
-                    routing = merge( true, routing, require(filename) );
+                if ( !fs.existsSync(filename) ) {
+//                    delete require.cache[_(filename, true)];
+//                    try {
+//                        //routing = merge( true, routing, require(filename) );
+//                        //routing = merge( true, files[name], require(filename) )
+//                    } catch (err) {
+//                        console.log(err.stack);
+//                        process.exit(1)
+//                    }
+//
+//                } else {
+                    //filename = appPath + '/config/' + conf[bundle][env].files[name];
+                    filename = main;
                 }
+                delete require.cache[_(filename, true)];
+                routing = merge( true, require(filename), routing);
+                if (filename != main) {
+                    routing = merge(true, require(main), routing);
+                }
+                files[name] = routing;
+                tmp = '';
                 //setting app param
                 if ( typeof(conf[bundle][env].content['views']) != 'undefined' ) {
                     for (var rule in routing) {
@@ -591,31 +600,21 @@ Config  = function(opt) {
                 if (!fs.existsSync(filename) ) {
                     filename = _(appPath +'/config/'+ conf[bundle][env].files[name])
                 }
-                delete require.cache[_(filename, true)];
-                tmp = '';
             } else {
                 filename = _(appPath +'/config/'+ conf[bundle][env].files[name])
             }
 
             //Can't do a thing without.
             try {
-                var main = _(appPath +'/config/'+ conf[bundle][env].files[name]);
+                main = _(appPath +'/config/'+ conf[bundle][env].files[name]);
                 if (cacheless) {
-                    tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
-                    filename = _(appPath + '/config/' + tmp);
-                    if (!fs.existsSync(filename) ) {
-                        filename = _(appPath +'/config/'+ conf[bundle][env].files[name]);
-
-                    }
                     delete require.cache[_(filename, true)];
-                    files[name] = require(filename);
-                    tmp = '';
-                } else {
-                    filename = main
                 }
+                files[name] = require(filename);
+                tmp = '';
 
-                if ( fs.existsSync(main) ) {
-                    files[name] = merge(true, files[name], require(main));
+                if (filename != main) {
+                    files[name] = merge(true, require(main), files[name]);
                 }
             } catch (_err) {
 
@@ -676,7 +675,8 @@ Config  = function(opt) {
 
         var localEnv = conf[bundle][env].executionPath + '/env.local.json';
         if ( env == 'dev' && fs.existsSync(localEnv) ) {
-            conf[bundle][env] = merge(true, require(localEnv), conf[bundle][env]);
+            //conf[bundle][env] = merge(true, require(localEnv), conf[bundle][env]);
+            conf[bundle][env] = merge(true, conf[bundle][env], require(localEnv));
         }
         var envKeys = conf[bundle][env];
         for (var k in envKeys) {
@@ -689,7 +689,7 @@ Config  = function(opt) {
             files['statics'] = require(getPath('geena.core') +'/template/conf/statics.json')
         } else if ( typeof(files['statics']) != 'undefined' ) {
             var defaultAliases = require(getPath('geena.core') +'/template/conf/statics.json');
-            files['statics'] = merge(true, files['statics'], defaultAliases)
+            files['statics'] = merge(true, defaultAliases, files['statics'])
         }
 
         files = whisper(reps, files);
