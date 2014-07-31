@@ -147,7 +147,7 @@ Controller = function(request, response, next) {
         //      /html/inc/_partial.html (BAD)
         fs.readFile(path, function (err, content) {
             if (err) {
-                this.throwError(_response, 500, err.stack);
+                self.throwError(_response, 500, err.stack);
                 return
             }
 
@@ -162,7 +162,7 @@ Controller = function(request, response, next) {
 
             fs.readFile(_options.views.default.layout, function(err, layout) {
                 if (err) {
-                    this.throwError(_response, 500, err.stack);
+                    self.throwError(_response, 500, err.stack);
                     return;
                 }
                 layout = layout.toString();

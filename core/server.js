@@ -230,7 +230,7 @@ Server = function(options) {
             })//EO this.loadBundleConfiguration(this.appName, function(err, conf){
         });//EO this.instance
 
-        console.log(
+        console.info(
                 '\nbundle: [ ' + self.appName +' ]',
                 '\nenv: [ '+ self.env +' ]',
                 '\nport: ' + self.conf[self.appName].port.http,

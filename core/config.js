@@ -217,7 +217,7 @@ Config  = function(opt) {
         set : function(env) {
             var found = false;
             //logger.debug('geena', 'CONFIG:ENV:DEBUG:1', 'Setting Env',  __stack);
-            console.debug('Setting Env',  __stack);
+            //console.debug('Setting Env',  __stack);
             var registeredEnvs = this.template.registeredEnvs;
             for (var e=0; e<registeredEnvs.length; ++e) {
                 if (registeredEnvs[e] == env) {
@@ -528,15 +528,6 @@ Config  = function(opt) {
         conf[bundle].cacheless = cacheless;
         conf[bundle][env].executionPath = getContext("paths").root;
 
-//        if (
-//            self.task != 'run' && env == 'prod' ||
-//            self.task == 'build' && env != 'dev'
-//        ) { // like for build
-//            //getting src path instead
-//            var appPath = _(conf[bundle][env].sources + '/' + bundle)
-//        } else {
-//            var appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
-//        }
         if ( self.task == 'run' && env != 'dev' ) {
             var appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
         } else { //getting src path instead
@@ -553,17 +544,6 @@ Config  = function(opt) {
                 tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
                 filename = _(appPath + '/config/' + tmp);
                 if ( !fs.existsSync(filename) ) {
-//                    delete require.cache[_(filename, true)];
-//                    try {
-//                        //routing = merge( true, routing, require(filename) );
-//                        //routing = merge( true, files[name], require(filename) )
-//                    } catch (err) {
-//                        console.log(err.stack);
-//                        process.exit(1)
-//                    }
-//
-//                } else {
-                    //filename = appPath + '/config/' + conf[bundle][env].files[name];
                     filename = main;
                 }
                 delete require.cache[_(filename, true)];
