@@ -42,7 +42,6 @@ Inherits = function(a, b) {
                         }
                         b.apply(this, arguments);
                     }
-                    var toto = 'titi';
                     delete this.s;
                     cache.apply(this, arguments);
                 }
