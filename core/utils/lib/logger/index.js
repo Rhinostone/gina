@@ -23,8 +23,10 @@ var merge = require('../merge');
 Logger = function(opt) {
     var self = this;
     var defaultOptions = {
-        template: '%d [ %l ] %m',
-        levels : { // based on Sylog
+        name: 'geena', // by default
+        template: '%d [ %s ] %m',
+        //containers: [],
+        levels : { // based on Sylog Severity Levels
             emerg: {
                 code: 0,
                 label: 'Emergency',
@@ -113,7 +115,7 @@ Logger = function(opt) {
         }
     }
 
-    var write = function(opt, parse, l, args) {
+    var write = function(opt, parse, s, args) {
         var content = "";
         //To handle logs with coma speparated arguments.
         for (var i=0; i<args.length; ++i) {
@@ -128,11 +130,12 @@ Logger = function(opt) {
         }
 
         if (content != '') {
-
+            var now = new Date();
             var repl = {
-                '%l': l,
-                '%d': new Date(),
-                '%m': content
+                '%s': s, //severity
+                '%d': now, // timestamp
+                '%m': content // message
+                //'%container', //container
             };
 
             var patt = opt.template.match(/\%[a-z A-Z]/g);
@@ -197,12 +200,17 @@ Logger = function(opt) {
 
 
             for (var l in levels) {
-                self[l] = new Function('return '+write+'('+JSON.stringify(opt)+', "'+l+'", arguments);');
+                self[l] = new Function('return '+write+'('+JSON.stringify(opt)+', '+parse+', "'+l+'", arguments);');
             }
         } catch(e) {
             setDefaultLevels();
             self.error('Cannot set type: ', e.stack|| e.message)
         }
+    }
+
+    this.getLogger = function(details) {
+        console.debug('getting logger ')
+
     }
 
 

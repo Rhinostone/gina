@@ -15,7 +15,6 @@
 var fs          = require('fs');
 var spawn       = require('child_process').spawn;
 var os          = require('os');
-//var Winston     = require('winston');
 var console     = require('../logger');
 var Proc        = require('../proc');
 var EventEmitter  = require('events').EventEmitter;
@@ -86,6 +85,19 @@ var AppCommand = {
 
         //inherited from utils/index.
         var root = getPath('root');
+        //Setting log paths.
+//        console.getLogger({
+//            name: 'geena',
+//            containers: [
+//                {
+//                    type: 'file',
+//                    //template: '',
+//                    path: _(root + '/logs'),
+//                    keep: 5
+//                }
+//            ]
+//        });
+
         this.options = options;
         this.msg = message;
         this.opt['option'] = process.argv[2];
@@ -122,7 +134,7 @@ var AppCommand = {
         }
 
         this.bundle = process.argv[3].replace(/.js/, '');
-        //Setting log paths.
+
 //        logger.setEnv(this.env);
 //        logger.init({
 //            logs    : _(this.options.root + '/logs'),
