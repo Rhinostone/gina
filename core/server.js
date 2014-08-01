@@ -93,6 +93,9 @@ Server = function(options) {
 //            );
             console.debug('Routing loaded' + '\n'+ JSON.stringify(self.routing, null, '\t'));
 
+            if ( hasViews(self.appName) ) {
+                utils.url(self.conf[self.appName], self.routing)
+            }
 
             if (success) {
                 onRequest()
@@ -136,6 +139,7 @@ Server = function(options) {
 
             try {
                 main = _(appPath + '/config/' + self.conf[apps[i]].files.routing);
+                filename = main;//by default
 
                 if (cacheless) {
 
@@ -196,7 +200,7 @@ Server = function(options) {
                 }
 
             } catch (err) {
-                console.warn('geena', 'SERVER:WARN:2', err, __stack);
+                console.warn(err, err.stack||err.message);
                 callback(false)
             }
 
