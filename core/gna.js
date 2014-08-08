@@ -40,19 +40,16 @@ var tmp = process.argv;
 if (process.argv.length >= 4) {
     startWithGeena = true;
 
-    if (process.argv[1] == 'geena' || process.argv[1] == _(root + '/geena') ) {
-        //this test might be useless.
-        setContext('paths', JSON.parse(tmp[1]).paths);
-        setContext('processList', JSON.parse(tmp[1]).processList);
-        process.argv.splice(1, 1);
-        //And so on if you need to.
-    } else {
+    try {
         setContext('paths', JSON.parse(tmp[3]).paths);//And so on if you need to.
         setContext('processList', JSON.parse(tmp[3]).processList);
         setContext('geenaProcess', JSON.parse(tmp[3]).geenaProcess);
         //Cleaning process argv.
         process.argv.splice(3);
-    }
+    } catch (err) {}
+
+    //if (process.argv[1] == 'geena' || process.argv[1] == _( getPath('root') + '/geena') ) {
+    //}
 }
 tmp = null;
 

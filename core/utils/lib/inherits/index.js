@@ -25,37 +25,35 @@ Inherits = function(a, b) {
     var init = function(a, b) {
         var err = check(a, b);
         if (!err) {
-            var c = ( function() {
+            var z = ( function() {
                 var cache = a;
                 return function() {
                     //super class
-                    this.s = function() {};
-                    this.s.apply(b, arguments);
-                    b.apply(this.s, arguments);
-                    if (this.s.protected != undefined) {
-                        for (var prop in this.s.protected) {
-                            this[prop] = this.s.protected[prop]
+                    if (this) {
+                        this.prototype = {};
+                        //makes it compatible with node.js classes like EventEmitter
+                        for (var prop in b.prototype) {
+                            if (!this[prop]) {
+                                this[prop] = b.prototype[prop];
+                                //this.prototype[prop] = b.prototype[prop]
+                            }
                         }
-                    } else {
-                        for (var prop in this.s) {
-                            this[prop] = this.s[prop]
-                        }
+                        //this.prototype.name = b.name;
                         b.apply(this, arguments);
+                        cache.apply(this, arguments)
                     }
-                    delete this.s;
-                    cache.apply(this, arguments);
                 }
             }());
 
-            //make it compatible with node.js classes like EventEmitter
+            //makes it compatible with node.js classes like EventEmitter
             if (b.prototype == undefined) {
                 b.prototype = {}
             }
 
             a.prototype = Object.create(b.prototype, {});
-            c.prototype = Object.create(a.prototype, {});
+            z.prototype = Object.create(a.prototype, {});
 
-            return c
+            return z
         } else {
             throw new Error(err)
         }

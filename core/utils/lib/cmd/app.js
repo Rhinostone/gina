@@ -514,16 +514,23 @@ var AppCommand = {
         var root = getPath('root') + '/deploy';
         var file = (opt) ? opt : 'script'; // init, or custom script
 
-        var path = ( typeof(conf.strategy) != 'undefined' && opt == '' ) ? root +'/bin/'+ conf.strategy + '.js' : root +'/'+ this.env + '/' + file+'.js';
+        var userScript = root +'/'+ this.env + '/' + file+'.js';
+        var path = ( typeof(conf.strategy) != 'undefined' && opt == '' ) ? root +'/bin/'+ conf.strategy + '.js' : userScript;
 
-        if ( fs.existsSync(path) ) {
-            var Script = require( path );
-            var DeployInit = require('./geena-deploy');
 
-            DeployInit = inherits(DeployInit, EventEmitter);
-            Script = inherits(Script, DeployInit);
+        if ( fs.existsSync(path) && path != userScript) {
 
-            var script = new Script(conf);
+            // user script and available strategies inherit from Deploy
+            // if a strategy is applied, you can catch complete event to do something in the end
+            if ( fs.existsSync(userScript) && typeof(conf.strategy) != 'undefined') {
+                var UserStrategy = require( userScript );
+                var deploy = new UserStrategy(conf);
+            } else {
+                var Strategy = require( path );
+                var deploy = new Strategy(conf);
+            }
+        } else {
+            console.error('no deploy strategy found')
         }
     },
     restart : function(opt) {

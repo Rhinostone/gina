@@ -84,7 +84,7 @@ Server = function(options) {
         }
 
         //console.log('['+ self.appName +'] on port : ['+ self.conf[self.appName].port.http + ']');
-        onRoutesLoaded( function(success) {//load all registered routes in routing.json
+        onRoutesLoaded( function(err) {//load all registered routes in routing.json
 //            console.debug(
 //                'geena',
 //                'SERVER:DEBUG:1',
@@ -97,7 +97,7 @@ Server = function(options) {
                 utils.url(self.conf[self.appName], self.routing)
             }
 
-            if (success) {
+            if (!err) {
                 onRequest()
             }
         })
@@ -148,14 +148,10 @@ Server = function(options) {
                     //Can't do a thing without.
                     if ( !fs.existsSync(filename) ) {
                         filename = main;
-//                        filename = tmpName;
-//                        if (cacheless) delete require.cache[_(filename, true)];
-//
-//                        self.routing = require(filename);
-//                        tmpContent = "";
                     }
                     delete require.cache[_(filename, true)];
                 }
+
 
                 if (filename != main) {
                     if (cacheless) delete require.cache[_(filename, true)];
@@ -168,9 +164,20 @@ Server = function(options) {
                 try {
 
                     tmp = self.routing;
-                    //Adding important properties.
+                    //Adding important properties; also done in config.
                     for (var rule in tmp){
                         tmp[rule].param.app = apps[i];
+
+                        if (conf.server.webroot != '/') {
+                            if (typeof(tmp[rule].url) != 'object') {
+                                tmp[rule].url = conf.server.webroot + tmp[rule].url;
+                            } else {
+                                for (var u=0; u<tmp[rule].url.length; ++u) {
+                                    tmp[rule].url[u] =  conf.server.webroot + tmp[rule].url[u]
+                                }
+                            }
+                        }
+
                         if( hasViews(apps[i])) {
                             tmp[rule].param.file = tmp[rule].param.action;
                             var tmpRouting = [];
@@ -192,20 +199,20 @@ Server = function(options) {
                     } else {
                         self.routing = tmp;
                     }
-                    tmp = {}
+                    tmp = {};
                 } catch (err) {
                     self.routing = null;
                     console.error('geena', 'SERVER:ERR:2', err, __stack);
-                    callback(false)
+                    callback(err)
                 }
 
             } catch (err) {
                 console.warn(err, err.stack||err.message);
-                callback(false)
+                callback(err)
             }
 
         }//EO for.
-        callback(true)
+        callback(false)
     }
 
     var hasViews = function(bundle) {

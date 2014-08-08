@@ -36,6 +36,7 @@ var fs = require('fs'),
         '-a -v',
         '--add-views',
         '-v',
+        '-V',
         '--version'
     ],
     run : function(options, message) {
@@ -64,6 +65,9 @@ var fs = require('fs'),
             case '-v':
             case '--version':
                 this.getVersion();
+                break;
+            case '-V':
+                this.getVersion(true);
                 break;
 
             case '-h':
@@ -102,7 +106,7 @@ var fs = require('fs'),
             console.error('bundle name is undefiend')
         }
     },
-    getVersion : function() {
+    getVersion : function(short) {
         var vers = "",
             version = {
             "number"    : this.options.version,
@@ -114,7 +118,12 @@ var fs = require('fs'),
                 + version.number +' '+ version.platform +' '+ version.arch
                 + '\n' + version.copyright;
         if (typeof(this.options.version) != "undefined") {
-            console.info(vers);
+            if (!short) {
+                console.info(vers);
+            } else {
+                console.info(version.number);
+            }
+
         } else {
             console.error(this.msg.basic[5]);
         }
