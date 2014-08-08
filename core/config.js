@@ -537,10 +537,9 @@ Config  = function(opt) {
         var files = {};
         var main = '';
         for (var name in  conf[bundle][env].files) {
-
+            main = _(appPath +'/config/'+ conf[bundle][env].files[name]);
             //Server only because of the shared mode VS the standalone mode.
             if (name == 'routing' && cacheless && typeof(reload) != 'undefined') {
-                main = _(appPath +'/config/'+ conf[bundle][env].files[name]);
                 tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
                 filename = _(appPath + '/config/' + tmp);
                 if ( !fs.existsSync(filename) ) {
@@ -586,7 +585,7 @@ Config  = function(opt) {
 
             //Can't do a thing without.
             try {
-                main = _(appPath +'/config/'+ conf[bundle][env].files[name]);
+                //main = _(appPath +'/config/'+ conf[bundle][env].files[name]);
                 if (cacheless) {
                     delete require.cache[_(filename, true)];
                 }

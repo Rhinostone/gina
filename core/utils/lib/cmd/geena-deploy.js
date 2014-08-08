@@ -1,25 +1,25 @@
-var Deploy;
+//var Deploy;
 
 var fs = require('fs');
+var EventEmitter = require('events').EventEmitter;
 var spawn = require('child_process').spawn;
 var helpers = require('../helpers');
+var inherits = require('../inherits');
 
-Deploy = function(opt) {
+//Deploy = function(opt) {
+function Deploy(opt) {
 
     var self =  Deploy.instance || this;
     var error = false;
     var hosts = {};
     this.env = opt.env;
-    this.stask = 'deploy';
+    this.task = 'deploy';
 
-    this.tasks = {
-        'onInitialized' : [],
-        'onDeployed' : []
-    }
+    setPath('deploy', _(getPath('root') +'/'+ this.task));
 
     this.init = this.onInitialize = function(cb) {
 
-        if (self.initialized == undefined) {
+        if (self.initialized == undefined && !Deploy.instance) {
             self.initialized = true;
 
             if (typeof(cb) != 'undefined' && typeof(cb) == 'function') {
@@ -27,9 +27,10 @@ Deploy = function(opt) {
             } else {
                 init()
             }
+            return self
+        } else {
+            return Deploy.instance
         }
-
-        return self
     }
 
     var init = function() {
@@ -71,6 +72,12 @@ Deploy = function(opt) {
                 self['shared'] = []
             }
 
+            if ( typeof(self['tasks']) == 'undefined') {
+                self['tasks'] = {
+                    "onInitialize" : [],
+                    "onDeployed" : []
+                }
+            }
 
             if ( typeof(self['host']) == 'undefined') {
                 self['host'] = self.user +'@'+ self.server
@@ -81,10 +88,13 @@ Deploy = function(opt) {
             }
 
             // link to current task added to the end
-            opt.tasks.onDeployed.push('cd '+self.target+'/; rm ./current; ln -s ' + self.release_path +' ./current');
+            self.tasks.onDeployed.push('cd '+self.target+'/; rm ./current; ln -s ' + self.release_path +' ./current');
 
+
+            self.tasks = whisper(dic, self.tasks);
             self = whisper(dic, self);
             opt = whisper(dic, opt);
+
 
             if (self.releases_path == '/' || self.releases_path == '/.' || self.releases_path == '~' || self.releases_path == '~/' || self.releases_path == '~/.') {
                 console.log('releases path cannot be root')
@@ -164,25 +174,44 @@ Deploy = function(opt) {
                         })
                 }
             } else {
-                cb()
+                cb(false)
             }
         };
 
         self
             .run('ls ' + self.releases_path + '/')
             .onComplete( function(err, data) {
-                if (!err) {
+                if (!err && data != undefined) {
                     var list = data.toString().split('\n');
                     removeRelease(list, 0, cb)
+                } else {
+                    self
+                        .run('mkdir ' + self.releases_path)
+                        .onComplete(cb)
                 }
             })
     }
 
+
+    /**
+     * Run commande
+     *
+     * @param cmdLine {array|string}
+     *
+     * */
     this.run = function(cmdline, runLocal) {
+        //var runLocal = runLocal||false;
         var outFile = _(getPath('globalTmpPath') + '/out.log');
         var errFile = _(getPath('globalTmpPath') + '/err.log');
         var out = fs.openSync(outFile, 'a');
         var err = fs.openSync(errFile, 'a');
+
+        var root = getPath('root');
+
+        var result, error = false;
+        var hasCalledBack = false;
+        //var e = self;//this
+        var e = new EventEmitter();
 
         var cmd;
         if ( isWin32() ) {
@@ -190,50 +219,83 @@ Deploy = function(opt) {
             process.exit(1)
         }
         if ( typeof(runLocal) != 'undefined' && runLocal == true ) {
+
+            //process.chdir(root);
             // cmdline must be an array !!
-            cmd = spawn(cmdline.splice(0,1).toString(), cmdline, { stdio: [ 'ignore', out, err ] })
+            if (typeof(cmdline) == 'string') {
+                cmdline = cmdline.split(' ')
+            }
+
+            //console.info('running: ', cmdline.join(' '));
+
+            cmd = spawn(cmdline.splice(0,1).toString(), cmdline, { cwd: root, stdio: [ 'ignore', out, err ] })
+
         } else {
+            console.info('running: [ ssh ] ', cmdline);
             cmd = spawn('ssh', [ self.host, cmdline ], { stdio: [ 'ignore', out, err ] })
         }
-
-
-        var result, error = false;
-        var hasCalledBack = false;
-        var e = self;
 
         cmd.on('stdout', function(data) {
             var str = data.toString();
             var lines = str.split(/(\r?\n)/g);
             result = lines.join('');
+            //console.info('out: ', result);
             e.emit('run#data', result)
         });
 
         // Errors are readable in the onComplete callback
         cmd.on('stderr', function (err) {
             var str = err.toString();
-            error = str;
-            e.emit('run#err', str)
+            error = str || false;
+            //console.error('err: ', error);
+            e.emit('run#err', error)
         });
 
         cmd.on('close', function (code) {
 
             try {
-                var error = ( fs.existsSync(errFile) ) ? fs.readFileSync(errFile).toString() : undefined;
+                var error = ( fs.existsSync(errFile) ) ? fs.readFileSync(errFile).toString() : false;
                 //closing
                 fs.closeSync(err);
-                fs.unlinkSync(errFile);
+                if ( fs.existsSync(errFile) ) fs.unlinkSync(errFile);
 
                 if (error) {
                     cmd.emit('stderr', new Buffer(error))
                 }
 
+
                 var data = ( fs.existsSync(outFile) ) ? fs.readFileSync(outFile).toString() : undefined;
                 //closing
                 fs.closeSync(out);
-                fs.unlinkSync(outFile);
+                if (fs.existsSync(outFile) ) fs.unlinkSync(outFile);
 
                 if ( data ) {
                     cmd.emit('stdout', new Buffer(data))
+                }
+
+
+                if (error == '') {
+                    error = false
+                }
+
+                if (code == 0 ) {
+                    e.emit('run#complete', error, result)
+//                    if (runLocal) {
+//                        e.emit('run#complete', error, result)
+//                    } else {
+//                        //setTimeout( function onClose() {
+//                            e.emit('run#complete', error, result)
+//                        //}, 150)
+//                    }
+                } else {
+                    e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
+//                    if (runLocal) {
+//                        e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
+//                    } else {
+//                        setTimeout( function onClose() {
+//                            e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
+//                        }, 150)
+//                    }
                 }
 
 
@@ -241,39 +303,48 @@ Deploy = function(opt) {
                 console.error(err.stack)
             }
 
-            if (code == 0 ) {
-                if (runLocal) {
-                    e.emit('run#complete', error, result)
-                } else {
-                    setTimeout( function onClose() {
-                        e.emit('run#complete', error, result)
-                    }, 150)
-                }
-            } else {
-                if (runLocal) {
-                    e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
-                } else {
-                    setTimeout( function onClose() {
-                        e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
-                    }, 150)
-                }
-            }
+
+
+
+
+
+
+//            if (code == 0 ) {
+//                if (runLocal) {
+//                    console.info('closing...');
+//
+//                    e.emit('run#complete', error, result)
+//                } else {
+//                    setTimeout( function onClose() {
+//                        e.emit('run#complete', error, result)
+//                    }, 150)
+//                }
+//            } else {
+//                if (runLocal) {
+//                    e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
+//                } else {
+//                    setTimeout( function onClose() {
+//                        e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
+//                    }, 150)
+//                }
+//            }
         });
 
-        this.onData = function(callback) {
+        e.onData = function(callback) {
 
-            e.on('run#data', function(data) {
+            e.once('run#data', function(data) {
                 callback(data)
             });
 
-            e.on('run#err', function(err, data) {
+            e.once('run#err', function(err, data) {
                 callback(err, data)
             });
 
             return e
+
         }
 
-        this.onComplete = function(callback) {
+        e.onComplete = function(callback) {
             e.once('run#complete', function(err, data) {
                 callback(err, data)
             });
@@ -281,13 +352,65 @@ Deploy = function(opt) {
             return e
         };
 
+        return e
+        //return this
+    }
+
+
+    var makeStartUpScript = function() {
+
+    }
+
+    /**
+     * runOnDeployedTasks
+     * @description Tasks to run after deploy is complete.
+     *
+     * @param {number} t - task id
+     * */
+    this.runOnDeployedTasks = function(t) {
+        console.info('running onDeployedTasks');
+        var t = t || 0;
+
+        if ( typeof(self.tasks) != 'undefined' && typeof(self.tasks.onDeployed[t]) != 'undefined') {
+            var tasks = self.tasks.onDeployed;
+            //console.info('running: '+ tasks[t]);
+            self
+                .run(tasks[t])
+                .onComplete( function(err, msg) {
+                    if (err) console.warn(err.stack||err.message||err);
+                    if (msg) console.info(msg);
+                    self.runOnDeployedTasks(t+1)
+                })
+
+        } else {
+            self.emit('deploy-tasks#complete', false)
+        }
+
+        this.onComplete = function(callback) {
+
+            self.once('deploy-tasks#complete' , function(err) {
+                if (!err) {
+                    console.log('finalizing... ')
+                }
+                callback(err)
+            });
+
+            // look into bin to create complete event
+            // then redirect to script when done in your local strategy
+            // with: [ self.emit('deploy#complete', err) ]
+
+            //return self
+        }
+
         return self
     }
 
-    this.onComplete = function(callback) {
+
+    this.onInitialized = function(callback) {
+
         self.once('init#complete' , function(err) {
             if (!err) {
-                console.log('init completed')
+                console.log('init complete')
             }
             callback(err)
         });
@@ -295,43 +418,20 @@ Deploy = function(opt) {
         return self
     }
 
-    var makeStartUpScript = function() {
+    this.onComplete = function(callback) {
 
-    }
-
-    this.runOnDeployedTasks = function(t) {
-        if ( typeof(opt.tasks) != 'undefined' && typeof(opt.tasks.onDeployed) != 'undefined' && opt.tasks.onDeployed.length > 0) {
-            var tasks = opt.tasks.onDeployed;
-            var t = t || 0;
-            if (t > tasks.length-1) {
-                self.emit('deploy#complete', false)
-            } else {
-                console.info('running: '+ tasks[t]);
-                self
-                    .run(tasks[t])
-                    .onComplete( function(err, msg) {
-                        self.runOnDeployedTasks(t+1)
-                    })
+        self.once('deploy#complete' , function(err) {
+            if (!err) {
+                console.info('deploy complete !')
             }
-        } else {
-            self.emit('deploy#complete', false)
-        }
-
-        this.onComplete = function(callback) {
-
-            self.once('deploy#complete' , function(err) {
-                if (!err) {
-                    console.log('finalizing... ')
-                }
-
-                callback(err)
-            });
-
-            return self
-        }
+            callback(err)
+        });
 
         return self
     }
+
+    return this
 };
 
+Deploy = inherits(Deploy, EventEmitter);
 module.exports = Deploy
