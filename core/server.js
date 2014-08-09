@@ -164,7 +164,7 @@ Server = function(options) {
                 try {
 
                     tmp = self.routing;
-                    //Adding important properties; also done in config.
+                    //Adding important properties; also done in core/config.
                     for (var rule in tmp){
                         tmp[rule].param.app = apps[i];
 
@@ -178,7 +178,7 @@ Server = function(options) {
                             }
                         }
 
-                        if( hasViews(apps[i])) {
+                        if( hasViews(apps[i]) ) {
                             tmp[rule].param.file = tmp[rule].param.action;
                             var tmpRouting = [];
                             for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
@@ -264,6 +264,8 @@ Server = function(options) {
     var loadBundleConfiguration = function(req, res, next, bundle, callback) {
 
         var pathname = url.parse(req.url).pathname;
+
+
         if ( /\/favicon\.ico/.test(pathname) ) {
             callback(false, pathname, req, res, next)
         }
@@ -276,8 +278,17 @@ Server = function(options) {
         }
         var cacheless = config.isCacheless();
 
-        var uri = pathname.split('/');
-        var key = uri.splice(1, 1)[0];
+        var uri = '', key = '';
+        //webroot test
+        if (self.conf[bundle].server.webroot != '/') {
+            uri = (self.conf[bundle].server.webroot + pathname.replace(self.conf[bundle].server.webroot, '')).split('/');
+            var len = self.conf[bundle].server.webroot.split('/').length;
+            key = uri.splice(1, len).join('/')
+        } else {
+            uri = pathname.split('/');
+            key = uri.splice(1, 1)[0]
+        }
+
         //static filter
         if ( typeof(conf.content.statics) != 'undefined' &&  typeof(conf.content.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
             uri = uri.join('/');
