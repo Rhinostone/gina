@@ -552,9 +552,22 @@ Config  = function(opt) {
                 }
                 files[name] = routing;
                 tmp = '';
+
                 //setting app param
-                if ( typeof(conf[bundle][env].content['views']) != 'undefined' ) {
-                    for (var rule in routing) {
+
+                for (var rule in routing) {
+                    //webroot control
+                    if (conf[bundle][env].server.webroot != '/') {
+                        if (typeof(routing[rule].url) != 'object') {
+                            routing[rule].url = conf[bundle][env].server.webroot + routing[rule].url;
+                        } else {
+                            for (var u=0; u<routing[rule].url.length; ++u) {
+                                routing[rule].url[u] =  conf[bundle][env].server.webroot + routing[rule].url[u]
+                            }
+                        }
+                    }
+
+                    if ( typeof(conf[bundle][env].content['views']) != 'undefined' ) {
                         routing[rule].param.file = routing[rule].param.action;
                         var tmpRouting = [];
                         for (var i = 0, len = routing[rule].param.file.length; i < len; ++i) {
@@ -568,6 +581,7 @@ Config  = function(opt) {
                         }
                     }
                 }
+
 
             } else if (name == 'routing') {
                 continue;
@@ -611,6 +625,7 @@ Config  = function(opt) {
         }//EO for (name
 
         var hasViews = (typeof(files['views']) != 'undefined' && typeof(files['views']['default']) != 'undefined') ? true : false;
+
         //Set default keys/values for views
         if ( hasViews &&  typeof(files['views'].default.views) == 'undefined' ) {
             files['views'].default.views =  _(appPath +'/views')
@@ -668,7 +683,66 @@ Config  = function(opt) {
             files['statics'] = require(getPath('geena.core') +'/template/conf/statics.json')
         } else if ( typeof(files['statics']) != 'undefined' ) {
             var defaultAliases = require(getPath('geena.core') +'/template/conf/statics.json');
-            files['statics'] = merge(true, defaultAliases, files['statics'])
+            //files['statics'] = merge(true, defaultAliases, files['statics'])
+            files['statics'] = merge(files['statics'], defaultAliases)
+        }
+
+        //webroot statics
+        if (hasViews &&
+            conf[bundle][env].server.webroot  != '/' &&
+            typeof(files['statics']) != 'undefined'
+        ) {
+            var newStatics = {};
+            var wroot = ( conf[bundle][env].server.webroot.substr(0,1) == '/' ) ?  conf[bundle][env].server.webroot.substr(1) : conf[bundle][env].server.webroot;
+            var k;
+            for (var i in files['statics']) {
+                k = i;
+                if ( !(new RegExp(wroot)).test(files['statics'][k]) ) {
+
+                    if (i.substr(0, 1) != '/') {
+                        i = '/' + i
+                    }
+
+                    newStatics[ wroot + i] = files['statics'][k]
+                } else {
+                    newStatics[k] = files['statics'][k]
+                }
+                delete files['statics'][k]
+            }
+            files['statics'] = newStatics;
+        }
+
+        //webroot javascripts
+        if (hasViews &&
+            conf[bundle][env].server.webroot  != '/' &&
+            typeof(files['views'].default.javascripts) != 'undefined'
+        ) {
+            for (var i=0; i<files['views'].default.javascripts.length; ++i) {
+                if (
+                    files['views'].default.javascripts[i].substr(0,1) != '{' &&
+                    !/\:\/\//.test(files['views'].default.javascripts[i])
+                ) {
+                    if (files['views'].default.javascripts[i].substr(0,1) != '/')
+                        files['views'].default.javascripts[i] = '/'+files['views'].default.javascripts[i];
+                    files['views'].default.javascripts[i] = conf[bundle][env].server.webroot + files['views'].default.javascripts[i]
+                }
+            }
+        }
+        //webroot stylesheets
+        if (hasViews &&
+            conf[bundle][env].server.webroot  != '/' &&
+            typeof(files['views'].default.stylesheets) != 'undefined'
+        ) {
+            for (var i=0; i<files['views'].default.stylesheets.length; ++i) {
+                if (
+                    files['views'].default.stylesheets[i].substr(0,1) != '{' &&
+                    !/\:\/\//.test(files['views'].default.stylesheets[i])
+                ) {
+                    if (files['views'].default.stylesheets[i].substr(0,1) != '/')
+                        files['views'].default.stylesheets[i] = '/'+files['views'].default.stylesheets[i];
+                    files['views'].default.stylesheets[i] = conf[bundle][env].server.webroot + files['views'].default.stylesheets[i]
+                }
+            }
         }
 
         files = whisper(reps, files);

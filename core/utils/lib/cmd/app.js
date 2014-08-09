@@ -529,6 +529,9 @@ var AppCommand = {
                 var Strategy = require( path );
                 var deploy = new Strategy(conf);
             }
+        } else if (path == userScript) {
+            var UserStrategy = require( userScript );
+            var deploy = new UserStrategy(conf);
         } else {
             console.error('no deploy strategy found')
         }
