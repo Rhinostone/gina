@@ -5,7 +5,10 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-var Entity;
+
+var EventEmitter  = require('events').EventEmitter;
+var utils   = require('geena').utils;
+var inherits = utils.inherits;
 
 /**
  * @class Model.{Model}.Entity class
@@ -16,8 +19,7 @@ var Entity;
  * @author      Rhinostone <geena@rhinostone.com>
  * @api         Public
  */
-
-Entity = function(configuration, conn) {
+function Entity(configuration, conn) {
 
     var _this = this;
     var self = {};
@@ -34,4 +36,5 @@ Entity = function(configuration, conn) {
 
 };
 
+inherits(Entity, EventEmitter);
 module.exports = Entity

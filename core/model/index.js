@@ -6,6 +6,17 @@
  * file that was distributed with this source code.
  */
 
+//Imports.
+var fs      = require('fs');
+var EventEmitter  = require('events').EventEmitter;
+var Module  = require('module');
+var utils   = require('geena').utils;
+var modelHelper = new utils.helpers.model();
+var inherits = utils.inherits;
+    //UtilsConfig = Utils.Config(),
+//dev     = require(_(getPath('geena.core')'/dev') ),
+
+
 /**
  * @class Model class
  *
@@ -15,25 +26,7 @@
  * @author      Rhinostone <geena@rhinostone.com>
  * @api         Public
  */
-
-var Model;
-
-//Imports.
-var fs      = require('fs');
-var Module  = require('module');
-var utils   = require('geena').utils;
-var modelHelper = new utils.helpers.model();
-var inherits = utils.inherits;
-    //UtilsConfig = Utils.Config(),
-//dev     = require(_(getPath('geena.core')'/dev') ),
-var util    = require('util');
-var EventEmitter  = require('events').EventEmitter;
-
-/**
- * Model Constructor
- * @constructor
- * */
-Model = function(namespace) {
+function Model(namespace) {
     var _this = this;
     var _configuration = null;
     var _connector = null;
@@ -247,12 +240,13 @@ Model = function(namespace) {
                     var EntityClass = require( _(entitiesPath + '/' + files[i]) );
                     //Inherits.
                     var Entity = inherits(EntityClass, ModelEntityClass);
-                    var EventEmitter  = require('events').EventEmitter;
-                    util.inherits(Entity, EventEmitter);
-                    //Entity = inherits(Entity, EventEmitter);
-                    for (var prop in Entity) {
-                        console.log('PROP FOUND ', prop);
-                    }
+                    //var EventEmitter  = require('events').EventEmitter;
+                    //util.inherits(Entity, EventEmitter);
+
+
+                    //for (var prop in Entity) {
+                    //    console.log('PROP FOUND ', prop);
+                    //}
                     var entity = new Entity( _this.getConfig(_connector), conn);
                     entitiesManager[entityName] = entity;
 
@@ -313,5 +307,5 @@ Model = function(namespace) {
     }
 };
 
-util.inherits(Model, EventEmitter);
+inherits(Model, EventEmitter);
 module.exports = Model;

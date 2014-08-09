@@ -1,4 +1,3 @@
-//var Deploy;
 
 var fs = require('fs');
 var EventEmitter = require('events').EventEmitter;
@@ -6,7 +5,7 @@ var spawn = require('child_process').spawn;
 var helpers = require('../helpers');
 var inherits = require('../inherits');
 
-//Deploy = function(opt) {
+
 function Deploy(opt) {
 
     var self =  Deploy.instance || this;
@@ -433,5 +432,5 @@ function Deploy(opt) {
     return this
 };
 
-Deploy = inherits(Deploy, EventEmitter);
+inherits(Deploy, EventEmitter);
 module.exports = Deploy

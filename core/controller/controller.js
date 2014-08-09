@@ -6,6 +6,15 @@
  * file that was distributed with this source code.
  */
 
+//Imports.
+var fs              = require('fs');
+var EventEmitter    = require('events').EventEmitter;
+var utils           = require('./../utils');
+var merge           = utils.merge;
+var inherits        = utils.inherits;
+var swig            = require('swig');
+
+
 /**
  * @class Controller
  *
@@ -16,15 +25,7 @@
  *
  * @api         Public
  */
-var Controller;
-
-//Imports.
-var fs      = require('fs');
-var utils   = require('./../utils');
-var merge   = utils.merge;
-var swig    = require('swig');
-
-Controller = function(request, response, next) {
+function Controller(request, response, next) {
 
     //public
     this.name       = "Controller";
@@ -468,23 +469,8 @@ Controller = function(request, response, next) {
     }
 
 
-/**    //protected
-    this.protected =  {
-        setOptions : self.setOptions,
-        hasOptions : self.hasOptions,
-        render : self.render,
-        renderJSON : self.renderJSON,
-        renderTEXT : self.renderTEXT,
-        set : self.set,
-        setMeta : self.setMeta,
-        getConfig : self.getConfig,
-        redirect : self.redirect,
-        getData : self.getData,
-        setRessources : setRessources,
-        setLayout : self.setLayout
-    };*/
-
-    init(request, response, next);
+    init(request, response, next)
 };
 
+inherits(Controller, EventEmitter);
 module.exports = Controller

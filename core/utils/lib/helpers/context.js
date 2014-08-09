@@ -6,6 +6,9 @@
  * file that was distributed with this source code.
  */
 
+var os = require('os');
+var merge = require('./../merge');
+
 /**
  * ContextHelper
  *
@@ -13,25 +16,19 @@
  * @author      Rhinostone <geena@rhinostone.com>
  * @api public
  * */
-var ContextHelper;
+function ContextHelper(contexts) {
 
-var os = require('os');
-var EventEmitter = require('events').EventEmitter;
-var merge = require('./../merge');
+    var self = this;
 
-/**
- * ContextHelper Constructor
- * */
-ContextHelper = function(contexts) {
-
-    var _this = this;
-
+    /**
+     * ContextHelper Constructor
+     * */
     var init = function(contexts) {
         if ( typeof(ContextHelper.initialized) != "undefined" ) {
             return ContextHelper.instance
         } else {
             ContextHelper.initialized = true;
-            ContextHelper.instance = _this
+            ContextHelper.instance = self
         }
 
         if ( typeof(contexts) == 'undefined' ) {
@@ -39,11 +36,11 @@ ContextHelper = function(contexts) {
                 paths : {}
             }
         }
-        _this.contexts = contexts
+        self.contexts = contexts
     }
 
     joinContext = function(context) {
-        merge(true, _this.contexts, context)
+        merge(true, self.contexts, context)
     }
 
     setContext = function(name, obj) {
@@ -55,27 +52,27 @@ ContextHelper = function(contexts) {
                 var name = 'global'
             }
 
-            if ( typeof(_this.contexts[name]) != "undefined") {
-                merge(_this.contexts[name], obj)
+            if ( typeof(self.contexts[name]) != "undefined") {
+                merge(self.contexts[name], obj)
             } else {
-                _this.contexts[name] = obj
+                self.contexts[name] = obj
             }
         } else {
             //console.log("setting context ", arguments[0]);
-            _this.contexts = arguments[0]
+            self.contexts = arguments[0]
         }
     }
 
     getContext = function(name) {
-        //console.log("getting ", name, _this.contexts.content[name], _this.contexts);
+        //console.log("getting ", name, self.contexts.content[name], self.contexts);
         if ( typeof(name) != 'undefined' ) {
             try {
-                return _this.contexts[name]
+                return self.contexts[name]
             } catch (err) {
                 return undefined
             }
         } else {
-            return _this.contexts
+            return self.contexts
         }
     }
 

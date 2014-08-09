@@ -6,16 +6,6 @@
  * file that was distributed with this source code.
  */
 
-/**
- * @class Router
- *
- *
- * @package     Geena
- * @namespace
- * @author      Rhinostone <geena@rhinostone.com>
- * @api         Public
- */
-var Router;
 
 //Imports.
 var url     = require("url"),
@@ -25,7 +15,16 @@ var url     = require("url"),
     console = utils.logger,
     inherits = utils.inherits;
 
-Router = function(env) {
+/**
+ * @class Router
+ *
+ *
+ * @package     Geena
+ * @namespace
+ * @author      Rhinostone <geena@rhinostone.com>
+ * @api         Public
+ */
+function Router(env) {
 
     this.name = 'Router';
     var _this = this;

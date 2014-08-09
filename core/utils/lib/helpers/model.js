@@ -6,6 +6,9 @@
  * file that was distributed with this source code.
  */
 
+
+var merge = require('./../merge');
+
 /**
  * ModelHelper
  *
@@ -13,12 +16,8 @@
  * @author      Rhinostone <geena@rhinostone.com>
  * @api public
  * */
-var ModelHelper;
-
-var merge = require('./../merge');
-
-ModelHelper = function(models) {
-    var _this = this;
+function ModelHelper(models) {
+    var self = this;
     /**
      * Init
      * @contructor
@@ -28,7 +27,7 @@ ModelHelper = function(models) {
             return ModelHelper.instance
         } else {
             ModelHelper.initialized = true;
-            ModelHelper.instance = _this
+            ModelHelper.instance = self
         }
 
         if ( typeof(models) == 'undefined' ) {
@@ -36,7 +35,7 @@ ModelHelper = function(models) {
                 entities : {}
             }
         }
-        _this.models = models
+        self.models = models
     }
 
     this.setConnection = function(name, obj) {
@@ -45,26 +44,26 @@ ModelHelper = function(models) {
                 var name = 'global'
             }
 
-            if (typeof(_this.models[name]) == 'undefined') {
-                _this.models[name] = {}
+            if (typeof(self.models[name]) == 'undefined') {
+                self.models[name] = {}
             }
 
-            if ( typeof(_this.models[name]['getConnection']) != "undefined") {
+            if ( typeof(self.models[name]['getConnection']) != "undefined") {
                 merge(
-                    _this.models[name]['getConnection'],
+                    self.models[name]['getConnection'],
                     function() {
-                        return _this.models[name]['_connection']
+                        return self.models[name]['_connection']
                     }
                 )
             } else {
-                _this.models[name]['_connection'] = obj;
-                _this.models[name]['getConnection'] = function() {
-                    return _this.models[name]['_connection']
+                self.models[name]['_connection'] = obj;
+                self.models[name]['getConnection'] = function() {
+                    return self.models[name]['_connection']
                 }
             }
         } else {
             //not sure...
-            _this.models = arguments[0]
+            self.models = arguments[0]
         }
     }
 
@@ -75,25 +74,25 @@ ModelHelper = function(models) {
                 var name = 'global'
             }
 
-            if ( typeof(_this.models[name]) != "undefined") {
-                merge(_this.models[name], obj)
+            if ( typeof(self.models[name]) != "undefined") {
+                merge(self.models[name], obj)
             } else {
-                _this.models[name] = obj
+                self.models[name] = obj
             }
         } else {
-            _this.models = arguments[0]
+            self.models = arguments[0]
         }
     }
 
     getModel = function(name) {
         if ( typeof(name) != 'undefined' ) {
             try {
-                return _this.models[name]
+                return self.models[name]
             } catch (err) {
                 return undefined
             }
         } else {
-            return _this.models
+            return self.models
         }
     }
 

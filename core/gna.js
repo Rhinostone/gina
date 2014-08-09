@@ -18,7 +18,7 @@ var fs      = require('fs');
 var Config  = require('./config');
 var utils   = require('./utils');
 //Yes it's global...
-console = utils.logger;
+var console = utils.logger;
 
 var Proc    = utils.Proc;
 var Server  = require('./server');//TODO require('./server').http

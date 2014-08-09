@@ -6,6 +6,17 @@
  * file that was distributed with this source code.
  */
 
+
+//Imports.
+var fs              = require('fs');
+var util            = require('util');
+var Events          = require('events');
+var EventEmitter    = require('events').EventEmitter;
+var utils           = require("./utils");
+var merge           = utils.merge;
+var inherits        = utils.inherits;
+var console         = utils.logger;
+
 /**
  * @class Config
  *
@@ -18,27 +29,16 @@
  * TODO - split Config.Env & Config.Host
  */
 
-var Config;
-
-//Imports.
-var fs              = require('fs');
-var util            = require('util');
-var Events          = require('events');
-var EventEmitter    = require('events').EventEmitter;
-var utils           = require("./utils");
-var merge           = utils.merge;
-var console         = utils.logger;
-
-/**
- * Config Constructor
- * @constructor
- * */
-Config  = function(opt) {
+function Config(opt) {
 
     var self = this;
     this.bundles = [];
     this.allBundles = [];
 
+    /**
+     * Config Constructor
+     * @constructor
+     * */
     var init =  function(opt) {
         if ( typeof(Config.initialized) == 'undefined' ) {
             Config.initialized = true;
@@ -305,8 +305,8 @@ Config  = function(opt) {
     var loadWithTemplate = function(userConf, template, callback) {
 
         var content = userConf,
-        //if nothing to merge.
-            newContent = content;
+            //if nothing to merge.
+            newContent = JSON.parse( JSON.stringify(content) );
 
         var isStandalone = true,
             env = self.Env.get(),
@@ -400,8 +400,8 @@ Config  = function(opt) {
                     //console.log("Merging..."+ app, "\n", content[app][env], "\n AND \n", template[app][env]);
                     //Mergin user's & template.
                     newContent[app][env] = merge(
-                        content[app][env],
-                        template["{bundle}"]["{env}"]
+                        newContent[app][env],
+                        JSON.parse( JSON.stringify(template["{bundle}"]["{env}"]))//only copy of it.
                     );
 
 
@@ -878,5 +878,6 @@ Config  = function(opt) {
 
 };
 
-util.inherits(Config, EventEmitter);
+//util.inherits(Config, EventEmitter);
+inherits(Config, EventEmitter);
 module.exports = Config

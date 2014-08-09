@@ -1,11 +1,8 @@
 /**
  * FrameworkController
  * */
-var FrameworkController;
 
-//Imports.
-
-FrameworkController = function() {
+function FrameworkController() {
     var self = this;
 
     /**
