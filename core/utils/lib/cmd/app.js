@@ -398,27 +398,40 @@ var AppCommand = {
     build : function(opt, argument) {
 
         console.info('Releasing build...');
-        //Getting project infos.
+        var bundle = this.bundle;
+        var projectConfPath = _(getPath('root') + '/project.json');
         try {
-            var project = require( _(getPath('root') + '/project.json') );
+            var project = require(projectConfPath);
         } catch (err) {
             console.error(err.stack);
         }
+        var defaultBuildScript = 'script/build.js';
+        var defaultBuildScriptPath = _(_( getPath('root') +'/'+ project.bundles[bundle].src +'/'+defaultBuildScript ));
 
-        var bundle = this.bundle;
+        //Getting project infos.
+
+
         try {
             //is Real bundle ?.
             if ( typeof(bundle) != 'undefined' && typeof(project.bundles[bundle]) != 'undefined') {
                 var BuildCmd = require('./geena-build');
-                if ( typeof(project.bundles[bundle]['script']) != 'undefined' && typeof(project.bundles[bundle]['script']['build']) != 'undefined') {
+                if (
+                    typeof(project.bundles[bundle]['script']) != 'undefined' && typeof(project.bundles[bundle]['script']['build']) != 'undefined' ||
+                    fs.existsSync(defaultBuildScriptPath)
+                ) {
+                    // found default build script but, no build description found in project.json
+                    if ( typeof(project.bundles[bundle]['script']) == 'undefined' ) { // updating project.json then
+                        if ( typeof(project.bundles[bundle]['script']) == 'undefined') {
+                            project.bundles[bundle]['script'] = {}
+                        }
+                        project.bundles[bundle]['script']['build'] = defaultBuildScript;
+                        fs.writeFileSync(projectConfPath, JSON.stringify(project, null, 4))
+                    }
                     var CustomBuild = require(_(getPath('root') +'/'+ project.bundles[bundle].src + '/' + project.bundles[bundle].script.build));
                     CustomBuild = inherits(CustomBuild, BuildCmd);
-                    CustomBuild = inherits( CustomBuild, EventEmitter);
 
                     var buildCmd = new CustomBuild(project, bundle);
                 } else {
-
-                    BuildCmd = inherits( BuildCmd, EventEmitter);
                     var buildCmd = new BuildCmd(project, bundle);
                     buildCmd.init()
                 }

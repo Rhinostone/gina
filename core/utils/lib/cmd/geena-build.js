@@ -1,10 +1,11 @@
-var BuildBundle;
-var fs = require('fs');
-var utils = getContext('geena.utils');
-var GEENA_PATH = _( getPath('geena.core') );
-var Config = require( _( GEENA_PATH + '/config') );
+var fs              = require('fs');
+var EventEmitter    = require('events').EventEmitter;
+var helpers         = require('../helpers');
+var inherits        = require('../inherits');
+var GEENA_PATH      = _( getPath('geena.core') );
+var Config          = require( _( GEENA_PATH + '/config') );
 
-BuildBundle = function(project, bundle) {
+function BuildBundle(project, bundle) {
 
     var self = this;
     // define all default
@@ -153,4 +154,5 @@ BuildBundle = function(project, bundle) {
 
 };
 
+inherits(BuildBundle, EventEmitter);
 module.exports = BuildBundle
