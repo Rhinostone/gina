@@ -1,11 +1,9 @@
-var DeployInit;
-
 var Deploy = require('./geena-deploy');
 //var inherits = require('../inherits');
 
 
 
-DeployInit = function(opt) {
+function DeployInit(opt) {
 
     var self = this;
 

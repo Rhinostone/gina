@@ -1,4 +1,4 @@
-var controller = require('./controller');
-controller.prototype.framework = require('./controller.framework');
+var Controller = require('./controller');
+Controller.prototype.framework = require('./controller.framework');
 
-module.exports = controller
+module.exports = Controller

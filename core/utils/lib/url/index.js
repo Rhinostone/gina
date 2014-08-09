@@ -1,6 +1,5 @@
-var Url;
 
-Url = function(env, routes) {
+function Url(env, routes) {
     var self = this;
 
     var init = function() {

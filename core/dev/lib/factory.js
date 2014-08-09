@@ -8,7 +8,7 @@
  */
 
 
-var Factory = function(options){
+function Factory(options){
     var init = function(){
 
     };

@@ -6,8 +6,8 @@
  * file that was distributed with this source code.
  */
 //'use strict';
-var Logger;
 
+// Imports
 var util = require('util');
 var merge = require('../merge');
 
@@ -20,7 +20,7 @@ var merge = require('../merge');
  *
  * @api Public
  * */
-Logger = function(opt) {
+function Logger(opt) {
     var self = this;
     var defaultOptions = {
         name: 'geena', // by default

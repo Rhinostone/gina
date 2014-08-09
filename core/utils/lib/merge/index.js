@@ -1,9 +1,6 @@
-var Merge;
-
-Merge = function () {
+function Merge() {
     /**
      *
-     * @param {boolean} deep - Deep copy
      * @param {boolean} [override] - Override when copying
      * @param {object} target - Target object
      * @param {object} source - Source object

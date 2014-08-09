@@ -1,11 +1,9 @@
+//Imports goes here.
+
 /**
  * {Bundle}Controller
  * */
-var {Bundle}Controller;
-
-//Imports.
-
-{Bundle}Controller = function() {
+function {Bundle}Controller() {
     var self = this;
 
     /**

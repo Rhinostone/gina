@@ -1,6 +1,3 @@
-var Server;
-
-
 //Imports.
 var fs              = require('fs');
 var path            = require("path");
@@ -15,7 +12,7 @@ var merge           = utils.merge;
 var Proc            = utils.Proc;
 var console         = utils.logger;
 
-Server = function(options) {
+function Server(options) {
     var self = this;
 
 

@@ -6,7 +6,7 @@
  * file that was distributed with this source code.
  */
 'use strict';
-var Inherits;
+
 
 /**
  * @class Inherits
@@ -17,7 +17,7 @@ var Inherits;
  *
  * @api Public
  * */
-Inherits = function(a, b) {
+function Inherits(a, b) {
     /**
      * init
      * @constructor

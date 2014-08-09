@@ -6,17 +6,6 @@
  * file that was distributed with this source code.
  */
 
-/**
- * PathHelper
- *
- * @package     Geena.Utils.Helpers
- * @author      Rhinzostone <geena@rhinostone.com>
- * @api public
- *
- * TODO - Put debug logs
- * */
-var PathHelper;
-
 var fs = require('fs');
 var Events = require('events');
 var Path = require('path');
@@ -27,23 +16,35 @@ var e =  new Events.EventEmitter();
 //Reminder: let listeners be removed by the V8 garbage collector.
 e.setMaxListeners(100);
 
+
 /**
- * PathHelper Constructor
- * @constructor
+ * PathHelper
+ *
+ * @package     Geena.Utils.Helpers
+ * @author      Rhinzostone <geena@rhinostone.com>
+ * @api public
+ *
+ * TODO - Put debug logs
  * */
-PathHelper = function() {
+
+ PathHelper = function() {
 
     this.paths = [];
     this.userPaths = {};
     var _this = this;
-    /**
-     * _
-     *
-     * @param {string} path - Path to convert
-     * @param {boolean} [force] - Force conversion to match platform style (Only for string conversion)
-     *
-     * @return {string|object} converted
-     * */
+
+     /**
+      * _
+      * PathHelper Constructor
+      *
+      * @constructor
+      *
+      * @param {string} path - Path to convert
+      * @param {boolean} [force] - Force conversion to match platform style (Only for string conversion)
+      *
+      * @return {string|object} converted
+      * */
+
     _ = function(path, force) {
         if ( typeof(force) == undefined) {
             force = _this.force = false
