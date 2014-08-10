@@ -1,13 +1,13 @@
 //Imports.
 var fs              = require('fs');
 var path            = require("path");
-var util            = require('util');
 var EventEmitter    = require('events').EventEmitter;
 var express         = require('express');
 var url             = require('url');
 var Config          = require('./config');
 var Router          = require('./router');
 var utils           = require('./utils');
+var inherits        = utils.inherits;
 var merge           = utils.merge;
 var Proc            = utils.Proc;
 var console         = utils.logger;
@@ -70,7 +70,11 @@ function Server(options) {
     }
 
 
-    this.start = function() {
+    this.start = function(instance) {
+
+        if (instance) {
+            self.instance = instance
+        }
 
         try {
             self.validHeads =  fs.readFileSync(getPath('geena.core') + '/mime.types').toString();
@@ -107,7 +111,7 @@ function Server(options) {
      * */
     var onRoutesLoaded = function(callback) {
 
-        var config = Config();
+        var config = new Config();
         var conf =  config.getInstance(self.appName);
         var cacheless = config.isCacheless();
 
@@ -267,7 +271,7 @@ function Server(options) {
             callback(false, pathname, req, res, next)
         }
 
-        var config = Config();
+        var config = new Config();
         config.setBundles(self.bundles);
         var conf = config.getInstance(bundle);
         if ( typeof(conf) != 'undefined') {//for cacheless mode
@@ -445,19 +449,15 @@ function Server(options) {
     };
 
 
-    return {
-        onConfigured : function(callback) {
-            self.once('configured', function(err, instance, middleware, conf) {
-                callback(err, instance, middleware, conf)
-            });
-            init(options)
-        },
-        start : function(instance) {
-            self.instance = instance;
-            self.start(instance)
-        }
+    this.onConfigured = function(callback) {
+        self.once('configured', function(err, instance, middleware, conf) {
+            callback(err, instance, middleware, conf)
+        });
+        init(options)
     }
+
+    return this
 };
 
-util.inherits(Server, EventEmitter);
+Server = inherits(Server, EventEmitter);
 module.exports = Server
