@@ -154,5 +154,5 @@ function BuildBundle(project, bundle) {
 
 };
 
-inherits(BuildBundle, EventEmitter);
+BuildBundle = inherits(BuildBundle, EventEmitter);
 module.exports = BuildBundle

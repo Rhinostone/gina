@@ -36,5 +36,5 @@ function Entity(configuration, conn) {
 
 };
 
-inherits(Entity, EventEmitter);
+Entity = inherits(Entity, EventEmitter);
 module.exports = Entity

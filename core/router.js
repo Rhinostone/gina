@@ -27,9 +27,12 @@ var url     = require("url"),
 function Router(env) {
 
     this.name = 'Router';
-    var _this = this;
-    var Config  = require('./config')();
-    var _conf = Config.getInstance();
+    var self = this;
+    var Config  = require('./config');
+    var config = new Config();
+    var local = {
+        conf : config.getInstance()
+    };
 
     /**
      * Router Constructor
@@ -38,7 +41,7 @@ function Router(env) {
     var init = function(){
         if ( typeof(Router.initialized) != "undefined" ) {
             console.log("....Router instance already exists...");
-            return _this.getInstance()
+            return self.getInstance()
         } else {
             Router.initialized = true;
             console.log("....creating new Router...")
@@ -58,11 +61,11 @@ function Router(env) {
         return ( patt.test(pathname) ) ? true : false
     }
     this.setMiddlewareInstance = function(instance) {
-        _this.middlewareInstance = instance
+        self.middlewareInstance = instance
     }
 
     this.getInstance = function() {
-        return _this
+        return self
     }
 
     var parseRouting = function(request, params, route) {
@@ -164,12 +167,12 @@ function Router(env) {
         var actionFile          = params.param.file;
         var namespace       = params.param.namespace;
         var SuperController = require('./controller');
-        var hasViews        = ( typeof(_conf[bundle][env].content.views) != 'undefined' ) ? true : false;
+        var hasViews        = ( typeof(local.conf[bundle][env].content.views) != 'undefined' ) ? true : false;
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
-        console.debug("routing content : \n", bundle, env,  JSON.stringify( Config.Env.getConf( bundle, env ), null, 4) );
+        console.debug("routing content : \n", bundle, env,  JSON.stringify( config.Env.getConf( bundle, env ), null, 4) );
         //Middleware Filters when declared.
-        var resHeaders = Config.Env.getConf( bundle, env ).server.response.header;
+        var resHeaders = config.Env.getConf( bundle, env ).server.response.header;
         //TODO - to test
         if ( resHeaders.count() > 0 ) {
             for (var h in resHeaders)
@@ -180,17 +183,17 @@ function Router(env) {
         console.debug('ACTION ON  ROUTING IS : ' + action);
 
         //Getting superCleasses & extending it with super Models.
-        var controllerFile = _(_conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controller.js');
+        var controllerFile = _(local.conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controller.js');
 
         var options = {
             action          : action,
             file            : actionFile,
             bundle          : bundle,//module
-            bundlePath      : _conf[bundle][env].bundlesPath +'/'+ bundle,
-            rootPath        : _this.executionPath,
-            conf            : _conf[bundle][env],
-            instance        : _this.middlewareInstance,
-            views           : ( hasViews ) ? _conf[bundle][env].content.views : undefined,
+            bundlePath      : local.conf[bundle][env].bundlesPath +'/'+ bundle,
+            rootPath        : self.executionPath,
+            conf            : local.conf[bundle][env],
+            instance        : self.middlewareInstance,
+            views           : ( hasViews ) ? local.conf[bundle][env].content.views : undefined,
             cacheless       : cacheless
         };
 

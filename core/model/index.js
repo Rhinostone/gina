@@ -10,9 +10,11 @@
 var fs      = require('fs');
 var EventEmitter  = require('events').EventEmitter;
 var Module  = require('module');
-var utils   = require('geena').utils;
+var utils   = require('../utils');
+var console = utils.logger;
 var modelHelper = new utils.helpers.model();
 var inherits = utils.inherits;
+
     //UtilsConfig = Utils.Config(),
 //dev     = require(_(getPath('geena.core')'/dev') ),
 
@@ -31,6 +33,7 @@ function Model(namespace) {
     var _configuration = null;
     var _connector = null;
     var _locals = null;
+    var utils   = require('../utils');
     var config = getContext('geena.config');
     var utilsConfig = getContext('geena.utils.config');
     var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
@@ -286,26 +289,47 @@ function Model(namespace) {
         //});//EO Fs.readdir.
     };
 
-    setup(namespace);
 
-    return {
-        onReady : function(callback) {
 
-            _this.on('model#ready', function(err, model, entities) {
-                //entities == null when the database server isn't start.
-                if ( err ) {
-                    console.error(err.stack||err.message)
-                    //console.log('No entities found for [ '+ _this.name +':'+ entityName +'].\n 1) Check if the database is started.\n2) Check if exists: /models/entities/'+ entityName);
-                } else {
-                    console.log('!! found entities ', entities);
-                    modelHelper.setModel(model, entities);
-                }
-                callback(err, model, entities);
-            });
-            init()
-        }
-    }
+    this.onReady = function(callback) {
+        console.log('binding...');
+        _this.once('model#ready', function(err, model, entities) {
+            //entities == null when the database server isn't start.
+            if ( err ) {
+                console.error(err.stack||err.message)
+                //console.log('No entities found for [ '+ _this.name +':'+ entityName +'].\n 1) Check if the database is started.\n2) Check if exists: /models/entities/'+ entityName);
+            } else {
+                console.log('!! found entities ', entities);
+                modelHelper.setModel(model, entities);
+            }
+            callback(err, model, entities);
+        });
+        setup(namespace);
+        init();
+    };
+
+
+
+    return this
+
+    //return {
+    //    onReady : function(callback) {
+    //
+    //        _this.on('model#ready', function(err, model, entities) {
+    //            //entities == null when the database server isn't start.
+    //            if ( err ) {
+    //                console.error(err.stack||err.message)
+    //                //console.log('No entities found for [ '+ _this.name +':'+ entityName +'].\n 1) Check if the database is started.\n2) Check if exists: /models/entities/'+ entityName);
+    //            } else {
+    //                console.log('!! found entities ', entities);
+    //                modelHelper.setModel(model, entities);
+    //            }
+    //            callback(err, model, entities);
+    //        });
+    //        init()
+    //    }
+    //}
 };
 
-inherits(Model, EventEmitter);
+Model = inherits(Model, EventEmitter);
 module.exports = Model;

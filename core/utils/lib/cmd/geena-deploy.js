@@ -432,5 +432,5 @@ function Deploy(opt) {
     return this
 };
 
-inherits(Deploy, EventEmitter);
+Deploy = inherits(Deploy, EventEmitter);
 module.exports = Deploy

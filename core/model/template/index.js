@@ -19,14 +19,13 @@
 var Model;
 
 //Imports.
-var fs      = require('fs'),
-    Module  = require('module')
-    utils   = require('geena.utils'),
-    merge   = utils.merge,
-    //Dev     = Utils.Dev,
-    util    = require('util'),
-    EventEmitter  = require('events').EventEmitter,
-    Config  = require('./../config');
+var fs      = require('fs');
+var Module  = require('module');
+var utils   = require('geena').utils;
+var merge   = utils.merge;
+//var Dev     = Utils.Dev;
+var EventEmitter  = require('events').EventEmitter;
+var Config  = require('./../config');
 
 Model = function(namespace){
     var _this = this;
@@ -254,7 +253,6 @@ Model = function(namespace){
         }
     }
 };
-Util.inherits(Model, EventEmitter);
 
-
+Model = inherits(Model, EventEmitter);
 module.exports = Model;

@@ -362,17 +362,19 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 // => var apiModel = getContext('apiModel')
                 console.log('....model ', c + 'Model');
                 mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
-                mObj[c+'Model'].onReady(
-                    function( err, _connector, _entities) {
-                        if (err) {
-                            console.error(err.stack||err.message)
+                mObj[c+'Model']
+                    .onReady(
+                        function onModelReady( err, _connector, _entities) {
+                            if (err) {
+                                console.error('found error ...', err);
+                                console.error(err.stack||err.message||err)
+                            }
+                            done(_connector)
                         }
-                        done(_connector)
-                    }
-                )
+                    );
             }
         } else {
-            callback()
+            callback(new Error('no connector found'))
         }
     }
 
