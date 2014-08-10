@@ -74,6 +74,9 @@ function Router(env) {
             score = 0,
             r = {};
 
+        //attaching routing description for this request
+        request.routing = params; // can be retried in controller with: req.routing
+
         if (uRe.length === uRo.length) {
             var maxLen = uRo.length;
             //console.info("-----------------FOUND MATCHING SCORE", uRe.length, uRo.length);

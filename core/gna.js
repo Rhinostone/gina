@@ -67,7 +67,7 @@ if ( typeof(geenaPath) == 'undefined') {
 setContext('geena.utils', utils);
 
 var envs = ['dev', 'debug', 'stage', 'prod'];
-var protocols = ['http']; // will support https for the 0.0.10
+var protocols = ['http', 'https']; // will support https for the 0.0.10
 var env;
 //Setting env.
 env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';

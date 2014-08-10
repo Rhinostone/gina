@@ -550,7 +550,7 @@ function Config(opt) {
                 if (filename != main) {
                     routing = merge(true, require(main), routing);
                 }
-                files[name] = routing;
+
                 tmp = '';
 
                 //setting app param
@@ -582,7 +582,7 @@ function Config(opt) {
                     }
                 }
 
-
+                files[name] = routing;
             } else if (name == 'routing') {
                 continue;
             }
@@ -855,51 +855,6 @@ function Config(opt) {
     }
 
     return this
-
-
-    //if (!opt) {
-    //    //Interface
-    //    return {
-    //        getInstance : function(bundle) {
-    //            return self.getInstance(bundle)
-    //        },
-    //        isCacheless : function() {
-    //            //logger.info('geena', 'CORE:INFO:42','ninja conf  !!!!' + this.envConf, __stack);
-    //            return self.isCacheless()
-    //        },
-    //        refresh : function(bundle, callback) {
-    //            self.refresh(bundle, function(err, routing) {
-    //                callback(err, routing)
-    //            })
-    //        },
-    //        Env : self.Env,
-    //        Host : self.Host,
-    //        setBundles : function(bundles) {
-    //            self.bundles = bundles
-    //        }
-    //    }
-    //
-    //} else {
-    //
-    //    //Defined before init.
-    //    var env = opt.env, _ready = {err:'not ready', val: null};
-    //    //logger.info('geena', 'CORE:INFO:42','about to init !!!! ', __stack);
-    //
-    //    this.env = opt.env;
-    //    init(opt);
-    //
-    //    return {
-    //        onReady : function(callback) {
-    //            self.once('complete', function(err, config) {
-    //                callback(err, config)
-    //            })
-    //        },
-    //        getInstance : function(bundle) {
-    //            return self.getInstance(bundle)
-    //        }
-    //    }
-    //}
-
 };
 
 Config = inherits(Config, EventEmitter);

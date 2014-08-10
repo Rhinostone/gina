@@ -64,20 +64,6 @@ function Controller(request, response, next) {
         return _options.cacheless
     }
 
-    this.throwError = function(res, code, msg) {
-
-        if ( !hasViews() ) {
-            res.writeHead(code, { 'Content-Type': 'application/json'} );
-            res.end(JSON.stringify({
-                status: code,
-                error: 'Error '+ code +'. '+ msg
-            }))
-        } else {
-            res.writeHead(code, { 'Content-Type': 'text/html'} );
-            res.end('Error '+ code +'. '+ msg)
-        }
-    }
-
     this.setOptions = function(options) {
         _options = Controller.instance._options = options;
         getParams(_request);
@@ -412,17 +398,83 @@ function Controller(request, response, next) {
     }
 
     /**
-     * TODO -  Controller.redirect()
+     * redirect
+     *
+     * Allows you to redirect to an internal [ route ], an internal [ path ], or an external [ url ]
+     * For this to work you have to set in your routing.json a new route using  "param":
+     * { "action": "redirect", "route": "one-valid-route" }
+     * OR
+     * { "action": "redirect", "url": "http://www.somedomain.com/page.html" }
+     *
+     * if you are free to use the redirection [ code ] of your choice, we've set it to 301 by default
+     *
+     *
+     * @param {object} req
+     * @param {object} res
+     *
+     * @callback [ next ]
      * */
-    this.redirect = function(route) {
+    this.redirect = function(req, res, next) {
+        var route = req.routing.param.route;
+        var path = req.routing.param.path || "";
+        var url = req.routing.param.url;
+        var code = req.routing.param.code || 301;
+        var conf = self.getConfig();
+        var routing = conf.content.routing;
+        var condition = true; //set by default for url @ path redirect
 
+        if (route) { // will go with route first
+            condition = ( typeof(routing[route]) != 'undefined') ? true : false;
+        }
+
+        if ( !self.forward404Unless(condition, req, res) ) { // forward to 404 if bad route
+
+            if (route) { // will go with route first
+                path = routing[route].url;
+                if ( typeof(path instanceof Array) ) {
+                    path = path[0] //if it is an array, we just take the first one
+                }
+                path = conf.hostname + conf.server.webroot + path;
+            } else if (url) {
+                path = url
+            } else {
+                path = conf.hostname + conf.server.webroot + path
+            }
+
+            res.writeHead(code, {'Location': path});
+            res.end()
+        }
     }
 
-    /**
-     * TODO -  Controller.forward404Unless()
-     * */
-    this.forward404Unless = function(condition) {
 
+    /**
+     * forward404Unless
+     *
+     * @param {boolean} condition
+     * @param {object} req
+     * @param {object} res
+     *
+     * @callback [ next ]
+     * @param {string | boolean} err
+     *
+     * @return {string | boolean} err
+     * */
+    this.forward404Unless = function(condition, req, res, next) {
+        var pathname = req.url;
+
+        if (!condition) {
+            self.throwError(res, 404, 'Page not found\n' + pathname);
+            var err = new Error('Page not found\n' + pathname);
+            if ( typeof(next) != 'undefined')
+                next(err)
+            else
+                return err
+        } else {
+            if ( typeof(next) != 'undefined')
+                next(false)
+            else
+                return false
+        }
     }
 
     /**
@@ -468,9 +520,22 @@ function Controller(request, response, next) {
         }
     }
 
+    this.throwError = function(res, code, msg) {
+
+        if ( !hasViews() ) {
+            res.writeHead(code, { 'Content-Type': 'application/json'} );
+            res.end(JSON.stringify({
+                status: code,
+                error: 'Error '+ code +'. '+ msg
+            }))
+        } else {
+            res.writeHead(code, { 'Content-Type': 'text/html'} );
+            res.end('Error '+ code +'. '+ msg)
+        }
+    };
 
     init(request, response, next)
 };
 
-inherits(Controller, EventEmitter);
+Controller = inherits(Controller, EventEmitter);
 module.exports = Controller

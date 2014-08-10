@@ -212,7 +212,9 @@ function Server(options) {
                 callback(err)
             }
 
+            self.conf[apps[i]].content.routing = self.routing
         }//EO for.
+
         callback(false)
     }
 
@@ -233,6 +235,9 @@ function Server(options) {
 
         self.instance.all('*', function onInstance(request, response, next) {
             //Only for dev & debug.
+            self.conf[self.appName]['protocol'] = request.protocol || self.conf[self.appName]['hostname'];
+            self.conf[self.appName]['hostname'] = self.conf[self.appName]['protocol'] +'://'+ request.headers.host;
+
             loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, req, res, next) {
                 console.log('calling back..');
                 if (err) {
