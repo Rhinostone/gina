@@ -607,7 +607,11 @@ function Config(opt) {
                 tmp = '';
 
                 if (filename != main) {
-                    files[name] = merge(true, require(main), files[name]);
+                    //files[name] = merge(true, require(main), files[name]);
+                    if (cacheless) {
+                        delete require.cache[_(main, true)];
+                    }
+                    files[name] = merge(files[name], require(main));
                 }
             } catch (_err) {
 
@@ -683,7 +687,7 @@ function Config(opt) {
             files['statics'] = require(getPath('geena.core') +'/template/conf/statics.json')
         } else if ( typeof(files['statics']) != 'undefined' ) {
             var defaultAliases = require(getPath('geena.core') +'/template/conf/statics.json');
-            //files['statics'] = merge(true, defaultAliases, files['statics'])
+
             files['statics'] = merge(files['statics'], defaultAliases)
         }
 
@@ -697,7 +701,8 @@ function Config(opt) {
             var k;
             for (var i in files['statics']) {
                 k = i;
-                if ( !(new RegExp(wroot)).test(files['statics'][k]) ) {
+               // if ( !(new RegExp(wroot)).test(files['statics'][k]) ) {
+                if ( !(new RegExp(wroot)).test(i) ) {
 
                     if (i.substr(0, 1) != '/') {
                         i = '/' + i
@@ -709,7 +714,7 @@ function Config(opt) {
                 }
                 delete files['statics'][k]
             }
-            files['statics'] = newStatics;
+            files['statics'] = JSON.parse( JSON.stringify(newStatics) );
         }
 
         //webroot javascripts

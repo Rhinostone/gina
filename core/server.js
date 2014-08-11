@@ -289,7 +289,7 @@ function Server(options) {
         if (self.conf[bundle].server.webroot != '/') {
             uri = (self.conf[bundle].server.webroot + pathname.replace(self.conf[bundle].server.webroot, '')).split('/');
             var len = self.conf[bundle].server.webroot.split('/').length;
-            key = uri.splice(1, len).join('/')
+            key = uri.splice(1, len).join('/');
         } else {
             uri = pathname.split('/');
             key = uri.splice(1, 1)[0]
