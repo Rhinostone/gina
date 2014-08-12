@@ -558,13 +558,19 @@ function Config(opt) {
 
                 for (var rule in routing) {
                     //webroot control
-                    if (conf[bundle][env].server.webroot != '/') {
-                        if (typeof(routing[rule].url) != 'object') {
-                            routing[rule].url = conf[bundle][env].server.webroot + routing[rule].url;
-                        } else {
-                            for (var u=0; u<routing[rule].url.length; ++u) {
-                                routing[rule].url[u] =  conf[bundle][env].server.webroot + routing[rule].url[u]
+                    if ( typeof(routing[rule].url) != 'object' ) {
+                        // adding / if missing
+                        if (routing[rule].url.substr(0,1) == '/') {
+                            routing[rule].url = routing[rule].url.substr(1);
+                        }
+
+                        routing[rule].url = conf[bundle][env].server.webroot + routing[rule].url;
+                    } else {
+                        for (var u=0; u<routing[rule].url.length; ++u) {
+                            if (routing[rule].url[u].substr(0,1) == '/') {
+                                routing[rule].url[u] = routing[rule].url[u].substr(1);
                             }
+                            routing[rule].url[u] =  conf[bundle][env].server.webroot + routing[rule].url[u]
                         }
                     }
 

@@ -413,6 +413,7 @@ function Controller() {
         var path = req.routing.param.path || "";
         var url = req.routing.param.url;
         var code = req.routing.param.code || 301;
+        var keepParams = req.routing.param['keep-params'] || false;
         var conf = self.getConfig();
         var routing = conf.content.routing;
         var condition = true; //set by default for url @ path redirect
