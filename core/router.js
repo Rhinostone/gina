@@ -8,13 +8,15 @@
 
 
 //Imports.
-//var fs      = require("fs");
 var url     = require("url");
 var utils   = require('./utils');
 var console = utils.logger;
 var inherits = utils.inherits;
 var SuperController = require('./controller');
 var Config  = require('./config');
+
+//init
+var config = new Config();
 
 /**
  * @class Router
@@ -29,8 +31,6 @@ function Router(env) {
 
     this.name = 'Router';
     var self = this;
-    //var Config  = require('./config');
-    var config = new Config();
     var local = {
         conf : config.getInstance()
     };
@@ -228,7 +228,7 @@ function Router(env) {
             superController.setOptions(request, response, options);
             superController.throwError(response, 500, err.stack);
         }
-        //eval('');
+
         action = null
     };//EO route()
 
