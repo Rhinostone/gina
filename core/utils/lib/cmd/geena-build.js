@@ -2,6 +2,7 @@ var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
 var helpers         = require('../helpers');
 var inherits        = require('../inherits');
+var console         = require('../logger');
 var GEENA_PATH      = _( getPath('geena.core') );
 var Config          = require( _( GEENA_PATH + '/config') );
 
