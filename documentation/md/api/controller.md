@@ -1,0 +1,53 @@
+# Controller API
+
+## Redirections
+
+There are many ways to redirect in Geena.
+
+### Redirecting thru `routing.json`
+
+#### 1st method
+adding the target to an existing route description
+```
+{
+    "default": {
+    	"comment": "default default index path",
+        "url": [
+        	"/", 
+            "", 
+            "/index.html", 
+            "default.js" 
+        ],
+        "param": { "action": "home" }
+    }
+}
+```
+
+Let's say my project url is http://localhost:3000
+
+This means that if i go to my browser and hit:
+- http://localhost:3000
+- http://localhost:3000/
+- http://localhost:3000/index.html
+- http://localhost:3000/default.js
+
+For all these urls, only `localhost:3000/` will call the `home`action while the others will only be `301`redirections to the first element of our urls array.
+
+
+
+NB.: The default redirect code applied will be `301`.
+
+#### 2nd method
+Creating a new route description
+route (route name), url or (relative) path.
+Redirect code (`301` by default)
+
+### Redirecting from your controller
+
+### Redirect types
+
+route (route name), url or (relative) path.
+
+Redirect code
+
+## Forwarding

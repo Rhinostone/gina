@@ -25,7 +25,7 @@ var swig            = require('swig');
  *
  * @api         Public
  */
-function Controller(request, response, next) {
+function Controller() {
 
     //public
     this.name       = "Controller";
@@ -33,15 +33,20 @@ function Controller(request, response, next) {
 
     //private
     var self = this;
-    var _options;
-    var _request, _response, _next;
+    var local = {
+        req : null,
+        res : null,
+        next : null,
+        options: null
+    };
 
     /**
      * Controller Constructor
      * @constructor
      * */
-    var init = function(request, response, next) {
-        _request = request, _response = response, _next = next;
+    //var init = function(request, response, next) {
+    var init = function() {
+        //_request = request, _response = response, _next = next;
         if ( typeof(Controller.initialized) != 'undefined' ) {
             return getInstance()
         } else {
@@ -51,27 +56,31 @@ function Controller(request, response, next) {
     }
 
     var getInstance = function() {
-        _options = Controller.instance._options;
+        local.options = Controller.instance._options;
         self._data = Controller.instance._data;
         return Controller.instance
     }
 
     var hasViews = function() {
-        return ( typeof(_options.views) != 'undefined' ) ? true : false;
+        return ( typeof(local.options.views) != 'undefined' ) ? true : false;
     }
 
     this.isCacheless = function() {
-        return _options.cacheless
+        return local.options.cacheless
     }
 
-    this.setOptions = function(options) {
-        _options = Controller.instance._options = options;
-        getParams(_request);
-        if ( typeof(_options.views) != 'undefined' && typeof(_options.action) != 'undefined' ) {
-            var action = _options.action;
+    this.setOptions = function(req, res, options) {
+        local.options = Controller.instance._options = options;
+
+        local.req = req;
+        local.res = res;
+
+        getParams(req);
+        if ( typeof(local.options.views) != 'undefined' && typeof(local.options.action) != 'undefined' ) {
+            var action = local.options.action;
             var ext = 'html';
-            if ( typeof(_options.views.default) != 'undefined' ) {
-                ext = _options.views.default.ext || ext;
+            if ( typeof(local.options.views.default) != 'undefined' ) {
+                ext = local.options.views.default.ext || ext;
             }
             if( !/\./.test(ext) ) {
                 ext = '.' + ext
@@ -85,30 +94,37 @@ function Controller(request, response, next) {
         }
 
         if ( hasViews() ) {
-            self.set('file', _options.file);
-            self.set('page.title', _options.file);
+            self.set('file', local.options.file);
+            self.set('page.title', local.options.file);
 
             //TODO - detect when to use swig
-            var dir = self.views || _options.views.default.views;
+            var dir = self.views || local.options.views.default.views;
             var swigOptions = {
                 loader: swig.loaders.fs(dir),
-                cache: (_options.cacheless) ? false : 'memory'
+                cache: (local.options.cacheless) ? false : 'memory'
             };
             swig.setDefaults(swigOptions);
             self.engine = swig;
         }
     }
 
-    this.setViewsLocation = function(dir) {
-        _options.views.default.views = dir;
-        _options.views.default.html = _(dir + '/html');
+    /**
+     * Set views|templates location
+     *
+     * @param {string} dir
+     * @param {string} [ layout ] - Is by default dir + '/layout.html'
+     * */
+    this.setViewsLocation = function(dir, layout) {
+        local.options.views.default.views = dir;
+        local.options.views.default.html = _(dir + '/html');
+        local.options.views.default.layout = layout || _(local.options.views.default.html + '/layout.html');
         swig.setDefaults({
             loader: swig.loaders.fs(dir)
         })
     }
 
     this.hasOptions = function() {
-        return ( typeof(_options) != 'undefined') ? true : false
+        return ( typeof(local.options) != 'undefined') ? true : false
     }
 
     /**
@@ -119,10 +135,10 @@ function Controller(request, response, next) {
      * */
     this.render = function(_data) {
         _data = merge(true, self.getData(), _data);
-        self.setRessources(_options.views, _data.page.action);
+        self.setRessources(local.options.views, _data.page.action);
         var data = merge(true, self.getData(), _data);
 
-        var path = _(_options.views.default.html + '/' + data.page.content);
+        var path = _(local.options.views.default.html + '/' + data.page.content);
 
         var dic = {};
         for (var d in data.page) {
@@ -134,29 +150,29 @@ function Controller(request, response, next) {
         //      /html/inc/_partial.html (BAD)
         fs.readFile(path, function (err, content) {
             if (err) {
-                self.throwError(_response, 500, err.stack);
+                self.throwError(local.res, 500, err.stack);
                 return
             }
 
             try {
-                content = swig.compile(content.toString())(data)
+                content = swig.compile( content.toString() )(data)
             } catch (err) {
-                self.throwError(_response, 500, '[ '+path+' ]\n' + err.stack);
+                self.throwError(local.res, 500, '[ '+path+' ]\n' + err.stack);
                 return
             }
 
             dic['page.content'] = content;
 
-            fs.readFile(_options.views.default.layout, function(err, layout) {
+            fs.readFile(local.options.views.default.layout, function(err, layout) {
                 if (err) {
-                    self.throwError(_response, 500, err.stack);
+                    self.throwError(local.res, 500, err.stack);
                     return;
                 }
                 layout = layout.toString();
                 layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
 
-                _response.writeHead(200, { 'Content-Type': 'text/html' });
-                _response.end(layout);
+                local.res.writeHead(200, { 'Content-Type': 'text/html' });
+                local.res.end(layout);
             })
         })
     }
@@ -167,27 +183,8 @@ function Controller(request, response, next) {
      * @param {string} filename
      * */
     this.setLayout = function(filename) {//means path
-        _options.views.default.layout = filename
+        local.options.views.default.layout = filename
     }
-//    this.render = function(data, request, response, next) {
-//
-//        self.app.isXmlHttpRequest = ( typeof(request) != "undefined" && request.xhr && self.app.isXmlHttpRequest || self.app.isXmlHttpRequest ) ? true : false;
-//
-//        if( typeof(self.app.isXmlHttpRequest) == "undefined" || !self.app.isXmlHttpRequest ) {
-//            data.page.handler = (self.app.handler != null) ? '<script type="text/javascript" src="/'+ self.app.appName + '/handlers/' + self.app.handler.file +'"></script>' : '';
-//            //console.log('HANDLER SRC _____',data.page.handler);
-//
-//            if (data.page.content) {
-//                _response.render('layout' + data.page.ext, data)
-//            }
-//        } else {
-//            if ( !response.get('Content-Type') ) {
-//                response.setHeader("Content-Type", "application/json")
-//            }
-//        }
-//        self.rendered = true;
-//        response.end()
-//    }
 
     /**
      * Render JSON
@@ -200,13 +197,13 @@ function Controller(request, response, next) {
         try {
 
             if(typeof(options) != "undefined" && typeof(options.charset) != "undefined"){
-                _response.setHeader("charset", options.charset);
+                local.res.setHeader("charset", options.charset);
             }
-            if ( !_response.get('Content-Type') ) {
-                _response.setHeader("Content-Type", "application/json");
+            if ( !local.res.get('Content-Type') ) {
+                local.res.setHeader("Content-Type", "application/json");
             }
             self.rendered = true;
-            _response.end(JSON.stringify(jsonObj))
+            local.res.end(JSON.stringify(jsonObj))
         } catch (err) {
             console.log(err.stack)
         }
@@ -219,13 +216,13 @@ function Controller(request, response, next) {
         }
 
         if(typeof(options) != "undefined" && typeof(options.charset) !="undefined") {
-            _response.setHeader("charset", options.charset);
+            local.res.setHeader("charset", options.charset);
         }
-        if ( !_response.get('Content-Type') ) {
-            _response.setHeader("Content-Type", "text/plain");
+        if ( !local.res.get('Content-Type') ) {
+            local.res.setHeader("Content-Type", "text/plain");
         }
         self.rendered = true;
-        _response.end(content);
+        local.res.end(content);
     }
 
     /**
@@ -274,7 +271,6 @@ function Controller(request, response, next) {
         //Getting global/default css
         //Default will be completed OR overriden by locals - if options are set to "override_css" : "true" or "override" : "true"
         if( viewConf["default"] ) {
-            //console.info('found default ', ["default"]);
             //Get css
             if( viewConf["default"]["stylesheets"] ) {
                 tmpRes = getNodeRes('css', cssStr, viewConf["default"]["stylesheets"], css);
@@ -300,14 +296,13 @@ function Controller(request, response, next) {
             }
             //Get css
             if( viewConf[localRessources]["stylesheets"] ) {
-                //console.info('case ', viewConf[localRessources]["stylesheets"], localRessources);
                 tmpRes = getNodeRes('css', cssStr, viewConf[localRessources]["stylesheets"], css);
                 cssStr = tmpRes.cssStr;
                 css = tmpRes.css;
                 tmpRes = null
             }
             //js override test
-            if( viewConf[localRessources]["override_js"] && viewConf[localRessources]["override_js"] == true || viewConf[localRessources]["override"] && viewConf[localRessources]["override"] == true ){
+            if( viewConf[localRessources]["override_js"] && viewConf[localRessources]["override_js"] == true || viewConf[localRessources]["override"] && viewConf[localRessources]["override"] == true ) {
                 jsStr = "";
                 js.content = []
             }
@@ -337,7 +332,6 @@ function Controller(request, response, next) {
      * @private
      * */
     var getNodeRes = function(type, resStr, resArr, resObj) {
-        //console.log('assigning ..... ', resStr);
         switch(type){
             case 'css':
                 var css = resObj;
@@ -436,7 +430,7 @@ function Controller(request, response, next) {
                 }
                 path = conf.hostname + conf.server.webroot + path;
             } else if (url) {
-                path = url
+                path = ( (/\:\/\//).test(url) ) ? url : req.protocol + '://' + url;
             } else {
                 path = conf.hostname + conf.server.webroot + path
             }
@@ -509,13 +503,13 @@ function Controller(request, response, next) {
         if ( typeof(name) != 'undefined' ) {
             try {
                 //Protect it.
-                tmp = JSON.stringify(_options.conf.content[name]);
+                tmp = JSON.stringify(local.options.conf.content[name]);
                 return JSON.parse(tmp)
             } catch (err) {
                 return undefined
             }
         } else {
-            tmp = JSON.stringify(_options.conf);
+            tmp = JSON.stringify(local.options.conf);
             return JSON.parse(tmp)
         }
     }
@@ -534,7 +528,7 @@ function Controller(request, response, next) {
         }
     };
 
-    init(request, response, next)
+    init()
 };
 
 Controller = inherits(Controller, EventEmitter);

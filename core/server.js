@@ -14,7 +14,9 @@ var console         = utils.logger;
 
 function Server(options) {
     var self = this;
-
+    var local = {
+        router : null
+    };
 
     this.conf = {};
     this.routing = {};
@@ -35,6 +37,8 @@ function Server(options) {
         self.appName = options.bundle;
 
         self.env = options.env;
+        local.router = new Router(self.env);
+
         self.cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
 
         //False => multiple apps sharing the same server (port).
@@ -376,7 +380,8 @@ function Server(options) {
 
         console.log('about to route to ', pathname);
 
-        var router = new Router(self.env);
+        //var router = new Router(self.env);
+        var router = local.router;
         router.setMiddlewareInstance(self.instance);
 
         //Middleware configuration.
