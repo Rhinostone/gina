@@ -173,13 +173,18 @@ function Server(options) {
                     for (var rule in tmp){
                         tmp[rule].param.app = apps[i];
 
-                        if (conf.server.webroot != '/') {
-                            if (typeof(tmp[rule].url) != 'object') {
-                                tmp[rule].url = conf.server.webroot + tmp[rule].url;
-                            } else {
-                                for (var u=0; u<tmp[rule].url.length; ++u) {
-                                    tmp[rule].url[u] =  conf.server.webroot + tmp[rule].url[u]
-                                }
+                        if (typeof(tmp[rule].url) != 'object') {
+                            if (tmp[rule].url.substr(0,1) == '/') {
+                                tmp[rule].url = tmp[rule].url.substr(1);
+                            }
+                            tmp[rule].url = conf.server.webroot + tmp[rule].url;
+                        } else {
+                            if (tmp[rule].url[u].substr(0,1) == '/') {
+                                tmp[rule].url[u] = tmp[rule].url[u].substr(1);
+                            }
+
+                            for (var u=0; u<tmp[rule].url.length; ++u) {
+                                tmp[rule].url[u] =  conf.server.webroot + tmp[rule].url[u]
                             }
                         }
 
