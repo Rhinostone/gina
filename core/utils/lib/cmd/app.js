@@ -545,6 +545,9 @@ var AppCommand = {
         } else if (path == userScript) {
             var UserStrategy = require( userScript );
             var deploy = new UserStrategy(conf);
+            deploy.onComplete( function(err) {
+                console.info('user\'s deploy script completed without errors');
+            })
         } else {
             console.error('no deploy strategy found')
         }
