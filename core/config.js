@@ -548,6 +548,7 @@ function Config(opt) {
                 delete require.cache[_(filename, true)];
                 routing = merge( true, require(filename), routing);
                 if (filename != main) {
+                    delete require.cache[_(main, true)];
                     routing = merge(true, require(main), routing);
                 }
 
