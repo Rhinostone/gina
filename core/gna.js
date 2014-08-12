@@ -70,7 +70,12 @@ var envs = ['dev', 'debug', 'stage', 'prod'];
 var protocols = ['http', 'https']; // will support https for the 0.0.10
 var env;
 //Setting env.
-env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
+if ( !process.env.NODE_ENV ) {
+    env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
+} else {
+    env = process.env.NODE_ENV
+}
+
 gna.env = process.env.NODE_ENV = env;
 
 //gna.env.isWin32 = process.env.isWin32 = function() {

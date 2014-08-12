@@ -509,7 +509,7 @@ function Config(opt) {
         var bundles     = self.getBundles();
         var cacheless   = self.isCacheless();
         var conf        = self.envConf;
-        var env         = self.Env.get();
+        var env         = self.env || self.Env.get();
         var routing     = {
             "geena-doc": {
                 "url": "/@doc",
