@@ -8,12 +8,13 @@
 
 
 //Imports.
-var url     = require("url"),
-    fs      = require("fs"),
-    util    = require('util'),
-    utils   = require('./utils'),
-    console = utils.logger,
-    inherits = utils.inherits;
+//var fs      = require("fs");
+var url     = require("url");
+var utils   = require('./utils');
+var console = utils.logger;
+var inherits = utils.inherits;
+var SuperController = require('./controller');
+var Config  = require('./config');
 
 /**
  * @class Router
@@ -28,7 +29,7 @@ function Router(env) {
 
     this.name = 'Router';
     var self = this;
-    var Config  = require('./config');
+    //var Config  = require('./config');
     var config = new Config();
     var local = {
         conf : config.getInstance()
@@ -40,11 +41,9 @@ function Router(env) {
      * */
     var init = function(){
         if ( typeof(Router.initialized) != "undefined" ) {
-            console.log("....Router instance already exists...");
             return self.getInstance()
         } else {
-            Router.initialized = true;
-            console.log("....creating new Router...")
+            Router.initialized = true
         }
     }
 
@@ -167,9 +166,8 @@ function Router(env) {
         var pathname        = url.parse(request.url).pathname;
         var bundle          = params.bundle;
         var action          = params.param.action;
-        var actionFile          = params.param.file;
+        var actionFile      = params.param.file;
         var namespace       = params.param.namespace;
-        var SuperController = require('./controller');
         var hasViews        = ( typeof(local.conf[bundle][env].content.views) != 'undefined' ) ? true : false;
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
@@ -207,30 +205,30 @@ function Router(env) {
             if (cacheless) delete require.cache[_(controllerFile, true)];
             var Controller  = require(controllerFile)
         } catch (err) {
-            var superController = new SuperController(request, response, next);
-            superController.setOptions(options);
+            var superController = new SuperController();
+            superController.setOptions(request, response, options);
             console.log(err.stack);
             superController.throwError(response, 500, err.stack);
             process.exit(1)
         }
 
-
-        // about to contact Controller'
+        // about to contact Controller ...
+        // namespaces should be supported for every bundles
         if ( typeof(namespace) != 'undefined' && namespace == 'framework' ) { //framework controller filter
             Controller = SuperController.prototype[namespace];
         }
 
         Controller = inherits(Controller, SuperController);
         try {
-            var controller = new Controller(request, response, next);
-            controller.setOptions(options);
+            var controller = new Controller();
+            controller.setOptions(request, response, options);
             controller[action](request, response, next)
         } catch (err) {
-            var superController = new SuperController(request, response, next);
-            superController.setOptions(options);
+            var superController = new SuperController();
+            superController.setOptions(request, response, options);
             superController.throwError(response, 500, err.stack);
         }
-        eval('');
+        //eval('');
         action = null
     };//EO route()
 

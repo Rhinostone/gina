@@ -4,19 +4,30 @@ var EventEmitter = require('events').EventEmitter;
 var spawn = require('child_process').spawn;
 var helpers = require('../helpers');
 var inherits = require('../inherits');
+var console = require('../logger');
 
-
+/**
+ *
+ * TODO - onInitialize event
+ * TODO - deploy bundle only
+ * */
 function Deploy(opt) {
 
     var self =  Deploy.instance || this;
+    var local = {};
     var error = false;
     var hosts = {};
     this.env = opt.env;
     this.task = 'deploy';
+    this.bundle = opt.bundle;
 
     setPath('deploy', _(getPath('root') +'/'+ this.task));
 
+
+
     this.init = this.onInitialize = function(cb) {
+
+
 
         if (self.initialized == undefined && !Deploy.instance) {
             self.initialized = true;
@@ -101,12 +112,40 @@ function Deploy(opt) {
             }
         }
 
-        Deploy.instance = self;
+        //get enabled bundles
+        self
+            .run('ls ./releases', true)
+            .onComplete( function onBundle(err, data) {
+                if (err) {
+                    console.emerg('releases dir not found: try to build then retry to deploy');
+                    process.exit(1)
+                }
 
-        self.removeAllReleases( function onRemoved() {
-            self.emit('init#complete', false)
-        })
+                if (!data) {
+                    console.emerg('releases dir is empty: try to build then retry to deploy');
+                    process.exit(1)
+                }
+                var a = data.split('\n'), list = [];
 
+                for (var i=0; i<a.length; ++i) {
+                    if (a[i] && a.indexOf(i) < 0)
+                        list.push(a[i])
+                }
+                self.bundles = list;
+                finalizeInit()
+            });
+
+        var finalizeInit = function() {
+            if (self.bundles.length > 0) {
+                Deploy.instance = self;
+
+                self.removeAllReleases( function onRemoved() {
+                    self.emit('init#complete', false)
+                })
+            } else {
+                console.error('could not deploy: no bundle found !')
+            }
+        }
     }
 
     this.getIgnoreList = function() {

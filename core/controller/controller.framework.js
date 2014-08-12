@@ -1,7 +1,11 @@
+var utils       = require('../utils');
+var inherits    = utils.inherits;
+var Controller  = require('./controller');
+
+
 /**
  * FrameworkController
  * */
-
 function FrameworkController() {
     var self = this;
 
@@ -33,10 +37,7 @@ function FrameworkController() {
         data['page']['lang'] = 'en';
         self.render(data)
     }
-
-    var init = function() {
-        console.log("local framework init")
-    }
 };
 
+FrameworkController = inherits(FrameworkController, Controller);
 module.exports = FrameworkController
