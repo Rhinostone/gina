@@ -54,6 +54,8 @@ function Deploy(opt) {
                 //normalizing home path alias (nixes only)
                 if (k == 'target' && opt['set'][k] === '~/') {
                     opt['set'][k] = '~'
+                } else if (k == 'target' && opt['set'][k] === '/') {
+                    opt['set'][k] = ''
                 }
                 // by default
                 if (k == 'target') {
@@ -139,9 +141,10 @@ function Deploy(opt) {
             if (self.bundles.length > 0) {
                 Deploy.instance = self;
 
-                self.removeAllReleases( function onRemoved() {
-                    self.emit('init#complete', false)
-                })
+                //self.removeAllReleases( function onRemoved() {
+                //    self.emit('init#complete', false)
+                //})
+                self.emit('init#complete', false)
             } else {
                 console.error('could not deploy: no bundle found !')
             }
@@ -318,54 +321,14 @@ function Deploy(opt) {
 
                 if (code == 0 ) {
                     e.emit('run#complete', error, result)
-//                    if (runLocal) {
-//                        e.emit('run#complete', error, result)
-//                    } else {
-//                        //setTimeout( function onClose() {
-//                            e.emit('run#complete', error, result)
-//                        //}, 150)
-//                    }
                 } else {
-                    e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
-//                    if (runLocal) {
-//                        e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
-//                    } else {
-//                        setTimeout( function onClose() {
-//                            e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
-//                        }, 150)
-//                    }
+                    e.emit('run#complete', 'project deploy encountered an error: ' + error, result)
                 }
 
 
             } catch (err) {
                 console.error(err.stack)
             }
-
-
-
-
-
-
-
-//            if (code == 0 ) {
-//                if (runLocal) {
-//                    console.info('closing...');
-//
-//                    e.emit('run#complete', error, result)
-//                } else {
-//                    setTimeout( function onClose() {
-//                        e.emit('run#complete', error, result)
-//                    }, 150)
-//                }
-//            } else {
-//                if (runLocal) {
-//                    e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
-//                } else {
-//                    setTimeout( function onClose() {
-//                        e.emit('run#complete', new Error('project deploy encountered an error: ' + error), result)
-//                    }, 150)
-//                }
-//            }
         });
 
         e.onData = function(callback) {
@@ -460,6 +423,9 @@ function Deploy(opt) {
 
         self.once('deploy#complete' , function(err) {
             if (!err) {
+                self.removeAllReleases( function onRemoved() {
+                    console.info('removed old releases')
+                })
                 console.info('deploy complete !')
             }
             callback(err)

@@ -15,6 +15,7 @@ function BuildBundle(project, bundle) {
         /^\./, //all but files starting with "."
         /\.dev\.json$/ //not all ending with ".dev.json"
     ];
+    this.project = project;
 
 
     this.init = this.onInitialize = function(cb) {
@@ -35,6 +36,9 @@ function BuildBundle(project, bundle) {
         console.log('init once !!');
         self.root = getPath('root');
         self.env = process.env.NODE_ENV;
+        var path = ( project.bundles[bundle].release.target.substr(0,1) != '/') ? '/'+project.bundles[bundle].release.target : project.bundles[bundle].release.target;
+        self['release_path'] = _(self.root + path);
+
 
         if ( typeof(bundle) != 'undefined' ) {
             console.log('building', bundle, '[ '+ self.env +' ]');
@@ -57,6 +61,9 @@ function BuildBundle(project, bundle) {
 
         config.onReady( function onConfigReady(err, obj) {
             var conf = self.conf = obj.conf[bundle][self.env];
+            var match = _(self.root +'/' +project.bundles[bundle].src);
+            self['views_path'] = self.conf.content.views.default.views.replace(match, self['release_path']);
+
             try {
                 //will always build from sources by default.
                 if ( typeof(package['src']) != 'undefined' && fs.existsSync( _(self.root + '/' + package['src']) )) {
