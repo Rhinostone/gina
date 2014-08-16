@@ -522,6 +522,7 @@ function Config(opt) {
         var tmp         = '';
         //var tmpName     = '';
         var filename    = '';
+        var appPath     = '';
         var err         = false;
 
         conf[bundle][env].bundles = bundles;
@@ -529,10 +530,12 @@ function Config(opt) {
         conf[bundle][env].executionPath = getContext("paths").root;
 
         if ( self.task == 'run' && env != 'dev' ) {
-            var appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
+            appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
         } else { //getting src path instead
-            var appPath = _(conf[bundle][env].sources + '/' + bundle)
+            appPath = _(conf[bundle][env].sources + '/' + bundle);
+            conf[bundle][env].bundlesPath = conf[bundle][env].sources;
         }
+
 
         var files = {};
         var main = '';

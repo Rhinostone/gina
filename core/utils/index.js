@@ -28,6 +28,7 @@ var utils = {
     merge       : require('./lib/merge'),
     generator   : require('./lib/generator'),//move to geena.dev
     Proc        : require('./lib/proc'),
+    Shell       : require('./lib/shell'),
     logger      : require('./lib/logger'),
     url         : require('./lib/url'),
     cmd         : require('./lib/cmd')
