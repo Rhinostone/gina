@@ -73,7 +73,11 @@ function Deploy(opt) {
 
                 self[k] = opt['set'][k];
                 dic[k] = opt['set'][k];
+
             }
+            //update dic
+            dic = whisper(dic, dic);
+
 
 
             if ( typeof(self['shared_path']) == 'undefined') {
@@ -104,8 +108,8 @@ function Deploy(opt) {
 
 
             self.tasks = whisper(dic, self.tasks);
-            self = whisper(dic, self);
-            opt = whisper(dic, opt);
+            self = whisper(dic, self);//closing to ensure replacement
+            opt = whisper(dic, opt);//closing to ensure replacement
 
 
             if (self.releases_path == '/' || self.releases_path == '/.' || self.releases_path == '~' || self.releases_path == '~/' || self.releases_path == '~/.') {
@@ -373,10 +377,8 @@ function Deploy(opt) {
         var t = t || 0;
 
         if ( typeof(self.tasks) != 'undefined' && typeof(self.tasks.onDeployed[t]) != 'undefined') {
-            var tasks = self.tasks.onDeployed;
-            //console.info('running: '+ tasks[t]);
             self
-                .run(tasks[t])
+                .run(self.tasks.onDeployed[t])
                 .onComplete( function(err, msg) {
                     if (err) console.warn(err.stack||err.message||err);
                     if (msg) console.info(msg);
