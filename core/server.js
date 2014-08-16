@@ -253,7 +253,9 @@ function Server(options) {
                 if (err) {
                     throwError(response, 500, 'Internal server error\n' + err.stack)
                 }
+
                 handle(req, res, next, pathname)
+
             })//EO this.loadBundleConfiguration(this.appName, function(err, conf){
         });//EO this.instance
 
@@ -439,11 +441,12 @@ function Server(options) {
             }
 
         if (!matched) {
-            if (pathname === '/favicon.ico' && !withViews) {
+            if (pathname === self.conf[self.appName].server.webroot + '/favicon.ico' && !withViews ) {
                 res.writeHead(200, {'Content-Type': 'image/x-icon'} );
                 res.end()
             }
-            throwError(res, 404, 'Page not found\n' + pathname)
+            if (!res.headerSent)
+                throwError(res, 404, 'Page not found\n' + self.conf[self.appName].server.webroot+pathname)
         }
     }
 

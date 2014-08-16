@@ -591,6 +591,7 @@ function Config(opt) {
                 }
 
                 files[name] = routing;
+                continue;
             } else if (name == 'routing') {
                 continue;
             }
