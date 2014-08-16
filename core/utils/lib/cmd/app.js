@@ -531,7 +531,7 @@ var AppCommand = {
         var path = ( typeof(conf.strategy) != 'undefined' && opt == '' ) ? root +'/bin/'+ conf.strategy + '.js' : userScript;
 
 
-        if ( fs.existsSync(path) && path != userScript) {
+        if ( fs.existsSync(path) && path != userScript ) {
 
             // user script and available strategies inherit from Deploy
             // if a strategy is applied, you can catch complete event to do something in the end
@@ -545,9 +545,9 @@ var AppCommand = {
         } else if (path == userScript) {
             var UserStrategy = require( userScript );
             var deploy = new UserStrategy(conf);
-            deploy.onComplete( function(err) {
-                console.info('user\'s deploy script completed without errors');
-            })
+            //deploy.onComplete( function(err) {
+            //    console.info('user\'s deploy script completed without errors');
+            //})
         } else {
             console.error('no deploy strategy found')
         }
