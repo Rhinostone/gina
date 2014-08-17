@@ -6,7 +6,7 @@ var Controller  = require('./controller');
 /**
  * FrameworkController
  * */
-function FrameworkController() {
+function FrameworkController(options) {
     var self = this;
 
     /**

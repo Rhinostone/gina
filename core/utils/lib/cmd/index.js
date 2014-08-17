@@ -21,6 +21,8 @@
  * THE SOFTWARE.
  */
 
+var helpers = require('../helpers');
+
 var cmd = {},
     argCount = process.argv.length - 2;
 
@@ -77,6 +79,63 @@ cmd.onExec = function() {
         ignore();
     }
 };
+
+cmd.load = function(root, package){
+
+    //Setting root for helpers.
+    setPath('root', root);
+
+    //Getting package.
+    var p = require( _(root + package) ),
+        geenaPath = _(root + package.replace('/package.json', ''));
+
+    cmd.setOption([
+        {
+            'name' : 'version',
+            'content' : p.version
+        },
+        {
+            'name' : 'copyright',
+            'content' : p.copyright
+        },
+        {
+            'name' : 'root',
+            'content' : root
+        },
+        {
+            'name' : 'core',
+            'content' : _(geenaPath +'/core')
+        }
+    ]);
+
+    //Set geena path.
+    setPath('geena.core', _(geenaPath +'/core'));
+    setPath('geena.core.utils', _(geenaPath +'/core/utils/lib'));
+    setPath('geena.documentation', _(geenaPath +'/documentation'));
+
+    var defaultConf = require( _(geenaPath + '/core/template/conf/env.json') );
+    //mountPath
+    var bundlesPath = defaultConf['mountPath'];
+    bundlesPath = _(bundlesPath.replace('{executionPath}', root));
+
+    //Set path for the global tmp repertory.
+    var gTmpPath = defaultConf['globalTmpPath'];
+    gTmpPath = _(gTmpPath.replace('{executionPath}', root));
+
+    var logsPath = defaultConf['logsPath'];
+    logsPath = _(logsPath .replace('{executionPath}', root));
+
+    //To make it globally accessible when you are in the geena process.
+    var globalPaths = {
+        "logsPath"      : logsPath,
+        "globalTmpPath" : gTmpPath,
+        "mountPath"     : bundlesPath
+    };
+
+    setPath(globalPaths);
+    cmd.onExec();
+};
+
 
 cmd.respawn = function(){
 

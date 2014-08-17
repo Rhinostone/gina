@@ -32,7 +32,8 @@ function Router(env) {
     this.name = 'Router';
     var self = this;
     var local = {
-        conf : config.getInstance()
+        conf : config.getInstance(),
+        bundle: null
     };
 
     /**
@@ -151,6 +152,27 @@ function Router(env) {
         return (v != null && v[0] == urlVal && v[0] !="") ? true : false
     }
 
+    var refreshCore = function() {
+        var core = new RegExp( getPath('geena.core') );
+        //var lib =  new RegExp( getPath('local.conf[local.bundle][local.env].libPath') );
+        var excluded = [
+            _(getPath('geena.core') + '/gna.js', true)//,
+            //_(getPath('geena.core') + '/router.js', true)
+        ];
+
+        for (var c in require.cache) {
+            if ( (core).test(c) && excluded.indexOf(c) < 0 ) {
+                require.cache[c].exports = require( _(c, true) )
+            }
+        }
+        //update utils
+        delete require.cache[_(getPath('geena.core') +'/utils/index.js', true)];
+        require.cache[_(getPath('geena.core') +'/utils/index.js', true)] = require( _(getPath('geena.core') +'/utils/index.js', true) );
+        require.cache[_(getPath('geena.core') + '/gna.js', true)].exports.utils = require.cache[_(getPath('geena.core') +'/utils/index.js', true)];
+
+        //TODO - do the same with lib
+    }
+
     /**
      * Route on the fly
      *
@@ -164,13 +186,16 @@ function Router(env) {
 
         //Routing.
         var pathname        = url.parse(request.url).pathname;
-        var bundle          = params.bundle;
+        var bundle          = local.bundle = params.bundle;
         var action          = params.param.action;
         var actionFile      = params.param.file;
         var namespace       = params.param.namespace;
         var hasViews        = ( typeof(local.conf[bundle][env].content.views) != 'undefined' ) ? true : false;
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
+
+        if (cacheless) refreshCore();
+
         console.debug("routing content : \n", bundle, env,  JSON.stringify( config.Env.getConf( bundle, env ), null, 4) );
         //Middleware Filters when declared.
         var resHeaders = config.Env.getConf( bundle, env ).server.response.header;
@@ -205,7 +230,7 @@ function Router(env) {
             if (cacheless) delete require.cache[_(controllerFile, true)];
             var Controller  = require(controllerFile)
         } catch (err) {
-            var superController = new SuperController();
+            var superController = new SuperController(options);
             superController.setOptions(request, response, options);
             console.log(err.stack);
             superController.throwError(response, 500, err.stack);
@@ -220,11 +245,11 @@ function Router(env) {
 
         Controller = inherits(Controller, SuperController);
         try {
-            var controller = new Controller();
+            var controller = new Controller(options);
             controller.setOptions(request, response, options);
             controller[action](request, response, next)
         } catch (err) {
-            var superController = new SuperController();
+            var superController = new SuperController(options);
             superController.setOptions(request, response, options);
             superController.throwError(response, 500, err.stack);
         }
