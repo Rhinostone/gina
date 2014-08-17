@@ -25,7 +25,7 @@ var swig            = require('swig');
  *
  * @api         Public
  */
-function Controller() {
+function Controller(options) {
 
     //public
     this.name       = "Controller";
@@ -37,7 +37,7 @@ function Controller() {
         req : null,
         res : null,
         next : null,
-        options: null
+        options: options || null
     };
 
     /**
@@ -51,7 +51,10 @@ function Controller() {
             return getInstance()
         } else {
             Controller.initialized = true;
-            Controller.instance = self
+            Controller.instance = self;
+            if (local.options) {
+                Controller.instance._options = local.options
+            }
         }
     }
 
