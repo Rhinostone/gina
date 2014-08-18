@@ -156,8 +156,7 @@ function Router(env) {
         var core = new RegExp( getPath('geena.core') );
         //var lib =  new RegExp( getPath('local.conf[local.bundle][local.env].libPath') );
         var excluded = [
-            _(getPath('geena.core') + '/gna.js', true)//,
-            //_(getPath('geena.core') + '/router.js', true)
+            _(getPath('geena.core') + '/gna.js', true)
         ];
 
         for (var c in require.cache) {
@@ -165,6 +164,7 @@ function Router(env) {
                 require.cache[c].exports = require( _(c, true) )
             }
         }
+
         //update utils
         delete require.cache[_(getPath('geena.core') +'/utils/index.js', true)];
         require.cache[_(getPath('geena.core') +'/utils/index.js', true)] = require( _(getPath('geena.core') +'/utils/index.js', true) );
@@ -187,7 +187,7 @@ function Router(env) {
         //Routing.
         var pathname        = url.parse(request.url).pathname;
         var bundle          = local.bundle = params.bundle;
-        var action          = params.param.action;
+        var action          = request.action = params.param.action;
         var actionFile      = params.param.file;
         var namespace       = params.param.namespace;
         var hasViews        = ( typeof(local.conf[bundle][env].content.views) != 'undefined' ) ? true : false;

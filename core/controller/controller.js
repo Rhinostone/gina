@@ -137,47 +137,52 @@ function Controller(options) {
      * @return {void}
      * */
     this.render = function(_data) {
-        _data = merge(true, self.getData(), _data);
-        self.setRessources(local.options.views, _data.page.action);
-        var data = merge(true, self.getData(), _data);
+        try {
+            _data = merge(true, self.getData(), _data);
 
-        var path = _(local.options.views.default.html + '/' + data.page.content);
+            self.setRessources(local.options.views, _data.page.action);
+            var data = merge(true, self.getData(), _data);
 
-        var dic = {};
-        for (var d in data.page) {
-            dic['page.'+d] = data.page[d]
-        }
-        // please, do not put any slashes when including...
-        // ex.:
-        //      html/inc/_partial.html (GOOD)
-        //      /html/inc/_partial.html (BAD)
-        fs.readFile(path, function (err, content) {
-            if (err) {
-                self.throwError(local.res, 500, err.stack);
-                return
+            var path = _(local.options.views.default.html + '/' + data.page.content);
+
+            var dic = {};
+            for (var d in data.page) {
+                dic['page.'+d] = data.page[d]
             }
-
-            try {
-                content = swig.compile( content.toString() )(data)
-            } catch (err) {
-                self.throwError(local.res, 500, '[ '+path+' ]\n' + err.stack);
-                return
-            }
-
-            dic['page.content'] = content;
-
-            fs.readFile(local.options.views.default.layout, function(err, layout) {
+            // please, do not put any slashes when including...
+            // ex.:
+            //      html/inc/_partial.html (GOOD)
+            //      /html/inc/_partial.html (BAD)
+            fs.readFile(path, function (err, content) {
                 if (err) {
                     self.throwError(local.res, 500, err.stack);
-                    return;
+                    return
                 }
-                layout = layout.toString();
-                layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
 
-                local.res.writeHead(200, { 'Content-Type': 'text/html' });
-                local.res.end(layout);
+                try {
+                    content = swig.compile( content.toString() )(data)
+                } catch (err) {
+                    self.throwError(local.res, 500, '[ '+path+' ]\n' + err.stack);
+                    return
+                }
+
+                dic['page.content'] = content;
+
+                fs.readFile(local.options.views.default.layout, function(err, layout) {
+                    if (err) {
+                        self.throwError(local.res, 500, err.stack);
+                        return;
+                    }
+                    layout = layout.toString();
+                    layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+
+                    local.res.writeHead(200, { 'Content-Type': 'text/html' });
+                    local.res.end(layout);
+                })
             })
-        })
+        } catch (err) {
+            self.throwError(local.res, 500, err.stack)
+        }
     }
 
     /**
@@ -391,7 +396,7 @@ function Controller(options) {
     }
 
     this.getData = function() {
-        return utils.refToObj(self._data)
+        return refToObj(self._data)
     }
 
     /**
@@ -519,6 +524,11 @@ function Controller(options) {
     }
 
     this.throwError = function(res, code, msg) {
+        if (arguments.length < 3) {
+            var msg = res;
+            var res = local.res;
+            var code = code || 500;
+        }
 
         if ( !hasViews() ) {
             res.writeHead(code, { 'Content-Type': 'application/json'} );
@@ -531,6 +541,55 @@ function Controller(options) {
             res.end('Error '+ code +'. '+ msg)
         }
     };
+
+    // TODO - Should be in another handler.. closer to the view controller/handler
+    var refToObj = function (arr){
+        var tmp = null,
+            curObj = {},
+            obj = {},
+            count = 0,
+            data = {},
+            last = null;
+        //console.info('arr is --------------------------\n', arr);
+        for (var r in arr) {
+            tmp = r.split(".");
+            //console.info('len ', r,tmp);
+            //Creating structure - Adding sub levels
+            for (var o in tmp) {
+                //console.info('ooo ', o, tmp[o], arr[r]);
+                count++;
+                if (last && typeof(obj[last]) == "undefined") {
+                    curObj[last] = {};
+                    //console.info("count is ", count);
+                    if (count >= tmp.length) {
+                        //Assigning.
+                        // !!! if null or undefined, it will be ignored while extending.
+                        curObj[last][tmp[o]] = (arr[r]) ? arr[r] : "undefined";
+                        last = null;
+                        count = 0;
+                        break;
+                    } else {
+                        curObj[last][tmp[o]] = {};
+                    }
+                } else if (tmp.length === 1) { //Just one root var
+                    //console.info('assigning ', arr[r], ' to ',tmp[o]);
+                    curObj[tmp[o]] = (arr[r]) ? arr[r] : "undefined";
+                    //last = null;
+                    //count = 0;
+                    obj = curObj;
+                    break;
+                }
+                obj = curObj;
+                last = tmp[o];
+            }
+            //console.info('current obj ',obj);
+            data = merge(true, data, obj);
+            //console.info('merged ', data);
+            obj = {};
+            curObj = {};
+        }
+        return data;
+    }
 
     init()
 };
