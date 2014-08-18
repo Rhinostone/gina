@@ -558,23 +558,37 @@ function Config(opt) {
                 tmp = '';
 
                 //setting app param
-
+                var wroot;
                 for (var rule in routing) {
                     //webroot control
+                    wroot = conf[bundle][env].server.webroot
+
                     if ( typeof(routing[rule].url) != 'object' ) {
                         // adding / if missing
                         if (routing[rule].url.length > 1 && routing[rule].url.substr(0,1) != '/') {
                             routing[rule].url = '/' + routing[rule].url
+                        } else if (routing[rule].url.length > 1 && conf[bundle][env].server.webroot.substr(conf[bundle][env].server.webroot.length-1,1) == '/') {
+                            routing[rule].url = routing[rule].url.substr(1)
+                        } else {
+                            if (wroot.substr(wroot.length-1,1) == '/') {
+                                wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+                            }
                         }
 
-                        routing[rule].url = conf[bundle][env].server.webroot + routing[rule].url;
+                        routing[rule].url = wroot + routing[rule].url;
                     } else {
                         for (var u=0; u<routing[rule].url.length; ++u) {
                             if (routing[rule].url[u].length > 1 && routing[rule].url[u].substr(0,1) != '/') {
                                 routing[rule].url[u] = '/' + routing[rule].url[u]
+                            } else if (routing[rule].url.length > 1 && conf[bundle][env].server.webroot.substr(conf[bundle][env].server.webroot.length-1,1) == '/') {
+                                routing[rule].url[u] = routing[rule].url[u].substr(1)
+                            } else {
+                                if (wroot.substr(wroot.length-1,1) == '/') {
+                                    wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+                                }
                             }
 
-                            routing[rule].url[u] =  conf[bundle][env].server.webroot + routing[rule].url[u]
+                            routing[rule].url[u] =  wroot + routing[rule].url[u]
                         }
                     }
 

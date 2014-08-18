@@ -169,23 +169,37 @@ function Server(options) {
                 try {
 
                     tmp = self.routing;
+                    var wroot;
                     //Adding important properties; also done in core/config.
                     for (var rule in tmp){
                         tmp[rule].param.app = apps[i];
+                        wroot = conf.server.webroot;
 
                         if (typeof(tmp[rule].url) != 'object') {
                             if (tmp[rule].url.length > 1 && tmp[rule].url.substr(0,1) != '/') {
                                 tmp[rule].url = '/'+tmp[rule].url
+                            } else if (tmp[rule].url.length > 1 && conf.server.webroot.substr(conf.server.webroot.length-1,1) == '/') {
+                                tmp[rule].url = tmp[rule].url.substr(1)
+                            } else {
+                                if (wroot.substr(wroot.length-1,1) == '/') {
+                                    wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+                                }
                             }
 
-                            tmp[rule].url = conf.server.webroot + tmp[rule].url;
+                            tmp[rule].url = wroot + tmp[rule].url;
                         } else {
                             if (tmp[rule].url[u].length > 1 && tmp[rule].url[u].substr(0,1) != '/') {
                                 tmp[rule].url[u] = '/'+tmp[rule].url[u]
+                            } else if (tmp[rule].url[u].length > 1 && conf.server.webroot.substr(conf.server.webroot.length-1,1) == '/') {
+                                tmp[rule].url[u] = tmp[rule].url[u].substr(1)
+                            } else {
+                                if (wroot.substr(wroot.length-1,1) == '/') {
+                                    wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+                                }
                             }
 
                             for (var u=0; u<tmp[rule].url.length; ++u) {
-                                tmp[rule].url[u] =  conf.server.webroot + tmp[rule].url[u]
+                                tmp[rule].url[u] =  wroot + tmp[rule].url[u]
                             }
                         }
 

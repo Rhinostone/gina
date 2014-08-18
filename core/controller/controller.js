@@ -430,6 +430,10 @@ function Controller(options) {
             condition = ( typeof(routing[route]) != 'undefined') ? true : false;
         }
 
+        //if (conf.server.webroot.substr(conf.server.webroot.length-1,1) == '/') {
+        //    conf.server.webroot = conf.server.webroot.substr(conf.server.webroot.length-1,1).replace('/', '')
+        //}
+
         if ( !self.forward404Unless(condition, req, res) ) { // forward to 404 if bad route
 
             if (route) { // will go with route first
