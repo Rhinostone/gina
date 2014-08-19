@@ -9,7 +9,7 @@
 //Imports.
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
-var utils           = require('./../utils');
+var utils           = require('./../utils') || require.cache[require.resolve('./../utils')];
 var merge           = utils.merge;
 var inherits        = utils.inherits;
 var swig            = require('swig');
@@ -436,9 +436,9 @@ function Controller(options) {
 
         if ( !self.forward404Unless(condition, req, res) ) { // forward to 404 if bad route
 
-            //if (wroot.substr(wroot.length-1,1) == '/') {
-            //    wroot = wroot.substr(wroot.length-1,1).replace('/', '')
-            //}
+            if (wroot.substr(wroot.length-1,1) == '/') {
+                wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+            }
 
             if (route) { // will go with route first
                 path = routing[route].url;
