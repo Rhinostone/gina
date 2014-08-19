@@ -258,6 +258,7 @@ function Server(options) {
             });*/
 
         self.instance.all('*', function onInstance(request, response, next) {
+
             //Only for dev & debug.
             self.conf[self.appName]['protocol'] = request.protocol || self.conf[self.appName]['hostname'];
             self.conf[self.appName]['hostname'] = self.conf[self.appName]['protocol'] +'://'+ request.headers.host;
@@ -323,11 +324,21 @@ function Server(options) {
 
         //static filter
         if ( typeof(conf.content.statics) != 'undefined' &&  typeof(conf.content.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
+            // No sessions for statics
+            if (req.session) {
+                delete req['session']
+            }
+
             uri = uri.join('/');
             var filename = path.join(conf.content.statics[key], uri);
+
             fs.exists(filename, function(exists) {
+
                 if(exists) {
+
+
                     if (fs.statSync(filename).isDirectory()) filename += '/index.html';
+
                     fs.readFile(filename, "binary", function(err, file) {
                         if (err) {
                             res.writeHead(500, {"Content-Type": "text/plain"});
@@ -446,6 +457,7 @@ function Server(options) {
                     if (!allowed) {
                         throwError(res, 405, 'Method Not Allowed for [' + self.appName + '] => ' + req.originalUrl)
                     } else {
+
                         router.route(req, res, next, params)
                     }
                     matched = true;
@@ -455,12 +467,17 @@ function Server(options) {
             }
 
         if (!matched) {
-            if (pathname === self.conf[self.appName].server.webroot + '/favicon.ico' && !withViews ) {
+            var wroot = self.conf[self.appName].server.webroot;
+            if (wroot.substr(wroot.length-1,1) == '/') {
+                wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+            }
+
+            if (pathname === wroot + '/favicon.ico' && !withViews ) {
                 res.writeHead(200, {'Content-Type': 'image/x-icon'} );
                 res.end()
             }
             if (!res.headerSent)
-                throwError(res, 404, 'Page not found\n' + self.conf[self.appName].server.webroot+pathname)
+                throwError(res, 404, 'Page not found\n' + wroot + pathname)
         }
     }
 
