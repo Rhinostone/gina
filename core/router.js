@@ -170,6 +170,9 @@ function Router(env) {
         require.cache[_(getPath('geena.core') +'/utils/index.js', true)] = require( _(getPath('geena.core') +'/utils/index.js', true) );
         require.cache[_(getPath('geena.core') + '/gna.js', true)].exports.utils = require.cache[_(getPath('geena.core') +'/utils/index.js', true)];
 
+        // Super controller
+        //SuperController = require.cache[_(getPath('geena.core') +'/controller/index.js', true)];
+
         //update server
 
 

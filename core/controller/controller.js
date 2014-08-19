@@ -427,6 +427,7 @@ function Controller(options) {
         var keepParams = req.routing.param['keep-params'] || false;
         var conf = self.getConfig();
         var routing = conf.content.routing;
+        var wroot = conf.server.webroot;
         var condition = true; //set by default for url @ path redirect
 
         if (route) { // will go with route first
@@ -435,16 +436,20 @@ function Controller(options) {
 
         if ( !self.forward404Unless(condition, req, res) ) { // forward to 404 if bad route
 
+            //if (wroot.substr(wroot.length-1,1) == '/') {
+            //    wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+            //}
+
             if (route) { // will go with route first
                 path = routing[route].url;
                 if ( typeof(path instanceof Array) ) {
                     path = path[0] //if it is an array, we just take the first one
                 }
-                path = conf.hostname + conf.server.webroot + path;
+                path = conf.hostname + wroot + path;
             } else if (url) {
                 path = ( (/\:\/\//).test(url) ) ? url : req.protocol + '://' + url;
             } else {
-                path = conf.hostname + conf.server.webroot + path
+                path = conf.hostname + wroot + path
             }
 
             res.writeHead(code, {'Location': path});
@@ -499,6 +504,7 @@ function Controller(options) {
         };
 
         delete req['query'];
+        // if you need it back in you controller: req.body = req.post
         delete req['body'];
     }
 
