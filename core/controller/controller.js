@@ -138,7 +138,8 @@ function Controller(options) {
      * */
     this.render = function(_data) {
         try {
-            _data = merge(true, self.getData(), _data);
+            //_data = merge(true, self.getData(), _data);
+            _data = merge(_data, self.getData());
 
             self.setRessources(local.options.views, _data.page.action);
             var data = merge(true, self.getData(), _data);
@@ -176,8 +177,10 @@ function Controller(options) {
                     layout = layout.toString();
                     layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
 
-                    local.res.writeHead(200, { 'Content-Type': 'text/html' });
-                    local.res.end(layout);
+                    if ( !local.res.headerSent ) {
+                        local.res.writeHead(200, { 'Content-Type': 'text/html' });
+                        local.res.end(layout);
+                    }
                 })
             })
         } catch (err) {
@@ -429,10 +432,6 @@ function Controller(options) {
         if (route) { // will go with route first
             condition = ( typeof(routing[route]) != 'undefined') ? true : false;
         }
-
-        //if (conf.server.webroot.substr(conf.server.webroot.length-1,1) == '/') {
-        //    conf.server.webroot = conf.server.webroot.substr(conf.server.webroot.length-1,1).replace('/', '')
-        //}
 
         if ( !self.forward404Unless(condition, req, res) ) { // forward to 404 if bad route
 
