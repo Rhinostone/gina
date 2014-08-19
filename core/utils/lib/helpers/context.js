@@ -36,7 +36,13 @@ function ContextHelper(contexts) {
                 paths : {}
             }
         }
-        self.contexts = contexts
+        self.contexts = contexts;
+        return self
+    }
+
+    this.configure = function(contexts) {
+        //self.contexts = merge(true, self.contexts, contexts);
+        joinContext(contexts)
     }
 
     joinContext = function(context) {
@@ -121,7 +127,7 @@ function ContextHelper(contexts) {
         return (os.platform() == 'win32') ? true : false;
     }
 
-    init(contexts)
+    return init(contexts)
 };
 
 module.exports = ContextHelper;

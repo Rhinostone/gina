@@ -1,4 +1,4 @@
-var utils       = require('../utils');
+var utils       = require('../utils') || require.cache[require.resolve('../utils')];
 var inherits    = utils.inherits;
 var Controller  = require('./controller');
 

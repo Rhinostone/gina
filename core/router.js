@@ -171,7 +171,10 @@ function Router(env) {
         require.cache[_(getPath('geena.core') + '/gna.js', true)].exports.utils = require.cache[_(getPath('geena.core') +'/utils/index.js', true)];
 
         // Super controller
-        //SuperController = require.cache[_(getPath('geena.core') +'/controller/index.js', true)];
+        delete require.cache[_(getPath('geena.core') +'/controller/index.js', true)];
+        require.cache[_(getPath('geena.core') +'/controller/index.js', true)] = require( _(getPath('geena.core') +'/controller/index.js', true) );
+        SuperController = require.cache[_(getPath('geena.core') +'/controller/index.js', true)];
+
 
         //update server
 
@@ -215,7 +218,7 @@ function Router(env) {
         console.debug('ACTION ON  ROUTING IS : ' + action);
 
         //Getting superCleasses & extending it with super Models.
-        var controllerFile = _(local.conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controller.js');
+        var controllerFile = local.conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controller.js';
 
         var options = {
             action          : action,
@@ -234,7 +237,7 @@ function Router(env) {
             //if ( typeof(namespace) != 'undefined' ) {
 
             if (cacheless) delete require.cache[_(controllerFile, true)];
-            var Controller  = require(controllerFile)
+            var Controller  = require(_(controllerFile, true))
         } catch (err) {
             var superController = new SuperController(options);
             superController.setOptions(request, response, options);
