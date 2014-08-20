@@ -263,15 +263,62 @@ function Server(options) {
             self.conf[self.appName]['protocol'] = request.protocol || self.conf[self.appName]['hostname'];
             self.conf[self.appName]['hostname'] = self.conf[self.appName]['protocol'] +'://'+ request.headers.host;
 
-            loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, req, res, next) {
-                console.log('calling back..');
-                if (err) {
-                    throwError(response, 500, 'Internal server error\n' + err.stack)
+            request.post = {};
+            request.get = {};
+            //request.put = {};
+            //request.delete = {};
+            request.body = {};
+
+            request.on('data', function(chunk){
+                if ( typeof(request.body) == 'object') {
+                    request.body = '';
                 }
+                request.body += chunk.toString()
+            });
 
-                handle(req, res, next, pathname)
+            request.on('end', function onEnd(){
 
-            })//EO this.loadBundleConfiguration(this.appName, function(err, conf){
+
+
+                switch( request.method.toLowerCase() ) {
+                    case 'post':
+                        var obj = {};
+                        if ( typeof(request.body) == 'string' ) {
+                            var arr = request.body.split(/&/g);
+                            var el = {};
+                            for (var i=0; i<arr.length; ++i) {
+                                el = arr[i].split(/=/)
+                                obj[el[0]] = el[1];
+                            }
+                        }
+                        request.post = obj;
+                        break;
+
+                    case 'get':
+                        request.get = request.query;
+                        break;
+                    //
+                    //case 'put':
+                    //    request.put = request.? || undefined;
+                    //    break;
+                    //
+                    //case 'delete':
+                    //    request.delete = request.? || undefined;
+                    //    break;
+                }
+                    //???
+                loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, req, res, next) {
+                    console.log('calling back..');
+                    if (err) {
+                        throwError(response, 500, 'Internal server error\n' + err.stack)
+                    }
+
+                    handle(req, res, next, pathname)
+
+                })//EO this.loadBundleConfiguration(this.appName, function(err, conf){
+            });
+
+
         });//EO this.instance
 
         console.info(

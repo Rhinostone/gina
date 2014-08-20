@@ -372,7 +372,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                     .onReady(
                         function onModelReady( err, _connector, _entities) {
                             if (err) {
-                                console.error('found error ...', err);
+                                console.error('found error ...');
                                 console.error(err.stack||err.message||err)
                             }
                             done(_connector)
