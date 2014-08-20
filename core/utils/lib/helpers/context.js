@@ -41,7 +41,6 @@ function ContextHelper(contexts) {
     }
 
     this.configure = function(contexts) {
-        //self.contexts = merge(true, self.contexts, contexts);
         joinContext(contexts)
     }
 
