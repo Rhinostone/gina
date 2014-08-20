@@ -833,32 +833,59 @@ function Config(opt) {
         //Reload models.
         var modelsPath = _(conf[bundle][env].modelsPath);
         var path;
-        fs.exists(modelsPath, function(exists) {
 
-            if (exists) {
-                var files = fs.readdirSync(modelsPath);
-                if ( typeof(files) == 'object' && files.count() > 0 ) {
-                    for (var f=0; f<files.length; ++f) {
-                        path = _(modelsPath + '/' + files[f], true);
-                        delete require.cache[path]
-                    }
+        if ( fs.existsSync(modelsPath) ) {
+            var files = fs.readdirSync(modelsPath);
+            if ( typeof(files) == 'object' && files.count() > 0 ) {
+                for (var f=0; f<files.length; ++f) {
+                    path = _(modelsPath + '/' + files[f], true);
+                    delete require.cache[path]
+                }
 
-                    var Model   = require('./model');
-                    for (var m in conf[bundle][env].content.connectors) {
-                        setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m))
-                    }
+                var Model   = require('./model');
+                for (var m in conf[bundle][env].content.connectors) {
+                    setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m))
                 }
             }
+        }
 
-            //Reload conf.
-            loadBundleConfig( bundle, function(err, files, routing) {
-                if (!err) {
-                    callback(false, routing)
-                } else {
-                    callback(err)
-                }
-            }, true)
-        })
+
+        //Reload conf.
+        loadBundleConfig( bundle, function(err, files, routing) {
+            if (!err) {
+                callback(false, routing)
+            } else {
+                callback(err)
+            }
+        }, true)
+
+
+        //fs.exists(modelsPath, function(exists) {
+        //
+        //    if (exists) {
+        //        var files = fs.readdirSync(modelsPath);
+        //        if ( typeof(files) == 'object' && files.count() > 0 ) {
+        //            for (var f=0; f<files.length; ++f) {
+        //                path = _(modelsPath + '/' + files[f], true);
+        //                delete require.cache[path]
+        //            }
+        //
+        //            var Model   = require('./model');
+        //            for (var m in conf[bundle][env].content.connectors) {
+        //                setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m))
+        //            }
+        //        }
+        //    }
+        //
+        //    //Reload conf.
+        //    loadBundleConfig( bundle, function(err, files, routing) {
+        //        if (!err) {
+        //            callback(false, routing)
+        //        } else {
+        //            callback(err)
+        //        }
+        //    }, true)
+        //})
 
     }//EO refresh.
 
