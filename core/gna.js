@@ -26,6 +26,7 @@ var Server  = require('./server');//TODO require('./server').http
 var EventEmitter = require('events').EventEmitter;
 var e = new EventEmitter();
 gna.initialized = process.initialized = false;
+gna.routed = process.routed = false;
 gna.utils = utils;
 setContext('geena.utils', utils);
 
@@ -394,7 +395,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
     gna.onInitialize = process.onInitialize = function(callback) {
 
         gna.initialized = true;
-        e.on('init', function(instance, middleware, conf) {
+        e.once('init', function(instance, middleware, conf) {
 
             loadAllModels(
                 conf,
@@ -427,6 +428,20 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                     }
                 }
             )
+        })
+    }
+
+    gna.onRouting = process.onRouting = function(callback) {
+
+        gna.routed = true;
+        e.once('route', function(request, response, next, params) {
+
+            try {
+                callback(e, request, response, next, params)
+            } catch (err) {
+                // TODO Output this to the error logger.
+                console.log('Could not complete routing: ', err.stack)
+            }
         })
     }
 

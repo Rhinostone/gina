@@ -214,6 +214,8 @@ function Router(env) {
                 response.header(h, resHeaders[h])
         }
 
+        // onRouteEvent
+
         //logger.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
         console.debug('ACTION ON  ROUTING IS : ' + action);
 
