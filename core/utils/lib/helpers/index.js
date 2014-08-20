@@ -65,12 +65,17 @@ Object.defineProperty( Object.prototype, 'count', {
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
     value: function(){
-        if (this instanceof String) this = JSON.parse(this);
-        var i = 0;
-        for (var prop in this)
-            if (this.hasOwnProperty(prop)) ++i;
+        try {
+            if (this instanceof String) this = JSON.parse(this);
+            var i = 0;
+            for (var prop in this)
+                if (this.hasOwnProperty(prop)) ++i;
 
-        return i;
+            return i;
+        } catch (err) {
+            return i
+        }
+
     }
 });
 /**

@@ -207,8 +207,8 @@ function Controller(options) {
 
         try {
 
-            if(typeof(options) != "undefined" && typeof(options.charset) != "undefined"){
-                local.res.setHeader("charset", options.charset);
+            if(typeof(local.options) != "undefined" && typeof(local.options.charset) != "undefined"){
+                local.res.setHeader("charset", local.options.charset);
             }
             if ( !local.res.get('Content-Type') ) {
                 local.res.setHeader("Content-Type", "application/json");
@@ -493,8 +493,6 @@ function Controller(options) {
      * Get Params
      * */
     var getParams = function(req) {
-        req.get = (req.query) ? req.query : {};
-        req.post = (req.body) ? req.body : {};
 
         req.getParams = function() {
             //copy.
@@ -503,10 +501,6 @@ function Controller(options) {
             params = merge(true, params, req.post);
             return params
         };
-
-        delete req['query'];
-        // if you need it back in you controller: req.body = req.post
-        delete req['body'];
     }
 
     /**
