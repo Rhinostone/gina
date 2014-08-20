@@ -216,6 +216,7 @@ function Controller(options) {
             self.rendered = true;
             local.res.end(JSON.stringify(jsonObj))
         } catch (err) {
+            local.res.end(JSON.stringify({error: err.stack}));
             console.log(err.stack)
         }
 
