@@ -17,6 +17,7 @@ var gna     = {core:{}};
 var fs      = require('fs');
 var Config  = require('./config');
 var utils   = require('./utils');
+var modelHelper = new utils.model();
 //Yes it's global...
 var console = utils.logger;
 
@@ -350,7 +351,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
             var Model   = require('./model');
             var mObj = {};
             var models = conf.content.connectors;
-            var entities = {};
+
             var connectorArray = models.toArray();
             var t = 0;
 
@@ -359,6 +360,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                     ++t
                 }
                 if ( t == connectorArray.count() ) {
+
                     callback()
                 }
             }
@@ -370,12 +372,19 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
                 mObj[c+'Model']
                     .onReady(
-                        function onModelReady( err, _connector, _entities) {
+                        function onModelReady( err, connector, entities, conn) {
                             if (err) {
                                 console.error('found error ...');
-                                console.error(err.stack||err.message||err)
+                                console.error(err.stack||err.message||err);
+                                done(connector)
+                            } else {
+                                // creating entities instances
+                                for (var ntt in entities) {
+                                    entities[ntt] = new entities[ntt](conn);
+                                }
+                                modelHelper.setModel(connector, entities);
+                                done(connector)
                             }
-                            done(_connector)
                         }
                     );
             }

@@ -23,7 +23,6 @@ var Helpers = {
         //I18n        : require("./i18n")(),
         path        : require("./path")(),
         context     : require("./context")(),
-        model      : require("./model"),
         text        : require("./text")()
 };
 

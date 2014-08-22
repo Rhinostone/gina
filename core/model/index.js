@@ -8,11 +8,12 @@
 
 //Imports.
 var fs      = require('fs');
+var vm      = require('vm');
 var EventEmitter  = require('events').EventEmitter;
 var Module  = require('module');
 var utils   = require('../utils');
 var console = utils.logger;
-var modelHelper = new utils.helpers.model();
+var modelHelper = new utils.model();
 var inherits = utils.inherits;
 
     //UtilsConfig = Utils.Config(),
@@ -29,7 +30,7 @@ var inherits = utils.inherits;
  * @api         Public
  */
 function Model(namespace) {
-    var _this = this;
+    var self = this;
     var _configuration = null;
     var _connector = null;
     var _locals = null;
@@ -66,10 +67,10 @@ function Model(namespace) {
 
         console.log("\nBundle", bundle);
         console.log("Model", model);
-        _this.name = _connector;
-        _this.bundle = bundle;
-        _this.model = model;
-        _this.modelDirName = modelDirName;
+        self.name = _connector;
+        self.bundle = bundle;
+        self.model = model;
+        self.modelDirName = modelDirName;
     };
 
     /**
@@ -81,9 +82,9 @@ function Model(namespace) {
      * */
     var init = function() {
         //TODO - if instance...
-        var bundle = _this.bundle;
-        var model = _this.model;
-        var modelDirName = _this.modelDirName;
+        var bundle = self.bundle;
+        var model = self.model;
+        var modelDirName = self.modelDirName;
         getConfig(bundle, function onGetConfigDone(err, conf){
 
             if (!err) {
@@ -96,7 +97,7 @@ function Model(namespace) {
                 var entitiesPath    = _(modelPath + '/entities');
                 console.log('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
                 if (!fs.existsSync(entitiesPath)) {
-                    _this.emit('model#ready', new Error('no entities found for your model: [ ' + model + ' ]'), _this.name, null);
+                    self.emit('model#ready', new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null);
                     //console.log("[ "+model+" ]no entities found...")
                 } else {
                     var connectorPath   = _(modelPath + '/lib/connector.js');
@@ -109,12 +110,12 @@ function Model(namespace) {
 
                         var Connector = require(connectorPath);
 
-                        _this.connect(
+                        self.connect(
                             Connector,
                             function onConnect(err, conn) {
                                 if (err) {
                                     console.error(err.stack);
-                                    _this.emit('model#ready', err, _this.name, null);
+                                    self.emit('model#ready', err, self.name, null);
                                 } else {
                                     //Getting Entities Manager.
                                     if (cacheless)
@@ -138,7 +139,7 @@ function Model(namespace) {
                 }
 
             } else {
-                _this.emit('model#ready', new Error('no configuration found for your model: ' + model), _this.name, null);
+                self.emit('model#ready', new Error('no configuration found for your model: ' + model), self.name, null);
                 console.log("no configuration found...")
             }
         });
@@ -147,7 +148,7 @@ function Model(namespace) {
     };
 
     this.connect = function(Connector, callback) {
-        var connector = new Connector( _this.getConfig(_connector) );
+        var connector = new Connector( self.getConfig(_connector) );
         connector.onReady( function(err, conn){
             callback(err, conn);
         })
@@ -223,49 +224,52 @@ function Model(namespace) {
             var entityName, exluded = ['index.js'];
 
             var produce = function(entityName, i){
-                console.log("producing ", _this.name,":",entityName, i);
+                console.log("producing ", self.name,":",entityName, i);
                 if (_locals == undefined) {
                     throw new Error("geena/utils/.gna not found.");
                 }
                 //if (err) log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
 
-                var filename = _locals.paths.geena + '/model/entity.js';
+                var filename = _locals.paths.geena + '/model/entity.js';// super
                 try {
-                    if (cacheless)
-                        delete require.cache[_(filename, true)];
+                    if (cacheless) {
+                        delete require.cache[_(filename, true)];//super
+                        delete require.cache[_(entitiesPath + '/' + files[i], true)];//child
+                    }
 
-                    var ModelEntityClass = require(filename);
-                    //var modelEntity = new ModelEntityClass( _this.getConfig(_connector), conn );
+                    var className = entityName.substr(0,1).toUpperCase() + entityName.substr(1);
 
-                    if (cacheless)
-                        delete require.cache[_(entitiesPath + '/' + files[i], true)];
-
+                    var EntitySuperClass = require(_(filename, true));
                     var EntityClass = require( _(entitiesPath + '/' + files[i]) );
-                    //Inherits.
-                    var Entity = inherits(EntityClass, ModelEntityClass);
-                    //var EventEmitter  = require('events').EventEmitter;
-                    //util.inherits(Entity, EventEmitter);
 
+
+                    //Inherits.
+                    var EntityClass = inherits(EntityClass, EntitySuperClass);
+
+                    EntityClass.prototype.name = className;
+                    EntityClass.prototype.model = self.model;
 
                     //for (var prop in Entity) {
                     //    console.log('PROP FOUND ', prop);
                     //}
-                    var entity = new Entity( _this.getConfig(_connector), conn);
-                    entitiesManager[entityName] = entity;
+
+                    entitiesManager[entityName] = EntityClass;
 
                 } catch (err) {
                     console.error(err.stack);
-                    _this.emit('model#ready', err, _this.name, undefined);
+                    self.emit('model#ready', err, self.name, undefined);
                 }
                 console.log('::::i '+i+' vs '+(files.length-1))
                 if (i == files.length-1) {
+                    // another one to instanciate and put in cache
+                    for (var nttClass in entitiesManager) {
+                        var _nttClass = nttClass.substr(0,1).toUpperCase() + nttClass.substr(1);
+                        modelHelper.setModelEntity(self.model, _nttClass, entitiesManager[nttClass]);
+                    }
                     //finished.
-                    _this.emit('model#ready', false, _this.name, entitiesManager);
+                    self.emit('model#ready', false, self.name, entitiesManager, conn);
                 }
-                ++that.i;
-
-
-                //console.log("EntityManager  \n",  entitiesManager,"\n VS \n",  Entity);
+                ++that.i
 
             };//EO produce.
 
@@ -279,7 +283,7 @@ function Model(namespace) {
                         produce(entityName, that.i);
                     } else if (that.i == files.length-1) {
                         //console.log("All done !");
-                        _this.emit('model#ready', false, _this.name, entitiesManager);
+                        self.emit('model#ready', false, self.name, entitiesManager);
                         ++that.i;
                     } else {
                         ++that.i;
@@ -293,16 +297,16 @@ function Model(namespace) {
 
     this.onReady = function(callback) {
         console.log('binding...');
-        _this.once('model#ready', function(err, model, entities) {
+        self.once('model#ready', function(err, model, entities, conn) {
             //entities == null when the database server isn't start.
             if ( err ) {
                 console.error(err.stack||err.message)
-                //console.log('No entities found for [ '+ _this.name +':'+ entityName +'].\n 1) Check if the database is started.\n2) Check if exists: /models/entities/'+ entityName);
-            } else {
-                console.log('!! found entities ', entities);
-                modelHelper.setModel(model, entities);
-            }
-            callback(err, model, entities);
+                //console.log('No entities found for [ '+ self.name +':'+ entityName +'].\n 1) Check if the database is started.\n2) Check if exists: /models/entities/'+ entityName);
+            } //else {
+              //  console.log('!! found entities ', entities);
+                //modelHelper.setModel(model, entities);
+            //}
+            callback(err, model, entities, conn);
         });
         setup(namespace);
         init();
@@ -311,25 +315,7 @@ function Model(namespace) {
 
 
     return this
-
-    //return {
-    //    onReady : function(callback) {
-    //
-    //        _this.on('model#ready', function(err, model, entities) {
-    //            //entities == null when the database server isn't start.
-    //            if ( err ) {
-    //                console.error(err.stack||err.message)
-    //                //console.log('No entities found for [ '+ _this.name +':'+ entityName +'].\n 1) Check if the database is started.\n2) Check if exists: /models/entities/'+ entityName);
-    //            } else {
-    //                console.log('!! found entities ', entities);
-    //                modelHelper.setModel(model, entities);
-    //            }
-    //            callback(err, model, entities);
-    //        });
-    //        init()
-    //    }
-    //}
-};
+}
 
 Model = inherits(Model, EventEmitter);
 module.exports = Model;
