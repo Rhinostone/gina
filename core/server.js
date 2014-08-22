@@ -250,13 +250,6 @@ function Server(options) {
 
         var apps = self.bundles;
 
-        /**
-         self.instance.all('*', function(req, res, next) {
-                res.header("Access-Control-Allow-Origin", "*");
-                res.header("Access-Control-Allow-Headers", "X-Requested-With");
-                next();
-            });*/
-
         self.instance.all('*', function onInstance(request, response, next) {
 
             //Only for dev & debug.
@@ -265,8 +258,8 @@ function Server(options) {
 
             request.post = {};
             request.get = {};
-            //request.put = {};
-            //request.delete = {};
+            //request.put = {}; //?
+            //request.delete = {}; //?
             request.body = {};
 
             request.on('data', function(chunk){
@@ -276,9 +269,7 @@ function Server(options) {
                 request.body += chunk.toString()
             });
 
-            request.on('end', function onEnd(){
-
-
+            request.on('end', function onEnd() {
 
                 switch( request.method.toLowerCase() ) {
                     case 'post':
@@ -288,7 +279,7 @@ function Server(options) {
                             var el = {};
                             for (var i=0; i<arr.length; ++i) {
                                 el = arr[i].split(/=/)
-                                obj[el[0]] = el[1];
+                                obj[ el[0] ] = el[1];
                             }
                         }
                         request.post = obj;
@@ -306,7 +297,7 @@ function Server(options) {
                     //    request.delete = request.? || undefined;
                     //    break;
                 }
-                    //???
+
                 loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, req, res, next) {
                     console.log('calling back..');
                     if (err) {

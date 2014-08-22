@@ -53,6 +53,7 @@ function Utils() {
         inherits    : _require('./lib/inherits'),
         helpers     : _require('./lib/helpers'),
         //this one must move to Dev since it's dev related
+        model       : _require('./lib/model'),
         merge       : _require('./lib/merge'),
         generator   : _require('./lib/generator'),//move to geena.dev
         Proc        : _require('./lib/proc'),
