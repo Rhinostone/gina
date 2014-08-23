@@ -8,6 +8,8 @@
 var fs = require('fs');
 var EventEmitter = require('events').EventEmitter;
 var utils   = require('geena').utils;
+var modelHelper = new utils.model();
+
 var inherits = utils.inherits;
 //var Config = require('../config');
 //var config = new Config();
@@ -30,10 +32,47 @@ function EntitySuper(conn) {
             EntitySuper[self.name] = {}
         }
         if ( !EntitySuper[self.name].instance ) {
+            setListeners();
             EntitySuper[self.name].instance = self;
-            return self;
+            return self
         } else {
             return EntitySuper[self.name].instance;
+        }
+    }
+
+    /**
+     * Set all main listenners at once
+     * */
+    var setListeners = function() {
+        if ( !EntitySuper[self.name].hasOwnEvents ) {
+            EntitySuper[self.name].hasOwnEvents = true;
+            // get entity objet
+            var entity = self.getEntity(self.name);
+            var shortName = self.name.replace(/Entity/, '').toLocaleLowerCase();
+            var events = [], i = 0;
+
+            for (var f in entity) {
+                if ( typeof(entity[f]) == 'function' && !self[f] && f != 'onComplete') {
+                    events[i] = shortName +'#'+ f;
+                    ++i;
+
+
+                    console.log('setting listner ' + f);
+                }
+            }
+
+            entity.onComplete = function(cb) {
+                // Loop on registered events
+                for (var i=0; i<events.length; ++i) {
+                    entity.once(events[i], function(err, data) {
+                        //cb(self._cbData['user#set'].err, self._cbData['user#set'].data);
+                        cb(err, data)
+                    })
+                }
+            };
+            // now merge with the current entity object
+            modelHelper.updateEntityObject(self.model, shortName+'Entity', entity);
+            return
         }
     }
 
@@ -53,7 +92,17 @@ function EntitySuper(conn) {
             throw new Error(err.stack);
             return null
         }
-    };
+    }
+
+    // self.trigger might be useless because of the existing self.emit(evt, err, data)
+    ///**
+    // * Trigger callback
+    // *
+    // * */
+    //this.trigger = function(err, data, evt) {
+    //    // eg.: evt = 'user#set';
+    //    self.emit(evt, err, data);
+    //};
 
     return init()
 };

@@ -194,7 +194,7 @@ Object.defineProperty( Object.prototype, 'toArray', {
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
     value: function(force) {
-        var arr = [], i = 0;
+        var arr = [],i = 0;
         for (var prop in this) {
             if ( this.hasOwnProperty(prop) ) {
                 if (force) {

@@ -942,7 +942,7 @@ e.setMaxListeners(100);
      * */
 
     var removeFolders = function(list, l, i, callback) {
-
+        var i = i || 0
         if ( typeof(list[l]) == "undefined") {
             callback(false, list[l-1][list[l-1].length -1])
         } else {
