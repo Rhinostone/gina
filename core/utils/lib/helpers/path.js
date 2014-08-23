@@ -27,7 +27,7 @@ e.setMaxListeners(100);
  * TODO - Put debug logs
  * */
 
- PathHelper = function() {
+ function PathHelper() {
 
     this.paths = [];
     this.userPaths = {};

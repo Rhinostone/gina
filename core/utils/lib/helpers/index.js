@@ -65,7 +65,8 @@ Object.defineProperty( Object.prototype, 'count', {
     configurable: true,
     value: function(){
         try {
-            if (this instanceof String) this = JSON.parse(this);
+            var self = this;
+            if (this instanceof String) self = JSON.parse(this);
             var i = 0;
             for (var prop in this)
                 if (this.hasOwnProperty(prop)) ++i;
