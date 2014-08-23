@@ -443,7 +443,7 @@ function Controller(options) {
 
             if (route) { // will go with route first
                 path = routing[route].url;
-                if ( typeof(path instanceof Array) ) {
+                if (path instanceof Array) {
                     path = path[0] //if it is an array, we just take the first one
                 }
                 path = conf.hostname + wroot + path;
@@ -454,7 +454,7 @@ function Controller(options) {
             }
 
             res.writeHead(code, {'Location': path});
-            res.end()
+            res.end();
         }
     }
 

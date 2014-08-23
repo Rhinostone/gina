@@ -59,20 +59,6 @@ function ModelHelper(models) {
             self.models[name]['getConnection'] = function() {
                 return self.models[name]['_connection']
             }
-
-            //if ( typeof(self.models[name]['getConnection']) != "undefined") {
-            //    merge(
-            //        self.models[name]['getConnection'],
-            //        function() {
-            //            return self.models[name]['_connection']
-            //        }
-            //    )
-            //} else {
-            //    self.models[name]['_connection'] = conn;
-            //    self.models[name]['getConnection'] = function() {
-            //        return self.models[name]['_connection']
-            //    }
-            //}
         } else {
             //not sure...
             self.models = arguments[0]
@@ -104,6 +90,22 @@ function ModelHelper(models) {
         }
     }
 
+    this.updateEntityObject = function(model, name, entityObject) {
+
+        if ( typeof(model) == 'undefined' || model == '' ) {
+            throw new Error('ModelHelper cannot update EntityObject whitout a connector !')
+        }
+
+        if ( typeof(name) == 'undefined' || name == '' ) {
+            throw new Error('ModelHelper cannot set ModelEntity whitout a name !')
+        }
+
+        if (!self.models[model][name]) {
+            self.models[model][name] = {}
+        }
+        self.models[model][name] = merge(self.models[model][name], entityObject);
+    }
+
     this.setModel = function(name, obj) {
         if (arguments.length > 1) {
             if ( typeof(name) == 'undefined' || name == '' ) {
@@ -132,12 +134,18 @@ function ModelHelper(models) {
     }
 
     /**
+     * Get Model Entity
      *
+     * @param {string} model
+     * @param {string} entityName
+     * @param {object} conn
+     *
+     * @return {object} entity
      * */
-    getModelEntity = function(model, entity, conn) {
-        if ( typeof(entity) != 'undefined' ) {
+    getModelEntity = function(model, entityName, conn) {
+        if ( typeof(entityName) != 'undefined' ) {
             try {
-                return new self.entities[model][entity](conn)
+                return new self.entities[model][entityName](conn)
             } catch (err) {
                 return undefined
             }
