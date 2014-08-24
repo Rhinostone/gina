@@ -529,9 +529,9 @@ function Controller(options) {
 
     this.throwError = function(res, code, msg) {
         if (arguments.length < 3) {
-            var msg = res;
             var res = local.res;
-            var code = code || 500;
+            var code = res || 500;
+            var msg = code || null;
         }
 
         if ( !hasViews() ) {
