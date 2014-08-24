@@ -25,7 +25,7 @@ function Inherits(a, b) {
     var init = function(a, b) {
         var err = check(a, b);
         if (!err) {
-            var z = ( function() {
+            var z = (function() {
                 var cache = a;
                 return function() {
                     //super class

@@ -12,8 +12,9 @@ var vm      = require('vm');
 var EventEmitter  = require('events').EventEmitter;
 var Module  = require('module');
 var utils   = require('../utils');
+
 var console = utils.logger;
-var modelHelper = new utils.model();
+var modelHelper = new utils.Model();
 var inherits = utils.inherits;
 
     //UtilsConfig = Utils.Config(),
