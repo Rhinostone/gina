@@ -40,6 +40,9 @@ PostInstall = function() {
         var version = require( _(self.path + 'package.json') ).version;
         var target = _(self.path + '/VERSION');
         try {
+            if ( fs.existsSync(target) ) {
+                fs.unlinkSync(target)
+            }
             fs.writeFileSync(target, version);
             callback(false)
         } catch(err) {
@@ -77,6 +80,9 @@ PostInstall = function() {
                 var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
                 var source = _(self.path + 'core/template/command/geena.bat.tpl');
                 var target = _(appPath + name + '.bat');
+                if ( fs.existsSync(target) ) {
+                    fs.unlinkSync(target)
+                }
                 utils.generator.createFileFromTemplate(source, target)
             }
 
