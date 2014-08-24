@@ -146,7 +146,7 @@ function Server(options) {
                 main = _(appPath + '/config/' + self.conf[apps[i]].files.routing);
                 filename = main;//by default
 
-                if (cacheless) {
+                //if (cacheless) {
 
                     filename = self.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
                     filename = _(appPath + '/config/' + filename);
@@ -154,6 +154,7 @@ function Server(options) {
                     if ( !fs.existsSync(filename) ) {
                         filename = main;
                     }
+                if (cacheless) {
                     delete require.cache[_(filename, true)];
                 }
 
@@ -188,17 +189,18 @@ function Server(options) {
 
                             tmp[rule].url = wroot + tmp[rule].url;
                         } else {
-                            if (tmp[rule].url[u].length > 1 && tmp[rule].url[u].substr(0,1) != '/') {
-                                tmp[rule].url[u] = '/'+tmp[rule].url[u]
-                            } else if (tmp[rule].url[u].length > 1 && conf.server.webroot.substr(conf.server.webroot.length-1,1) == '/') {
-                                tmp[rule].url[u] = tmp[rule].url[u].substr(1)
-                            } else {
-                                if (wroot.substr(wroot.length-1,1) == '/') {
-                                    wroot = wroot.substr(wroot.length-1,1).replace('/', '')
-                                }
-                            }
 
                             for (var u=0; u<tmp[rule].url.length; ++u) {
+                                if (tmp[rule].url[u].length > 1 && tmp[rule].url[u].substr(0,1) != '/') {
+                                    tmp[rule].url[u] = '/'+tmp[rule].url[u]
+                                } else if (tmp[rule].url[u].length > 1 && conf.server.webroot.substr(conf.server.webroot.length-1,1) == '/') {
+                                    tmp[rule].url[u] = tmp[rule].url[u].substr(1)
+                                } else {
+                                    if (wroot.substr(wroot.length-1,1) == '/') {
+                                        wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+                                    }
+                                }
+
                                 tmp[rule].url[u] =  wroot + tmp[rule].url[u]
                             }
                         }

@@ -613,14 +613,12 @@ function Config(opt) {
                 continue;
             }
 
-            if (cacheless) {
-                tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
-                filename = _(appPath + '/config/' + tmp);
-                if (!fs.existsSync(filename) ) {
-                    filename = _(appPath +'/config/'+ conf[bundle][env].files[name])
-                }
-            } else {
+            tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
+            filename = _(appPath + '/config/' + tmp);
+            if (!fs.existsSync(filename) ) {
                 filename = _(appPath +'/config/'+ conf[bundle][env].files[name])
+            } else {
+                conf[bundle][env].files[name] = tmp
             }
 
             //Can't do a thing without.
@@ -727,7 +725,6 @@ function Config(opt) {
             var k;
             for (var i in files['statics']) {
                 k = i;
-               // if ( !(new RegExp(wroot)).test(files['statics'][k]) ) {
                 if ( !(new RegExp(wroot)).test(i) ) {
 
                     if (i.substr(0, 1) != '/') {
