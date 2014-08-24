@@ -17,13 +17,11 @@ var gna     = {core:{}};
 var fs      = require('fs');
 var Config  = require('./config');
 var utils   = require('./utils');
-var modelHelper = new utils.model();
-//Yes it's global...
-var console = utils.logger;
 
+var console = utils.logger;
 var Proc    = utils.Proc;
+var modelHelper = new utils.Model();
 var Server  = require('./server');//TODO require('./server').http
-//var Winston = require('winston');
 var EventEmitter = require('events').EventEmitter;
 var e = new EventEmitter();
 gna.initialized = process.initialized = false;

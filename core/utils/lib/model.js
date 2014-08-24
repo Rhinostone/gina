@@ -10,41 +10,36 @@
 var merge = require('./merge');
 
 /**
- * ModelHelper
+ * Model uitls
  *
- * @package     Geena.Utils.Helpers
+ * @package     Geena.Utils
  * @author      Rhinostone <geena@rhinostone.com>
  * @api public
  * */
-function ModelHelper(models) {
+function Model() {
     var self = this;
-
 
     /**
      * Init
      * @contructor
      * */
-    var init = function(models) {
+    var init = function() {
 
-
-        if ( ModelHelper.instance ) {
-            self = ModelHelper.instance;
-            return ModelHelper.instance
-        } else {
-            if ( typeof(models) == 'undefined' ) {
-                var models = {}
-            }
-            self.models = models
+        if ( !Model.instance ) {
+            self.models = self.models || {};
             self.entities = {};
-            ModelHelper.instance = self;
+            Model.instance = self;
             return self
+        } else {
+            self = Model.instance;
+            return Model.instance
         }
     }
 
     this.setConnection = function(name, conn) {
         if (arguments.length > 1) {
             if (!self.models) {
-                self.models = {};
+                self.models = {}
             }
             if ( typeof(name) == 'undefined' || name == '' ) {
                 throw new Error('Connection must have a name !')
@@ -73,6 +68,9 @@ function ModelHelper(models) {
      * */
     this.setModelEntity = function(model, name, module) {
         if (arguments.length > 1) {
+            if (!self.models) {
+                self.models = {}
+            }
             if ( typeof(name) == 'undefined' || name == '' ) {
                 throw new Error('ModelHelper cannot set ModelEntity whitout a name !')
             }
@@ -103,7 +101,8 @@ function ModelHelper(models) {
         if (!self.models[model][name]) {
             self.models[model][name] = {}
         }
-        self.models[model][name] = merge(self.models[model][name], entityObject);
+
+        self.models[model][name] = merge(self.models[model][name], entityObject)
     }
 
     this.setModel = function(name, obj) {
@@ -115,7 +114,8 @@ function ModelHelper(models) {
             if (!self.models[name]) {
                 self.models[name] = {}
             }
-            self.models[name] = merge(self.models[name], obj);
+
+            self.models[name] = merge(self.models[name], obj)
         } else {
             self.models = arguments[0]
         }
@@ -154,7 +154,7 @@ function ModelHelper(models) {
         }
     }
 
-    init(models);
-};
+    return init()
+}
 
-module.exports = ModelHelper
+module.exports = Model

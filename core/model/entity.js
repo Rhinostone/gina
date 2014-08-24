@@ -7,10 +7,11 @@
  */
 var fs = require('fs');
 var EventEmitter = require('events').EventEmitter;
-var utils   = require('geena').utils;
-var modelHelper = new utils.model();
-
+var utils = require('geena').utils;
+var console = utils.logger;
+var helpers = utils.helpers;
 var inherits = utils.inherits;
+var modelHelper = new utils.Model();
 //var Config = require('../config');
 //var config = new Config();
 
@@ -48,16 +49,32 @@ function EntitySuper(conn) {
             EntitySuper[self.name].hasOwnEvents = true;
             // get entity objet
             var entity = self.getEntity(self.name);
+            // use this property inside your entity to disable listeners
+            if (entity.hasOwnEvents) return false;
+
             var shortName = self.name.replace(/Entity/, '').toLocaleLowerCase();
             var events = [], i = 0;
 
             for (var f in entity) {
-                if ( typeof(entity[f]) == 'function' && !self[f] && f != 'onComplete') {
+                if (
+                    typeof(entity[f]) == 'function' &&
+                    !self[f] &&
+                    f != 'onComplete' &&
+                    f.substr(f.length-4) !== 'Sync' &&
+                    f.substr(f.length-5) !== '_sync'&&
+                    f.substr(f.length-5) !== '-sync'
+                ) {
                     events[i] = shortName +'#'+ f;
                     ++i;
 
-
-                    console.log('setting listner ' + f);
+                    entity[f] = (function() {
+                        var cached = entity[f];
+                        return function() {
+                            cached.apply(this, arguments);
+                            return this // chaining event & method
+                        }
+                    }());
+                    console.debug('setting listener for: [ '+self.model+' ]' + f);
                 }
             }
 
@@ -65,14 +82,12 @@ function EntitySuper(conn) {
                 // Loop on registered events
                 for (var i=0; i<events.length; ++i) {
                     entity.once(events[i], function(err, data) {
-                        //cb(self._cbData['user#set'].err, self._cbData['user#set'].data);
                         cb(err, data)
                     })
                 }
             };
             // now merge with the current entity object
-            modelHelper.updateEntityObject(self.model, shortName+'Entity', entity);
-            return
+            modelHelper.updateEntityObject(self.model, shortName+'Entity', entity)
         }
     }
 
