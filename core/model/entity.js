@@ -74,7 +74,7 @@ function EntitySuper(conn) {
                             return this // chaining event & method
                         }
                     }());
-                    console.debug('setting listener for: [ '+self.model+' ]' + f);
+                    console.debug('setting listener for: [ '+self.model+'/'+self.name+' ]' + f);
                 }
             }
 
