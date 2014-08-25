@@ -202,20 +202,26 @@ function Server(options) {
                                     }
                                 }
 
-                                tmp[rule].url[u] =  wroot + tmp[rule].url[u]
+                                tmp[rule].url[u] = wroot + tmp[rule].url[u]
                             }
                         }
 
                         if( hasViews(apps[i]) ) {
-                            tmp[rule].param.file = tmp[rule].param.action;
-                            var tmpRouting = [];
-                            for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
-                                if (/[A-Z]/.test(tmp[rule].param.file.charAt(r))) {
-                                    tmpRouting[0] = tmp[rule].param.file.substring(0, r);
-                                    tmpRouting[1] = '-' + (tmp[rule].param.file.charAt(r)).toLocaleLowerCase();
-                                    tmpRouting[2] = tmp[rule].param.file.substring(r + 1);
-                                    tmp[rule].param.file = tmpRouting[0] + tmpRouting[1] + tmpRouting[2];
-                                    ++r
+                            // This is only an issue when it comes to the frontend dev
+                            // views.useRouteNameAsFilename is set to true by default
+                            // IF [ false ] the action is used as filename
+                            tmp[rule].param.file = tmp[rule].param.file  || rule;
+                            if ( !self.conf[apps[i]].content['views']['default'].useRouteNameAsFilename && tmp[rule].param.namespace != 'framework') {
+                                tmp[rule].param.file = tmp[rule].param.action;
+                                var tmpRouting = [];
+                                for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
+                                    if (/[A-Z]/.test(tmp[rule].param.file.charAt(r))) {
+                                        tmpRouting[0] = tmp[rule].param.file.substring(0, r);
+                                        tmpRouting[1] = '-' + (tmp[rule].param.file.charAt(r)).toLocaleLowerCase();
+                                        tmpRouting[2] = tmp[rule].param.file.substring(r + 1);
+                                        tmp[rule].param.file = tmpRouting[0] + tmpRouting[1] + tmpRouting[2];
+                                        ++r
+                                    }
                                 }
                             }
                         }
