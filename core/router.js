@@ -242,7 +242,7 @@ function Router(env) {
             var Controller  = require(_(controllerFile, true))
         } catch (err) {
             var superController = new SuperController(options);
-            superController.setOptions(request, response, options);
+            superController.setOptions(request, response, next, options);
             console.log(err.stack);
             superController.throwError(response, 500, err.stack);
             process.exit(1)
@@ -257,11 +257,11 @@ function Router(env) {
         Controller = inherits(Controller, SuperController);
         try {
             var controller = new Controller(options);
-            controller.setOptions(request, response, options);
+            controller.setOptions(request, response, next, options);
             controller[action](request, response, next)
         } catch (err) {
             var superController = new SuperController(options);
-            superController.setOptions(request, response, options);
+            superController.setOptions(request, response, next, options);
             superController.throwError(response, 500, err.stack);
         }
 
