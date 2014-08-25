@@ -511,7 +511,7 @@ function Config(opt) {
         var conf        = self.envConf;
         var env         = self.env || self.Env.get();
         var routing     = {
-            "geena-doc": {
+            "home": {
                 "url": "/@doc",
                 "param": {
                     "namespace" : "framework",
@@ -593,15 +593,17 @@ function Config(opt) {
                     }
 
                     if ( typeof(conf[bundle][env].content['views']) != 'undefined' ) {
-                        routing[rule].param.file = routing[rule].param.action;
-                        var tmpRouting = [];
-                        for (var i = 0, len = routing[rule].param.file.length; i < len; ++i) {
-                            if (/[A-Z]/.test(routing[rule].param.file.charAt(i))) {
-                                tmpRouting[0] = routing[rule].param.file.substring(0, i);
-                                tmpRouting[1] = '-' + (routing[rule].param.file.charAt(i)).toLocaleLowerCase();
-                                tmpRouting[2] = routing[rule].param.file.substring(i + 1);
-                                routing[rule].param.file = tmpRouting[0] + tmpRouting[1] + tmpRouting[2];
-                                ++i;
+                        routing[rule].param.file = routing[rule].param.file || rule;//routing[rule].param.action
+                        if ( !conf[bundle][env].content['views']['default'].useRouteNameAsFilename && routing[rule].param.namespace != 'framework') {
+                            var tmpRouting = [];
+                            for (var i = 0, len = routing[rule].param.file.length; i < len; ++i) {
+                                if (/[A-Z]/.test(routing[rule].param.file.charAt(i))) {
+                                    tmpRouting[0] = routing[rule].param.file.substring(0, i);
+                                    tmpRouting[1] = '-' + (routing[rule].param.file.charAt(i)).toLocaleLowerCase();
+                                    tmpRouting[2] = routing[rule].param.file.substring(i + 1);
+                                    routing[rule].param.file = tmpRouting[0] + tmpRouting[1] + tmpRouting[2];
+                                    ++i;
+                                }
                             }
                         }
                     }
@@ -713,6 +715,14 @@ function Config(opt) {
             var defaultAliases = require(getPath('geena.core') +'/template/conf/statics.json');
 
             files['statics'] = merge(files['statics'], defaultAliases)
+        }
+
+        if (hasViews && typeof(files['views']) == 'undefined') {
+            files['views'] = require(getPath('geena.core') +'/template/conf/views.json')
+        } else if ( typeof(files['views']) != 'undefined' ) {
+            var defaultViewsSettings = require(getPath('geena.core') +'/template/conf/views.json');
+
+            files['views'] = merge(files['views'], defaultViewsSettings)
         }
 
         //webroot statics

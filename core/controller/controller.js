@@ -87,10 +87,11 @@ function Controller(options) {
                 ext = local.options.views.default.ext || ext;
             }
             if( !/\./.test(ext) ) {
-                ext = '.' + ext
+                ext = '.' + ext;
+                local.options.views.default.ext = ext
             }
 
-            var content = action + ext;
+            var content = action;
             self.set('page.ext', ext);
             self.set('page.content', content);
             self.set('page.action', action);
@@ -139,13 +140,17 @@ function Controller(options) {
      * */
     this.render = function(_data) {
         try {
-            //_data = merge(true, self.getData(), _data);
             _data = merge(_data, self.getData());
 
-            self.setRessources(local.options.views, _data.page.action);
-            var data = merge(true, self.getData(), _data);
+            //self.setRessources(local.options.views, _data.page.action);
+            self.setRessources(local.options.views, _data.file);
+            var data = merge(_data, self.getData());
 
-            var path = _(local.options.views.default.html + '/' + data.page.content);
+            var path = _(local.options.views.default.html + '/' + data.file );
+
+            if (data.page.ext) {
+                path += data.page.ext
+            }
 
             var dic = {};
             for (var d in data.page) {
