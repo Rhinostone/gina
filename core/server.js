@@ -12,6 +12,7 @@ var merge           = utils.merge;
 var Proc            = utils.Proc;
 var console         = utils.logger;
 
+
 function Server(options) {
     var self = this;
     var local = {
@@ -277,6 +278,8 @@ function Server(options) {
                     case 'post':
                         var obj = {};
                         if ( typeof(request.body) == 'string' ) {
+                            // get rid of encoding issues
+                            request.body = decodeURIComponent( request.body );
                             var arr = request.body.split(/&/g);
                             var el = {};
                             for (var i=0; i<arr.length; ++i) {
@@ -336,7 +339,7 @@ function Server(options) {
 
     var loadBundleConfiguration = function(req, res, next, bundle, callback) {
 
-        var pathname = url.parse(req.url).pathname;
+        var pathname = url.parse(req.url, true).pathname;
 
 
         if ( /\/favicon\.ico/.test(pathname) ) {

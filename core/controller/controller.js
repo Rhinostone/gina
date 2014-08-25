@@ -72,11 +72,12 @@ function Controller(options) {
         return local.options.cacheless
     }
 
-    this.setOptions = function(req, res, options) {
+    this.setOptions = function(req, res, next, options) {
         local.options = Controller.instance._options = options;
 
         local.req = req;
         local.res = res;
+        local.next = next;
 
         getParams(req);
         if ( typeof(local.options.views) != 'undefined' && typeof(local.options.action) != 'undefined' ) {
@@ -534,17 +535,21 @@ function Controller(options) {
             var msg = code || null;
         }
 
-        if ( !hasViews() ) {
-            res.writeHead(code, { 'Content-Type': 'application/json'} );
-            res.end(JSON.stringify({
-                status: code,
-                error: 'Error '+ code +'. '+ msg
-            }))
+        if ( !res.headerSent ) {
+            if ( !hasViews() ) {
+                res.writeHead(code, { 'Content-Type': 'application/json'} );
+                res.end(JSON.stringify({
+                    status: code,
+                    error: 'Error '+ code +'. '+ msg
+                }))
+            } else {
+                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.end('Error '+ code +'. '+ msg)
+            }
         } else {
-            res.writeHead(code, { 'Content-Type': 'text/html'} );
-            res.end('Error '+ code +'. '+ msg)
+            local.next()
         }
-    };
+    }
 
     // TODO - Should be in another handler.. closer to the view controller/handler
     var refToObj = function (arr){
