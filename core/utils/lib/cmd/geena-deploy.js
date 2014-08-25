@@ -24,10 +24,7 @@ function Deploy(opt) {
     setPath('deploy', _(getPath('root') +'/'+ this.task));
 
 
-
     this.init = this.onInitialize = function(cb) {
-
-
 
         if (self.initialized == undefined && !Deploy.instance) {
             self.initialized = true;
@@ -255,7 +252,6 @@ function Deploy(opt) {
 
         var result, error = false;
         var hasCalledBack = false;
-        //var e = self;//this
         var e = new EventEmitter();
 
         var cmd;
