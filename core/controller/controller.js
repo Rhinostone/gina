@@ -181,6 +181,8 @@ function Controller(options) {
                     if ( !local.res.headerSent ) {
                         local.res.writeHead(200, { 'Content-Type': 'text/html' });
                         local.res.end(layout);
+                    } else {
+                        local.next()
                     }
                 })
             })
@@ -205,7 +207,7 @@ function Controller(options) {
      * @return {void}
      * */
     this.renderJSON = function(jsonObj) {
-
+        self.rendered = true;
         try {
 
             if(typeof(local.options) != "undefined" && typeof(local.options.charset) != "undefined"){
@@ -214,8 +216,12 @@ function Controller(options) {
             if ( !local.res.get('Content-Type') ) {
                 local.res.setHeader("Content-Type", "application/json");
             }
-            self.rendered = true;
-            local.res.end(JSON.stringify(jsonObj))
+            if ( !local.res.headerSent ) {
+                local.res.end(JSON.stringify(jsonObj))
+            } else {
+                local.next()
+            }
+
         } catch (err) {
             local.res.end(JSON.stringify({error: err.stack}));
             console.log(err.stack)
@@ -224,6 +230,7 @@ function Controller(options) {
     }
 
     this.renderTEXT = function(content) {
+        self.rendered = true;
         if ( typeof(content) != "string" ) {
             var content = content.toString();
         }
@@ -234,8 +241,13 @@ function Controller(options) {
         if ( !local.res.get('Content-Type') ) {
             local.res.setHeader("Content-Type", "text/plain");
         }
-        self.rendered = true;
-        local.res.end(content);
+
+        if ( !local.res.headerSent ) {
+            local.res.end(content);
+        } else {
+            local.next()
+        }
+
     }
 
     /**

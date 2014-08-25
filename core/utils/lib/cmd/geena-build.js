@@ -15,7 +15,7 @@ function BuildBundle(project, bundle) {
         /^\./, //all but files starting with "."
         /\.dev\.json$/ //not all ending with ".dev.json"
     ];
-    this.project = project;
+    this.project = _(getPath('root') + '/project.json');
 
 
     this.init = this.onInitialize = function(cb) {
@@ -36,9 +36,6 @@ function BuildBundle(project, bundle) {
         console.log('init once !!');
         self.root = getPath('root');
         self.env = process.env.NODE_ENV;
-        var path = ( project.bundles[bundle].release.target.substr(0,1) != '/') ? '/'+project.bundles[bundle].release.target : project.bundles[bundle].release.target;
-        self['release_path'] = _(self.root + path);
-
 
         if ( typeof(bundle) != 'undefined' ) {
             console.log('building', bundle, '[ '+ self.env +' ]');
@@ -50,7 +47,7 @@ function BuildBundle(project, bundle) {
         }
     }
 
-    var getSourceInfos = function( package, bundle, callback) {
+    var buildBundleFromSources = function(project, bundle) {
         var config = new Config({
             env             : self.env,
             executionPath   : self.root,
@@ -60,83 +57,134 @@ function BuildBundle(project, bundle) {
         });
 
         config.onReady( function onConfigReady(err, obj) {
-            var conf = self.conf = obj.conf[bundle][self.env];
-            var match = _(self.root +'/' +project.bundles[bundle].src);
-            self['views_path'] = self.conf.content.views.default.views.replace(match, self['release_path']);
+            self.conf = obj.conf[bundle][self.env];
+            var path = '';
+            // getting release path
+            if (
+                typeof(project.bundles[bundle].release) != 'undefined' &&
+                typeof(project.bundles[bundle].release.target) != 'undefined' &&
+                project.bundles[bundle].release.target.substr(0,1) != '/'
+            ) {
 
-            try {
-                //will always build from sources by default.
-                if ( typeof(package['src']) != 'undefined' && fs.existsSync( _(self.root + '/' + package['src']) )) {
-                    var sourcePath = _(conf.sources + '/' + bundle);
+                path = '/'+project.bundles[bundle].release.target
 
-                    if ( typeof(package.release.version) == 'undefined' && typeof(package.tag) != 'undefined') {
-                        package.release.version = package.tag
-                    }
-                    var version = package.release.version;//by default.
-                    if ( fs.existsSync( _(sourcePath + '/config/app.json') ) ) {
-                        var appConf = require( _(sourcePath + '/config/app.json'));
-                        if ( typeof(appConf['version']) != 'undefined' ) {
-                            version = appConf['version']
-                        }
-                    }
+            } else  if (
+                typeof(project.bundles[bundle].release) != 'undefined' &&
+                typeof(project.bundles[bundle].release.target) != 'undefined'
+            ) {
+                path = project.bundles[bundle].release.target
 
-                    if (version == undefined) {
-                        console.log('You need a version reference to build.');
-                        process.exit(1);
-                    }
-
-                    var releasePath = _(conf.releases + '/'+ bundle +'/' + self.env +'/'+ version);
-                    callback(false, {
-                        src     : sourcePath,
-                        target  : releasePath,
-                        version : version
-                    })
-                } else if ( typeof(package['repo']) != 'undefined' ) {
-                    //relies on configuration.
-                    console.log('build from repo is a feature in progress.');
-                    process.exit(0);
+            } else { // no target found... making one
+                // by default
+                var link = ( _(self.conf.releases) ).replace(self.root + '/', '');
+                if ( !project.bundles[bundle].release.link ) {
+                    //save it
+                    project.bundles[bundle].release.link = link;
                 } else {
-                    console.log('No source reference found for build. Need to add [src] or [repo]');
-                    process.exit(0);
+                    link = project.bundles[bundle].release.link
                 }
+
+                // by default
+                var version = '0.0.1';
+                if ( !project.bundles[bundle].release.version ) {
+                    //save it
+                    version = project.bundles[bundle].release.version = version
+                } else {
+                    version = project.bundles[bundle].release.version
+                }
+
+                // by default
+                var target = link + '/' + version;
+                if ( !project.bundles[bundle].release.target ) {
+                    //save it
+                    target = project.bundles[bundle].release.target = target
+                } else {
+                    target = project.bundles[bundle].release.target
+                }
+
+                path = target;
+                // write to file
+                fs.writeFileSync(self.project, JSON.stringify(project, null, 4));
+            }
+
+            self['release_path'] = _(self.root + path);
+
+            //build(bundle, releasePath, version);
+            try {
+                var package = project.bundles[bundle];
+
+                getSourceInfos(package, bundle, function (err, opt) {
+                    if (err) {
+                        console.error(err.stack);
+                        process.exit(0);
+                    }
+
+                    var source = opt.src;
+                    var target = opt.target;
+                    var version = opt.version;
+
+                    var excluded = self.excluded;
+
+                    var targetObj = new _(target);
+                    targetObj.rm(function (err) {
+                        var sourceObj = new _(source)
+                            .cp(target, excluded, function (err) {
+                                self.emit('build#complete', err, version)
+                            })
+                    })
+                })
             } catch (err) {
-                callback(err);
+                console.error(err.stack);
+                process.exit(0)
             }
         })
-    };
+    }
 
-    var buildBundleFromSources = function(project, bundle) {
+    var getSourceInfos = function( package, bundle, callback) {
 
-        //build(bundle, releasePath, version);
+
+        var match = _(self.root +'/' +project.bundles[bundle].src);
+        self['views_path'] = self.conf.content.views.default.views.replace(match, self['release_path']);
+
         try {
-            var package = project.bundles[bundle];
+            //will always build from sources by default.
+            if ( typeof(package['src']) != 'undefined' && fs.existsSync( _(self.root + '/' + package['src']) )) {
+                var sourcePath = _(self.conf.sources + '/' + bundle);
 
-            getSourceInfos(package, bundle, function(err, opt) {
-                if (err) {
-                    console.error(err.stack);
-                    process.exit(0);
+                if ( typeof(package.release.version) == 'undefined' && typeof(package.tag) != 'undefined') {
+                    package.release.version = package.tag
+                }
+                var version = package.release.version;//by default.
+                if ( fs.existsSync( _(sourcePath + '/config/app.json') ) ) {
+                    var appConf = require( _(sourcePath + '/config/app.json'));
+                    if ( typeof(appConf['version']) != 'undefined' ) {
+                        version = appConf['version']
+                    }
                 }
 
-                var source  = opt.src;
-                var target  = opt.target;
-                var version = opt.version;
+                if (version == undefined) {
+                    console.log('You need a version reference to build.');
+                    process.exit(1);
+                }
 
-                var excluded = self.excluded;
-
-                var targetObj = new _(target);
-                targetObj.rm( function(err) {
-                    var sourceObj = new _(source)
-                        .cp(target, excluded, function(err) {
-                            self.emit('build#complete', err, version)
-                        })
+                var releasePath = _(self.conf.releases + '/'+ bundle +'/' + self.env +'/'+ version);
+                callback(false, {
+                    src     : sourcePath,
+                    target  : releasePath,
+                    version : version
                 })
-            })
+            } else if ( typeof(package['repo']) != 'undefined' ) {
+                //relies on configuration.
+                console.log('build from repo is a feature in progress.');
+                process.exit(0)
+            } else {
+                console.log('No source reference found for build. Need to add [src] or [repo]');
+                process.exit(0)
+            }
         } catch (err) {
-            console.error(err.stack);
-            process.exit(0);
+            callback(err)
         }
-
-    };
+    }
 
 //    var buildProjectFromSources = function(project) {
 //
@@ -158,7 +206,7 @@ function BuildBundle(project, bundle) {
         });
 
         return self
-    };
+    }
 
 };
 
