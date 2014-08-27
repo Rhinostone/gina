@@ -102,7 +102,8 @@ function Model() {
             self.models[model][name] = {}
         }
 
-        self.models[model][name] = merge(self.models[model][name], entityObject)
+        self.models[model][name] = merge(self.models[model][name], entityObject);
+        return self.models[model][name]
     }
 
     this.setModel = function(name, obj) {
@@ -145,7 +146,12 @@ function Model() {
     getModelEntity = function(model, entityName, conn) {
         if ( typeof(entityName) != 'undefined' ) {
             try {
-                return new self.entities[model][entityName](conn)
+                var shortName = entityName.substr(0, 1).toLowerCase() + entityName.substr(1);
+                if ( self.models[model][shortName] ) {
+                    return self.models[model][shortName]
+                }
+                var entityObj = new self.entities[model][entityName](conn);
+                return self.models[model][shortName] || entityObj
             } catch (err) {
                 return undefined
             }

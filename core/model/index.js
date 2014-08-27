@@ -249,6 +249,7 @@ function Model(namespace) {
 
                     EntityClass.prototype.name = className;
                     EntityClass.prototype.model = self.model;
+                    EntityClass.prototype._ressource = require( _(entitiesPath + '/' + files[i]) );
 
                     //for (var prop in Entity) {
                     //    console.log('PROP FOUND ', prop);
