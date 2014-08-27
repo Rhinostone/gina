@@ -44,7 +44,6 @@ function Controller(options) {
      * Controller Constructor
      * @constructor
      * */
-    //var init = function(request, response, next) {
     var init = function() {
         //_request = request, _response = response, _next = next;
         if ( typeof(Controller.initialized) != 'undefined' ) {
@@ -139,10 +138,19 @@ function Controller(options) {
      * @return {void}
      * */
     this.render = function(_data) {
-        try {
-            _data = merge(_data, self.getData());
 
-            //self.setRessources(local.options.views, _data.page.action);
+        try {
+
+            if (!_data['page']) {
+                var data = JSON.parse( JSON.stringify(_data) );
+                _data = self.getData();
+                _data['page'] = {
+                    data: data
+                }
+            } //else {
+             //   _data = merge(_data, self.getData());
+            //}
+
             self.setRessources(local.options.views, _data.file);
             var data = merge(_data, self.getData());
 
@@ -186,8 +194,7 @@ function Controller(options) {
                     if ( !local.res.headerSent ) {
                         local.res.writeHead(200, { 'Content-Type': 'text/html' });
                         local.res.end(layout);
-                    } else {
-                        local.next()
+                        local.res.headerSent = true
                     }
                 })
             })
@@ -222,13 +229,15 @@ function Controller(options) {
                 local.res.setHeader("Content-Type", "application/json");
             }
             if ( !local.res.headerSent ) {
-                local.res.end(JSON.stringify(jsonObj))
+                local.res.end(JSON.stringify(jsonObj));
+                local.res.headerSent = true
             } else {
                 local.next()
             }
 
         } catch (err) {
             local.res.end(JSON.stringify({error: err.stack}));
+            local.res.headerSent = true;
             console.log(err.stack)
         }
 
@@ -249,6 +258,7 @@ function Controller(options) {
 
         if ( !local.res.headerSent ) {
             local.res.end(content);
+            local.res.headerSent = true;
         } else {
             local.next()
         }
@@ -471,8 +481,11 @@ function Controller(options) {
                 path = conf.hostname + wroot + path
             }
 
-            res.writeHead(code, {'Location': path});
+            if (req.headerSent) return next();
+
+            res.writeHead(code, { 'Location': path });
             res.end();
+            local.res.headerSent = true;// done for the render() method
         }
     }
 
@@ -500,7 +513,7 @@ function Controller(options) {
             else
                 return err
         } else {
-            if ( typeof(next) != 'undefined')
+            if ( typeof(next) != 'undefined' )
                 next(false)
             else
                 return false
@@ -508,17 +521,17 @@ function Controller(options) {
     }
 
     /**
-     * Get Params
+     * Get all Params
      * */
     var getParams = function(req) {
 
         req.getParams = function() {
-            //copy.
+            // copy
             var params = JSON.parse(JSON.stringify(req.params));
             params = merge(true, params, req.get);
             params = merge(true, params, req.post);
             return params
-        };
+        }
     }
 
     /**
@@ -530,10 +543,10 @@ function Controller(options) {
      * TODO - Protect result
      * */
     this.getConfig = function(name) {
-        var tmp = "";
+        var tmp = '';
         if ( typeof(name) != 'undefined' ) {
             try {
-                //Protect it.
+                // needs to be read only
                 tmp = JSON.stringify(local.options.conf.content[name]);
                 return JSON.parse(tmp)
             } catch (err) {
@@ -561,14 +574,15 @@ function Controller(options) {
                 }))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('Error '+ code +'. '+ msg)
+                res.end('Error '+ code +'. '+ msg);
+                local.res.headerSent = true;
             }
         } else {
             local.next()
         }
     }
 
-    // TODO - Should be in another handler.. closer to the view controller/handler
+    // converting references to objects
     var refToObj = function (arr){
         var tmp = null,
             curObj = {},
@@ -576,45 +590,36 @@ function Controller(options) {
             count = 0,
             data = {},
             last = null;
-        //console.info('arr is --------------------------\n', arr);
         for (var r in arr) {
             tmp = r.split(".");
-            //console.info('len ', r,tmp);
             //Creating structure - Adding sub levels
             for (var o in tmp) {
-                //console.info('ooo ', o, tmp[o], arr[r]);
                 count++;
                 if (last && typeof(obj[last]) == "undefined") {
                     curObj[last] = {};
-                    //console.info("count is ", count);
                     if (count >= tmp.length) {
-                        //Assigning.
+                        // assigning.
                         // !!! if null or undefined, it will be ignored while extending.
                         curObj[last][tmp[o]] = (arr[r]) ? arr[r] : "undefined";
                         last = null;
                         count = 0;
-                        break;
+                        break
                     } else {
-                        curObj[last][tmp[o]] = {};
+                        curObj[last][tmp[o]] = {}
                     }
                 } else if (tmp.length === 1) { //Just one root var
-                    //console.info('assigning ', arr[r], ' to ',tmp[o]);
                     curObj[tmp[o]] = (arr[r]) ? arr[r] : "undefined";
-                    //last = null;
-                    //count = 0;
                     obj = curObj;
-                    break;
+                    break
                 }
                 obj = curObj;
-                last = tmp[o];
+                last = tmp[o]
             }
-            //console.info('current obj ',obj);
             data = merge(true, data, obj);
-            //console.info('merged ', data);
             obj = {};
-            curObj = {};
+            curObj = {}
         }
-        return data;
+        return data
     }
 
     init()

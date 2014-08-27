@@ -511,13 +511,13 @@ function Config(opt) {
         var conf        = self.envConf;
         var env         = self.env || self.Env.get();
         var routing     = {
-            "home": {
-                "url": "/@doc",
-                "param": {
-                    "namespace" : "framework",
-                    "action": "doc"
-                }
-            }
+            //"home": {
+            //    "url": "/@doc",
+            //    "param": {
+            //        "namespace" : "framework",
+            //        "action": "doc"
+            //    }
+            //}
         };
         var tmp         = '';
         //var tmpName     = '';
