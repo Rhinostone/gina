@@ -24,7 +24,7 @@ var modelHelper = new utils.Model();
  * @author      Rhinostone <geena@rhinostone.com>
  * @api         Public
  */
-function EntitySuper(conn) {
+function EntitySuper(conn, ressource) {
 
     var self = this;
 
@@ -32,10 +32,13 @@ function EntitySuper(conn) {
         if (!EntitySuper[self.name]) {
             EntitySuper[self.name] = {}
         }
+
         if ( !EntitySuper[self.name].instance ) {
-            setListeners();
-            EntitySuper[self.name].instance = self;
-            return self
+            if (EntitySuper[self.name].initialized) {
+                return setListeners(EntitySuper[self.name].instance)
+            } else {
+                return setListeners()
+            }
         } else {
             return EntitySuper[self.name].instance;
         }
@@ -44,11 +47,14 @@ function EntitySuper(conn) {
     /**
      * Set all main listenners at once
      * */
-    var setListeners = function() {
+    var setListeners = function(instance) {
         if ( !EntitySuper[self.name].hasOwnEvents ) {
             EntitySuper[self.name].hasOwnEvents = true;
+            EntitySuper[self.name].initialized = true;// avoid forever loop
             // get entity objet
-            var entity = self.getEntity(self.name);
+            var entity = instance || self.getEntity(self.name);
+            if (!entity) return false;
+
             // use this property inside your entity to disable listeners
             if (entity.hasOwnEvents) return false;
 
@@ -86,8 +92,9 @@ function EntitySuper(conn) {
                     })
                 }
             };
-            // now merge with the current entity object
-            modelHelper.updateEntityObject(self.model, shortName+'Entity', entity)
+            EntitySuper[self.name].instance =  entity;
+            // now merging with the current entity object
+            return modelHelper.updateEntityObject(self.model, shortName+'Entity', entity)
         }
     }
 
