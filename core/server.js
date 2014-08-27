@@ -255,6 +255,23 @@ function Server(options) {
         return ( typeof(self.conf[bundle].content['views']) != 'undefined' ) ? true : false;
     }
 
+    var parseBody = function(body) {
+        var obj = {}, arr = body.split(/&/g);
+        var el = {};
+        for (var i=0; i<arr.length; ++i) {
+            el = arr[i].split(/=/);
+            if ( /\{\}\"\:/.test(el[1]) ) { //might be a json
+                try {
+                    el[1] = JSON.parse(el[1])
+                } catch (err) {
+                    console.error('could not parse body: ' + el[1])
+                }
+            }
+            obj[ el[0] ] = el[1]
+        }
+        return obj
+    }
+
     var onRequest = function() {
 
         var apps = self.bundles;
@@ -267,6 +284,7 @@ function Server(options) {
 
             request.post = {};
             request.get = {};
+            //request.cookie = {};
             //request.put = {}; //?
             //request.delete = {}; //?
             request.body = {};
@@ -286,14 +304,12 @@ function Server(options) {
                         if ( typeof(request.body) == 'string' ) {
                             // get rid of encoding issues
                             request.body = decodeURIComponent( request.body );
-                            var arr = request.body.split(/&/g);
-                            var el = {};
-                            for (var i=0; i<arr.length; ++i) {
-                                el = arr[i].split(/=/)
-                                obj[ el[0] ] = el[1];
-                            }
+                            if ( request.body.substr(0,1) == '?')
+                                request.body = request.body.substr(1);
+
+                            obj = parseBody(request.body)
                         }
-                        request.post = obj;
+                        request.body = request.post = obj;
                         break;
 
                     case 'get':
@@ -307,7 +323,10 @@ function Server(options) {
                     //case 'delete':
                     //    request.delete = request.? || undefined;
                     //    break;
-                }
+                };
+
+                // cookie time !!
+
 
                 loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, req, res, next) {
                     console.log('calling back..');
