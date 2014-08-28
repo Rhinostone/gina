@@ -132,6 +132,15 @@ function Controller(options) {
     }
 
     /**
+     * Set Layout path
+     *
+     * @param {string} filename
+     * */
+    this.setLayout = function(filename) {//means path
+        local.options.views.default.layout = filename
+    }
+
+    /**
      * Render HTML templates : Swig is the default template engine
      *
      * @param {object} _data
@@ -191,10 +200,10 @@ function Controller(options) {
                     layout = layout.toString();
                     layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
 
-                    if ( !local.res.headerSent ) {
+                    if ( !local.res.headersSent ) {
                         local.res.writeHead(200, { 'Content-Type': 'text/html' });
                         local.res.end(layout);
-                        local.res.headerSent = true
+                        local.res.headersSent = true
                     }
                 })
             })
@@ -203,14 +212,6 @@ function Controller(options) {
         }
     }
 
-    /**
-     * Set Layout path
-     *
-     * @param {string} filename
-     * */
-    this.setLayout = function(filename) {//means path
-        local.options.views.default.layout = filename
-    }
 
     /**
      * Render JSON
@@ -219,7 +220,6 @@ function Controller(options) {
      * @return {void}
      * */
     this.renderJSON = function(jsonObj) {
-        self.rendered = true;
         try {
 
             if(typeof(local.options) != "undefined" && typeof(local.options.charset) != "undefined"){
@@ -228,23 +228,22 @@ function Controller(options) {
             if ( !local.res.get('Content-Type') ) {
                 local.res.setHeader("Content-Type", "application/json");
             }
-            if ( !local.res.headerSent ) {
+            if ( !local.res.headersSent ) {
                 local.res.end(JSON.stringify(jsonObj));
-                local.res.headerSent = true
+                local.res.headersSent = true
             } else {
                 local.next()
             }
 
         } catch (err) {
             local.res.end(JSON.stringify({error: err.stack}));
-            local.res.headerSent = true;
+            local.res.headersSent = true;
             console.log(err.stack)
         }
 
     }
 
     this.renderTEXT = function(content) {
-        self.rendered = true;
         if ( typeof(content) != "string" ) {
             var content = content.toString();
         }
@@ -256,9 +255,9 @@ function Controller(options) {
             local.res.setHeader("Content-Type", "text/plain");
         }
 
-        if ( !local.res.headerSent ) {
+        if ( !local.res.headersSent ) {
             local.res.end(content);
-            local.res.headerSent = true;
+            local.res.headersSent = true;
         } else {
             local.next()
         }
@@ -481,11 +480,11 @@ function Controller(options) {
                 path = conf.hostname + wroot + path
             }
 
-            if (req.headerSent) return next();
+            if (req.headersSent) return next();
 
             res.writeHead(code, { 'Location': path });
             res.end();
-            local.res.headerSent = true;// done for the render() method
+            local.res.headersSent = true;// done for the render() method
         }
     }
 
@@ -565,7 +564,7 @@ function Controller(options) {
             var msg = code || null;
         }
 
-        if ( !res.headerSent ) {
+        if ( !res.headersSent ) {
             if ( !hasViews() ) {
                 res.writeHead(code, { 'Content-Type': 'application/json'} );
                 res.end(JSON.stringify({
@@ -575,7 +574,7 @@ function Controller(options) {
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
                 res.end('Error '+ code +'. '+ msg);
-                local.res.headerSent = true;
+                local.res.headersSent = true;
             }
         } else {
             local.next()
