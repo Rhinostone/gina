@@ -231,10 +231,7 @@ function Controller(options) {
             if ( !local.res.headersSent ) {
                 local.res.end(JSON.stringify(jsonObj));
                 local.res.headersSent = true
-            } else {
-                local.next()
             }
-
         } catch (err) {
             local.res.end(JSON.stringify({error: err.stack}));
             local.res.headersSent = true;
@@ -257,11 +254,8 @@ function Controller(options) {
 
         if ( !local.res.headersSent ) {
             local.res.end(content);
-            local.res.headersSent = true;
-        } else {
-            local.next()
+            local.res.headersSent = true
         }
-
     }
 
     /**
