@@ -284,7 +284,7 @@ function Server(options) {
 
             request.post = {};
             request.get = {};
-            //request.cookie = {};
+            //request.cookies = {}; // ???
             //request.put = {}; //?
             //request.delete = {}; //?
             request.body = {};
@@ -336,7 +336,7 @@ function Server(options) {
 
                     handle(req, res, next, pathname)
 
-                })//EO this.loadBundleConfiguration(this.appName, function(err, conf){
+                })
             });
 
 
@@ -467,14 +467,14 @@ function Server(options) {
                 if (err) console.error('geena', 'SERVER:ERR:5', err, __stack);
                 //refreshes routing at the same time.
                 self.routing = routing;
-
-                callback(err, pathname, req, res, next)
+                if (!req.handled)
+                    callback(err, pathname, req, res, next)
             })
         }
     }
 
     var handle = function(req, res, next, pathname) {
-
+        req.handled = true;
         var matched = false;
         var isRoute = {};
         var withViews = hasViews(self.appName);
