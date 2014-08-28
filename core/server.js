@@ -331,7 +331,7 @@ function Server(options) {
                 loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, req, res, next) {
                     console.log('calling back..');
                     if (err) {
-                        throwError(response, 500, 'Internal server error\n' + err.stack)
+                        throwError(response, 500, 'Internal server error\n' + err.stack, next)
                     }
 
                     handle(req, res, next, pathname)
@@ -495,7 +495,7 @@ function Server(options) {
                     'Malformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl,
                 __stack
             );
-            throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl);
+            throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl, next);
         }
 
         var params = {};
@@ -523,7 +523,7 @@ function Server(options) {
                     );
                     var allowed = (typeof(self.routing[rule].method) == 'undefined' || self.routing[rule].method.length > 0 || self.routing[rule].method.indexOf(req.method) != -1)
                     if (!allowed) {
-                        throwError(res, 405, 'Method Not Allowed for [' + self.appName + '] => ' + req.originalUrl)
+                        throwError(res, 405, 'Method Not Allowed for [' + self.appName + '] => ' + req.originalUrl, next)
                     } else {
                         // onRouting Event ???
                         router.route(req, res, next, params)
@@ -540,31 +540,36 @@ function Server(options) {
                 wroot = wroot.substr(wroot.length-1,1).replace('/', '')
             }
 
-            if (pathname === wroot + '/favicon.ico' && !withViews ) {
+            if (pathname === wroot + '/favicon.ico' && !withViews && !res.headersSent ) {
                 res.writeHead(200, {'Content-Type': 'image/x-icon'} );
                 res.end()
             }
-            if (!res.headerSent)
-                throwError(res, 404, 'Page not found\n' + wroot + pathname)
+            if (!res.headersSent)
+                throwError(res, 404, 'Page not found\n' + wroot + pathname, next)
         }
     }
 
-    var throwError = function(res, code, msg) {
+    var throwError = function(res, code, msg, next) {
         var withViews = hasViews(self.appName);
 
         if ( !withViews ) {
-            res.writeHead(code, { 'Content-Type': 'application/json'} );
-            res.end(JSON.stringify({
-                status: code,
-                error: 'Error '+ code +'. '+ msg
-            }))
+            if (!res.headersSent) {
+                res.writeHead(code, { 'Content-Type': 'application/json'} );
+                res.end(JSON.stringify({
+                    status: code,
+                    error: 'Error '+ code +'. '+ msg
+                }))
+            }
+
         } else {
             if (!res.headersSent) {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
                 res.end('Error '+ code +'. '+ msg)
             }
         }
-    };
+
+        next()
+    }
 
 
     this.onConfigured = function(callback) {
