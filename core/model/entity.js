@@ -60,14 +60,14 @@ function EntitySuper(conn, ressource) {
 
             var shortName = self.name.replace(/Entity/, '').toLocaleLowerCase();
             var events = [], i = 0;
-
+            var eCount = 5; // default max listeners is 5
             for (var f in entity) {
                 if (
                     typeof(entity[f]) == 'function' &&
                     !self[f] &&
                     f != 'onComplete' &&
                     f.substr(f.length-4) !== 'Sync' &&
-                    f.substr(f.length-5) !== '_sync'&&
+                    f.substr(f.length-5) !== '_sync' &&
                     f.substr(f.length-5) !== '-sync'
                 ) {
                     events[i] = shortName +'#'+ f;
@@ -83,7 +83,9 @@ function EntitySuper(conn, ressource) {
                     console.debug('setting listener for: [ '+self.model+'/'+self.name+' ] ' + f +'(...)');
                 }
             }
-
+            eCount += i;
+            self.setMaxListeners(entity.maxListeners || eCount);
+            console.debug('setting max event listeners to: ' + (entity.maxListeners || eCount) );
             entity.onComplete = function(cb) {
                 // Loop on registered events
                 for (var i=0; i<events.length; ++i) {

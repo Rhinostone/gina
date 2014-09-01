@@ -61,6 +61,7 @@ function Utils() {
         logger      : _require('./lib/logger'),
         url         : _require('./lib/url'),
         cmd         : _require('./lib/cmd'),
+        Validator   : _require('./lib/validator')
     }
 };
 

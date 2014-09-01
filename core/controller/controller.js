@@ -180,14 +180,15 @@ function Controller(options) {
             fs.readFile(path, function (err, content) {
                 if (err) {
                     self.throwError(local.res, 500, err.stack);
-                    return
                 }
 
                 try {
                     content = swig.compile( content.toString() )(data)
                 } catch (err) {
-                    self.throwError(local.res, 500, '[ '+path+' ]\n' + err.stack);
-                    return
+                    // [ martin ]
+                    // i sent an email to [ paul@paularmstrongdesigns.com ] on 2014/08 to see if there is
+                    // a way of retrieving swig compilation stack traces
+                    self.throwError(local.res, 500, 'compilation exception encoutered: [ '+path+' ]\n');
                 }
 
                 dic['page.content'] = content;
@@ -195,7 +196,6 @@ function Controller(options) {
                 fs.readFile(local.options.views.default.layout, function(err, layout) {
                     if (err) {
                         self.throwError(local.res, 500, err.stack);
-                        return;
                     }
                     layout = layout.toString();
                     layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
