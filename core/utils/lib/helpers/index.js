@@ -17,13 +17,14 @@
  */
 
 var Helpers = {
-        console     : require("./console")(),
-        //DateTime    : require("./time")(),
-        //Form        : require("./form")(),
-        //I18n        : require("./i18n")(),
-        path        : require("./path")(),
-        context     : require("./context")(),
-        text        : require("./text")()
+        console     : require('./console')(),
+        //DateTime    : require('./time')(),
+        //Form        : require('./form')(),
+        //I18n        : require('./i18n')(),
+        path        : require('./path')(),
+        context     : require('./context')(),
+        text        : require('./text')(),
+        math        : require('./math')()
 };
 
 die = function(){
