@@ -144,7 +144,9 @@ function BuildBundle(project, bundle) {
 
 
         var match = _(self.root +'/' +project.bundles[bundle].src);
-        self['views_path'] = self.conf.content.views.default.views.replace(match, self['release_path']);
+        if ( typeof(self.conf.content.views) != 'undefined') {
+            self['views_path'] = self.conf.content.views.default.views.replace(match, self['release_path']);
+        }
 
         try {
             //will always build from sources by default.

@@ -23,8 +23,7 @@ var Helpers = {
         //I18n        : require('./i18n')(),
         path        : require('./path')(),
         context     : require('./context')(),
-        text        : require('./text')(),
-        math        : require('./math')()
+        text        : require('./text')()
 };
 
 die = function(){

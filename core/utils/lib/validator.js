@@ -30,7 +30,7 @@ function Validator(data, errorLabels) {
         },
         errorLabels: {
             is: 'condition not satisfied',
-            isEmail: 'email not valid',
+            isEmail: '%n not valid',
             isRequired: '%n is required',
             isString: '%n must be an instance of String',
             validStringWithLen: '%n should be a %s characters length',

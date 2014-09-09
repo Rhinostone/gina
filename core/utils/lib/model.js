@@ -7,16 +7,20 @@
  */
 
 
-var merge = require('./merge');
+var merge   = require('./merge');
+var console = require('./logger');
+var math    = require('./math');
+
+var checkSum = math.checkSum;
 
 /**
- * Model uitls
+ * Model uitl
  *
  * @package     Geena.Utils
  * @author      Rhinostone <geena@rhinostone.com>
  * @api public
  * */
-function Model() {
+function ModelUtil() {
     var self = this;
 
     /**
@@ -25,14 +29,15 @@ function Model() {
      * */
     var init = function() {
 
-        if ( !Model.instance ) {
+        if ( !ModelUtil.instance ) {
             self.models = self.models || {};
             self.entities = {};
-            Model.instance = self;
+            self.files = {};
+            ModelUtil.instance = self;
             return self
         } else {
-            self = Model.instance;
-            return Model.instance
+            self = ModelUtil.instance;
+            return ModelUtil.instance
         }
     }
 
@@ -46,7 +51,8 @@ function Model() {
             }
 
             if (typeof(self.models[name]) == 'undefined') {
-                self.models[name] = {}
+                self.models[name] = {};
+                self.files[name] = {}
             }
 
 
@@ -72,7 +78,7 @@ function Model() {
                 self.models = {}
             }
             if ( typeof(name) == 'undefined' || name == '' ) {
-                throw new Error('ModelHelper cannot set ModelEntity whitout a name !')
+                throw new Error('ModelUtil cannot set ModelEntity whitout a name !')
             }
 
             if( !self.entities[model] ) {
@@ -91,11 +97,11 @@ function Model() {
     this.updateEntityObject = function(model, name, entityObject) {
 
         if ( typeof(model) == 'undefined' || model == '' ) {
-            throw new Error('ModelHelper cannot update EntityObject whitout a connector !')
+            throw new Error('ModelUtil cannot update EntityObject whitout a connector !')
         }
 
         if ( typeof(name) == 'undefined' || name == '' ) {
-            throw new Error('ModelHelper cannot set ModelEntity whitout a name !')
+            throw new Error('ModelUtil cannot set ModelEntity whitout a name !')
         }
 
         if (!self.models[model][name]) {
@@ -119,6 +125,100 @@ function Model() {
             self.models[name] = merge(self.models[name], obj)
         } else {
             self.models = arguments[0]
+        }
+    }
+
+    this.loadAllModels = function(conf, cb) {
+
+        if ( typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null) {
+            var Model = require( _( getPath('geena.core')+'/model') );
+            var mObj = {};
+            var models = conf.content.connectors;
+
+            var t = 1;
+
+            var done = function(connector) {
+                if ( typeof(models[connector]) != 'undefined' ) {
+                    ++t
+                } else {
+                    console.error('connector '+ connector +' not found in configuration')
+                }
+
+                if ( t == models.count() ) {
+                    cb()
+                }
+            }
+
+            for (var c in models) {//c as connector name
+                //e.g. var apiModel    = new Model(config.bundle + "/api");
+                // => var apiModel = getContext('apiModel')
+                console.log('....model ', c + 'Model');
+                mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
+                mObj[c+'Model']
+                    .onReady(
+                    function onModelReady( err, connector, entities, conn) {
+                        if (err) {
+                            console.error('found error ...');
+                            console.error(err.stack||err.message||err);
+                            done(connector)
+                        } else {
+                            // creating entities instances
+                            for (var ntt in entities) {
+                                entities[ntt] = new entities[ntt](conn);
+                            }
+                            self.setModel(connector, entities);
+                            done(connector)
+                        }
+                    }
+                )
+            }
+        } else {
+            cb(new Error('no connector found'))
+        }
+    }
+
+    this.reloadModels = function(conf, cb) {
+        if (typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null ) {
+            var mObj = {};
+            var models = conf.content.connectors;
+
+            var t = 1;
+
+            var done = function(connector) {
+                if ( typeof(models[connector]) != 'undefined' ) {
+                    ++t
+                } else {
+                    console.error('connector '+ connector +' not found in configuration')
+                }
+
+                if ( t == models.count() ) {
+                    cb()
+                }
+            }
+            for (var c in models) {
+                console.log('....reloading model ', c + 'Model');
+                mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
+                mObj[c+'Model']
+                    .reload( conf, function onReload(err, connector, entities){ // entities to reload
+                        console.log('done reloading '+ connector);
+                        if (err) {
+                            console.error('found error ...');
+                            console.error(err.stack||err.message||err);
+                            done(connector)
+                        } else {
+                            var shortName = '';
+                            // refreshing entities instances
+                            for (var ntt in entities) {
+                                entities[ntt] = new entities[ntt](conn);
+                                shortName = ntt.replace(/Entity/, '').toLocaleLowerCase();
+                                self.updateEntityObject(connector, shortName, entities[ntt])
+                            }
+                            done(connector)
+                        }
+                    })
+            }
+        } else {
+            cb(new Error('no connector found'))
         }
     }
 
@@ -165,4 +265,4 @@ function Model() {
     return init()
 }
 
-module.exports = Model
+module.exports = ModelUtil

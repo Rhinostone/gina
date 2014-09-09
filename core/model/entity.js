@@ -59,7 +59,7 @@ function EntitySuper(conn, ressource) {
             if (entity.hasOwnEvents) return false;
 
             var shortName = self.name.replace(/Entity/, '').toLocaleLowerCase();
-            var events = [], i = 0;
+            var events = [], i = 0, cb = {};
             var eCount = 5; // default max listeners is 5
             for (var f in entity) {
                 if (
@@ -67,33 +67,51 @@ function EntitySuper(conn, ressource) {
                     !self[f] &&
                     f != 'onComplete' &&
                     f.substr(f.length-4) !== 'Sync' &&
+                    f.substr(f.length-4) !== 'Task' &&
+                    f.substr(f.length-4) !== '_task' &&
                     f.substr(f.length-5) !== '_sync' &&
                     f.substr(f.length-5) !== '-sync'
                 ) {
                     events[i] = shortName +'#'+ f;
                     ++i;
 
-                    entity[f] = (function() {
+                    entity[f] = (function(e, ev) {
                         var cached = entity[f];
+
                         return function() {
+                            if ( !entity.trigger) {
+                                entity.trigger = e
+                            }
+                            this.onComplete = function(cb) {
+                                entity.once(entity.name+'#'+ev, function(args){
+                                    cb.apply(this, args)
+                                })
+                            };
                             cached.apply(this, arguments);
                             return this // chaining event & method
                         }
-                    }());
+                    }(shortName +'#'+ f, f));
+
                     console.debug('setting listener for: [ '+self.model+'/'+self.name+' ] ' + f +'(...)');
                 }
             }
             eCount += i;
             self.setMaxListeners(entity.maxListeners || eCount);
             console.debug('setting max event listeners to: ' + (entity.maxListeners || eCount) );
-            entity.onComplete = function(cb) {
-                // Loop on registered events
-                for (var i=0; i<events.length; ++i) {
-                    entity.once(events[i], function(err, data) {
-                        cb(err, data)
-                    })
-                }
-            };
+
+            for (var i=0; i<events.length; ++i) {
+                entity.on(events[i], (function(e) {
+                    return function() {
+                        console.log('calling back from event: ', e);
+                        var f = e.split(/\#/)[1];
+                        entity.emit(entity.name+'#'+f, arguments);
+                        // won't work here in some cases... save it for another case... out of here
+                        //if (this.trigger === e) {
+                        //}
+                    }
+                }(events[i])))
+            }
+
             EntitySuper[self.name].instance =  entity;
             // now merging with the current entity object
             return modelHelper.updateEntityObject(self.model, shortName+'Entity', entity)
