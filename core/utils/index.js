@@ -59,6 +59,7 @@ function Utils() {
         Proc        : _require('./lib/proc'),
         Shell       : _require('./lib/shell'),
         logger      : _require('./lib/logger'),
+        math        : _require('./lib/math'),
         url         : _require('./lib/url'),
         cmd         : _require('./lib/cmd'),
         Validator   : _require('./lib/validator')

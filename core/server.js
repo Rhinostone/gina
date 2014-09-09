@@ -329,13 +329,15 @@ function Server(options) {
 
 
                 loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, req, res, next) {
-                    console.log('calling back..');
-                    if (err) {
-                        throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                    if (!req.handled) {
+                        req.handled = true;
+                        console.log('calling back..');
+                        if (err) {
+                            throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                        } else {
+                            handle(req, res, next, pathname)
+                        }
                     }
-
-                    handle(req, res, next, pathname)
-
                 })
             });
 
@@ -368,7 +370,8 @@ function Server(options) {
 
 
         if ( /\/favicon\.ico/.test(pathname) ) {
-            callback(false, pathname, req, res, next)
+            callback(false, pathname, req, res, next);
+            return false;
         }
 
         var config = new Config();
@@ -403,7 +406,6 @@ function Server(options) {
             fs.exists(filename, function(exists) {
 
                 if(exists) {
-
 
                     if (fs.statSync(filename).isDirectory()) filename += '/index.html';
 
@@ -465,21 +467,19 @@ function Server(options) {
         } else {
             config.refresh(bundle, function(err, routing) {
                 if (err) console.error('geena', 'SERVER:ERR:5', err, __stack);
-                //refreshes routing at the same time.
+                //refreshing routing at the same time.
                 self.routing = routing;
-                if (!req.handled)
-                    callback(err, pathname, req, res, next)
+                callback(err, pathname, req, res, next)
             })
         }
     }
 
     var handle = function(req, res, next, pathname) {
-        req.handled = true;
         var matched = false;
         var isRoute = {};
         var withViews = hasViews(self.appName);
 
-        console.log('about to route to ', pathname);
+        console.log('about to handle [ '+ pathname + ' ] route');
 
         //var router = new Router(self.env);
         var router = local.router;

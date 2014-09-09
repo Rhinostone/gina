@@ -16,6 +16,8 @@ var utils           = require("./utils");
 var merge           = utils.merge;
 var inherits        = utils.inherits;
 var console         = utils.logger;
+var modelHelper     = new utils.Model();
+
 
 /**
  * @class Config
@@ -112,7 +114,7 @@ function Config(opt) {
                     //To reset it, just delete the hidden folder.
                     var geenaPath = opt.geenaPath;
                     var utilsConfig = new utils.Config();
-                    setContext('geena.utils.config', utilsConfig);
+                    //setContext('geena.utils.config', utilsConfig);
 
                     utilsConfig.set('geena', 'locals.json', {
                         project : utilsConfig.getProjectName(),
@@ -839,61 +841,31 @@ function Config(opt) {
 
         //Reload models.
         var modelsPath = _(conf[bundle][env].modelsPath);
-        var path;
 
         if ( fs.existsSync(modelsPath) ) {
-            var files = fs.readdirSync(modelsPath);
-            if ( typeof(files) == 'object' && files.count() > 0 ) {
-                for (var f=0; f<files.length; ++f) {
-                    path = _(modelsPath + '/' + files[f], true);
-                    delete require.cache[path]
-                }
+            //var Model = require('./model');
+            //var model = new Model();
 
-                var Model   = require('./model');
-                for (var m in conf[bundle][env].content.connectors) {
-                    setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m))
+            //modelHelper.reloadModels(conf[bundle][env],  function doneReloadingModel() {
+                //Reload conf.
+                loadBundleConfig( bundle, function(err, files, routing) {
+                    if (!err) {
+                        callback(false, routing)
+                    } else {
+                        callback(err)
+                    }
+                }, true)
+            //})
+        } else {
+            //Reload conf. who likes repetition ?
+            loadBundleConfig( bundle, function(err, files, routing) {
+                if (!err) {
+                    callback(false, routing)
+                } else {
+                    callback(err)
                 }
-            }
+            }, true)
         }
-
-
-        //Reload conf.
-        loadBundleConfig( bundle, function(err, files, routing) {
-            if (!err) {
-                callback(false, routing)
-            } else {
-                callback(err)
-            }
-        }, true)
-
-
-        //fs.exists(modelsPath, function(exists) {
-        //
-        //    if (exists) {
-        //        var files = fs.readdirSync(modelsPath);
-        //        if ( typeof(files) == 'object' && files.count() > 0 ) {
-        //            for (var f=0; f<files.length; ++f) {
-        //                path = _(modelsPath + '/' + files[f], true);
-        //                delete require.cache[path]
-        //            }
-        //
-        //            var Model   = require('./model');
-        //            for (var m in conf[bundle][env].content.connectors) {
-        //                setContext(m+'Model',  new Model(conf[bundle][env].bundle + "/" + m))
-        //            }
-        //        }
-        //    }
-        //
-        //    //Reload conf.
-        //    loadBundleConfig( bundle, function(err, files, routing) {
-        //        if (!err) {
-        //            callback(false, routing)
-        //        } else {
-        //            callback(err)
-        //        }
-        //    }, true)
-        //})
-
     }//EO refresh.
 
     if (!opt) {

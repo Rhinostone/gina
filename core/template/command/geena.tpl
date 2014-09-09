@@ -22,5 +22,5 @@ try {
     console.log('Geena Command Line Tool \r\n'.rainbow);
     utils.cmd.load(__dirname, "/node_modules/geena/package.json")
 } catch (err) {
-    console.error(err.stack)
+    process.stdout.write(err.stack + '\r\n')
 }

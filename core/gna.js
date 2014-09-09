@@ -337,61 +337,6 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
     } catch (err) {
         abort(err)
     }
-    // BO Cooking...
-
-
-
-    var loadAllModels = function(conf, callback) {
-        //TODO - Reload using cacheless method for DEV env.
-
-        if ( typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null) {
-            // TODO -  ? utils.loadModels();
-            var Model   = require('./model');
-            var mObj = {};
-            var models = conf.content.connectors;
-
-            var connectorArray = models.toArray();
-            var t = 0;
-
-            var done = function(connector) {
-                if (connector in connectorArray) {
-                    ++t
-                }
-                if ( t == connectorArray.count() ) {
-
-                    callback()
-                }
-            }
-
-            for (var c in models) {//c as connector name
-                //e.g. var apiModel    = new Model(config.bundle + "/api");
-                // => var apiModel = getContext('apiModel')
-                console.log('....model ', c + 'Model');
-                mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
-                mObj[c+'Model']
-                    .onReady(
-                        function onModelReady( err, connector, entities, conn) {
-                            if (err) {
-                                console.error('found error ...');
-                                console.error(err.stack||err.message||err);
-                                done(connector)
-                            } else {
-                                // creating entities instances
-                                for (var ntt in entities) {
-                                    entities[ntt] = new entities[ntt](conn);
-                                }
-                                modelHelper.setModel(connector, entities);
-                                done(connector)
-                            }
-                        }
-                    );
-            }
-        } else {
-            callback(new Error('no connector found'))
-        }
-    }
-
-    //EO cooking
 
     /**
      * On middleware initialization
@@ -403,8 +348,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
         gna.initialized = true;
         e.once('init', function(instance, middleware, conf) {
-
-            loadAllModels(
+            modelHelper.loadAllModels(
                 conf,
                 function() {
                     joinContext(conf.contexts);
@@ -427,11 +371,11 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                         }
                     };
                     try {
-                        //configureMiddleware(instance, express);
+                        //configureMiddleware(instance, express); // no, no and no...
                         callback(e, instance, middleware)
                     } catch (err) {
                         // TODO Output this to the error logger.
-                        console.log('Could not complete initialization: ', err.stack)
+                        console.error('Could not complete initialization: ', err.stack)
                     }
                 }
             )
@@ -447,7 +391,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 callback(e, request, response, next, params)
             } catch (err) {
                 // TODO Output this to the error logger.
-                console.log('Could not complete routing: ', err.stack)
+                console.error('Could not complete routing: ', err.stack)
             }
         })
     }

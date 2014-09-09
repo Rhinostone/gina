@@ -7,61 +7,69 @@
  * file that was distributed with this source code.
  */
 
-var Config;
-//Imports.
 
-var fs  = require('fs');
-var EventEmitter = require('events').EventEmitter;
+//Imports.
+var fs      = require('fs');
+var console = require('./logger');
+
 
 /**
  * Config constructor
  * @contructor
  * */
-Config = function() {
+function ConfigUtil() {
 
-    var self = this, mainConfig;
-    //this.value = getContext("utils.config.value");
-    try {
-        this.paths = getContext("paths");
-    } catch (err) {
-        this.paths = {};
-    }
-
-    var path = new _(__dirname).toUnixStyle();
-    this.__dirname =  _( path.substring(0, (path.length - 4)) );
-
+    var self = this; //, mainConfig
 
     /**
-     * Init Utils config
-     *
-     * @private
+     * Init
+     * @contructor
      * */
-    var init = function(){
+    var init = function() {
 
-        //getting context path thru path helper.
-        console.log("asking for dirname ", __dirname);
-        var path = new _(__dirname).toUnixStyle();
-        self.__dirname =  _( path.substring(0, (path.length - 4)) );
-
-        if ( self.paths.utils == undefined)
-            self.paths.utils = self.__dirname
-
-        //if (self.paths == "undefined") {
-
-        //}
-
-
-        self.get('geena', 'locals.json', function(err, obj){
-
-            if( !err ) {
-                //console.log("LINSTING path ", obj.paths);
-                mainConfig = require(obj.paths.geena + '/config')();
-            } else {
-                console.log(err.stack);
+        if ( !ConfigUtil.instance ) {
+            try {
+                self.paths = getContext("paths")
+            } catch (err) {
+                self.paths = {}
             }
 
-        });
-    };
+            var path = new _(__dirname).toUnixStyle();
+            self.__dirname =  _( path.substring(0, (path.length - 4)) );
+
+            ConfigUtil.instance = self;
+            return self
+        } else {
+            self = ConfigUtil.instance;
+            return ConfigUtil.instance
+        }
+    }
+
+
+    ///**
+    // * Init Utils config
+    // *
+    // * @private
+    // * */
+    //var init = function(){
+    //
+    //    //getting context path thru path helper.
+    //    console.log("asking for dirname ", __dirname);
+    //    var path = new _(__dirname).toUnixStyle();
+    //    self.__dirname =  _( path.substring(0, (path.length - 4)) );
+    //
+    //    if ( self.paths.utils == undefined) {
+    //        self.paths.utils = self.__dirname
+    //    }
+    //
+    //    self.get('geena', 'locals.json', function(err, obj){
+    //        if( !err ) {
+    //            mainConfig = require(obj.paths.geena + '/config')()
+    //        } else {
+    //            console.log(err.stack)
+    //        }
+    //    })
+    //}
 
     /**
      * Set config file if !exists
@@ -79,7 +87,7 @@ Config = function() {
                 });
                 break;
         }
-    };
+    }
 
     /**
      * Get config file if exists
@@ -99,9 +107,7 @@ Config = function() {
             case 'geena':
             case 'geena.utils':
                 try {
-
                     //You are under geena.utils/lib/...
-                    //console.log("getting in this value ?? ", project, file, self.value);
                     if ( typeof(self.value) != "undefined" ) {
 
                         try {
@@ -125,8 +131,7 @@ Config = function() {
                             }
                         }
                     }
-
-                    callback(false, config);
+                    callback(false, config)
 
                 } catch (err) {
                     var err = new Error('.gna/locals.json: project configuration file not found. \n' + (err.stack||err.message));
@@ -138,7 +143,7 @@ Config = function() {
             default :
                 callback('Config.get('+project+'): case not found');
         }
-    };
+    }
 
     /**
      * Get sync config file if exists
@@ -150,7 +155,7 @@ Config = function() {
      * */
     this.getSync = function(project, file){
         if (typeof(file) == 'undefined') {
-            var file = 'local.json'
+            var file = 'locals.json'
         }
 
         if ( typeof(self.value) != "undefined" ) {
@@ -159,18 +164,19 @@ Config = function() {
             var filename = self.paths.root +'/.gna/'+ file;
             try {
                 if ( fs.existsSync(filename) ) {
-                    return require(filename);
+                    return require(filename)
                 } else {
+                    var err = new Error(filename+ ' not found');
+                    console.emerg(err.stack||err.message);
                     return undefined
                 }
-
             } catch (err) {
-                //logger.error('geena', 'UTILS:CONFIG:ERR:6', err, __stack);
-                console.error(err.stack)
-                return null;
+                console.error(err.stack);
+                throw new Error(err.message);
+
             }
         }
-    };
+    }
 
     /**
      * Create a config file
@@ -183,8 +189,7 @@ Config = function() {
      * TOTO - Avoid systematics file override.
      * @private
      * */
-    var setFile = function(app, file, content, callback){
-
+    var setFile = function(app, file, content, callback) {
 
         var paths = {
             root : content.paths.root,
@@ -207,31 +212,30 @@ Config = function() {
                     fs.mkdir(gnaFolder, 0777, function(err){
                         if (err) {
                             console.error(err.stack);
-                            callback(err);
+                            callback(err)
                         } else {
                             //Creating content.
                             createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
-                                callback(err);
-                            });
+                                callback(err)
+                            })
                         }
-                    });
+                    })
                 }
 
             };
+
             fs.exists(gnaFolder, function(exists){
                 //console.log("file exists ? ", gnaFolder, exists);
-
                 if (exists) {
                     var folder = new _(gnaFolder).rm( function(err){
                         if (!err) {
-                            createFolder();
+                            createFolder()
                         } else {
-                            callback(err);
+                            callback(err)
                         }
-
-                    });
+                    })
                 } else {
-                    createFolder();
+                    createFolder()
                 }
             //logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
 //                    console.warn("waah ", gnaFolder+ '/' +file, gnaFolder, content);
@@ -271,15 +275,12 @@ Config = function() {
 //                        });
 //                    });
 //                }//EO if (!exists) {
-            });
-
-
-
+            })
         } catch (err) {
             //log it.
-            console.error(err);
+            console.error(err)
         }
-    };
+    }
 
     /**
      * Remove symbolic link
@@ -299,31 +300,30 @@ Config = function() {
                     if ( stats.isSymbolicLink() ) fs.unlink(path, function(err){
                         if (err) {
                             console.error(err.stack);
-                            callback(err);
+                            callback(err)
                         } else {
                             //Trigger.
                             onSymlinkRemoved(self.paths, function(err){
                                 if (err) console.error(err.stack);
 
-                                callback(false);
-                            });
+                                callback(false)
+                            })
                         }
-                    });
-                });
+                    })
+                })
             } else {
                 //log & ignore. This is not a real issue.
                 //logger.warn('geena', 'UTILS:CONFIG:WARN:1', 'Path not found: ' + path, __stack);
                 console.warn( 'Path not found: ' + path, __stack);
-
                 onSymlinkRemoved(self.paths, function(err){
                     //if (err) logger.error('geena', 'UTILS:CONFIG:ERR:9', err, __stack);
                     if (err) console.error(err.stack||err.message);
 
-                    callback(false);
-                });
+                    callback(false)
+                })
             }
-        });
-    };
+        })
+    }
 
     /**
      * Symbolic link remove event
@@ -349,16 +349,16 @@ Config = function() {
                     if (err) {
                         //logger.error('geena', 'UTILS:CONFIG:ERR:8', err, __stack);
                         console.error(err.stack||err.message);
-                        callback(err);
+                        callback(err)
                     } else {
                         //logger.info('geena', 'UTILS:CONFIG:INFO:1', path +': deleted with success !');
                         console.info( path +': deleted with success !');
-                        callback(false);
+                        callback(false)
                     }
-                });
+                })
             }
-        });
-    };
+        })
+    }
 
     /**
      * Create content
@@ -378,9 +378,9 @@ Config = function() {
                 if (err) {
                     //logger.error('geena', 'UTILS:CONFIG:ERR:2', err, __stack);
                     console.error(err.stack||err.message);
-                    callback(err);
+                    callback(err)
                 } else {
-                    callback(false);
+                    callback(false)
                 }
 //                } else {
 //                    /** doesn't work on windows */
@@ -408,8 +408,8 @@ Config = function() {
 //                    });
 //                }
             }//EO function
-        );//EO fs.appendFile
-    };
+        )//EO fs.appendFile
+    }
 
     /**
      * Get var value by namespace
@@ -427,13 +427,13 @@ Config = function() {
         if (config != null) {
             var split = namespace.split('.'), k=0;
             while (k<split.length) {
-                config = config[split[k++]];
+                config = config[split[k++]]
             }
-            return config;
+            return config
         } else {
-            return null;
+            return null
         }
-    };
+    }
 
     /**
      * Get path by app & namespance
@@ -461,12 +461,10 @@ Config = function() {
 
             } catch (err) {
                 var err = new Error('Config.getPath(app, cat, callback): cat not found');
-                //logger.error('geena', 'UTILS:CONFIG:ERR:5', err, __stack);
-
-                callback(err);
+                callback(err)
             }
-        });
-    };
+        })
+    }
 
 
     /**
@@ -478,11 +476,13 @@ Config = function() {
     this.getProjectName = function(){
         if ( this.paths != undefined && this.paths.root != undefined ) {
             var arr = this.paths.root.split("/");
-            return arr[arr.length-1];
+            return arr[arr.length-1]
         } else {
-            return null;
+            return null
         }
     }
+
+    return init()
 };
 
-module.exports = Config
+module.exports = ConfigUtil
