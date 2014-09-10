@@ -16,7 +16,7 @@ var utils           = require("./utils");
 var merge           = utils.merge;
 var inherits        = utils.inherits;
 var console         = utils.logger;
-var modelHelper     = new utils.Model();
+var modelUtil     = new utils.Model();
 
 
 /**
@@ -189,7 +189,7 @@ function Config(opt) {
         load : function(callback) {
             try {
 
-                var envConf = "";
+                var envConf = '';
                 //console.error("loading once ", this.parent.userConf);
 
                 //require(this.executionPath + '/env.json');
@@ -837,34 +837,39 @@ function Config(opt) {
      * */
     this.refresh = function(bundle, callback) {
         var env = self.Env.get();
-        var conf = self.envConf;
+        var conf = self.envConf[bundle][env];
+
 
         //Reload models.
-        var modelsPath = _(conf[bundle][env].modelsPath);
+        var modelsPath = _(conf.modelsPath);
 
         if ( fs.existsSync(modelsPath) ) {
-            //var Model = require('./model');
-            //var model = new Model();
+        //Reload conf.
+        loadBundleConfig(
+            bundle,
+            function doneLoadingBundleConfig(err, files, routing) {
+                if (!err) {
+                    //modelUtil.reloadModels(
+                    //    conf,
+                    //    function doneReloadingModel() {
+                            callback(false, routing)
+                    //    })
+                } else {
+                    callback(err)
+                }
+            }, true)
 
-            //modelHelper.reloadModels(conf[bundle][env],  function doneReloadingModel() {
-                //Reload conf.
-                loadBundleConfig( bundle, function(err, files, routing) {
+        } else {
+            //Reload conf. who likes repetition ?
+            loadBundleConfig(
+                bundle,
+                function doneLoadingBundleConfig(err, files, routing) {
                     if (!err) {
                         callback(false, routing)
                     } else {
                         callback(err)
                     }
                 }, true)
-            //})
-        } else {
-            //Reload conf. who likes repetition ?
-            loadBundleConfig( bundle, function(err, files, routing) {
-                if (!err) {
-                    callback(false, routing)
-                } else {
-                    callback(err)
-                }
-            }, true)
         }
     }//EO refresh.
 

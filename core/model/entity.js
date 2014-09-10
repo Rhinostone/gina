@@ -48,8 +48,8 @@ function EntitySuper(conn, ressource) {
      * Set all main listenners at once
      * */
     var setListeners = function(instance) {
-        if ( !EntitySuper[self.name].hasOwnEvents ) {
-            EntitySuper[self.name].hasOwnEvents = true;
+        if ( !EntitySuper[self.name].initialized ) {
+            //EntitySuper[self.name].hasOwnEvents = true;
             EntitySuper[self.name].initialized = true;// avoid forever loop
             // get entity objet
             var entity = instance || self.getEntity(self.name);
@@ -75,8 +75,9 @@ function EntitySuper(conn, ressource) {
                     events[i] = shortName +'#'+ f;
                     ++i;
 
+                    console.debug('setting listener for: [ '+self.model+'/'+self.name+'::' + f +'(...) ]');
                     entity[f] = (function(e, ev) {
-                        var cached = entity[f];
+                        var cached = entity[ev];
 
                         return function() {
                             if ( !entity.trigger) {
@@ -86,18 +87,19 @@ function EntitySuper(conn, ressource) {
                                 entity.once(entity.name+'#'+ev, function(args){
                                     cb.apply(this, args)
                                 })
-                            };
+                            }
+
                             cached.apply(this, arguments);
                             return this // chaining event & method
                         }
                     }(shortName +'#'+ f, f));
 
-                    console.debug('setting listener for: [ '+self.model+'/'+self.name+' ] ' + f +'(...)');
+
                 }
             }
             eCount += i;
             self.setMaxListeners(entity.maxListeners || eCount);
-            console.debug('setting max event listeners to: ' + (entity.maxListeners || eCount) );
+            console.debug('['+self.name+']setting max listeners to: ' + (entity.maxListeners || eCount) );
 
             for (var i=0; i<events.length; ++i) {
                 entity.on(events[i], (function(e) {
@@ -114,7 +116,8 @@ function EntitySuper(conn, ressource) {
 
             EntitySuper[self.name].instance =  entity;
             // now merging with the current entity object
-            return modelHelper.updateEntityObject(self.model, shortName+'Entity', entity)
+            //return modelHelper.updateEntityObject(self.model, shortName+'Entity', entity)
+            return modelHelper.updateEntityObject(self.model, self.name.substr(0,1).toLowerCase() + self.name.substr(1), entity)
         }
     }
 

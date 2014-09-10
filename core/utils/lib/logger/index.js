@@ -116,7 +116,7 @@ function Logger(opt) {
     }
 
     var write = function(opt, parse, s, args) {
-        var content = "";
+        var content = '';
         //To handle logs with coma speparated arguments.
         for (var i=0; i<args.length; ++i) {
             if (args[i] instanceof Function) {
