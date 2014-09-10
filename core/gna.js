@@ -20,7 +20,7 @@ var utils   = require('./utils');
 
 var console = utils.logger;
 var Proc    = utils.Proc;
-var modelHelper = new utils.Model();
+var modelUtil = new utils.Model();
 var Server  = require('./server');//TODO require('./server').http
 var EventEmitter = require('events').EventEmitter;
 var e = new EventEmitter();
@@ -348,7 +348,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
         gna.initialized = true;
         e.once('init', function(instance, middleware, conf) {
-            modelHelper.loadAllModels(
+            modelUtil.loadAllModels(
                 conf,
                 function() {
                     joinContext(conf.contexts);

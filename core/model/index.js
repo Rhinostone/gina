@@ -8,7 +8,6 @@
 
 //Imports.
 var fs              = require('fs');
-var vm              = require('vm');
 var EventEmitter    = require('events').EventEmitter;
 var Module          = require('module');
 var Config          = require( getPath('geena.core') + '/config');
@@ -18,7 +17,7 @@ var console         = utils.logger;
 var math            = utils.math;
 var inherits        = utils.inherits;
 var utilsConfig     = new utils.Config();
-var modelHelper     = new utils.Model();
+var modelUtil       = new utils.Model();
 
 
 
@@ -142,7 +141,7 @@ function Model(namespace) {
 
                                     var entitiesManager = new require(conf.path)()[model];
                                     local.entitiesManager = entitiesManager;
-                                    modelHelper.setConnection(model, conn);
+                                    modelUtil.setConnection(model, conn);
                                     Model.local = local;
                                     getModelEntities(entitiesManager, modelPath, entitiesPath, conn)
                                 }
@@ -183,8 +182,9 @@ function Model(namespace) {
         local = Model.local;
         _locals = local.locals;
         self.i = 0;
-        getModelEntities(local.entitiesManager, local.modelPath, local.entitiesPath, local.connection, function(err){
-            modelHelper.reloadEntities(conf, cb)
+        getModelEntities(local.entitiesManager, local.modelPath, local.entitiesPath, local.connection, function(err, connector, entities, connexion){
+            //modelUtil.reloadEntities(conf, cb)
+            cb(err, connector, entities, connexion)
         })
     }
 
@@ -281,7 +281,7 @@ function Model(namespace) {
                 var className = entityName.substr(0,1).toUpperCase() + entityName.substr(1);
 
                 var EntitySuperClass = require(_(filename, true));
-                var EntityClass = require( _(entitiesPath + '/' + files[i]) );
+                var EntityClass = require( _(entitiesPath + '/' + files[i], true) );
                 var sum = math.checkSumSync( _(entitiesPath + '/' + files[i]) );
                 if ( typeof(local.files[ files[i] ]) != 'undefined' && local.files[ files[i] ] !== sum ) {
                     // will only be used for cacheless anyway
@@ -317,7 +317,7 @@ function Model(namespace) {
                 // another one to instanciate and put in cache
                 for (var nttClass in entitiesManager) {
                     var _nttClass = nttClass.substr(0,1).toUpperCase() + nttClass.substr(1);
-                    modelHelper.setModelEntity(self.model, _nttClass, entitiesManager[nttClass]);
+                    modelUtil.setModelEntity(self.model, _nttClass, entitiesManager[nttClass]);
                 }
                 Model.local = local;
                 //finished.

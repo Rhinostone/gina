@@ -10,7 +10,6 @@
 var merge   = require('./merge');
 var console = require('./logger');
 var math    = require('./math');
-
 var checkSum = math.checkSum;
 
 /**
@@ -94,7 +93,7 @@ function ModelUtil() {
         }
     }
 
-    this.updateEntityObject = function(model, name, entityObject) {
+    this.updateEntityObject = function(model, name, entityObject, override) {
 
         if ( typeof(model) == 'undefined' || model == '' ) {
             throw new Error('ModelUtil cannot update EntityObject whitout a connector !')
@@ -108,7 +107,12 @@ function ModelUtil() {
             self.models[model][name] = {}
         }
 
-        self.models[model][name] = merge(self.models[model][name], entityObject);
+        if (override) {
+            self.models[model][name] = merge(true, self.models[model][name], entityObject);
+        } else {
+            self.models[model][name] = merge(self.models[model][name], entityObject);
+        }
+
         return self.models[model][name]
     }
 
@@ -179,6 +183,7 @@ function ModelUtil() {
 
     this.reloadModels = function(conf, cb) {
         if (typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null ) {
+            var Model = require( _( getPath('geena.core')+'/model') );
             var mObj = {};
             var models = conf.content.connectors;
 
@@ -192,14 +197,15 @@ function ModelUtil() {
                 }
 
                 if ( t == models.count() ) {
-                    cb()
+                    t = 1;
+                    cb(false)
                 }
             }
             for (var c in models) {
                 console.log('....reloading model ', c + 'Model');
                 mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
                 mObj[c+'Model']
-                    .reload( conf, function onReload(err, connector, entities){ // entities to reload
+                    .reload( conf, function onReload(err, connector, entities, conn, list){ // entities to reload
                         console.log('done reloading '+ connector);
                         if (err) {
                             console.error('found error ...');
@@ -209,9 +215,12 @@ function ModelUtil() {
                             var shortName = '';
                             // refreshing entities instances
                             for (var ntt in entities) {
-                                entities[ntt] = new entities[ntt](conn);
-                                shortName = ntt.replace(/Entity/, '').toLocaleLowerCase();
-                                self.updateEntityObject(connector, shortName, entities[ntt])
+                                //if ( typeof(list[ntt]) != 'undefined' ) {
+                                    entities[ntt] = new entities[ntt](conn);
+                                    shortName = ntt.replace(/Entity/, '').toLocaleLowerCase();
+                                    self.updateEntityObject(connector, shortName, entities[ntt])
+                                //}
+
                             }
                             done(connector)
                         }
