@@ -116,7 +116,6 @@ function EntitySuper(conn, ressource) {
 
             EntitySuper[self.name].instance =  entity;
             // now merging with the current entity object
-            //return modelHelper.updateEntityObject(self.model, shortName+'Entity', entity)
             return modelHelper.updateEntityObject(self.model, self.name.substr(0,1).toLowerCase() + self.name.substr(1), entity)
         }
     }
