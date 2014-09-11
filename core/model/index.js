@@ -36,6 +36,7 @@ var modelUtil       = new utils.Model();
  */
 function Model(namespace) {
     var self = this;
+    this.i = 0;
     var local = {
         modelPath: null,
         entitiesPath: null,
@@ -53,6 +54,12 @@ function Model(namespace) {
 
     var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
 
+    var getInstance = function() {
+        self = Model.instance;
+        local = Model.local;
+        _locals = local.locals;
+        self.i = 0;
+    }
 
     var setup = function(namespace) {
         if ( !Model.instance ) {
@@ -164,9 +171,10 @@ function Model(namespace) {
             }
             return self
         } else {
-            local = Model.local;
+            local = local || Model.local;
+            _locals = local.locals;
             self = Model.instance;
-            return Model.instance
+            return self
         }
     }
 
@@ -178,10 +186,9 @@ function Model(namespace) {
     }
 
     this.reload = function(conf, cb) {
-        self = Model.instance;
-        local = Model.local;
-        _locals = local.locals;
-        self.i = 0;
+        if (!local.entitiesPath) {
+            getInstance()
+        }
         getModelEntities(local.entitiesManager, local.modelPath, local.entitiesPath, local.connection, function(err, connector, entities, connexion){
             //modelUtil.reloadEntities(conf, cb)
             cb(err, connector, entities, connexion)
@@ -278,7 +285,9 @@ function Model(namespace) {
                 }
 
                 console.log("producing ", self.name,":",entityName, ' ( '+i+' )');
+
                 var className = entityName.substr(0,1).toUpperCase() + entityName.substr(1);
+                //entityName.substr(0,1).toLowerCase() + entityName.substr(1);
 
                 var EntitySuperClass = require(_(filename, true));
                 var EntityClass = require( _(entitiesPath + '/' + files[i], true) );

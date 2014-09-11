@@ -173,8 +173,7 @@ function ModelUtil() {
                             self.setModel(connector, entities);
                             done(connector)
                         }
-                    }
-                )
+                    })
             }
         } else {
             cb(new Error('no connector found'))
@@ -195,40 +194,42 @@ function ModelUtil() {
                 } else {
                     console.error('connector '+ connector +' not found in configuration')
                 }
-
                 if ( t == models.count() ) {
-                    t = 1;
                     cb(false)
                 }
             }
-            for (var c in models) {
-                console.log('....reloading model ', c + 'Model');
-                mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
-                mObj[c+'Model']
-                    .reload( conf, function onReload(err, connector, entities, conn, list){ // entities to reload
-                        console.log('done reloading '+ connector);
-                        if (err) {
-                            console.error('found error ...');
-                            console.error(err.stack||err.message||err);
-                            done(connector)
-                        } else {
-                            var shortName = '';
-                            // refreshing entities instances
-                            for (var ntt in entities) {
-                                //if ( typeof(list[ntt]) != 'undefined' ) {
-                                    entities[ntt] = new entities[ntt](conn);
-                                    shortName = ntt.replace(/Entity/, '').toLocaleLowerCase();
-                                    self.updateEntityObject(connector, shortName, entities[ntt])
-                                //}
 
-                            }
-                            done(connector)
-                        }
-                    })
+            for (var c in models) {
+                console.log('....reloading model ', c + 'Model')
             }
         } else {
             cb(new Error('no connector found'))
         }
+    }
+
+    var instanciate = function() {
+        mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
+        mObj[c+'Model']
+            .reload( conf, function onReload(err, connector, entities, conn){ // entities to reload
+                console.log('done reloading '+ connector);
+                if (err) {
+                    console.error('found error ...');
+                    console.error(err.stack||err.message||err);
+                    done(connector)
+                } else {
+                    var entityName = '';
+                    // refreshing entities instances
+                    for (var ntt in entities) {
+                        //if ( typeof(list[ntt]) != 'undefined' ) {
+                        entities[ntt] = new entities[ntt](conn);
+                        //entityName = self.name.substr(0,1).toLowerCase() + self.name.substr(1);
+                        entityName = ntt;
+                        self.updateEntityObject(connector, entityName, entities[ntt])
+                        //}
+                    }
+                    done(connector)
+                }
+            })
     }
 
     getModel = function(model) {
