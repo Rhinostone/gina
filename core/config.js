@@ -542,7 +542,7 @@ function Config(opt) {
         var files = {};
         var main = '';
         for (var name in  conf[bundle][env].files) {
-            main = _(appPath +'/config/'+ conf[bundle][env].files[name]);
+            main = _(appPath +'/config/'+ conf[bundle][env].files[name]).replace('.'+env, '');
             //Server only because of the shared mode VS the standalone mode.
             if (name == 'routing' && cacheless && typeof(reload) != 'undefined') {
                 tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
@@ -631,7 +631,7 @@ function Config(opt) {
                 if (cacheless) {
                     delete require.cache[_(filename, true)];
                 }
-                files[name] = require(filename);
+                files[name] = require(_(filename, true));
                 tmp = '';
 
                 if (filename != main) {

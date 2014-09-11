@@ -58,7 +58,10 @@ function EntitySuper(conn, ressource) {
             // use this property inside your entity to disable listeners
             if (entity.hasOwnEvents) return false;
 
-            var shortName = self.name.replace(/Entity/, '').toLocaleLowerCase();
+            //var shortName = self.name.replace(/Entity/, '').toLocaleLowerCase();
+            var entityName = self.name.substr(0,1).toLowerCase() + self.name.substr(1);
+            var shortName = entityName.replace(/Entity/, '');
+
             var events = [], i = 0, cb = {};
             var eCount = 5; // default max listeners is 5
             for (var f in entity) {
@@ -92,9 +95,7 @@ function EntitySuper(conn, ressource) {
                             cached.apply(this, arguments);
                             return this // chaining event & method
                         }
-                    }(shortName +'#'+ f, f));
-
-
+                    }(shortName +'#'+ f, f))
                 }
             }
             eCount += i;
@@ -116,7 +117,8 @@ function EntitySuper(conn, ressource) {
 
             EntitySuper[self.name].instance =  entity;
             // now merging with the current entity object
-            return modelHelper.updateEntityObject(self.model, self.name.substr(0,1).toLowerCase() + self.name.substr(1), entity)
+            //var entityName = self.name.substr(0,1).toLowerCase() + self.name.substr(1);
+            return modelHelper.updateEntityObject(self.model, entityName, entity)
         }
     }
 
