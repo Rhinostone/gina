@@ -10,6 +10,7 @@
 var merge   = require('./merge');
 var console = require('./logger');
 var math    = require('./math');
+//var helpers = require('./helpers');
 var checkSum = math.checkSum;
 
 /**
@@ -21,6 +22,7 @@ var checkSum = math.checkSum;
  * */
 function ModelUtil() {
     var self = this;
+    var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
 
     /**
      * Init
@@ -28,13 +30,17 @@ function ModelUtil() {
      * */
     var init = function() {
 
-        if ( !ModelUtil.instance ) {
+        if ( !ModelUtil.instance && !getContext('ModelUtil') ) {
             self.models = self.models || {};
             self.entities = {};
             self.files = {};
+            setContext('ModelUtil', self);
             ModelUtil.instance = self;
             return self
         } else {
+            if (!ModelUtil.instance) {
+                ModelUtil.instance = getContext('ModelUtil')
+            }
             self = ModelUtil.instance;
             return ModelUtil.instance
         }
@@ -83,17 +89,17 @@ function ModelUtil() {
             if( !self.entities[model] ) {
                 self.entities[model] = {}
             }
-            if ( typeof(self.entities[model][name]) != "undefined") {
-                merge(self.entities[model][name], module)
-            } else {
+            //if ( typeof(self.entities[model][name]) != "undefined") {
+            //    merge(self.entities[model][name], module)
+            //} else {
                 self.entities[model][name] = module
-            }
+            //}
         } else {
             self.entities[model] = arguments[0]
         }
     }
 
-    this.updateEntityObject = function(model, name, entityObject, override) {
+    this.updateEntityObject = function(model, name, entityObject) {
 
         if ( typeof(model) == 'undefined' || model == '' ) {
             throw new Error('ModelUtil cannot update EntityObject whitout a connector !')
@@ -107,12 +113,16 @@ function ModelUtil() {
             self.models[model][name] = {}
         }
 
-        if (override) {
-            self.models[model][name] = merge(true, self.models[model][name], entityObject);
-        } else {
-            self.models[model][name] = merge(self.models[model][name], entityObject);
-        }
+        //if (override) {
 
+        //} else {
+            //self.models[model][name] = merge(self.models[model][name], entityObject);
+
+        //}
+        self.models[model][name] =  entityObject;
+
+        //ModelUtil.instance.models = self.models; //updating instance
+        //setContext('ModelUtil', self);
         return self.models[model][name]
     }
 
@@ -127,8 +137,9 @@ function ModelUtil() {
             }
 
             self.models[name] = merge(self.models[name], obj)
+
         } else {
-            self.models = arguments[0]
+            self.models[name] = {}
         }
     }
 
@@ -139,7 +150,7 @@ function ModelUtil() {
             var mObj = {};
             var models = conf.content.connectors;
 
-            var t = 1;
+            var t = 0;
 
             var done = function(connector) {
                 if ( typeof(models[connector]) != 'undefined' ) {
@@ -160,17 +171,18 @@ function ModelUtil() {
                 mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
                 mObj[c+'Model']
                     .onReady(
-                    function onModelReady( err, connector, entities, conn) {
+                    function onModelReady( err, connector, entitiesObject, conn) {
                         if (err) {
                             console.error('found error ...');
                             console.error(err.stack||err.message||err);
                             done(connector)
                         } else {
                             // creating entities instances
-                            for (var ntt in entities) {
-                                entities[ntt] = new entities[ntt](conn);
+                            for (var ntt in entitiesObject) {
+                                entitiesObject[ntt] = new entitiesObject[ntt](conn)
                             }
-                            self.setModel(connector, entities);
+                            //self.setModel(connector, entitiesObject);
+                            //delete entitiesObject;
                             done(connector)
                         }
                     })
@@ -181,56 +193,51 @@ function ModelUtil() {
     }
 
     this.reloadModels = function(conf, cb) {
-        if (typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null ) {
+        if ( typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null ) {
+
             var Model = require( _( getPath('geena.core')+'/model') );
-            var mObj = {};
             var models = conf.content.connectors;
+            var mObj = {};
 
-            var t = 1;
+            var t = 0;
+            var m = [];
+            for (var c in models) {
+                m.push(c)
+            }
 
-            var done = function(connector) {
-                if ( typeof(models[connector]) != 'undefined' ) {
-                    ++t
-                } else {
+            var done = function(connector, t) {
+                if ( typeof(models[connector]) == 'undefined' ) {
                     console.error('connector '+ connector +' not found in configuration')
                 }
                 if ( t == models.count() ) {
-                    cb(false)
+                    cb()
+                } else {
+                    reload(t)
                 }
-            }
+            };
 
-            for (var c in models) {
-                console.log('....reloading model ', c + 'Model')
+            var reload = function(i) {
+
+                mObj[m[i]+'Model'] = new Model(conf.bundle + '/' + m[i]);
+                mObj[m[i]+'Model']
+                    .reload( conf, function onReload(err, connector, entitiesObject, conn) { // entities to reload
+                        if (err) {
+                            console.error(err.stack||err.message||err)
+                        } else {
+                            self.models[connector] = {};
+                            for (var ntt in entitiesObject) {
+                                entitiesObject[ntt] = new entitiesObject[ntt](conn, true);
+                            }
+                        }
+                        done(connector, i+1);
+                    })
             }
+            reload(0)
         } else {
             cb(new Error('no connector found'))
         }
     }
 
-    var instanciate = function() {
-        mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
-        mObj[c+'Model']
-            .reload( conf, function onReload(err, connector, entities, conn){ // entities to reload
-                console.log('done reloading '+ connector);
-                if (err) {
-                    console.error('found error ...');
-                    console.error(err.stack||err.message||err);
-                    done(connector)
-                } else {
-                    var entityName = '';
-                    // refreshing entities instances
-                    for (var ntt in entities) {
-                        //if ( typeof(list[ntt]) != 'undefined' ) {
-                        entities[ntt] = new entities[ntt](conn);
-                        //entityName = self.name.substr(0,1).toLowerCase() + self.name.substr(1);
-                        entityName = ntt;
-                        self.updateEntityObject(connector, entityName, entities[ntt])
-                        //}
-                    }
-                    done(connector)
-                }
-            })
-    }
 
     getModel = function(model) {
         if ( typeof(model) != 'undefined' ) {
@@ -260,7 +267,13 @@ function ModelUtil() {
                 if ( self.models[model][shortName] ) {
                     return self.models[model][shortName]
                 }
-                var entityObj = new self.entities[model][entityName](conn);
+
+                if (cacheless) {
+                    var entityObj = new self.entities[model][entityName](conn, true);
+                } else {
+                    var entityObj = new self.entities[model][entityName](conn);
+                }
+
                 return self.models[model][shortName] || entityObj
             } catch (err) {
                 return undefined
