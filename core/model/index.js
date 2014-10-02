@@ -54,43 +54,35 @@ function Model(namespace) {
 
     var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
 
-    var getInstance = function() {
-        self = Model.instance;
-        local = Model.local;
-        _locals = local.locals;
-        self.i = 0;
-    }
 
     var setup = function(namespace) {
-        if ( !Model.instance ) {
-            if ( typeof(namespace) == 'undefined' || namespace == '') {
-                console.error('geena', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
-            }
-
-            var model, namespace = namespace.split(/\//g);
-            _connector = namespace[1];//Has to be writtien the same for the connetors.json decalration or for the model folder
-            var bundle = namespace[0];
-            namespace.shift();
-            //Capitalize - Normalize
-            if (namespace.length > 1) {
-                //            for (var i; i<namespace.length; ++i) {
-                //                namespace[i] = namespace[i].substring(0, 1).toUpperCase() + namespace[i].substring(1);
-                //            }
-
-                model = namespace.join(".");
-            } else {
-                //Dir name.
-                model = namespace[0];
-            }
-
-
-            console.log("\nBundle", bundle);
-            console.log("Model", model);
-            self.name = _connector;
-            self.bundle = bundle;
-            self.model = model;
-            self.modelDirName = model;
+        if ( typeof(namespace) == 'undefined' || namespace == '') {
+            console.error('geena', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
         }
+
+        var model, namespace = namespace.split(/\//g);
+        _connector = namespace[1];//Has to be writtien the same for the connetors.json decalration or for the model folder
+        var bundle = namespace[0];
+        namespace.shift();
+        //Capitalize - Normalize
+        if (namespace.length > 1) {
+            //            for (var i; i<namespace.length; ++i) {
+            //                namespace[i] = namespace[i].substring(0, 1).toUpperCase() + namespace[i].substring(1);
+            //            }
+
+            model = namespace.join(".");
+        } else {
+            //Dir name.
+            model = namespace[0];
+        }
+
+
+        console.log("\nBundle", bundle);
+        console.log("Model", model);
+        self.name = _connector;
+        self.bundle = bundle;
+        self.model = model;
+        self.modelDirName = model;
     }
 
     /**
@@ -100,82 +92,98 @@ function Model(namespace) {
      *
      * @private
      * */
-    var init = function() {
-        if ( !Model.instance ) {
-            Model.instance = self;
-            var bundle = self.bundle;
-            var model = self.model;
-            var modelDirName = self.modelDirName;
+    var init = function(reload) {
 
-            // this is supposed to happen on load or for dev env; on reload, with a checksum
-            var conf = getConfigSync(bundle);
-            local.locals = conf.locals;
+        var bundle = self.bundle;
+        var model = self.model;
+        var modelDirName = self.modelDirName;
 
-            if (conf) {
-                _configuration = conf.connectors;
+        // this is supposed to happen on load or for dev env; on reload, with a checksum
+        var conf = getConfigSync(bundle);
+        local.locals = conf.locals;
 
-                console.log("CONF READY ", model, conf.path);
-                //TODO - More controls...
+        if (conf) {
+            _configuration = conf.connectors;
 
-                //For now, I just need the F..ing entity name.
-                var modelPath       = local.modelPath = _(conf.path + '/' + modelDirName);
-                var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
-                console.log('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
-                if (!fs.existsSync(entitiesPath)) {
-                    self.emit('model#ready', new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null);
-                    //console.log("[ "+model+" ]no entities found...")
+            console.log("CONF READY ", model, conf.path);
+            //TODO - More controls...
+
+            //For now, I just need the F..ing entity name.
+            var modelPath       = local.modelPath = _(conf.path + '/' + modelDirName);
+            var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
+            console.log('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
+            if (!fs.existsSync(entitiesPath)) {
+                if (reload) {
+                    reload(new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null)
                 } else {
-                    var connectorPath   = _(modelPath + '/lib/connector.js');
-                    //Getting Entities Manager.
-                    var exists = fs.existsSync(connectorPath);
-                    if (exists) {
-                        if (cacheless)
-                            delete require.cache[_(connectorPath, true)];
+                    self.emit('model#ready', new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null)
+                }
+            } else {
+                var connectorPath   = _(modelPath + '/lib/connector.js');
+                //Getting Entities Manager.
+                var exists = fs.existsSync(connectorPath);
+                if (exists) {
+                    if (cacheless)
+                        delete require.cache[_(connectorPath, true)];
 
-                        var Connector = require(connectorPath);
+                    var Connector = require(connectorPath);
 
-                        self.connect(
-                            Connector,
-                            function onConnect(err, conn) {
-                                if (err) {
-                                    console.error(err.stack);
-                                    self.emit('model#ready', err, self.name, null);
+                    self.connect(
+                        Connector,
+                        function onConnect(err, conn) {
+                            if (err) {
+                                console.error(err.stack);
+                                if (reload) {
+                                    reload(err, self.name, null)
                                 } else {
-                                    local.connection = conn;
-                                    //Getting Entities Manager.
-                                    if (cacheless)
-                                        delete require.cache[_(conf.path, true)];
+                                    self.emit('model#ready', err, self.name, null)
+                                }
+                            } else {
+                                local.connection = conn;
+                                //Getting Entities Manager.
+                                if (cacheless)
+                                    delete require.cache[_(conf.path + '/index.js', true)];
 
-                                    var entitiesManager = new require(conf.path)()[model];
-                                    local.entitiesManager = entitiesManager;
+                                var entitiesManager = new require(_(conf.path + '/index.js', true))()[model];
+                                //modelUtil.setConnection(model, conn);
+                                if (reload) {
+                                    getModelEntities(entitiesManager, modelPath, entitiesPath, conn, function onReload(err, connector, entities, connexion){
+                                        //modelUtil.reloadEntities(conf, cb)
+                                        reload(err, connector, entities, connexion)
+                                    })
+                                } else {
                                     modelUtil.setConnection(model, conn);
-                                    Model.local = local;
                                     getModelEntities(entitiesManager, modelPath, entitiesPath, conn)
                                 }
                             }
-                        )
-                    } else {
-                        //Means that no connector was found in models.
-                        if (cacheless)
-                            delete require.cache[_(conf.path, true)];
+                        }
+                    )
+                } else {//Means that no connector was found in models.
+                    /**
+                    if (cacheless)
+                        delete require.cache[_(conf.path, true)];
 
-                        var entitiesManager = new require(conf.path)()[model];
-                        Model.local = Model.local || local;
-                        getModelEntities(entitiesManager, modelPath, entitiesPath, undefined)
+                    var entitiesManager = new require(conf.path)()[model];
+                    getModelEntities(entitiesManager, modelPath, entitiesPath, undefined)
+                     */
+                    //finished.
+                    if ( reload ) {
+                        reload(false, self.name, null, conn)
+                    } else {
+                        self.emit('model#ready', false, self.name, null, conn)
                     }
                 }
-
-            } else {
-                self.emit('model#ready', new Error('no configuration found for your model: ' + model), self.name, null);
-                console.log("no configuration found...")
             }
-            return self
-        } else {
-            local = local || Model.local;
-            _locals = local.locals;
-            self = Model.instance;
-            return self
+
+        } else {
+            if (reload) {
+                reload(new Error('no configuration found for your model: ' + model), self.name, null)
+            } else {
+                self.emit('model#ready', new Error('no configuration found for your model: ' + model), self.name, null)
+            }
+            console.log("no configuration found...")
         }
+        return self
     }
 
     this.connect = function(Connector, callback) {
@@ -186,13 +194,8 @@ function Model(namespace) {
     }
 
     this.reload = function(conf, cb) {
-        if (!local.entitiesPath) {
-            getInstance()
-        }
-        getModelEntities(local.entitiesManager, local.modelPath, local.entitiesPath, local.connection, function(err, connector, entities, connexion){
-            //modelUtil.reloadEntities(conf, cb)
-            cb(err, connector, entities, connexion)
-        })
+        setup(namespace);
+        init(cb)
     }
 
     /**
@@ -261,17 +264,12 @@ function Model(namespace) {
         var suffix = 'Entity';
 
         var that = self;
-        var i = that.i = that.i || 0;
+        var i = that.i || 0;
         var files = fs.readdirSync(entitiesPath);
 
         var entityName, exluded = ['index.js'];
         if (_locals == undefined) {
             throw new Error("geena/utils/.gna not found.");
-        }
-        // superEntity
-        var filename = _locals.paths.geena + '/model/entity.js';
-        if (cacheless) {
-            delete require.cache[_(filename, true)];//super
         }
 
         var produce = function(entityName, i){
@@ -280,16 +278,20 @@ function Model(namespace) {
             //if (err) log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
 
             try {
-                if (cacheless) { //checksum
-                    delete require.cache[_(entitiesPath + '/' + files[i], true)];//child
-                }
-
                 console.log("producing ", self.name,":",entityName, ' ( '+i+' )');
 
                 var className = entityName.substr(0,1).toUpperCase() + entityName.substr(1);
                 //entityName.substr(0,1).toLowerCase() + entityName.substr(1);
 
+                // superEntity
+                var filename = _locals.paths.geena + '/model/entity.js';
+                //if (cacheless) {
+                delete require.cache[_(filename, true)]; //EntitySuperClass
+                //}
                 var EntitySuperClass = require(_(filename, true));
+                if (cacheless) { //checksum
+                    delete require.cache[_(entitiesPath + '/' + files[i], true)];//child
+                }
                 var EntityClass = require( _(entitiesPath + '/' + files[i], true) );
                 var sum = math.checkSumSync( _(entitiesPath + '/' + files[i]) );
                 if ( typeof(local.files[ files[i] ]) != 'undefined' && local.files[ files[i] ] !== sum ) {
@@ -301,11 +303,11 @@ function Model(namespace) {
                 }
 
                 //Inherits.
-                var EntityClass = inherits(EntityClass, EntitySuperClass);
+                EntityClass = inherits(EntityClass, EntitySuperClass);
 
                 EntityClass.prototype.name = className;
                 EntityClass.prototype.model = self.model;
-                EntityClass.prototype._ressource = require( _(entitiesPath + '/' + files[i]) );
+                //EntityClass.prototype._ressource = require( _(entitiesPath + '/' + files[i], true) );
 
                 //for (var prop in Entity) {
                 //    console.log('PROP FOUND ', prop);
@@ -326,9 +328,8 @@ function Model(namespace) {
                 // another one to instanciate and put in cache
                 for (var nttClass in entitiesManager) {
                     var _nttClass = nttClass.substr(0,1).toUpperCase() + nttClass.substr(1);
-                    modelUtil.setModelEntity(self.model, _nttClass, entitiesManager[nttClass]);
+                    modelUtil.setModelEntity(self.model, _nttClass, entitiesManager[nttClass])
                 }
-                Model.local = local;
                 //finished.
                 if ( reload ) {
                     reload(false, self.name, entitiesManager, conn)
@@ -351,12 +352,12 @@ function Model(namespace) {
                     produce(entityName, that.i);
                 } else if (that.i == files.length-1) {
                     //console.log("All done !");
-                    Model.local = local;
                     if ( reload ) {
                         reload(false, self.name, entitiesManager)
                     } else {
                         self.emit('model#ready', false, self.name, entitiesManager)
                     }
+                    //delete entitiesManager;
                     ++that.i;
                 } else {
                     ++that.i;

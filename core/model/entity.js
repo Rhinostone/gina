@@ -11,7 +11,7 @@ var utils = require('geena').utils;
 var console = utils.logger;
 var helpers = utils.helpers;
 var inherits = utils.inherits;
-var modelHelper = new utils.Model();
+var modelUtil = new utils.Model();
 //var Config = require('../config');
 //var config = new Config();
 
@@ -24,7 +24,7 @@ var modelHelper = new utils.Model();
  * @author      Rhinostone <geena@rhinostone.com>
  * @api         Public
  */
-function EntitySuper(conn, ressource) {
+function EntitySuper(conn, overrideInstance) {
 
     var self = this;
 
@@ -39,6 +39,10 @@ function EntitySuper(conn, ressource) {
             } else {
                 return setListeners()
             }
+        //} else if( typeof(overrideInstance) != 'undefined') {
+        //    delete EntitySuper[self.name].instance;
+        //    delete EntitySuper[self.name].initialized;
+        //    return setListeners()
         } else {
             return EntitySuper[self.name].instance;
         }
@@ -58,7 +62,6 @@ function EntitySuper(conn, ressource) {
             // use this property inside your entity to disable listeners
             if (entity.hasOwnEvents) return false;
 
-            //var shortName = self.name.replace(/Entity/, '').toLocaleLowerCase();
             var entityName = self.name.substr(0,1).toLowerCase() + self.name.substr(1);
             var shortName = entityName.replace(/Entity/, '');
 
@@ -99,10 +102,16 @@ function EntitySuper(conn, ressource) {
                 }
             }
             eCount += i;
+
             self.setMaxListeners(entity.maxListeners || eCount);
+            //entity.setMaxListeners(entity.maxListeners || eCount);
+
             console.debug('['+self.name+']setting max listeners to: ' + (entity.maxListeners || eCount) );
 
             for (var i=0; i<events.length; ++i) {
+
+                entity.removeAllListeners(events[i]); // added on october 1st to prevent adding new listners on each new querie
+
                 entity.on(events[i], (function(e) {
                     return function() {
                         console.log('calling back from event: ', e);
@@ -117,8 +126,7 @@ function EntitySuper(conn, ressource) {
 
             EntitySuper[self.name].instance =  entity;
             // now merging with the current entity object
-            //var entityName = self.name.substr(0,1).toLowerCase() + self.name.substr(1);
-            return modelHelper.updateEntityObject(self.model, entityName, entity)
+            return modelUtil.updateEntityObject(self.model, entityName, entity)
         }
     }
 

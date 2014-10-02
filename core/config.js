@@ -849,11 +849,11 @@ function Config(opt) {
             bundle,
             function doneLoadingBundleConfig(err, files, routing) {
                 if (!err) {
-                    //modelUtil.reloadModels(
-                    //    conf,
-                    //    function doneReloadingModel() {
+                    modelUtil.reloadModels(
+                        conf,
+                        function doneReloadingModel() {
                             callback(false, routing)
-                    //    })
+                        })
                 } else {
                     callback(err)
                 }
