@@ -141,14 +141,10 @@ function Model(namespace) {
                             } else {
                                 local.connection = conn;
                                 //Getting Entities Manager.
-                                if (cacheless)
-                                    delete require.cache[_(conf.path + '/index.js', true)];
+                                var entitiesManager = new require( _(conf.path) )()[model];
 
-                                var entitiesManager = new require(_(conf.path + '/index.js', true))()[model];
-                                //modelUtil.setConnection(model, conn);
                                 if (reload) {
                                     getModelEntities(entitiesManager, modelPath, entitiesPath, conn, function onReload(err, connector, entities, connexion){
-                                        //modelUtil.reloadEntities(conf, cb)
                                         reload(err, connector, entities, connexion)
                                     })
                                 } else {
@@ -159,13 +155,7 @@ function Model(namespace) {
                         }
                     )
                 } else {//Means that no connector was found in models.
-                    /**
-                    if (cacheless)
-                        delete require.cache[_(conf.path, true)];
 
-                    var entitiesManager = new require(conf.path)()[model];
-                    getModelEntities(entitiesManager, modelPath, entitiesPath, undefined)
-                     */
                     //finished.
                     if ( reload ) {
                         reload(false, self.name, null, conn)
@@ -285,13 +275,14 @@ function Model(namespace) {
 
                 // superEntity
                 var filename = _locals.paths.geena + '/model/entity.js';
-                //if (cacheless) {
-                delete require.cache[_(filename, true)]; //EntitySuperClass
-                //}
+                if (cacheless)
+                    delete require.cache[_(filename, true)]; //EntitySuperClass
+
                 var EntitySuperClass = require(_(filename, true));
                 if (cacheless) { //checksum
                     delete require.cache[_(entitiesPath + '/' + files[i], true)];//child
                 }
+
                 var EntityClass = require( _(entitiesPath + '/' + files[i], true) );
                 var sum = math.checkSumSync( _(entitiesPath + '/' + files[i]) );
                 if ( typeof(local.files[ files[i] ]) != 'undefined' && local.files[ files[i] ] !== sum ) {
