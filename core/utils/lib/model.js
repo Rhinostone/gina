@@ -10,7 +10,6 @@
 var merge   = require('./merge');
 var console = require('./logger');
 var math    = require('./math');
-//var helpers = require('./helpers');
 var checkSum = math.checkSum;
 
 /**
@@ -66,17 +65,16 @@ function ModelUtil() {
                 return self.models[name]['_connection']
             }
         } else {
-            //not sure...
-            self.models = arguments[0]
+            self.models = {}
         }
     }
 
     /**
-     *
-     * @param {string} name - Entity name
-     * @param {object} module
-     *
-     * */
+    *
+    * @param {string} name - Entity name
+    * @param {object} module
+    *
+    * */
     this.setModelEntity = function(model, name, module) {
         if (arguments.length > 1) {
             if (!self.models) {
@@ -92,7 +90,7 @@ function ModelUtil() {
             //if ( typeof(self.entities[model][name]) != "undefined") {
             //    merge(self.entities[model][name], module)
             //} else {
-                self.entities[model][name] = module
+            self.entities[model][name] = module
             //}
         } else {
             self.entities[model] = arguments[0]
@@ -112,17 +110,8 @@ function ModelUtil() {
         if (!self.models[model][name]) {
             self.models[model][name] = {}
         }
-
-        //if (override) {
-
-        //} else {
-            //self.models[model][name] = merge(self.models[model][name], entityObject);
-
-        //}
         self.models[model][name] =  entityObject;
 
-        //ModelUtil.instance.models = self.models; //updating instance
-        //setContext('ModelUtil', self);
         return self.models[model][name]
     }
 
@@ -181,8 +170,6 @@ function ModelUtil() {
                             for (var ntt in entitiesObject) {
                                 entitiesObject[ntt] = new entitiesObject[ntt](conn)
                             }
-                            //self.setModel(connector, entitiesObject);
-                            //delete entitiesObject;
                             done(connector)
                         }
                     })
@@ -226,7 +213,7 @@ function ModelUtil() {
                         } else {
                             self.models[connector] = {};
                             for (var ntt in entitiesObject) {
-                                entitiesObject[ntt] = new entitiesObject[ntt](conn, true);
+                                entitiesObject[ntt] = new entitiesObject[ntt](conn);
                             }
                         }
                         done(connector, i+1);
@@ -268,11 +255,7 @@ function ModelUtil() {
                     return self.models[model][shortName]
                 }
 
-                if (cacheless) {
-                    var entityObj = new self.entities[model][entityName](conn, true);
-                } else {
-                    var entityObj = new self.entities[model][entityName](conn);
-                }
+                var entityObj = new self.entities[model][entityName](conn);
 
                 return self.models[model][shortName] || entityObj
             } catch (err) {
@@ -282,8 +265,6 @@ function ModelUtil() {
             return self.entities[model]
         }
     }
-
-
 
     return init()
 }

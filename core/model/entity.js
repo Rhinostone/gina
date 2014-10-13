@@ -16,15 +16,15 @@ var modelUtil = new utils.Model();
 //var config = new Config();
 
 /**
- * @class Model.{Model}.EntitySuper class
+ * @class Model.EntitySuper class
  *
  *
  * @package     Geena
- * @namespace   Geena.Model.{Model}
+ * @namespace   Geena.Model
  * @author      Rhinostone <geena@rhinostone.com>
  * @api         Public
  */
-function EntitySuper(conn, overrideInstance) {
+function EntitySuper(conn) {
 
     var self = this;
 
@@ -39,12 +39,8 @@ function EntitySuper(conn, overrideInstance) {
             } else {
                 return setListeners()
             }
-        //} else if( typeof(overrideInstance) != 'undefined') {
-        //    delete EntitySuper[self.name].instance;
-        //    delete EntitySuper[self.name].initialized;
-        //    return setListeners()
         } else {
-            return EntitySuper[self.name].instance;
+            return EntitySuper[self.name].instance
         }
     }
 
@@ -53,8 +49,7 @@ function EntitySuper(conn, overrideInstance) {
      * */
     var setListeners = function(instance) {
         if ( !EntitySuper[self.name].initialized ) {
-            //EntitySuper[self.name].hasOwnEvents = true;
-            EntitySuper[self.name].initialized = true;// avoid forever loop
+            EntitySuper[self.name].initialized = true;
             // get entity objet
             var entity = instance || self.getEntity(self.name);
             if (!entity) return false;
