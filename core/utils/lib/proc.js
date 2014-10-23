@@ -63,7 +63,7 @@ Proc = function(bundle, proc, usePidFile){
     this.bundles = [];
 
     if ( typeof(usePidFile) == 'undefined') {
-        var usePidFile = true;
+        var usePidFile = true
     }
 
     /**
@@ -77,16 +77,16 @@ Proc = function(bundle, proc, usePidFile){
         var pathObj = new _( getPath('root') + '/tmp/pid/' );
         var path = pathObj.toString();
         //Create dir if needed.
-        console.log("MKDIR  pathObj (pid:"+self.proc.pid+") - ", self.bundle);
+        console.debug("MKDIR  pathObj (pid:"+self.proc.pid+") - ", self.bundle);
 
         process.list = (process.list == undefined) ? [] : process.list;
         process.pids = (process.pids == undefined) ? {} : process.pids;
 
         self.register(self.bundle, self.proc.pid);
-        console.log('registring ', self.proc.pid);
+
         if (usePidFile) {
             pathObj.mkdir( function(err, path){
-                console.log('path created ('+path+') now saving PID ' +  bundle);
+                console.debug('path created ('+path+') now saving PID ' +  bundle);
                 //logger.info('geena', 'PROC:INFO:1', 'path created ('+path+') now saving PID ' +  bundle, __stack);
                 //Save file.
                 if (!err) {
@@ -94,10 +94,14 @@ Proc = function(bundle, proc, usePidFile){
                     self.path = path + pathObj.sep;
                     //Add PID file.
                     setPID(self.bundle, self.PID, self.proc);
-                    save(self.bundle, self.PID, self.proc);
+                    save(self.bundle, self.PID, self.proc)
                 }
-            });
-        }
+            })
+        }// else {
+        //    self.PID = self.proc.pid;
+        //    self.path = path + pathObj.sep;
+        //    setPID(self.bundle, self.PID, self.proc)
+        //}
     };
 
     var isMaster = function() {
@@ -305,6 +309,7 @@ Proc = function(bundle, proc, usePidFile){
             var fileStream = fs.createWriteStream(path + PID);
             fileStream.once('open', function(fd) {
                 fileStream.write(bundle);
+                console.debug('registered ', self.proc.pid);
                 fileStream.end();
             });
         }
@@ -388,7 +393,7 @@ Proc = function(bundle, proc, usePidFile){
         console.warn('Invalid or undefined proc name . Proc naming Aborted',
             __stack)
     } else {
-        init();
+        init()
     }
 };
 

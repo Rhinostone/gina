@@ -102,11 +102,10 @@ var AppCommand = {
         this.msg = message;
         this.opt['option'] = process.argv[2];
         this.env = 'prod'; // by default
+        var envFound = this.checkEnv();
 
         if (process.argv[2] == '-s' || process.argv[2] == '--start') {
             //use registeredEnvs for this.....
-            var envFound = this.checkEnv();
-
             if (process.argv.length >= 5 && !envFound) {
                 this.env = 'prod';
                 process.argv.splice(4, 0, this.env);
@@ -116,17 +115,12 @@ var AppCommand = {
             //herited from gna.js.
 
         } else {
-            var envFound = this.checkEnv();
             this.PID = new Proc('geena', process, false);
         }
 
         this.PID.setMaster(process.pid);
 
-        if (longCMD) {
-            this.opt['argument'] = process.argv[4];
-        } else {
-            this.opt['argument'] =  process.argv[4];
-        }
+        this.opt['argument'] = process.argv[4];
 
         if (process.argv[5] != undefined && process.argv[5].indexOf('=')) {
             var p = process.argv[5].split(/=/);
@@ -141,7 +135,7 @@ var AppCommand = {
 //            core    : _(this.options.core)
 //        });
         process.env.NODE_ENV = this.env;
-        this.isAllowedOption(this.opt);
+        this.isAllowedOption(this.opt)
     },
     isAllowedOption : function(opt){
         var found = false;
@@ -481,8 +475,6 @@ var AppCommand = {
                         isWorking = true
                     }
                 }
-            } else {
-                isWorking = true
             }
 
             if ( typeof(bundle) != 'undefined' && typeof(projectData.bundles[bundle]) != 'undefined' && !isWorking) {

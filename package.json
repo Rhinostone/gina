@@ -23,7 +23,7 @@
   "copyright" : "Copyright (c) 2009-2014 Rhinostone <geena@rhinostone.com>",
   "dependencies": {
     "colors" : "",
-    "express": "3.x",
+    "express": "4.x",
     "swig": ""
   },
   "engine": [

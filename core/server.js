@@ -1,6 +1,6 @@
 //Imports.
 var fs              = require('fs');
-var path            = require("path");
+var path            = require('path');
 var EventEmitter    = require('events').EventEmitter;
 var express         = require('express');
 var url             = require('url');
@@ -123,13 +123,13 @@ function Server(options) {
         var env         = self.env,
             cacheless   = self.cacheless,
             apps        = conf.bundles,
-            filename    = "",
-            appName     = "",
-            name        = "",
+            filename    = '',
+            appName     = '',
+            name        = '',
             tmp         = {},
-            main        = "",
-            tmpContent  = "",
-            tmpName     = "";
+            main        = '',
+            tmpContent  = '',
+            tmpName     = '';
 
         if (cacheless) {
             self.routing = {}
@@ -146,19 +146,16 @@ function Server(options) {
             try {
                 main = _(appPath + '/config/' + self.conf[apps[i]].files.routing);
                 filename = main;//by default
-
-                //if (cacheless) {
-
-                    filename = self.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
-                    filename = _(appPath + '/config/' + filename);
-                    //Can't do a thing without.
-                    if ( !fs.existsSync(filename) ) {
-                        filename = main;
-                    }
-                if (cacheless) {
-                    delete require.cache[_(filename, true)];
+                filename = self.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
+                filename = _(appPath + '/config/' + filename);
+                //Can't do a thing without.
+                if ( !fs.existsSync(filename) ) {
+                    filename = main
                 }
 
+                if (cacheless) {
+                    delete require.cache[_(filename, true)]
+                }
 
                 if (filename != main) {
                     if (cacheless) delete require.cache[_(filename, true)];
@@ -166,7 +163,6 @@ function Server(options) {
                 } else {
                     self.routing = require(filename);
                 }
-
 
                 try {
 
@@ -229,9 +225,9 @@ function Server(options) {
                     }
 
                     if (self.routing.count() > 0) {
-                        self.routing = merge(true, self.routing, tmp);
+                        self.routing = merge(true, self.routing, tmp)
                     } else {
-                        self.routing = tmp;
+                        self.routing = tmp
                     }
                     tmp = {};
                 } catch (err) {
@@ -275,9 +271,18 @@ function Server(options) {
     var onRequest = function() {
 
         var apps = self.bundles;
+        var webrootLen = self.conf[self.appName].server.webroot.length;
 
         self.instance.all('*', function onInstance(request, response, next) {
-
+            // Fixing an express js bug :(
+            // express is trying to force : /path/dir => /path/dir/
+            // which causes : /path/dir/path/dir/  <---- by trying to add a slash in the end
+            if (
+                webrootLen > 1
+                && request.url === self.conf[self.appName].server.webroot + '/' + self.conf[self.appName].server.webroot + '/'
+            ) {
+                request.url = self.conf[self.appName].server.webroot
+            }
             //Only for dev & debug.
             self.conf[self.appName]['protocol'] = request.protocol || self.conf[self.appName]['hostname'];
             self.conf[self.appName]['hostname'] = self.conf[self.appName]['protocol'] +'://'+ request.headers.host;
@@ -322,10 +327,11 @@ function Server(options) {
                     //
                     //case 'delete':
                     //    request.delete = request.? || undefined;
-                    //    break;
+                    //    break
                 };
 
                 // cookie time !!
+
 
 
                 loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, req, res, next) {
@@ -366,17 +372,19 @@ function Server(options) {
 
     var loadBundleConfiguration = function(req, res, next, bundle, callback) {
 
-        var pathname = url.parse(req.url, true).pathname;
-
-
-        if ( /\/favicon\.ico/.test(pathname) ) {
-            callback(false, pathname, req, res, next);
-            return false;
-        }
-
         var config = new Config();
         config.setBundles(self.bundles);
         var conf = config.getInstance(bundle);
+
+        var pathname = url.parse(req.url, true).pathname;
+
+        if ( /\/favicon\.ico/.test(pathname) ) {
+            callback(false, pathname, req, res, next);
+            return false
+        }
+
+
+
         if ( typeof(conf) != 'undefined') {//for cacheless mode
             self.conf[bundle] = conf
         }
@@ -545,7 +553,8 @@ function Server(options) {
                 res.end()
             }
             if (!res.headersSent)
-                throwError(res, 404, 'Page not found\n' + wroot + pathname, next)
+                throwError(res, 404, 'Page not found: \n' + pathname, next)
+                //throwError(res, 404, 'Page not found\n' + wroot + pathname, next)
         }
     }
 
@@ -559,16 +568,18 @@ function Server(options) {
                     status: code,
                     error: 'Error '+ code +'. '+ msg
                 }))
+            } else {
+                next()
             }
 
         } else {
             if (!res.headersSent) {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
                 res.end('Error '+ code +'. '+ msg)
+            } else {
+                next()
             }
         }
-
-        next()
     }
 
 
