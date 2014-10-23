@@ -156,10 +156,7 @@ function Controller(options) {
                 _data['page'] = {
                     data: data
                 }
-            } //else {
-             //   _data = merge(_data, self.getData());
-            //}
-
+            }
             self.setRessources(local.options.views, _data.file);
             var data = merge(_data, self.getData());
 
@@ -467,11 +464,10 @@ function Controller(options) {
                 if (path instanceof Array) {
                     path = path[0] //if it is an array, we just take the first one
                 }
-                path = conf.hostname + wroot + path;
             } else if (url) {
                 path = ( (/\:\/\//).test(url) ) ? url : req.protocol + '://' + url;
             } else {
-                path = conf.hostname + wroot + path
+                path = conf.hostname + path
             }
 
             if (req.headersSent) return next();
