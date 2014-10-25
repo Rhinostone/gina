@@ -3,8 +3,8 @@ var EventEmitter    = require('events').EventEmitter;
 var helpers         = require('../helpers');
 var inherits        = require('../inherits');
 var console         = require('../logger');
-var GEENA_PATH      = _( getPath('geena.core') );
-var Config          = require( _( GEENA_PATH + '/config') );
+var GINA_PATH      = _( getPath('gina.core') );
+var Config          = require( _( GINA_PATH + '/config') );
 
 function BuildBundle(project, bundle) {
 
@@ -52,7 +52,7 @@ function BuildBundle(project, bundle) {
             env             : self.env,
             executionPath   : self.root,
             startingApp     : bundle,
-            geenaPath       : GEENA_PATH,
+            ginaPath       : GINA_PATH,
             task            : self.task
         });
 

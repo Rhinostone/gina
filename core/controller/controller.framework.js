@@ -31,7 +31,7 @@ function FrameworkController(options) {
 
     var render = function(data) {
         //var views = self.getConfig('views');// ????
-        var dir = getPath('geena.documentation');
+        var dir = getPath('gina.documentation');
         self.setViewsLocation(dir);
         //by default for all pages
         data['page']['lang'] = 'en';

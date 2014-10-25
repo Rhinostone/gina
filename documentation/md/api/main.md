@@ -2,7 +2,7 @@
 
 ## Redirections
 
-There are many ways to redirect in Geena.
+There are many ways to redirect in Gina.
 
 ### Redirecting thru `routing.json`
 
@@ -13,10 +13,10 @@ adding the target to an existing route description
     "default": {
     	"comment": "default default index path",
         "url": [
-        	"/", 
-            "", 
-            "/index.html", 
-            "default.js" 
+        	"/",
+            "",
+            "/index.html",
+            "default.js"
         ],
         "param": { "action": "home" }
     }

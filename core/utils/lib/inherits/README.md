@@ -1,44 +1,44 @@
 # inherits()
 
-**Package:** geena.utils   
-**Name:** inherits   
-**Version:** 0.0.2   
-**Compatibility:** ECMA-262   
-**Geena version:** 0.0.8p10   
+**Package:** gina.utils
+**Name:** inherits
+**Version:** 0.0.2
+**Compatibility:** ECMA-262
+**Gina version:** 0.0.8p10
 **Status:** unstable
 
 
 
 ## Summary
 
-`inherits` uses `Object.create()` to allow a class **A** inherit properties from a class **B**  where **B** is the superclass.   
-Properties/members from the superclass (B) can be overriden by the targeted class (A).   
-There is two way of inheriting from a superclass: 
+`inherits` uses `Object.create()` to allow a class **A** inherit properties from a class **B**  where **B** is the superclass.
+Properties/members from the superclass (B) can be overriden by the targeted class (A).
+There is two way of inheriting from a superclass:
 - inheriting by exposing **all** `public` members of the superclass (default)
 - inheriting by exposing **only** `protected` members of the superclass
 
-The result of the operation will return a class with both properties.    
-`inherits()` is a function from geena.utils. Althought, it can be required without having to install the [framework](https://github.com/rhinostone/geena).
+The result of the operation will return a class with both properties.
+`inherits()` is a function from gina.utils. Althought, it can be required without having to install the [framework](https://github.com/rhinostone/gina).
 
-## Syntax   
+## Syntax
 *inherits(ClassA, ClassB)*
 
-> var a = new ( inherits(A, B) );   
+> var a = new ( inherits(A, B) );
 
-or 
+or
 
-> var AB = inherits(A, B);   
-> var a = new AB();   
+> var AB = inherits(A, B);
+> var a = new AB();
 
 
 **N.B.:** Inheritance will occur before instantiation
 
 ### Parameters
 
-**ClassA**   
+**ClassA**
 > Target class
 
-**ClassB**   
+**ClassB**
 > Super class
 
 ### Example - Public inheritance
@@ -72,7 +72,7 @@ console.log('Name: ', a.getName());// Michael Jackson
 console.log('Age: ', a.getAge());// 46
 ```
 
-**output:** 
+**output:**
 
 ```tty
 is [ a ] instance of A ?  true
@@ -134,7 +134,7 @@ a.say('A, B, C !'); // playing A, B, C !
 
 ```
 
-**output:**  
+**output:**
 ```tty
 playing some song on the juke box
 is [ a ] instance of A ?  true

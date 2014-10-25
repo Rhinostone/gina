@@ -47,7 +47,7 @@ function Server(options) {
 
         self.executionPath = options.executionPath;
 
-        //console.log("Geena ", options);
+        //console.log("Gina ", options);
         self.bundles = options.bundles;
 
         //console.log("!!Stand alone ? ", this.isStandalone, this.bundles, '\n'+options.conf);
@@ -82,7 +82,7 @@ function Server(options) {
         }
 
         try {
-            self.validHeads =  fs.readFileSync(getPath('geena.core') + '/mime.types').toString();
+            self.validHeads =  fs.readFileSync(getPath('gina.core') + '/mime.types').toString();
             self.validHeads = JSON.parse(self.validHeads)
         } catch(err) {
             console.error(err.stack||err.message);
@@ -92,7 +92,7 @@ function Server(options) {
         //console.log('['+ self.appName +'] on port : ['+ self.conf[self.appName].port.http + ']');
         onRoutesLoaded( function(err) {//load all registered routes in routing.json
 //            console.debug(
-//                'geena',
+//                'gina',
 //                'SERVER:DEBUG:1',
 //                'Routing loaded' + '\n'+ JSON.stringify(self.routing, null, '\t'),
 //                __stack
@@ -232,7 +232,7 @@ function Server(options) {
                     tmp = {};
                 } catch (err) {
                     self.routing = null;
-                    console.error('geena', 'SERVER:ERR:2', err, __stack);
+                    console.error('gina', 'SERVER:ERR:2', err, __stack);
                     callback(err)
                 }
 
@@ -474,7 +474,7 @@ function Server(options) {
             callback(err, pathname, req, res, next)
         } else {
             config.refresh(bundle, function(err, routing) {
-                if (err) console.error('geena', 'SERVER:ERR:5', err, __stack);
+                if (err) console.error('gina', 'SERVER:ERR:5', err, __stack);
                 //refreshing routing at the same time.
                 self.routing = routing;
                 callback(err, pathname, req, res, next)
@@ -498,7 +498,7 @@ function Server(options) {
 
         if ( self.routing == null || self.routing.count() == 0 ) {
             console.error(
-                'geena',
+                'gina',
                 'SERVER:ERR:1',
                     'Malformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl,
                 __stack
@@ -524,7 +524,7 @@ function Server(options) {
                 if (pathname === self.routing[rule].url || isRoute.past) {
 
                     console.debug(
-                        'geena',
+                        'gina',
                         'SERVER:DEBUG:4',
                             'Server routing to '+ pathname,
                         __stack

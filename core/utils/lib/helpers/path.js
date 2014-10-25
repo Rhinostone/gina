@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -20,8 +20,8 @@ e.setMaxListeners(100);
 /**
  * PathHelper
  *
- * @package     Geena.Utils.Helpers
- * @author      Rhinzostone <geena@rhinostone.com>
+ * @package     Gina.Utils.Helpers
+ * @author      Rhinzostone <gina@rhinostone.com>
  * @api public
  *
  * TODO - Put debug logs
@@ -604,7 +604,7 @@ e.setMaxListeners(100);
 //            e.once('cp#complete', function(err, destination) {
 //                if (err) {
 //                    logger.error(
-//                        'geena',
+//                        'gina',
 //                        'UTILS:PATH:ERROR:7',
 //                        err,
 //                        __stack

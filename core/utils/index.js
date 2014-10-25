@@ -1,16 +1,16 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
 
 /**
- * Geena.Core.Utils Class
+ * Gina.Core.Utils Class
  *
- * @package    Geena.Core
- * @author     Rhinostone <geena@rhinostone.com>
+ * @package    Gina.Core
+ * @author     Rhinostone <gina@rhinostone.com>
  */
 
 
@@ -49,13 +49,13 @@ function Utils() {
 
     return {
         Config      : _require('./lib/config'),
-        //dev     : require('./lib/dev'),//must be at the same level than geena.utils => geena.dev
+        //dev     : require('./lib/dev'),//must be at the same level than gina.utils => gina.dev
         inherits    : _require('./lib/inherits'),
         helpers     : _require('./lib/helpers'),
         //this one must move to Dev since it's dev related
         Model       : _require('./lib/model'),
         merge       : _require('./lib/merge'),
-        generator   : _require('./lib/generator'),//move to geena.dev
+        generator   : _require('./lib/generator'),//move to gina.dev
         Proc        : _require('./lib/proc'),
         Shell       : _require('./lib/shell'),
         logger      : _require('./lib/logger'),

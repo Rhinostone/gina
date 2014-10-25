@@ -1,7 +1,7 @@
-/* Geena.Utils.Logger
+/* Gina.Utils.Logger
  *
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -54,7 +54,7 @@ var fs      = require('fs'),
                 var conf = require(paths.core + '/template/conf/env.json');
                 this.defConf = conf;
             } catch (err) {
-                this.error('geena', 'LOGGER:ERR:1', err.Error);
+                this.error('gina', 'LOGGER:ERR:1', err.Error);
                 return false;
             }
 
@@ -79,7 +79,7 @@ var fs      = require('fs'),
         console.log("MKDIR loggerCreate");
         loggerCreate.mkdir( function(err, path){
             if (err) {
-                _this.error('geena', 'LOGGER:ERR:8', err, __stack);
+                _this.error('gina', 'LOGGER:ERR:8', err, __stack);
             }
         });
     },
@@ -98,7 +98,7 @@ var fs      = require('fs'),
         if (env == "debug") {
             this.getMsg("debug", arguments, function(err, msg){
                 if (err)
-                    _this.error('geena', 'LOGGER:ERR:5', msg, __stack);
+                    _this.error('gina', 'LOGGER:ERR:5', msg, __stack);
 
                 _this.save(msg);
             });
@@ -110,7 +110,7 @@ var fs      = require('fs'),
 
             this.getMsg("info", arguments, function(err, msg){
                 if (err)
-                    _this.error('geena', 'LOGGER:ERR:2', msg);
+                    _this.error('gina', 'LOGGER:ERR:2', msg);
 
                 _this.save(msg);
             });
@@ -121,7 +121,7 @@ var fs      = require('fs'),
         if (env == "dev" || env == "debug") {
             this.getMsg("notice", arguments, function(err, msg){
                 if (err)
-                    _this.error('geena', 'LOGGER:ERR:7', msg);
+                    _this.error('gina', 'LOGGER:ERR:7', msg);
 
                 _this.save(msg);
             });
@@ -131,7 +131,7 @@ var fs      = require('fs'),
         var _this =  this;
         this.getMsg("warn", arguments, function(err, msg){
             if (err)
-                _this.error('geena', 'LOGGER:ERR:3', msg);
+                _this.error('gina', 'LOGGER:ERR:3', msg);
 
             _this.save(msg);
         });
@@ -140,7 +140,7 @@ var fs      = require('fs'),
         var _this =  this;
         this.getMsg("err", arguments, function(err, msg){
             if (err)
-                _this.error('geena', 'LOGGER:ERR:4', msg);
+                _this.error('gina', 'LOGGER:ERR:4', msg);
 
             _this.save(msg);
         });
@@ -154,7 +154,7 @@ var fs      = require('fs'),
         }
         this.getMsg("exception", arguments, function(err, msg){
             if (err)
-                _this.error('geena', 'LOGGER:ERR:6', msg);
+                _this.error('gina', 'LOGGER:ERR:6', msg);
             if ( typeof(callback) != 'undefined') {
                 _this.save(msg, callback);
             } else {
@@ -167,7 +167,7 @@ var fs      = require('fs'),
         var _this = this;
         this.getMsg("emerg", arguments, function(err, msg){
             if (err)
-                _this.error('geena', 'LOGGER:ERR:7', msg);
+                _this.error('gina', 'LOGGER:ERR:7', msg);
             else
                 _this.save(msg);
 
@@ -354,7 +354,7 @@ var fs      = require('fs'),
                                     ? msg.explicit
                                     : msg.message;
 
-                                var logger = getContext('geena.utils.logger');
+                                var logger = getContext('gina.utils.logger');
 
 
                                 //F...ing Winston....
