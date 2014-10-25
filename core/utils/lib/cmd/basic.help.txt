@@ -10,18 +10,18 @@
 
 usage:
 
-$ geena <option>
+$ gina <option>
 [basic options]:
     -h or --help
     -v or --version
 
-$ geena <option>
+$ gina <option>
 [project options]:
     -i or --init <project_name>
     -b or --build (will build all bundles at once)
 
 
-$ geena <option> <bundle_name> <arguments>
+$ gina <option> <bundle_name> <arguments>
 [option]:
     -a or --add <bundle> <argument>
     -d or --delete <bundle>

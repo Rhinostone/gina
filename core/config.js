@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -23,9 +23,9 @@ var modelUtil     = new utils.Model();
  * @class Config
  *
  *
- * @package     Geena
+ * @package     Gina
  * @namespace
- * @author      Rhinostone <geena@rhinostone.com>
+ * @author      Rhinostone <gina@rhinostone.com>
  * @api         Public
  *
  * TODO - split Config.Env & Config.Host
@@ -51,7 +51,7 @@ function Config(opt) {
         self.executionPath = opt.executionPath;
         self.task = opt.task || 'run'; // to be aible to filter later on non run task
 
-        //logger.debug('geena', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
+        //logger.debug('gina', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
         console.debug('Initalizing config ', __stack);
 
         self.userConf = false;
@@ -62,7 +62,7 @@ function Config(opt) {
             self.userConf = require(path);
 
 //            logger.debug(
-//                'geena',
+//                'gina',
 //                'CONFIG:DEBUG:6',
 //                'Applicaiton config file loaded ['
 //                    + _(self.executionPath + '/env.json') + ']',
@@ -86,19 +86,19 @@ function Config(opt) {
 
     var getConf = function() {
 
-        //logger.debug('geena', 'CONFIG:DEBUG:2', 'Loading conf', __stack);
+        //logger.debug('gina', 'CONFIG:DEBUG:2', 'Loading conf', __stack);
         console.debug('Loading conf', __stack);
 
         self.Env.load( function(err, envConf) {
-            //logger.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 42', __stack);
-            //logger.info('geena', 'CORE:INFO:42','on this Env LOAD!', __stack);
+            //logger.debug('gina', 'CONFIG:DEBUG:42', 'CONF LOADED 42', __stack);
+            //logger.info('gina', 'CORE:INFO:42','on this Env LOAD!', __stack);
 
             if ( typeof(self.Env.loaded) == "undefined") {
                 //Need to globalize some of them.
                 self.env = Config.instance.env = env;
                 self.envConf = Config.instance.envconf = envConf;
                 loadBundlesConfiguration( function(err) {
-                    //logger.debug('geena', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
+                    //logger.debug('gina', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
                     self.bundlesConfiguration = {
                         env             : self.Env.get(),
                         conf            : self.getInstance(),
@@ -112,14 +112,14 @@ function Config(opt) {
                     //TODO - Don't override if syntax is ok - no mixed paths.
                     //Set paths for utils. Override for now.
                     //To reset it, just delete the hidden folder.
-                    var geenaPath = opt.geenaPath;
+                    var ginaPath = opt.ginaPath;
                     var utilsConfig = new utils.Config();
-                    //setContext('geena.utils.config', utilsConfig);
+                    //setContext('gina.utils.config', utilsConfig);
 
-                    utilsConfig.set('geena', 'locals.json', {
+                    utilsConfig.set('gina', 'locals.json', {
                         project : utilsConfig.getProjectName(),
                         paths : {
-                            geena   : geenaPath,
+                            gina   : ginaPath,
                             utils   : utilsConfig.__dirname,
                             root    : opt.executionPath,
                             env     : opt.executionPath + '/env.json',
@@ -165,7 +165,7 @@ function Config(opt) {
             try {
                 return configuration[bundle][self.Env.get()];
             } catch (err) {
-                //logger.error('geena', 'CONFIG:ERR:1', err, __stack);
+                //logger.error('gina', 'CONFIG:ERR:1', err, __stack);
                 console.error(err.stack||err.message);
                 return undefined
             }
@@ -180,9 +180,9 @@ function Config(opt) {
      * @class Env Sub class
      *
      *
-     * @package     Geena.Config
-     * @namespace   Geena.Config.Env
-     * @author      Rhinostone <geena@rhinostone.com>
+     * @package     Gina.Config
+     * @namespace   Gina.Config.Env
+     * @author      Rhinostone <gina@rhinostone.com>
      */
     this.Env = {
         template : require('./template/conf/env.json'),
@@ -198,19 +198,19 @@ function Config(opt) {
 
                     loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
                         self.envConf = envConf;
-                        //logger.warn('geena', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t') );
+                        //logger.warn('gina', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t') );
                         callback(false, envConf);
                     });
                 } else {
 
                     envConf = this.template;
                     self.envConf = envConf;
-                    //logger.warn('geena', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t'));
+                    //logger.warn('gina', 'CONFIG:WARN:10', 'envConf LOADED !!' + JSON.stringify(envConf, null, '\t'));
                     callback(false, envConf);
                 }
 
             } catch(err) {
-                //logger.warn('geena', 'CONF:ENV:WARN:1', err, __stack);
+                //logger.warn('gina', 'CONF:ENV:WARN:1', err, __stack);
                 console.warn(err.stack||err.message);
                 callback(err);
             }
@@ -218,7 +218,7 @@ function Config(opt) {
 
         set : function(env) {
             var found = false;
-            //logger.debug('geena', 'CONFIG:ENV:DEBUG:1', 'Setting Env',  __stack);
+            //logger.debug('gina', 'CONFIG:ENV:DEBUG:1', 'Setting Env',  __stack);
             //console.debug('Setting Env',  __stack);
             var registeredEnvs = this.template.registeredEnvs;
             for (var e=0; e<registeredEnvs.length; ++e) {
@@ -233,7 +233,7 @@ function Config(opt) {
                 if (typeof(env) == "undefined") {
                     this.current = this.template.defEnv;
                 } else {
-                    //logger.error('geena', 'CONFIG:ENV:ERR:1', 'Env: ' + env + '] not found');
+                    //logger.error('gina', 'CONFIG:ENV:ERR:1', 'Env: ' + env + '] not found');
                     console.error(new Error('Env: ' + env + '] not found'));
                     process.exit(1);
                 }
@@ -270,8 +270,8 @@ function Config(opt) {
     /**
      * Host Class
      *
-     * @package    Geena.Config
-     * @author     Rhinostone <geena@rhinostone.com>
+     * @package    Gina.Config
+     * @author     Rhinostone <gina@rhinostone.com>
      */
     this.Host = {
         //By default.
@@ -332,7 +332,7 @@ function Config(opt) {
         for (var app in content) {
             //Checking if genuine app.
 //            logger.debug(
-//                'geena',
+//                'gina',
 //                'CONFIG:DEBUG:4',
 //                'Checking if application is registered ' + app,
 //                __stack
@@ -407,7 +407,7 @@ function Config(opt) {
                     );
 
 
-                    //Variables replace. Compare with geena/core/template/conf/env.json.
+                    //Variables replace. Compare with gina/core/template/conf/env.json.
                     var reps = {
                         "executionPath" : root,
                         "bundlesPath" : appsPath,
@@ -421,7 +421,7 @@ function Config(opt) {
                     newContent = whisper(reps, newContent);
                 } else {
 //                    logger.warn(
-//                        'geena',
+//                        'gina',
 //                        'CONFIG:WARN:1',
 //                        'Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath),
 //                        __stack
@@ -438,7 +438,7 @@ function Config(opt) {
 
 
 //        logger.debug(
-//            'geena',
+//            'gina',
 //            'CONFIG:DEBUG:7',
 //            'Env configuration loaded \n ' + newContent,
 //            __stack
@@ -450,7 +450,7 @@ function Config(opt) {
         if (!isStandalone) self.Host.standaloneMode = isStandalone;
 
 //        logger.debug(
-//            'geena',
+//            'gina',
 //            'CONFIG:DEBUG:3',
 //            'Is server running as a standalone instance ? ' + isStandalone,
 //            __stack
@@ -468,7 +468,7 @@ function Config(opt) {
             var usrConf = require(self.executionPath +'/'+ file +'.json');
             return true
         } catch(err) {
-            //logger.warn('geena', 'CONF:HOST:WARN:1', err, __stack);
+            //logger.warn('gina', 'CONF:HOST:WARN:1', err, __stack);
             console.warn(err.stack||err.message);
             return false
         }
@@ -483,7 +483,7 @@ function Config(opt) {
 
         //Registered apps only.
 //        logger.debug(
-//            'geena',
+//            'gina',
 //            'CONFIG:DEBUG:4',
 //            'Pushing apps ' + JSON.stringify(self.bundles, null, '\t'),
 //            __stack
@@ -495,7 +495,7 @@ function Config(opt) {
     this.getAllBundles = function() {
         //Registered apps only.
 //        logger.debug(
-//            'geena',
+//            'gina',
 //            'CONFIG:DEBUG:5',
 //            'Pushing ALL apps ' + JSON.stringify(self.allBundles, null, '\t'),
 //            __stack
@@ -650,8 +650,8 @@ function Config(opt) {
                     files[name] = undefined
                 }
                 //console.error(_err.stack);
-                //logger.warn('geena', 'SERVER:WARN:1', filename + _err, __stack);
-                //logger.debug('geena', 'SERVER:DEBUG:5', filename +err, __stack)
+                //logger.warn('gina', 'SERVER:WARN:1', filename + _err, __stack);
+                //logger.debug('gina', 'SERVER:DEBUG:5', filename +err, __stack)
             }
 
         }//EO for (name
@@ -712,17 +712,17 @@ function Config(opt) {
         }
 
         if (hasViews && typeof(files['statics']) == 'undefined') {
-            files['statics'] = require(getPath('geena.core') +'/template/conf/statics.json')
+            files['statics'] = require(getPath('gina.core') +'/template/conf/statics.json')
         } else if ( typeof(files['statics']) != 'undefined' ) {
-            var defaultAliases = require(getPath('geena.core') +'/template/conf/statics.json');
+            var defaultAliases = require(getPath('gina.core') +'/template/conf/statics.json');
 
             files['statics'] = merge(files['statics'], defaultAliases)
         }
 
         if (hasViews && typeof(files['views']) == 'undefined') {
-            files['views'] = require(getPath('geena.core') +'/template/conf/views.json')
+            files['views'] = require(getPath('gina.core') +'/template/conf/views.json')
         } else if ( typeof(files['views']) != 'undefined' ) {
-            var defaultViewsSettings = require(getPath('geena.core') +'/template/conf/views.json');
+            var defaultViewsSettings = require(getPath('gina.core') +'/template/conf/views.json');
 
             files['views'] = merge(files['views'], defaultViewsSettings)
         }

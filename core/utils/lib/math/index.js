@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2009-2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2009-2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -13,8 +13,8 @@ var crypto      = require('crypto');
 /**
  * MathHelper
  *
- * @package     geena.utils.math
- * @author      Rhinostone <geena@rhinostone.com>
+ * @package     gina.utils.math
+ * @author      Rhinostone <gina@rhinostone.com>
  * @api public
  * */
 
@@ -39,7 +39,7 @@ function Math() {
      *
      * e.g.:
      *
-     *  var operate = require("geena").utils.math.operate;
+     *  var operate = require("gina").utils.math.operate;
      *  var calculation = "10*2";
      *  var result = operate(calculation);
      *      => 20

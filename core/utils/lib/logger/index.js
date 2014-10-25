@@ -1,6 +1,6 @@
 /**
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -14,16 +14,16 @@ var merge = require('../merge');
 /**
  * @class Logger
  *
- * @package geena.utils
- * @namesame geena.utils.logger
- * @author Rhinostone <geena@rhinostone.com>
+ * @package gina.utils
+ * @namesame gina.utils.logger
+ * @author Rhinostone <gina@rhinostone.com>
  *
  * @api Public
  * */
 function Logger(opt) {
     var self = this;
     var defaultOptions = {
-        name: 'geena', // by default
+        name: 'gina', // by default
         template: '%d [ %s ] %m',
         //containers: [],
         levels : { // based on Sylog Severity Levels

@@ -1,6 +1,5 @@
 //imports
 var fs = require('fs');
-//var utils = getContext('geena.utils');
 
 function DeleteBundle(project, env, bundle) {
 

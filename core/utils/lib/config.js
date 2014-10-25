@@ -1,7 +1,7 @@
-/* Geena.Utils.Config
+/* Gina.Utils.Config
  *
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -62,9 +62,9 @@ function ConfigUtil() {
     //        self.paths.utils = self.__dirname
     //    }
     //
-    //    self.get('geena', 'locals.json', function(err, obj){
+    //    self.get('gina', 'locals.json', function(err, obj){
     //        if( !err ) {
-    //            mainConfig = require(obj.paths.geena + '/config')()
+    //            mainConfig = require(obj.paths.gina + '/config')()
     //        } else {
     //            console.log(err.stack)
     //        }
@@ -80,8 +80,8 @@ function ConfigUtil() {
      * */
     this.set = function(app, file, content, callback){
         switch (app) {
-            case 'geena':
-            case 'geena.utils':
+            case 'gina':
+            case 'gina.utils':
                 setFile(app, file, content, function(err){
                     callback(err);
                 });
@@ -104,10 +104,10 @@ function ConfigUtil() {
         var config = null, err = false;
 
         switch (project) {
-            case 'geena':
-            case 'geena.utils':
+            case 'gina':
+            case 'gina.utils':
                 try {
-                    //You are under geena.utils/lib/...
+                    //You are under gina.utils/lib/...
                     if ( typeof(self.value) != "undefined" ) {
 
                         try {
@@ -135,7 +135,7 @@ function ConfigUtil() {
 
                 } catch (err) {
                     var err = new Error('.gna/locals.json: project configuration file not found. \n' + (err.stack||err.message));
-                    //logger.error('geena', 'UTILS:CONFIG:ERR:3', err, __stack);
+                    //logger.error('gina', 'UTILS:CONFIG:ERR:3', err, __stack);
                     callback(err);
                 }
                 break;
@@ -237,10 +237,10 @@ function ConfigUtil() {
                 } else {
                     createFolder()
                 }
-            //logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
+            //logger.error('gina', 'UTILS:CONFIG:ERR:1', err, __stack);
 //                    console.warn("waah ", gnaFolder+ '/' +file, gnaFolder, content);
 //                    fs.mkdir(gnaFolder, 0777, function(err){
-//                        if (err) logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
+//                        if (err) logger.error('gina', 'UTILS:CONFIG:ERR:1', err, __stack);
 //
 //                        //Creating content.
 //                        createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
@@ -263,10 +263,10 @@ function ConfigUtil() {
 //                    var path = self.paths.utils + '/.gna';
 //
 //                    removeSymlink(path, function(err){
-//                        if (err) logger.error('geena', 'UTILS:CONFIG:ERR:10', err, __stack);
+//                        if (err) logger.error('gina', 'UTILS:CONFIG:ERR:10', err, __stack);
 //
 //                        Fs.mkdir(gnaFolder, 0777, function(err){
-//                            if (err) logger.error('geena', 'UTILS:CONFIG:ERR:1', err, __stack);
+//                            if (err) logger.error('gina', 'UTILS:CONFIG:ERR:1', err, __stack);
 //
 //                            //Creating content.
 //                            createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
@@ -313,10 +313,10 @@ function ConfigUtil() {
                 })
             } else {
                 //log & ignore. This is not a real issue.
-                //logger.warn('geena', 'UTILS:CONFIG:WARN:1', 'Path not found: ' + path, __stack);
+                //logger.warn('gina', 'UTILS:CONFIG:WARN:1', 'Path not found: ' + path, __stack);
                 console.warn( 'Path not found: ' + path, __stack);
                 onSymlinkRemoved(self.paths, function(err){
-                    //if (err) logger.error('geena', 'UTILS:CONFIG:ERR:9', err, __stack);
+                    //if (err) logger.error('gina', 'UTILS:CONFIG:ERR:9', err, __stack);
                     if (err) console.error(err.stack||err.message);
 
                     callback(false)
@@ -347,11 +347,11 @@ function ConfigUtil() {
                 p.rm(function(err, path){
                     //console.log("receives ", err, path);
                     if (err) {
-                        //logger.error('geena', 'UTILS:CONFIG:ERR:8', err, __stack);
+                        //logger.error('gina', 'UTILS:CONFIG:ERR:8', err, __stack);
                         console.error(err.stack||err.message);
                         callback(err)
                     } else {
-                        //logger.info('geena', 'UTILS:CONFIG:INFO:1', path +': deleted with success !');
+                        //logger.info('gina', 'UTILS:CONFIG:INFO:1', path +': deleted with success !');
                         console.info( path +': deleted with success !');
                         callback(false)
                     }
@@ -376,7 +376,7 @@ function ConfigUtil() {
             null,
             function(err){
                 if (err) {
-                    //logger.error('geena', 'UTILS:CONFIG:ERR:2', err, __stack);
+                    //logger.error('gina', 'UTILS:CONFIG:ERR:2', err, __stack);
                     console.error(err.stack||err.message);
                     callback(err)
                 } else {
@@ -399,7 +399,7 @@ function ConfigUtil() {
 //                                fs.symlinkSync(gnaFolder, target);
 //
 //                            } catch (err) {
-//                                logger.error('geena', 'UTILS:CONFIG:ERR:12', err, __stack);
+//                                logger.error('gina', 'UTILS:CONFIG:ERR:12', err, __stack);
 //                            }
 //
 //                            callback(err);
@@ -451,7 +451,7 @@ function ConfigUtil() {
 
         self.get(app, function(err, config){
             if (err) {
-                //logger.error('geena', 'UTILS:CONFIG:ERR:4', err, __stack);
+                //logger.error('gina', 'UTILS:CONFIG:ERR:4', err, __stack);
                 console.error(err.stack||err.message);
                 callback(err + 'Utils.Config.get(...)');
             }

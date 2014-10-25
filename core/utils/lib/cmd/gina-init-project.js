@@ -1,14 +1,13 @@
-var iniProject;
 
 //imports
 var fs = require('fs');
-var utils = getContext('geena.utils');
-var GEENA_PATH = _( getPath('geena.core') );
-//var Config = require( _( GEENA_PATH + '/config') );
+var utils = getContext('gina.utils');
+var GINA_PATH = _( getPath('gina.core') );
+//var Config = require( _( GINA_PATH + '/config') );
 var readline = require('readline');
 var rl = readline.createInterface(process.stdin, process.stdout);
 
-iniProject = function(name) {
+function iniProject(name) {
 
     var self = this;
     self.task = 'init';//important for later in config init
@@ -28,7 +27,7 @@ iniProject = function(name) {
     }
 
     var createFile = function(target) {
-        var conf = GEENA_PATH +'/template/conf/project.json';
+        var conf = GINA_PATH +'/template/conf/project.json';
         var contentFile = require(conf);
         var dic = {
             "project" : self.name

@@ -7,19 +7,20 @@
     "inheritance",
     "class",
     "geena",
+    "gina",
     "utils",
     "util"
   ],
   "version": "0.0.1",
   "repository" : {
     "type" : "git",
-    "url" : "https://github.com/Rhinostone/geena.utils.inherits.git"
+    "url" : "https://github.com/Rhinostone/gina.utils.inherits.git"
   },
   "author": {
     "name": "Rhinostone",
-    "email": "geena@rhinosotne.com"
+    "email": "gina@rhinosotne.com"
   },
-  "copyright" : "Copyright (c) 2014 Rhinostone <geena@rhinostone.com>",
+  "copyright" : "Copyright (c) 2014 Rhinostone <gina@rhinostone.com>",
   "scripts": {
     "test": "nodeunit test"
   },
