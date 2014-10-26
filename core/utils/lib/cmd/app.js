@@ -403,8 +403,6 @@ var AppCommand = {
         var defaultBuildScriptPath = _(_( getPath('root') +'/'+ project.bundles[bundle].src +'/'+defaultBuildScript ));
 
         //Getting project infos.
-
-
         try {
             //is Real bundle ?.
             if ( typeof(bundle) != 'undefined' && typeof(project.bundles[bundle]) != 'undefined') {

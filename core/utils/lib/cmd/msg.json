@@ -8,8 +8,8 @@
         "0" : "basic.help.txt",
         "1" : "no argument found",
         "2" : "illegal option",
-        "4" : "gina Project v",
-        "5" : "gina Framework not found! Please visite http://www.gina.io/ to get the latest version or try to run : npm install gina"
+        "4" : "Gina I/O v",
+        "5" : "Gina I/O Framework not found! Please visite http://www.gina.io/ to get the latest version or try to run : npm install gina"
     },
     "app" : {
         "1" : "%option%: option not found",
