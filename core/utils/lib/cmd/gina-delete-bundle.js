@@ -7,6 +7,7 @@ var Config          = require( _( GINA_PATH + '/config') );
 /**
  * Class DeleteBundle
  *
+ * TODO - Added prompt to ask confirmation before deleting related releases
  * */
 function DeleteBundle(project, env, bundle) {
 

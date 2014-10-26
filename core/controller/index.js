@@ -4,9 +4,9 @@ var helpers = utils.helpers;
 var context = helpers.context;
 try {
     //first load only
-    if (process.argv[3]) {
-        context.configure( JSON.parse(process.argv[3]) );
-    }
+    //if (process.argv[3]) {
+    //    context.configure( JSON.parse(process.argv[3]) );
+    //}
 
 } catch (err) {
     throw new Error('no context found !\n'+ err.stack)

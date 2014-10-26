@@ -21,14 +21,13 @@ var utils   = require('./utils');
 var console = utils.logger;
 var Proc    = utils.Proc;
 var modelUtil = new utils.Model();
-var Server  = require('./server');//TODO require('./server').http
 var EventEmitter = require('events').EventEmitter;
 var e = new EventEmitter();
 gna.initialized = process.initialized = false;
 gna.routed = process.routed = false;
 gna.utils = utils;
 setContext('gina.utils', utils);
-
+var Server  = require('./server');//TODO require('./server').http
 
 
 // BO cooking..
