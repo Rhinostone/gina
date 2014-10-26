@@ -1,25 +1,29 @@
-Gina
-=====
+# Gina
 
-<strong>Gina Project</strong> - A Node.js MVC framework
+<strong>Gina I/O</strong> - Node.js MVC and Event Driven framework
 
-<a href="https://nodei.co/npm/gina/"><img src="https://nodei.co/npm/gina.png" alt="NPM" style="max-width:100%;"></a>
+## Installing Gina I/O
 
-You can install this module using npm:
+You can install the framework using npm:
 
-```$ npm install gina```
+```  tty
+$ npm install gina
+```
 
 You can also install it via GitHub:
 
-```$ git clone https://github.com/rhinostone/gina.git ./node_modules/gina```
+```  tty
+$ git clone https://github.com/rhinostone/gina.git ./node_modules/gina
+```
 
-```$ node ./node_modules/gina/script/post_install.js```
+``` tty
+$ node ./node_modules/gina/script/post_install.js
+```
 
 
-License (MIT)
-=============
+## License (MIT)
 
-Copyright (c) 2009-2014 [Rhinostone](http://www.rhinostone.com/) <gina@rhinostone.com>
+Copyright (c) 2009-2014 [Rhinostone](http://www.rhinostone.com/)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
