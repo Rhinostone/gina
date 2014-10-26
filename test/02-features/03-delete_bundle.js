@@ -32,7 +32,7 @@ AddBundle = function(conf, exports) {
                 var errFile = _(__dirname + '/err.log');
                 var out = fs.openSync(outFile, 'a');
                 var err = fs.openSync(errFile, 'a');
-                var cmd = (isWin32()) ? '.geena' : './geena';
+                var cmd = (isWin32()) ? '.gina' : './gina';
                 var init = spawn('node', [ cmd, '--delete', self.bundleName ], {stdio: [ 'ignore', out, err ]});
 
                 //init.stdout.setEncoding('utf8');
@@ -87,7 +87,7 @@ AddBundle = function(conf, exports) {
         var out = fs.openSync(outFile, 'a');
         var err = fs.openSync(errFile, 'a');
 
-        var cmd = (isWin32()) ? '.geena' : './geena';
+        var cmd = (isWin32()) ? '.gina' : './gina';
         var init = spawn('node', [ cmd, '--add', self.bundleName ], {stdio: [ 'ignore', out, err ]});
 
         //init.stdout.setEncoding('utf8');

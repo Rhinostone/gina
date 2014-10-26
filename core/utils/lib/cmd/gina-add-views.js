@@ -1,8 +1,8 @@
 var AddViews;
 var fs = require('fs');
-var utils = getContext('geena.utils');
-var GEENA_PATH = _( getPath('geena.core') );
-var Config = require( _( GEENA_PATH + '/config') );
+var utils = getContext('gina.utils');
+var GINA_PATH = _( getPath('gina.core') );
+var Config = require( _( GINA_PATH + '/config') );
 var readline = require('readline');
 var rl = readline.createInterface(process.stdin, process.stdout);
 
@@ -21,7 +21,7 @@ AddViews = function(bundle, env) {
             env             : self.env,
             executionPath   : self.root,
             startingApp     : self.bundle,
-            geenaPath       : GEENA_PATH,
+            ginaPath        : GINA_PATH,
             task            : self.task
         });
         config.onReady( function onConfigReady(err, config) {
@@ -37,7 +37,7 @@ AddViews = function(bundle, env) {
 
     var addConfFile = function() {
 
-        var file = new _(GEENA_PATH +'/template/conf/views.json');
+        var file = new _(GINA_PATH +'/template/conf/views.json');
         var target = _(self.src + '/config/views.json');
         var folder = _(self.src + '/views');
 
@@ -81,7 +81,7 @@ AddViews = function(bundle, env) {
     }
 
     var copyFolder = function() {
-        var folder = new _(GEENA_PATH +'/template/views');
+        var folder = new _(GINA_PATH +'/template/views');
         var target = _(self.src + '/views');
 
         folder.cp(target, function(err){

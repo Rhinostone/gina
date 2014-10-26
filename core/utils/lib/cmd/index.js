@@ -1,6 +1,6 @@
 /*!
- * Geena.Utils.cmd
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * Gina.Utils.cmd
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -39,7 +39,7 @@ cmd.setOption = function(option){
 cmd.getString = function() {
     var cmd = process.argv.toString()
             .replace(/,/g,' ')
-            .replace(/node/g, 'geena');
+            .replace(/node/g, 'gina');
     var cmdArr = cmd.split('/');
     cmd = cmdArr[cmdArr.length-1];
     return cmd;
@@ -57,26 +57,26 @@ cmd.onExec = function() {
 
     var _this = this, ignore = function(){
         console.log(_this.msg.default[0].replace("%command%", cmd.getString()));
-        return;
+        return
     };
 
     if (argCount <= 0) {
-        console.log("Command geena must have argument(s) !"
-                +"\nTry this to get help: geena -h");
+        console.log("Command gina must have argument(s) !"
+                +"\nTry this to get help: gina -h")
     } else if (argCount == 1) {
         var p = _(__dirname + '/basic.js');
-        cmd.Basic = require(p).run(cmd.getOptions(), cmd.msg);
+        cmd.Basic = require(p).run(cmd.getOptions(), cmd.msg)
     } else if (argCount >= 2 && argCount <4 || argCount == 4) {
         var longcmd = (argCount>2) ? true : false;
         if (argCount == 4 && process.argv[2] != '-s' && process.argv[2] != '--start') {
-            ignore();
+            ignore()
         } else {
             var p = _(__dirname + '/app.js');
-            cmd.App = require(p).run( cmd.getOptions(), cmd.msg, longcmd );
+            cmd.App = require(p).run( cmd.getOptions(), cmd.msg, longcmd )
         }
 
     } else {
-        ignore();
+        ignore()
     }
 };
 
@@ -87,7 +87,7 @@ cmd.load = function(root, package){
 
     //Getting package.
     var p = require( _(root + package) ),
-        geenaPath = _(root + package.replace('/package.json', ''));
+        ginaPath = _(root + package.replace('/package.json', ''));
 
     cmd.setOption([
         {
@@ -104,16 +104,16 @@ cmd.load = function(root, package){
         },
         {
             'name' : 'core',
-            'content' : _(geenaPath +'/core')
+            'content' : _(ginaPath +'/core')
         }
     ]);
 
-    //Set geena path.
-    setPath('geena.core', _(geenaPath +'/core'));
-    setPath('geena.core.utils', _(geenaPath +'/core/utils/lib'));
-    setPath('geena.documentation', _(geenaPath +'/documentation'));
+    //Set gina path.
+    setPath('gina.core', _(ginaPath +'/core'));
+    setPath('gina.core.utils', _(ginaPath +'/core/utils/lib'));
+    setPath('gina.documentation', _(ginaPath +'/documentation'));
 
-    var defaultConf = require( _(geenaPath + '/core/template/conf/env.json') );
+    var defaultConf = require( _(ginaPath + '/core/template/conf/env.json') );
     //mountPath
     var bundlesPath = defaultConf['mountPath'];
     bundlesPath = _(bundlesPath.replace('{executionPath}', root));
@@ -125,7 +125,7 @@ cmd.load = function(root, package){
     var logsPath = defaultConf['logsPath'];
     logsPath = _(logsPath .replace('{executionPath}', root));
 
-    //To make it globally accessible when you are in the geena process.
+    //To make it globally accessible when you are in the gina process.
     var globalPaths = {
         "logsPath"      : logsPath,
         "globalTmpPath" : gTmpPath,
@@ -133,7 +133,7 @@ cmd.load = function(root, package){
     };
 
     setPath(globalPaths);
-    cmd.onExec();
+    cmd.onExec()
 };
 
 

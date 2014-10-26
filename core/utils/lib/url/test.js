@@ -3,7 +3,7 @@ var up  = new (require('./index.js'))({fqdn : 'toto.com'}, rts);
 var testMocks  = require('./mocks.json');
 
 
-var mocksTest = function (target) {
+function mocksTest(target) {
     var index;
     var i;
     var res;

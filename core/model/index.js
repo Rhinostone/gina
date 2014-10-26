@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -10,7 +10,7 @@
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
 var Module          = require('module');
-var Config          = require( getPath('geena.core') + '/config');
+var Config          = require( getPath('gina.core') + '/config');
 var config          = new Config();
 var utils           = require('../utils');
 var console         = utils.logger;
@@ -22,16 +22,16 @@ var modelUtil       = new utils.Model();
 
 
     //UtilsConfig = Utils.Config(),
-//dev     = require(_(getPath('geena.core')'/dev') ),
+//dev     = require(_(getPath('gina.core')'/dev') ),
 
 
 /**
  * @class Model class
  *
  *
- * @package     Geena
+ * @package     Gina
  * @namespace
- * @author      Rhinostone <geena@rhinostone.com>
+ * @author      Rhinostone <gina@rhinostone.com>
  * @api         Public
  */
 function Model(namespace) {
@@ -49,15 +49,15 @@ function Model(namespace) {
     var _connector = null;
     var _locals = null;
     //var utils   = require('../utils');
-    //var config = getContext('geena.config');
-    //var utilsConfig = getContext('geena.utils.config');
+    //var config = getContext('gina.config');
+    //var utilsConfig = getContext('gina.utils.config');
 
     var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
 
 
     var setup = function(namespace) {
         if ( typeof(namespace) == 'undefined' || namespace == '') {
-            console.error('geena', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
+            console.error('gina', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
         }
 
         var model, namespace = namespace.split(/\//g);
@@ -203,7 +203,7 @@ function Model(namespace) {
         var configuration = config.getInstance(bundle);
 
         try {
-            var locals = _locals = utilsConfig.getSync('geena', 'locals.json')
+            var locals = _locals = utilsConfig.getSync('gina', 'locals.json')
         } catch (err) {
             console.emerg(err.stack||err.message)
         }
@@ -259,13 +259,13 @@ function Model(namespace) {
 
         var entityName, exluded = ['index.js'];
         if (_locals == undefined) {
-            throw new Error("geena/utils/.gna not found.");
+            throw new Error("gina/utils/.gna not found.");
         }
 
         var produce = function(entityName, i){
 
 
-            //if (err) log.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
+            //if (err) log.error('gina', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
 
             try {
                 console.log("producing ", self.name,":",entityName, ' ( '+i+' )');
@@ -274,7 +274,7 @@ function Model(namespace) {
                 //entityName.substr(0,1).toLowerCase() + entityName.substr(1);
 
                 // superEntity
-                var filename = _locals.paths.geena + '/model/entity.js';
+                var filename = _locals.paths.gina + '/model/entity.js';
                 if (cacheless)
                     delete require.cache[_(filename, true)]; //EntitySuperClass
 

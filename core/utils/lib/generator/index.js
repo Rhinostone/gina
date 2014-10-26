@@ -1,12 +1,11 @@
-/* Geena.Utils.Generator
+/* Gina.Utils.Generator
  *
- * This file is part of the geena package.
- * Copyright (c) 2009-2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2009-2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-var Generator;
 
 var fs = require('fs');
 
@@ -15,11 +14,11 @@ var fs = require('fs');
  *
  * Generator Class
  *
- * @package     Geena.Utils
- * @namespace   Geena.Utils.Generator
- * @author      Rhinostone <geena@rhinostone.com>
+ * @package     Gina.Utils
+ * @namespace   Gina.Utils.Generator
+ * @author      Rhinostone <gina@rhinostone.com>
  * */
-Generator = {
+var Generator = {
     createFileFromTemplate : function(source, target, callback){
 
         fs.readFile(source, function(err, data){
@@ -33,7 +32,7 @@ Generator = {
             fs.writeFile(target, data, function(err, data){
                 if (err) throw err;
                 //Setting permission.
-                fs.chmodSync(target, 0755);                
+                fs.chmodSync(target, 0755);
                 if ( typeof(callback) != 'undefined') callback(err)
             });
         });
@@ -63,4 +62,4 @@ Generator = {
     }
 };
 
-module.exports = Generator;
+module.exports = Generator

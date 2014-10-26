@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -22,9 +22,9 @@ var config = new Config();
  * @class Router
  *
  *
- * @package     Geena
+ * @package     Gina
  * @namespace
- * @author      Rhinostone <geena@rhinostone.com>
+ * @author      Rhinostone <gina@rhinostone.com>
  * @api         Public
  */
 function Router(env) {
@@ -153,10 +153,10 @@ function Router(env) {
     }
 
     var refreshCore = function() {
-        var core = new RegExp( getPath('geena.core') );
+        var core = new RegExp( getPath('gina.core') );
         //var lib =  new RegExp( getPath('local.conf[local.bundle][local.env].libPath') );
         var excluded = [
-            _(getPath('geena.core') + '/gna.js', true)
+            _(getPath('gina.core') + '/gna.js', true)
         ];
 
         for (var c in require.cache) {
@@ -166,14 +166,14 @@ function Router(env) {
         }
 
         //update utils
-        delete require.cache[_(getPath('geena.core') +'/utils/index.js', true)];
-        require.cache[_(getPath('geena.core') +'/utils/index.js', true)] = require( _(getPath('geena.core') +'/utils/index.js', true) );
-        require.cache[_(getPath('geena.core') + '/gna.js', true)].exports.utils = require.cache[_(getPath('geena.core') +'/utils/index.js', true)];
+        delete require.cache[_(getPath('gina.core') +'/utils/index.js', true)];
+        require.cache[_(getPath('gina.core') +'/utils/index.js', true)] = require( _(getPath('gina.core') +'/utils/index.js', true) );
+        require.cache[_(getPath('gina.core') + '/gna.js', true)].exports.utils = require.cache[_(getPath('gina.core') +'/utils/index.js', true)];
 
         // Super controller
-        delete require.cache[_(getPath('geena.core') +'/controller/index.js', true)];
-        require.cache[_(getPath('geena.core') +'/controller/index.js', true)] = require( _(getPath('geena.core') +'/controller/index.js', true) );
-        SuperController = require.cache[_(getPath('geena.core') +'/controller/index.js', true)];
+        delete require.cache[_(getPath('gina.core') +'/controller/index.js', true)];
+        require.cache[_(getPath('gina.core') +'/controller/index.js', true)] = require( _(getPath('gina.core') +'/controller/index.js', true) );
+        SuperController = require.cache[_(getPath('gina.core') +'/controller/index.js', true)];
 
 
         //update server
@@ -216,7 +216,7 @@ function Router(env) {
 
         // onRouteEvent
 
-        //logger.debug('geena', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
+        //logger.debug('gina', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
         console.debug('ACTION ON  ROUTING IS : ' + action);
 
         //Getting superCleasses & extending it with super Models.

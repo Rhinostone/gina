@@ -1,4 +1,4 @@
-# GEENA
+# GINA
 
 * * *
 
@@ -63,7 +63,7 @@
 
 ## Error
 
-- geena start and end without error
+- gina start and end without error
 	- administrator
 	- bundle/port already working
 	- model : database

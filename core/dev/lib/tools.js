@@ -1,9 +1,7 @@
-var Tools;
+function Tools() {
 
-var Tools = function(){
-
-    var init = function(){};
-    this.runScriptObject = function(){};
+    var init = function() {};
+    this.runScriptObject = function() {};
 
     init()
 };

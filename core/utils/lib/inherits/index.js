@@ -1,6 +1,6 @@
 /**
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -11,9 +11,9 @@
 /**
  * @class Inherits
  *
- * @package geena.utils
- * @namesame geena.utils.inherits
- * @author Rhinostone <geena@rhinostone.com>
+ * @package gina.utils
+ * @namesame gina.utils.inherits
+ * @author Rhinostone <gina@rhinostone.com>
  *
  * @api Public
  * */

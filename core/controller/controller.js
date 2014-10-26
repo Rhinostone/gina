@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -19,9 +19,9 @@ var swig            = require('swig');
  * @class Controller
  *
  *
- * @package     Geena
+ * @package     Gina
  * @namespace
- * @author      Rhinostone <geena@rhinostone.com>
+ * @author      Rhinostone <gina@rhinostone.com>
  *
  * @api         Public
  */
@@ -159,11 +159,6 @@ function Controller(options) {
                     data: data
                 }
             }
-
-             //else {
-             //   _data = merge(_data, self.getData());
-            //}
-
             self.setRessources(local.options.views, _data.file);
             var data = merge(_data, self.getData());
 
@@ -471,11 +466,10 @@ function Controller(options) {
                 if (path instanceof Array) {
                     path = path[0] //if it is an array, we just take the first one
                 }
-                path = conf.hostname + wroot + path;
             } else if (url) {
                 path = ( (/\:\/\//).test(url) ) ? url : req.protocol + '://' + url;
             } else {
-                path = conf.hostname + wroot + path
+                path = conf.hostname + path
             }
 
             if (req.headersSent) return next();

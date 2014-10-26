@@ -1,28 +1,26 @@
-/**
- * Test Suite
- * PLEASE, DO NOT TOUCH IT
- *
- * @package     geena
- * @author      Rhinostone
- */
-var TestSuite;
-
 // Imports.
 var fs = require('fs');
 var helpers = require('helpers');
 var inherits = require('inherits');
 
+/**
+ * Test Suite
+ * PLEASE, DO NOT TOUCH IT
+ *
+ * @package     gina
+ * @author      Rhinostone
+ */
 var TestSuite = function() {
     var self = this;
 
     this.root = __dirname;
     var d = _(__dirname).split(/\//);
     d.splice(d.length-1, 1);
-    var geena = d.join('/');
+    var gina = d.join('/');
 
     this.config = {
         root : this.root,
-        geena : geena,
+        gina : gina,
         target : this.root +'/workspace',
         nodeModules : this.root +'/node_modules'
     };
@@ -41,7 +39,7 @@ var TestSuite = function() {
     var init = function() {
         // load on startup
         loadScripts(self.root);
-    };
+    }
 
     var loadScripts = function(path) {
         var files = fs.readdirSync(path);

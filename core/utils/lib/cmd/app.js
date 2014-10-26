@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -9,15 +9,15 @@
 /**
  * AppCommand Class
  *
- * @package    Geena.Utils.Cmd
- * @author     Rhinostone <geena@rhinostone.com>
+ * @package    Gina.Utils.Cmd
+ * @author     Rhinostone <gina@rhinostone.com>
  */
 var fs          = require('fs');
 var spawn       = require('child_process').spawn;
 var os          = require('os');
 var console     = require('../logger');
 var Proc        = require('../proc');
-var EventEmitter  = require('events').EventEmitter;
+var EventEmitter = require('events').EventEmitter;
 var inherits    = require('../inherits');
 //var generator   = require('../generator');
 
@@ -87,7 +87,7 @@ var AppCommand = {
         var root = getPath('root');
         //Setting log paths.
 //        console.getLogger({
-//            name: 'geena',
+//            name: 'gina',
 //            containers: [
 //                {
 //                    type: 'file',
@@ -102,31 +102,25 @@ var AppCommand = {
         this.msg = message;
         this.opt['option'] = process.argv[2];
         this.env = 'prod'; // by default
+        var envFound = this.checkEnv();
 
         if (process.argv[2] == '-s' || process.argv[2] == '--start') {
             //use registeredEnvs for this.....
-            var envFound = this.checkEnv();
-
             if (process.argv.length >= 5 && !envFound) {
                 this.env = 'prod';
                 process.argv.splice(4, 0, this.env);
             }
 
-            this.PID = new Proc('geena', process);
+            this.PID = new Proc('gina', process);
             //herited from gna.js.
 
         } else {
-            var envFound = this.checkEnv();
-            this.PID = new Proc('geena', process, false);
+            this.PID = new Proc('gina', process, false);
         }
 
         this.PID.setMaster(process.pid);
 
-        if (longCMD) {
-            this.opt['argument'] = process.argv[4];
-        } else {
-            this.opt['argument'] =  process.argv[4];
-        }
+        this.opt['argument'] = process.argv[4];
 
         if (process.argv[5] != undefined && process.argv[5].indexOf('=')) {
             var p = process.argv[5].split(/=/);
@@ -141,7 +135,7 @@ var AppCommand = {
 //            core    : _(this.options.core)
 //        });
         process.env.NODE_ENV = this.env;
-        this.isAllowedOption(this.opt);
+        this.isAllowedOption(this.opt)
     },
     isAllowedOption : function(opt){
         var found = false;
@@ -156,7 +150,7 @@ var AppCommand = {
         } else {
             console.error(this.msg.default[0].replace(
                 "%command%",
-                "geena " + opt['option']
+                "gina " + opt['option']
             ) +'\n'+ this.msg.app[3]);
         }
     },
@@ -276,7 +270,7 @@ var AppCommand = {
                     } else {
                         var msg = self.msg.app[2]
                                 .replace("%type%", opt['type'])
-                                .replace("%command%", 'geena '
+                                .replace("%command%", 'gina '
                                 + opt['option'] +' '
                                 + self.bundle
                                 +' '+ opt['argument']
@@ -373,7 +367,7 @@ var AppCommand = {
 
         //is Real bundle ?.
         if ( typeof(bundle) != 'undefined' ) {
-            var addCmd = require('./geena-add-bundle')(opt, project, envDotJson, bundle)
+            var addCmd = require('./gina-add-bundle')(opt, project, envDotJson, bundle)
         } else {
             console.warn('bundle is undefined !')
         }
@@ -388,7 +382,7 @@ var AppCommand = {
             }
 
             try {
-                var addViews = require('./geena-add-views')(self.bundle, self.env)
+                var addViews = require('./gina-add-views')(self.bundle, self.env)
             } catch (err) {
                 console.error(err.stack);
                 process.exit(1)
@@ -409,12 +403,10 @@ var AppCommand = {
         var defaultBuildScriptPath = _(_( getPath('root') +'/'+ project.bundles[bundle].src +'/'+defaultBuildScript ));
 
         //Getting project infos.
-
-
         try {
             //is Real bundle ?.
             if ( typeof(bundle) != 'undefined' && typeof(project.bundles[bundle]) != 'undefined') {
-                var BuildCmd = require('./geena-build');
+                var BuildCmd = require('./gina-build');
                 if (
                     typeof(project.bundles[bundle]['script']) != 'undefined' && typeof(project.bundles[bundle]['script']['build']) != 'undefined' ||
                     fs.existsSync(defaultBuildScriptPath)
@@ -437,7 +429,7 @@ var AppCommand = {
                 }
 
             } else if (bundle == undefined) {
-                var buildCmd = require('./geena-build')(project);
+                var buildCmd = require('./gina-build')(project);
                 buildCmd.init()
             } else {
                 console.error('Bundle [ '+ bundle +' ] not found.')
@@ -452,7 +444,7 @@ var AppCommand = {
         var project = process.argv[3];
         try {
             console.log('creating new project...');
-            var initCmd = require('./geena-init-project')(project)
+            var initCmd = require('./gina-init-project')(project)
         } catch (err) {
             console.error(err.stack);
             process.exit(1)
@@ -481,12 +473,10 @@ var AppCommand = {
                         isWorking = true
                     }
                 }
-            } else {
-                isWorking = true
             }
 
             if ( typeof(bundle) != 'undefined' && typeof(projectData.bundles[bundle]) != 'undefined' && !isWorking) {
-                var DeleteCmd = require('./geena-delete-bundle');
+                var DeleteCmd = require('./gina-delete-bundle');
                 var deleteCmd = null;
                 if ( typeof(projectData.bundles[bundle]['script']) != 'undefined' && typeof(projectData.bundles[bundle]['script']['delete']) != 'undefined') {
                     var CustomDelete = require(_(getPath('root') +'/'+ projectData.bundles[bundle].src + '/' + projectData.bundles[bundle].script.delete));
@@ -583,14 +573,14 @@ var AppCommand = {
             //setContext('logger', loggerInstance);
 
             if (!real) {
-//                logger.getPath('geena', function(pathErr, path){
+//                logger.getPath('gina', function(pathErr, path){
 //                    if (!pathErr) {
-//                        var filename = _(path +'/'+ logger.getFilename('geena'));
+//                        var filename = _(path +'/'+ logger.getFilename('gina'));
 //                        var data = '[LOG]' + JSON.stringify({
 //                            "filename" : filename,
 //                            "env" : logger.getEnv(),
 //                            "msg" : {
-//                                "logger"    : "geena",
+//                                "logger"    : "gina",
 //                                "label"     : "SERVER:EMERG:1",
 //                                "level"     : "err",
 //                                "profile"   : logger.getEnv(),
@@ -617,7 +607,7 @@ var AppCommand = {
 
                 process.list = (process.list == undefined) ? [] : process.list;
                 setContext('processList', process.list);
-                setContext('geenaProcess', process.pid);
+                setContext('ginaProcess', process.pid);
                 var params = [
                     //"--debug-brk=5858",//what ever port you want.
                     (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
@@ -656,7 +646,7 @@ var AppCommand = {
                         //loggerInstance["trace"](out);//Not shared with the main flow...
                         console.info(out.toString());
                         //fix it...
-                        //logger.warn('geena', 'CONSOLE:LOG:1', data);
+                        //logger.warn('gina', 'CONSOLE:LOG:1', data);
                     } else {
                         //var data = JSON.parse(data);
                         //console.log("[traces] => ", data);
@@ -680,9 +670,9 @@ var AppCommand = {
                 self.prc.stderr.on('data', function(err) {
                     console.error(err.toString());
 
-//                    logger.getPath('geena', function(pathErr, path){
+//                    logger.getPath('gina', function(pathErr, path){
 //                        if (!pathErr) {
-//                            var filename = _(path +'/'+ logger.getFilename('geena'));
+//                            var filename = _(path +'/'+ logger.getFilename('gina'));
 //                             //var test = JSON.stringify({"error" :err});
 //                            //console.log("[TRACE]" + JSON.parse(test).error);
 //                            /**
@@ -690,7 +680,7 @@ var AppCommand = {
 //                                "filename" : filename,
 //                                "env" : logger.getEnv(),
 //                                "msg" : {
-//                                    "logger"    : "geena",
+//                                    "logger"    : "gina",
 //                                    "label"     : "SERVER:RUNTIME:ERR:2",
 //                                    "level"     : "err",
 //                                    "profile"   : logger.getEnv(),
@@ -712,17 +702,17 @@ var AppCommand = {
 //                        }
 //                    });
                     /**
-                    logger.getPath('geena', function(pathErr, path){
+                    logger.getPath('gina', function(pathErr, path){
                         if (!pathErr) {
-                            //var filename = _(logger.getPath('geena') +'/'+ logger.getFilename('geena'));
-                            var filename = _(path +'/'+ logger.getFilename('geena'));
+                            //var filename = _(logger.getPath('gina') +'/'+ logger.getFilename('gina'));
+                            var filename = _(path +'/'+ logger.getFilename('gina'));
                             //var test = JSON.stringify({"error" :err});
                             //console.log("[TRACE]" + JSON.parse(test).error);
                             var data = '[LOG]' + JSON.stringify({
                                 "filename" : filename,
                                 "env" : logger.getEnv(),
                                 "msg" : {
-                                    "logger"    : "geena",
+                                    "logger"    : "gina",
                                     "label"     : "SERVER:RUNTIME:ERR:2",
                                     "level"     : "err",
                                     "profile"   : logger.getEnv(),

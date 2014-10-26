@@ -1,4 +1,4 @@
-var Class = function(){
+var Class = function() {
     /**
      * Construct a Class from singleton to object
      *
@@ -13,11 +13,11 @@ var Class = function(){
      * */
     this.construct = function(Class, autoInit){
         var _this = this;
-        return function(){
+        return function() {
             //TODO - Check if exists before init.
             for (var prop in Class) {
                 if ( Class.hasOwnProperty(prop) ){
-                    this[prop] = Class[prop];
+                    this[prop] = Class[prop]
                 }
             }
             //This one is optional.
@@ -29,7 +29,7 @@ var Class = function(){
                 }
             }
 
-            return this;
-        };
+            return this
+        }
     }
 };

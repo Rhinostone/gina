@@ -5,4 +5,4 @@ CALL :sub "%_params%"
 GOTO :eof
 :sub
 
-node .geena %~n1
+node .gina %~n1
