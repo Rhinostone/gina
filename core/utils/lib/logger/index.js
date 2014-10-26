@@ -97,8 +97,6 @@ function Logger(opt) {
             Logger.instance = self;
             setDefaultLevels()
         }
-
-        console.info('Logger ready');
     }
 
     var getInstance = function() {

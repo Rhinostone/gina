@@ -53,6 +53,7 @@ var TestSuite = function() {
 
             var passed = true;
             for (var i in ignored) {
+
                 if ( ignored[i].test(files[f]) ) {
                     passed = false
                 }
@@ -68,12 +69,14 @@ var TestSuite = function() {
             } else if ( passed ) {
                 //console.log('suite is : ', files[f]);
 //                if (files[f] == '02-add_new_bundle.js') {
+
+                if ( filename.substr(filename.length-3) == '.js') {
                     var Suite = require(filename);
                     if ( typeof(Suite) == 'function') {
                         Suite = inherits(Suite, self.Suite);
                         new Suite(self.config, exports)
                     }
-//                }
+                }
             }
         }
     }
