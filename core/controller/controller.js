@@ -150,13 +150,17 @@ function Controller(options) {
 
         try {
 
-            if (!_data['page']) {
+            if (!_data) {
+                _data = { page: {}}
+            } else if (!_data['page']) {
                 var data = JSON.parse( JSON.stringify(_data) );
                 _data = self.getData();
                 _data['page'] = {
                     data: data
                 }
-            } //else {
+            }
+
+             //else {
              //   _data = merge(_data, self.getData());
             //}
 
