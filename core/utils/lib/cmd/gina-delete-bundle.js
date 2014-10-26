@@ -1,11 +1,19 @@
 //imports
-var fs = require('fs');
+var fs              = require('fs');
+var console         = require('../logger');
+var GINA_PATH      = _( getPath('gina.core') );
+var Config          = require( _( GINA_PATH + '/config') );
 
+/**
+ * Class DeleteBundle
+ *
+ * */
 function DeleteBundle(project, env, bundle) {
 
     var self = this;
     var reserved = [ 'framework' ];
     self.task = 'delete';//important for later in config init
+    self.env = env;
 
     this.init = this.onInitialize = function (cb) {
         if (self.initialized == undefined) {
@@ -30,7 +38,7 @@ function DeleteBundle(project, env, bundle) {
         try {
             self.project = project;
             self.projectData = require(project);
-            self.env = env;
+
             if ( !fs.existsSync(env) ) {
                 fs.writeFileSync(env, '{}')
             }
@@ -38,23 +46,23 @@ function DeleteBundle(project, env, bundle) {
 
             self.bundle = bundle;
 
-            console.log('removing', bundle);
+            console.info('removing ', bundle);
 
             // TODO - Prompt if user want to erase related releases if exist
             var projectObj = require(self.project);
-            var releasePath = new _(projectObj.bundles[self.bundle].release.link);
-            //if ( fs.existsSync(releasePath.toString()) ) {
-                //releasePath.rm(function onReleaseDeleted(err) {
+            var linkPath = new _(_(self.root +'/'+ projectObj.bundles[self.bundle].release.link));
+            if ( fs.existsSync(linkPath.toString()) ) {
+                linkPath.rm(function onLinkDeleted(err) {
                     if (err) {
                         console.error(err.stack||err.message);
                         process.exit(1)
                     } else {
                         deleteBundle()
                     }
-                //})
-            //} else {
-            //    deleteBundle()
-            //}
+                })
+            } else {
+                deleteBundle()
+            }
 
         } catch (err) {
             console.error(err.stack);
@@ -62,39 +70,69 @@ function DeleteBundle(project, env, bundle) {
         }
     }
 
+    var deleteSources = function() {
+        if (fs.existsSync(_(self.root+'/src/'+self.bundle))) {
+
+            var bundlePath = new _(self.root+'/src/'+self.bundle);
+            bundlePath.rm( function bundleRemoved (err) {
+                if (err) {
+                    console.log(err.stack);
+                    process.exit(1)
+                }
+                console.log('Bundle [ '+bundle+' ] has been removed from your project with success.');
+                self.emit('delete#complete', err)
+            })
+        } else {
+            console.log('Bundle [ '+bundle+' ] has been removed from your project with success.');
+            self.emit('delete#complete', err)
+        }
+    }
+
     var deleteBundle = function() {
 
+        var config = new Config({
+            env             : process.env.NODE_ENV,
+            executionPath   : self.root,
+            startingApp     : self.bundle,
+            ginaPath       : GINA_PATH,
+            task            : self.task
+        });
 
-        removeFromLogs( function logsRemoved (err) {
-            if (err) {
-                console.error(err.stack);
-                process.exit(1)
-            }
-            cleanFile( function logsRemoved (err) {
+        config.onReady( function onConfigReady(err, obj) {
+
+            self.conf = obj.conf[bundle][process.env.NODE_ENV];
+
+            removeFromLogs( function logsRemoved (err) {
                 if (err) {
                     console.error(err.stack);
                     process.exit(1)
                 }
+                cleanFile( function logsRemoved (err) {
+                    if (err) {
+                        console.error(err.stack);
+                        process.exit(1)
+                    }
 
-
-
-                if (fs.existsSync(_(self.root+'/src/'+self.bundle))) {
-
-                    var bundlePath = new _(self.root+'/src/'+self.bundle);
-                    bundlePath.rm( function bundleRemoved (err) {
-                        if (err) {
-                            console.log(err.stack);
-                            process.exit(1)
-                        }
-                        console.log('Bundle [ '+bundle+' ] has been removed from your project with success.');
-                        self.emit('delete#complete', err)
-                    })
-                } else {
-                    console.log('Bundle [ '+bundle+' ] has been removed from your project with success.');
-                    self.emit('delete#complete', err)
-                }
+                    if (
+                        typeof(self.conf['releases'] != undefined)
+                        && fs.existsSync(_(self.conf.releases +'/'+ bundle))
+                    ) {
+                        var relPath = new _(self.conf.releases +'/'+ bundle);
+                        relPath.rm( function bundleRemoved (err) {
+                            if (err) {
+                                console.log(err.stack);
+                                process.exit(1)
+                            }
+                            console.log('Bundle release for [ '+bundle+' ] has been removed from your project with success.');
+                            deleteSources()
+                        })
+                    } else {
+                        // deleting soruces
+                        deleteSources()
+                    }
+                })
             })
-        })
+        })//EO config.onReady
     }
 
     var cleanFile = function(callback) {

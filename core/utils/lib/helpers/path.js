@@ -999,7 +999,7 @@ e.setMaxListeners(100);
             }
         } else {
 
-            fs.stat(source, function(err, stats) {
+            fs.lstat(source, function(err, stats) {
                 if (!err) {
                     if ( stats.isDirectory() ) {
 
