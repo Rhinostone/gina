@@ -1,11 +1,9 @@
-var AddBundle;
-
 //imports
 var fs = require('fs');
 var spawn = require('child_process').spawn;
 var helpers = require('helpers');
 
-AddBundle = function(conf, exports) {
+function AddBundle(conf, exports) {
     var self = this;
     var root = conf.root;
     var tmp = conf.tmp;

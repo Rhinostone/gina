@@ -21,6 +21,7 @@
  * THE SOFTWARE.
  */
 
+var fs      = require('fs');
 var helpers = require('../helpers');
 
 var cmd = {},
@@ -88,15 +89,8 @@ cmd.load = function(root, package){
     //Getting package.
     var p = require( _(root + package) ),
         ginaPath = _(root + package.replace('/package.json', '')),
-        middleware = 'none';
+        middleware = fs.readFileSync(_(ginaPath + '/MIDDLEWARE')).toString() || 'none';
 
-    try {
-
-        var dep = p.dependencies;
-        console.log('dep ', dep);
-    } catch (err) {
-
-    }
 
     cmd.setOption([
         {
