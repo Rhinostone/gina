@@ -32,7 +32,7 @@ AddBundle = function(conf, exports) {
         var out = fs.openSync(outFile, 'a');
         var err = fs.openSync(errFile, 'a');
 
-        var cmd = (isWin32()) ? '.geena' : './geena';
+        var cmd = (isWin32()) ? '.gina' : './gina';
         var init = spawn('node', [ cmd, '--add', self.bundleName ], {stdio: [ 'ignore', out, err ]});
 
         //init.stdout.setEncoding('utf8');
@@ -77,7 +77,7 @@ AddBundle = function(conf, exports) {
     var testBundleStructure = function(callback) {
         testBundleStructureDone = true;
         try {
-            var srcPath = conf.geena +'/core/template/samples/bundle';
+            var srcPath = conf.gina +'/core/template/samples/bundle';
             var src = new _( srcPath);
             var dstPath = workspace.toString() +'/src/'+ self.bundleName;
             var dst = new _( dstPath);

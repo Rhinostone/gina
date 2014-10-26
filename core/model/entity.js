@@ -1,13 +1,13 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
 var fs = require('fs');
 var EventEmitter = require('events').EventEmitter;
-var utils = require('geena').utils;
+var utils = require('gina').utils;
 var console = utils.logger;
 var helpers = utils.helpers;
 var inherits = utils.inherits;
@@ -19,9 +19,9 @@ var modelUtil = new utils.Model();
  * @class Model.EntitySuper class
  *
  *
- * @package     Geena
- * @namespace   Geena.Model
- * @author      Rhinostone <geena@rhinostone.com>
+ * @package     Gina
+ * @namespace   Gina.Model
+ * @author      Rhinostone <gina@rhinostone.com>
  * @api         Public
  */
 function EntitySuper(conn) {

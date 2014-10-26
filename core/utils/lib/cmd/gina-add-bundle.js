@@ -2,9 +2,9 @@ var AddBundle;
 
 //imports
 var fs = require('fs');
-var utils = getContext('geena.utils');
-var GEENA_PATH = _( getPath('geena.core') );
-var Config = require( _( GEENA_PATH + '/config') );
+var utils = getContext('gina.utils');
+var GINA_PATH = _( getPath('gina.core') );
+var Config = require( _( GINA_PATH + '/config') );
 var readline = require('readline');
 var rl = readline.createInterface(process.stdin, process.stdout);
 
@@ -180,7 +180,7 @@ AddBundle = function(opt, project, env, bundle) {
     var createBundle = function() {
         var conf = self.conf
         var src = self.root +'/'+ conf.src;
-        var sample = new _(GEENA_PATH +'/template/samples/bundle/');
+        var sample = new _(GINA_PATH +'/template/samples/bundle/');
         var target = _(src);
         sample.cp(target, function done(err) {
             if (err) {

@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -15,8 +15,8 @@ var checkSum = math.checkSum;
 /**
  * Model uitl
  *
- * @package     Geena.Utils
- * @author      Rhinostone <geena@rhinostone.com>
+ * @package     Gina.Utils
+ * @author      Rhinostone <gina@rhinostone.com>
  * @api public
  * */
 function ModelUtil() {
@@ -135,7 +135,7 @@ function ModelUtil() {
     this.loadAllModels = function(conf, cb) {
 
         if ( typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null) {
-            var Model = require( _( getPath('geena.core')+'/model') );
+            var Model = require( _( getPath('gina.core')+'/model') );
             var mObj = {};
             var models = conf.content.connectors;
 
@@ -182,7 +182,7 @@ function ModelUtil() {
     this.reloadModels = function(conf, cb) {
         if ( typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null ) {
 
-            var Model = require( _( getPath('geena.core')+'/model') );
+            var Model = require( _( getPath('gina.core')+'/model') );
             var models = conf.content.connectors;
             var mObj = {};
 

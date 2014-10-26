@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -10,9 +10,9 @@
  * @class Model class
  *
  *
- * @package     Geena
+ * @package     Gina
  * @namespace
- * @author      Rhinostone <geena@rhinostone.com>
+ * @author      Rhinostone <gina@rhinostone.com>
  * @api         Public
  */
 
@@ -21,7 +21,7 @@ var Model;
 //Imports.
 var fs      = require('fs');
 var Module  = require('module');
-var utils   = require('geena').utils;
+var utils   = require('gina').utils;
 var merge   = utils.merge;
 //var Dev     = Utils.Dev;
 var EventEmitter  = require('events').EventEmitter;
@@ -43,7 +43,7 @@ Model = function(namespace){
 
 
         if ( typeof(namespace) == "undefined" || namespace == "") {
-            //logger.error('geena', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
+            //logger.error('gina', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
             console.error(new Error('EEMPTY: Model namespace'));
         }
         var suffix = 'Entity';
@@ -88,11 +88,11 @@ Model = function(namespace){
                     var produce = function(entityName, i){
                         console.log("producing ", files[i]);
 
-                        utils.config.get('geena', 'project.json', function(err, config){
-                            //if (err) logger.error('geena', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
+                        utils.config.get('gina', 'project.json', function(err, config){
+                            //if (err) logger.error('gina', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
                             if (err) console.error(err.stack||err.message);
 
-                            var filename = config.paths.geena + '/model/entityFactory.js';
+                            var filename = config.paths.gina + '/model/entityFactory.js';
 
                             //TODO - Factory class
                             //var Factory = new Factory({source: , target: ).onComplete();
@@ -119,10 +119,10 @@ Model = function(namespace){
                                         console.log("\nEntity CONTENT ", Entity, " \nVS\n", EntityFactory);
 
                                     } else {
-                                        throw new Error('Geena.Model.getContext(...): [entityName] is undefined.');
+                                        throw new Error('Gina.Model.getContext(...): [entityName] is undefined.');
                                     }
                                 } catch (err) {
-                                    //logger.error('geena', 'MODEL:ERR:4', 'EEMPTY: EntitySuper\n' + err, __stack);
+                                    //logger.error('gina', 'MODEL:ERR:4', 'EEMPTY: EntitySuper\n' + err, __stack);
                                     console.error( 'EEMPTY: EntitySuper\n' + (err.stack||err.message))
                                 }
 
@@ -214,7 +214,7 @@ Model = function(namespace){
         fs.readFile(filename, function (err, data){
 
             if (err) {
-                //logger.error('geena', 'MODEL:ERR:3', err, __stack);
+                //logger.error('gina', 'MODEL:ERR:3', err, __stack);
                 console.error(err.stack||err.message);
                 callback(err);
             }

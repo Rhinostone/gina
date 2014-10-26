@@ -1,5 +1,5 @@
 var clean;
-//var utils = require('geena').utils;
+//var utils = require('gina').utils;
 //var util = require('util');
 
 clean = function(project, bundle){

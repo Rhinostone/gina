@@ -1,11 +1,10 @@
 /**
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-var PostInstall;
 
 //Imports
 var fs      = require("fs");
@@ -17,7 +16,7 @@ var os      = require("os");
  * Post install constructor
  * @constructor
  * */
-PostInstall = function() {
+function PostInstall() {
 
     var self = this;
 
@@ -31,8 +30,8 @@ PostInstall = function() {
                 console.error(err.stack)
             }
 
-            createGeenaFileForPlatform();
-            console.log("Geena's command line tool has been installed.");
+            createGinaFileForPlatform();
+            console.log("Gina's command line tool has been installed.");
         })
     }
 
@@ -51,34 +50,34 @@ PostInstall = function() {
     }
 
     //Creating framework command line file for nix.
-    var createGeenaFile = function(win32Name, callback) {
+    var createGinaFile = function(win32Name, callback) {
         var name = require( _(self.path + 'package.json') ).name;
         var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
-        var source = _(self.path + 'core/template/command/geena.tpl');
+        var source = _(self.path + 'core/template/command/gina.tpl');
         var target = _(appPath + name);
         if ( typeof(win32Name) != 'undefined') {
             target = _(appPath + win32Name)
         }
         //Will override.
         if ( typeof(callback) != 'undefined')
-            utils.generator.createFileFromTemplate(source, target, function onGeenaFileCreated(err){
+            utils.generator.createFileFromTemplate(source, target, function onGinaFileCreated(err){
                 callback(err)
             })
         else
             utils.generator.createFileFromTemplate(source, target);
     }
 
-    var createGeenaFileForPlatform = function() {
+    var createGinaFileForPlatform = function() {
         var name = require( _(self.path + 'package.json') ).name;
 
         var filename = ( (self.isWin32) ? '.' : '' ) + name;
 
-        createGeenaFile(filename, function onFileCreated(err) {
+        createGinaFile(filename, function onFileCreated(err) {
             if (err) console.error(err.stack);
 
             if (self.isWin32) {
                 var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
-                var source = _(self.path + 'core/template/command/geena.bat.tpl');
+                var source = _(self.path + 'core/template/command/gina.bat.tpl');
                 var target = _(appPath + name + '.bat');
                 if ( fs.existsSync(target) ) {
                     fs.unlinkSync(target)
@@ -89,7 +88,7 @@ PostInstall = function() {
         });
     }
 
-    //var createGeenaHome = function() { };
+    //var createGinaHome = function() { };
 
     init()
 };

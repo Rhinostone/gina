@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -12,8 +12,8 @@ var merge = require('./../merge');
 /**
  * ContextHelper
  *
- * @package     Geena.Utils.Helpers
- * @author      Rhinostone <geena@rhinostone.com>
+ * @package     Gina.Utils.Helpers
+ * @author      Rhinostone <gina@rhinostone.com>
  * @api public
  * */
 function ContextHelper(contexts) {

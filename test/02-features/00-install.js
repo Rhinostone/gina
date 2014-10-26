@@ -23,17 +23,17 @@ InstallTest = function(conf, exports) {
                 console.error(err.stack);
             }
             //cp sources
-            var source = new _(conf.geena);
-            var target = _(workspace.toString() + '/node_modules/geena');
+            var source = new _(conf.gina);
+            var target = _(workspace.toString() + '/node_modules/gina');
             var ignore = [/^\./, 'test', 'node_modules'];
             source.cp(target, ignore, function(err) {
                 if (err) {
                     console.error(err.stack);
                     process.exit(1)
                 }
-                console.log('workspace ready !');
+                console.info('workspace ready !');
                 self.hasWorkspace = true;
-                self.deps = require(_( workspace.toString() + '/node_modules/geena/package.json' )).dependencies;
+                self.deps = require(_( workspace.toString() + '/node_modules/gina/package.json' )).dependencies;
                 self.modules = [];
                 for (var m in self.deps) {
                     self.modules.push(m)
@@ -45,7 +45,7 @@ InstallTest = function(conf, exports) {
 
 //    var runNpmInstall = function(m, callback) {
 //
-//        var path = _( workspace.toString() + '/node_modules/geena' );
+//        var path = _( workspace.toString() + '/node_modules/gina' );
 //        process.chdir(path);//CD command like.
 //
 //        var npmInstall = function(callback) {
@@ -90,7 +90,7 @@ InstallTest = function(conf, exports) {
 //
 //        var runPostInstall = function(callback) {
 //
-//            var path = _( workspace.toString() + '/node_modules/geena' );
+//            var path = _( workspace.toString() + '/node_modules/gina' );
 //            process.chdir(path);//CD command like.
 //            var pi = spawn('node', [ 'script/post_install.js' ]);
 //
@@ -124,7 +124,7 @@ InstallTest = function(conf, exports) {
 
     var runNpmInstall = function(m, callback) {
 
-        var path = _( workspace.toString() + '/node_modules/geena' );
+        var path = _( workspace.toString() + '/node_modules/gina' );
         process.chdir(path);//CD command like.
 
         var npmInstall = function(callback) {
@@ -189,7 +189,7 @@ InstallTest = function(conf, exports) {
 
         var runPostInstall = function(callback) {
 
-            var path = _( workspace.toString() + '/node_modules/geena' );
+            var path = _( workspace.toString() + '/node_modules/gina' );
             process.chdir(path);//CD command like.
 
 
@@ -243,7 +243,7 @@ InstallTest = function(conf, exports) {
     }
 
     var hasBinary = function(callback) {
-        var file = ( isWin32() ) ? 'geena.bat' : 'geena';
+        var file = ( isWin32() ) ? 'gina.bat' : 'gina';
         workspace.hasFile(file , function(err, found) {
             callback(err, found)
         })
@@ -290,7 +290,7 @@ InstallTest = function(conf, exports) {
             test.done()
         },
 
-        'Had installed [ geena ] binary' : function(test) {
+        'Had installed [ gina ] binary' : function(test) {
             test.equal(self.binaryFound, true);
             test.done()
         }

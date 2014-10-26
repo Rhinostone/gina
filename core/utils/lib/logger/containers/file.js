@@ -1,8 +1,7 @@
-var FileContainer;
 
 var merge = require('../../merge');
 
-FileContainer = function(opt) {
+function FileContainer(opt) {
     var init = function() {}
 
     ;

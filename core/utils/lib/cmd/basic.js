@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2009-2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2009-2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -9,8 +9,8 @@
 /**
  * BasicCommand Class
  *
- * @package    Geena.Utils.Cmd
- * @author     Rhinostone <geena@rhinostone.com>
+ * @package    Gina.Utils.Cmd
+ * @author     Rhinostone <gina@rhinostone.com>
  */
 var fs = require('fs'),
     BasicCommand = {
@@ -56,7 +56,7 @@ var fs = require('fs'),
         if (found) {
             this.map(arg);
         } else {
-            console.warn( this.msg.default[0].replace("%command%", "geena " + arg) );
+            console.warn( this.msg.default[0].replace("%command%", "gina " + arg) );
         }
 
     },

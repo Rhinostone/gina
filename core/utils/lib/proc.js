@@ -1,7 +1,7 @@
-/* Geena.utils.Proc
+/* Gina.utils.Proc
  *
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -63,7 +63,7 @@ Proc = function(bundle, proc, usePidFile){
     this.bundles = [];
 
     if ( typeof(usePidFile) == 'undefined') {
-        var usePidFile = true;
+        var usePidFile = true
     }
 
     /**
@@ -77,27 +77,31 @@ Proc = function(bundle, proc, usePidFile){
         var pathObj = new _( getPath('root') + '/tmp/pid/' );
         var path = pathObj.toString();
         //Create dir if needed.
-        console.log("MKDIR  pathObj (pid:"+self.proc.pid+") - ", self.bundle);
+        console.debug("MKDIR  pathObj (pid:"+self.proc.pid+") - ", self.bundle);
 
         process.list = (process.list == undefined) ? [] : process.list;
         process.pids = (process.pids == undefined) ? {} : process.pids;
 
         self.register(self.bundle, self.proc.pid);
-        console.log('registring ', self.proc.pid);
+
         if (usePidFile) {
             pathObj.mkdir( function(err, path){
-                console.log('path created ('+path+') now saving PID ' +  bundle);
-                //logger.info('geena', 'PROC:INFO:1', 'path created ('+path+') now saving PID ' +  bundle, __stack);
+                console.debug('path created ('+path+') now saving PID ' +  bundle);
+                //logger.info('gina', 'PROC:INFO:1', 'path created ('+path+') now saving PID ' +  bundle, __stack);
                 //Save file.
                 if (!err) {
                     self.PID = self.proc.pid;
                     self.path = path + pathObj.sep;
                     //Add PID file.
                     setPID(self.bundle, self.PID, self.proc);
-                    save(self.bundle, self.PID, self.proc);
+                    save(self.bundle, self.PID, self.proc)
                 }
-            });
-        }
+            })
+        }// else {
+        //    self.PID = self.proc.pid;
+        //    self.path = path + pathObj.sep;
+        //    setPID(self.bundle, self.PID, self.proc)
+        //}
     };
 
     var isMaster = function() {
@@ -136,7 +140,7 @@ Proc = function(bundle, proc, usePidFile){
         var outPath = _(root + '/out.'+bundle+'.'+version+'.log');
         var errPath = _(root + '/out.'+bundle+'.'+version+'.log');
         var nodePath = getPath('node');
-        var geenaPath = _(root + '/geena');
+        var ginaPath = _(root + '/gina');
 
         if (env == 'prod') { //won't loop forever for others env.
 
@@ -144,7 +148,7 @@ Proc = function(bundle, proc, usePidFile){
             //Should kill existing one..
             opt.path = '/' + bundle + '/restart/' + pid + '/' + env;
 
-            var HttpClient = require('geena.com').Http;
+            var HttpClient = require('gina.com').Http;
             var httpClient = new HttpClient();
 
             if (httpClient) {
@@ -167,8 +171,8 @@ Proc = function(bundle, proc, usePidFile){
 
     var setPID = function(bundle, PID, proc) {
 
-        if (bundle != 'geena') {
-            proc.title = 'geena: '+ bundle;
+        if (bundle != 'gina') {
+            proc.title = 'gina: '+ bundle;
         } else {
             proc.title = bundle;
         }
@@ -201,7 +205,7 @@ Proc = function(bundle, proc, usePidFile){
             //Will prevent the server from stopping.
             proc.on('uncaughtException', function(err) {
                 //console.log('fuck shit ! ' + err);
-//                logger.exception('geena', 'FATAL_EXCEPTION:1', 'Special care needed !! ' + err + err.stack, function(err){
+//                logger.exception('gina', 'FATAL_EXCEPTION:1', 'Special care needed !! ' + err + err.stack, function(err){
 //                    //TODO - Send an email to the administrator/dev
 //                    //TODO - Have a delegate handler to allow the dev to do its stuff. Maybe it's already there if any dev can override.
 //                    console.log('Fix your shit...');
@@ -230,9 +234,9 @@ Proc = function(bundle, proc, usePidFile){
 
                 //console.log('bundle ', bundle, ' vs ', pid, " => ", process.pid);
 
-                //console.log("got exit code ", "("+code+")", pid, " VS ", pid, " <=> geena: ", process.pid);
+                //console.log("got exit code ", "("+code+")", pid, " VS ", pid, " <=> gina: ", process.pid);
                 //code = code || 0;
-                //var obj = logger.emerg('geena', 'UTILS:EMERG1', 'process exit code ' + code);
+                //var obj = logger.emerg('gina', 'UTILS:EMERG1', 'process exit code ' + code);
                 //if (code == 0  && env != "debug" && env != "dev"/***/) {
                 for (var p=0; p<process.list.count(); p++) {
                     dismiss(process.list[p].pid)
@@ -305,6 +309,7 @@ Proc = function(bundle, proc, usePidFile){
             var fileStream = fs.createWriteStream(path + PID);
             fileStream.once('open', function(fd) {
                 fileStream.write(bundle);
+                console.debug('registered ', self.proc.pid);
                 fileStream.end();
             });
         }
@@ -322,7 +327,7 @@ Proc = function(bundle, proc, usePidFile){
             return self.PID;
         } catch (err) {
 //            logger.error(
-//                'geena',
+//                'gina',
 //                'UTILS:PROC:ERR:2',
 //                'Could not get PID for bundle: '+ self.bundle,
 //                __stack
@@ -362,8 +367,8 @@ Proc = function(bundle, proc, usePidFile){
     };
 
     this.register = function(bundle, pid) {
-        if ( bundle == 'geena' || bundle != 'geena' && self.bundles.indexOf(bundle) == -1 ) {
-            if (bundle != 'geena') {
+        if ( bundle == 'gina' || bundle != 'gina' && self.bundles.indexOf(bundle) == -1 ) {
+            if (bundle != 'gina') {
                 self.bundles.push(bundle);
             }
 
@@ -380,7 +385,7 @@ Proc = function(bundle, proc, usePidFile){
     //Init.
     if ( typeof(this.bundle) == "undefined" ) {
 //        logger.warn(
-//            'geena',
+//            'gina',
 //            'UTILS:PROC:WARN:1',
 //            'Invalid or undefined proc name . Proc naming Aborted',
 //            __stack
@@ -388,7 +393,7 @@ Proc = function(bundle, proc, usePidFile){
         console.warn('Invalid or undefined proc name . Proc naming Aborted',
             __stack)
     } else {
-        init();
+        init()
     }
 };
 
