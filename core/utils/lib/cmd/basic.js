@@ -109,14 +109,18 @@ var fs = require('fs'),
     getVersion : function(short) {
         var vers = "",
             version = {
-            "number"    : this.options.version,
-            "platform"  : process.platform,
-            "arch"      : process.arch,
-            "copyright" : this.options.copyright
+            "number"        : this.options.version,
+            "platform"      : process.platform,
+            "arch"          : process.arch,
+            "middleware"    : this.options.middleware,
+            "copyright"     : this.options.copyright
         };
+
         vers = this.msg.basic[4]
-                + version.number +' '+ version.platform +' '+ version.arch
-                + '\n' + version.copyright;
+                .replace(/%version%/, version.number +' '+ version.platform +' '+ version.arch)
+                .replace(/%middleware%/, version.middleware)
+                .replace(/%copyright%/, version.copyright);
+
         if (typeof(this.options.version) != "undefined") {
             if (!short) {
                 console.info(vers);

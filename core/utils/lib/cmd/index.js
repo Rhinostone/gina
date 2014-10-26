@@ -87,7 +87,16 @@ cmd.load = function(root, package){
 
     //Getting package.
     var p = require( _(root + package) ),
-        ginaPath = _(root + package.replace('/package.json', ''));
+        ginaPath = _(root + package.replace('/package.json', '')),
+        middleware = 'none';
+
+    try {
+
+        var dep = p.dependencies;
+        console.log('dep ', dep);
+    } catch (err) {
+
+    }
 
     cmd.setOption([
         {
@@ -105,6 +114,10 @@ cmd.load = function(root, package){
         {
             'name' : 'core',
             'content' : _(ginaPath +'/core')
+        },
+        {
+            'name' : 'middleware',
+            'content': middleware
         }
     ]);
 
