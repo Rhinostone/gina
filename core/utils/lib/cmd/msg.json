@@ -8,7 +8,7 @@
         "0" : "basic.help.txt",
         "1" : "no argument found",
         "2" : "illegal option",
-        "4" : "Gina I/O v",
+        "4" : "Gina I/O v %version%\nMiddleware: %middleware%\n%copyright%",
         "5" : "Gina I/O Framework not found! Please visite http://www.gina.io/ to get the latest version or try to run : npm install gina"
     },
     "app" : {
