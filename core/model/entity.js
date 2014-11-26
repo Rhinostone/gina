@@ -80,18 +80,18 @@ function EntitySuper(conn) {
                     entity[f] = (function(e, ev) {
                         var cached = entity[ev];
 
-                        return function() {
-                            if ( !entity.trigger) {
-                                entity.trigger = e
-                            }
-                            this.onComplete = function(cb) {
-                                entity.once(entity.name+'#'+ev, function(args){
-                                    cb.apply(this, args)
+                        return function () {
+                            //if (!entity.trigger) {
+                            //    entity.trigger = e
+                            //}
+                            this[ev].onComplete = function (cb) {
+                                entity.once(entity.name + '#' + ev, function (args) {
+                                    cb.apply(this[ev], args)
                                 })
                             }
 
-                            cached.apply(this, arguments);
-                            return this // chaining event & method
+                            cached.apply(this[ev], arguments);
+                            return this[ev] // chaining event & method
                         }
                     }(shortName +'#'+ f, f))
                 }
