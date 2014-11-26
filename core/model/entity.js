@@ -109,7 +109,7 @@ function EntitySuper(conn) {
 
                 entity.on(events[i], (function(e) {
                     return function() {
-                        console.log('calling back from event: ', e);
+                        console.debug('calling back from event: ', e);
                         var f = e.split(/\#/)[1];
                         entity.emit(entity.name+'#'+f, arguments);
                         // won't work here in some cases... save it for another case... out of here
