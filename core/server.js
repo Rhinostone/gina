@@ -350,11 +350,13 @@ function Server(options) {
 
         });//EO this.instance
 
+        var hostname = self.conf[self.appName].protocol + '://' + self.conf[self.appName].host + ':' + self.conf[self.appName].port[self.conf[self.appName].protocol];
         console.info(
                 '\nbundle: [ ' + self.appName +' ]',
                 '\nenv: [ '+ self.env +' ]',
-                '\nport: ' + self.conf[self.appName].port.http,
-                '\npid: ' + process.pid
+                //'\nport: ' + self.conf[self.appName].port.http,
+                '\npid: ' + process.pid,
+                '\nThis way please -> '+ hostname
         );
 
 

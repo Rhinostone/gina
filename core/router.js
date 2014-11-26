@@ -8,12 +8,13 @@
 
 
 //Imports.
-var url     = require("url");
-var utils   = require('./utils');
-var console = utils.logger;
-var inherits = utils.inherits;
+
+var url             = require('url');
+var utils           = require('./utils');
+var console         = utils.logger;
+var inherits        = utils.inherits;
 var SuperController = require('./controller');
-var Config  = require('./config');
+var Config          = require('./config');
 
 //init
 var config = new Config();
@@ -196,22 +197,26 @@ function Router(env) {
         //Routing.
         var pathname        = url.parse(request.url).pathname;
         var bundle          = local.bundle = params.bundle;
+        var conf            = config.Env.getConf( bundle, env );
         var action          = request.action = params.param.action;
         var actionFile      = params.param.file;
         var namespace       = params.param.namespace;
-        var hasViews        = ( typeof(local.conf[bundle][env].content.views) != 'undefined' ) ? true : false;
+        var hasViews        = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
 
         if (cacheless) refreshCore();
 
-        console.debug("routing content : \n", bundle, env,  JSON.stringify( config.Env.getConf( bundle, env ), null, 4) );
+
+        console.debug("routing content : \n", bundle, env,  JSON.stringify( conf, null, 4) );
+
         //Middleware Filters when declared.
-        var resHeaders = config.Env.getConf( bundle, env ).server.response.header;
+        var resHeaders = conf.server.response.header;
         //TODO - to test
         if ( resHeaders.count() > 0 ) {
-            for (var h in resHeaders)
-                response.header(h, resHeaders[h])
+            for (var h in resHeaders) {
+                response.setHeader(h, resHeaders[h])
+            }
         }
 
         // onRouteEvent
@@ -220,17 +225,17 @@ function Router(env) {
         console.debug('ACTION ON  ROUTING IS : ' + action);
 
         //Getting superCleasses & extending it with super Models.
-        var controllerFile = local.conf[bundle][env].bundlesPath +'/'+ bundle + '/controllers/controller.js';
+        var controllerFile = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
 
         var options = {
             action          : action,
             file            : actionFile,
             bundle          : bundle,//module
-            bundlePath      : local.conf[bundle][env].bundlesPath +'/'+ bundle,
+            bundlePath      : conf.bundlesPath +'/'+ bundle,
             rootPath        : self.executionPath,
-            conf            : local.conf[bundle][env],
+            conf            : conf,
             instance        : self.middlewareInstance,
-            views           : ( hasViews ) ? local.conf[bundle][env].content.views : undefined,
+            views           : ( hasViews ) ? conf.content.views : undefined,
             cacheless       : cacheless
         };
 
