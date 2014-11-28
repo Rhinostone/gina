@@ -24,6 +24,7 @@ $ gina <option>
 $ gina <option> <bundle_name> <arguments>
 [option]:
     -a or --add <bundle> <argument>
+    -av or --add-views <bundle>
     -d or --delete <bundle>
     -b or --build <bundle>
     -r or --restart <bundle>
