@@ -17,9 +17,15 @@ AddBundle = function(opt, project, env, bundle) {
     var init = function(opt, project, env, bundle) {
 
         if ( reserved.indexOf(bundle) > -1 ) {
-            console.log('[ '+bundle+' ] is a reserved name. Please, try something else.');
+            console.error('[ '+bundle+' ] is a reserved name. Please, try something else.');
             process.exit(1)
         }
+
+        if ( !isValidName() ) {
+            console.error('[ '+bundle+' ] is not a valid name. Please, try something else: [a-Z0-9].');
+            process.exit(1)
+        }
+
         self.root = getPath('root');
         self.opt = opt;
 
@@ -39,6 +45,11 @@ AddBundle = function(opt, project, env, bundle) {
         } catch (err) {
             rollback(err)
         }
+    }
+
+    var isValidName = function() {
+        var patt = /[a-z0-9]/gi;
+        return patt.test(bundle)
     }
 
     var check = function() {
