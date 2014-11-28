@@ -22,7 +22,7 @@ AddBundle = function(opt, project, env, bundle) {
         }
 
         if ( !isValidName() ) {
-            console.error('[ '+bundle+' ] is not a valid name. Please, try something else: [a-Z0-9].');
+            console.error('[ '+bundle+' ] is not a valid bundle name. Please, try something else: [a-Z0-9].');
             process.exit(1)
         }
 
