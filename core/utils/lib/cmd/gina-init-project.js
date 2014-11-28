@@ -16,6 +16,11 @@ function iniProject(name) {
         self.root = getPath('root');
         self.name = name;
 
+        if ( !isValidName() ) {
+            console.error('[ '+name+' ] is not a valid project name. Please, try something else: [a-Z0-9].');
+            process.exit(1)
+        }
+
         var file = new _(self.root + '/project.json');
         var exists = file.existsSync();
         if ( !exists ) {
@@ -24,6 +29,11 @@ function iniProject(name) {
             console.log('[ aborted ] a project already exists in this location: '+ file);
             process.exit(0)
         }
+    }
+
+    var isValidName = function() {
+        var patt = /[a-z0-9]/gi;
+        return patt.test(bundle)
     }
 
     var createFile = function(target) {
