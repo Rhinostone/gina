@@ -458,20 +458,19 @@ var AppCommand = {
             var envPath = _(getPath('root') + '/env.json');
             var isWorking = false;
 
-            if (!fs.existsSync(_(getPath('root')+'/bundles/'+bundle))) {
-                if (fs.existsSync(_(getPath('root')+'/tmp/pid'))) {
-                    var pids = fs.readdirSync(getPath('root')+'/tmp/pid');
-                    var i = pids.length-1;
-                    var tmpContent = null;
-                    while ( i >= 0 && tmpContent == null) {
-                        tmpContent = fs.readFileSync(getPath('root')+'/tmp/pid/'+pids[i]);
-                        if (tmpContent != bundle) {
-                            tmpContent = null
-                        }
+            if (fs.existsSync(_(getPath('root')+'/tmp/pid'))) {
+                var pids = fs.readdirSync(getPath('root')+'/tmp/pid');
+                var i = pids.length-1;
+                var tmpContent = null;
+                while ( i >= 0 && tmpContent == null) {
+                    tmpContent = fs.readFileSync(getPath('root')+'/tmp/pid/'+pids[i]);
+                    if (tmpContent != bundle) {
+                        tmpContent = null
                     }
-                    if (tmpContent != null) {
-                        isWorking = true
-                    }
+                    --i
+                }
+                if (tmpContent != null) {
+                    isWorking = true
                 }
             }
 
