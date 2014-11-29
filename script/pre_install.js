@@ -7,7 +7,10 @@
  */
 
 var fs      = require('fs');
-var os      = require("os");
+var os      = require('os');
+var utils   = require('./../core/utils');
+var console = utils.logger;
+
 /**
  * Pre install constructor
  * @constructor
@@ -19,66 +22,13 @@ function PreInstall() {
         self.isWin32 = ( os.platform() == 'win32' ) ? true : false;
         self.path = __dirname.substring(0, (__dirname.length - 'script'.length));
 
-        setDefaultMiddleware()
     }
-
-    var setDefaultMiddleware = function() {
-        var key = '--middleware=', file = 'MIDDLEWARE';
-        // default middleware;
-        var middleware = 'express@3.x';
-
-        var arg = process.argv;
-        //getting option
-        for (var i=0; i<arg.length; ++i) {
-            if (arg[i].indexOf(key) > -1) {
-                middleware = (arg[i].split(/=/)[1])
-            }
-        }
-
-        var filename = self.path +'/'+ file;
-        //default middleware from file
-        if ( fs.existsSync(filename) ) { // update
-            var def = fs.readFileSync(filename).toString;
-            // TODO - uninstall it if installed ??
-            if (def !== middleware) {
-                fs.writeFile(filename, middleware, function onWrote(err){
-                    if (err) {
-                        throw new Error(err.stack||err.message||err);
-                        process.exit(1)
-                    }
-                    //updade package.json too !
-                    updatePackage(middleware)
-                });
-            } // else, nothing to do
-        } else { // create
-            fs.writeFile(filename, middleware, function onWrote(err){
-                if (err) {
-                    throw new Error(err.stack||err.message||err);
-                    process.exit(1)
-                }
-                //updade package.json too !
-                updatePackage(middleware)
-            });
-        }
-    }
-
-    var updatePackage = function(middleware) {
-        var m = middleware.split(/\@/);
-        var dep = m[0], val = m[1];
-        var filename = self.path +'/package.json';
-
-        try {
-            var content = require(filename);
-            //TODO - remove all other supported middlewares lsitied in package.json
-            content.dependencies[dep] = val;
-            fs.writeFileSync(filename, JSON.stringify(content, null, 2) );
-        } catch(err) {
-            throw new Error(err.stack||err.message||err);
-            process.exit(1)
-        }
-
-        return true
-    }
+    // this is done to allow multiple calls of post_install.js
+    //if ( /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
+    //    process.exit(0)
+    //} else {
+    //  ...
+    //}
 
     init()
 };
