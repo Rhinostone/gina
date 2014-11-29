@@ -23,12 +23,15 @@ function PreInstall() {
         self.path = __dirname.substring(0, (__dirname.length - 'script'.length));
 
     }
-    // this is done to allow multiple calls of post_install.js
-    //if ( /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
+    // compare with post_install.js if you want to use this
+    //var filename = _(self.path + '/SUCCESS');
+    //var installed = fs.existsSync( filename );
+    //if (installed && /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
     //    process.exit(0)
-    //} else {
-    //  ...
+    //} else  {
+    //    fs.writeFileSync(filename, true );
     //}
+    // ...
 
     init()
 };

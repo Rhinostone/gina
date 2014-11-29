@@ -37,8 +37,8 @@ module.exports = function () {
         var hasCalledBack = false;
         var e = new EventEmitter();
 
-        console.log( opt.cwd );
-        console.log( 'running ', cmdline);
+        //console.log( opt.cwd );
+        //console.log( 'running ', cmdline);
 
         var cmd;
         if ( isWin32() ) {

@@ -14,6 +14,7 @@ VERSION
 .svn
 .git
 test/workspace
+SUCCESS
 
 # Desktop
 .DS_Store
