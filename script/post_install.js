@@ -28,20 +28,12 @@ function PostInstall() {
         self.path = _( __dirname.substring(0, (__dirname.length - "script".length)-1 ) );
         self.root = process.cwd().toString();
 
-
-        // this is done to allow multiple calls of post_install.js
-        if ( /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
-            process.exit(0)
-        } else {
-            // do something that can be called after the first time installation
-            createVersionFile(function onFileCreated(err) {
-                if (err) {
-                    console.error(err.stack)
-                }
-
-                createGinaFileForPlatform()
-            })
-        }
+        createVersionFile(function onFileCreated(err) {
+            if (err) {
+                console.error(err.stack)
+            }
+            createGinaFileForPlatform()
+        })
     }
 
     var createVersionFile = function(callback) {
@@ -78,6 +70,7 @@ function PostInstall() {
     }
 
     var createGinaFileForPlatform = function() {
+        console.info('creating platform file');
         var name = require( _(self.path + '/package.json') ).name;
 
         var filename = ( (self.isWin32) ? '.' : '' ) + name;
@@ -94,6 +87,16 @@ function PostInstall() {
                 }
                 utils.generator.createFileFromTemplate(source, target)
             }
+
+            // this is done to allow multiple calls of post_install.js
+            var filename = _(self.path + '/SUCCESS');
+            var installed = fs.existsSync( filename );
+            if (installed && /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
+                process.exit(0)
+            } else  {
+                fs.writeFileSync(filename, true );
+            }
+            // do something that can be called after the first time installation
 
             // Check if npm install has been done
             if ( !hasNodeModulesSync() ) {
