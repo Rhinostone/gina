@@ -92,6 +92,8 @@ function PostInstall() {
             var filename = _(self.path + '/SUCCESS');
             var installed = fs.existsSync( filename );
             if (installed && /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
+                var msg = "Gina's command line tool has been installed.";
+                console.info(msg);
                 process.exit(0)
             } else  {
                 fs.writeFileSync(filename, true );
