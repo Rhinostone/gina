@@ -33,7 +33,7 @@ function iniProject(name) {
 
     var isValidName = function() {
         var patt = /[a-z0-9]/gi;
-        return patt.test(bundle)
+        return patt.test(name)
     }
 
     var createFile = function(target) {
