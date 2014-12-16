@@ -15,20 +15,33 @@ function iniProject(name) {
     var init = function(name) {
         self.root = getPath('root');
         self.name = name;
+        var err = false;
 
         if ( !isValidName() ) {
             console.error('[ '+name+' ] is not a valid project name. Please, try something else: [a-Z0-9].');
             process.exit(1)
         }
 
+        // creating project file
         var file = new _(self.root + '/project.json');
         var exists = file.existsSync();
         if ( !exists ) {
-            createFile( file.toString() )
+            createProjectFile( file.toString() )
         } else {
-            console.log('[ aborted ] a project already exists in this location: '+ file);
-            process.exit(0)
+            console.warn('a project already exists in this location: '+ file);
         }
+
+        // creating package file
+        file = new _(self.root + '/package.json');
+        exists = file.existsSync();
+        if ( !exists ) {
+            createPackageFile( file.toString() )
+        } else {
+            console.warn('a package already exists in this location: '+ file);
+
+            end()
+        }
+
     }
 
     var isValidName = function() {
@@ -36,7 +49,7 @@ function iniProject(name) {
         return patt.test(name)
     }
 
-    var createFile = function(target) {
+    var createProjectFile = function(target) {
         var conf = GINA_PATH +'/template/conf/project.json';
         var contentFile = require(conf);
         var dic = {
@@ -44,7 +57,23 @@ function iniProject(name) {
         };
 
         contentFile = whisper(dic, contentFile);//data
+        fs.writeFileSync(target, JSON.stringify(contentFile, null, 4))
+    }
+
+    var createPackageFile = function(target) {
+        var conf = GINA_PATH +'/template/conf/package.json';
+        var contentFile = require(conf);
+        var dic = {
+            "project" : self.name
+        };
+
+        contentFile = whisper(dic, contentFile);//data
         fs.writeFileSync(target, JSON.stringify(contentFile, null, 4));
+
+        end()
+    }
+
+    var end = function() {
         console.log('project [ '+ self.name +' ] ready');
         process.exit(0)
     }
