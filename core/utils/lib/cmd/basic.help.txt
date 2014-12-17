@@ -29,6 +29,7 @@ $ gina <option> <bundle_name> <arguments>
     -b or --build <bundle>
     -r or --restart <bundle>
     -s or --start <bundle> [<argument>]
+    -c or --connect (will add a database connector)
 
 [arguments]:
     <add>   -wv or --with-views
