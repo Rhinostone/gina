@@ -40,5 +40,5 @@
     "postinstall": "node script/post_install.js"
   },
   "license": "MIT",
-  "readmeFilename": "README_NPM.md"
+  "readmeFilename": "README.md"
 }
