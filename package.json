@@ -15,7 +15,7 @@
     "gina.io",
     "gina js"
   ],
-  "version": "0.0.9p16",
+  "version": "0.0.9p17",
   "repository": {
     "type": "git",
     "url": "https://github.com/Rhinostone/gina.git"
@@ -40,5 +40,5 @@
     "postinstall": "node script/post_install.js"
   },
   "license": "MIT",
-  "readmeFilename": "README_NPM.md"
+  "readmeFilename": "README.md"
 }
