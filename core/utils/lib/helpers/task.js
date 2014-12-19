@@ -41,10 +41,6 @@ module.exports = function () {
         //console.log( 'running ', cmdline);
 
         var cmd;
-        if ( isWin32() ) {
-            throw new Error('Windows platform not supported yet for command line forward');
-            process.exit(1)
-        }
         // cmdline must be an array !!
         if (typeof(cmdline) == 'string') {
             cmdline = cmdline.split(' ')
