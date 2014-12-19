@@ -75,52 +75,66 @@ function PostInstall() {
 
         var filename = ( (self.isWin32) ? '.' : '' ) + name;
 
+        var keepGoing = function(filename) {
+
+            createGinaFile(filename, function onFileCreated(err) {
+                if (err) console.error(err.stack);
+
+                // this is done to allow multiple calls of post_install.js
+                var filename = _(self.path + '/SUCCESS');
+                var installed = fs.existsSync( filename );
+                if (installed && /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
+                    var msg = "Gina's command line tool has been installed.";
+                    console.info(msg);
+                    process.exit(0)
+                } else  {
+                    fs.writeFileSync(filename, true );
+                }
+                // do something that can be called after the first time installation
+
+
+                // Check if npm install has been done
+                if ( !hasNodeModulesSync() ) {
+                    npmInstall()
+                } else {
+                    var target = new _(self.path + '/node_modules');
+                    console.debug('replacing: ', target.toString() );
+                    target
+                        .rm( function(err) {
+                            if (err) {
+                                console.error(err.stack);
+                                process.exit(1)
+                            } else {
+                                npmInstall()
+                            }
+                        })
+                }
+
+            })
+        }
+
         if (self.isWin32) {
             var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
             var source = _(self.path + '/core/template/command/gina.bat.tpl');
             var target = _(appPath +'/'+ name + '.bat');
             if ( fs.existsSync(target) ) {
                 fs.unlinkSync(target);
-                console.info('file '+target+' exists; will unlink before creating new one');
+                // have to wait for windows to complete this
+                setTimeout( function(){
+                    utils.generator.createFileFromTemplate(source, target);
+                    keepGoing(filename)
+                }, 1000)
+            } else {
+                utils.generator.createFileFromTemplate(source, target);
+                keepGoing(filename)
             }
 
-            utils.generator.createFileFromTemplate(source, target)
+        } else {
+            keepGoing(filename)
         }
 
-        createGinaFile(filename, function onFileCreated(err) {
-            if (err) console.error(err.stack);
-
-            // this is done to allow multiple calls of post_install.js
-            var filename = _(self.path + '/SUCCESS');
-            var installed = fs.existsSync( filename );
-            if (installed && /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
-                var msg = "Gina's command line tool has been installed.";
-                console.info(msg);
-                process.exit(0)
-            } else  {
-                fs.writeFileSync(filename, true );
-            }
-            // do something that can be called after the first time installation
 
 
-            // Check if npm install has been done
-            if ( !hasNodeModulesSync() ) {
-                npmInstall()
-            } else {
-                var target = new _(self.path + '/node_modules');
-                console.debug('replacing: ', target.toString() );
-                target
-                    .rm( function(err) {
-                        if (err) {
-                            console.error(err.stack);
-                            process.exit(1)
-                        } else {
-                            npmInstall()
-                        }
-                    })
-            }
-
-        })
     }
 
     var hasNodeModulesSync = function() {
