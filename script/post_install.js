@@ -78,16 +78,6 @@ function PostInstall() {
         createGinaFile(filename, function onFileCreated(err) {
             if (err) console.error(err.stack);
 
-            if (self.isWin32) {
-                var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
-                var source = _(self.path + '/core/template/command/gina.bat.tpl');
-                var target = _(appPath +'/'+ name + '.bat');
-                if ( fs.existsSync(target) ) {
-                    fs.unlinkSync(target)
-                }
-                utils.generator.createFileFromTemplate(source, target)
-            }
-
             // this is done to allow multiple calls of post_install.js
             var filename = _(self.path + '/SUCCESS');
             var installed = fs.existsSync( filename );
@@ -96,6 +86,17 @@ function PostInstall() {
                 console.info(msg);
                 process.exit(0)
             } else  {
+
+                if (self.isWin32) {
+                    var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
+                    var source = _(self.path + '/core/template/command/gina.bat.tpl');
+                    var target = _(appPath +'/'+ name + '.bat');
+                    if ( fs.existsSync(target) ) {
+                        fs.unlinkSync(target)
+                    }
+                    utils.generator.createFileFromTemplate(source, target)
+                }
+
                 fs.writeFileSync(filename, true );
             }
             // do something that can be called after the first time installation
@@ -128,7 +129,10 @@ function PostInstall() {
 
 
     var npmInstall = function() {
-        run('npm install', { cwd: _(self.path), tmp: _(self.root +'/tmp')  })
+        console.info('now installing modules: please, wait ...');
+        var cmd = ( isWin32() ) ? 'npm.cmd install' : 'npm install';
+
+        run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp')  })
             .onData(function(data){
                 console.info(data)
             })
