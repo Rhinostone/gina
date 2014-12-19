@@ -80,10 +80,11 @@ function PostInstall() {
             var source = _(self.path + '/core/template/command/gina.bat.tpl');
             var target = _(appPath +'/'+ name + '.bat');
             if ( fs.existsSync(target) ) {
-                fs.unlinkSync(target)
-            } else {
-                utils.generator.createFileFromTemplate(source, target)
+                fs.unlinkSync(target);
+                console.info('file '+target+' exists; will unlink before creating new one');
             }
+
+            utils.generator.createFileFromTemplate(source, target)
         }
 
         createGinaFile(filename, function onFileCreated(err) {
