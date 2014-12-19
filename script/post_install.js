@@ -86,20 +86,19 @@ function PostInstall() {
                 console.info(msg);
                 process.exit(0)
             } else  {
-
-                if (self.isWin32) {
-                    var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
-                    var source = _(self.path + '/core/template/command/gina.bat.tpl');
-                    var target = _(appPath +'/'+ name + '.bat');
-                    if ( fs.existsSync(target) ) {
-                        fs.unlinkSync(target)
-                    }
-                    utils.generator.createFileFromTemplate(source, target)
-                }
-
                 fs.writeFileSync(filename, true );
             }
             // do something that can be called after the first time installation
+            if (self.isWin32) {
+                var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
+                var source = _(self.path + '/core/template/command/gina.bat.tpl');
+                var target = _(appPath +'/'+ name + '.bat');
+                if ( fs.existsSync(target) ) {
+                    fs.unlinkSync(target)
+                } else {
+                    utils.generator.createFileFromTemplate(source, target)
+                }
+            }
 
             // Check if npm install has been done
             if ( !hasNodeModulesSync() ) {
