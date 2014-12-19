@@ -92,6 +92,45 @@ Once it's done, you just need to refresh your browser.
 Gina is shipped with [Swig](http://paularmstrong.github.io/swig/docs/) as the default template engine. If you are more confortable with another template engine, you can use your own.
 
 
+## Troubleshooting
+
+### I can't start my bundle
+
+__Are you starting for the first time ?__
+
+- If you are a __Windows user__, make sure you are running your command line with sufficient permission; like __"launching your terminal as administrator"__.
+
+
+- If you have just cloned Gina from github, don't forget to run from the project root :
+```tty
+$ node node_modules/gina/script/post_install.js
+```
+
+- Have you noticed the __environment argument__ ( dev ) ?
+``` tty
+$ gina -s frontend dev
+```
+Without the __dev__ argument, Gina is going to understand that you want to use the production environment. If it's really what you want to achieve, just __build__ :
+```tty
+$ gina -b frontend prod
+```
+NB.: `prod` is optiona here; if you don't add it, it will build for prod by default.
+
+
+__Are you trying to restart after a crash ?__
+
+Gina uses 2 processes today: one master, one slave (it will change very soon). Once an excepion is thrown and the program crashes, one of the 2 process can remain in the tasks/processes list.   
+This has been mostly observed for Windows users.  
+
+- If you are on a POSIX OS, you should look for `gina`, then kill it !   
+
+- If you are on a Windows, look for `node.exe` or  `Event I/O Handler`, then kill it !  
+
+After this, try again to start, it should run better.
+
+
+
+
 More documentation and tutorials are coming !
 
 
