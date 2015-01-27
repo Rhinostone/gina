@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2009-2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2009-2014 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -14,7 +14,7 @@ var fs      = require('fs');
 PrePublish = function(){
     var self = this;
     this.path = _( __dirname.substring(0, (__dirname.length - "script".length)) );
-    //this.projectPath = _( __dirname.substring(0, (__dirname.length - "node_modules/geena/script".length)) );
+    //this.projectPath = _( __dirname.substring(0, (__dirname.length - "node_modules/gina/script".length)) );
 
     var init = function(){
         self.tasksCount = 0;
@@ -57,7 +57,7 @@ PrePublish = function(){
 
     };
 
-    this.removeComments = function(){ console.log('removin comments...')};
+    this.removeComments = function(){ console.log('removing  comments...')};
     this.removeConsoleLog = function(){
 
     };

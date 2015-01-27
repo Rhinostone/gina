@@ -1,0 +1,9 @@
+{
+    "source" : [
+        "${gina.framework}/lib/cmd"
+    ],
+    "target" : [
+        "${gina}/doc/man",
+        "${gina}/doc/htmlman"
+    ]
+}
