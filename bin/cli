@@ -18,7 +18,7 @@ pack =  (isWin32) ? pack.replace(/\//g, '\\') : pack;
 try {
     var packObj = require(pack);
     var version =  getEnvVar('GINA_VERSION') || packObj.version;
-    var frameworkPath = ginaPath + '/node_modules/gina.framework/' + version;
+    var frameworkPath = ginaPath + '/framework/' + version;
 
     require(frameworkPath + '/lib');
     var console = lib.logger;
