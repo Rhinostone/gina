@@ -1,6 +1,6 @@
 {
     "frameworks": {
-        "{release}": ["{version}"]
+        "{release}": [ "{version}" ]
     },
     "projects": [],
     "bundles": {

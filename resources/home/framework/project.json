@@ -3,14 +3,14 @@
     "name" : "framework",
     "middleware" : "express@3.4.0",
     "npm" : true,
-    "packages" : {
-        "geena" : {
+    "bundles" : {
+        "gina" : {
             "comment" : "Framework module - Source path must be relative.",
             "version" : "{version}",
-            "src" : "node_modules/{version}/geena.framework",
+            "src" : "node_modules/{version}/gina.framework",
             "repo" : {
-                "ssh" : "git@wgit.rhinostone.net:geena/geena.module.framework.git",
-                "https" : "http://wgit.rhinostone.net:45980/geena/geena.module.framework.git"
+                "ssh" : "git@wgit.rhinostone.net:gina/gina.module.framework.git",
+                "https" : "http://wgit.rhinostone.net:45980/gina/gina.module.framework.git"
             }
         },
         "updater" : {
@@ -19,8 +19,8 @@
             "version" : "0.0.1",
             "src" : "src/updater",
             "repo" : {
-                "ssh" : "git@wgit.rhinostone.net:geena/geena.bundle.updater.git",
-                "https" : "http://wgit.rhinostone.net:45980/geena/geena.bundle.updater.git"
+                "ssh" : "git@wgit.rhinostone.net:gina/gina.bundle.updater.git",
+                "https" : "http://wgit.rhinostone.net:45980/gina/gina.bundle.updater.git"
             },
             "release" : {
                 "version" : "0.0.1",
@@ -34,8 +34,8 @@
             "version" : "0.0.1",
             "src" : "src/shutdown",
             "repo" : {
-                "ssh" : "git@github.com:Rhinostone/geena.bundle.shutdown.git",
-                "https" : "https://github.com/Rhinostone/geena.bundle.shutdown.git"
+                "ssh" : "git@github.com:Rhinostone/gina.bundle.shutdown.git",
+                "https" : "https://github.com/Rhinostone/gina.bundle.shutdown.git"
             },
             "release" : {
                 "version" : "0.0.1",

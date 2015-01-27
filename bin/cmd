@@ -1,0 +1,109 @@
+#!/usr/bin/env node
+'use strict';
+
+var fs      = require('fs');
+var net     = require('net');
+
+function Cmd(opt, runOffine) {
+
+    var local = {};
+    var lib = {};
+
+    var init = function(opt, runOffine) {
+        local.port       = opt.port;
+        local.binPath    = opt.binPath;
+        local.pack       = opt.pack;
+        local.ginaPath   = opt.ginaPath;
+        local.homedir    = opt.homedir;
+        local.frameworkPath = opt.frameworkPath;
+
+        lib = require(local.frameworkPath + "/lib");
+
+        if ( typeof(runOffine) != 'undefined' ) {
+            launchCmd()
+        } else {
+            launchFramework()
+        }
+    };
+
+
+    var launchFramework = function(){
+
+        var framework = net.createServer( function(conn) {//'connection' listener
+            //feedback.
+            conn.on('end', function() {
+                console.info('client disconnected')
+            });
+
+            //Receiving.
+            conn.on('data', function(data) {
+
+                console.info('received ', data.toString() );
+
+                //Launch.
+                lib.cmd.load({
+                    ginaPath : local.ginaPath,
+                    frameworkPath : local.frameworkPath,
+                    pack : local.pack,
+                    argv : data.toString(),
+                    client : conn,
+                    homedir : local.homedir
+                })
+            })
+        });
+
+
+        framework.on('error', function(err) {
+            if (err.code === 'EADDRINUSE') {
+                console.warn('Framework already running.')
+                //Checks if there is services to start anyway.
+            } else {
+                console.emerg('Could not start framework. ', err.stack)
+            }
+        });
+
+        framework.listen(local.port, function() { //'listening' listener
+            console.info('Framework started');
+
+            //Launch first time.
+            lib.cmd.load({
+                ginaPath : local.ginaPath,
+                frameworkPath : local.frameworkPath,
+                pack : local.pack,
+                argv : JSON.stringify(process.argv),
+                client : process.stdout,
+                isFromFramework : true,
+                homedir : local.homedir,
+                task : {
+                    topic : "framework",
+                    action : "start"
+                }
+            })
+        })
+    };
+
+    var launchCmd = function() {
+        var cmd = process.argv[2].split(':');
+        var topic = cmd[0];
+        var action = cmd[1];
+
+
+        lib.cmd.load({
+            ginaPath : local.ginaPath,
+            frameworkPath : local.frameworkPath,
+            pack : local.pack,
+            argv : JSON.stringify(process.argv),
+            client : process.stdout,
+            isFromFramework : true,
+            homedir : local.homedir,
+            task : {
+                topic : topic,
+                action : action
+            }
+        })
+    };
+
+    init(opt,runOffine)
+};
+
+module.exports = Cmd
