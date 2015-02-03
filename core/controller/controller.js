@@ -182,6 +182,16 @@ function Controller(options) {
                 }
 
                 try {
+                    // Allows you to get a bundle web root
+                    swig.setFilter('getBundleWebroot', function (input, obj) {
+                        var prop = options.envObj.getConf(obj, options.conf.env),
+                            url = prop.protocol + '://'+ prop.host +':'+ prop.port[prop.protocol];
+                        if ( typeof(prop.server['webroot']) != 'undefined') {
+                            url += prop.server['webroot']
+                        }
+                        return url
+                    });
+
                     content = swig.compile( content.toString() )(data)
                 } catch (err) {
                     // [ martin ]
