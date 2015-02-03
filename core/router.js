@@ -236,7 +236,8 @@ function Router(env) {
             conf            : conf,
             instance        : self.middlewareInstance,
             views           : ( hasViews ) ? conf.content.views : undefined,
-            cacheless       : cacheless
+            cacheless       : cacheless,
+            envObj          : config.Env
         };
 
         try {
