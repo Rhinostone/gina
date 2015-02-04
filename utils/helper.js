@@ -1,9 +1,9 @@
-var MainHelper;
-
 var fs = require('fs');
 var os = require('os');
 
-MainHelper = function(opt) {
+
+
+function MainHelper(opt) {
     var self = {
         protectedVars : [],
         config : {}
@@ -294,7 +294,11 @@ MainHelper = function(opt) {
     }()
 
     filterArgs = function() {
-        var evar = "";
+        var setget = ( typeof(process.argv[2]) != 'undefined'
+                            && /(\:set$|\:get$|[-v]|\:version$|[--version])/.test(process.argv[2]))
+                            ? true : false
+            , evar = '';
+
         if ( typeof(process.env['gina']) == 'undefined') {
             process['gina'] = {}
         }
@@ -333,7 +337,8 @@ MainHelper = function(opt) {
         }
 
         //Cleaning argv.
-        process.argv = newArgv;
+        if (!setget)
+            process.argv = newArgv;
 
         //Cleaning the rest.
         for (var e in process.env) {
@@ -436,7 +441,7 @@ MainHelper = function(opt) {
 
     setVendorsConfig = function(dir) {
         if ( !fs.existsSync(dir) ) {
-            console.log('Directory [' + dir + '] is missing !')
+            console.debug('Directory [' + dir + '] is missing !')
         } else {
             var files = fs.readdirSync(dir), filename = "";
             var file = '', a = [];

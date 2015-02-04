@@ -1,40 +1,26 @@
-# Project
-/bundles
-
 # IDE
 .jshintrc
 .idea
 nbproject
-.metadata
 
-# Geena
-node_modules
-npm-debug.log
-releases
-bundles
-logs
-tmp
-cache
-src
-./src
+# Gina
+/logs
+/tmp
+/cache
 .gna
-*.log
-
+node_modules*
+VERSION
 # SCM
 .svn
 .git
+test/workspace
+SUCCESS
 
 # Desktop
 .DS_Store
-._.DS_Store
 desktop.ini
-
-# Capistrano
-Capfile
-/config
 
 # Misc
 /data
 /cgi-bin
-*.sock
-*.dump
+._.DS_Store

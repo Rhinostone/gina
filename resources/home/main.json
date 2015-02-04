@@ -1,0 +1,14 @@
+{
+    "frameworks": {
+        "{release}": [ "{version}" ]
+    },
+    "envs": {
+        "{release}": ["dev"]
+    },
+    "def_env": {
+      "{release}": "dev"
+    },
+    "dev_env": {
+        "{release}": "dev"
+    }
+}
