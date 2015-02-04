@@ -6,8 +6,6 @@ var net = require('net');
 
 
 var isWin32 = (process.platform === 'win32') ? true : false;
-process.argv.push('--is-win32=' + isWin32);
-
 var binPath = __dirname;
 var ginaPath = (binPath.replace(/\\/g, '/')).replace('/bin', '');
 ginaPath = (isWin32) ? ginaPath.replace(/\//g, '\\') : ginaPath;
@@ -34,7 +32,7 @@ try {
         process.exit(1)
     }
 } catch (err) {
-    console.error('gina: could not load [ ' + pack + ' ]\n' + err.stack);
+    process.stdout.write('gina: could not load [ ' + pack + ' ]\n' + err.stack);
     process.exit(1)
 }
 
