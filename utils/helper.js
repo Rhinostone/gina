@@ -470,6 +470,9 @@ function MainHelper(opt) {
             throw new Error('wont\'t override env var [ '+ key + ' ]')
         } else {
             //Write env var.
+            if ( typeof(process['gina']) == 'undefined') {
+                process['gina'] = {}
+            }
             process['gina'][key] = val;
             if ( typeof(isProtected) != 'undefined' && isProtected == true) {
                 self.protectedVars.push(key)
