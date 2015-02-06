@@ -20,6 +20,7 @@ try {
     var frameworkPath = ginaPath + '/framework/' + version;
 
     require(frameworkPath + '/lib');
+    //Loading logger.
     var console = lib.logger;
 
     if ( !fs.existsSync(frameworkPath) ) {
@@ -38,24 +39,7 @@ try {
 }
 
 
-//var console = require(ginaPath + '/utils/logger');
-
-
-
-//try {
-
-//} catch(err) {
-//    console.error(err.stack)
-//}
-
 filterArgs();
-
-//Loading logger.
-//setVendorsConfig(ginaPath + '/config');
-//var logger = new Logger( getVendorsConfig('log4js') );
-//var console = require(ginaPath +'/utils/logger');
-
-
 //check for $HOME path, alert if empty.
 var home = getUserHome();
 if (!home) {
@@ -79,6 +63,7 @@ var allowedOffline = [
     'env:',
     'framework:',
     'project:',
+    'bundle:',
     '--',//options or other aliases.
     '-'//options or other aliases.
 ];
