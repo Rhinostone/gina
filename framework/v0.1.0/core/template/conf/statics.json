@@ -1,0 +1,5 @@
+{
+    "css": "{views}/css",
+    "images": "{views}/images",
+    "js" : "{views}/js"
+}

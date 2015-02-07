@@ -1,0 +1,6 @@
+{
+    "default": {
+        "url": "/",
+        "param": { "action": "init" }
+    }
+}

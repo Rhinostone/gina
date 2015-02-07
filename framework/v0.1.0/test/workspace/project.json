@@ -1,0 +1,14 @@
+{
+    "name": "my_project",
+    "bundles": {
+        "my_bundle": {
+            "comment": "Your comment goes here.",
+            "tag": "001",
+            "src": "src/my_bundle",
+            "release": {
+                "version": "0.0.1",
+                "link": "bundles/my_bundle"
+            }
+        }
+    }
+}

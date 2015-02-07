@@ -1,0 +1,13 @@
+{
+    "framework" : {
+        "." : "dot",
+        "-h" : "help",
+        "--help" : "help",
+        "-o" : "open",
+        "--open" : "open",
+        "-r" : "restart",
+        "--restart" : "restart",
+        "-v" : "version",
+        "--verison" : "version"
+    }
+}

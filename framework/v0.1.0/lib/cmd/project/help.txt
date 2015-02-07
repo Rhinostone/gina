@@ -1,0 +1,39 @@
+******************************
+* Project command lines e.g. *
+******************************
+
+
+[ Adding a new project ]
+
+You have 2 ways of creating your project
+
+1st method
+----------
+$ gina project:add <project_name> [ —-path=/var/www ] (if no path given, will take the current)
+
+where `/var/www` is the destination path
+
+2nd method
+----------
+$ gina project:add /Workflow/www/<project_name>
+
+
+
+$ gina project:list [ [ —-more ] | [-b | —-with-bundles] | [-e | -—with-envs] ]
+
+[ Removing an existing project ]
+
+$ gina project:remove <project_name> [ -f (remove all related sources without prompting) ]
+
+
+$ gina project:rename vitrinedemo dressing-board [ —-path=/new/path ]
+$ gina project:start aikos [ —-env=staging ]
+$ gina project:restart aikos ( !!! must take in consideration the arguments given inline for startup. eg.: —-env=staging )
+$ gina project:stop aikos
+
+
+//Commercial offers with the cloud ??
+$ gina project:backup aikos —-path=/var/dump —-with-password
+$ gina project:restore /var/dump/myproject.gna (will restore in current path)
+	or $ gina project:restore myproject.gna (will restore from current path to current path: myproject.gna must be under the PWD)
+	or $ gina project:restore /var/dump/myproject.gna  —-path=/other/path
