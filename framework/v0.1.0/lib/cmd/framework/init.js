@@ -120,7 +120,7 @@ function Initialize(opt) {
                 var data = require(source);
                 var dic = {
                     'release' : self.release,
-                    'version' : getEnvVar('GINA_VERSION')
+                    'version' : 'v' + getEnvVar('GINA_VERSION')
                 };
                 data = whisper(dic, data);
 
@@ -131,6 +131,22 @@ function Initialize(opt) {
             }
         } else {
             // update if needed : like the version number ...
+        }
+    }
+
+    /**
+     * Checking ports
+     *
+     **/
+    self.checkIfPorts = function() {
+        console.debug('checking ports...');
+        var target = _(self.opt.homedir +'/ports.json');
+
+        if ( !fs.existsSync(target) ) {
+            lib.generator.createFileFromDataSync(
+                { http: {} },
+                target
+            )
         }
     }
 

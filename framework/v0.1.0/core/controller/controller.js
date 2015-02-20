@@ -79,8 +79,8 @@ function Controller(options) {
         local.next = next;
 
         getParams(req);
-        if ( typeof(local.options.views) != 'undefined' && typeof(local.options.action) != 'undefined' ) {
-            var action = local.options.action;
+        if ( typeof(local.options.views) != 'undefined' && typeof(local.options.control) != 'undefined' ) {
+            var control = local.options.control;
             var ext = 'html';
             if ( typeof(local.options.views.default) != 'undefined' ) {
                 ext = local.options.views.default.ext || ext;
@@ -90,11 +90,11 @@ function Controller(options) {
                 local.options.views.default.ext = ext
             }
 
-            var content = action;
+            var content = control;
             self.set('page.ext', ext);
             self.set('page.content', content);
-            self.set('page.action', action);
-            self.set('page.title', action);
+            self.set('page.control', control);
+            self.set('page.title', control);
         }
 
         if ( hasViews() ) {
@@ -438,9 +438,9 @@ function Controller(options) {
      *
      * Allows you to redirect to an internal [ route ], an internal [ path ], or an external [ url ]
      * For this to work you have to set in your routing.json a new route using  "param":
-     * { "action": "redirect", "route": "one-valid-route" }
+     * { "control": "redirect", "route": "one-valid-route" }
      * OR
-     * { "action": "redirect", "url": "http://www.somedomain.com/page.html" }
+     * { "control": "redirect", "url": "http://www.somedomain.com/page.html" }
      *
      * if you are free to use the redirection [ code ] of your choice, we've set it to 301 by default
      *

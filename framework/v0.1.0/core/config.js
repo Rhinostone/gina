@@ -517,7 +517,7 @@ function Config(opt) {
             //    "url": "/@doc",
             //    "param": {
             //        "namespace" : "framework",
-            //        "action": "doc"
+            //        "control": "doc"
             //    }
             //}
         };
@@ -595,7 +595,7 @@ function Config(opt) {
                     }
 
                     if ( typeof(conf[bundle][env].content['views']) != 'undefined' ) {
-                        routing[rule].param.file = routing[rule].param.file || rule;//routing[rule].param.action
+                        routing[rule].param.file = routing[rule].param.file || rule;
                         if ( !conf[bundle][env].content['views']['default'].useRouteNameAsFilename && routing[rule].param.namespace != 'framework') {
                             var tmpRouting = [];
                             for (var i = 0, len = routing[rule].param.file.length; i < len; ++i) {

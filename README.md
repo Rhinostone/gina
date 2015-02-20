@@ -20,7 +20,7 @@ $ npm install gina -g
 
 You can check if gina is properly installed
 ```  tty
-$ gina -v 
+$ gina -v
 ```
 NB.: This is a shortcut for `gina framework:version`
 
@@ -43,7 +43,7 @@ $ cd myproject
 
 Then you need to __initialize your project__
 
-> on Windows from the Windows CLI - __NEED TO BE ADMIN !!__ 
+> on Windows from the Windows CLI - __NEED TO BE ADMIN !!__
 
 ```  tty
 $ gina project:add myproject
@@ -81,13 +81,13 @@ or by using the shortcut way
 $ gina -s frontend --env=dev
 ```
 
-Now, visite http://127.0.0.1:3100/  to check your homepage.   
+Now, visite http://127.0.0.1:3100/  to check your homepage.
 Isn't it sexy !?
 
 If you need to stop it, just hit `ctrl+c`.
 
-__Setting default env__   
-You can set `dev` as your default envirnoment to avoid adding `--env=dev` everytime you have to run a bundle. 
+__Setting default env__
+You can set `dev` as your default envirnoment to avoid adding `--env=dev` everytime you have to run a bundle.
 
 ```tty
 $ gina framework:set --env=dev
@@ -97,14 +97,14 @@ This only means that when you omit the env in the command line, it will automati
 
 ### Adding views
 
-The default bundle renders a json representation of a "Hello World" message.   
+The default bundle renders a json representation of a "Hello World" message.
 
 Let's add views on our frontend
 
 ```tty
 $ gina bundle:add-views frontend
 ```
-Now edit the `init` action in `src/frontend/controllers/controller.js` so that you can have `self.render(...)` instead of `self.renderJSON(...)`  
+Now edit the `init` control in `src/frontend/controllers/controller.js` so that you can have `self.render(...)` instead of `self.renderJSON(...)`
 
 Once it's done, you just need to refresh your browser.
 
@@ -137,15 +137,15 @@ $ gina bundle:build frontend --env=prod
 
 __Are you trying to restart after a crash ?__
 
-Before v0.1.0, Gina uses 2 processes for each bundle: one master, one slave.   
-Once an excepion is thrown and the program crashes, one of the 2 process can remain in the tasks/processes list.   
+Before v0.1.0, Gina uses 2 processes for each bundle: one master, one slave.
+Once an excepion is thrown and the program crashes, one of the 2 process can remain in the tasks/processes list.
 
-Gina only uses one process per bundle or one per project if you heve decided to merge bundles execution.  
-This has been mostly observed for Windows users.  
+Gina only uses one process per bundle or one per project if you heve decided to merge bundles execution.
+This has been mostly observed for Windows users.
 
-- If you are on a POSIX OS, you should look for `gina`, then kill it !   
+- If you are on a POSIX OS, you should look for `gina`, then kill it !
 
-- If you are on a Windows, look for `node.exe` or  `Event I/O Handler`, then kill it !  
+- If you are on a Windows, look for `node.exe` or  `Event I/O Handler`, then kill it !
 
 After this, try again to start, it should run better.
 

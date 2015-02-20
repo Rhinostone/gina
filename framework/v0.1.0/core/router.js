@@ -198,8 +198,8 @@ function Router(env) {
         var pathname        = url.parse(request.url).pathname;
         var bundle          = local.bundle = params.bundle;
         var conf            = config.Env.getConf( bundle, env );
-        var action          = request.action = params.param.action;
-        var actionFile      = params.param.file;
+        var control         = request.control = params.param.control;
+        var controlFile     = params.param.file;
         var namespace       = params.param.namespace;
         var hasViews        = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
 
@@ -220,16 +220,14 @@ function Router(env) {
         }
 
         // onRouteEvent
-
-        //logger.debug('gina', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
-        console.debug('ACTION ON  ROUTING IS : ' + action);
+        console.debug('CONTROL ON ROUTING IS : ' + control);
 
         //Getting superCleasses & extending it with super Models.
         var controllerFile = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
 
         var options = {
-            action          : action,
-            file            : actionFile,
+            control         : control,
+            file            : controlFile,
             bundle          : bundle,//module
             bundlePath      : conf.bundlesPath +'/'+ bundle,
             rootPath        : self.executionPath,
@@ -264,14 +262,14 @@ function Router(env) {
         try {
             var controller = new Controller(options);
             controller.setOptions(request, response, next, options);
-            controller[action](request, response, next)
+            controller[control](request, response, next)
         } catch (err) {
             var superController = new SuperController(options);
             superController.setOptions(request, response, next, options);
             superController.throwError(response, 500, err.stack);
         }
 
-        action = null
+        control = null
     };//EO route()
 
     init()

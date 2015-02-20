@@ -71,6 +71,14 @@ function Add() {
             console.warn('[ project.json ] already exists in this location: '+ file);
         }
 
+        // creating env file
+        var file = new _(self.root + '/env.json');
+        if ( !file.existsSync() ) {
+            createEnvFile( file.toString() )
+        } else {
+            console.warn('[ env.json ] already exists in this location: '+ file);
+        }
+
         // creating package file
         file = new _(self.root + '/package.json');
         if ( !file.existsSync() ) {
@@ -105,8 +113,19 @@ function Add() {
         };
 
         contentFile = whisper(dic, contentFile);//data
-        fs.writeFileSync(target, JSON.stringify(contentFile, null, 4))
+        lib.generator.createFileFromDataSync(
+            contentFile,
+            target
+        )
     }
+
+    var createEnvFile = function(target) {
+        lib.generator.createFileFromDataSync(
+            {},
+            target
+        )
+    }
+
 
     var createPackageFile = function(target) {
         var conf = _(getPath('gina.core') +'/template/conf/package.json');
@@ -116,7 +135,10 @@ function Add() {
         };
 
         contentFile = whisper(dic, contentFile);//data
-        fs.writeFileSync(target, JSON.stringify(contentFile, null, 4));
+        lib.generator.createFileFromDataSync(
+            contentFile,
+            target
+        );
 
         end(true)
     }
@@ -128,7 +150,7 @@ function Add() {
 
         projects[self.name] = {
             "path": self.root,
-            "framework": GINA_VERSION,
+            "framework": "v" + GINA_VERSION,
             "envs": [ "dev" ],
             "def_env": "dev",
             "dev_env": "dev"
@@ -137,7 +159,9 @@ function Add() {
         lib.generator.createFileFromDataSync(
             projects,
             target
-        )
+        );
+
+        if ( !fs.existsSync(self.projectPath) )
 
         if (created)
             console.log('project [ '+ self.name +' ] ready');

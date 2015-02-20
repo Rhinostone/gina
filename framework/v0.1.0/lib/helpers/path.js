@@ -549,7 +549,7 @@ e.setMaxListeners(100);
                         childElementsOnly['source'] && !childElementsOnly['destination']
                     ) {
                     method = "3A";
-                    console.log("....calling method ", method);
+                    //console.log("....calling method ", method);
 
                     browseCopy(source, destination, excluded, function(err){
                         console.log("copy Dir/ to Dir/ && Dir/ to Dir done");
@@ -558,23 +558,21 @@ e.setMaxListeners(100);
 
                 } else if (!childElementsOnly["source"] && childElementsOnly["destination"]) {
                     method = "3B";
-                    console.log("....calling method ", method);
+                    //console.log("....calling method ", method);
                     //Getting folder name.
                     var folder = new _(source).toArray().last();
                     destination += '/' + folder;
 
                     var target = new _(destination).mkdir( function(err, path) {
                         browseCopy(source, path, excluded, function(err) {
-                            console.log("copy Dir to Dir/ done");
+                            //console.log("copy Dir to Dir/ done");
                             e.emit("cp#complete", err, path, method)
                         })
                     })
                 } else {
                     //3C.
-                    console.log("....calling method ", method);
                     var onRemoved = function(err, target) {
                         // err: 99% means that it doesn't exist. Well, we don't care do we ?.
-                        console.log("somee shieshit has been triggered ! ", target);
                         if (!err) {
 
                             var isExcluded = false;
@@ -918,9 +916,9 @@ e.setMaxListeners(100);
         task.cp(target, function(err) {
             if (err) console.error(err);
 
-            console.log("cp done... now unlinking source ", self.value);
+            //console.log("cp done... now unlinking source ", self.value);
             rm(self.value).onComplete( function(err, path){
-                console.log('fuckn rm() complete');
+                //console.log('rm() complete');
                 e.emit('mv#complete', err, path)
             })
         });

@@ -20,6 +20,11 @@ function Remove() {
         self.name = process.argv[3];
         isValidName();
 
+        self.portsPath = _(GINA_HOMEDIR + '/ports.json');
+        self.portsData = require( self.portsPath );
+        self.portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json');
+        self.portsReverseData = require( self.portsReversePath );
+
         if ( typeof(self.projects[self.name]) == 'undefined' ) {
             console.error('[ '+ self.name + ' ] is not a registered project');
             process.exit(1)
@@ -56,6 +61,40 @@ function Remove() {
                     console.error(folder.stack);
                     process.exit(1)
                 }
+
+                // removing ports
+                var ports = JSON.parse(JSON.stringify(self.portsData, null, 4))
+                    , portsReverse = JSON.parse(JSON.stringify(self.portsReverseData, null, 4))
+                    , t = null // protocols
+                    , p = null
+                    , re = {}
+                    , start = 0
+                    , bundle = null
+                    , bundles = [];
+
+                for(p in ports) {
+                    re = new RegExp("\@"+self.name+"\/");
+                    if ( re.test(ports[p]) ) {
+                        start = ports[p].indexOf(':')+1;
+                        bundle = ports[p].substr(start, ports[p].indexOf('/')-start);
+                        bundles.push(bundle);
+                        delete ports[p]
+                    }
+                }
+
+                for(t in portsReverse) {
+
+                    for(p in portsReverse[t]) {
+                        if ( bundles.indexOf(p) > -1 ) {
+                            delete portsReverse[t][p]
+                        }
+                    }
+                }
+
+                // now writing
+                lib.generator.createFileFromDataSync(ports, self.portsPath);
+                lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
+
                 self.root = folder.toString()
 
             }
