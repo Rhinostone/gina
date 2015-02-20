@@ -10,7 +10,7 @@ function FrameworkController(options) {
     var self = this;
 
     /**
-     * Init default action
+     * Init default control
      *
      * @param {object} req
      * @param {object} res
@@ -19,7 +19,7 @@ function FrameworkController(options) {
     this.init = function(req, res) {}
 
     this.doc = function(req, res) {
-        console.log('got doc action');
+        console.log('got doc control');
         var status = req.get.status || 'ok';
         var data = {
             status: status,

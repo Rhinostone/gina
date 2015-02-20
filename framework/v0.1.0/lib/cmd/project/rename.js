@@ -10,6 +10,10 @@ function Rename() {
     var init = function() {
 
         self.projects = require(_(GINA_HOMEDIR + '/projects.json') );
+        self.portsPath = _(GINA_HOMEDIR + '/ports.json');
+        self.portsData = require( self.portsPath );
+        self.portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json');
+        self.portsReverseData = require( self.portsReversePath );
 
         if (!process.argv[3]) {
             console.error('Missing argument <source_name>');
@@ -37,60 +41,6 @@ function Rename() {
         }
 
 
-
-
-        //
-        //
-        //
-        //if ( folder.isValidPath() ) {
-        //    try {
-        //        err = folder.mkdirSync();
-        //        if (err instanceof Error) {
-        //            console.error(err.stack);
-        //            process.exit(1)
-        //        }
-        //        self.root = folder.toString()
-        //    } catch (err) {
-        //        console.error(err.stack || err.message);
-        //        process.exit(1)
-        //    }
-        //} else {
-        //    // must be a valid project name then
-        //    if ( !isValidName() ) {
-        //        console.error('[ '+self.name+' ] is not a valid project name. Please, try something else: [a-Z0-9].');
-        //        process.exit(1)
-        //    } else {
-        //
-        //        self.root = process.cwd();
-        //        self.name = process.argv[3];
-        //        self.root = _(self.root +'/'+ self.name);
-        //        isDefined(self.name);
-        //        folder = new _(self.root).mkdirSync();
-        //        if (folder instanceof Error) {
-        //            console.error(err.stack || err.message);
-        //            process.exit(1)
-        //        }
-        //    }
-        //}
-        //
-        //
-        //// creating project file
-        //var file = new _(self.root + '/project.json');
-        //if ( !file.existsSync() ) {
-        //    createProjectFile( file.toString() )
-        //} else {
-        //    console.warn('[ project.json ] already exists in this location: '+ file);
-        //}
-        //
-        //// creating package file
-        //file = new _(self.root + '/package.json');
-        //if ( !file.existsSync() ) {
-        //    createPackageFile( file.toString() )
-        //} else {
-        //    console.warn('[ package.json ] already exists in this location: '+ file);
-        //
-        //    end()
-        //}
     }
 
     var isDefined = function(name) {
@@ -157,6 +107,43 @@ function Rename() {
             }
 
             delete self.projects[self.source];
+
+            // update ports
+            var ports = JSON.parse(JSON.stringify(self.portsData, null, 4))
+                , portsReverse = JSON.parse(JSON.stringify(self.portsReverseData, null, 4))
+                , t = null // protocols
+                , p = null
+                , re = {}
+                , start = 0
+                , bundle = null
+                , newBundle = null
+                , bundles = [];
+
+            for(p in ports) {
+                re = new RegExp("\@"+self.source+"\/");
+                if ( re.test(ports[p]) ) {
+                    start = ports[p].indexOf(':')+1;
+                    bundle = ports[p].substr(start, ports[p].indexOf('/')-start);
+                    newBundle = bundle.substr(0, bundle.indexOf('@')) +'@'+ self.target;
+                    ports[p] = ports[p].replace(bundle, newBundle);
+                }
+            }
+
+            var re = new RegExp('\@'+self.source+'$');
+            for(t in portsReverse) {
+                for(p in portsReverse[t]) {
+                    //if ( bundles.indexOf(p) > -1 ) {
+                    if ( re.test(p) ) {
+                        portsReverse[t][p.replace(self.source, self.target)] = JSON.parse(JSON.stringify(portsReverse[t][p], null, 4));
+                        delete portsReverse[t][p]
+                    }
+                }
+            }
+
+            // now writing
+            lib.generator.createFileFromDataSync(ports, self.portsPath);
+            lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
+
             end(true)
         })
     }

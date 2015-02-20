@@ -175,7 +175,6 @@ function MainHelper(opt) {
          * @return {object} [result]
          * */
         var init = browse = function () {
-            process.stdout.write('oups !');
             var target = arguments[0] || (Array.isArray(arguments[1]) ? [] : {});
 
             var i = 1;

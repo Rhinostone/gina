@@ -1,4 +1,8 @@
+var fs      = require('fs');
+
 var console = lib.logger;
+var scan    = require('./inc/scan.js');
+
 /**
  * Add new environment for a given project
  *
@@ -21,8 +25,7 @@ function Add() {
 
         self.projects = require(_(GINA_HOMEDIR + '/projects.json'));
 
-        var i = 3
-            , envs = [];
+        var i = 3, envs = [];
 
         for (; i<process.argv.length; ++i) {
             if ( /^\@[a-z0-9_.]/.test(process.argv[i]) ) {
@@ -34,29 +37,23 @@ function Add() {
         }
 
 
-        if ( isDefined(self.name) ) {
+        if ( isDefined(self.name) && envs.length > 0) {
             saveEnvs(envs)
+        } else {
+            console.error('[ '+ self.name+' ] is not an existing project');
+            process.exit(1)
         }
+    }
 
-
-
-
-        //if ( typeof(process.argv[3]) != 'undefined' ) {
-        //    if ( !self.main.envs[GINA_RELEASE].inArray(process.argv[3]) ) {
-        //        addEnv(process.argv[3])
-        //    } else {
-        //        console.warn('Environment [ '+process.argv[3]+' ] already exists')
-        //    }
-        //} else {
-        //    console.error('Missing argument in [ gina env:add <environment> ]')
-        //}
+    this.setParameters = function(params){
+        self.projects = require(_(GINA_HOMEDIR + '/projects.json'));
     }
 
     var isDefined = function(name) {
         if ( typeof(self.projects[name]) != 'undefined' ) {
-            console.error('[ '+ name +' ] is an existing project. Please choose another name or remove it first.');
-            process.exit(1)
+            return true
         }
+        return false
     }
 
     var isValidName = function() {
@@ -67,31 +64,136 @@ function Add() {
         return patt.test(self.name)
     }
 
-    var saveEnvs = function(envs) {
-        var e           = 0
-            , conf      = {}
-            , file      = _(self.projects[self.name].path + '/env.json')
-            , template  = _(GINA_DIR + '/ressources/template/env.json')
-            , ports     = require(_(GINA_HOMEDIR + '/ports.json'));
+    /**
+     * Get available port - Will scan until a free one is found
+     *
+     * @return {integer} port
+     * */
+    var setPorts = function (conf, bundles, modified, cb, b, e) {
+        var bundle = bundles[b]
+            , len = conf.count();
 
-        if ( fs.existsSync(file) ) {
-            conf = require(file);
-            //writing
+        if (e > len-1) { // exit
+            cb(false, modified)
+        } else {
 
-        }
+            //for(; e < bundles.length; ++e) {
+            //
+            //}
+            scan({ignore: self.portsList}, function(err, port){
+                if (err) {
+                    cb(err)
+                }
 
-        for (; e<envs.length; ++e) {
+            })
 
+            setPorts(conf, bundles, modified, cb, b, e)
         }
     }
 
-    var addEnv = function(env) {
-        self.main['envs'][GINA_RELEASE].push(env);
+    var saveEnvs = function(envs) {
+        var conf      = {}
+            , b, p
+            , bundles   = []
+            , modified  = false
+            , file      = _(self.projects[self.name].path + '/env.json')
+            , ports     = require(_(GINA_HOMEDIR + '/ports.json'))
+            ;
+
+
+        if ( !fs.existsSync( _(self.projects[self.name].path + '/project.json') )) {
+            console.error('project corrupted');
+            process.exit(1)
+        }
+
+        self.project = require(_(self.projects[self.name].path + '/project.json'));
+        self.portsList = [];
+        for (p in ports) {
+            self.portsList.push(p)
+        }
+        for (b in self.project.bundles) {
+            bundles.push(self.project.bundles[b])
+        }
+
+        // to env.json file
+        if ( !fs.existsSync(file) ) {
+            lib.generator.createFileFromDataSync({}, file)
+        }
+
+        conf = require(_(self.projects[self.name].path + '/project.json')).bundles;
+
+        if ( conf.count() > 0 ) {
+            setPorts(conf, bundles, modified, function(err, modified){
+
+                if (modified) addEnvToBundle(conf, file)
+            }, 0, 0)
+        } else { // else means that no bundle found yet ... that's ok !
+            addEnvToProject(envs)
+        }
+        //for (bundle in conf) {
+        //    for (; e<envs.length; ++e) {
+        //        if ( typeof(conf[bundle][envs[e]]) == 'undefined' ) {
+        //            modified = true;
+        //            conf[bundle][envs[e]] = {
+        //                "host": "127.0.0.1", // || -h={host}
+        //                "port": {
+        //                    "http": 3130 //Replace by getAvailabePort() || -p={port} => getAvailabePort(port)
+        //                }
+        //            }
+        //        } // ignore silently if env already exists
+        //    }
+        //    //writing
+        //    if (modified) addEnvToBundle(conf, file)
+        //}
+
+    }
+
+
+
+    /**
+     * Adding envs to /project/root/env.json
+     *
+     * @param {string} file
+     * */
+    var addEnvToBundle = function(conf, file) {
         lib.generator.createFileFromDataSync(
-            self.main,
-            self.target
+            conf,
+            file
         )
+    }
+
+    /**
+     * Adding envs to ~/.gina/projects.json
+     *
+     * @param {array} envs
+     * */
+    var addEnvToProject = function(envs) {
+        var e = 0, modified = false;
+        // to ~/.gina/projects.json
+        for (; e<envs.length; ++e) {
+            if (self.projects[self.name].envs.indexOf(envs[e]) < 0 ) {
+                modified = true;
+                self.projects[self.name].envs.push(envs[e])
+            }
+        }
+        //writing
+        if (modified) {
+            lib.generator.createFileFromDataSync(
+                self.projects,
+                _(GINA_HOMEDIR + '/projects.json')
+            )
+            return true
+        }
+        return false
     };
+
+    var end = function(envs, created) {
+
+        if (created)
+            console.log('environment'+((envs.length > 1) ? 's' : '')+' [ '+ envs.join(', ') +' ] created');
+
+        process.exit(0)
+    }
 
     init()
 };

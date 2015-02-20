@@ -7,7 +7,7 @@ function {Bundle}Controller() {
     var self = this;
 
     /**
-     * Init default action
+     * Init default control
      *
      * @param {object} req
      * @param {object} res
