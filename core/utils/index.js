@@ -19,23 +19,6 @@ var merge = require('./lib/merge');
 
 function Utils() {
 
-    var self = this;
-
-
-    /**
-     * Clean files on directory read
-     * Mac os Hack
-     * NB.: use once in the server.js
-     * TODO - remove it...
-     **/
-    this.cleanFiles = function(files){
-        for(var f=0; f< files.length; f++){
-            if(files[f].substring(0,1) == '.')
-                files.splice(0,1);
-        }
-        return files;
-    };
-
     var _require = function(path) {
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
         if (cacheless) {
@@ -47,7 +30,7 @@ function Utils() {
     }
 
 
-    return {
+    var self =  {
         Config      : _require('./lib/config'),
         //dev     : require('./lib/dev'),//must be at the same level than gina.utils => gina.dev
         inherits    : _require('./lib/inherits'),
@@ -63,7 +46,23 @@ function Utils() {
         url         : _require('./lib/url'),
         cmd         : _require('./lib/cmd'),
         Validator   : _require('./lib/validator')
-    }
+    };
+
+    /**
+     * Clean files on directory read
+     * Mac os Hack
+     * NB.: use once in the server.js
+     * TODO - remove it...
+     **/
+    self.cleanFiles = function(files){
+        for(var f=0; f< files.length; f++){
+            if(files[f].substring(0,1) == '.')
+                files.splice(0,1);
+        }
+        return files;
+    };
+
+    return self
 };
 
 module.exports = Utils()

@@ -198,12 +198,16 @@ function Router(env) {
         var pathname        = url.parse(request.url).pathname;
         var bundle          = local.bundle = params.bundle;
         var conf            = config.Env.getConf( bundle, env );
+        local.conf = conf;
         var action          = request.action = params.param.action;
+        var middleware      = params.middleware;
         var actionFile      = params.param.file;
         var namespace       = params.param.namespace;
-        var hasViews        = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
+        var routeHasViews        = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
+        local.routeHasViews = routeHasViews;
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
+        local.cacheless = cacheless;
 
         if (cacheless) refreshCore();
 
@@ -219,8 +223,6 @@ function Router(env) {
             }
         }
 
-        // onRouteEvent
-
         //logger.debug('gina', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
         console.debug('ACTION ON  ROUTING IS : ' + action);
 
@@ -235,10 +237,11 @@ function Router(env) {
             rootPath        : self.executionPath,
             conf            : conf,
             instance        : self.middlewareInstance,
-            views           : ( hasViews ) ? conf.content.views : undefined,
-            cacheless       : cacheless,
-            envObj          : config.Env
+            views           : ( routeHasViews ) ? conf.content.views : undefined,
+            cacheless       : cacheless
         };
+
+
 
         try {
             // TODO - namespace handling
@@ -256,7 +259,7 @@ function Router(env) {
 
         // about to contact Controller ...
         // namespaces should be supported for every bundles
-        if ( typeof(namespace) != 'undefined' && namespace == 'framework' ) { //framework controller filter
+        if ( typeof(namespace) != 'undefined' && namespace == 'framework' ) {
             Controller = SuperController.prototype[namespace];
         }
 
@@ -264,7 +267,16 @@ function Router(env) {
         try {
             var controller = new Controller(options);
             controller.setOptions(request, response, next, options);
-            controller[action](request, response, next)
+
+            if ( typeof(middleware) != 'undefined') {
+                processMiddlewares(middleware, action, request, response, next,
+                    function onDone(action, request, response, next){
+                        controller[action](request, response, next)
+                    })
+            } else {
+                controller[action](request, response, next)
+            }
+
         } catch (err) {
             var superController = new SuperController(options);
             superController.setOptions(request, response, next, options);
@@ -273,6 +285,108 @@ function Router(env) {
 
         action = null
     };//EO route()
+
+    var processMiddlewares = function(middlewares, action, req, res, next, cb){
+
+        var filename = _(local.conf.bundlePath)
+            , middleware = {}
+            , constructor = null
+            , re = new RegExp('^'+filename);
+
+        if ( middlewares.length > 0 ) {
+            for (var m=0; m<middlewares.length; ++m) {
+                constructor = middlewares[m].split(/\./g);
+                constructor = constructor
+                    .splice(constructor.length-1,1)
+                    .toString();
+                middleware = middlewares[m].split(/\./g);
+                middleware.splice(middleware.length-1);
+                middleware = middleware.join('/');
+                filename = _(filename +'/'+ middleware);
+                if ( !fs.existsSync( filename ) ) {
+                    // no middleware found with this alias
+                    throwError(res, 501, new Error('middleware not found '+ middleware).stack);
+                }
+                if (local.cacheless) {
+                    // because of the /index.js and sub files
+                    for (var p in require.cache) {
+                        if ( re.test(p) ) {
+                            delete require.cache[p]
+                        }
+                    }
+                }
+
+                middleware = require(_(filename, true));
+                if ( !middleware[constructor] ) {
+                    throwError(res, 501, new Error('contructor [ '+constructor+' ] not found @'+ middlewares[m]).stack);
+                }
+
+                if ( typeof(middleware[constructor]) != 'undefined') {
+
+                    // exporting config
+                    middleware.getConfig = function(name){
+                        var tmp = null;
+                        if ( typeof(name) != 'undefined' ) {
+                            try {
+                                //Protect it.
+                                tmp = JSON.stringify(local.conf.content[name]);
+                                return JSON.parse(tmp)
+                            } catch (err) {
+                                console.error(err.stack);
+                                return undefined
+                            }
+                        } else {
+                            tmp = JSON.stringify(local.conf);
+                            return JSON.parse(tmp)
+                        }
+                    };
+                    middleware.throwError = throwError;
+
+                    middleware[constructor](req, res, next,
+                        function onMiddlewareProcessed(req, res, next){
+                            middlewares.splice(m, 1);
+                            processMiddlewares(middlewares, action,  req, res, next, cb)
+                        }
+                    );
+                    break
+                }
+            }
+
+        } else {
+            cb(action, req, res, next)
+        }
+    };
+
+    var hasViews = function() {
+        return local.routeHasViews;
+    };
+
+    var throwError = function(res, code, msg) {
+        if (arguments.length < 3) {
+            var res = local.res;
+            var code = res || 500;
+            var msg = code || null;
+            if ( typeof(msg) != 'string' ) {
+                msg = JSON.stringify(msg)
+            }
+        }
+
+        if ( !res.headersSent ) {
+            if ( !hasViews() ) {
+                res.writeHead(code, { 'Content-Type': 'application/json'} );
+                res.end(JSON.stringify({
+                    status: code,
+                    error: 'Error '+ code +'. '+ msg
+                }))
+            } else {
+                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.end('Error '+ code +'. '+ msg);
+                local.res.headersSent = true;
+            }
+        } else {
+            local.next()
+        }
+    };
 
     init()
 };

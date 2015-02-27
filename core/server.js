@@ -519,6 +519,7 @@ function Server(options) {
                     requirements : self.routing[rule].requirements,
                     url : pathname,
                     param : self.routing[rule].param,
+                    middleware : self.routing[rule].middleware,
                     bundle: self.appName
                 };
                 //Parsing for the right url.

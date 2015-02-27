@@ -14,14 +14,15 @@ var merge = require('../merge');
 /**
  * @class Logger
  *
- * @package gina.utils
- * @namesame gina.utils.logger
+ * @package gina.lib
+ * @namesame gina.lib.logger
  * @author Rhinostone <gina@rhinostone.com>
  *
  * @api Public
  * */
 function Logger(opt) {
-    var self = this;
+    var self = {};
+
     var defaultOptions = {
         name: 'gina', // by default
         template: '%d [ %s ] %m',
@@ -42,64 +43,68 @@ function Logger(opt) {
 
             crit: {
                 code: 2,
-                label: '',
+                label: 'Critical',
                 desciption: 'Critical conditions.',
                 color: 'magenta'
             },
             error : {
                 code: 3,
-                label: '',
-                desciption: '',
+                label: 'Error',
+                desciption: 'Error conditions.',
                 color : 'orange'
             },
             warn : {
                 code: 4,
-                label: '',
-                desciption: '',
+                label: 'Warning',
+                desciption: 'Warning conditions.',
                 color: 'yellow'
             },
             notice: {
                 code: 5,
-                label: '',
-                desciption: '',
+                label: 'Notice',
+                desciption: 'Normal but significant condition.',
                 color: 'black'
             },
             info : {
                 code: 6,
-                label: '',
-                desciption: '',
+                label: 'Informational',
+                desciption: 'Informational messages.',
                 color: 'blue'
             },
             debug : {
                 code: 7,
-                label: '',
-                desciption: '',
+                label: 'Debug',
+                desciption: 'Debug-level messages.',
                 color: 'cyan'
                 //'format' : '',
                 //'pipe' : []
             }
+
         }
     };
-    opt = merge(true, defaultOptions, opt);
 
-
+    if (opt) {
+        opt = merge(true, defaultOptions, opt)
+    } else {
+        opt = defaultOptions
+    }
 
     /**
      * init
      * @constructor
      * */
-    var init = function() {
+    var init = function(opt) {
         if ( typeof(Logger.initialized) != "undefined" ) {
-            console.log("....Logger instance already exists...");
-            return getInstance()
+            console.debug("Logger instance already exists. Loading it.");
+            return getInstance(opt)
         } else {
             Logger.initialized = true;
             Logger.instance = self;
-            setDefaultLevels()
+            setDefaultLevels();
         }
     }
 
-    var getInstance = function() {
+    var getInstance = function(opt) {
         return Logger.instance
     }
 
@@ -109,25 +114,33 @@ function Logger(opt) {
             if ( typeof(self[l]) != 'undefined' )
                 delete self[l];
 
-            self[l] = new Function('return '+write+'('+JSON.stringify(opt)+', '+parse+', "'+l+'", arguments);');
+            //self[l] = new Function('return '+write+'('+JSON.stringify(opt)+', '+parse+', "'+l+'", arguments);');
+            self[l] = new Function('this._log_printed = false; process.stdout.write('+write+'('+JSON.stringify(opt)+', '+parse+', "'+l+'", arguments));');
         }
     }
 
     var write = function(opt, parse, s, args) {
+
+        if ( new RegExp('^debugger listening on port').test(args[0]) ) {
+            s = 'debug'
+        }
+        //process.stdout.write('\n'+ "LOGGER ACTION ? "+ s + ": ("+args.length+") ["+ args[0]+ "]");
         var content = '';
-        //To handle logs with coma speparated arguments.
+        //To handle logs with coma separated arguments.
         for (var i=0; i<args.length; ++i) {
             if (args[i] instanceof Function) {
-                content += args[i].toString() + ""
+                content += args[i].toString() + ''
             } else if (args[i] instanceof Object) {
                 // careful, [ parse ] will be out of the main execution context: passing it for recursive use
-                content += parse(parse, args[i], "")
+                content += parse(parse, args[i], '')
             } else {
+                //if ( args[i].replace(/\s/g, '') != '')
+                //process.stdout.write('\n'+ ("=>> [" + args[i] + "]"));
                 content += args[i] + ' '
             }
         }
 
-        if (content != '') {
+        if (content != '' && !this._log_printed) {
             var now = new Date();
             var repl = {
                 '%s': s, //severity
@@ -136,18 +149,25 @@ function Logger(opt) {
                 //'%container', //container
             };
 
-            var patt = opt.template.match(/\%[a-z A-Z]/g);
+            var patt = opt.template.match(/\%[a-z A-Z 0-9]/g);
             content = opt.template;
             for(var p=0; p<patt.length; ++p) {
-                content = content.replace(new RegExp(patt[p], 'g'), repl[patt[p]])
+                content = content.replace(new RegExp(patt[p], 'g'), repl[patt[p]]);
             }
 
-            return process.stdout.write(content + '\n')
+            //return process.stdout.write('\n'+ content)
+            this._log_printed = true;
+            return '\n'+ content
         }
+
+        this._log_printed = false;
+        return content
     }
 
     var parse = function(parse, obj, str) {
-        var l = 0, len = obj.count(), isArray = (obj instanceof Array) ? true : false;
+        var l = 0
+            , len = obj.count()
+            , isArray = (obj instanceof Array) ? true : false;
         str += (isArray) ? '[ ' : '{';
 
         for (var attr in obj) {
@@ -189,7 +209,7 @@ function Logger(opt) {
 //        }
 //    }
 
-    this.setLevels = function(levels) {
+    self.setLevels = function(levels) {
         try {
             //remove default.
             for (var l in opt.levels) {
@@ -206,14 +226,32 @@ function Logger(opt) {
         }
     }
 
-    this.getLogger = function(details) {
-        console.debug('getting logger ')
+    self.getLogger = function(details) {
+        console.debug('getting logger')
+    }
 
+    self.log = function() {
+        var args = arguments, content = '';
+        //console.log("arg: ", args);
+        //To handle logs with coma speparated arguments.
+        for (var i=0; i<args.length; ++i) {
+
+            if (args[i] instanceof Object) {
+                //console.log("\n...", args[i], args[i].toString());
+                content += JSON.stringify(args[i], null, '\t')
+            } else {
+                content += args[i]
+            }
+        }
+        //process.stdout.write('\n'+ "hum ? "+ content);
+        //console.log("hum ? ", content);
+        if (content != '')
+            process.stdout.write('\n'+ content)
     }
 
 
-    init();
-    return this
+    init(opt);
+    return self
 };
 
 

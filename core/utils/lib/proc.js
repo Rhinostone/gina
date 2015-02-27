@@ -76,6 +76,7 @@ Proc = function(bundle, proc, usePidFile){
         //Default.
         var pathObj = new _( getPath('root') + '/tmp/pid/' );
         var path = pathObj.toString();
+
         //Create dir if needed.
         console.debug("MKDIR  pathObj (pid:"+self.proc.pid+") - ", self.bundle);
 
@@ -198,7 +199,7 @@ Proc = function(bundle, proc, usePidFile){
             proc.on('SIGINT', function(code){
 
                 if (code == undefined) var code = 0;
-                console.log("\nGot exit code. Now killing: ", code, process.list);
+                console.log("\nGot exit code. Now killing: ", code, process.list, '\n');
                 proc.exit(code);//tigger exit event.
             });
 
