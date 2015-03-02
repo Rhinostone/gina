@@ -4,7 +4,7 @@
 
 
 
-Node.js(90%), other(10% - optional)
+Node.js(100%)
 
 ## Philosophy behind
 
@@ -32,13 +32,13 @@ $ npm install gina
 ```
 Then you need to __initialize your project__
 
-> On Mac Os X or on Linux   
+> On Mac Os X or on Linux
 
 ```  tty
 $ ./gina -i myproject
 ```
 
-> on Windows from the Windows CLI - __NEED TO BE ADMIN !!__ 
+> on Windows from the Windows CLI - __NEED TO BE ADMIN !!__
 
 ```  tty
 $ gina -i myproject
@@ -70,7 +70,7 @@ You can start the bundle with the following command:
 ```tty
 $ gina -s frontend dev
 ```
-Now, visite http://127.0.0.1:3100/  to check your homepage.   
+Now, visite http://127.0.0.1:3100/  to check your homepage.
 Isn't it sexy !?
 
 If you need to stop it, just hit `ctrl+c`.
@@ -78,14 +78,14 @@ If you need to stop it, just hit `ctrl+c`.
 
 ### Adding views
 
-The default bundle renders a json representation of a "Hello World" message.   
+The default bundle renders a json representation of a "Hello World" message.
 
 Let's add views on our frontend
 
 ```tty
 $ gina -av frontend
 ```
-Now edit the `init` action in `src/frontend/controllers/controller.js` so that you can have `self.render(...)` instead of `self.renderJSON(...)`  
+Now edit the `init` action in `src/frontend/controllers/controller.js` so that you can have `self.render(...)` instead of `self.renderJSON(...)`
 
 Once it's done, you just need to refresh your browser.
 
@@ -114,17 +114,17 @@ Without the __dev__ argument, Gina is going to understand that you want to use t
 ```tty
 $ gina -b frontend prod
 ```
-NB.: `prod` is optiona here; if you don't add it, it will build for prod by default.
+NB.: `prod` is optional here; if you don't add it, it will build for prod by default.
 
 
 __Are you trying to restart after a crash ?__
 
-Gina uses 2 processes today: one master, one slave (it will change very soon). Once an excepion is thrown and the program crashes, one of the 2 process can remain in the tasks/processes list.   
-This has been mostly observed for Windows users.  
+Gina uses 2 processes today: one master, one slave (it will change very soon). Once an excepion is thrown and the program crashes, one of the 2 process can remain in the tasks/processes list.
+This has been mostly observed for Windows users.
 
-- If you are on a POSIX OS, you should look for `gina`, then kill it !   
+- If you are on a POSIX OS, you should look for `gina`, then kill it !
 
-- If you are on a Windows, look for `node.exe` or  `Event I/O Handler`, then kill it !  
+- If you are on a Windows, look for `node.exe` or  `Event I/O Handler`, then kill it !
 
 After this, try again to start, it should run better.
 

@@ -116,6 +116,7 @@ cmd.load = function(root, package){
     ]);
 
     //Set gina path.
+    setPath('gina', ginaPath);
     setPath('gina.core', _(ginaPath +'/core'));
     setPath('gina.core.utils', _(ginaPath +'/core/utils/lib'));
     setPath('gina.documentation', _(ginaPath +'/documentation'));

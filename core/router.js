@@ -9,15 +9,15 @@
 
 //Imports.
 
-var url             = require('url');
-var utils           = require('./utils');
-var console         = utils.logger;
-var inherits        = utils.inherits;
-var SuperController = require('./controller');
-var Config          = require('./config');
-
-//init
-var config = new Config();
+var url                 = require('url')
+    , fs                = require('fs')
+    , utils             = require('./utils')
+    , console           = utils.logger
+    , inherits          = utils.inherits
+    , SuperController   = require('./controller')
+    , Config            = require('./config')
+    //init
+    , config            = new Config();
 
 /**
  * @class Router
@@ -31,11 +31,11 @@ var config = new Config();
 function Router(env) {
 
     this.name = 'Router';
-    var self = this;
-    var local = {
-        conf : config.getInstance(),
-        bundle: null
-    };
+    var self = this
+        , local = {
+            conf    : config.getInstance(),
+            bundle  : null
+        };
 
     /**
      * Router Constructor
@@ -61,6 +61,7 @@ function Router(env) {
         var patt = /:/;
         return ( patt.test(pathname) ) ? true : false
     }
+
     this.setMiddlewareInstance = function(instance) {
         self.middlewareInstance = instance
     }
@@ -70,10 +71,11 @@ function Router(env) {
     }
 
     var parseRouting = function(request, params, route) {
-        var uRe = params.url.split(/\//),
-            uRo = route.split(/\//),
-            score = 0,
-            r = {};
+        var uRe     = params.url.split(/\//)
+            , uRo   = route.split(/\//)
+            , score = 0
+            , r     = {}
+            , i     = 0;
 
         //attaching routing description for this request
         request.routing = params; // can be retried in controller with: req.routing
@@ -82,7 +84,7 @@ function Router(env) {
             var maxLen = uRo.length;
             //console.info("-----------------FOUND MATCHING SCORE", uRe.length, uRo.length);
             //console.info(uRe, uRo);
-            for (var i=0; i<maxLen; ++i) {
+            for (; i<maxLen; ++i) {
                 if (uRe[i] === uRo[i])
                     ++score
                 else if (hasParams(uRo[i]) && fitsWithRequirements(request, uRo[i], uRe[i], params))
@@ -105,11 +107,11 @@ function Router(env) {
     this.compareUrls = function(request, params, urlRouting) {
 
         if ( typeof(urlRouting) == 'object' ) {
-            var i = 0;
-            var res = {
-                past : false,
-                request : request
-            };
+            var i = 0
+                , res = {
+                    past : false,
+                    request : request
+                };
             while (i < urlRouting.count() && !res.past) {
                 res = parseRouting(request, params, urlRouting[i]);
                 ++i
@@ -134,23 +136,23 @@ function Router(env) {
      * */
     var fitsWithRequirements = function(request, urlVar, urlVal, params) {
 
-        urlVar = urlVar.replace(/:/,"");
+        urlVar = urlVar.replace(/:/, '');
         var v = null;
 
         //console.info("ROUTE !!! ", urlVar, params.requirements);
         if (
-            typeof(params.requirements) != "undefined" &&
-            typeof(params.requirements[urlVar]) != "undefined"
+            typeof(params.requirements) != 'undefined' &&
+            typeof(params.requirements[urlVar]) != 'undefined'
             ) {
             v = urlVal.match(params.requirements[urlVar]);
             //console.info('does it match ?', v);
             //works with regex like "([0-9]*)"
             //console.log("PARAMMMMM !!! ", urlVar, params.requireclearments[urlVar], params.requirements);
-            if (v != null && v[0] !== "") {
+            if (v != null && v[0] !== '') {
                 request.params[urlVar] = v[0]
             }
         }
-        return (v != null && v[0] == urlVal && v[0] !="") ? true : false
+        return (v != null && v[0] == urlVal && v[0] != '') ? true : false
     }
 
     var refreshCore = function() {
@@ -200,10 +202,10 @@ function Router(env) {
         var conf            = config.Env.getConf( bundle, env );
         local.conf = conf;
         var action          = request.action = params.param.action;
-        var middleware      = params.middleware;
+        var middleware      = params.middleware || [];
         var actionFile      = params.param.file;
         var namespace       = params.param.namespace;
-        var routeHasViews        = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
+        var routeHasViews   = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
         local.routeHasViews = routeHasViews;
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
@@ -268,7 +270,7 @@ function Router(env) {
             var controller = new Controller(options);
             controller.setOptions(request, response, next, options);
 
-            if ( typeof(middleware) != 'undefined') {
+            if (middleware.length > 0) {
                 processMiddlewares(middleware, action, request, response, next,
                     function onDone(action, request, response, next){
                         controller[action](request, response, next)
@@ -302,19 +304,22 @@ function Router(env) {
                 middleware = middlewares[m].split(/\./g);
                 middleware.splice(middleware.length-1);
                 middleware = middleware.join('/');
-                filename = _(filename +'/'+ middleware);
+                filename = _(filename +'/'+ middleware + '/index.js');
                 if ( !fs.existsSync( filename ) ) {
                     // no middleware found with this alias
                     throwError(res, 501, new Error('middleware not found '+ middleware).stack);
                 }
-                if (local.cacheless) {
-                    // because of the /index.js and sub files
-                    for (var p in require.cache) {
-                        if ( re.test(p) ) {
-                            delete require.cache[p]
-                        }
-                    }
-                }
+
+                //if (local.cacheless) {
+                //    // because of the /index.js and sub files
+                //    for (var p in require.cache) {
+                //        if ( re.test(p) ) {
+                //            delete require.cache[p]
+                //        }
+                //    }
+                //}
+
+                delete require.cache[_(filename, true)];
 
                 middleware = require(_(filename, true));
                 if ( !middleware[constructor] ) {
