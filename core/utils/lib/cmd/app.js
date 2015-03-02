@@ -572,28 +572,6 @@ var AppCommand = {
             //setContext('logger', loggerInstance);
 
             if (!real) {
-//                logger.getPath('gina', function(pathErr, path){
-//                    if (!pathErr) {
-//                        var filename = _(path +'/'+ logger.getFilename('gina'));
-//                        var data = '[LOG]' + JSON.stringify({
-//                            "filename" : filename,
-//                            "env" : logger.getEnv(),
-//                            "msg" : {
-//                                "logger"    : "gina",
-//                                "label"     : "SERVER:EMERG:1",
-//                                "level"     : "err",
-//                                "profile"   : logger.getEnv(),
-//                                "message"   : "SERVER:EMERG:1",
-//                                "explicit"  : "" + self.msg.app[4].replace("%app%", self.bundle)
-//                            }
-//                        });
-//
-//                        logger.onMessage(data, function(msg){
-//                            //Node exception. Will lead to a log(msg)
-//                            loggerInstance.err(msg)
-//                        });
-//                    }
-//                });
                 console.error(self.msg.app[4].replace("%app%", self.bundle))
 
             } else {
@@ -668,67 +646,8 @@ var AppCommand = {
                 self.prc.stderr.setEncoding('utf8');//Set encoding.
                 self.prc.stderr.on('data', function(err) {
                     console.error(err.toString());
-
-//                    logger.getPath('gina', function(pathErr, path){
-//                        if (!pathErr) {
-//                            var filename = _(path +'/'+ logger.getFilename('gina'));
-//                             //var test = JSON.stringify({"error" :err});
-//                            //console.log("[TRACE]" + JSON.parse(test).error);
-//                            /**
-//                            var data = '[LOG]' + JSON.stringify({
-//                                "filename" : filename,
-//                                "env" : logger.getEnv(),
-//                                "msg" : {
-//                                    "logger"    : "gina",
-//                                    "label"     : "SERVER:RUNTIME:ERR:2",
-//                                    "level"     : "err",
-//                                    "profile"   : logger.getEnv(),
-//                                    "message"   : "SERVER:RUNTIME:ERR:2",
-//                                    "explicit"  : "" + err
-//                                }
-//                            });*/
-//
-//
-//
-//                            //logger.onMessage(data, function(msg){
-//                                //Node exception.
-//                                //loggerInstance.err(msg);
-//                            //});
-//                            //logger.onMessage(data, function(msg){
-//                                //Node exception.
-//                                //loggerInstance.err(msg);
-//                            //});/***/
-//                        }
-//                    });
-                    /**
-                    logger.getPath('gina', function(pathErr, path){
-                        if (!pathErr) {
-                            //var filename = _(logger.getPath('gina') +'/'+ logger.getFilename('gina'));
-                            var filename = _(path +'/'+ logger.getFilename('gina'));
-                            //var test = JSON.stringify({"error" :err});
-                            //console.log("[TRACE]" + JSON.parse(test).error);
-                            var data = '[LOG]' + JSON.stringify({
-                                "filename" : filename,
-                                "env" : logger.getEnv(),
-                                "msg" : {
-                                    "logger"    : "gina",
-                                    "label"     : "SERVER:RUNTIME:ERR:2",
-                                    "level"     : "err",
-                                    "profile"   : logger.getEnv(),
-                                    "message"   : "SERVER:RUNTIME:ERR:2",
-                                    "explicit"  : "" + err
-                                }
-                            });
-
-                            logger.onMessage(data, function(msg){
-                                //Node exception.
-                                loggerInstance.err(msg);
-                            });
-                        }
-                    });
-                     */
                 });
-                /** */
+
             }
 
         });//EO this.isRealApp.
