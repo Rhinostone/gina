@@ -879,6 +879,7 @@ function Config(opt) {
             //Reload conf. who likes repetition ?
             loadBundleConfig(
                 [bundle],
+                0,
                 function doneLoadingBundleConfig(err, files, routing) {
                     if (!err) {
                         callback(false, routing)
