@@ -859,8 +859,10 @@ function Config(opt) {
 
         if ( fs.existsSync(modelsPath) ) {
             //Reload conf.
+
             loadBundleConfig(
-                bundle,
+                [bundle],
+                0,
                 function doneLoadingBundleConfig(err, files, routing) {
                     if (!err) {
                         modelUtil.reloadModels(
@@ -876,7 +878,7 @@ function Config(opt) {
         } else {
             //Reload conf. who likes repetition ?
             loadBundleConfig(
-                bundle,
+                [bundle],
                 function doneLoadingBundleConfig(err, files, routing) {
                     if (!err) {
                         callback(false, routing)
