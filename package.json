@@ -6,32 +6,31 @@
     "micro framework",
     "mvc",
     "mvc framework",
-    "geena",
-    "geenajs",
-    "geena project",
-    "geena js",
+    "router",
+    "api",
+    "web",
     "gina",
     "gina I/O",
     "gina.io",
     "gina js"
   ],
-  "version": "0.0.9p26",
+  "version": "0.0.9p27",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Rhinostone/gina.git"
+    "url": "https://github.com/rhinostone/gina.git"
   },
   "author": {
     "name": "Rhinostone",
     "email": "gina@rhinosotne.com"
   },
-  "copyright": "Copyright (c) 2009-2014 Rhinostone <gina@rhinostone.com>",
+  "copyright": "Copyright (c) 2009-2015 Rhinostone <gina@rhinostone.com>",
   "dependencies": {
     "colors": "",
     "express": "4.x",
     "swig": ""
   },
   "engine": [
-    "node >=0.22"
+    "node >=0.10.22"
   ],
   "main": "core/gna",
   "scripts": {
