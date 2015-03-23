@@ -3,7 +3,6 @@
 var fs = require('fs');
 var utils = getContext('gina.utils');
 var GINA_PATH = _( getPath('gina.core') );
-//var Config = require( _( GINA_PATH + '/config') );
 var readline = require('readline');
 var rl = readline.createInterface(process.stdin, process.stdout);
 
@@ -17,7 +16,7 @@ function iniProject(name) {
         self.name = name;
         var err = false;
 
-        if ( !isValidName() ) {
+        if ( !isValidName() && ! ) {
             console.error('[ '+name+' ] is not a valid project name. Please, try something else: [a-Z0-9].');
             process.exit(1)
         }

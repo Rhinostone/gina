@@ -397,7 +397,7 @@ var AppCommand = {
         try {
             var project = require(projectConfPath);
         } catch (err) {
-            console.error(err.stack);
+            console.warn(err.stack);
         }
         var defaultBuildScript = 'script/build.js';
         var defaultBuildScriptPath = _(_( getPath('root') +'/'+ project.bundles[bundle].src +'/'+defaultBuildScript ));
