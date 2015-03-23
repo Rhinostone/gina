@@ -41,8 +41,6 @@ function Deploy(opt) {
     }
 
     var init = function() {
-        console.log('init once !!');
-
         // main init code goes here...
         if ( typeof(opt['set']) != 'undefined') {
 
@@ -63,14 +61,16 @@ function Deploy(opt) {
                     } else {
                         self.release = self.makeReleaseNumber()
                     }
+                    self['release_relative_path'] = './releases/' + self.release;
                     self['release_path'] = self['releases_path'] + '/' + self.release;
                     dic['release_path'] = self['releases_path'] + '/' + self.release;
+                    dic['release'] = +self.release;
                 }
 
 
+                opt['set'][k] = whisper(dic, opt['set'][k]);
                 self[k] = opt['set'][k];
                 dic[k] = opt['set'][k];
-
             }
             //update dic
             dic = whisper(dic, dic);
@@ -100,13 +100,20 @@ function Deploy(opt) {
                 self['keep_releases'] = 5
             }
 
+            if ( typeof(self['sources']) == 'undefined') {
+                self['sources'] = './releases';
+            }
+
             // link to current task added to the end
-            self.tasks.onDeployed.push('cd '+self.target+'/; rm ./current; ln -s ' + self.release_path +' ./current');
+            for (var t in self.tasks.onDeployed) {
+                self.tasks.onDeployed[t] = self.tasks.onDeployed[t].replace(/\/current/g, '/releases/'+self.release)
+            }
+            self.tasks.onDeployed.push('cd '+self.target+'/; rm ./current; ln -s ' + self.release_relative_path +' ./current');
 
 
             self.tasks = whisper(dic, self.tasks);
+
             self = whisper(dic, self);//closing to ensure replacement
-            opt = whisper(dic, opt);//closing to ensure replacement
 
 
             if (self.releases_path == '/' || self.releases_path == '/.' || self.releases_path == '~' || self.releases_path == '~/' || self.releases_path == '~/.') {
@@ -117,7 +124,7 @@ function Deploy(opt) {
 
         //get enabled bundles
         self
-            .run('ls ./releases', true)
+            .run('ls '+ self.sources, true)
             .onComplete( function onBundle(err, data) {
                 if (err) {
                     console.emerg('releases dir not found: try to build then retry to deploy');
@@ -170,24 +177,31 @@ function Deploy(opt) {
             }
         }
 
-        var envs = require(getPath('root') +'/env.json');
+
         var envsList = [], bundleList = [];
         var path = '';
+        try {
+            var envs = require(getPath('root') +'/env.json');
 
-        for (var b in envs) {
-            bundleList.push(b);
-            for (var e in envs[b]) {
-                if (list.indexOf('*/'+ e +'/*') < 0 && e != self.env ) {
-                    list.push('*/'+ e +'/*')
-                }
+            for (var b in envs) {
+                bundleList.push(b);
+                for (var e in envs[b]) {
+                    if (list.indexOf('*/'+ e +'/*') < 0 && e != self.env ) {
+                        list.push('*/'+ e +'/*')
+                    }
 
-                path = './releases/'+ b +'/'+ e;
-                if (list.indexOf(path) < 0 && e != self.env ) {
-                    list.push(path)
+                    path = './releases/'+ b +'/'+ e;
+                    if (list.indexOf(path) < 0 && e != self.env ) {
+                        list.push(path)
+                    }
                 }
             }
+        } catch (err) {
+            if (!self.bundles[0]) {
+                console.error(err.stack);
+                process.exit(1)
+            }
         }
-
         return list
     }
 

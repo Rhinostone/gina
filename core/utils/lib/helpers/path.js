@@ -11,6 +11,8 @@ var Events = require('events');
 var Path = require('path');
 
 var merge = require('./../merge');
+var console = require('./../logger');
+
 var ContextHelper = require('./context');
 var e =  new Events.EventEmitter();
 //Reminder: let listeners be removed by the V8 garbage collector.
@@ -27,23 +29,23 @@ e.setMaxListeners(100);
  * TODO - Put debug logs
  * */
 
- function PathHelper() {
+function PathHelper() {
 
     this.paths = [];
     this.userPaths = {};
     var _this = this;
 
-     /**
-      * _
-      * PathHelper Constructor
-      *
-      * @constructor
-      *
-      * @param {string} path - Path to convert
-      * @param {boolean} [force] - Force conversion to match platform style (Only for string conversion)
-      *
-      * @return {string|object} converted
-      * */
+    /**
+     * _
+     * PathHelper Constructor
+     *
+     * @constructor
+     *
+     * @param {string} path - Path to convert
+     * @param {boolean} [force] - Force conversion to match platform style (Only for string conversion)
+     *
+     * @return {string|object} converted
+     * */
 
     _ = function(path, force) {
         if ( typeof(force) == undefined) {
@@ -52,7 +54,7 @@ e.setMaxListeners(100);
         path = Path.normalize(path);
         var isConstructor = false;
         if (this instanceof _ // <- You could use arguments.callee instead of _ here,
-            // except in in EcmaScript 5 strict mode.
+                // except in in EcmaScript 5 strict mode.
             && !this.previouslyConstructedBy_) {
             isConstructor = true;
             this.previouslyConstructedBy_ = true
@@ -254,6 +256,71 @@ e.setMaxListeners(100);
     }
 
     /**
+     * _.mkdirSync() Create a folder recursively
+     *      if doesn't exists,
+     *
+     *      return
+     *          err string if failed
+     *          else return instance
+     *
+     * @param {string} permission Folder permission
+     * */
+    _.prototype.mkdirSync = function(permission) {
+
+        if ( fs.existsSync(this.value) ) {
+            return this // always return the instance for sync
+        }
+        cleanSlashes(this);
+
+        //by default.
+        if ( typeof(permission) == 'undefined' ) {
+            var permission = 0775
+        }
+
+        if ( typeof(pathArr) == 'undefined' ) {
+            var pathArr = toArray(this)
+        }
+
+        try {
+            mkdirSync(this, permission, pathArr, 0);
+            return this // always return the instance for sync
+        } catch (err) {
+            return err // it has to be thrown clean to be "instanceof Error"
+        }
+    }
+
+    var mkdirSync = function(self, permission, pathArr, i, path) {
+
+        var addFolder = function(self, permission, pathArr, i, path) {
+            try {
+                fs.mkdirSync(path, permission);
+                mkdirSync(self, permission, pathArr, i, path)
+            } catch (err) {
+                console.debug(err.stack); // always keep trace of the original stack
+                throw new Error(err.message)
+            }
+        };
+
+        if (i+1 < pathArr.length) {
+
+            if ( typeof(path) == 'undefined') {
+                var path =   self.start + pathArr[0]
+            } else {
+                ++i;
+                path += '/' + pathArr[i]
+            }
+
+            if ( !fs.existsSync(path) ) {
+                addFolder(self, permission, pathArr, i, path)
+            } else {
+                mkdirSync(self, permission, pathArr, i, path)
+            }
+        } else {
+            return
+        }
+    }
+
+    /**
      * _.mkdir() Create a folder if doesn't exists, else return path
      *
      * @param {string} permission Folder permission
@@ -262,7 +329,7 @@ e.setMaxListeners(100);
     _.prototype.mkdir = function(permission, callback) {
         if ( typeof(permission) == "function") {
             var callback = permission;
-            var permission = 0777
+            var permission = 0775
         }
         var self = this;
         self = cleanSlashes(self);
@@ -279,8 +346,8 @@ e.setMaxListeners(100);
                         //Avoid collisions.
                         if (err) {
                             console.error("Debug needed mkdir on existing folder !! ", err);
-                           // console.warn("MKDIR ERR: silently ignored.. ", path);
-                           //callback("MKDIR ERR: silently ignored.. ");
+                            // console.warn("MKDIR ERR: silently ignored.. ", path);
+                            //callback("MKDIR ERR: silently ignored.. ");
                             process.exit(1)
                         } else {
 
@@ -320,7 +387,7 @@ e.setMaxListeners(100);
 
         //by default.
         if ( typeof(permission) == 'undefined' ) {
-            var permission = 0777
+            var permission = 0775
         }
 
         if ( typeof(pathArr) == 'undefined' ) {
@@ -408,7 +475,7 @@ e.setMaxListeners(100);
 //                    typeof(method) != 'undefined'
 //                ) {
 
-                    cb(err);
+                cb(err);
                 //}
             });
 
@@ -452,7 +519,7 @@ e.setMaxListeners(100);
          * EO Targeting folder content..
          * */
 
-        //Define strategy.
+            //Define strategy.
         fs.lstat(source, function(err, stats) {
             // 1) File => Dir (add if exist else, throw error).
             // 2) File => File (create or replace if exists).
@@ -479,10 +546,10 @@ e.setMaxListeners(100);
                 var method = "3C", createDir;
                 if (
                     childElementsOnly['source'] && childElementsOnly['destination'] ||
-                        childElementsOnly['source'] && !childElementsOnly['destination']
-                    ) {
+                    childElementsOnly['source'] && !childElementsOnly['destination']
+                ) {
                     method = "3A";
-                    console.log("....calling method ", method);
+                    //console.log("....calling method ", method);
 
                     browseCopy(source, destination, excluded, function(err){
                         console.log("copy Dir/ to Dir/ && Dir/ to Dir done");
@@ -491,23 +558,21 @@ e.setMaxListeners(100);
 
                 } else if (!childElementsOnly["source"] && childElementsOnly["destination"]) {
                     method = "3B";
-                    console.log("....calling method ", method);
+                    //console.log("....calling method ", method);
                     //Getting folder name.
                     var folder = new _(source).toArray().last();
                     destination += '/' + folder;
 
                     var target = new _(destination).mkdir( function(err, path) {
                         browseCopy(source, path, excluded, function(err) {
-                            console.log("copy Dir to Dir/ done");
+                            //console.log("copy Dir to Dir/ done");
                             e.emit("cp#complete", err, path, method)
                         })
                     })
                 } else {
                     //3C.
-                    console.log("....calling method ", method);
                     var onRemoved = function(err, target) {
                         // err: 99% means that it doesn't exist. Well, we don't care do we ?.
-                        console.log("somee shieshit has been triggered ! ", target);
                         if (!err) {
 
                             var isExcluded = false;
@@ -830,12 +895,19 @@ e.setMaxListeners(100);
         var self = this;
         //Enter dir & start rm.
         var p = self.value;
-        mv(self, target)
-            .onComplete( function(err, path){
-                if (p == path && typeof(callback) != 'undefined') {
-                    callback(err)
-                }
-            })
+
+        fs.exists(p, function(exists){
+            if ( !exists ) {
+                callback( new Error(' mv() - source [ '+p+' ] does not exists !') )
+            } else {
+                mv(self, target)
+                    .onComplete( function(err, path){
+                        if (p == path && typeof(callback) != 'undefined') {
+                            callback(err)
+                        }
+                    })
+            }
+        })
     }
 
     var mv = function(self, target) {
@@ -844,9 +916,9 @@ e.setMaxListeners(100);
         task.cp(target, function(err) {
             if (err) console.error(err);
 
-            console.log("cp done... now unlinking source ", self.value);
+            //console.log("cp done... now unlinking source ", self.value);
             rm(self.value).onComplete( function(err, path){
-                console.log('fuckn rm() complete');
+                //console.log('rm() complete');
                 e.emit('mv#complete', err, path)
             })
         });
@@ -864,6 +936,131 @@ e.setMaxListeners(100);
                     }
                     callback(err, path)
                 })
+            }
+        }
+    }
+
+    /**
+     * _.rmSync() Delete a folder recursively
+     *      if doesn't exists,
+     *
+     *      return
+     *          err string if failed
+     *          else return instance
+     *
+     * */
+    _.prototype.rmSync = function() {
+
+        if ( !fs.existsSync(this.value) ) {
+            return this // always return the instance for sync
+        }
+        cleanSlashes(this);
+
+        try {
+            browseRemoveSync(this.value);
+            return this // always return the instance for sync
+        } catch (err) {
+            return err // it has to be thrown clean to be "instanceof Error"
+        }
+    }
+
+    var removeFoldersSync = function(list, l, i) {
+        var i = i || 0;
+        if ( typeof(list[l]) == "undefined") {
+            return list[l-1][list[l-1].length -1]
+        } else {
+            if (i === list[l].length-1 ) {
+                i = 0;
+                try {
+                    fs.rmdirSync(list[l][i]);
+                    ++l;
+                    removeFoldersSync(list, l, i)
+                } catch(err) {
+                    console.debug(err.stack); // always keep trace of the original stack
+                    throw new Error(err.message)
+                }
+            } else {
+                ++i;
+                try {
+                    fs.rmdirSync(list[l][i]);
+                    removeFoldersSync(list, l, i)
+                } catch(err) {
+                    console.debug(err.stack); // always keep trace of the original stack
+                    throw new Error(err.message)
+                }
+            }
+        }
+    }
+
+    var removeFileSync = function(filename) {
+        try {
+            fs.unlinkSync(filename)
+        } catch (err) {
+            console.debug(err.stack); // always keep trace of the original stack
+            throw new Error(err.message)
+        }
+    }
+
+    var browseRemoveSync = function(source, list, folders, i) {
+        var list = ( typeof(list) != 'undefined' ) ? list : [];
+        var folders = ( typeof(folders) != 'undefined' ) ? folders : [];
+        var i = ( typeof(i) != 'undefined' ) ? i : 0;
+
+        if (list.length === 0) {
+            list.push(source)
+        }
+
+        if (source == undefined) {
+            if (folders.length > 0) {
+                removeFoldersSync(folders.reverse(), 0, 0)
+            } else {
+                return list[list.length -1]
+            }
+        } else {
+
+            var stats = fs.lstatSync(source);
+
+            if (stats instanceof Error)
+                return stats;
+
+            if ( stats.isDirectory() ) {
+
+                if (folders.length == 0) {
+                    folders[0] = [];
+                    folders[0].push(source)
+                } else {
+                    var l =  source.substring( (folders[0][0].length) ).match(/\//g);
+                    if (l == null) {
+                        l = 0
+                    } else {
+                        l = l.length
+                    }
+                    if ( typeof(folders[l]) == 'undefined') {
+                        folders[l] = []
+                    }
+                    folders[l].push(source)
+                }
+
+                var files = fs.readdirSync(source);
+
+                if ( files instanceof Error)
+                    return files;
+
+                if ( typeof(files) != 'undefined') {
+                    for (var f=0; f<files.length; ++f) {
+                        list.push( _(source +'/'+ files[f]) )
+                    }
+                }
+                ++i;
+                browseRemoveSync(list[i], list, folders, i)
+
+            } else {
+                var err = removeFileSync(source);
+                if (err instanceof Error)
+                    return err;
+
+                ++i;
+                browseRemoveSync(list[i], list, folders, i)
             }
         }
     }
@@ -1074,6 +1271,34 @@ e.setMaxListeners(100);
         var self = this;
         var i = _this.paths.indexOf(self.value);
         return ( i > -1 ) ? _this.paths[i].replace(/\//g, "\\") : self.value;
+    }
+
+    /**
+     * Check if a given path is valid
+     *
+     * Will pass as valid:
+     * -------------------
+     * C:\data\folder\file (  "C:\\data\\folder\\file" )
+     * C:\data\folder\other file (  "C:\\data\\folder\\other\ file" )
+     * /data/folder/file
+     * /data/folder/other file ( "/data/folder/other\ file" )
+     * \\192.168.0.1\folder\file ( "\\\\192.168.0.1\\folder\\file" )
+     *
+     * @return {boolean} isReal
+     *
+     * @callback [ cb ]
+     * @param {boolean} isReal
+     * */
+    _.prototype.isValidPath = function(cb) {
+        // compatible nix & win32 - (sensitive) case handled for posix
+        var re = /(^(?!:[\w]\:|\\)(\/[a-zA-Z_\-\s0-9\.]+)+|^(?:[\w]\:|\\)(\\[a-z_\-\s0-9\.]+)+)/;
+
+        cleanSlashes(this); // ??
+        if ( typeof(cb) != 'undefined' && typeof(cb) == 'function') {
+            cb( re.test(this.value) )
+        } else {
+            return re.test(this.value)
+        }
     }
 
     /**
