@@ -16,7 +16,7 @@ function iniProject(name) {
         self.name = name;
         var err = false;
 
-        if ( !isValidName() && ! ) {
+        if ( !isValidName() ) {
             console.error('[ '+name+' ] is not a valid project name. Please, try something else: [a-Z0-9].');
             process.exit(1)
         }

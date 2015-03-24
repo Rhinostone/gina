@@ -378,17 +378,19 @@ function Config(opt) {
 
                 //console.log("My env ", env, self.executionPath, JSON.stringify(template, null, '\t') );
                 //Existing app and port sharing => != standalone.
-                if ( fs.existsSync(appsPath) ) {
-                    var masterPort = content[self.startingApp][env].port.http;
-                    //Check if standalone or shared instance
-                    if (content[app][env].port.http != masterPort) {
-                        //console.log("should be ok !!");
-                        isStandalone = false;
-                        self.Host.standaloneMode = isStandalone
-                    } else if (app != self.startingApp) {
-                        self.bundles.push(app)
-                    }
-                    self.allBundles.push(app);
+                if ( !fs.existsSync(appsPath) ) {
+                    new _(appsPath).mkdirSync()
+                }
+                var masterPort = content[self.startingApp][env].port.http;
+                //Check if standalone or shared instance
+                if (content[app][env].port.http != masterPort) {
+                    //console.log("should be ok !!");
+                    isStandalone = false;
+                    self.Host.standaloneMode = isStandalone
+                } else if (app != self.startingApp) {
+                    self.bundles.push(app)
+                }
+                self.allBundles.push(app);
 
 //                    console.log(
 //                        "\nenv                  => " + env,
@@ -399,42 +401,34 @@ function Config(opt) {
 //                        "\nmaster port          => " + masterPort + '  ' + content[self.startingApp][env].port.http,
 //                        "\nRegisterd bundles    => " + self.bundles
 //                    );
-                    //console.log("Merging..."+ app, "\n", content[app][env], "\n AND \n", template[app][env]);
-                    //Mergin user's & template.
-                    newContent[app][env] = merge(
-                        newContent[app][env],
-                        JSON.parse( JSON.stringify(template["{bundle}"]["{env}"]))//only copy of it.
-                    );
+                //console.log("Merging..."+ app, "\n", content[app][env], "\n AND \n", template[app][env]);
+                //Mergin user's & template.
+                newContent[app][env] = merge(
+                    newContent[app][env],
+                    JSON.parse( JSON.stringify(template["{bundle}"]["{env}"]))//only copy of it.
+                );
 
 
-                    //Variables replace. Compare with gina/core/template/conf/env.json.
-                    var reps = {
-                        "executionPath" : root,
-                        "bundlesPath" : appsPath,
-                        "modelsPath" : modelsPath,
-                        "env" : env,
-                        "bundle" : app
-                    };
+                //Variables replace. Compare with gina/core/template/conf/env.json.
+                var reps = {
+                    "executionPath" : root,
+                    "bundlesPath" : appsPath,
+                    "modelsPath" : modelsPath,
+                    "env" : env,
+                    "bundle" : app
+                };
 
 
-                    //console.error("reps ", reps);
-                    newContent = whisper(reps, newContent);
-                } else {
-//                    logger.warn(
-//                        'gina',
-//                        'CONFIG:WARN:1',
-//                        'Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath),
-//                        __stack
-//                    );
-                    console.warn( 'Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath),
-                        __stack);
-                    callback('Server won\'t load [' +app + '] app or apps path does not exists: ' + _(appsPath) )
-                }
+                //console.error("reps ", reps);
+                newContent = whisper(reps, newContent);
+
 
             }
             //Else not in the scenario.
 
         }//EO for.
+
+        //self.envConf = content[bundle][env];
 
 
 //        logger.debug(
@@ -512,7 +506,6 @@ function Config(opt) {
             var bundle = bundles[b]
         }
         var cacheless   = self.isCacheless();
-        var conf        = self.envConf;
         var env         = self.env || self.Env.get();
         var routing     = {
             //"home": {
@@ -528,10 +521,12 @@ function Config(opt) {
         var filename    = '';
         var appPath     = '';
         var err         = false;
+        var conf        = self.envConf;
 
         conf[bundle][env].bundles = bundles;
         conf[bundle].cacheless = cacheless;
         conf[bundle][env].executionPath = getContext("paths").root;
+
 
         if ( self.task == 'run' && env != 'dev' ) {
             appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
@@ -795,7 +790,6 @@ function Config(opt) {
         conf[bundle][env].bundle    = bundle;
         conf[bundle][env].env       = env;
 
-        //self.envConf = conf;
 
         ++b;
         if (b < bundles.length) {
