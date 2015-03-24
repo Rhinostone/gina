@@ -82,7 +82,7 @@ function Deploy(opt) {
             }
 
             if ( typeof(self['shared']) == 'undefined') {
-                self['shared'] = []
+                self['shared'] = {}
             }
 
             if ( typeof(self['tasks']) == 'undefined') {

@@ -33,6 +33,7 @@ function BuildBundle(project, bundle) {
     }
 
     var init = function() {
+        console.log('init once !!');
         self.root = getPath('root');
         self.env = process.env.NODE_ENV;
 
