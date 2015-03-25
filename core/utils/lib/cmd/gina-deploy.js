@@ -117,7 +117,7 @@ function Deploy(opt) {
 
 
             if (self.releases_path == '/' || self.releases_path == '/.' || self.releases_path == '~' || self.releases_path == '~/' || self.releases_path == '~/.') {
-                console.log('releases path cannot be root')
+                console.log('releases path cannot be root');
                 process.exit(1)
             }
         }
