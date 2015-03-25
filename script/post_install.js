@@ -164,7 +164,7 @@ function PostInstall() {
     var end = function() {
         // Update middleware file
         var filename = _(self.path) + '/MIDDLEWARE';
-        var msg = "Gina's command line tool has been installed.";
+        var msg = "Gina's command line tool has been installed.\n\r";
 
         var deps = require(_(self.path) + '/package.json').dependecies;
 
@@ -193,7 +193,7 @@ function PostInstall() {
                         throw new Error(err.stack||err.message||err);
                         process.exit(1)
                     } else {
-                        console.info(msg)
+                        console.log(msg)
                     }
                 })
             } // else, nothing to do
@@ -203,7 +203,7 @@ function PostInstall() {
                     throw new Error(err.stack||err.message||err);
                     process.exit(1)
                 } else {
-                    console.info(msg)
+                    console.log(msg)
                 }
             })
         }
