@@ -19,7 +19,7 @@ module.exports = function scan(opt, cb){
         len: 1
     };
 
-    if ( arguments.length < 2) {
+    if ( arguments.length < 2 ) {
         var cb = opt, opt = defaultOptions
     } else {
         opt = merge(true, defaultOptions, opt)
@@ -34,7 +34,7 @@ module.exports = function scan(opt, cb){
     }
 
     var self = opt;
-    var port = self.start, ports = [];
+    var port = self.start, ports = [], count = 1;
 
     var find = function(port) {
 

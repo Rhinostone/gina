@@ -132,7 +132,6 @@ function Rename() {
             var re = new RegExp('\@'+self.source+'$');
             for(t in portsReverse) {
                 for(p in portsReverse[t]) {
-                    //if ( bundles.indexOf(p) > -1 ) {
                     if ( re.test(p) ) {
                         portsReverse[t][p.replace(self.source, self.target)] = JSON.parse(JSON.stringify(portsReverse[t][p], null, 4));
                         delete portsReverse[t][p]

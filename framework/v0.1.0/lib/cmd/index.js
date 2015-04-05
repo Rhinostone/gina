@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Geena.Utils.cmd
+ * Gina.Utils.cmd
  * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy

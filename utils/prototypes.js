@@ -50,7 +50,8 @@ Object.defineProperty( Object.prototype, 'functionCount', {
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
     value: function(){
-        if (this instanceof String) this = JSON.parse(this);
+        var self = this;
+        if (this instanceof String) self = JSON.parse(this);
         var i = 0;
         for (var prop in this)
             if (this.hasOwnProperty(prop) && typeof(this[prop]) == 'function') ++i;

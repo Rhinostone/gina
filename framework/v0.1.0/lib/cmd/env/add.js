@@ -19,7 +19,7 @@ var scan    = require('./inc/scan.js');
  *
  * */
 function Add() {
-    var self = {};
+    var self = {}, local = {};
 
     var init = function() {
 
@@ -29,18 +29,32 @@ function Add() {
 
         for (; i<process.argv.length; ++i) {
             if ( /^\@[a-z0-9_.]/.test(process.argv[i]) ) {
-                self.name = process.argv[i];
-                isValidName()
+                self.bundle = process.argv[i].split('@')[0] || null;
+
+                if ( !isValidName(process.argv[i]) ) {
+                    console.error('[ '+process.argv[i]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].');
+                    process.exit(1);
+                }
+
             } else if (/^[a-z0-9_.]/.test(process.argv[i])) {
                 envs.push(process.argv[i])
             }
         }
 
+        if ( typeof(self.name) == 'undefined') {
+            var folder = new _(process.cwd()).toArray().last();
+            if ( isDefined(folder) ) {
+                self.name = folder
+            }
+        }
+
 
         if ( isDefined(self.name) && envs.length > 0) {
-            saveEnvs(envs)
+            self.envs = envs;
+            saveEnvs()
         } else {
-            console.error('[ '+ self.name+' ] is not an existing project');
+            //console.error('[ '+ self.name+' ] is not an existing project');
+            console.error('Missing argument @<project_name>');
             process.exit(1)
         }
     }
@@ -56,43 +70,18 @@ function Add() {
         return false
     }
 
-    var isValidName = function() {
-        if (self.name == undefined) return false;
+    var isValidName = function(name) {
+        if (name == undefined) return false;
 
-        self.name = self.name.replace(/\@/, '');
+        self.name = name.replace(/\@/, '');
         var patt = /^[a-z0-9_.]/;
         return patt.test(self.name)
     }
 
-    /**
-     * Get available port - Will scan until a free one is found
-     *
-     * @return {integer} port
-     * */
-    var setPorts = function (conf, bundles, modified, cb, b, e) {
-        var bundle = bundles[b]
-            , len = conf.count();
 
-        if (e > len-1) { // exit
-            cb(false, modified)
-        } else {
-
-            //for(; e < bundles.length; ++e) {
-            //
-            //}
-            scan({ignore: self.portsList}, function(err, port){
-                if (err) {
-                    cb(err)
-                }
-
-            })
-
-            setPorts(conf, bundles, modified, cb, b, e)
-        }
-    }
-
-    var saveEnvs = function(envs) {
+    var saveEnvs = function() {
         var conf      = {}
+            , envs      = self.envs
             , b, p
             , bundles   = []
             , modified  = false
@@ -122,13 +111,13 @@ function Add() {
 
         conf = require(_(self.projects[self.name].path + '/project.json')).bundles;
 
-        if ( conf.count() > 0 ) {
+        if ( self.bundle && conf.count() > 0 ) {
             setPorts(conf, bundles, modified, function(err, modified){
 
                 if (modified) addEnvToBundle(conf, file)
             }, 0, 0)
         } else { // else means that no bundle found yet ... that's ok !
-            addEnvToProject(envs)
+            addEnvToProject()
         }
         //for (bundle in conf) {
         //    for (; e<envs.length; ++e) {
@@ -146,6 +135,55 @@ function Add() {
         //    if (modified) addEnvToBundle(conf, file)
         //}
 
+    }
+
+    /**
+     * Get available port - Will scan until a free one is found
+     *
+     * @return {integer} port
+     * */
+    var setPorts = function (conf, bundles, modified, cb, b, e) {
+
+        local.this = {
+            conf        : conf,
+            bundles     : bundles,
+            modified    : modified,
+            cb          : cb,
+            b           : b,
+            e           : e,
+            bundle      : bundles[b],
+            len         : conf.count()
+        };
+
+        var len = local.this.len;
+
+        if (e > len-1) { // exit
+            delete local.this;
+            cb(false, modified)
+        } else {
+
+            //for(; e < bundles.length; ++e) {
+            //
+            //}
+            scan({ignore: self.portsList}, function(err, port){
+                var l = local.this;
+                if (err) {
+                    l.cb(err)
+                } else {
+
+                    //l.modified = true;
+                    l.conf[l.bundle[l.b]][envs[l.e]] = {
+                        "host": "127.0.0.1", // || -h={host}
+                        "port": {
+                            "http": port
+                        }
+                    };
+                    ++l.e;
+                    setPorts(l.conf, l.bundles, l.modified, l.cb, l.b, l.e)
+                }
+
+            })
+        }
     }
 
 
@@ -167,8 +205,10 @@ function Add() {
      *
      * @param {array} envs
      * */
-    var addEnvToProject = function(envs) {
-        var e = 0, modified = false;
+    var addEnvToProject = function() {
+        var e = 0
+            , modified = false
+            , envs = self.envs;
         // to ~/.gina/projects.json
         for (; e<envs.length; ++e) {
             if (self.projects[self.name].envs.indexOf(envs[e]) < 0 ) {

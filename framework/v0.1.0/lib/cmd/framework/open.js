@@ -14,7 +14,7 @@ Open = function(){
                 child.exec(openCmd + ' ' + GINA_DIR + '/services');
                 break;
 
-            case 'geena':
+            case 'gina':
             case 'framework':
                 child.exec(openCmd + ' ' + GINA_DIR);
                 break;
@@ -35,12 +35,12 @@ Open = function(){
                 if ( fs.existsSync(GINA_HOMEDIR) ) {
                     child.exec(openCmd + ' ' +  GINA_HOMEDIR)
                 } else {
-                    console.log((GINA_IS_WIN32) ? 'geena: sorry, no %USERPROFILE% found' : 'geena: sorry, no $HOME found')
+                    console.log((GINA_IS_WIN32) ? 'gina: sorry, no %USERPROFILE% found' : 'gina: sorry, no $HOME found')
                 }
                 break;
 
             default:
-                console.log('geena: shortcut not indexed [' + process.argv[3] + ']' );
+                console.log('gina: shortcut not indexed [' + process.argv[3] + ']' );
         }
     };
 

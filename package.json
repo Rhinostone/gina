@@ -36,11 +36,7 @@
   "preferGlobal": "true",
   "bin": {
     "gina" : "./bin/cli",
-    "gina-framework" : "./bin/cli",
-    "gina-project" : "./bin/cli",
-    "gina-bundle" : "./bin/cli",
-    "gina-model" : "./bin/cli",
-    "gina-env" : "./bin/cli"
+    "gina-debug": "./bin/cli"
   },
   "man" : [
     "./doc/man/gina.1",

@@ -23,7 +23,7 @@ function Add() {
             isDefined(self.name);
             folder = new _(p[1] +'/'+ self.name)
         } else if (typeof(process.argv[4]) != 'undefined') {
-            console.error('argument not available for this command: ' + process.argv[4])
+            console.error('Argument not available for this command: ' + process.argv[4])
         } else {
             folder = new _(process.argv[3]);
             if ( folder.isValidPath() )
@@ -92,6 +92,27 @@ function Add() {
 
     var isDefined = function(name) {
         if ( typeof(self.projects[name]) != 'undefined' ) {
+            // import if exists but path just changed
+            if ( typeof(self.projects[name].path) != 'undefined') {
+                var old = new _(self.projects[name].path).toArray().last();
+                var current = new _(process.cwd()).toArray().last();
+                if (current == old) {
+                    self.root = process.cwd()
+                }
+
+                if (old === self.name) {
+                    self.projects[name].path = self.root;
+
+                    var target = _(GINA_HOMEDIR + '/projects.json')
+                        , projects = self.projects;
+                    lib.generator.createFileFromDataSync(
+                        projects,
+                        target
+                    );
+                    console.log('project [ '+ self.name +' ] imported');
+                    process.exit(0)
+                }
+            }
             console.error('[ '+ name +' ] is an existing project. Please choose another name or remove it first.');
             process.exit(1)
         }
