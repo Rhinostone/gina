@@ -39,6 +39,12 @@ try {
 }
 
 
+/**if ( /gina\-debug$/.test(process.argv[1]) ) {
+    setEnvVar('GINA_DEBUG', true);
+    process.argv.splice(1, 0, "--debug-brk=5656");
+    console.error(process.argv);
+}*/
+
 filterArgs();
 //check for $HOME path, alert if empty.
 var home = getUserHome();
@@ -64,16 +70,15 @@ var allowedOffline = [
     'framework:',
     'project:',
     'bundle:',
-    '--',//options or other aliases.
-    '-'//options or other aliases.
+    '--', //options or other aliases.
+    '-' //options or other aliases.
 ];
 
 if ( process.argv.count() < 3 ) {
     if (isWin32)
-        console.emerg('Check out the help section:\n$ gina -h')
+        console.log('Check out the help section:\n$ gina -h')
     else
-        //console.log('Check out the manpage:')
-        console.emerg('Check out the manpage:\n$ man gina')
+        console.log('Check out the manpage:\n$ man gina')
 
     process.exit(0)
 }

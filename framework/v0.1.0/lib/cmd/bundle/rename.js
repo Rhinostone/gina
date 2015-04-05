@@ -1,3 +1,4 @@
 /**
- * Created by martinlutheretouman on 2/6/15.
+ * Rename a given bundle
+ * ! source & target project must be identical
  */

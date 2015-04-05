@@ -116,27 +116,27 @@ function Server(options) {
      * */
     var onRoutesLoaded = function(callback) {
 
-        var config = new Config();
-        var conf =  config.getInstance(self.appName);
-        var cacheless = config.isCacheless();
-
-        var env         = self.env,
-            cacheless   = self.cacheless,
-            apps        = conf.bundles,
-            filename    = '',
-            appName     = '',
-            name        = '',
-            tmp         = {},
-            main        = '',
-            tmpContent  = '',
-            tmpName     = '';
+        var config          = new Config()
+            , conf          =  config.getInstance(self.appName)
+            , cacheless     = config.isCacheless()
+            , env           = self.env
+            , cacheless     = self.cacheless
+            , apps          = conf.bundles
+            , filename      = ''
+            , appName       = ''
+            , name          = ''
+            , tmp           = {}
+            , main          = ''
+            , tmpContent    = ''
+            , tmpName       = ''
+            , i             = 0;
 
         if (cacheless) {
             self.routing = {}
         }
 
         //Standalone or shared instance mode. It doesn't matter.
-        for (var i=0; i<apps.length; ++i) {
+        for (; i<apps.length; ++i) {
             var appPath = _(self.conf[apps[i]].bundlesPath+ '/' + apps[i]);
             appName =  apps[i];
 
@@ -205,10 +205,10 @@ function Server(options) {
                         if( hasViews(apps[i]) ) {
                             // This is only an issue when it comes to the frontend dev
                             // views.useRouteNameAsFilename is set to true by default
-                            // IF [ false ] the control is used as filename
+                            // IF [ false ] the action is used as filename
                             tmp[rule].param.file = tmp[rule].param.file  || rule;
                             if ( !self.conf[apps[i]].content['views']['default'].useRouteNameAsFilename && tmp[rule].param.namespace != 'framework') {
-                                tmp[rule].param.file = tmp[rule].param.control;
+                                tmp[rule].param.file = tmp[rule].param.action;
                                 var tmpRouting = [];
                                 for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
                                     if (/[A-Z]/.test(tmp[rule].param.file.charAt(r))) {
@@ -241,7 +241,7 @@ function Server(options) {
                 callback(err)
             }
 
-            self.conf[apps[i]].content.routing = self.routing
+            self.conf[apps[i]].content.routing = self.routing;
         }//EO for.
 
         callback(false)
@@ -330,7 +330,6 @@ function Server(options) {
                     //    break
                 };
 
-                // cookie time !!
 
 
 
@@ -485,53 +484,42 @@ function Server(options) {
     }
 
     var handle = function(req, res, next, pathname) {
-        var matched = false;
-        var isRoute = {};
-        var withViews = hasViews(self.appName);
+        var matched         = false
+            , isRoute       = {}
+            , withViews     = hasViews(self.appName)
+            , router        = local.router;
 
-        console.log('about to handle [ '+ pathname + ' ] route');
-
-        //var router = new Router(self.env);
-        var router = local.router;
+        console.debug('about to handle [ '+ pathname + ' ] route');
         router.setMiddlewareInstance(self.instance);
 
         //Middleware configuration.
         req.setEncoding(self.conf[self.appName].encoding);
 
         if ( self.routing == null || self.routing.count() == 0 ) {
-            console.error(
-                'gina',
-                'SERVER:ERR:1',
-                    'Malformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl,
-                __stack
-            );
+            console.error('Malformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl);
             throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl, next);
         }
 
-        var params = {};
+        var params = {}, routing = JSON.parse(JSON.stringify(self.routing));
         out:
-            for (var rule in self.routing) {
-                if (typeof(self.routing[rule]['param']) == 'undefined')
+            for (var rule in routing) {
+                if (typeof(routing[rule]['param']) == 'undefined')
                     break;
 
                 //Preparing params to relay to the router.
                 params = {
-                    requirements : self.routing[rule].requirements,
+                    requirements : routing[rule].requirements,
                     url : pathname,
-                    param : self.routing[rule].param,
+                    param : routing[rule].param,
+                    middleware : routing[rule].middleware,
                     bundle: self.appName
                 };
                 //Parsing for the right url.
-                isRoute = router.compareUrls(req, params, self.routing[rule].url);
-                if (pathname === self.routing[rule].url || isRoute.past) {
+                isRoute = router.compareUrls(req, params, routing[rule].url);
+                if (pathname === routing[rule].url || isRoute.past) {
 
-                    console.debug(
-                        'gina',
-                        'SERVER:DEBUG:4',
-                            'Server routing to '+ pathname,
-                        __stack
-                    );
-                    var allowed = (typeof(self.routing[rule].method) == 'undefined' || self.routing[rule].method.length > 0 || self.routing[rule].method.indexOf(req.method) != -1)
+                    console.debug('Server routing to '+ pathname);
+                    var allowed = (typeof(routing[rule].method) == 'undefined' || routing[rule].method.length > 0 || routing[rule].method.indexOf(req.method) != -1)
                     if (!allowed) {
                         throwError(res, 405, 'Method Not Allowed for [' + self.appName + '] => ' + req.originalUrl, next)
                     } else {

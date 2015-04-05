@@ -42,46 +42,38 @@ function Config(opt) {
      * @constructor
      * */
     var init =  function(opt) {
-        if ( typeof(Config.initialized) == 'undefined' ) {
-            Config.initialized = true;
-            Config.instance = self
+
+        if ( !Config.initialized) {
+            var env = opt.env;
+
+            self.startingApp = opt.startingApp;
+            self.executionPath = opt.executionPath;
+            self.task = opt.task || 'run'; // to be aible to filter later on non run task
+
+            //logger.debug('gina', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
+            console.debug('Initalizing config ', __stack);
+
+            self.userConf = false;
+            var path = _(self.executionPath + '/env.json');
+
+            if ( fs.existsSync(path) ) {
+
+                self.userConf = require(path);
+                console.debug('Applicaiton config file loaded ['
+                    + _(self.executionPath + '/env.json') + ']');
+            }
+
+            self.Env.parent = self;
+            if (env != 'undefined') self.Env.set(env);
+
+            self.Host.parent = self;
+
+            //Do some checking please.. like already has a PID ?.
+            //if yes, join in case of standalone.. or create a new thread.
+            self.Host.setMaster(self.startingApp);
+
+            getConf()
         }
-        var env = opt.env;
-        self.startingApp = opt.startingApp;
-        self.executionPath = opt.executionPath;
-        self.task = opt.task || 'run'; // to be aible to filter later on non run task
-
-        //logger.debug('gina', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
-        console.debug('Initalizing config ', __stack);
-
-        self.userConf = false;
-        var path = _(self.executionPath + '/env.json');
-
-        if ( fs.existsSync(path) ) {
-
-            self.userConf = require(path);
-
-//            logger.debug(
-//                'gina',
-//                'CONFIG:DEBUG:6',
-//                'Applicaiton config file loaded ['
-//                    + _(self.executionPath + '/env.json') + ']',
-//                __stack
-//            );
-            console.debug('Applicaiton config file loaded ['
-                    + _(self.executionPath + '/env.json') + ']',
-                __stack);
-        }
-
-        self.Env.parent = self;
-        if (env != 'undefined') self.Env.set(env);
-
-        self.Host.parent = self;
-
-        //Do some checking please.. like already has a PID ?.
-        //if yes, join in case of standalone.. or create a new thread.
-        self.Host.setMaster(self.startingApp);
-        getConf()
     }
 
     var getConf = function() {
@@ -95,9 +87,17 @@ function Config(opt) {
 
             if ( typeof(self.Env.loaded) == "undefined") {
                 //Need to globalize some of them.
-                self.env = Config.instance.env = env;
-                self.envConf = Config.instance.envconf = envConf;
-                loadBundlesConfiguration( function(err) {
+                self.env = env;
+                self.envConf = envConf;
+
+                loadBundlesConfiguration( function(err, file, routing) {
+
+                    if ( typeof(Config.initialized) == 'undefined' ) {
+                        Config.initialized = true;
+                        Config.instance = self
+                    }
+
+
                     //logger.debug('gina', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
                     self.bundlesConfiguration = {
                         env             : self.Env.get(),
@@ -145,11 +145,11 @@ function Config(opt) {
      * @return {object|undefined} configuration|"undefined"
      * */
 
-     this.getInstance = function(bundle) {
+    this.getInstance = function(bundle) {
 
-         self = Config.instance;
-         var configuration = self.envConf;
-         var env = self.env;
+        self = Config.instance;
+        var configuration = self.envConf;
+        var env = self.env;
 
         self.Env.parent = self;
         if (env != 'undefined')
@@ -307,7 +307,7 @@ function Config(opt) {
     var loadWithTemplate = function(userConf, template, callback) {
 
         var content = userConf,
-            //if nothing to merge.
+        //if nothing to merge.
             newContent = JSON.parse( JSON.stringify(content) );
 
         var isStandalone = true,
@@ -345,7 +345,7 @@ function Config(opt) {
 //                //Sorry, can't work without... fix your shit.
 //                process.kill(process.pid, 'SIGINT');
 //            }
-                //callback(new Error('No definition found for bundle ['+ app +']in project.json'));
+            //callback(new Error('No definition found for bundle ['+ app +']in project.json'));
 
 
             if ( typeof(content[app][env]) != "undefined" ) {
@@ -353,7 +353,7 @@ function Config(opt) {
                 if (
                     pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && env == 'dev'
                     || pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && env == 'debug'
-                    ) {
+                ) {
                     var p = _(pkg[app].src);
                     content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
                     //content[app][env]['bundlesPath'] = root + "/"+ p.replace('/' + app, '');
@@ -504,11 +504,13 @@ function Config(opt) {
         return self.allBundles
     }
 
-    var loadBundleConfig = function(bundle, callback, reload) {
-        if ( typeof(bundle) == "undefined") {
+    var loadBundleConfig = function(bundles, b, callback, reload) {
+
+        if ( typeof(bundles[b]) == "undefined") {
             var bundle = self.startingApp
+        } else {
+            var bundle = bundles[b]
         }
-        var bundles     = self.getBundles();
         var cacheless   = self.isCacheless();
         var conf        = self.envConf;
         var env         = self.env || self.Env.get();
@@ -517,7 +519,7 @@ function Config(opt) {
             //    "url": "/@doc",
             //    "param": {
             //        "namespace" : "framework",
-            //        "control": "doc"
+            //        "action": "doc"
             //    }
             //}
         };
@@ -593,9 +595,11 @@ function Config(opt) {
                             routing[rule].url[u] =  wroot + routing[rule].url[u]
                         }
                     }
-
+                    if ( typeof(conf[bundle][env].content) == 'undefined') {
+                        conf[bundle][env].content = {}
+                    }
                     if ( typeof(conf[bundle][env].content['views']) != 'undefined' ) {
-                        routing[rule].param.file = routing[rule].param.file || rule;
+                        routing[rule].param.file = routing[rule].param.file || rule;//routing[rule].param.action
                         if ( !conf[bundle][env].content['views']['default'].useRouteNameAsFilename && routing[rule].param.namespace != 'framework') {
                             var tmpRouting = [];
                             for (var i = 0, len = routing[rule].param.file.length; i < len; ++i) {
@@ -791,7 +795,14 @@ function Config(opt) {
         conf[bundle][env].bundle    = bundle;
         conf[bundle][env].env       = env;
 
-        callback(err, files, routing)
+        //self.envConf = conf;
+
+        ++b;
+        if (b < bundles.length) {
+            loadBundleConfig(bundles, b, callback, reload)
+        } else {
+            callback(err, files, routing)
+        }
     }
 
     /**
@@ -799,22 +810,25 @@ function Config(opt) {
      *
      * TODO - simplify / optimize
      * */
-     var loadBundlesConfiguration = function(callback) {
+    var loadBundlesConfiguration = function(callback) {
 
         var bundles = self.getBundles();
-        var count = bundles.length;
-        var bundle = undefined;
+        //var count = bundles.length;
+        //var bundle = undefined;
         //For each bundles.
-        for (var i=0; i<bundles.length; ++i) {
-            bundle = bundles[i];
-            loadBundleConfig(bundle, function() {
-                --count;
-                if (count == 0) {
-                    //We always return something.
-                    callback(false)
-                }
-            })
-        }//EO for each app
+        //for (var i=0; i<bundles.length; ++i) {
+        //    bundle = bundles[i];
+        //    loadBundleConfig(bundle, function() {
+        //        --count;
+        //        if (count == 0) {
+        //            //We always return something.
+        //            callback(false)
+        //        }
+        //    })
+        //}//EO for each app
+
+        loadBundleConfig(bundles, 0, callback)
+
     }
 
     /**
@@ -823,7 +837,7 @@ function Config(opt) {
      * @return {boolean} isUsingCache
      * */
     this.isCacheless = function() {
-        var env = Config.instance.Env.get();
+        var env = self.Env.get();//Config.instance.Env.get();
         //Also defined in core/gna.
         return (env == "dev" || env == "debug") ? true : false
     }
@@ -844,25 +858,28 @@ function Config(opt) {
         var modelsPath = _(conf.modelsPath);
 
         if ( fs.existsSync(modelsPath) ) {
-        //Reload conf.
-        loadBundleConfig(
-            bundle,
-            function doneLoadingBundleConfig(err, files, routing) {
-                if (!err) {
-                    modelUtil.reloadModels(
-                        conf,
-                        function doneReloadingModel() {
-                            callback(false, routing)
-                        })
-                } else {
-                    callback(err)
-                }
-            }, true)
+            //Reload conf.
+
+            loadBundleConfig(
+                [bundle],
+                0,
+                function doneLoadingBundleConfig(err, files, routing) {
+                    if (!err) {
+                        modelUtil.reloadModels(
+                            conf,
+                            function doneReloadingModel() {
+                                callback(false, routing)
+                            })
+                    } else {
+                        callback(err)
+                    }
+                }, true)
 
         } else {
             //Reload conf. who likes repetition ?
             loadBundleConfig(
-                bundle,
+                [bundle],
+                0,
                 function doneLoadingBundleConfig(err, files, routing) {
                     if (!err) {
                         callback(false, routing)

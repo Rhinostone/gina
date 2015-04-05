@@ -11,7 +11,7 @@ var scan    = require('../env/inc/scan');
  * NB.: If bundle exists, it won't be replaced. You'll only get warnings.
  * */
 function Add() {
-    var self = {};
+    var self = {}, local = {};
 
     var init = function() {
         self.projects = require( _(GINA_HOMEDIR + '/projects.json') );
@@ -19,48 +19,97 @@ function Add() {
         self.envs = [];
         self.portsPath = _(GINA_HOMEDIR + '/ports.json');
         self.portsData = require( self.portsPath );
-        self.portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json');
-        self.portsReverseData = require( self.portsReversePath );
+        //self.portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json');
+        //self.portsReverseData = require( self.portsReversePath );
 
         for (var p in self.portsData) {
             self.portsList.push(p)
         }
 
-        var param = [], options = {};
-        if (!process.argv[3]) {
-            console.error('Missing argument <bundle_name>@<project_name>');
-            process.exit(1)
+        var i = 3, bundles = [];
+        for (; i<process.argv.length; ++i) {
+            if ( /^\@[a-z0-9_.]/.test(process.argv[i]) ) {
+                //self.project = process.argv[i].split('@')[0] || null;
+
+                if ( !isValidName(process.argv[i]) ) {
+                    console.error('[ '+process.argv[i]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].');
+                    process.exit(1);
+                }
+
+            } else if (/^[a-z0-9_.]/.test(process.argv[i])) {
+                bundles.push(process.argv[i])
+            }
         }
 
-        isInProject(); // check if command is running from within the project folder
+        if ( typeof(self.name) == 'undefined') {
+            var folder = new _(process.cwd()).toArray().last();
+            if ( isDefined(folder) ) {
+                self.name = folder
+            }
+        }
 
-        if ( /^[a-zA-Z0-9_.]+\@[a-zA-Z0-9_.]+/.test(process.argv[3]) ) {
-            param = process.argv[3].split('@');
-            self.bundle = param[0];
-            self.project = param[1];
-            if ( !isDefined(self.project) ) {
-                console.error('[ '+ self.project+' ] is not an existing project');
+
+        if ( isDefined(self.name) && bundles.length > 0) {
+            self.bundles = bundles;
+            for (var e in self.projects[self.name].envs) {
+                self.envs.push(self.projects[self.name].envs[e])
+            }
+            self.envs.sort();
+            self.envPath = _(self.projects[self.name].path + '/env.json');
+            addBundles(0, 0)
+        } else {
+            //console.error('[ '+ self.name+' ] is not an existing project');
+            if ( bundles.length == 0) {
+                console.error('Missing argument <bundle_name>');
                 process.exit(1)
             }
-            self.projectPath = _(self.projects[self.project].path + '/project.json');
-            self.envPath = _(self.projects[self.project].path + '/env.json');
-            for (var e in self.projects[self.project].envs) {
-                self.envs.push(self.projects[self.project].envs[e])
-            }
-
-        } else {
-            console.error('gina bundle:add <bundle>@<project> did not match naming rules. Did you forget project name ?');
+            console.error('Missing argument @<project_name>');
             process.exit(1)
         }
+    }
 
-        if ( isValidName('bundle', self.bundle) && isValidName('project', self.project) ) {
-            self.projectData = require(self.projectPath);
-            self.envData = require(self.envPath);
-            self.bundlePath = _(self.projects[self.project].path + '/src/'+ self.bundle);
+    var isDefined = function(name) {
+        if ( typeof(self.projects[name]) != 'undefined' ) {
+            return true
+        }
+        return false
+    }
+
+    var isValidName = function(name) {
+        if (name == undefined) return false;
+
+        self.name = name.replace(/\@/, '');
+        var patt = /^[a-z0-9_.]/;
+        return patt.test(self.name)
+    }
+
+    /**
+     * Add bundles
+     *
+     * @param {number} b - bundle index
+     * @param {number} e - env index
+     *
+     * */
+    var addBundles = function(b, e) {
+        var param = []
+            , options = {}
+            , bundle = self.bundles[b]
+            , project = self.name;
+
+
+        if (b > self.bundles.length-1) {// done
+
+        }
+
+        if ( /^[a-z0-9_.]/.test(bundle) ) {
+            var projectData = require(_(self.projects[self.name].path + '/project.json'))
+                , bundlePath = _(self.projects[self.name].path + '/src/'+ bundle);
 
             if ( !fs.existsSync(self.envPath) ) {
                 lib.generator.createFileFromDataSync({}, self.envPath);
             }
+
+            local.bundle = bundle;
 
             // find available port
             options = {
@@ -73,56 +122,31 @@ function Add() {
                     process.exit(1)
                 }
 
-                self.ports = ports.join(',').split(',');// int->string
+                for (var p=0; p<ports.length; ++p) {
+                    self.portsList.push(ports[p])
+                }
+                self.portsList.sort();
+
+
+                //self.ports = ports.join(',').split(',');// int->string
+
                 try {
-                    check()
+                    check(local.bundle)
                 } catch (err) {
                     rollback(err)
                 }
             })
 
         } else {
-            console.error('[ '+ self.bundle+' ] is not a valid bundle name')
+            console.error('[ '+ bundle+' ] is not a valid bundle name')
             process.exit(1)
         }
     }
 
-    var isInProject = function() {
-        var path    = process.cwd()
-            , p     = null
-            , found = false;
+    var check = function(bundle) {
+        if ( typeof(self.projectData.bundles[bundle]) != 'undefined' ) {
 
-        for (p in self.projects) {
-            if ( self.projects[p].path === path ) {
-                found = true;
-                if ( !(/^[a-zA-Z0-9_.]+\@[a-zA-Z0-9_.]+/.test(process.argv[3])) ) {
-                    process.argv[3] += '@'+p
-                }
-                break
-            }
-        }
-    }
-
-    var isDefined = function(name, value) {
-        if ( typeof(self.projects[name]) != 'undefined' ) {
-            return true
-        }
-        return false
-    }
-
-    var isValidName = function(name, value) {
-        self[name] = value;
-        if (self[name] == undefined) return false;
-
-        self[name] = self[name].replace(/\@/, '');
-        var patt = /^[a-z0-9_.]/;
-        return patt.test(self[name])
-    }
-
-    var check = function() {
-        if ( typeof(self.projectData.bundles[self.bundle]) != 'undefined' ) {
-
-            rl.setPrompt('Bundle [ '+ self.bundle +' ] already exists. Do you want to override ? (yes|no) > ');
+            rl.setPrompt('Bundle [ '+ bundle +' ] already exists. Do you want to override ? (Y/n):');
             rl.prompt();
 
             rl.on('line', function(line) {
@@ -160,7 +184,7 @@ function Add() {
                 }
 
                 if (rewrite) {
-                    delete content.bundles[bundle]
+                    delete content.bundles[local.bundle]
                 }
                 createBundle()
             })
@@ -199,10 +223,30 @@ function Add() {
      *
      * */
     var saveEnvFile = function(callback) {
+        var portsPath = _(GINA_HOMEDIR + '/ports.json', true)
+            , portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json', true)
+            , envDataPath = _(self.projects[self.name].path + '/env.json', true);
+
+
+        if ( typeof(require.cache[portsPath]) != 'undefined') {
+            delete require.cache[portsPath]
+        }
+        if ( typeof(require.cache[portsReversePath]) != 'undefined') {
+            delete require.cache[portsReversePath]
+        }
+        if ( typeof(require.cache[envDataPath]) != 'undefined') {
+            delete require.cache[envDataPath]
+        }
+
+        var envData = require(envDataPath)
+            , portsData = require(portsPath)
+            , portsReverseData = require(portsReversePath);
+
+
         var e = 0
-            , content = JSON.parse(JSON.stringify(self.envData))
-            , ports = JSON.parse(JSON.stringify(self.portsData))
-            , portsReverse = JSON.parse(JSON.stringify(self.portsReverseData));
+            , content = JSON.parse(JSON.stringify(envData))
+            , ports = JSON.parse(JSON.stringify(portsData))
+            , portsReverse = JSON.parse(JSON.stringify(portsReverseData));
 
         if ( typeof(content[self.bundle]) != 'undefined' ) {
             delete content[self.bundle]
@@ -210,13 +254,13 @@ function Add() {
 
 
         for (; e<self.envs.length; ++e) {
-            if ( typeof(content[self.bundle]) == 'undefined' ) {
-                content[self.bundle] = {}
+            if ( typeof(content[local.bundle]) == 'undefined' ) {
+                content[local.bundle] = {}
             }
-            content[self.bundle][self.envs[e]] = {
+            content[local.bundle][self.envs[e]] = {
                 "host" : "127.0.0.1",
                 "port" : {
-                    "http" : self.ports[e]
+                    "http" : local.ports[e]
                 }
             }
             if ( typeof(content[self.bundle]) == 'undefined') {

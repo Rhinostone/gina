@@ -7,31 +7,72 @@ function Remove() {
     var self = {};
 
     var init = function() {
-        self.target = _(GINA_HOMEDIR + '/main.json');
-        self.main   = require(self.target);
+        self.target = _(GINA_HOMEDIR + '/projects.json');
+        self.projects   = require(self.target);
 
-        if ( typeof(process.argv[3]) != 'undefined' ) {
-            if ( self.main.envs[GINA_RELEASE].inArray(process.argv[3]) ) {
-                removeEnv(process.argv[3], self.main, self.target)
-            } else {
-                console.error('Environment [ '+process.argv[3]+' ] not found')
+
+        if ( typeof(process.argv[4]) != 'undefined') {
+            if ( !isValidName(process.argv[4]) ) {
+                console.error('[ '+process.argv[4]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].');
+                process.exit(1);
             }
         } else {
-            console.error('Missing argument in [ gina env:remove <environment> ]')
+            // is current path == project path ?
+            var root = process.cwd();
+            var name = new _(root).toArray().last();
+            if ( isDefined(name) ) {
+                self.name = name
+            }
+        }
+
+        if ( typeof(process.argv[3]) != 'undefined' ) {
+            if ( !self.projects[self.name].envs.inArray(process.argv[3]) ) {
+                console.error('Environment [ '+process.argv[3]+' ] not found');
+                process.exit(1)
+            }
+        } else {
+            console.error('Missing argument in [ gina env:use <environment> ]');
+            process.exit(1)
+        }
+
+        if ( typeof(self.name) == 'undefined' ) {
+            console.error('Project name is required: @<project_name>');
+            process.exit(1)
+        } else if ( typeof(self.name) != 'undefined' && isDefined(self.name) ) {
+            removeEnv(process.argv[3], self.projects, self.target)
+        } else {
+            console.error('[ '+self.name+' ] is not a valid project name.');
+            process.exit(1)
         }
     }
 
-    var removeEnv = function(env, main, target) {
-        if(env === main['dev_env'][GINA_RELEASE] || env === main['def_env'][GINA_RELEASE]) {
-            if (env === main['def_env'][GINA_RELEASE]) {
-                console.error('Environment [ '+process.argv[3]+' ] is set as "default environment"')
+    var isDefined = function(name) {
+        if ( typeof(self.projects[name]) != 'undefined' ) {
+            return true
+        }
+        return false
+    }
+
+    var isValidName = function(name) {
+        if (name == undefined) return false;
+
+        self.name = name.replace(/\@/, '');
+        var patt = /^[a-z0-9_.]/;
+        return patt.test(self.name)
+    }
+
+    var removeEnv = function(env, projects, target) {
+        if(env === projects[self.name]['dev_env']|| env === projects[self.name]['def_env']) {
+            if (env === projects[self.name]['def_env']) {
+                console.error('Environment [ '+env+' ] is set as "default environment"')
             } else {
-                console.error('Environment [ '+process.argv[3]+' ] is protected')
+                console.error('Environment [ '+env+' ] is protected')
             }
         } else {
-            main['envs'][GINA_RELEASE].splice(main['envs'][GINA_RELEASE].indexOf(env), 1);
+            projects[self.name]
+            projects[self.name]['envs'].splice(projects[self.name]['envs'].indexOf(env), 1);
             lib.generator.createFileFromDataSync(
-                main,
+                projects,
                 target
             )
         }

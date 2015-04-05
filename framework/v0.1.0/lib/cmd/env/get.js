@@ -30,7 +30,7 @@ function Get(){
                 if ( /^(\-\-)/.test(process.argv[i]) ) {
                     key = process.argv[i].replace(/\-\-/, '').replace(/\-/, '_');
                     if ( typeof(settings[key]) != 'undefined' ) {
-                        str += key +' = '+ settings[key] +'\n'
+                        str += settings[key] +'\n'
                     }
                 }
             }

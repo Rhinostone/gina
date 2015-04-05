@@ -158,7 +158,7 @@ function Remove() {
             console.log('project [ '+ self.name +' ] removed');
 
         process.exit(0)
-    }
+    };
 
     init()
 };

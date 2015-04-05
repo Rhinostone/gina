@@ -60,7 +60,7 @@ function Initialize(opt) {
         try {
             require(path)(opt)
         } catch(err) {
-            console.crit('Geena has some troubles with command [ ', process.argv.toArray().join(' ') + ' ]\n' + err.stack)
+            console.crit('Gina has some troubles with command [ ', process.argv.toArray().join(' ') + ' ]\n' + err.stack)
         }
     }
 

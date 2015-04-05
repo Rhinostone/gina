@@ -1,5 +1,6 @@
 {
     "version": "{version}",
     "env": "{dev_env}",
-    "node_version": "0.10.25"
+    "node_version": "0.10.25",
+    "debug_port": "5858"
 }
