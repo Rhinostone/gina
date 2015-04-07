@@ -1,7 +1,7 @@
 var fs      = require('fs');
 
 var console = lib.logger;
-var scan    = require('./inc/scan.js');
+var scan    = require('../port/inc/scan.js');
 
 /**
  * Add new environment for a given project
