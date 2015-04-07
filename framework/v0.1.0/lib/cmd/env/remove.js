@@ -2,7 +2,7 @@
 var console = lib.logger;
 /**
  * Remove existing environment
- * TODO - Remove related files & folders
+ * TODO - Prompt for confirmation: "This will remove [ environment ] for the whole project. Proceed ? Y/n: "
  * */
 function Remove() {
     var self = {};
