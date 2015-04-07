@@ -3,12 +3,12 @@ var readline    = require('readline');
 var rl          = readline.createInterface(process.stdin, process.stdout);
 
 var console = lib.logger;
-var scan    = require('../env/inc/scan');
+var scan    = require('../port/inc/scan');
 
 
 /**
  * Add new bundle to a given project.
- * NB.: If bundle exists, it won't be replaced. You'll only get warnings.
+ * NB.: If bundle exists, You will be asked if you want to replace.
  * */
 function Add() {
     var self = {}, local = {};
@@ -19,8 +19,6 @@ function Add() {
         self.envs = [];
         self.portsPath = _(GINA_HOMEDIR + '/ports.json');
         self.portsData = require( self.portsPath );
-        //self.portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json');
-        //self.portsReverseData = require( self.portsReversePath );
 
         for (var p in self.portsData) {
             self.portsList.push(p)
@@ -55,8 +53,16 @@ function Add() {
                 self.envs.push(self.projects[self.name].envs[e])
             }
             self.envs.sort();
+            // rollback infos
             self.envPath = _(self.projects[self.name].path + '/env.json');
-            addBundles(0, 0)
+            self.projectPath = _(self.projects[self.name].path + '/project.json', true);
+            self.projectData = require(self.projectPath);
+            self.portsPath = _(GINA_HOMEDIR + '/ports.json');
+            self.portsData = require(self.portsPath);
+            self.portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json');
+            self.portsReverseData = require(self.portsReversePath);
+
+            addBundles(0)
         } else {
             //console.error('[ '+ self.name+' ] is not an existing project');
             if ( bundles.length == 0) {
@@ -90,16 +96,16 @@ function Add() {
      * @param {number} e - env index
      *
      * */
-    var addBundles = function(b, e) {
+    var addBundles = function(b) {
+        if (b > self.bundles.length-1) {// done
+            process.exit(0)
+        }
+
         var param = []
             , options = {}
             , bundle = self.bundles[b]
             , project = self.name;
 
-
-        if (b > self.bundles.length-1) {// done
-
-        }
 
         if ( /^[a-z0-9_.]/.test(bundle) ) {
             var projectData = require(_(self.projects[self.name].path + '/project.json'))
@@ -110,6 +116,7 @@ function Add() {
             }
 
             local.bundle = bundle;
+            local.b = b;
 
             // find available port
             options = {
@@ -126,12 +133,11 @@ function Add() {
                     self.portsList.push(ports[p])
                 }
                 self.portsList.sort();
-
-
-                //self.ports = ports.join(',').split(',');// int->string
-
+                self.ports = ports;
+                
                 try {
-                    check(local.bundle)
+                    check(local.bundle);
+                    //makeBundle(true); // ignore checking
                 } catch (err) {
                     rollback(err)
                 }
@@ -175,6 +181,35 @@ function Add() {
     }
 
     var makeBundle = function(rewrite) {
+        if (rewrite) {
+            var portsPath = _(GINA_HOMEDIR + '/ports.json', true)
+                , portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json', true);
+
+            if ( typeof(require.cache[portsPath]) != 'undefined') {
+                delete require.cache[portsPath]
+            }
+            if ( typeof(require.cache[portsReversePath]) != 'undefined') {
+                delete require.cache[portsReversePath]
+            }
+
+            var ports = require(portsPath);
+            var portsReverse = require(portsReversePath);
+
+            var patt = new RegExp(local.bundle + '@' + self.name +'/');
+            for (var p in ports) {
+
+                if ( patt.test(ports[p]) ) {
+                    delete ports[p];
+                    self.portsList.splice(self.portsList.indexOf(p), 1)
+                }
+            }
+
+            delete portsReverse[local.bundle + '@' + self.name];
+
+            lib.generator.createFileFromDataSync(ports, self.portsPath);
+            lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
+        }
+
         saveEnvFile(function doneSavingEnv(err){
             if (err) rollback(err);
 
@@ -182,7 +217,6 @@ function Add() {
                 if ( err ) {
                     rollback(err)
                 }
-
                 if (rewrite) {
                     delete content.bundles[local.bundle]
                 }
@@ -200,13 +234,13 @@ function Add() {
      * */
     var saveProjectFile = function(callback) {
         var data = JSON.parse(JSON.stringify(self.projectData, null, 4));
-        data.bundles[self.bundle] = {
+        data.bundles[local.bundle] = {
             "comment" : "Your comment goes here.",
             "tag" : "001",
-            "src" : "src/" + self.bundle,
+            "src" : "src/" + local.bundle,
             "release" : {
                 "version" : "0.0.1",
-                "link" : "bundles/"+ self.bundle
+                "link" : "bundles/"+ local.bundle
             }
         };
         try {
@@ -214,7 +248,7 @@ function Add() {
             self.projectDataWrote = true;
             callback(false, data)
         } catch (err) {
-            callback(err, undefined)
+            callback(err)
         }
     }
 
@@ -248,8 +282,8 @@ function Add() {
             , ports = JSON.parse(JSON.stringify(portsData))
             , portsReverse = JSON.parse(JSON.stringify(portsReverseData));
 
-        if ( typeof(content[self.bundle]) != 'undefined' ) {
-            delete content[self.bundle]
+        if ( typeof(content[local.bundle]) != 'undefined' ) {
+            delete content[local.bundle]
         }
 
 
@@ -258,33 +292,38 @@ function Add() {
                 content[local.bundle] = {}
             }
             content[local.bundle][self.envs[e]] = {
-                "host" : "127.0.0.1",
-                "port" : {
-                    "http" : local.ports[e]
-                }
+                "host" : "127.0.0.1"
+            };
+            if ( typeof(content[local.bundle]) == 'undefined') {
+                content[local.bundle] = {}
             }
-            if ( typeof(content[self.bundle]) == 'undefined') {
-                content[self.bundle] = {}
+
+            //if ( typeof(ports[self.portsList[e]]) == 'undefined') {
+                ports[self.ports[e]] = local.bundle + '@' + self.name + '/' + self.envs[e]
+            //} else {
+            //    console.warn('[ '+self.portsList[e]+' ] is already set. Won\'t override.' )
+            //}
+
+            if ( typeof(portsReverse[local.bundle + '@' + self.name]) == 'undefined') {
+                portsReverse[local.bundle + '@' + self.name] = {}
             }
-            ports[self.ports[e]] = 'http:'+ self.bundle + '@' + self.project + '/' + self.envs[e];
-            if ( typeof(portsReverse.http[self.bundle + '@' + self.project]) == 'undefined') {
-                portsReverse.http[self.bundle + '@' + self.project] = {}
-            }
-            portsReverse.http[self.bundle + '@' + self.project][self.envs[e]] = self.ports[e]
+
+            //if ( typeof(portsReverse[local.bundle + '@' + self.name][self.envs[e]]) == 'undefined') {
+                portsReverse[local.bundle + '@' + self.name][self.envs[e]] = ''+ self.ports[e]
+            //}
+
         }
 
         try {
-            lib.generator.createFileFromDataSync(content, self.envPath);
+            lib.generator.createFileFromDataSync(content, envDataPath);
             self.envDataWrote = true;
             // save to ~/.gina/ports.json & ~/.gina/ports.reverse.json
-            lib.generator.createFileFromDataSync(ports, self.portsPath);
+            lib.generator.createFileFromDataSync(ports, portsPath);
             self.portsDataWrote = true;
-            lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
+            lib.generator.createFileFromDataSync(portsReverse, portsReversePath);
             self.portsReverseDataWrote = true;
 
             callback(false)
-
-            //callback(false)
         } catch (err) {
             callback(err)
         }
@@ -300,9 +339,9 @@ function Add() {
      * */
     var createBundle = function() {
         delete require.cache[_(self.projectPath,true)];
-        self.projectData = require(_(self.projectPath));
-        var target = _( self.projects[self.project].path +'/'+ self.projectData.bundles[self.bundle].src)
-            , sample = new _(getPath('gina.core') +'/template/samples/bundle/');
+        var projectData = require(_(self.projectPath));
+        var target = _( self.projects[self.name].path +'/'+ projectData.bundles[local.bundle].src);
+        var sample = new _(getPath('gina.core') +'/template/samples/bundle/');
 
 
         sample.cp(target, function done(err) {
@@ -310,8 +349,8 @@ function Add() {
                 rollback(err)
             }
             // Browse, parse and replace keys
-            self.source = _(target);
-            browse(self.source)
+            local.source = target;
+            browse(local.source)
         })
     }
 
@@ -322,15 +361,15 @@ function Add() {
      * @param {string} bundle
      * */
     var browse = function(source, list) {
-        var bundle = self.bundle
+        var bundle = local.bundle
             , newSource
             , files = fs.readdirSync(source)
             , f = 0;
 
-        if (source == self.source && typeof(list) == 'undefined') {//root
+        if (source == local.source && typeof(list) == 'undefined') {//root
             var list = [];// root list
             for (var l=0; l<files.length; ++l) {
-                list[l] = _(self.source +'/'+ files[l])
+                list[l] = _(local.source +'/'+ files[l])
             }
         }
 
@@ -357,7 +396,8 @@ function Add() {
 
             if (f == files.length-1 && list.length == 0) { //end of all
                 console.info('Bundle [ '+bundle+' ] has been added to your project with success ;)');
-                process.exit(0)
+                ++local.b;
+                addBundles(local.b)
             }
         }
     }
@@ -380,8 +420,8 @@ function Add() {
                 var contentFile = fs.readFileSync(file, 'utf8').toString();
                 //var contentFile = require(file).toSource();
                 var dic = {
-                    "Bundle" : self.bundle.substring(0, 1).toUpperCase() + self.bundle.substring(1),
-                    "bundle" : self.bundle
+                    "Bundle" : local.bundle.substring(0, 1).toUpperCase() + local.bundle.substring(1),
+                    "bundle" : local.bundle
                 };
 
                 contentFile = whisper(dic, contentFile);
@@ -411,8 +451,8 @@ function Add() {
             }
             //restore project.json
             if ( typeof(self.projectDataWrote) != undefined ) {
-                if ( typeof(self.projectData.bundles[self.bundle]) != 'undefined') {
-                    delete self.projectData.bundles[self.bundle]
+                if ( typeof(self.projectData.bundles[local.bundle]) != 'undefined') {
+                    delete self.projectData.bundles[local.bundle]
                 }
                 lib.generator.createFileFromDataSync(self.projectData, self.projectPath)
             }
@@ -431,7 +471,7 @@ function Add() {
             process.exit(1)
         };
 
-        var bundle = new _(self.bundlePath);
+        var bundle = new _(local.source);
         if ( bundle.existsSync() ) {
             bundle.rm( function(err) {//remove folder
                 if (err) {
