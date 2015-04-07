@@ -134,7 +134,7 @@ function Add() {
                 }
                 self.portsList.sort();
                 self.ports = ports;
-                
+
                 try {
                     check(local.bundle);
                     //makeBundle(true); // ignore checking

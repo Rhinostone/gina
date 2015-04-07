@@ -1,3 +1,4 @@
+//var fs          = require('fs');
 var console = lib.logger;
 /**
  * Remove existing environment
@@ -74,7 +75,29 @@ function Remove() {
             lib.generator.createFileFromDataSync(
                 projects,
                 target
-            )
+            );
+            // clean ports & reverse ports registered for the project
+            var portsPath = _(GINA_HOMEDIR + '/ports.json')
+                , portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json')
+                , ports = require(portsPath)
+                , portsReverse = require(portsReversePath);
+
+
+            var patt = new RegExp("@"+ self.name +"/"+ env +"$");
+            for (var p in ports) {
+                if ( patt.test(ports[p]) ) {
+                    delete ports[p]
+                }
+            }
+            for (var p in portsReverse) {
+                if ( typeof( portsReverse[p][env]) != 'undefined' ) {
+                    delete portsReverse[p][env]
+                }
+            }
+
+            lib.generator.createFileFromDataSync(ports, portsPath);
+            lib.generator.createFileFromDataSync(portsReverse, portsReversePath);
+            process.exit(0)
         }
     };
 
