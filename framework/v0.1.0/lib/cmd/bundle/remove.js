@@ -3,7 +3,6 @@ var readline    = require('readline');
 var rl          = readline.createInterface(process.stdin, process.stdout);
 
 var console = lib.logger;
-var scan    = require('../env/inc/scan');
 
 /**
  * Add new bundle to a given project.
@@ -90,8 +89,8 @@ function Remove() {
                         , bundle = null
                         , bundles = [];
 
+                    re = new RegExp(self.bundle+"\@"+self.project+"\/");
                     for(p in ports) {
-                        re = new RegExp(self.bundle+"\@"+self.project+"\/");
                         if ( re.test(ports[p]) ) {
                             start = ports[p].indexOf(':')+1;
                             bundle = ports[p].substr(start, ports[p].indexOf('/')-start);
@@ -100,11 +99,10 @@ function Remove() {
                         }
                     }
 
-                    for(t in portsReverse) {
-                        for(p in portsReverse[t]) {
-                            if ( bundles.indexOf(p) > -1 ) {
-                                delete portsReverse[t][p]
-                            }
+                    re = new RegExp('^'+ self.bundle +'@'+self.project +'$');
+                    for(p in portsReverse) {
+                        if ( re.test(p) ) {
+                            delete portsReverse[p]
                         }
                     }
 

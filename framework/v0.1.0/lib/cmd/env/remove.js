@@ -70,7 +70,7 @@ function Remove() {
                 console.error('Environment [ '+env+' ] is protected')
             }
         } else {
-            projects[self.name]
+
             projects[self.name]['envs'].splice(projects[self.name]['envs'].indexOf(env), 1);
             lib.generator.createFileFromDataSync(
                 projects,
@@ -80,7 +80,9 @@ function Remove() {
             var portsPath = _(GINA_HOMEDIR + '/ports.json')
                 , portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json')
                 , ports = require(portsPath)
-                , portsReverse = require(portsReversePath);
+                , portsReverse = require(portsReversePath)
+                , envsPath = _(projects[self.name].path +'/env.json')
+                , envs = require(envsPath);
 
 
             var patt = new RegExp("@"+ self.name +"/"+ env +"$");
@@ -95,8 +97,19 @@ function Remove() {
                 }
             }
 
+            for (var bundle in envs) {
+                for (var e in envs[bundle]) {
+                    if (e == env) {
+                        delete envs[bundle][e]
+                    }
+                }
+            }
+
             lib.generator.createFileFromDataSync(ports, portsPath);
             lib.generator.createFileFromDataSync(portsReverse, portsReversePath);
+            lib.generator.createFileFromDataSync(envs, envsPath);
+
+            console.log('Environment [ '+env+' ] removed with success');
             process.exit(0)
         }
     };
