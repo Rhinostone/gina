@@ -488,6 +488,7 @@ function Controller(options) {
             res.end();
             local.res.headersSent = true;// done for the render() method
         }
+        next()
     }
 
 
