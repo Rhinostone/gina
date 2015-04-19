@@ -126,7 +126,7 @@ function Config(opt) {
                             tmp     : opt.executionPath + '/tmp'
                         },
                         //TODO - Replace property by bundle.
-                        bundles : self.bundlesConfiguration.allBundles,
+                        bundles : self.bundlesConfiguration.allBundles
                         //envs :
                     }, function(err) {
                         self.Env.loaded = true;
@@ -547,6 +547,7 @@ function Config(opt) {
                 if ( !fs.existsSync(filename) ) {
                     filename = main;
                 }
+
                 delete require.cache[_(filename, true)];
                 routing = merge( true, require(filename), routing);
                 if (filename != main) {
