@@ -65,6 +65,13 @@ function Merge() {
                                     copy[ prop ] = clone[ prop ];
                                 }
                             }
+
+                        } else {
+                            for (var prop in copy) {
+                                if (typeof(clone[ prop ]) != "undefined") {
+                                    clone[ prop ] = copy[ prop ]
+                                }
+                            }
                         }
 
                         // Never move original objects, clone them
