@@ -13,7 +13,7 @@
     },
     "app" : {
         "1" : "%option%: option not found",
-        "2" : "Type %type% not found in commad: %command%",
+        "2" : "Type %type% not found in command: %command%",
         "3" : "Check documentation for the right syntax.\nSample command:\n$ gina --start <app_name> <env>",
         "4" : "Bundle [%app%] not found. May be a problem with your build."
     }

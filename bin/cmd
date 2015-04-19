@@ -3,6 +3,7 @@
 
 var fs      = require('fs');
 var net     = require('net');
+var console = lib.logger;
 
 function Cmd(opt, runOffine) {
 
@@ -19,6 +20,7 @@ function Cmd(opt, runOffine) {
 
         lib = require(local.frameworkPath + "/lib");
 
+        checkIfSettings();
         if ( typeof(runOffine) != 'undefined' ) {
             launchCmd()
         } else {
@@ -39,13 +41,16 @@ function Cmd(opt, runOffine) {
             conn.on('data', function(data) {
 
                 console.info('received ', data.toString() );
-
+                var argv = JSON.parse( data.toString() );
+                argv[0] = process.execPath;
+                argv[1] = argv[1] + '/bin/cli';
                 //Launch.
                 lib.cmd.load({
+                    isOnlineCommand : true,
                     ginaPath : local.ginaPath,
                     frameworkPath : local.frameworkPath,
                     pack : local.pack,
-                    argv : data.toString(),
+                    argv : argv,
                     client : conn,
                     homedir : local.homedir
                 })
@@ -55,22 +60,40 @@ function Cmd(opt, runOffine) {
 
         framework.on('error', function(err) {
             if (err.code === 'EADDRINUSE') {
-                console.warn('Framework already running.')
-                //Checks if there is services to start anyway.
+                if (process.argv[2] == 'framework:start') {
+                    var shortVersion = getEnvVar('GINA_SHORT_VERSION')
+                        , rundir = require( getEnvVar('GINA_HOMEPATH') +'/'+ shortVersion +'/settings.json').rundir
+                        , path = _( rundir +'/gina')
+                        , pids = fs.readdirSync( path )
+                        , i = 0
+                        , str = ''
+                        , pid = undefined;
+
+                    while(i< pids.length) {
+                        str = fs.readFileSync(_(path +'/'+ pids[i])).toString();
+                        if ( str === 'gina' ) {
+                            pid = pids[i];
+                            break
+                        }
+                        ++i
+                    }
+                    console.warn('Framework already running: [ '+ pid+' ]')
+                } else {
+
+                }
             } else {
                 console.emerg('Could not start framework. ', err.stack)
             }
         });
 
         framework.listen(local.port, function() { //'listening' listener
-            console.info('Framework started');
 
-            //Launch first time.
+            //First time launch.
             lib.cmd.load({
                 ginaPath : local.ginaPath,
                 frameworkPath : local.frameworkPath,
                 pack : local.pack,
-                argv : JSON.stringify(process.argv),
+                argv : process.argv,
                 client : process.stdout,
                 isFromFramework : true,
                 homedir : local.homedir,
@@ -83,16 +106,16 @@ function Cmd(opt, runOffine) {
     };
 
     var launchCmd = function() {
-        var cmd = process.argv[2].split(':');
-        var topic = cmd[0];
-        var action = cmd[1];
+        var cmd = process.argv[2].split(':')
+            , topic = cmd[0]
+            , action = cmd[1];
 
 
         lib.cmd.load({
             ginaPath : local.ginaPath,
             frameworkPath : local.frameworkPath,
             pack : local.pack,
-            argv : JSON.stringify(process.argv),
+            argv : process.argv,
             client : process.stdout,
             isFromFramework : true,
             homedir : local.homedir,
@@ -102,6 +125,45 @@ function Cmd(opt, runOffine) {
             }
         })
     };
+
+    var checkIfSettings = function() {
+        var main = require( getEnvVar('GINA_HOMEPATH') + '/main.json' )
+            , version = getEnvVar('GINA_VERSION')
+            , home = getEnvVar('GINA_HOMEPATH')
+            , shortVersion = getEnvVar('GINA_SHORT_VERSION')
+            , env = getEnvVar('GINA_ENV') || main['dev_env'][shortVersion]
+            , source = getEnvVar('GINA_DIR') + '/resources/home/settings.json'
+            , target = home +'/'+ shortVersion +'/settings.json'
+            , settings = {}
+            , data = {};
+
+        if ( !fs.existsSync(target) ) {
+            try {
+                var data = require(source);
+                data.version = version;
+                data.env = env;
+                data.tmpdir = _( getTmpDir() );
+                data.rundir = _( getRunDir() );
+                data.logdir = _( getLogDir() );
+
+                var env = require(home + '/main.json').dev_env;
+                var dic = {
+                    'version' : getEnvVar('GINA_VERSION'),
+                    'dev_env' : env
+                };
+                data = whisper(dic, data);
+                settings = data;
+
+                lib.generator.createFileFromDataSync(
+                    data,
+                    target
+                )
+            } catch (err) {
+                console.error(err.stack);
+                process.exit(1)
+            }
+        }
+    }
 
     init(opt,runOffine)
 };

@@ -51,9 +51,17 @@ var home = getUserHome();
 if (!home) {
     console.error('No ' + ((isWin32) ? 'USERPROFILE' : 'HOME') + ' path found.')
 } else {
+    var shortVersion = version.split('.');
+    shortVersion.splice(2,1);
+    shortVersion = shortVersion.join('.');
+    setEnvVar('GINA_SHORT_VERSION', shortVersion);
+
     setEnvVar('GINA_HOME', home);
     setEnvVar('GINA_DIR', ginaPath);
-    home = getEnvVar('GINA_HOMEPATH') || home + '/.gina'
+    if ( typeof(getEnvVar('GINA_HOMEPATH')) == 'undefined') {
+        setEnvVar('GINA_HOMEPATH', home + '/.gina')
+    }
+    home = getEnvVar('GINA_HOMEPATH')
 }
 setEnvVar('GINA_IS_WIN32', isWin32, true);
 
@@ -88,13 +96,15 @@ if (process.argv[2].indexOf(':') < 0) {
 }
 
 if (
-    typeof(process.argv[2]) != 'undefined' &&
-    process.argv[2] === 'start'||
-    typeof(process.argv[2]) != 'undefined' &&
-    process.argv[2] === 'framework:start'
+    typeof(process.argv[2]) != 'undefined'
+        && process.argv[2] === 'start'
+    || typeof(process.argv[2]) != 'undefined'
+        && process.argv[2] === 'framework:start'
+    //|| typeof(process.argv[2]) != 'undefined'
+    //    && process.argv[2] === 'bundle:start'
 ) {
 
-    //Start framework & pass service options.
+    //Start framework || launch online CMD.
     require(binPath + '/cmd')({
         binPath : binPath,
         ginaPath : ginaPath,
@@ -107,6 +117,7 @@ if (
 } else if (
     typeof(process.argv[2]) != 'undefined'
     && allowedOffline.indexOf( (process.argv[2].split(':')[0] + ':')) > -1
+    &&  process.argv[2] !== 'bundle:start'
     || process.argv[2].substr(0, 2) === '--'
     || process.argv[2].substr(0, 1) === '-'
 ) {
@@ -133,14 +144,16 @@ if (
         function() {
             //Forwarding cmd.
             client.write( JSON.stringify(process.argv) );
-            console.log('Gina Command Line Tool\r\n')
         }
     );
 
     client.on('data', function(data) {
         //Acknowledging ready state.
-        console.notice( data.toString() + '\n');
-        client.end()
+        if (  /\[ quit \]/.test(data) ) {
+            client.end()
+        } else {
+            console.log( data.toString() + '\n');
+        }
     });
 
     //client end event.
@@ -150,9 +163,9 @@ if (
 
     client.on('error', function(err) {
         if (isWin32) {
-            console.emerg('If [ gina ] not started, try to start framework as Administrator :\n$ gina start')
+            console.log('[ gina ] not started, try to start framework as Administrator :\n$ gina start')
         } else {
-            console.emerg('If [ gina ] not started, try to start framework:\n$ [sudo] gina start')
+            console.log('[ gina ] not started, try to start framework with :\n$ sudo gina start')
         }
         process.exit(1)
     })

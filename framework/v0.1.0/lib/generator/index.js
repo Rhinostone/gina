@@ -18,8 +18,10 @@ var fs = require('fs');
  * @namespace   Gina.Utils.Generator
  * @author      Rhinostone <gina@rhinostone.com>
  * */
-var Generator = {
-    createFileFromTemplate : function(source, target, callback){
+function Generator () {
+    var self  = {};
+
+    self.createFileFromTemplate = function(source, target, callback){
 
         fs.readFile(source, function(err, data){
             if (err) throw err;
@@ -36,16 +38,19 @@ var Generator = {
                 if ( typeof(callback) != 'undefined') callback(err)
             });
         });
-    },
-    createFileFromDataSync : function(data, target){
+    }
+
+    self.createFileFromDataSync = function(data, target){
         var data = (typeof(data) == "object") ? JSON.stringify(data, null, 4) : data;
         fs.writeFileSync(target, data);
         fs.chmodSync(target, 0755)
-    },
-    createFoldersFromStructureSync : function(structure){
+    }
 
-    },
-    createPathSync : function(path, callback) {
+    self.createFoldersFromStructureSync = function(structure){
+
+    }
+
+    self.createPathSync = function(path, callback) {
         var t = path.replace(/\\/g, '\/').split('/');
         var path = '';
         //creating folders
@@ -64,7 +69,10 @@ var Generator = {
         } catch (err) {
             callback(err);
         }
-    }
+    };
+
+    return self
 };
 
-module.exports = Generator
+
+module.exports = Generator()

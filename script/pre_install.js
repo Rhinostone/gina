@@ -8,8 +8,10 @@
 
 var fs      = require('fs');
 var os      = require('os');
-var utils   = require('./../core/utils');
-var console = utils.logger;
+
+
+var lib     = require('./lib');
+var console = lib.logger;
 
 /**
  * Pre install constructor
@@ -19,8 +21,9 @@ function PreInstall() {
     var self = this;
 
     var init = function() {
-        self.isWin32 = ( os.platform() == 'win32' ) ? true : false;
-        self.path = __dirname.substring(0, (__dirname.length - 'script'.length));
+        self.isWin32 = getEnvVar('GINA_IS_WIN32');
+        self.path = getEnvVar('GINA_FRAMEWORK');
+        self.gina = getEnvVar('GINA_DIR');
 
     }
     // compare with post_install.js if you want to use this

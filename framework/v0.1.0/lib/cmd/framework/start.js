@@ -1,23 +1,47 @@
 'use strict';
-var Start;
-
-var help = require( getPath('gina') + '/utils/helper');
-var child = require('child_process');
-var lib = require( getPath('gina.lib') );
-
-
-Start = function(opt){
+var fs      = require('fs');
+var help    = require( getPath('gina') + '/utils/helper');
+var child   = require('child_process');
+var lib     = require( getPath('gina.lib') );
+var console = lib.logger;
+/**
+ * Framework start command - Needs to be launched as [sudo], [admin] or [root]
+ *
+ * NB.: Another alternative is to set appropriate permissions for `/var/run/gina`
+ * e.g. if you have a `gina` user in the `www-data` group
+ *  $ sudo mkdir /var/run/gina
+ *  $ sudo chown -R gina:www-data /var/run/gina
+ *
+ * @param {object} opt - Constructor options
+ * */
+function Start(opt){
 
     //Get services list.
-    var list = require(GINA_HOMEDIR + '/list.json');
-    var self = {
-        opt : opt,
-        cmd : 'framework:start',
-        servicesList : list.services[opt.release]
-    };
+    var self = {};
+
+
+
+    //var self = {
+    //    opt : opt,
+    //    cmd : 'framework:start',
+    //    servicesList : list.services[opt.release]
+    //};
 
     var init = function(opt){
-        self.opt = opt;
+
+        self.pid = opt.pid;
+        self.projects = require(GINA_HOMEDIR + '/projects.json');
+        self.services = [];
+        self.bundles = [];
+
+        cleanPIDs();
+        console.info('Framework ready for connections');
+
+        //var project
+
+        //for (var p in self.projects) {
+        //    self.bundles.push()
+        //}
         var frameworkPath = getPath('framework');
 
 //        setUpLogs( function(err){
@@ -26,14 +50,12 @@ Start = function(opt){
 //        })
 
 
-        var argv = process.argv.toArray();
-        var i = argv.indexOf(self.cmd);
-        var services = argv.slice(i+1);
-        if ( services.length > 0) {//by hand.
-            startSelectedServices(services)
-        } else {
-            startAllServices()
-        }
+        //var services = argv.slice(i+1);
+        //if ( services.length > 0) {//by hand.
+        //    startSelectedServices(services)
+        //} else {
+        //    startAllServices()
+        //}
 
 
 
@@ -47,12 +69,29 @@ Start = function(opt){
         //}
     };
 
+    var cleanPIDs = function() {
+        var f = 0
+            , path = _(GINA_RUNDIR + '/gina')
+            , files = fs.readdirSync( path );
+
+        for (;f < files.length; ++f) {
+            if (files[f] != self.pid) {
+                try {
+                    new _(path +'/'+ files[f]).rmSync()
+                } catch(err) {
+                    console.error(err.stack||err.message);
+                    process.exit(1);
+                }
+            }
+        }
+    }
+
     /**
      * Check is the service is a real one.
      *
      * */
-    var isReal = function(service){
-        return ( typeof(self.servicesList[service]) != 'undefined') ? true : false
+    var isReal = function(bundle){
+        return ( typeof(self.bundles[bundle]) != 'undefined') ? true : false
     };
 
 //    var isRunning = fucntion(service) {

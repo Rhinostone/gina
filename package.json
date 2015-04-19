@@ -46,7 +46,7 @@
     "./doc/man/gina-model.1",
     "./doc/man/gina-env.1"
   ],
-  "main": "./bin/cli",
+  "main": "./framework/v0.1.0/core/gna",
   "scripts": {
     "test": "nodeunit bin/test",
     "preinstall": "node script/pre_install.js",

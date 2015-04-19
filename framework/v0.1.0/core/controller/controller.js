@@ -9,9 +9,9 @@
 //Imports.
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
-var utils           = require('./../utils') || require.cache[require.resolve('./../utils')];
-var merge           = utils.merge;
-var inherits        = utils.inherits;
+var lib             = require('./../../lib') || require.cache[require.resolve('./../../lib')];
+var merge           = lib.merge;
+var inherits        = lib.inherits;
 var swig            = require('swig');
 
 

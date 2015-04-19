@@ -1,6 +1,21 @@
 var console = lib.logger;
 /**
  * Add or edit framework settings
+ *
+ *  // set or change log_level
+ *  $ gina env:set --log-level=debug
+ *
+ *  // remove sample key
+ *  $ gina env:set --sample
+ *
+ *  NB.: key values can be set to undefined or null
+ *  $ gina env:set --sample=undefined
+ *  $ gina env:set --sample=null
+ *
+ *  Once set, you can call the constant from your application
+ *  $ gina env:set --my-contant
+ *  console.log(GINA_MY_CONTSTANT)
+ *
  * */
 function Set(){
     var self = {};
@@ -23,7 +38,11 @@ function Set(){
     }
 
     var set = function(arr) {
-        self.settings[arr[0].replace(/\-\-/, '').replace(/\-/, '_')] = arr[1] || '';
+        if ( typeof(arr[1]) == 'undefined' ) {
+            delete self.settings[arr[0].replace(/\-\-/, '').replace(/\-/, '_')]
+        } else {
+            self.settings[arr[0].replace(/\-\-/, '').replace(/\-/, '_')] = arr[1] || ''
+        }
     }
 
     var save = function(data, target) {

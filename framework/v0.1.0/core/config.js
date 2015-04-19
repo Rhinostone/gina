@@ -1,6 +1,6 @@
 /*
  * This file is part of the gina package.
- * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2015 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -12,11 +12,11 @@ var fs              = require('fs');
 var util            = require('util');
 var Events          = require('events');
 var EventEmitter    = require('events').EventEmitter;
-var utils           = require("./utils");
-var merge           = utils.merge;
-var inherits        = utils.inherits;
-var console         = utils.logger;
-var modelUtil     = new utils.Model();
+var lib             = require("./../lib");
+var merge           = lib.merge;
+var inherits        = lib.inherits;
+var console         = lib.logger;
+var modelUtil       = new lib.Model();
 
 
 /**
@@ -110,10 +110,10 @@ function Config(opt) {
                     //console.error("found bundles ", self.bundlesConfiguration.bundles);
 
                     //TODO - Don't override if syntax is ok - no mixed paths.
-                    //Set paths for utils. Override for now.
+                    //Set paths for lib. Override for now.
                     //To reset it, just delete the hidden folder.
                     var ginaPath = opt.ginaPath;
-                    var utilsConfig = new utils.Config();
+                    var utilsConfig = new lib.Config();
                     //setContext('gina.utils.config', utilsConfig);
 
                     utilsConfig.set('gina', 'locals.json', {
@@ -126,7 +126,7 @@ function Config(opt) {
                             tmp     : opt.executionPath + '/tmp'
                         },
                         //TODO - Replace property by bundle.
-                        bundles : self.bundlesConfiguration.allBundles,
+                        bundles : self.bundlesConfiguration.allBundles
                         //envs :
                     }, function(err) {
                         self.Env.loaded = true;
