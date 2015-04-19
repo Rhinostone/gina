@@ -1,6 +1,20 @@
 var console = lib.logger;
 /**
  * Get framework settings
+ *
+ * e.g.
+ *  // get all
+ *  $ gina env:get
+ *
+ *  // get rundir
+ *  $ gina env:get --rundir
+ *
+ *  //get rundir & log_level
+ *  $ gina env:get --rundir --log-level
+ *
+ *  // set or change log_level
+ *  $ gina env:set --log-level=debug
+ *
  * */
 function Get(){
     var self = {};
@@ -24,7 +38,6 @@ function Get(){
             for(var prop in settings) {
                 str += prop +' = '+ settings[prop] +'\n'
             }
-            console.log(str.substr(0, str.length-1))
         } else {
             for (var i=0; i<process.argv.length; ++i) {
                 if ( /^(\-\-)/.test(process.argv[i]) ) {
@@ -34,9 +47,13 @@ function Get(){
                     }
                 }
             }
-            if (str != '')
-                console.log(str.substr(0, str.length-1))
+
         }
+
+        if (str != '')
+            console.log(str.substr(0, str.length-1));
+
+        process.exit(0)
     }
 
     init()

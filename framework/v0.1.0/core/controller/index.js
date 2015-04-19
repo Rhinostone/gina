@@ -1,6 +1,6 @@
-var utils = require('../utils') || require.cache[require.resolve('../utils')];
-var inherits = utils.inherits;
-var helpers = utils.helpers;
+var lib = require('../../lib') || require.cache[require.resolve('../../lib')];
+var inherits = lib.inherits;
+var helpers = lib.helpers;
 var context = helpers.context;
 try {
     //first load only

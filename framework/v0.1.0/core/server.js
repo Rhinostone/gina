@@ -6,11 +6,11 @@ var express         = require('express');
 var url             = require('url');
 var Config          = require('./config');
 var Router          = require('./router');
-var utils           = require('./utils');
-var inherits        = utils.inherits;
-var merge           = utils.merge;
-var Proc            = utils.Proc;
-var console         = utils.logger;
+var lib             = require('./../lib');
+var inherits        = lib.inherits;
+var merge           = lib.merge;
+var Proc            = lib.Proc;
+var console         = lib.logger;
 
 
 function Server(options) {
@@ -100,7 +100,7 @@ function Server(options) {
             console.debug('Routing loaded' + '\n'+ JSON.stringify(self.routing, null, '\t'));
 
             if ( hasViews(self.appName) ) {
-                utils.url(self.conf[self.appName], self.routing)
+                lib.url(self.conf[self.appName], self.routing)
             }
 
             if (!err) {

@@ -8,9 +8,11 @@
 
 //Imports
 var fs      = require('fs');
-var os      = require('os');
-var utils   = require('./../core/utils');
-var console = utils.logger;
+
+var lib         = require('./lib');
+var console     = lib.logger;
+var generator   = lib.generator;
+
 
 
 
@@ -24,16 +26,36 @@ function PostInstall() {
 
     //Initialize post installation scripts.
     var init = function() {
-        self.isWin32 = ( os.platform() == 'win32' ) ? true : false;
-        self.path = _( __dirname.substring(0, (__dirname.length - "script".length)-1 ) );
-        self.root = process.cwd().toString();
-
-        createVersionFile(function onFileCreated(err) {
-            if (err) {
-                console.error(err.stack)
+        self.isWin32 = getEnvVar('GINA_IS_WIN32');
+        self.path = getEnvVar('GINA_FRAMEWORK');
+        self.gina = getEnvVar('GINA_DIR');
+        var path = new _(process.env.PATH.split(':')[1]).toUnixStyle();
+        path = path.split('/');
+        var root = ''
+        for (var p = 0; p < path.length; ++p) {
+            if (path[p] == 'node_modules') {
+                root = root.substr(0, root.length-1);
+                break
             }
-            createGinaFileForPlatform()
-        })
+            root += path[p] + '/'
+        }
+        self.root = root;
+
+
+        console.log('project ',  self.root, ' VS ', process.cwd());
+
+        console.debug('framework path: ' + getEnvVar('GINA_FRAMEWORK'));
+
+        if ( self.root === process.cwd() ) { //local install
+            createVersionFile(function onFileCreated(err) {
+                if (err) {
+                    console.error(err.stack)
+                }
+                createGinaFileForPlatform()
+            })
+        } else {
+
+        }
     }
 
     var createVersionFile = function(callback) {
@@ -61,11 +83,11 @@ function PostInstall() {
         }
         //Will override.
         if ( typeof(callback) != 'undefined') {
-            utils.generator.createFileFromTemplate(source, target, function onGinaFileCreated(err) {
+            generator.createFileFromTemplate(source, target, function onGinaFileCreated(err) {
                 callback(err)
             })
         } else {
-            utils.generator.createFileFromTemplate(source, target)
+            generator.createFileFromTemplate(source, target)
         }
     }
 
@@ -121,11 +143,11 @@ function PostInstall() {
                 fs.unlinkSync(target);
                 // have to wait for windows to complete this
                 setTimeout( function(){
-                    utils.generator.createFileFromTemplate(source, target);
+                    generator.createFileFromTemplate(source, target);
                     keepGoing(filename)
                 }, 1000)
             } else {
-                utils.generator.createFileFromTemplate(source, target);
+                generator.createFileFromTemplate(source, target);
                 keepGoing(filename)
             }
 

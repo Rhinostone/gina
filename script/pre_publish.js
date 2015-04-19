@@ -7,13 +7,15 @@
  */
 
 //Imports.
-var fs      = require('fs');
-var spawn   = require('child_process').spawn;
-var utils   = require('./../core/utils');
+var fs          = require('fs');
+var spawn       = require('child_process').spawn;
+
+var lib         = require('./lib');
+var console     = lib.logger;
 
 function PrePublish() {
     var self = this;
-    this.path = _( __dirname.substring(0, (__dirname.length - "script".length)) );
+    this.path = getEnvVar('GINA_DIR');
     //this.projectPath = _( __dirname.substring(0, (__dirname.length - "node_modules/gina/script".length)) );
 
     var init = function() {

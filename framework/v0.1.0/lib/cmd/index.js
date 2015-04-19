@@ -71,44 +71,58 @@ cmd.getOptions = function() {
 
 cmd.onExec = function(client, isFromFramework, opt) {
     cmd.option = opt;
+    var console = lib.logger;
     var Proc = require( getPath('gina.lib') + '/proc');
-    var self = this;
+    var self = {};
+
+    cmd.msg = require( _(__dirname + '/framework/msg.json') );
+    self.isFromFramework = opt.isFromFramework || isFromFramework || false;
+    self.isOnlineCommand = opt.isOnlineCommand || false;
+
     var ignore = function() {
 
         if (!self.isFromFramework) {
-            var m = self.msg.default[0].replace("%command%", cmd.getString());
+            var m = cmd.msg.default[0].replace("%command%", cmd.getString());
             client.write(m)
         }
     };
 
-    cmd.msg = require( _(__dirname + '/msg.json') );
-    this.isFromFramework = isFromFramework;
 
 
     if (self.isFromFramework) {
         var init = require('./framework/init')(opt);
-
-        //Starting framework and default services.
+        //Framework CMD.
         if (opt.task.action == 'start') {
             init.onComplete( function done(err, run){
-                console.debug('loading opt ',  opt.task.action);
-                //Setting master process and starting with PID file.
+                console.debug('loading task ',  opt.task.action);
+                //Setting master process with its own PID file.
                 cmd.proc = new Proc('gina', process);
                 cmd.proc.setMaster(process.pid);
-                cmd.proc.onReady( function(){
+
+                cmd.proc.onReady( function(){ //starting others
+                    opt.pid = process.pid;
                     run(opt)
                 })
             })
-        } else { // CMD
+        } else { // Offline CMD
             init.onComplete( function done(err, run, opt){
-                //Starts without PID file.
-                //cmd.proc = new Proc('cmd', process, false);
-                //cmd.proc.onReady( function(){
-
-                    run(opt)
-                //})
+                run(opt)
             })
         }
+
+    } else if (self.isOnlineCommand) {
+        var arr = opt.argv[2].split(':');
+        if ( typeof(opt.task) == 'undefined' ) {
+            opt.task = {}
+        }
+        opt.task.topic  = arr[0];
+        opt.task.action = arr[1];
+
+        var init = require('./framework/init')(opt);
+        init.onListen( function done(err, run, opt){
+
+            run(opt, cmd)
+        })
 
     } else {
         ignore()

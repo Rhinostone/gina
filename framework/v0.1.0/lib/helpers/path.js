@@ -345,9 +345,7 @@ e.setMaxListeners(100);
                     .onComplete( function(err, path){
                         //Avoid collisions.
                         if (err) {
-                            console.error("Debug needed mkdir on existing folder !! ", err);
-                           // console.warn("MKDIR ERR: silently ignored.. ", path);
-                           //callback("MKDIR ERR: silently ignored.. ");
+                            console.error(err.stack||err.message);
                             process.exit(1)
                         } else {
 

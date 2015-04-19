@@ -69,7 +69,7 @@ lib = new Lib();
 lib.cmd.load = function(opt){
     //ginaPath, pack, argv, client
 
-    process.argv = JSON.parse(opt.argv);
+    process.argv = opt.argv;
 
     //Set gina paths.
     setPath('gina', _(opt.ginaPath));

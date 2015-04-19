@@ -293,6 +293,7 @@ function MainHelper(opt) {
     }()
 
     filterArgs = function() {
+
         var setget = ( typeof(process.argv[2]) != 'undefined'
                             && /(\:set$|\:get$|[-v]|\:version$|[--version])/.test(process.argv[2]))
                             ? true : false
@@ -302,6 +303,7 @@ function MainHelper(opt) {
             process['gina'] = {}
         }
         var newArgv = {};
+
         for (var a in process.argv) {
             if ( process.argv[a].indexOf('--') > -1 && process.argv[a].indexOf('=') > -1) {
                 evar = ( (process.argv[a].replace(/--/, ''))
@@ -310,7 +312,7 @@ function MainHelper(opt) {
 
                 evar[0] = evar[0].toUpperCase();
                 if (
-                    evar[0].substr(0, 6) !== 'GINA_' &&
+                    evar[0].substr(0, 5) !== 'GINA_' &&
                     evar[0].substr(0, 7) !== 'VENDOR_' &&
                     evar[0].substr(0, 5) !== 'USER_'
                     ) {
@@ -342,7 +344,7 @@ function MainHelper(opt) {
         //Cleaning the rest.
         for (var e in process.env) {
             if (
-                e.substr(0, 6) === 'GINA_' ||
+                e.substr(0, 5) === 'GINA_' || // 6?
                 e.substr(0, 7) === 'VENDOR_' ||
                 e.substr(0, 5) === 'USER_'
                 ) {
@@ -350,6 +352,8 @@ function MainHelper(opt) {
                 delete process.env[e]
             }
         }
+
+        setContext('envVars', process['gina']);
     }
 
     getEnvVar = function(key) {
@@ -477,6 +481,13 @@ function MainHelper(opt) {
                 self.protectedVars.push(key)
             }
         }
+    }
+
+    defineDefault = function(obj) {
+        for (var c in obj) {
+            define(c, obj[c])
+        }
+        delete  obj
     }
 
     init(opt)

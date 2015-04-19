@@ -11,9 +11,9 @@
 
 var url                 = require('url')
     , fs                = require('fs')
-    , utils             = require('./utils')
-    , console           = utils.logger
-    , inherits          = utils.inherits
+    , lib               = require('./../lib')
+    , console           = lib.logger
+    , inherits          = lib.inherits
     , SuperController   = require('./controller')
     , Config            = require('./config')
     //init

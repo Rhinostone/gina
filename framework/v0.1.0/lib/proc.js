@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Geena.lib.Proc
+ * Proc
  *
  * This file is part of the gina package.
  * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
@@ -61,17 +61,10 @@ var console = require('./logger');
  * */
 Proc = function(bundle, proc, usePidFile){
 
-    var self   = this;
-    this.PID    = null;
-    this.path   = null;
-    this.master = false;//used only by master.
-    this.bundle = bundle;
-    this.proc   = proc;
-    this.bundles = require(GINA_HOMEDIR + '/main.json')['bundles'][GINA_RELEASE] || [];
+    var self   = {};
 
-    if ( typeof(usePidFile) == 'undefined') {
-        var usePidFile = true;
-    }
+
+
 
     /**
      * Check target path
@@ -79,15 +72,39 @@ Proc = function(bundle, proc, usePidFile){
      * @param {integer} PID Id of the PID to save
      * */
 
-    var init = function(){
-        //Look for framework path if root is empty.
-        if ( !getPath('root') ) {
-            setPath('root', getPath('gina'))
+    var init = function(bundle, proc, usePidFile) {
+
+        var projects = require(GINA_HOMEDIR + '/projects.json');
+
+        self.PID    = null;
+        self.path   = null;
+        self.master = false;//used only by master.
+        self.bundles = [];
+        self.bundle = bundle;
+        self.proc   = proc;
+
+        //Init.
+        if ( typeof(self.bundle) == "undefined" ) {
+            throw new Error('Invalid or undefined proc name . Proc naming Aborted');
+            process.exit(1)
         }
 
-        //Default.
-        //var pathObj = new _( getPath('root') + '/tmp/pid/' );
-        var pathObj = new _( GINA_RUNDIR + '/gina');
+        for (var p in projects) {
+            self.bundles.push(p)
+        }
+
+        if ( typeof(usePidFile) == 'undefined') {
+            var usePidFile = true;
+        }
+
+        //Look for framework path if root is empty.
+        if ( !getPath('root') ) {
+            setPath('root', GINA_DIR)
+        }
+
+
+        //PID | run path. - user running node & gina must have permissions
+        var pathObj = new _(GINA_RUNDIR + '/gina');// e.g. /var/run
         var path = pathObj.toString();
 
         //Create dir if needed.
@@ -219,12 +236,11 @@ Proc = function(bundle, proc, usePidFile){
             //Will prevent the server from stopping.
             proc.on('uncaughtException', function(err){
 
-                console.emerg('Special care needed !! ' + err + err.stack, function(err){
-                    //TODO - Send an email to the administrator/dev
-                    //TODO - Have a delegate handler to allow the dev to do its stuff. Maybe it's already there if any dev can override.
-                    console.log('Fix your shit...');
-                });
-                console.error(err.stack);
+
+                //TODO - Send an email to the administrator/dev
+                //TODO - Have a delegate handler to allow the dev to do its stuff. Maybe it's already there if any dev can override.
+                console.info('Fix your shit...');
+                console.emerg(err.stack||err.message||err);
                 var bundle = process.argv[3];
                 var pid = self.getPidByBundleName(bundle);
 
@@ -288,19 +304,22 @@ Proc = function(bundle, proc, usePidFile){
         var bundleName = self.getBundleNameByPid(pid);
         var path = _(self.path + pid);
         try {
-            fs.unlinkSync(path);
+            if ( fs.existsSync(path) )
+                fs.unlinkSync(path);
         } catch (err) {
             console.debug('Final : ', err.stack)
             //Means that it does not exists anymore.
         }
 
         try {
-            if (bundleName != undefined) {
-                fs.unlinkSync( _(getPath('mountPath') + '/' + bundleName) );
-            }
-        } catch (err) {
-            console.debug('Final : ', err.stack)
+            var mountPath = _(getPath('mountPath') + '/' + bundleName);
+            if (bundleName != undefined && fs.existsSync(mountPath) )
+                fs.unlinkSync(mountPath);
+
             //Means that it does not exists anymore.
+        } catch (err) {
+            //Catchall
+            console.debug('Final : ', err.stack)
         }
 
         process.kill(pid, "SIGKILL");
@@ -338,7 +357,7 @@ Proc = function(bundle, proc, usePidFile){
      * @param {string} bundle
      * @return {number} PID
      * */
-    this.getPID = function(){
+    self.getPID = function(){
 
         try{
             return self.PID;
@@ -348,7 +367,7 @@ Proc = function(bundle, proc, usePidFile){
         }
     };
 
-    this.getBundleNameByPid = function(pid){
+    self.getBundleNameByPid = function(pid){
         var list = process.list;
 
         for (var i=0; i<list.length; ++i) {
@@ -359,7 +378,7 @@ Proc = function(bundle, proc, usePidFile){
         return undefined
     };
 
-    this.getPidByBundleName = function(bundle){
+    self.getPidByBundleName = function(bundle){
         var list = process.pids;
         console.debug("list ", list, ':',  list[bundle]);
         if ( typeof(list[bundle]) != "undefined")
@@ -368,7 +387,7 @@ Proc = function(bundle, proc, usePidFile){
             return undefined
     };
 
-    this.setMaster = function(bool){
+    self.setMaster = function(bool){
         if ( typeof(bool) == 'undefined' || bool == true) {
             self.master = true;
         } else {
@@ -376,7 +395,7 @@ Proc = function(bundle, proc, usePidFile){
         }
     };
 
-    this.register = function(bundle, pid) {
+    self.register = function(bundle, pid) {
         if ( bundle == 'gina' || bundle != 'gina' && self.bundles.indexOf(bundle) == -1 ) {
             if (bundle != 'gina') {
                 self.bundles.push(bundle);
@@ -391,22 +410,17 @@ Proc = function(bundle, proc, usePidFile){
         }
     };
 
-    //Init.
-    if ( typeof(this.bundle) == "undefined" ) {
-        console.warn('Invalid or undefined proc name . Proc naming Aborted');
-    }
 
 
     return {
-        onReady : function(callback){
+        onReady: function(callback){
             e.on('proc#ready', function(){
                 callback()
             });
             init(bundle, proc, usePidFile)
         },
-        setMaster : function(bool){
-            self.setMaster(bool)
-        }
+        setMaster: self.setMaster,
+        register: self.register
     }
 
 };

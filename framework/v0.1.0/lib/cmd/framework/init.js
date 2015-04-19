@@ -52,13 +52,15 @@ function Initialize(opt) {
         return task
     }
 
-    var run = function(opt) {
+    var run = function(opt, cmd) {
         opt.task = checkForAliases(opt.task);
         var filename ='/cmd/' + opt.task.topic + '/' + opt.task.action + '.js'
         var path = getPath('gina.lib') + filename;
 
         try {
-            require(path)(opt)
+            if ( GINA_ENV_IS_DEV )
+                delete require.cache[path];
+            require(path)(opt, cmd)
         } catch(err) {
             console.crit('Gina has some troubles with command [ ', process.argv.toArray().join(' ') + ' ]\n' + err.stack)
         }
@@ -144,7 +146,23 @@ function Initialize(opt) {
 
         if ( !fs.existsSync(target) ) {
             lib.generator.createFileFromDataSync(
-                { http: {} },
+                {},
+                target
+            )
+        }
+    }
+
+    /**
+     * Checking ports.reverse
+     *
+     **/
+    self.checkIfPorts = function() {
+        console.debug('checking ports.reverse...');
+        var target = _(self.opt.homedir +'/ports.reverse.json');
+
+        if ( !fs.existsSync(target) ) {
+            lib.generator.createFileFromDataSync(
+                {},
                 target
             )
         }
@@ -209,8 +227,9 @@ function Initialize(opt) {
 
     /**
      * Checking settings, defining constants
-     *
+     * Also done during bin/cmd init() ... so if you change here ...
      **/
+
     self.checkIfSettings = function() {
         console.debug('checking settings...');
         var main = require( self.opt.homedir + '/main.json' )
@@ -278,18 +297,25 @@ function Initialize(opt) {
 
     self.end = function() {
         //getDefined() to list it all
-        for (var c in process.gina) {
-            define(c, process.gina[c])
-        }
-        delete  process.gina
+        //for (var c in process.gina) {
+        //    define(c, process.gina[c])
+        //}
+        //delete  process.gina
+        defineDefault(process.gina)
     }
 
     return {
-        onComplete : function(callback) {
-            e.on('init#complete', function(err, run, opt) {
+        onComplete: function(callback) {
+            e.once('init#complete', function(err, run, opt) {
                 callback(err, run, opt)
             });
             init(opt)
+        },
+        onListen: function(callback) {
+            e.once('init#listen', function(err, run, opt) {
+                callback(err, run, opt)
+            });
+            e.emit('init#listen', false, run, opt)
         }
     }
 };

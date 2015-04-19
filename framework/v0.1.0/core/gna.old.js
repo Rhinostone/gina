@@ -16,19 +16,18 @@
 var gna     = {core:{}};
 var fs      = require('fs');
 var Config  = require('./config');
-var lib   = require('./../lib');
+var utils   = require('./utils');
 
-
-var console = lib.logger;
-var Proc    = lib.Proc;
-var modelUtil = new lib.Model();
+var console = utils.logger;
+var Proc    = utils.Proc;
+var modelUtil = new utils.Model();
 var EventEmitter = require('events').EventEmitter;
 var e = new EventEmitter();
 gna.initialized = process.initialized = false;
 gna.routed = process.routed = false;
-gna.utils = lib;
-setContext('gina.utils', lib);
-var Server  = require('./server');//TODO  - HTTP vs HTTPS
+gna.utils = utils;
+setContext('gina.utils', utils);
+var Server  = require('./server');//TODO require('./server').http
 
 
 // BO cooking..
@@ -37,47 +36,15 @@ var startWithGina = false;
 var tmp = process.argv;
 
 // filter $ node.. o $ gina  with or without env
-if (process.argv.length >= 3) {
+if (process.argv.length >= 4) {
     startWithGina = true;
 
     try {
-        setContext('paths', JSON.parse(tmp[2]).paths);//And so on if you need to.
-        setContext('processList', JSON.parse(tmp[2]).processList);
-        setContext('ginaProcess', JSON.parse(tmp[2]).ginaProcess);
-
-        var obj = JSON.parse(tmp[2]).envVars;
-        var evar = '';
-        require(getPath('gina') +'/utils/helper');
-        if ( typeof(obj) != 'undefined') {
-
-            for (var a in obj) {
-
-                if (
-                    a.substr(0, 5) === 'GINA_'
-                    || a.substr(0, 7) === 'VENDOR_'
-                    || a.substr(0, 5) === 'USER_'
-                ) {
-                    evar = obj[a];
-
-                    //Boolean values.
-
-                    if (obj[a] === "true") {
-                        evar = true
-                    }
-                    if (obj[a] === "false") {
-                        evar = false
-                    }
-
-                    setEnvVar(a, evar, true)
-
-                }
-
-            }
-            defineDefault(obj)
-        }
-
+        setContext('paths', JSON.parse(tmp[3]).paths);//And so on if you need to.
+        setContext('processList', JSON.parse(tmp[3]).processList);
+        setContext('ginaProcess', JSON.parse(tmp[3]).ginaProcess);
         //Cleaning process argv.
-        process.argv.splice(2);
+        process.argv.splice(3);
     } catch (err) {}
 
     //if (process.argv[1] == 'gina' || process.argv[1] == _( getPath('root') + '/gina') ) {
@@ -96,20 +63,31 @@ if ( typeof(ginaPath) == 'undefined') {
     setPath('gina.core', ginaPath);
 }
 
-//setContext('gina.utils', lib);
+setContext('gina.utils', utils);
 
-var projects = require( _(GINA_HOMEDIR + '/projects.json') );
-
+var envs = ['dev', 'debug', 'stage', 'prod'];
+var protocols = ['http', 'https']; // will support https for the 0.0.10
+var env;
 //Setting env.
-var env = projects[self.name]['dev_env']
-    , isDev = (self.projects[self.name]['dev_env'] === self.projects[self.name]['def_env']) ? true: false;
+if ( !process.env.NODE_ENV ) {
+    env =  ( typeof(process.argv[2]) != 'undefined')  ? process.argv[2].toLowerCase() : 'prod';
+} else {
+    env = process.env.NODE_ENV
+}
 
 gna.env = process.env.NODE_ENV = env;
-gna.env.isWin32 = process.env.isWin32 = isWin32;
+
+//gna.env.isWin32 = process.env.isWin32 = function() {
+//    return (os.platform() == 'win32') ? true : false;
+//};
+gna.env.isWin32 = process.env.isWin32 = isWin32
 
 //Cahceless is also defined in the main config : Config::isCacheless().
-process.env.IS_CACHELESS = isDev;
+process.env.IS_CACHELESS = (env == "dev" || env == "debug") ? true : false;
 
+//console.log('ENV => ', env);
+//console.log('HOW  ', process.argv.length, process.argv);
+//var bundlesPath = _(root + '/bundles');
 var bundlesPath = getPath('mountPath');
 
 var p = new _(process.argv[1]).toUnixStyle().split("/");

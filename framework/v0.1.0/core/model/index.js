@@ -12,12 +12,12 @@ var EventEmitter    = require('events').EventEmitter;
 var Module          = require('module');
 var Config          = require( getPath('gina.core') + '/config');
 var config          = new Config();
-var utils           = require('../utils');
-var console         = utils.logger;
-var math            = utils.math;
-var inherits        = utils.inherits;
-var utilsConfig     = new utils.Config();
-var modelUtil       = new utils.Model();
+var lib             = require('../../lib');
+var console         = lib.logger;
+var math            = lib.math;
+var inherits        = lib.inherits;
+var utilsConfig     = new lib.Config();
+var modelUtil       = new lib.Model();
 
 
 
