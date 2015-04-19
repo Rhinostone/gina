@@ -158,7 +158,6 @@ function Server(options) {
                 }
 
                 if (filename != main) {
-                    if (cacheless) delete require.cache[_(filename, true)];
                     self.routing = merge(true, require(main), require(filename));
                 } else {
                     self.routing = require(filename);

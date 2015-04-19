@@ -59,7 +59,7 @@ Note that the default bundle type is api.
 Ok ! Let's do it !
 
 ``` tty
-$ gina -a frontend
+$ ./gina -a frontend
 ```
 
 We have just created a frontend application that will host our homepage.
@@ -68,7 +68,7 @@ You will find all bundle sources under `myproject/src`.
 You can start the bundle with the following command:
 
 ```tty
-$ gina -s frontend dev
+$ ./gina -s frontend dev
 ```
 Now, visite http://127.0.0.1:3100/  to check your homepage.
 Isn't it sexy !?
@@ -83,7 +83,7 @@ The default bundle renders a json representation of a "Hello World" message.
 Let's add views on our frontend
 
 ```tty
-$ gina -av frontend
+$ ./gina -av frontend
 ```
 Now edit the `init` action in `src/frontend/controllers/controller.js` so that you can have `self.render(...)` instead of `self.renderJSON(...)`
 
@@ -108,11 +108,11 @@ $ node node_modules/gina/script/post_install.js
 
 - Have you noticed the __environment argument__ ( dev ) ?
 ``` tty
-$ gina -s frontend dev
+$ ./gina -s frontend dev
 ```
 Without the __dev__ argument, Gina is going to understand that you want to use the production environment. If it's really what you want to achieve, just __build__ :
 ```tty
-$ gina -b frontend prod
+$ ./gina -b frontend prod
 ```
 NB.: `prod` is optional here; if you don't add it, it will build for prod by default.
 
