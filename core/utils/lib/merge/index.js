@@ -9,7 +9,6 @@ function Merge() {
      * */
     var init = browse = function () {
         var target = arguments[0] || (Array.isArray(arguments[1]) ? [] : {});
-
         var i = 1;
         var length = arguments.length;
         var override = false;
@@ -25,76 +24,94 @@ function Merge() {
 
         // Handle case when target is a string or something (possible in deep copy)
         if (typeof(target) !== 'object' && typeof(target) !== 'function') {
-            target = {}
-        }
+            if (override) {
+                if (typeof(arguments[2]) == 'undefined') {
+                    target = arguments[1]
+                } else {
+                    target = arguments[2]
+                }
+            } else {
+                if (typeof(arguments[0]) == 'undefined') {
+                    target = arguments[1]
+                } else {
+                    target = arguments[0]
+                }
+            }
 
-        for (; i < length; i++) {
-            // Only deal with non-null/undefined values
-            if (( options = arguments[i]) != null) {
-                // Merge the base object
-                for (var name in options) {
-                    src = target[ name ];
-                    copy = options[ name ];
-
-
-                    // Prevent never-ending loop
-                    if (target === copy) {
-                        continue
+        } else {
+            for (; i < length; i++) {
+                // Only deal with non-null/undefined values
+                if (( options = arguments[i]) != null) {
+                    if ( typeof(options) != 'object') {
+                        target = options;
+                        break;
                     }
+                    // Merge the base object
+                    for (var name in options) {
+                        src = target[ name ];
+                        copy = options[ name ];
 
-                    // Recurse if we're merging plain objects or arrays
-                    if (
-                        copy &&
-                        (
+
+                        // Prevent never-ending loop
+                        if (target === copy) {
+                            continue
+                        }
+
+                        // Recurse if we're merging plain objects or arrays
+                        if (
+                            copy
+                            && (
                             isObject(copy) ||
                             ( copyIsArray = Array.isArray(copy) )
                             )
                         ) {
 
-                        if (copyIsArray) {
-                            copyIsArray = false;
-                            clone = src && Array.isArray(src) ? src : []
-                        } else {
-                            clone = src && isObject(src) ? src : {}
-                        }
+                            if (copyIsArray) {
+                                copyIsArray = false;
+                                clone = src && Array.isArray(src) ? src : []
+                            } else {
+                                clone = src && isObject(src) ? src : {}
+                            }
 
-                        //[propose] Supposed to go deep... deep... deep...
-                        if (!override) {
-                            for (var prop in copy) {
-                                if (typeof(clone[ prop ]) != "undefined") {
-                                    copy[ prop ] = clone[ prop ];
+                            //[propose] Supposed to go deep... deep... deep...
+                            if (!override) {
+                                for (var prop in copy) {
+                                    if (typeof(clone[ prop ]) != "undefined") {
+                                        copy[ prop ] = clone[ prop ];
+                                    }
+                                }
+
+                            } else {
+                                for (var prop in copy) {
+                                    if (typeof(clone[ prop ]) != "undefined") {
+                                        clone[ prop ] = copy[ prop ]
+                                    }
                                 }
                             }
 
-                        } else {
-                            for (var prop in copy) {
-                                if (typeof(clone[ prop ]) != "undefined") {
-                                    clone[ prop ] = copy[ prop ]
-                                }
+                            // Never move original objects, clone them
+                            if (typeof(src) != "boolean") {//if property is not boolean
+                                target[ name ] = browse(override, clone, copy)
                             }
-                        }
-
-                        // Never move original objects, clone them
-                        if (typeof(src) != "boolean") {//if property is not boolean
-                            target[ name ] = browse(override, clone, copy)
-                        }
-                        // Don't bring in undefined values
-                    } else if (copy !== undefined) {
-                        //[propose]Don't override existing if prop defined or override @ false
-                        if (
-                            typeof(src) != "undefined" &&
-                            src != copy && !override
+                            // Don't bring in undefined values
+                        } else if (copy !== undefined) {
+                            //[propose]Don't override existing if prop defined or override @ false
+                            if (
+                                typeof(src) != "undefined"
+                                && src != copy && !override
                             ) {
-                            target[ name ] = src
-                        } else {
-                            target[ name ] = copy
-                        }
+                                target[ name ] = src
+                            } else {
+                                target[ name ] = copy
+                            }
 
+                        }
                     }
                 }
-
             }
         }
+
+
         // Return the modified object
         return target
     }
@@ -108,7 +125,7 @@ function Merge() {
             {}.toString.call(obj) !== '[object Object]' ||
             obj.nodeType ||
             obj.setInterval
-            ) {
+        ) {
             return false
         }
 
@@ -119,7 +136,7 @@ function Merge() {
 
         if (
             obj.constructor && !hasOwnConstructor && !hasMethodPrototyped
-            ) {
+        ) {
             return false
         }
 
