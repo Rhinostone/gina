@@ -107,7 +107,7 @@ function BuildBundle(project, bundle) {
                 fs.writeFileSync(self.project, JSON.stringify(project, null, 4));
             }
 
-            self['release_path'] = _(self.root + path);
+
 
             //build(bundle, releasePath, version);
             try {
@@ -121,6 +121,7 @@ function BuildBundle(project, bundle) {
 
                     var source = opt.src;
                     var target = opt.target;
+                    self['release_path'] = target;
                     var version = opt.version;
 
                     var excluded = self.excluded;
@@ -143,10 +144,7 @@ function BuildBundle(project, bundle) {
     var getSourceInfos = function( package, bundle, callback) {
 
 
-        var match = _(self.root +'/' +project.bundles[bundle].src);
-        if ( typeof(self.conf.content.views) != 'undefined') {
-            self['views_path'] = self.conf.content.views.default.views.replace(match, self['release_path']);
-        }
+
 
         try {
             //will always build from sources by default.
@@ -170,6 +168,11 @@ function BuildBundle(project, bundle) {
                 }
 
                 var releasePath = _(self.conf.releases + '/'+ bundle +'/' + self.env +'/'+ version);
+
+                var match = _(self.root +'/' +project.bundles[bundle].src);
+                if ( typeof(self.conf.content.views) != 'undefined') {
+                    self['views_path'] = self.conf.content.views.default.views.replace(match, releasePath);
+                }
                 callback(false, {
                     src     : sourcePath,
                     target  : releasePath,
