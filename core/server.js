@@ -16,7 +16,8 @@ var console         = utils.logger;
 function Server(options) {
     var self = this;
     var local = {
-        router : null
+        router : null,
+        hasViews: {}
     };
 
     this.conf = {};
@@ -247,7 +248,15 @@ function Server(options) {
     }
 
     var hasViews = function(bundle) {
-        return ( typeof(self.conf[bundle].content['views']) != 'undefined' ) ? true : false;
+        var _hasViews;
+        if (typeof(local.hasViews[bundle]) != 'undefined') {
+            _hasViews = local.hasViews[bundle];
+        } else {
+            _hasViews = ( typeof(self.conf[bundle].content['views']) != 'undefined' ) ? true : false;
+            local.hasViews[bundle] = _hasViews;
+        }
+
+        return _hasViews
     }
 
     var parseBody = function(body) {
@@ -488,10 +497,13 @@ function Server(options) {
             callback(err, pathname, req, res, next)
         } else {
             config.refresh(bundle, function(err, routing) {
-                if (err) console.error('gina', 'SERVER:ERR:5', err, __stack);
-                //refreshing routing at the same time.
-                self.routing = routing;
-                callback(err, pathname, req, res, next)
+                if (err) {
+                    throwError(res, 500, 'Internal Server Error: \n' + (err.stack||err), next)
+                } else {
+                    //refreshing routing at the same time.
+                    self.routing = routing;
+                    callback(err, pathname, req, res, next)
+                }
             })
         }
     }
@@ -562,7 +574,7 @@ function Server(options) {
     }
 
     var throwError = function(res, code, msg, next) {
-        var withViews = hasViews(self.appName);
+        var withViews = local.hasViews[self.appName] || hasViews(self.appName);
 
         if ( !withViews ) {
             if (!res.headersSent) {
