@@ -390,11 +390,10 @@ function Server(options) {
 
         var pathname = url.parse(req.url, true).pathname;
 
-        if ( /\/favicon\.ico/.test(pathname) ) {
+        if ( /\/favicon\.ico/.test(pathname) && !hasViews(bundle)) {
             callback(false, pathname, req, res, next);
             return false
         }
-
 
 
         if ( typeof(conf) != 'undefined') {//for cacheless mode
