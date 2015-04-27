@@ -512,7 +512,6 @@ function Config(opt) {
             var bundle = bundles[b]
         }
         var cacheless   = self.isCacheless();
-        var conf        = self.envConf;
         var env         = self.env || self.Env.get();
         var routing     = {
             //"home": {
@@ -528,10 +527,12 @@ function Config(opt) {
         var filename    = '';
         var appPath     = '';
         var err         = false;
+        var conf        = self.envConf;
 
         conf[bundle][env].bundles = bundles;
         conf[bundle].cacheless = cacheless;
         conf[bundle][env].executionPath = getContext("paths").root;
+
 
         if ( self.task == 'run' && env != 'dev' ) {
             appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
@@ -542,9 +543,10 @@ function Config(opt) {
 
 
         var files = {};
-        var main = '';
+        var main = '', wroot;
         for (var name in  conf[bundle][env].files) {
             main = _(appPath +'/config/'+ conf[bundle][env].files[name]).replace('.'+env, '');
+
             //Server only because of the shared mode VS the standalone mode.
             if (name == 'routing' && cacheless && typeof(reload) != 'undefined') {
                 tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
@@ -552,17 +554,27 @@ function Config(opt) {
                 if ( !fs.existsSync(filename) ) {
                     filename = main;
                 }
+
                 delete require.cache[_(filename, true)];
-                routing = merge( true, require(filename), routing);
+                try {
+                    routing = merge( true, require(_(filename, true)), routing);
+                } catch (err) {
+                    callback(err)
+                }
+
                 if (filename != main) {
                     delete require.cache[_(main, true)];
-                    routing = merge(true, require(main), routing);
+                    try {
+                        routing = merge(true, require(main), routing)
+                    } catch (err) {
+                        callback(err)
+                    }
                 }
 
                 tmp = '';
 
                 //setting app param
-                var wroot;
+
                 for (var rule in routing) {
                     //webroot control
                     wroot = conf[bundle][env].server.webroot
@@ -595,24 +607,6 @@ function Config(opt) {
                             routing[rule].url[u] =  wroot + routing[rule].url[u]
                         }
                     }
-                    if ( typeof(conf[bundle][env].content) == 'undefined') {
-                        conf[bundle][env].content = {}
-                    }
-                    if ( typeof(conf[bundle][env].content['views']) != 'undefined' ) {
-                        routing[rule].param.file = routing[rule].param.file || rule;//routing[rule].param.action
-                        if ( !conf[bundle][env].content['views']['default'].useRouteNameAsFilename && routing[rule].param.namespace != 'framework') {
-                            var tmpRouting = [];
-                            for (var i = 0, len = routing[rule].param.file.length; i < len; ++i) {
-                                if (/[A-Z]/.test(routing[rule].param.file.charAt(i))) {
-                                    tmpRouting[0] = routing[rule].param.file.substring(0, i);
-                                    tmpRouting[1] = '-' + (routing[rule].param.file.charAt(i)).toLocaleLowerCase();
-                                    tmpRouting[2] = routing[rule].param.file.substring(i + 1);
-                                    routing[rule].param.file = tmpRouting[0] + tmpRouting[1] + tmpRouting[2];
-                                    ++i;
-                                }
-                            }
-                        }
-                    }
                 }
 
                 files[name] = routing;
@@ -620,6 +614,7 @@ function Config(opt) {
             } else if (name == 'routing') {
                 continue;
             }
+
 
             tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
             filename = _(appPath + '/config/' + tmp);
@@ -643,24 +638,22 @@ function Config(opt) {
                     if (cacheless) {
                         delete require.cache[_(main, true)];
                     }
-                    files[name] = merge(files[name], require(main));
+                    files[name] = merge(files[name], require(_(main, true)));
                 }
             } catch (_err) {
 
                 if ( fs.existsSync(filename) ) {
-                    console.emerg("[ " +filename + " ] is malformed !!");
-                    process.exit(1)
+                    callback( new Error('[ ' +filename + ' ] is malformed !!') )
+                    //process.exit(1)
                 } else {
                     files[name] = undefined
                 }
-                //console.error(_err.stack);
-                //logger.warn('gina', 'SERVER:WARN:1', filename + _err, __stack);
-                //logger.debug('gina', 'SERVER:DEBUG:5', filename +err, __stack)
             }
 
         }//EO for (name
 
         var hasViews = (typeof(files['views']) != 'undefined' && typeof(files['views']['default']) != 'undefined') ? true : false;
+
 
         //Set default keys/values for views
         if ( hasViews &&  typeof(files['views'].default.views) == 'undefined' ) {
@@ -715,21 +708,36 @@ function Config(opt) {
             }
         }
 
-        if (hasViews && typeof(files['statics']) == 'undefined') {
-            files['statics'] = require(getPath('gina.core') +'/template/conf/statics.json')
-        } else if ( typeof(files['statics']) != 'undefined' ) {
-            var defaultAliases = require(getPath('gina.core') +'/template/conf/statics.json');
 
-            files['statics'] = merge(files['statics'], defaultAliases)
+        try {
+            var staticsPath = _(getPath('gina.core') +'/template/conf/statics.json', true);
+            var viewsPath = _(getPath('gina.core') +'/template/conf/views.json', true);
+
+            if (fs.existsSync(staticsPath))
+                delete require.cache[staticsPath];
+
+
+
+            if (hasViews && typeof(files['statics']) == 'undefined') {
+                files['statics'] = require(staticsPath)
+            } else if ( typeof(files['statics']) != 'undefined' ) {
+                var defaultAliases = require(staticsPath);
+
+                files['statics'] = merge(files['statics'], defaultAliases)
+            }
+
+            if (hasViews && typeof(files['views']) == 'undefined') {
+                files['views'] = require(viewsPath)
+            } else if ( typeof(files['views']) != 'undefined' ) {
+                var defaultViewsSettings = require(viewsPath);
+
+                files['views'] = merge(files['views'], defaultViewsSettings)
+            }
+        } catch (err) {
+            callback(err)
         }
 
-        if (hasViews && typeof(files['views']) == 'undefined') {
-            files['views'] = require(getPath('gina.core') +'/template/conf/views.json')
-        } else if ( typeof(files['views']) != 'undefined' ) {
-            var defaultViewsSettings = require(getPath('gina.core') +'/template/conf/views.json');
 
-            files['views'] = merge(files['views'], defaultViewsSettings)
-        }
 
         //webroot statics
         if (hasViews &&
@@ -791,11 +799,32 @@ function Config(opt) {
 
         files = whisper(reps, files);
 
+        if ( hasViews ) {
+            for (var rule in routing) {
+                routing[rule].param.file = routing[rule].param.file || rule;//routing[rule].param.action
+                if (!files['views'].default.useRouteNameAsFilename && routing[rule].param.namespace != 'framework') {
+                    var tmpRouting = [];
+                    for (var i = 0, len = routing[rule].param.file.length; i < len; ++i) {
+                        if (/[A-Z]/.test(routing[rule].param.file.charAt(i))) {
+                            tmpRouting[0] = routing[rule].param.file.substring(0, i);
+                            tmpRouting[1] = '-' + (routing[rule].param.file.charAt(i)).toLocaleLowerCase();
+                            tmpRouting[2] = routing[rule].param.file.substring(i + 1);
+                            routing[rule].param.file = tmpRouting[0] + tmpRouting[1] + tmpRouting[2];
+                            ++i;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ( typeof(conf[bundle][env].content) == 'undefined') {
+            conf[bundle][env].content = {}
+        }
+
         conf[bundle][env].content   = files;
         conf[bundle][env].bundle    = bundle;
         conf[bundle][env].env       = env;
 
-        //self.envConf = conf;
 
         ++b;
         if (b < bundles.length) {

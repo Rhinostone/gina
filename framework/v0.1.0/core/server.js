@@ -16,7 +16,8 @@ var console         = lib.logger;
 function Server(options) {
     var self = this;
     var local = {
-        router : null
+        router : null,
+        hasViews: {}
     };
 
     this.conf = {};
@@ -248,7 +249,15 @@ function Server(options) {
     }
 
     var hasViews = function(bundle) {
-        return ( typeof(self.conf[bundle].content['views']) != 'undefined' ) ? true : false;
+        var _hasViews;
+        if (typeof(local.hasViews[bundle]) != 'undefined') {
+            _hasViews = local.hasViews[bundle];
+        } else {
+            _hasViews = ( typeof(self.conf[bundle].content['views']) != 'undefined' ) ? true : false;
+            local.hasViews[bundle] = _hasViews;
+        }
+
+        return _hasViews
     }
 
     var parseBody = function(body) {
@@ -364,11 +373,14 @@ function Server(options) {
 
     var getHead = function(file) {
         var s = file.split(/\./);
-        var type = 'plain/text';
+        var type = undefined;
         if( typeof(self.validHeads[s[s.length-1]]) != 'undefiend' ) {
-            type = self.validHeads[s[s.length-1]]
+            type = self.validHeads[s[s.length-1]];
+            if (!type) {
+                console.warn('[ '+file+' ] extension: `'+s[2]+'` not supported by `core/mime.types`. Replacing with `plain/text` ')
+            }
         }
-        return type
+        return type || 'plain/text'
     }
 
     var loadBundleConfiguration = function(req, res, next, bundle, callback) {
@@ -426,10 +438,20 @@ function Server(options) {
                             return
                         }
                         if (!res.headersSent) {
-                            res.setHeader("Content-Type", getHead(filename));
-                            res.writeHead(200)
-                            res.write(file, 'binary');
-                            res.end()
+                            try {
+                                res.setHeader("Content-Type", getHead(filename));
+                                if (cacheless) {
+                                    // source maps integration for javascript
+                                    if ( /\.js$/.test(filename) && fs.existsSync(filename +'.map') ) {
+                                        res.setHeader("X-SourceMap", pathname +'.map')
+                                    }
+                                }
+                                res.writeHead(200)
+                                res.write(file, 'binary');
+                                res.end()
+                            } catch(err) {
+                                throwError(res, 500, err.stack)
+                            }
                         }
                     });
                 } else {
@@ -549,7 +571,7 @@ function Server(options) {
     }
 
     var throwError = function(res, code, msg, next) {
-        var withViews = hasViews(self.appName);
+        var withViews = local.hasViews[self.appName] || hasViews(self.appName);
 
         if ( !withViews ) {
             if (!res.headersSent) {
@@ -565,7 +587,7 @@ function Server(options) {
         } else {
             if (!res.headersSent) {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('Error '+ code +'. '+ msg)
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>')
             } else {
                 next()
             }
