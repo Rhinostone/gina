@@ -330,7 +330,7 @@ function Controller(options) {
         }
 
         //Check if local css exists
-        if( viewConf[localRessources] ) {
+        if( viewConf[localRessources] && localRessources != 'default' ) {
             //Css override test
             if(viewConf[localRessources]["override_css"] && viewConf[localRessources]["override_css"] == true || viewConf[localRessources]["override"] && viewConf[localRessources]["override"] == true){
                 cssStr = "";
