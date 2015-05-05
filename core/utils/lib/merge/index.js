@@ -16,7 +16,7 @@ function Merge() {
 
         // Handle an override copy situation || target value is boolean
         if (typeof(target) === 'boolean') {
-            if (arguments.length == 3) {
+            if (arguments.length > 2) {
                 override = target;
                 target = arguments[1] ||  (Array.isArray(arguments[1]) ? [] : {});
                 // skip the boolean and the target
