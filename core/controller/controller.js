@@ -290,7 +290,6 @@ function Controller(options) {
     }
 
     this.setRessources = function(viewConf, localRessources) {
-
         var res = '',
             tmpRes = {},
             css = {
@@ -306,12 +305,12 @@ function Controller(options) {
             },
             jsStr = ' ';
 
-
         //intercept errors in case of malformed config
         if ( typeof(viewConf) != "object" ) {
             cssStr = viewConf;
             jsStr = viewConf
         }
+
 
         //cascading merging
         if (localRessources !== 'default') {
