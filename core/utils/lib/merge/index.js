@@ -14,12 +14,16 @@ function Merge() {
         var override = false;
         var options, name, src, copy, copyIsArray, clone;
 
-        // Handle an override copy situation
+        // Handle an override copy situation || target value is boolean
         if (typeof(target) === 'boolean') {
-            override = target;
-            target = arguments[1] ||  (Array.isArray(arguments[1]) ? [] : {});
-            // skip the boolean and the target
-            i = 2
+            if (arguments.length == 3) {
+                override = target;
+                target = arguments[1] ||  (Array.isArray(arguments[1]) ? [] : {});
+                // skip the boolean and the target
+                i = 2
+            } else {
+                target = arguments[0] || false;
+            }
         }
 
         // Handle case when target is a string or something (possible in deep copy)
@@ -46,65 +50,88 @@ function Merge() {
                         target = options;
                         break;
                     }
-                    // Merge the base object
-                    for (var name in options) {
-                        src = target[ name ];
-                        copy = options[ name ];
-
-
-                        // Prevent never-ending loop
-                        if (target === copy) {
-                            continue
+                    // both target & options are arrays
+                    if ( Array.isArray(options) && Array.isArray(target) ) {
+                        var newTarget = [];
+                        for (var a = 0; a < options.length; ++a ) {
+                            if ( target.indexOf(options[a]) > -1 && override) {
+                                target.splice(target.indexOf(options[a]), 1, options[a])
+                            } else if (target.indexOf(options[a]) < 0) {
+                                // required to keep keys in the dependancy order
+                                // !!! don't change this !!!
+                                newTarget.push(options[a])
+                            }
                         }
 
-                        // Recurse if we're merging plain objects or arrays
-                        if (
-                            copy
-                            && (
-                            isObject(copy) ||
-                            ( copyIsArray = Array.isArray(copy) )
-                            )
-                        ) {
+                        if (newTarget.length > 0 && target.length > 0) {
+                            for (var t=0; t<target.length; ++t) {
+                                newTarget.push(target[t])
+                            }
+                            target = newTarget
+                        } else if (newTarget.length > 0 ) {
+                            target = newTarget
+                        }
+                    } else {
+                        // Merge the base object
+                        for (var name in options) {
+                            src = target[ name ];
+                            copy = options[ name ];
 
-                            if (copyIsArray) {
-                                copyIsArray = false;
-                                clone = src && Array.isArray(src) ? src : []
-                            } else {
-                                clone = src && isObject(src) ? src : {}
+
+                            // Prevent never-ending loop
+                            if (target === copy) {
+                                continue
                             }
 
-                            //[propose] Supposed to go deep... deep... deep...
-                            if (!override) {
-                                for (var prop in copy) {
-                                    if (typeof(clone[ prop ]) != "undefined") {
-                                        copy[ prop ] = clone[ prop ];
-                                    }
-                                }
-
-                            } else {
-                                for (var prop in copy) {
-                                    if (typeof(clone[ prop ]) != "undefined") {
-                                        clone[ prop ] = copy[ prop ]
-                                    }
-                                }
-                            }
-
-                            // Never move original objects, clone them
-                            if (typeof(src) != "boolean") {//if property is not boolean
-                                target[ name ] = browse(override, clone, copy)
-                            }
-                            // Don't bring in undefined values
-                        } else if (copy !== undefined) {
-                            //[propose]Don't override existing if prop defined or override @ false
+                            // Recurse if we're merging plain objects or arrays
                             if (
-                                typeof(src) != "undefined"
-                                && src != copy && !override
+                                copy
+                                && (
+                                isObject(copy) ||
+                                ( copyIsArray = Array.isArray(copy) )
+                                )
                             ) {
-                                target[ name ] = src
-                            } else {
-                                target[ name ] = copy
-                            }
 
+                                if (copyIsArray) {
+                                    copyIsArray = false;
+                                    clone = src && Array.isArray(src) ? src : []
+                                } else {
+                                    clone = src && isObject(src) ? src : {}
+                                }
+
+                                //[propose] Supposed to go deep... deep... deep...
+                                if (!override) {
+                                    for (var prop in copy) {
+                                        if (typeof(clone[ prop ]) != "undefined") {
+                                            copy[ prop ] = clone[ prop ];
+                                        }
+                                    }
+
+                                } else {
+                                    for (var prop in copy) {
+                                        if (typeof(clone[ prop ]) != "undefined") {
+                                            clone[ prop ] = copy[ prop ]
+                                        }
+                                    }
+                                }
+
+                                // Never move original objects, clone them
+                                if (typeof(src) != "boolean") {//if property is not boolean
+                                    target[ name ] = browse(override, clone, copy)
+                                }
+                                // Don't bring in undefined values
+                            } else if (copy !== undefined) {
+                                //[propose]Don't override existing if prop defined or override @ false
+                                if (
+                                    typeof(src) != "undefined"
+                                    && src != copy && !override
+                                ) {
+                                    target[ name ] = src
+                                } else {
+                                    target[ name ] = copy
+                                }
+
+                            }
                         }
                     }
                 }
