@@ -104,6 +104,7 @@ function Controller(options) {
             //TODO - detect when to use swig
             var dir = self.views || local.options.views.default.views;
             var swigOptions = {
+                autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape: false,
                 loader: swig.loaders.fs(dir),
                 cache: (local.options.cacheless) ? false : 'memory'
             };
@@ -136,8 +137,8 @@ function Controller(options) {
      *
      * @param {string} filename
      * */
-    this.setLayout = function(filename) {//means path
-        local.options.views.default.layout = filename
+    this.setLayout = function(rule, filename) {//means path
+        local.options.views[rule].layout = filename
     }
 
     /**
@@ -162,7 +163,7 @@ function Controller(options) {
             self.setRessources(local.options.views, _data.file);
             var data = merge(_data, self.getData());
 
-            var path = _(local.options.views.default.html + '/' + data.file );
+            var path = _(local.options.views[_data.file].html + '/' + data.file );
 
             if (data.page.ext) {
                 path += data.page.ext
@@ -202,7 +203,7 @@ function Controller(options) {
 
                 dic['page.content'] = content;
 
-                fs.readFile(local.options.views.default.layout, function(err, layout) {
+                fs.readFile(local.options.views[_data.file].layout, function(err, layout) {
                     if (err) {
                         self.throwError(local.res, 500, err.stack);
                     }
@@ -289,6 +290,7 @@ function Controller(options) {
     }
 
     this.setRessources = function(viewConf, localRessources) {
+
         var res = '',
             tmpRes = {},
             css = {
@@ -304,57 +306,33 @@ function Controller(options) {
             },
             jsStr = ' ';
 
+
         //intercept errors in case of malformed config
         if ( typeof(viewConf) != "object" ) {
             cssStr = viewConf;
             jsStr = viewConf
         }
 
-        //Getting global/default css
-        //Default will be completed OR overriden by locals - if options are set to "override_css" : "true" or "override" : "true"
-        if( viewConf["default"] ) {
-            //Get css
-            if( viewConf["default"]["stylesheets"] ) {
-                tmpRes = getNodeRes('css', cssStr, viewConf["default"]["stylesheets"], css);
-                cssStr = tmpRes.cssStr;
-                css = tmpRes.css;
-                tmpRes = null
-            }
-            //Get js
-            if( viewConf["default"]["javascripts"] ) {
-                tmpRes = getNodeRes('js', jsStr, viewConf["default"]["javascripts"], js);
-                jsStr = tmpRes.jsStr;
-                js = tmpRes.js;
-                tmpRes = null
+        //cascading merging
+        if (localRessources !== 'default') {
+            for (var attr in viewConf.default) {
+                viewConf[localRessources][attr] = merge(viewConf[localRessources][attr], viewConf.default[attr])
             }
         }
 
-        //Check if local css exists
-        if( viewConf[localRessources] && localRessources != 'default' ) {
-            //Css override test
-            if(viewConf[localRessources]["override_css"] && viewConf[localRessources]["override_css"] == true || viewConf[localRessources]["override"] && viewConf[localRessources]["override"] == true){
-                cssStr = "";
-                css.content = []
-            }
-            //Get css
-            if( viewConf[localRessources]["stylesheets"] ) {
-                tmpRes = getNodeRes('css', cssStr, viewConf[localRessources]["stylesheets"], css);
-                cssStr = tmpRes.cssStr;
-                css = tmpRes.css;
-                tmpRes = null
-            }
-            //js override test
-            if( viewConf[localRessources]["override_js"] && viewConf[localRessources]["override_js"] == true || viewConf[localRessources]["override"] && viewConf[localRessources]["override"] == true ) {
-                jsStr = "";
-                js.content = []
-            }
-            //Get js
-            if( viewConf[localRessources]["javascripts"] ) {
-                tmpRes = getNodeRes('js', jsStr, viewConf[localRessources]["javascripts"], js);
-                jsStr = tmpRes.jsStr;
-                js = tmpRes.js;
-                tmpRes = null
-            }
+        //Get css
+        if( viewConf[localRessources]["stylesheets"] ) {
+            tmpRes = getNodeRes('css', cssStr, viewConf[localRessources]["stylesheets"], css);
+            cssStr = tmpRes.cssStr;
+            css = tmpRes.css;
+            tmpRes = null
+        }
+        //Get js
+        if( viewConf[localRessources]["javascripts"] ) {
+            tmpRes = getNodeRes('js', jsStr, viewConf[localRessources]["javascripts"], js);
+            jsStr = tmpRes.jsStr;
+            js = tmpRes.js;
+            tmpRes = null
         }
 
         self.set('page.stylesheets', cssStr);
