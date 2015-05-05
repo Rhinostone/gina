@@ -256,7 +256,6 @@ function Router(env) {
             superController.setOptions(request, response, next, options);
             console.log(err.stack);
             superController.throwError(response, 500, err.stack);
-            process.exit(1)
         }
 
         // about to contact Controller ...
@@ -282,7 +281,12 @@ function Router(env) {
         } catch (err) {
             var superController = new SuperController(options);
             superController.setOptions(request, response, next, options);
-            superController.throwError(response, 500, err.stack);
+            if ( typeof(controller[action]) == 'undefined') {
+                superController.throwError(response, 500, new Error('Action not found: `'+ action+'`. Please, check your routing.json or the related control in your `controller.js`.'));
+            } else {
+                superController.throwError(response, 500, err.stack);
+            }
+
         }
 
         action = null
