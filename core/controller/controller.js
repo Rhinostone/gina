@@ -95,6 +95,7 @@ function Controller(options) {
             self.set('page.content', content);
             self.set('page.action', action);
             self.set('page.title', action);
+            self.set('page.lang', req.headers['accept-language'].split(',')[0]);
         }
 
         if ( hasViews() ) {
