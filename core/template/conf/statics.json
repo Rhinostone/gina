@@ -1,6 +1,3 @@
 {
-    "css": "{views}/css",
-    "images": "{views}/images",
-    "js" : "{views}/js",
-    "favicon.ico": "{views}/html/favicon.ico"
+   "favicon.ico": "{views}/html/favicon.ico"
 }

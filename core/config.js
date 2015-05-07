@@ -665,9 +665,9 @@ function Config(opt) {
         };
 
         if (hasViews && typeof(files['views'].default) != 'undefined') {
-            reps["views"] = files['views'].default.views;
-            reps["html"] = files['views'].default.html;
-            reps["theme"] = files['views'].default.theme;
+            reps['views'] = files['views'].default.views;
+            reps['html'] = files['views'].default.html;
+            reps['theme'] = files['views'].default.theme;
         }
 
         var ports = conf[bundle][env].port;
@@ -696,7 +696,6 @@ function Config(opt) {
                 delete require.cache[staticsPath];
 
 
-
             if (hasViews && typeof(files['statics']) == 'undefined') {
                 files['statics'] = require(staticsPath)
             } else if ( typeof(files['statics']) != 'undefined' ) {
@@ -705,6 +704,21 @@ function Config(opt) {
                 files['statics'] = merge(files['statics'], defaultAliases)
             }
 
+            // public root dirrestories
+            var d = 0
+                , dirs = fs.readdirSync(reps['views'])
+                , statics = {};
+            // removing html/template directory
+            dirs.splice(dirs.indexOf(new _(reps.html, true).toArray().last()), 1);
+            // making statics allowed directories
+            while ( d < dirs.length) {
+                if ( !/^\./.test(dirs[d]) && fs.lstatSync(_(reps.views +'/'+ dirs[d], true)).isDirectory() ) {
+                    statics[dirs[d]] = _('{views}/'+dirs[d], true)
+                }
+                ++d
+            }
+            files['statics'] = (files['statics'], statics);
+
             if (hasViews && typeof(files['views']) == 'undefined') {
                 files['views'] = require(viewsPath)
             } else if ( typeof(files['views']) != 'undefined' ) {
@@ -712,6 +726,8 @@ function Config(opt) {
 
                 files['views'] = merge(files['views'], defaultViewsSettings)
             }
+
+
         } catch (err) {
             callback(err)
         }
