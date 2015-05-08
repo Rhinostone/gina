@@ -395,96 +395,13 @@ function Server(options) {
             return false
         }
 
-
         if ( typeof(conf) != 'undefined') {//for cacheless mode
             self.conf[bundle] = conf
         }
-        var cacheless = config.isCacheless();
-        /**
-
-        var uri = '', key = '';
-        //webroot test
-        if (self.conf[bundle].server.webroot != '/') {
-            uri = (self.conf[bundle].server.webroot + pathname.replace(self.conf[bundle].server.webroot, '')).split('/');
-            var len = self.conf[bundle].server.webroot.split('/').length;
-            key = uri.splice(1, len).join('/');
-        } else {
-            uri = pathname.split('/');
-            key = uri.splice(1, 1)[0]
-        }
-
-        //static filter
-        if ( typeof(conf.content.statics) != 'undefined' &&  typeof(conf.content.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
-            // No sessions for statics
-            if (req.session) {
-                delete req['session']
-            }
-
-            uri = uri.join('/');
-            var filename = path.join(conf.content.statics[key], uri);
-
-            fs.exists(filename, function(exists) {
-
-                if(exists) {
-
-                    if (fs.statSync(filename).isDirectory()) filename += '/index.html';
-
-                    fs.readFile(filename, "binary", function(err, file) {
-                        if (err) {
-                            res.writeHead(500, {"Content-Type": "text/plain"});
-                            res.write(err.stack + "\n");
-                            res.end();
-                            return
-                        }
-                        if (!res.headersSent) {
-                            try {
-                                res.setHeader("Content-Type", getHead(filename));
-                                if (cacheless) {
-                                    // source maps integration for javascript
-                                    if ( /\.js$/.test(filename) && fs.existsSync(filename +'.map') ) {
-                                        res.setHeader("X-SourceMap", pathname +'.map')
-                                    }
-                                }
-
-                                res.writeHead(200)
-                                res.write(file, 'binary');
-                                res.end()
-                            } catch(err) {
-                                throwError(res, 500, err.stack)
-                            }
-                        }
-                    });
-                } else {
-                    onBundleConfigLoaded(bundle, {
-                        err : false,
-                        cacheless : cacheless,
-                        pathname : pathname,
-                        req : req,
-                        res : res,
-                        conf : config,
-                        next : next,
-                        callback : callback
-                    })
-                }//EO exists
-            })//EO static filter
-
-        } else {
-            onBundleConfigLoaded(bundle, {
-                err : false,
-                cacheless : cacheless,
-                pathname : pathname,
-                req : req,
-                res : res,
-                conf : config,
-                next : next,
-                callback : callback
-            })
-        }
-        */
 
         onBundleConfigLoaded(bundle, {
             err : false,
-            cacheless : cacheless,
+            cacheless : config.isCacheless(),
             pathname : pathname,
             req : req,
             res : res,
