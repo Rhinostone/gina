@@ -341,14 +341,14 @@ function Server(options) {
 
 
 
-                loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, req, res, next) {
+                loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, cacheless, req, res, next) {
                     if (!req.handled) {
                         req.handled = true;
-                        console.log('calling back..');
+                        console.debug('loadBundleConfiguration called back..');
                         if (err) {
                             throwError(response, 500, 'Internal server error\n' + err.stack, next)
                         } else {
-                            handle(req, res, next, pathname)
+                            handle(req, res, next, pathname, cacheless)
                         }
                     }
                 })
@@ -400,6 +400,7 @@ function Server(options) {
             self.conf[bundle] = conf
         }
         var cacheless = config.isCacheless();
+        /**
 
         var uri = '', key = '';
         //webroot test
@@ -466,6 +467,7 @@ function Server(options) {
                     })
                 }//EO exists
             })//EO static filter
+
         } else {
             onBundleConfigLoaded(bundle, {
                 err : false,
@@ -478,7 +480,18 @@ function Server(options) {
                 callback : callback
             })
         }
+        */
 
+        onBundleConfigLoaded(bundle, {
+            err : false,
+            cacheless : cacheless,
+            pathname : pathname,
+            req : req,
+            res : res,
+            conf : config,
+            next : next,
+            callback : callback
+        })
     }
 
     var onBundleConfigLoaded = function(bundle, options) {
@@ -493,7 +506,7 @@ function Server(options) {
 
         //Reloading assets & files.
         if (!cacheless) { // all but dev & debug
-            callback(err, pathname, req, res, next)
+            callback(err, pathname, false, req, res, next)
         } else {
             config.refresh(bundle, function(err, routing) {
                 if (err) {
@@ -501,13 +514,13 @@ function Server(options) {
                 } else {
                     //refreshing routing at the same time.
                     self.routing = routing;
-                    callback(err, pathname, req, res, next)
+                    callback(err, pathname, cacheless, req, res, next)
                 }
             })
         }
     }
 
-    var handle = function(req, res, next, pathname) {
+    var handle = function(req, res, next, pathname, cacheless) {
         var matched         = false
             , isRoute       = {}
             , withViews     = hasViews(self.appName)
@@ -524,7 +537,8 @@ function Server(options) {
             throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl, next);
         }
 
-        var params = {}, routing = JSON.parse(JSON.stringify(self.routing));
+        var params = {}
+            , routing = JSON.parse(JSON.stringify(self.routing));
         out:
             for (var rule in routing) {
                 if (typeof(routing[rule]['param']) == 'undefined')
@@ -543,6 +557,7 @@ function Server(options) {
                 if (pathname === routing[rule].url || isRoute.past) {
 
                     console.debug('Server routing to '+ pathname);
+
                     var allowed = (typeof(routing[rule].method) == 'undefined' || routing[rule].method.length > 0 || routing[rule].method.indexOf(req.method) != -1)
                     if (!allowed) {
                         throwError(res, 405, 'Method Not Allowed for [' + self.appName + '] => ' + req.originalUrl, next)
@@ -553,22 +568,98 @@ function Server(options) {
                     matched = true;
                     isRoute = {};
                     break out;
+
                 }
             }
 
         if (!matched) {
-            var wroot = self.conf[self.appName].server.webroot;
-            if (wroot.substr(wroot.length-1,1) == '/') {
-                wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+            var wroot = self.conf[self.appName].server.webroot
+                , allowed = null
+                , bundle = self.appName
+                , conf = self.conf[bundle];
+
+            var uri = '', key = '';
+            //webroot test
+            if (self.conf[bundle].server.webroot != '/') {
+                uri = (self.conf[bundle].server.webroot + pathname.replace(self.conf[bundle].server.webroot, '')).split('/');
+                var len = self.conf[bundle].server.webroot.split('/').length;
+                key = uri.splice(1, len).join('/');
+            } else {
+                uri = pathname.split('/');
+                key = uri.splice(1, 1)[0]
             }
 
-            if (pathname === wroot + '/favicon.ico' && !withViews && !res.headersSent ) {
-                res.writeHead(200, {'Content-Type': 'image/x-icon'} );
-                res.end()
+            //static filter
+            if ( typeof(conf.content.statics) != 'undefined' &&  typeof(conf.content.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
+                // No sessions for statics
+                if (req.session) {
+                    delete req['session']
+                }
+
+                uri = uri.join('/');
+                var filename = path.join(conf.content.statics[key], uri);
+
+                fs.exists(filename, function(exists) {
+
+                    if(exists) {
+
+                        if (fs.statSync(filename).isDirectory()) filename += '/index.html';
+
+                        fs.readFile(filename, "binary", function(err, file) {
+                            if (err) {
+                                res.writeHead(500, {"Content-Type": "text/plain"});
+                                res.write(err.stack + "\n");
+                                res.end();
+                                return
+                            }
+                            if (!res.headersSent) {
+                                try {
+                                    res.setHeader("Content-Type", getHead(filename));
+                                    if (cacheless) {
+                                        // source maps integration for javascript
+                                        if ( /\.js$/.test(filename) && fs.existsSync(filename +'.map') ) {
+                                            res.setHeader("X-SourceMap", pathname +'.map')
+                                        }
+                                    }
+
+                                    res.writeHead(200)
+                                    res.write(file, 'binary');
+                                    res.end()
+                                } catch(err) {
+                                    throwError(res, 500, err.stack)
+                                }
+                            }
+                        });
+                    } else {
+                        // else
+                        if (wroot.substr(wroot.length-1,1) == '/') {
+                            wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+                        }
+
+                        if (pathname === wroot + '/favicon.ico' && !withViews && !res.headersSent ) {
+                            res.writeHead(200, {'Content-Type': 'image/x-icon'} );
+                            res.end()
+                        }
+                        if (!res.headersSent)
+                            throwError(res, 404, 'Page not found: \n' + pathname, next)
+
+                    }//EO exists
+                })//EO static filter
+
+            } else {
+                // else
+                if (wroot.substr(wroot.length-1,1) == '/') {
+                    wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+                }
+
+                if (pathname === wroot + '/favicon.ico' && !withViews && !res.headersSent ) {
+                    res.writeHead(200, {'Content-Type': 'image/x-icon'} );
+                    res.end()
+                }
+                if (!res.headersSent)
+                    throwError(res, 404, 'Page not found: \n' + pathname, next)
             }
-            if (!res.headersSent)
-                throwError(res, 404, 'Page not found: \n' + pathname, next)
-                //throwError(res, 404, 'Page not found\n' + wroot + pathname, next)
+
         }
     }
 
