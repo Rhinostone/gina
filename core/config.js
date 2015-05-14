@@ -425,8 +425,6 @@ function Config(opt) {
 
         }//EO for.
 
-        //self.envConf = content[bundle][env];
-
 
 //        logger.debug(
 //            'gina',
@@ -704,7 +702,7 @@ function Config(opt) {
                 files['statics'] = merge(files['statics'], defaultAliases)
             }
 
-            // public root dirrestories
+            // public root directories
             var d = 0
                 , dirs = fs.readdirSync(reps['views'])
                 , statics = {};
@@ -726,8 +724,6 @@ function Config(opt) {
 
                 files['views'] = merge(files['views'], defaultViewsSettings)
             }
-
-
         } catch (err) {
             callback(err)
         }
