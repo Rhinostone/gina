@@ -97,9 +97,9 @@ function Controller(options) {
             self.set('page.title', action);
 
             if (typeof(req.headers['accept-language']) != 'undefined') {
-                self.set('page.lang', (req.headers['accept-language'].split(',')[0]).split('-')[0]);
+                self.set('page.lang', req.headers['accept-language'].split(',')[0]);
             } else {
-                self.set('page.lang', (local.options.conf.server.response.header['accept-language'].split(',')[0]).split('-')[0]);
+                self.set('page.lang', local.options.conf.server.response.header['accept-language'].split(',')[0]);
             }
         }
 
