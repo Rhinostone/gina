@@ -158,7 +158,8 @@ function Controller(options) {
         try {
 
             if (!_data) {
-                _data = { page: {}}
+                _data = self.getData();
+                _data.page.data = {}
             } else if (!_data['page']) {
                 var data = JSON.parse( JSON.stringify(_data) );
                 _data = self.getData();
@@ -295,7 +296,13 @@ function Controller(options) {
         return self._data[variable]
     }
 
-    this.setRessources = function(viewConf, localRessources) {
+    /**
+     * Set ressources
+     *
+     * @param {object} viewConf - template configuration
+     * @param {string} localRessouces - rule name
+     * */
+    this.setRessources = function(viewConf, localRessource) {
         var res = '',
             tmpRes = {},
             css = {
@@ -319,22 +326,26 @@ function Controller(options) {
 
 
         //cascading merging
-        if (localRessources !== 'default') {
-            for (var attr in viewConf.default) {
-                viewConf[localRessources][attr] = merge(viewConf[localRessources][attr], viewConf.default[attr])
+        if (localRessource !== 'default') {
+            if ( typeof(viewConf[localRessource]) != 'undefined') {
+                for (var attr in viewConf.default) {
+                    viewConf[localRessource][attr] = merge(viewConf[localRessource][attr], viewConf.default[attr])
+                }
+            } else {
+                viewConf[localRessource] = viewConf.default
             }
         }
 
         //Get css
-        if( viewConf[localRessources]["stylesheets"] ) {
-            tmpRes = getNodeRes('css', cssStr, viewConf[localRessources]["stylesheets"], css);
+        if( viewConf[localRessource]["stylesheets"] ) {
+            tmpRes = getNodeRes('css', cssStr, viewConf[localRessource]["stylesheets"], css);
             cssStr = tmpRes.cssStr;
             css = tmpRes.css;
             tmpRes = null
         }
         //Get js
-        if( viewConf[localRessources]["javascripts"] ) {
-            tmpRes = getNodeRes('js', jsStr, viewConf[localRessources]["javascripts"], js);
+        if( viewConf[localRessource]["javascripts"] ) {
+            tmpRes = getNodeRes('js', jsStr, viewConf[localRessource]["javascripts"], js);
             jsStr = tmpRes.jsStr;
             js = tmpRes.js;
             tmpRes = null
