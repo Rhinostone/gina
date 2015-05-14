@@ -95,7 +95,12 @@ function Controller(options) {
             self.set('page.content', content);
             self.set('page.action', action);
             self.set('page.title', action);
-            self.set('page.lang', req.headers['accept-language'].split(',')[0]);
+
+            if (typeof(req.headers['accept-language']) != 'undefined') {
+                self.set('page.lang', (req.headers['accept-language'].split(',')[0]).split('-')[0]);
+            } else {
+                self.set('page.lang', (local.options.conf.server.response.header['accept-language'].split(',')[0]).split('-')[0]);
+            }
         }
 
         if ( hasViews() ) {
