@@ -58,7 +58,7 @@ function Controller(options) {
     }
 
     var getInstance = function() {
-        local.options = Controller.instance._options;
+        local.options = Controller.instance._options = options;
         self._data = Controller.instance._data;
         return Controller.instance
     }
@@ -560,6 +560,7 @@ function Controller(options) {
      * */
     this.getConfig = function(name) {
         var tmp = '';
+
         if ( typeof(name) != 'undefined' ) {
             try {
                 // needs to be read only

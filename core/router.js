@@ -200,7 +200,9 @@ function Router(env) {
         var pathname        = url.parse(request.url).pathname;
         var bundle          = local.bundle = params.bundle;
         var conf            = config.Env.getConf( bundle, env );
+        var bundles         = conf.bundles;
         local.conf = conf;
+        local.isStandalone  = config.Host.isStandalone();
         var action          = request.action = params.param.action;
         var middleware      = params.middleware || [];
         var actionFile      = params.param.file; // matches rule name
@@ -229,7 +231,12 @@ function Router(env) {
         console.debug('ACTION ON  ROUTING IS : ' + action);
 
         //Getting superCleasses & extending it with super Models.
-        var controllerFile = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
+        //var controllerFile = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
+        var controllerFiles = {}, Controllers = {};
+        for (var b in bundles) {
+            controllerFiles[bundles[b]] = conf.bundlesPath +'/'+ bundles[b] + '/controllers/controller.js';
+        }
+
 
         var options = {
             action          : action,
@@ -251,8 +258,12 @@ function Router(env) {
                 options.namespace = namespace
             }
 
-            if (cacheless) delete require.cache[_(controllerFile, true)];
-            var Controller  = require(_(controllerFile, true))
+            if (cacheless) delete require.cache[_(controllerFiles[bundle], true)];
+
+            //var Controller  = require(_(controllerFiles[bundle], true))
+            for (var b in bundles) {
+                Controllers[bundles[b]] = require(_(controllerFiles[bundles[b]], true));
+            }
         } catch (err) {
             var superController = new SuperController(options);
             superController.setOptions(request, response, next, options);
@@ -263,12 +274,15 @@ function Router(env) {
         // about to contact Controller ...
         // namespaces should be supported for every bundles
         if ( typeof(namespace) != 'undefined' && namespace == 'framework' ) {
-            Controller = SuperController.prototype[namespace];
+            //Controller = SuperController.prototype[namespace];
+            Controllers[bundle] = SuperController.prototype[namespace];
         }
 
-        Controller = inherits(Controller, SuperController);
+        //Controller = inherits(Controller, SuperController);
+        Controllers[bundle] = inherits(Controllers[bundle], SuperController);
         try {
-            var controller = new Controller(options);
+            //var controller = new Controller(options);
+            var controller = new Controllers[bundle](options);
             controller.setOptions(request, response, next, options);
 
             if (middleware.length > 0) {
@@ -283,7 +297,7 @@ function Router(env) {
         } catch (err) {
             var superController = new SuperController(options);
             superController.setOptions(request, response, next, options);
-            if ( typeof(controller[action]) == 'undefined') {
+            if ( typeof(controller) != 'undefined' && typeof(controller[action]) == 'undefined') {
                 superController.throwError(response, 500, (new Error('Action not found: `'+ action+'`. Please, check your routing.json or the related control in your `controller.js`.')).stack);
             } else {
                 superController.throwError(response, 500, err.stack);
