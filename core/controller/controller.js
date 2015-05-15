@@ -104,6 +104,11 @@ function Controller(options) {
         }
 
         if ( hasViews() ) {
+
+            if ( typeof(local.options.file) == 'undefined') {
+                local.options.file = 'index'
+            }
+
             self.set('file', local.options.file);
             self.set('page.title', local.options.file);
 
@@ -128,6 +133,9 @@ function Controller(options) {
     this.setViewsLocation = function(dir, layout) {
         local.options.views.default.views = dir;
         local.options.views.default.html = _(dir + '/html');
+        if ( typeof(local.options.namespace) != 'undefined') {
+            local.options.views.default.html = _(local.options.views.default.html+'/'+local.options.namespace)
+        }
         local.options.views.default.layout = layout || _(local.options.views.default.html + '/layout.html');
         swig.setDefaults({
             loader: swig.loaders.fs(dir)
@@ -156,21 +164,32 @@ function Controller(options) {
     this.render = function(_data) {
 
         try {
-
+            var data = self.getData();
             if (!_data) {
-                _data = self.getData();
-                _data.page.data = {}
+                _data = { page: {}}
             } else if (!_data['page']) {
-                var data = JSON.parse( JSON.stringify(_data) );
-                _data = self.getData();
-                _data['page'] = {
-                    data: data
+                data['page'] = {
+                    data: _data
                 }
+            } else {
+                data = merge(_data, data)
             }
-            self.setRessources(local.options.views, _data.file);
-            var data = merge(_data, self.getData());
+            self.setRessources(local.options.views, data.file);
+            var file = data.file;
 
-            var path = _(local.options.views[_data.file].html + '/' + data.file );
+
+            // pre-compiling variables
+            data = merge(data, self.getData()); // needed !!
+            if ( typeof(local.options.namespace) != 'undefined' ) {
+                file = ''+ file.replace(local.options.namespace+'-', '');
+                // means that rule name === namespace -> pointing to root namespace dir
+                if (!file || file === local.options.namespace) {
+                    file = 'index'
+                }
+                path = _(local.options.views[data.file].html +'/'+ local.options.namespace + '/' + file)
+            } else {
+                path = _(local.options.views[data.file].html +'/'+ file)
+            }
 
             if (data.page.ext) {
                 path += data.page.ext
@@ -182,8 +201,9 @@ function Controller(options) {
             }
             // please, do not put any slashes when including...
             // ex.:
-            //      html/inc/_partial.html (GOOD)
             //      /html/inc/_partial.html (BAD)
+            //      html/inc/_partial.html (GOOD)
+            //      html/namespace/page.html (GOOD)
             fs.readFile(path, function (err, content) {
                 if (err) {
                     self.throwError(local.res, 500, err.stack);
@@ -210,7 +230,7 @@ function Controller(options) {
 
                 dic['page.content'] = content;
 
-                fs.readFile(local.options.views[_data.file].layout, function(err, layout) {
+                fs.readFile(local.options.views[data.file].layout, function(err, layout) {
                     if (err) {
                         self.throwError(local.res, 500, err.stack);
                     }
@@ -570,7 +590,7 @@ function Controller(options) {
                 }))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('Error '+ code +'. '+ msg);
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
                 local.res.headersSent = true;
             }
         } else {

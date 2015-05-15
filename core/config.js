@@ -78,7 +78,7 @@ function Config(opt) {
 
     var getConf = function() {
 
-        console.debug('Loading conf', __stack);
+        console.debug('Loading conf...');
 
         self.Env.load( function(err, envConf) {
 
@@ -315,8 +315,6 @@ function Config(opt) {
 
         //Pushing default app first.
         self.bundles.push(self.startingApp);//This is a JSON.push.
-        //console.log(" CONTENT TO BE SURE ", app, JSON.stringify(content, null, 4));
-        //console.log("bundle list ", self.bundles);
         var root = new _(self.executionPath).toUnixStyle();
         try {
             var pkg = require(_(root + '/project.json')).bundles;
@@ -328,22 +326,7 @@ function Config(opt) {
         //For each app.
         for (var app in content) {
             //Checking if genuine app.
-//            logger.debug(
-//                'gina',
-//                'CONFIG:DEBUG:4',
-//                'Checking if application is registered ' + app,
-//                __stack
-//            );
-            console.debug('Checking if application is registered ' + app, __stack);
-
-            //Now check if you have a description for each bundle.
-//            if ( typeof(pkg[app]) == 'undefined' ) {
-//                throw new Error('No definition found for bundle ['+ app +']in project.json');
-//                //Sorry, can't work without... fix your shit.
-//                process.kill(process.pid, 'SIGINT');
-//            }
-            //callback(new Error('No definition found for bundle ['+ app +']in project.json'));
-
+            console.debug('Checking if application [ '+ app +' ]is registered ');
 
             if ( typeof(content[app][env]) != "undefined" ) {
 
@@ -353,7 +336,6 @@ function Config(opt) {
                 ) {
                     var p = _(pkg[app].src);
                     content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
-                    //content[app][env]['bundlesPath'] = root + "/"+ p.replace('/' + app, '');
                 } else {
                     var p = ( typeof(pkg[app].release.link) != 'undefined' ) ? _(pkg[app].release.link) : _(pkg[app].release.target);
                     content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
@@ -381,7 +363,6 @@ function Config(opt) {
                 var masterPort = content[self.startingApp][env].port.http;
                 //Check if standalone or shared instance
                 if (content[app][env].port.http != masterPort) {
-                    //console.log("should be ok !!");
                     isStandalone = false;
                     self.Host.standaloneMode = isStandalone
                 } else if (app != self.startingApp) {
@@ -426,28 +407,13 @@ function Config(opt) {
         }//EO for.
 
 
-//        logger.debug(
-//            'gina',
-//            'CONFIG:DEBUG:7',
-//            'Env configuration loaded \n ' + newContent,
-//            __stack
-//        );
-        console.debug('Env configuration loaded \n ' + newContent,
-            __stack);
+        console.debug('Env configuration loaded \n ' + newContent);
 
-        //Means all apps sharing the same process.
+        // TRUE means that all apps sharing the same process will merge into one.
         if (!isStandalone) self.Host.standaloneMode = isStandalone;
 
-//        logger.debug(
-//            'gina',
-//            'CONFIG:DEBUG:3',
-//            'Is server running as a standalone instance ? ' + isStandalone,
-//            __stack
-//        );
+        console.debug('Is server running as a standalone instance ? ' + isStandalone);
 
-        console.debug('Is server running as a standalone instance ? ' + isStandalone,
-            __stack);
-        //return newContent;
         callback(false, newContent)
     }
 
@@ -494,11 +460,12 @@ function Config(opt) {
             //"home": {
             //    "url": "/@doc",
             //    "param": {
-            //        "namespace" : "framework",
+            //        "bundle" : "framework",
             //        "action": "doc"
             //    }
             //}
         };
+        var standaloneRouting = {};
         var tmp         = '';
         //var tmpName     = '';
         var filename    = '';
@@ -551,10 +518,16 @@ function Config(opt) {
                 tmp = '';
 
                 //setting app param
-
                 for (var rule in routing) {
+                    routing[rule].bundle = bundle; // for reverse search
                     //webroot control
-                    wroot = conf[bundle][env].server.webroot
+                    wroot = conf[bundle][env].server.webroot;
+                    routing[rule].param.file = rule; // get template file
+                    // renaming rule for standalone setup
+                    if ( self.Host.isStandalone() && bundle != self.startingApp && wroot == '/') {
+                        wroot = '/'+bundle;
+                        conf[bundle][env].server.webroot = wroot
+                    }
 
                     if ( typeof(routing[rule].url) != 'object' ) {
                         // adding / if missing
@@ -584,9 +557,16 @@ function Config(opt) {
                             routing[rule].url[u] =  wroot + routing[rule].url[u]
                         }
                     }
+
+                    if ( self.Host.isStandalone() && routing[rule]) {
+                        if (bundle != self.startingApp)
+                            standaloneRouting[bundle +'-'+ rule] = JSON.parse(JSON.stringify(routing[rule]))
+                        else
+                            standaloneRouting[rule] = JSON.parse(JSON.stringify(routing[rule]))
+                    }
                 }
 
-                files[name] = routing;
+                files[name] = (self.Host.isStandalone()) ? standaloneRouting : routing;
                 continue;
             } else if (name == 'routing') {
                 continue;
@@ -791,8 +771,14 @@ function Config(opt) {
         files = whisper(reps, files);
 
         if ( hasViews ) {
+            //var actionFile = 'index';
+            routing = files['routing'];
+
             for (var rule in routing) {
-                routing[rule].param.file = routing[rule].param.file || rule;//routing[rule].param.action
+                //if ( self.Host.isStandalone() && (new RegExp('^'+routing[rule].bundle+'-')).test(rule) ) {
+                //    actionFile = rule.match(new RegExp('[^'+routing[rule].bundle+'-]+'))[0] // get template file
+                //}
+                //routing[rule].param.file = actionFile; //routing[rule].param.file || rule
                 if (!files['views'].default.useRouteNameAsFilename && routing[rule].param.namespace != 'framework') {
                     var tmpRouting = [];
                     for (var i = 0, len = routing[rule].param.file.length; i < len; ++i) {
@@ -821,7 +807,21 @@ function Config(opt) {
         if (b < bundles.length) {
             loadBundleConfig(bundles, b, callback, reload)
         } else {
-            callback(err, files, routing)
+            if ( !self.Host.isStandalone() ) {
+                callback(err, files, routing)
+            } else {
+                // merging all into the startingApp
+                if (conf[self.startingApp][env].content.routing) {
+                    routing = JSON.parse(JSON.stringify(conf[self.startingApp][env].content.routing));
+                    for (var i=0; i<bundles.length; ++i) {
+                        if (bundles[i] != self.startingApp) {
+                            routing = merge(routing, conf[bundles[i]][env].content.routing)
+                        }
+                    }
+                }
+
+                callback(err, files, routing)
+            }
         }
     }
 
@@ -831,24 +831,9 @@ function Config(opt) {
      * TODO - simplify / optimize
      * */
     var loadBundlesConfiguration = function(callback) {
-
         var bundles = self.getBundles();
-        //var count = bundles.length;
-        //var bundle = undefined;
-        //For each bundles.
-        //for (var i=0; i<bundles.length; ++i) {
-        //    bundle = bundles[i];
-        //    loadBundleConfig(bundle, function() {
-        //        --count;
-        //        if (count == 0) {
-        //            //We always return something.
-        //            callback(false)
-        //        }
-        //    })
-        //}//EO for each app
 
         loadBundleConfig(bundles, 0, callback)
-
     }
 
     /**
@@ -881,7 +866,7 @@ function Config(opt) {
             //Reload conf.
 
             loadBundleConfig(
-                [bundle],
+                self.bundles,
                 0,
                 function doneLoadingBundleConfig(err, files, routing) {
                     if (!err) {
@@ -898,7 +883,7 @@ function Config(opt) {
         } else {
             //Reload conf. who likes repetition ?
             loadBundleConfig(
-                [bundle],
+                self.bundles,
                 0,
                 function doneLoadingBundleConfig(err, files, routing) {
                     if (!err) {
