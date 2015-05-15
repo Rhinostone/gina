@@ -203,7 +203,7 @@ function Router(env) {
         local.conf = conf;
         var action          = request.action = params.param.action;
         var middleware      = params.middleware || [];
-        var actionFile      = params.param.file;
+        var actionFile      = params.param.file; // matches rule name
         var namespace       = params.param.namespace;
         var routeHasViews   = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
         local.routeHasViews = routeHasViews;
@@ -247,7 +247,9 @@ function Router(env) {
 
         try {
             // TODO - namespace handling
-            //if ( typeof(namespace) != 'undefined' ) {
+            if ( typeof(namespace) != 'undefined' ) {
+                options.namespace = namespace
+            }
 
             if (cacheless) delete require.cache[_(controllerFile, true)];
             var Controller  = require(_(controllerFile, true))
@@ -282,7 +284,7 @@ function Router(env) {
             var superController = new SuperController(options);
             superController.setOptions(request, response, next, options);
             if ( typeof(controller[action]) == 'undefined') {
-                superController.throwError(response, 500, new Error('Action not found: `'+ action+'`. Please, check your routing.json or the related control in your `controller.js`.'));
+                superController.throwError(response, 500, (new Error('Action not found: `'+ action+'`. Please, check your routing.json or the related control in your `controller.js`.')).stack);
             } else {
                 superController.throwError(response, 500, err.stack);
             }
@@ -389,7 +391,7 @@ function Router(env) {
                 }))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('Error '+ code +'. '+ msg);
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
                 local.res.headersSent = true;
             }
         } else {

@@ -90,14 +90,7 @@ function Server(options) {
             process.exit(1)
         }
 
-        //console.log('['+ self.appName +'] on port : ['+ self.conf[self.appName].port.http + ']');
         onRoutesLoaded( function(err) {//load all registered routes in routing.json
-//            console.debug(
-//                'gina',
-//                'SERVER:DEBUG:1',
-//                'Routing loaded' + '\n'+ JSON.stringify(self.routing, null, '\t'),
-//                __stack
-//            );
             console.debug('Routing loaded' + '\n'+ JSON.stringify(self.routing, null, '\t'));
 
             if ( hasViews(self.appName) ) {
@@ -170,7 +163,7 @@ function Server(options) {
                     var wroot;
                     //Adding important properties; also done in core/config.
                     for (var rule in tmp){
-                        tmp[rule].param.app = apps[i];
+                        tmp[rule].bundle = apps[i];
                         wroot = conf.server.webroot;
 
                         if (typeof(tmp[rule].url) != 'object') {
@@ -232,7 +225,7 @@ function Server(options) {
                     tmp = {};
                 } catch (err) {
                     self.routing = null;
-                    console.error('gina', 'SERVER:ERR:2', err, __stack);
+                    console.error(err.stack||err.message);
                     callback(err)
                 }
 
@@ -467,7 +460,7 @@ function Server(options) {
                     url : pathname,
                     param : routing[rule].param,
                     middleware : routing[rule].middleware,
-                    bundle: self.appName
+                    bundle: routing[rule].bundle
                 };
                 //Parsing for the right url.
                 isRoute = router.compareUrls(req, params, routing[rule].url);
