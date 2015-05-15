@@ -188,7 +188,6 @@ function Config(opt) {
 
                 var envConf = '';
                 //console.error("loading once ", this.parent.userConf);
-
                 //require(this.executionPath + '/env.json');
 
                 if (this.parent.userConf) {
@@ -467,7 +466,6 @@ function Config(opt) {
         };
         var standaloneRouting = {};
         var tmp         = '';
-        //var tmpName     = '';
         var filename    = '';
         var appPath     = '';
         var err         = false;
@@ -525,7 +523,7 @@ function Config(opt) {
                     routing[rule].param.file = rule; // get template file
                     // renaming rule for standalone setup
                     if ( self.Host.isStandalone() && bundle != self.startingApp && wroot == '/') {
-                        wroot = '/'+bundle;
+                        wroot = '/'+ bundle;
                         conf[bundle][env].server.webroot = wroot
                     }
 

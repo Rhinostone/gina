@@ -120,6 +120,7 @@ function Server(options) {
             , appName       = ''
             , name          = ''
             , tmp           = {}
+            , standaloneTmp = {}
             , main          = ''
             , tmpContent    = ''
             , tmpName       = ''
@@ -163,8 +164,14 @@ function Server(options) {
                     var wroot;
                     //Adding important properties; also done in core/config.
                     for (var rule in tmp){
-                        tmp[rule].bundle = apps[i];
+                        tmp[rule].bundle = apps[i]; // for reverse search
                         wroot = conf.server.webroot;
+                        tmp[rule].param.file = rule; // get template file
+                        // renaming rule for standalone setup
+                        if ( self.isStandalone && apps[i] != self.appName && wroot == '/') {
+                            wroot = '/'+ apps[i];
+                            conf.server.webroot = wroot
+                        }
 
                         if (typeof(tmp[rule].url) != 'object') {
                             if (tmp[rule].url.length > 1 && tmp[rule].url.substr(0,1) != '/') {
@@ -199,9 +206,9 @@ function Server(options) {
                             // This is only an issue when it comes to the frontend dev
                             // views.useRouteNameAsFilename is set to true by default
                             // IF [ false ] the action is used as filename
-                            tmp[rule].param.file = tmp[rule].param.file  || rule;
-                            if ( !self.conf[apps[i]].content['views']['default'].useRouteNameAsFilename && tmp[rule].param.namespace != 'framework') {
-                                tmp[rule].param.file = tmp[rule].param.action;
+                            //tmp[rule].param.file = tmp[rule].param.file  || rule;
+                            if ( !self.conf[apps[i]].content['views']['default'].useRouteNameAsFilename && tmp[rule].param.bundle != 'framework') {
+                                //tmp[rule].param.file = tmp[rule].param.action;
                                 var tmpRouting = [];
                                 for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
                                     if (/[A-Z]/.test(tmp[rule].param.file.charAt(r))) {
@@ -215,14 +222,29 @@ function Server(options) {
                             }
                         }
 
+                        if ( self.isStandalone && tmp[rule]) {
+                            if (tmp[rule].bundle != self.appName) {
+                                standaloneTmp[tmp[rule].bundle + '-' + rule] = JSON.parse(JSON.stringify(tmp[rule]));
+                                //delete self.routing[rule];
+                                //continue
+                            } else {
+                                standaloneTmp[rule] = JSON.parse(JSON.stringify(tmp[rule]))
+                            }
+                        }
                     }
 
-                    if (self.routing.count() > 0) {
-                        self.routing = merge(true, self.routing, tmp)
-                    } else {
-                        self.routing = tmp
-                    }
-                    tmp = {};
+
+
+                    //if (self.routing.count() > 0) {
+                    //    tmp = (self.isStandalone) ? standaloneTmp : tmp;
+                    //    //self.routing = merge(true, self.routing, tmp);
+                    //    self.routing = merge(JSON.parse(JSON.stringify(tmp)), self.routing);
+                    //} else {
+                    //    self.routing = JSON.parse(JSON.stringify(tmp))
+                    //}
+
+                    //tmp = {};
+                    //standaloneTmp = {};
                 } catch (err) {
                     self.routing = null;
                     console.error(err.stack||err.message);
@@ -234,8 +256,10 @@ function Server(options) {
                 callback(err)
             }
 
-            self.conf[apps[i]].content.routing = self.routing;
+            self.conf[apps[i]].content.routing = (self.isStandalone) ? standaloneTmp : tmp;
         }//EO for.
+
+        self.routing = self.conf[self.appName].content.routing
 
         callback(false)
     }
