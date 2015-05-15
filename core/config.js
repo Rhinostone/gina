@@ -16,7 +16,7 @@ var utils           = require("./utils");
 var merge           = utils.merge;
 var inherits        = utils.inherits;
 var console         = utils.logger;
-var modelUtil     = new utils.Model();
+var modelUtil       = new utils.Model();
 
 
 /**
@@ -422,8 +422,7 @@ function Config(opt) {
             var usrConf = require(self.executionPath +'/'+ file +'.json');
             return true
         } catch(err) {
-            //logger.warn('gina', 'CONF:HOST:WARN:1', err, __stack);
-            console.warn(err.stack||err.message);
+            console.warn('CONF:HOST:WARN:1', err.stack||err.message);
             return false
         }
     }
@@ -484,7 +483,7 @@ function Config(opt) {
         }
 
 
-        var files = {};
+        var files = {"routing": {}};
         var main = '', wroot;
         for (var name in  conf[bundle][env].files) {
             main = _(appPath +'/config/'+ conf[bundle][env].files[name]).replace('.'+env, '');
@@ -557,14 +556,16 @@ function Config(opt) {
                     }
 
                     if ( self.Host.isStandalone() && routing[rule]) {
-                        if (bundle != self.startingApp)
-                            standaloneRouting[bundle +'-'+ rule] = JSON.parse(JSON.stringify(routing[rule]))
-                        else
+                        if (bundle != self.startingApp) {
+                            standaloneRouting[bundle + '-' + rule] = JSON.parse(JSON.stringify(routing[rule]));
+                        } else {
                             standaloneRouting[rule] = JSON.parse(JSON.stringify(routing[rule]))
+                        }
                     }
                 }
 
-                files[name] = (self.Host.isStandalone()) ? standaloneRouting : routing;
+                conf[bundle][env].content.routing = merge(conf[bundle][env].content.routing, ((self.Host.isStandalone()) ? standaloneRouting : routing) );
+                files[name] = conf[bundle][env].content.routing
                 continue;
             } else if (name == 'routing') {
                 continue;
@@ -581,7 +582,6 @@ function Config(opt) {
 
             //Can't do a thing without.
             try {
-                //main = _(appPath +'/config/'+ conf[bundle][env].files[name]);
                 if (cacheless) {
                     delete require.cache[_(filename, true)];
                 }
@@ -589,7 +589,6 @@ function Config(opt) {
                 tmp = '';
 
                 if (filename != main) {
-                    //files[name] = merge(true, require(main), files[name]);
                     if (cacheless) {
                         delete require.cache[_(main, true)];
                     }
@@ -599,13 +598,13 @@ function Config(opt) {
 
                 if ( fs.existsSync(filename) ) {
                     callback( new Error('[ ' +filename + ' ] is malformed !!') )
-                    //process.exit(1)
                 } else {
                     files[name] = undefined
                 }
             }
 
         }//EO for (name
+
 
         var hasViews = (typeof(files['views']) != 'undefined' && typeof(files['views']['default']) != 'undefined') ? true : false;
 
@@ -635,7 +634,6 @@ function Config(opt) {
             "modelsPath"    : conf[bundle][env].modelsPath,
             "logsPath"      : conf[bundle][env].logsPath,
             "tmpPath"       : conf[bundle][env].tmpPath,
-            "env"           : env,
             "bundle"        : bundle,
             "host"          : conf[bundle][env].host
         };
@@ -769,14 +767,9 @@ function Config(opt) {
         files = whisper(reps, files);
 
         if ( hasViews ) {
-            //var actionFile = 'index';
             routing = files['routing'];
 
             for (var rule in routing) {
-                //if ( self.Host.isStandalone() && (new RegExp('^'+routing[rule].bundle+'-')).test(rule) ) {
-                //    actionFile = rule.match(new RegExp('[^'+routing[rule].bundle+'-]+'))[0] // get template file
-                //}
-                //routing[rule].param.file = actionFile; //routing[rule].param.file || rule
                 if (!files['views'].default.useRouteNameAsFilename && routing[rule].param.namespace != 'framework') {
                     var tmpRouting = [];
                     for (var i = 0, len = routing[rule].param.file.length; i < len; ++i) {

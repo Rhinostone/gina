@@ -227,14 +227,12 @@ function Router(env) {
             }
         }
 
-        //logger.debug('gina', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
         console.debug('ACTION ON  ROUTING IS : ' + action);
 
         //Getting superCleasses & extending it with super Models.
-        //var controllerFile = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
         var controllerFiles = {}, Controllers = {};
         for (var b in bundles) {
-            controllerFiles[bundles[b]] = conf.bundlesPath +'/'+ bundles[b] + '/controllers/controller.js';
+            controllerFiles[bundles[b]] = conf.bundlesPath +'/'+ bundles[b] + '/controllers/controller.js'; // /{namespace}.js ??
         }
 
 
@@ -260,7 +258,6 @@ function Router(env) {
 
             if (cacheless) delete require.cache[_(controllerFiles[bundle], true)];
 
-            //var Controller  = require(_(controllerFiles[bundle], true))
             for (var b in bundles) {
                 Controllers[bundles[b]] = require(_(controllerFiles[bundles[b]], true));
             }
@@ -274,14 +271,11 @@ function Router(env) {
         // about to contact Controller ...
         // namespaces should be supported for every bundles
         if ( typeof(namespace) != 'undefined' && namespace == 'framework' ) {
-            //Controller = SuperController.prototype[namespace];
             Controllers[bundle] = SuperController.prototype[namespace];
         }
 
-        //Controller = inherits(Controller, SuperController);
         Controllers[bundle] = inherits(Controllers[bundle], SuperController);
         try {
-            //var controller = new Controller(options);
             var controller = new Controllers[bundle](options);
             controller.setOptions(request, response, next, options);
 

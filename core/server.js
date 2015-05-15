@@ -225,15 +225,11 @@ function Server(options) {
                         if ( self.isStandalone && tmp[rule]) {
                             if (tmp[rule].bundle != self.appName) {
                                 standaloneTmp[tmp[rule].bundle + '-' + rule] = JSON.parse(JSON.stringify(tmp[rule]));
-                                //delete self.routing[rule];
-                                //continue
                             } else {
                                 standaloneTmp[rule] = JSON.parse(JSON.stringify(tmp[rule]))
                             }
                         }
                     }
-
-
 
                     //if (self.routing.count() > 0) {
                     //    tmp = (self.isStandalone) ? standaloneTmp : tmp;

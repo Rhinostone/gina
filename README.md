@@ -128,7 +128,19 @@ This has been mostly observed for Windows users.
 
 After this, try again to start, it should run better.
 
+### I can't re install Gina
 
+__Are you trying to reinstall from the project root ?__
+
+- Go to your project root (where you can see `env.json` & `project.json`)
+- Remove the file `gina`. This bug is related to npm since node 0.12.x and only found on POSIX Operating Systems
+``` tty   
+$ rm ./gina
+```
+- You can now reinstall
+``` tty   
+$ npm install gina 
+```
 
 
 More documentation and tutorials are coming !
