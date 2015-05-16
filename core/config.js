@@ -484,7 +484,7 @@ function Config(opt) {
 
 
         var files = {"routing": {}};
-        var main = '', wroot;
+        var main = '', wroot = conf[bundle][env].server.webroot;
         for (var name in  conf[bundle][env].files) {
             main = _(appPath +'/config/'+ conf[bundle][env].files[name]).replace('.'+env, '');
 
@@ -518,7 +518,6 @@ function Config(opt) {
                 for (var rule in routing) {
                     routing[rule].bundle = bundle; // for reverse search
                     //webroot control
-                    wroot = conf[bundle][env].server.webroot;
                     routing[rule].param.file = rule; // get template file
                     // renaming rule for standalone setup
                     if ( self.Host.isStandalone() && bundle != self.startingApp && wroot == '/') {
@@ -712,7 +711,10 @@ function Config(opt) {
             typeof(files['statics']) != 'undefined'
         ) {
             var newStatics = {};
-            var wroot = ( conf[bundle][env].server.webroot.substr(0,1) == '/' ) ?  conf[bundle][env].server.webroot.substr(1) : conf[bundle][env].server.webroot;
+            if (!wroot) {
+                wroot = ( conf[bundle][env].server.webroot.substr(0,1) == '/' ) ?  conf[bundle][env].server.webroot.substr(1) : conf[bundle][env].server.webroot;
+            }
+
             var k;
             for (var i in files['statics']) {
                 k = i;
@@ -801,16 +803,6 @@ function Config(opt) {
             if ( !self.Host.isStandalone() ) {
                 callback(err, files, routing)
             } else {
-                // merging all into the startingApp
-                if (conf[self.startingApp][env].content.routing) {
-                    routing = JSON.parse(JSON.stringify(conf[self.startingApp][env].content.routing));
-                    for (var i=0; i<bundles.length; ++i) {
-                        if (bundles[i] != self.startingApp) {
-                            routing = merge(routing, conf[bundles[i]][env].content.routing)
-                        }
-                    }
-                }
-
                 callback(err, files, routing)
             }
         }
