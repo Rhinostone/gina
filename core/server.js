@@ -491,16 +491,45 @@ function Server(options) {
             }
 
         if (!matched) {
-            var wroot = self.conf[self.appName].server.webroot
-                , allowed = null
-                , bundle = self.appName
-                , conf = self.conf[bundle];
+            // find targeted bundle
+            var allowed     = null
+                , bundle    = null
+                , conf      = null;
+            if (self.bundles.length == 1) {
+                bundle = self.bundles[0]
+            } else {
+                end:
+                for (var b in self.conf) {
+                    if ( typeof(self.conf[b].content.statics.count()) != 'undefined' && self.conf[b].content.statics.count() > 0 ) {
+                        for (var s in self.conf[b].content.statics) {
+                            s = (s.substr(0,1) == '/') ? s.substr(1) : s;
+                            if ( (new RegExp('^/'+s)).test(params.url) ) {
+                                bundle = b;
+                                break end
+                            }
+                        }
+                    } else {
+                        // no statics
+                        break
+                    }
+                }
+            }
 
-            var uri = '', key = '';
+
+            if (bundle == null && !res.headersSent) {
+                throwError(res, 404, 'Page not found: \n' + pathname, next);
+                return
+            }
+
+            var uri = ''
+                , key = ''
+                , conf = self.conf[bundle]
+                , wroot = conf.server.webroot;
+
             //webroot test
-            if (self.conf[bundle].server.webroot != '/') {
-                uri = (self.conf[bundle].server.webroot + pathname.replace(self.conf[bundle].server.webroot, '')).split('/');
-                var len = self.conf[bundle].server.webroot.split('/').length;
+            if (wroot != '/') {
+                uri = (wroot + pathname.replace(wroot, '')).split('/');
+                var len = wroot.split('/').length;
                 key = uri.splice(1, len).join('/');
             } else {
                 uri = pathname.split('/');
@@ -558,6 +587,7 @@ function Server(options) {
                             res.writeHead(200, {'Content-Type': 'image/x-icon'} );
                             res.end()
                         }
+
                         if (!res.headersSent)
                             throwError(res, 404, 'Page not found: \n' + pathname, next)
 

@@ -468,7 +468,12 @@ function Config(opt) {
         var filename    = '';
         var appPath     = '';
         var err         = false;
-        var conf        = self.envConf;
+        var conf        = self.envConf, wroot = conf[bundle][env].server.webroot;
+        // standalone setup
+        if ( self.Host.isStandalone() && bundle != self.startingApp && wroot == '/') {
+            wroot = '/'+ bundle;
+            conf[bundle][env].server.webroot = wroot
+        }
 
         conf[bundle][env].bundles = bundles;
         conf[bundle].cacheless = cacheless;
@@ -484,7 +489,7 @@ function Config(opt) {
 
 
         var files = {"routing": {}};
-        var main = '', wroot = conf[bundle][env].server.webroot;
+        var main = '';
         for (var name in  conf[bundle][env].files) {
             main = _(appPath +'/config/'+ conf[bundle][env].files[name]).replace('.'+env, '');
 
@@ -519,11 +524,6 @@ function Config(opt) {
                     routing[rule].bundle = bundle; // for reverse search
                     //webroot control
                     routing[rule].param.file = rule; // get template file
-                    // renaming rule for standalone setup
-                    if ( self.Host.isStandalone() && bundle != self.startingApp && wroot == '/') {
-                        wroot = '/'+ bundle;
-                        conf[bundle][env].server.webroot = wroot
-                    }
 
                     if ( typeof(routing[rule].url) != 'object' ) {
                         // adding / if missing
@@ -564,7 +564,7 @@ function Config(opt) {
                 }
 
                 conf[bundle][env].content.routing = merge(conf[bundle][env].content.routing, ((self.Host.isStandalone()) ? standaloneRouting : routing) );
-                files[name] = conf[bundle][env].content.routing
+                files[name] = routing = conf[bundle][env].content.routing;
                 continue;
             } else if (name == 'routing') {
                 continue;
@@ -710,9 +710,11 @@ function Config(opt) {
             conf[bundle][env].server.webroot  != '/' &&
             typeof(files['statics']) != 'undefined'
         ) {
-            var newStatics = {};
+            var newStatics = {}, _wroot = '';
             if (!wroot) {
-                wroot = ( conf[bundle][env].server.webroot.substr(0,1) == '/' ) ?  conf[bundle][env].server.webroot.substr(1) : conf[bundle][env].server.webroot;
+                _wroot = ( conf[bundle][env].server.webroot.substr(0,1) == '/' ) ?  conf[bundle][env].server.webroot.substr(1) : conf[bundle][env].server.webroot;
+            } else {
+                _wroot = ( wroot.substr(0,1) == '/' ) ?  wroot.substr(1) : wroot;
             }
 
             var k;
@@ -724,7 +726,7 @@ function Config(opt) {
                         i = '/' + i
                     }
 
-                    newStatics[ wroot + i] = files['statics'][k]
+                    newStatics[ _wroot + i] = files['statics'][k]
                 } else {
                     newStatics[k] = files['statics'][k]
                 }
@@ -768,8 +770,8 @@ function Config(opt) {
 
         files = whisper(reps, files);
 
-        if ( hasViews ) {
-            routing = files['routing'];
+        if ( hasViews && routing.count() > 0 ) {
+            //routing = files['routing'];
 
             for (var rule in routing) {
                 if (!files['views'].default.useRouteNameAsFilename && routing[rule].param.namespace != 'framework') {
