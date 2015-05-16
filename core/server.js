@@ -41,38 +41,34 @@ function Server(options) {
         self.env = options.env;
         local.router = new Router(self.env);
 
-        self.cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
-
-        //False => multiple apps sharing the same server (port).
+        //True => multiple bundles sharing the same server (port).
         self.isStandalone = options.isStandalone;
 
         self.executionPath = options.executionPath;
 
-        //console.log("Gina ", options);
         self.bundles = options.bundles;
-
-        //console.log("!!Stand alone ? ", this.isStandalone, this.bundles, '\n'+options.conf);
-        //console.log("CONF CONTENT \n",  options.conf[this.appName][this.env]);
+        self.conf = {};
 
         if (!self.isStandalone) {
             //Only load the related conf / env.
-            self.conf[self.appName] = options.conf[self.appName][self.env];
-            self.conf[self.appName].bundlesPath = options.conf[self.appName][self.env].bundlesPath;
-            self.conf[self.appName].modelsPath =  options.conf[self.appName][self.env].modelsPath;
+            self.conf[self.appName][self.env] = options.conf[self.appName][self.env];
+            self.conf[self.appName][self.env].bundlesPath = options.conf[self.appName][self.env].bundlesPath;
+            self.conf[self.appName][self.env].modelsPath =  options.conf[self.appName][self.env].modelsPath;
         } else {
 
             //console.log("Running mode not handled yet..", self.appName, " VS ", self.bundles);
             //Load all conf for the related apps & env.
             var apps = self.bundles;
             for (var i=0; i<apps.length; ++i) {
-                self.conf[apps[i]] = options.conf[apps[i]][self.env];
-                self.conf[apps[i]].bundlesPath = options.conf[apps[i]][self.env].bundlesPath;
-                self.conf[apps[i]].modelsPath = options.conf[apps[i]][self.env].modelsPath;
+                self.conf[apps[i]] = {};
+                self.conf[apps[i]][self.env] = options.conf[apps[i]][self.env];
+                self.conf[apps[i]][self.env].bundlesPath = options.conf[apps[i]][self.env].bundlesPath;
+                self.conf[apps[i]][self.env].modelsPath = options.conf[apps[i]][self.env].modelsPath;
             }
         }
 
 
-        self.emit('configured', false, express(), express, self.conf[self.appName])
+        self.emit('configured', false, express(), express, self.conf[self.appName][self.env])
     }
 
 
@@ -94,7 +90,7 @@ function Server(options) {
             console.debug('Routing loaded' + '\n'+ JSON.stringify(self.routing, null, '\t'));
 
             if ( hasViews(self.appName) ) {
-                utils.url(self.conf[self.appName], self.routing)
+                utils.url(self.conf[self.appName][self.env], self.routing)
             }
 
             if (!err) {
@@ -114,7 +110,6 @@ function Server(options) {
             , conf          =  config.getInstance(self.appName)
             , cacheless     = config.isCacheless()
             , env           = self.env
-            , cacheless     = self.cacheless
             , apps          = conf.bundles
             , filename      = ''
             , appName       = ''
@@ -133,16 +128,16 @@ function Server(options) {
 
         //Standalone or shared instance mode. It doesn't matter.
         for (; i<apps.length; ++i) {
-            var appPath = _(self.conf[apps[i]].bundlesPath+ '/' + apps[i]);
+            var appPath = _(self.conf[apps[i]][self.env].bundlesPath+ '/' + apps[i]);
             appName =  apps[i];
 
             //Specific case.
             if (!self.isStandalone && i == 0) appName = apps[i];
 
             try {
-                main = _(appPath + '/config/' + self.conf[apps[i]].files.routing);
+                main = _(appPath + '/config/' + self.conf[apps[i]][self.env].files.routing);
                 filename = main;//by default
-                filename = self.conf[apps[i]].files.routing.replace(/.json/, '.' +env + '.json');
+                filename = self.conf[apps[i]][self.env].files.routing.replace(/.json/, '.' +env + '.json');
                 filename = _(appPath + '/config/' + filename);
                 //Can't do a thing without.
                 if ( !fs.existsSync(filename) ) {
@@ -165,18 +160,18 @@ function Server(options) {
                     //Adding important properties; also done in core/config.
                     for (var rule in tmp){
                         tmp[rule].bundle = apps[i]; // for reverse search
-                        wroot = self.conf[apps[i]].server.webroot;
+                        wroot = self.conf[apps[i]][self.env].server.webroot;
                         tmp[rule].param.file = rule; // get template file
                         // renaming rule for standalone setup
                         if ( self.isStandalone && apps[i] != self.appName && wroot == '/') {
                             wroot = '/'+ apps[i];
-                            self.conf[apps[i]].server.webroot = wroot
+                            self.conf[apps[i]][self.env].server.webroot = wroot
                         }
 
                         if (typeof(tmp[rule].url) != 'object') {
                             if (tmp[rule].url.length > 1 && tmp[rule].url.substr(0,1) != '/') {
                                 tmp[rule].url = '/'+tmp[rule].url
-                            } else if (tmp[rule].url.length > 1 && self.conf[apps[i]].server.webroot.substr(self.conf[apps[i]].server.webroot.length-1,1) == '/') {
+                            } else if (tmp[rule].url.length > 1 && self.conf[apps[i]][self.env].server.webroot.substr(self.conf[apps[i]][self.env].server.webroot.length-1,1) == '/') {
                                 tmp[rule].url = tmp[rule].url.substr(1)
                             } else {
                                 if (wroot.substr(wroot.length-1,1) == '/') {
@@ -190,7 +185,7 @@ function Server(options) {
                             for (var u=0; u<tmp[rule].url.length; ++u) {
                                 if (tmp[rule].url[u].length > 1 && tmp[rule].url[u].substr(0,1) != '/') {
                                     tmp[rule].url[u] = '/'+tmp[rule].url[u]
-                                } else if (tmp[rule].url[u].length > 1 && self.conf[apps[i]].server.webroot.substr(self.conf[apps[i]].server.webroot.length-1,1) == '/') {
+                                } else if (tmp[rule].url[u].length > 1 && self.conf[apps[i]][self.env].server.webroot.substr(self.conf[apps[i]][self.env].server.webroot.length-1,1) == '/') {
                                     tmp[rule].url[u] = tmp[rule].url[u].substr(1)
                                 } else {
                                     if (wroot.substr(wroot.length-1,1) == '/') {
@@ -206,8 +201,7 @@ function Server(options) {
                             // This is only an issue when it comes to the frontend dev
                             // views.useRouteNameAsFilename is set to true by default
                             // IF [ false ] the action is used as filename
-                            if ( !self.conf[apps[i]].content['views']['default'].useRouteNameAsFilename && tmp[rule].param.bundle != 'framework') {
-                                //tmp[rule].param.file = tmp[rule].param.action;
+                            if ( !self.conf[apps[i]][self.env].content['views']['default'].useRouteNameAsFilename && tmp[rule].param.bundle != 'framework') {
                                 var tmpRouting = [];
                                 for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
                                     if (/[A-Z]/.test(tmp[rule].param.file.charAt(r))) {
@@ -240,20 +234,20 @@ function Server(options) {
                 callback(err)
             }
 
-            self.conf[apps[i]].content.routing = (self.isStandalone) ? standaloneTmp : tmp;
+            self.conf[apps[i]][self.env].content.routing = (self.isStandalone) ? standaloneTmp : tmp;
         }//EO for.
 
-        self.routing = self.conf[self.appName].content.routing
+        self.routing = self.conf[self.appName][self.env].content.routing
 
         callback(false)
     }
 
     var hasViews = function(bundle) {
-        var _hasViews;
+        var _hasViews = false;
         if (typeof(local.hasViews[bundle]) != 'undefined') {
             _hasViews = local.hasViews[bundle];
         } else {
-            _hasViews = ( typeof(self.conf[bundle].content['views']) != 'undefined' ) ? true : false;
+            _hasViews = ( typeof(self.conf[bundle][self.env].content['views']) != 'undefined' ) ? true : false;
             local.hasViews[bundle] = _hasViews;
         }
 
@@ -280,7 +274,7 @@ function Server(options) {
     var onRequest = function() {
 
         var apps = self.bundles;
-        var webrootLen = self.conf[self.appName].server.webroot.length;
+        var webrootLen = self.conf[self.appName][self.env].server.webroot.length;
 
         self.instance.all('*', function onInstance(request, response, next) {
             // Fixing an express js bug :(
@@ -288,13 +282,13 @@ function Server(options) {
             // which causes : /path/dir/path/dir/  <---- by trying to add a slash in the end
             if (
                 webrootLen > 1
-                && request.url === self.conf[self.appName].server.webroot + '/' + self.conf[self.appName].server.webroot + '/'
+                && request.url === self.conf[self.appName][self.env].server.webroot + '/' + self.conf[self.appName][self.env].server.webroot + '/'
             ) {
-                request.url = self.conf[self.appName].server.webroot
+                request.url = self.conf[self.appName][self.env].server.webroot
             }
             //Only for dev & debug.
-            self.conf[self.appName]['protocol'] = request.protocol || self.conf[self.appName]['hostname'];
-            self.conf[self.appName]['hostname'] = self.conf[self.appName]['protocol'] +'://'+ request.headers.host;
+            self.conf[self.appName][self.env]['protocol'] = request.protocol || self.conf[self.appName][self.env]['hostname'];
+            self.conf[self.appName][self.env]['hostname'] = self.conf[self.appName][self.env]['protocol'] +'://'+ request.headers.host;
 
             request.post = {};
             request.get = {};
@@ -342,14 +336,14 @@ function Server(options) {
 
 
 
-                loadBundleConfiguration(request, response, next, self.appName, function (err, pathname, cacheless, req, res, next) {
+                loadBundleConfiguration(request, response, next, function (err, bundle, pathname, cacheless, req, res, next) {
                     if (!req.handled) {
                         req.handled = true;
                         console.debug('loadBundleConfiguration called back..');
                         if (err) {
                             throwError(response, 500, 'Internal server error\n' + err.stack, next)
                         } else {
-                            handle(req, res, next, pathname, cacheless)
+                            handle(req, res, next, bundle, pathname, cacheless)
                         }
                     }
                 })
@@ -358,17 +352,17 @@ function Server(options) {
 
         });//EO this.instance
 
-        var hostname = self.conf[self.appName].protocol + '://' + self.conf[self.appName].host + ':' + self.conf[self.appName].port[self.conf[self.appName].protocol];
+        var hostname = self.conf[self.appName][self.env].protocol + '://' + self.conf[self.appName][self.env].host + ':' + self.conf[self.appName][self.env].port[self.conf[self.appName][self.env].protocol];
         console.info(
                 '\nbundle: [ ' + self.appName +' ]',
                 '\nenv: [ '+ self.env +' ]',
-                //'\nport: ' + self.conf[self.appName].port.http,
+                //'\nport: ' + self.conf[self.appName][self.env].port.http,
                 '\npid: ' + process.pid,
                 '\nThis way please -> '+ hostname
         );
 
 
-        self.instance.listen(self.conf[self.appName].port.http);//By Default 8888
+        self.instance.listen(self.conf[self.appName][self.env].port.http);//By Default 3100
     }
 
     var getHead = function(file) {
@@ -377,27 +371,48 @@ function Server(options) {
         if( typeof(self.validHeads[s[s.length-1]]) != 'undefiend' ) {
             type = self.validHeads[s[s.length-1]];
             if (!type) {
-                console.warn('[ '+file+' ] extension: `'+s[2]+'` not supported by `core/mime.types`. Replacing with `plain/text` ')
+                console.warn('[ '+file+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Replacing with `plain/text` ')
             }
         }
         return type || 'plain/text'
     }
 
-    var loadBundleConfiguration = function(req, res, next, bundle, callback) {
+    var loadBundleConfiguration = function(req, res, next, callback) {
 
         var config = new Config();
         config.setBundles(self.bundles);
         var conf = config.getInstance(bundle);
-
-        var pathname = url.parse(req.url, true).pathname;
-
-        if ( /\/favicon\.ico/.test(pathname) && !hasViews(bundle)) {
-            callback(false, pathname, req, res, next);
-            return false
+        if ( typeof(conf) != 'undefined') {//for cacheless mode
+            self.conf = conf
         }
 
-        if ( typeof(conf) != 'undefined') {//for cacheless mode
-            self.conf[bundle] = conf
+        var pathname = url.parse(req.url, true).pathname;
+        var bundle = self.appName; // by default
+
+        // finding bundle
+        if (self.isStandalone) {
+
+            end:
+                for (var b in conf) {
+                    if ( typeof(conf[b][self.env].content.statics) != 'undefined' && conf[b][self.env].content.statics.count() > 0 ) {
+                        for (var s in conf[b][self.env].content.statics) {
+                            s = (s.substr(0,1) == '/') ? s.substr(1) : s;
+                            if ( (new RegExp('^/'+s)).test(pathname) ) {
+                                bundle = b;
+                                break end
+                            }
+                        }
+                    } else {
+                        // no statics ... use startingApp and leave it to handle()
+                        self.isNotStatic = true
+                        break
+                    }
+                }
+        }
+
+        if ( /\/favicon\.ico/.test(pathname) && !hasViews(bundle)) {
+            callback(false, bundle, pathname, req, res, next);
+            return false
         }
 
         onBundleConfigLoaded(bundle, {
@@ -432,27 +447,27 @@ function Server(options) {
                 } else {
                     //refreshing routing at the same time.
                     self.routing = routing;
-                    callback(err, pathname, cacheless, req, res, next)
+                    callback(err, bundle, pathname, cacheless, req, res, next)
                 }
             })
         }
     }
 
-    var handle = function(req, res, next, pathname, cacheless) {
+    var handle = function(req, res, next, bundle, pathname, cacheless) {
         var matched         = false
             , isRoute       = {}
-            , withViews     = hasViews(self.appName)
+            , withViews     = hasViews(bundle)
             , router        = local.router;
 
         console.debug('about to handle [ '+ pathname + ' ] route');
         router.setMiddlewareInstance(self.instance);
 
         //Middleware configuration.
-        req.setEncoding(self.conf[self.appName].encoding);
+        req.setEncoding(self.conf[bundle][self.env].encoding);
 
         if ( self.routing == null || self.routing.count() == 0 ) {
-            console.error('Malformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl);
-            throwError(res, 500, 'Internal server error\nMalformed routing or Null value for application [' + self.appName + '] => ' + req.originalUrl, next);
+            console.error('Malformed routing or Null value for bundle [' + bundle + '] => ' + req.originalUrl);
+            throwError(res, 500, 'Internal server error\nMalformed routing or Null value for bundle [' + bundke + '] => ' + req.originalUrl, next);
         }
 
         var params = {}
@@ -490,41 +505,20 @@ function Server(options) {
                 }
             }
 
+
         if (!matched) {
+
+            if ( typeof(self.isNotStatic) != 'undefined' && !res.headersSent) {
+                delete self.isNotStatic;
+                throwError(res, 404, 'Page not found: \n' + pathname, next)
+            }
             // find targeted bundle
             var allowed     = null
-                , bundle    = null
-                , conf      = null;
-            if (self.bundles.length == 1) {
-                bundle = self.bundles[0]
-            } else {
-                end:
-                for (var b in self.conf) {
-                    if ( typeof(self.conf[b].content.statics.count()) != 'undefined' && self.conf[b].content.statics.count() > 0 ) {
-                        for (var s in self.conf[b].content.statics) {
-                            s = (s.substr(0,1) == '/') ? s.substr(1) : s;
-                            if ( (new RegExp('^/'+s)).test(params.url) ) {
-                                bundle = b;
-                                break end
-                            }
-                        }
-                    } else {
-                        // no statics
-                        break
-                    }
-                }
-            }
-
-
-            if (bundle == null && !res.headersSent) {
-                throwError(res, 404, 'Page not found: \n' + pathname, next);
-                return
-            }
-
-            var uri = ''
-                , key = ''
-                , conf = self.conf[bundle]
-                , wroot = conf.server.webroot;
+                , conf      = null
+                , uri       = ''
+                , key       = ''
+                , conf      = self.conf[bundle][self.env]
+                , wroot     = conf.server.webroot;
 
             //webroot test
             if (wroot != '/') {

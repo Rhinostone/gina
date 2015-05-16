@@ -445,7 +445,7 @@ function Config(opt) {
         return self.allBundles
     }
 
-    var loadBundleConfig = function(bundles, b, callback, reload) {
+    var loadBundleConfig = function(bundles, b, callback, reload, collectedRules) {
 
         if ( typeof(bundles[b]) == "undefined") {
             var bundle = self.startingApp
@@ -454,6 +454,10 @@ function Config(opt) {
         }
         var cacheless   = self.isCacheless();
         var env         = self.env || self.Env.get();
+        if ( typeof(collectedRules) == 'undefined') {
+            var collectedRules = {}
+        }
+
         var routing     = {
             //"home": {
             //    "url": "/@doc",
@@ -463,12 +467,14 @@ function Config(opt) {
             //    }
             //}
         };
+
         var standaloneRouting = {};
         var tmp         = '';
         var filename    = '';
         var appPath     = '';
         var err         = false;
-        var conf        = self.envConf, wroot = conf[bundle][env].server.webroot;
+        var conf        = self.envConf
+            , wroot = conf[bundle][env].server.webroot;
         // standalone setup
         if ( self.Host.isStandalone() && bundle != self.startingApp && wroot == '/') {
             wroot = '/'+ bundle;
@@ -476,7 +482,7 @@ function Config(opt) {
         }
 
         conf[bundle][env].bundles = bundles;
-        conf[bundle].cacheless = cacheless;
+        conf[bundle][env].cacheless = cacheless;
         conf[bundle][env].executionPath = getContext("paths").root;
 
 
@@ -529,8 +535,8 @@ function Config(opt) {
                         // adding / if missing
                         if (routing[rule].url.length > 1 && routing[rule].url.substr(0,1) != '/') {
                             routing[rule].url = '/' + routing[rule].url
-                        } else if (routing[rule].url.length > 1 && conf[bundle][env].server.webroot.substr(conf[bundle][env].server.webroot.length-1,1) == '/') {
-                            routing[rule].url = routing[rule].url.substr(1)
+                        //} else if (routing[rule].url.length > 1 && conf[bundle][env].server.webroot.substr(conf[bundle][env].server.webroot.length-1,1) == '/') {
+                        //    routing[rule].url = routing[rule].url.substr(1)
                         } else {
                             if (wroot.substr(wroot.length-1,1) == '/') {
                                 wroot = wroot.substr(wroot.length-1,1).replace('/', '')
@@ -554,17 +560,12 @@ function Config(opt) {
                         }
                     }
 
-                    if ( self.Host.isStandalone() && routing[rule]) {
-                        if (bundle != self.startingApp) {
-                            standaloneRouting[bundle + '-' + rule] = JSON.parse(JSON.stringify(routing[rule]));
-                        } else {
-                            standaloneRouting[rule] = JSON.parse(JSON.stringify(routing[rule]))
-                        }
+                    if ( self.Host.isStandalone() && routing[rule] && bundle != self.startingApp ) {
+                        standaloneRouting[bundle + '-' + rule] = JSON.parse(JSON.stringify(routing[rule]))
                     }
                 }
 
-                conf[bundle][env].content.routing = merge(conf[bundle][env].content.routing, ((self.Host.isStandalone()) ? standaloneRouting : routing) );
-                files[name] = routing = conf[bundle][env].content.routing;
+                files[name] = collectedRules = merge(true, collectedRules, ((self.Host.isStandalone() && bundle != self.startingApp ) ? standaloneRouting : routing));
                 continue;
             } else if (name == 'routing') {
                 continue;
@@ -770,25 +771,6 @@ function Config(opt) {
 
         files = whisper(reps, files);
 
-        if ( hasViews && routing.count() > 0 ) {
-            //routing = files['routing'];
-
-            for (var rule in routing) {
-                if (!files['views'].default.useRouteNameAsFilename && routing[rule].param.namespace != 'framework') {
-                    var tmpRouting = [];
-                    for (var i = 0, len = routing[rule].param.file.length; i < len; ++i) {
-                        if (/[A-Z]/.test(routing[rule].param.file.charAt(i))) {
-                            tmpRouting[0] = routing[rule].param.file.substring(0, i);
-                            tmpRouting[1] = '-' + (routing[rule].param.file.charAt(i)).toLocaleLowerCase();
-                            tmpRouting[2] = routing[rule].param.file.substring(i + 1);
-                            routing[rule].param.file = tmpRouting[0] + tmpRouting[1] + tmpRouting[2];
-                            ++i;
-                        }
-                    }
-                }
-            }
-        }
-
         if ( typeof(conf[bundle][env].content) == 'undefined') {
             conf[bundle][env].content = {}
         }
@@ -800,12 +782,12 @@ function Config(opt) {
 
         ++b;
         if (b < bundles.length) {
-            loadBundleConfig(bundles, b, callback, reload)
+            loadBundleConfig(bundles, b, callback, reload, collectedRules)
         } else {
             if ( !self.Host.isStandalone() ) {
-                callback(err, files, routing)
+                callback(err, files, collectedRules)
             } else {
-                callback(err, files, routing)
+                callback(err, files, collectedRules)
             }
         }
     }
@@ -840,32 +822,30 @@ function Config(opt) {
      * @param {boolean|string} err
      * */
     this.refresh = function(bundle, callback) {
-        var env = self.Env.get();
-        var conf = self.envConf[bundle][env];
-
-
-        //Reload models.
-        var modelsPath = _(conf.modelsPath);
-
-        if ( fs.existsSync(modelsPath) ) {
-            //Reload conf.
-
-            loadBundleConfig(
-                self.bundles,
-                0,
-                function doneLoadingBundleConfig(err, files, routing) {
-                    if (!err) {
-                        modelUtil.reloadModels(
-                            conf,
-                            function doneReloadingModel() {
-                                callback(false, routing)
-                            })
-                    } else {
-                        callback(err)
-                    }
-                }, true)
-
-        } else {
+        //var env = self.Env.get();
+        //var conf = self.envConf[bundle][env];
+        ////Reload models.
+        //var modelsPath = _(conf.modelsPath);
+        //
+        //if ( fs.existsSync(modelsPath) ) {
+        //    //Reload conf.
+        //
+        //    loadBundleConfig(
+        //        self.bundles,
+        //        0,
+        //        function doneLoadingBundleConfig(err, files, routing) {
+        //            if (!err) {
+        //                modelUtil.reloadModels(
+        //                    conf,
+        //                    function doneReloadingModel() {
+        //                        callback(false, routing)
+        //                    })
+        //            } else {
+        //                callback(err)
+        //            }
+        //        }, true)
+        //
+        //} else {
             //Reload conf. who likes repetition ?
             loadBundleConfig(
                 self.bundles,
@@ -877,8 +857,23 @@ function Config(opt) {
                         callback(err)
                     }
                 }, true)
-        }
+        //}
     }//EO refresh.
+
+    this.refreshModels = function(bundle, callback) {
+        var env = self.Env.get()
+            , conf = self.envConf[bundle][env]
+            //Reload models.
+            , modelsPath = _(conf.modelsPath)
+            , routing = conf.content.routing;
+
+        modelUtil.reloadModels(
+            conf,
+            function doneReloadingModel() {
+                callback(false, routing)
+            })
+
+    }
 
     if (!opt) {
 
