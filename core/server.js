@@ -51,7 +51,7 @@ function Server(options) {
 
         if (!self.isStandalone) {
             //Only load the related conf / env.
-            self.conf[apps[i]] = {};
+            self.conf[self.appName] = {};
             self.conf[self.appName][self.env] = options.conf[self.appName][self.env];
             self.conf[self.appName][self.env].bundlesPath = options.conf[self.appName][self.env].bundlesPath;
             self.conf[self.appName][self.env].modelsPath =  options.conf[self.appName][self.env].modelsPath;
