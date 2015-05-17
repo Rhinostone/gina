@@ -387,12 +387,20 @@ function Config(opt) {
 
 
                 //Variables replace. Compare with gina/core/template/conf/env.json.
+                var version = undefined;
+                try {
+                    version = require(_(getPath('gina') +'/package.json' )).version
+                } catch (err) {
+                    console.debug(err.stack)
+                }
+
                 var reps = {
                     "executionPath" : root,
                     "bundlesPath" : appsPath,
                     "modelsPath" : modelsPath,
                     "env" : env,
-                    "bundle" : app
+                    "bundle" : app,
+                    "version": version
                 };
 
 
