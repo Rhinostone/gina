@@ -820,57 +820,43 @@ function Config(opt) {
      * @param {boolean|string} err
      * */
     this.refresh = function(bundle, callback) {
-        //var env = self.Env.get();
-        //var conf = self.envConf[bundle][env];
-        ////Reload models.
-        //var modelsPath = _(conf.modelsPath);
-        //
-        //if ( fs.existsSync(modelsPath) ) {
-        //    //Reload conf.
-        //
-        //    loadBundleConfig(
-        //        self.bundles,
-        //        0,
-        //        function doneLoadingBundleConfig(err, files, routing) {
-        //            if (!err) {
-        //                modelUtil.reloadModels(
-        //                    conf,
-        //                    function doneReloadingModel() {
-        //                        callback(false, routing)
-        //                    })
-        //            } else {
-        //                callback(err)
-        //            }
-        //        }, true)
-        //
-        //} else {
-            //Reload conf. who likes repetition ?
-            loadBundleConfig(
-                self.bundles,
-                0,
-                function doneLoadingBundleConfig(err, files, routing) {
-                    if (!err) {
-                        callback(false, routing)
-                    } else {
-                        callback(err)
-                    }
-                }, true)
-        //}
+        //Reload conf. who likes repetition ?
+        loadBundleConfig(
+            self.bundles,
+            0,
+            function doneLoadingBundleConfig(err, files, routing) {
+                if (!err) {
+                    callback(false, routing)
+                } else {
+                    callback(err)
+                }
+            }, true)
     }//EO refresh.
 
+    /**
+     * Reloading bundle model
+     *
+     * @param {string} bundle - bundle name
+     * @callback {function} callback
+     * @param {boolean} error
+     * */
     this.refreshModels = function(bundle, callback) {
         var env = self.Env.get()
             , conf = self.envConf[bundle][env]
             //Reload models.
-            , modelsPath = _(conf.modelsPath)
-            , routing = conf.content.routing;
+            , modelsPath = _(conf.modelsPath);
 
-        modelUtil.reloadModels(
-            conf,
-            function doneReloadingModel() {
-                callback(false, routing)
-            })
-
+        fs.exists(modelsPath, function(exists){
+            if (exists) {
+                modelUtil.reloadModels(
+                    conf,
+                    function doneReloadingModel() {
+                        callback(false)
+                    })
+            } else {
+                callback(false)
+            }
+        })
     }
 
     if (!opt) {
