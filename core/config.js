@@ -535,8 +535,6 @@ function Config(opt) {
                         // adding / if missing
                         if (routing[rule].url.length > 1 && routing[rule].url.substr(0,1) != '/') {
                             routing[rule].url = '/' + routing[rule].url
-                        //} else if (routing[rule].url.length > 1 && conf[bundle][env].server.webroot.substr(conf[bundle][env].server.webroot.length-1,1) == '/') {
-                        //    routing[rule].url = routing[rule].url.substr(1)
                         } else {
                             if (wroot.substr(wroot.length-1,1) == '/') {
                                 wroot = wroot.substr(wroot.length-1,1).replace('/', '')
@@ -691,7 +689,7 @@ function Config(opt) {
                 }
                 ++d
             }
-            files['statics'] = (files['statics'], statics);
+            files['statics'] = merge(files['statics'], statics);
 
             if (hasViews && typeof(files['views']) == 'undefined') {
                 files['views'] = require(viewsPath)
