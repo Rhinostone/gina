@@ -3,9 +3,10 @@
   "description": "MVC Framework for Node.",
   "keywords": [
     "framework",
-    "micro framework",
+    "micro service",
     "mvc",
     "mvc framework",
+    "micro framework",
     "router",
     "api",
     "web",
@@ -14,7 +15,7 @@
     "gina.io",
     "gina js"
   ],
-  "version": "0.0.9p42",
+  "version": "0.0.9p43",
   "repository": {
     "type": "git",
     "url": "https://github.com/rhinostone/gina.git"

@@ -128,13 +128,10 @@ function PostInstall() {
                 utils.generator.createFileFromTemplate(source, target);
                 keepGoing(filename)
             }
-
         } else {
+            filename += '.sh';// patch for latest npm release
             keepGoing(filename)
         }
-
-
-
     }
 
     var hasNodeModulesSync = function() {
