@@ -337,14 +337,14 @@ function Server(options) {
 
 
 
-                loadBundleConfiguration(request, response, next, function (err, bundle, pathname, cacheless, req, res, next) {
+                loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
                     if (!req.handled) {
                         req.handled = true;
                         console.debug('loadBundleConfiguration called back..');
                         if (err) {
                             throwError(response, 500, 'Internal server error\n' + err.stack, next)
                         } else {
-                            handle(req, res, next, bundle, pathname, cacheless)
+                            handle(req, res, next, bundle, pathname, config)
                         }
                     }
                 })
@@ -418,7 +418,7 @@ function Server(options) {
 
         onBundleConfigLoaded(bundle, {
             err : false,
-            cacheless : config.isCacheless(),
+            config : config,
             pathname : pathname,
             req : req,
             res : res,
@@ -429,14 +429,14 @@ function Server(options) {
     }
 
     var onBundleConfigLoaded = function(bundle, options) {
-        var err = options.err;
-        var cacheless = options.cacheless;
-        var pathname = options.pathname;
-        var req = options.req;
-        var res = options.res;
-        var config = options.conf;
-        var next = options.next;
-        var callback = options.callback;
+        var err         = options.err
+            , cacheless = options.config.isCacheless()
+            , pathname  = options.pathname
+            , req       = options.req
+            , res       = options.res
+            , config    = options.conf
+            , next      = options.next
+            , callback  = options.callback;
 
         //Reloading assets & files.
         if (!cacheless) { // all but dev & debug
@@ -448,17 +448,18 @@ function Server(options) {
                 } else {
                     //refreshing routing at the same time.
                     self.routing = routing;
-                    callback(err, bundle, pathname, cacheless, req, res, next)
+                    callback(err, bundle, pathname, options.config, req, res, next)
                 }
             })
         }
     }
 
-    var handle = function(req, res, next, bundle, pathname, cacheless) {
+    var handle = function(req, res, next, bundle, pathname, config) {
         var matched         = false
             , isRoute       = {}
             , withViews     = hasViews(bundle)
-            , router        = local.router;
+            , router        = local.router
+            , cacheless     = config.isCacheless();
 
         console.debug('about to handle [ '+ pathname + ' ] route');
         router.setMiddlewareInstance(self.instance);
@@ -497,7 +498,13 @@ function Server(options) {
                         throwError(res, 405, 'Method Not Allowed for [' + self.appName + '] => ' + req.originalUrl, next)
                     } else {
                         // onRouting Event ???
-                        router.route(req, res, next, params)
+                        if ( cacheless ) {
+                            config.refreshModels(bundle, function onModelRefreshed(){
+                                router.route(req, res, next, params)
+                            })
+                        } else {
+                            router.route(req, res, next, params)
+                        }
                     }
                     matched = true;
                     isRoute = {};
@@ -581,7 +588,7 @@ function Server(options) {
                         if (wroot.substr(wroot.length-1,1) == '/') {
                             wroot = wroot.substr(wroot.length-1,1).replace('/', '')
                         }
-
+                        // web services case ... when you hit from a web browser
                         if (pathname === wroot + '/favicon.ico' && !withViews && !res.headersSent ) {
                             res.writeHead(200, {'Content-Type': 'image/x-icon'} );
                             res.end()
