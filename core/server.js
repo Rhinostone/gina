@@ -162,7 +162,7 @@ function Server(options) {
                     for (var rule in tmp){
                         tmp[rule].bundle = apps[i]; // for reverse search
                         wroot = self.conf[apps[i]][self.env].server.webroot;
-                        tmp[rule].param.file = rule; // get template file
+                        tmp[rule].param.file = ( typeof(tmp[rule].param.file) != 'undefined' ) ? tmp[rule].param.file : rule; // get template file
                         // renaming rule for standalone setup
                         if ( self.isStandalone && apps[i] != self.appName && wroot == '/') {
                             wroot = '/'+ apps[i];
@@ -495,11 +495,11 @@ function Server(options) {
 
                     var allowed = (typeof(routing[rule].method) == 'undefined' || routing[rule].method.length > 0 || routing[rule].method.indexOf(req.method) != -1)
                     if (!allowed) {
-                        throwError(res, 405, 'Method Not Allowed for [' + self.appName + '] => ' + req.originalUrl, next)
+                        throwError(res, 405, 'Method Not Allowed for [' + params.bundle + '] => ' + req.originalUrl, next)
                     } else {
                         // onRouting Event ???
                         if ( cacheless ) {
-                            config.refreshModels(bundle, function onModelRefreshed(){
+                            config.refreshModels(params.bundle, function onModelRefreshed(){
                                 router.route(req, res, next, params)
                             })
                         } else {

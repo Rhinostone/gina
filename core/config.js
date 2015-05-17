@@ -529,7 +529,7 @@ function Config(opt) {
                 for (var rule in routing) {
                     routing[rule].bundle = bundle; // for reverse search
                     //webroot control
-                    routing[rule].param.file = rule; // get template file
+                    routing[rule].param.file = ( typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: rule; // get template file
 
                     if ( typeof(routing[rule].url) != 'object' ) {
                         // adding / if missing

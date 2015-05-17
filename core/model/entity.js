@@ -109,7 +109,8 @@ function EntitySuper(conn) {
 
                 entity.on(events[i], (function(e) {
                     return function() {
-                        console.debug('calling back from event: ', e);
+                        console.debug('calling back from event: ' + e);
+                        // TODO - put try catch, retrieve Controller [res] & throwError() on exception
                         var f = e.split(/\#/)[1];
                         entity.emit(entity.name+'#'+f, arguments);
                         // won't work here in some cases... save it for another case... out of here
