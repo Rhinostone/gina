@@ -468,7 +468,7 @@ function Server(options) {
 
         if ( self.routing == null || self.routing.count() == 0 ) {
             console.error('Malformed routing or Null value for bundle [' + bundle + '] => ' + req.originalUrl);
-            throwError(res, 500, 'Internal server error\nMalformed routing or Null value for bundle [' + bundke + '] => ' + req.originalUrl, next);
+            throwError(res, 500, 'Internal server error\nMalformed routing or Null value for bundle [' + bundle + '] => ' + req.originalUrl, next);
         }
 
         var params = {}
@@ -532,7 +532,11 @@ function Server(options) {
             }
 
             //static filter
-            if ( typeof(conf.content.statics) != 'undefined' &&  typeof(conf.content.statics[key]) != 'undefined' && typeof(key) != 'undefined') {
+            if ( typeof(conf.content.statics) != 'undefined'
+                && typeof(conf.content.statics[key]) != 'undefined'
+                && typeof(key) != 'undefined'
+                && req.url === wroot + req.url.replace(wroot, '')
+            ) {
                 // No sessions for statics
                 if (req.session) {
                     delete req['session']
