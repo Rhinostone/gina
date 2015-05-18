@@ -483,6 +483,7 @@ function Server(options) {
                 params = {
                     requirements : routing[rule].requirements,
                     url : pathname,
+                    rule: rule,
                     param : routing[rule].param,
                     middleware : routing[rule].middleware,
                     bundle: routing[rule].bundle

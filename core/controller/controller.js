@@ -75,6 +75,28 @@ function Controller(options) {
     this.setOptions = function(req, res, next, options) {
         local.options = Controller.instance._options = options;
 
+        // N.B.: Avoid setting `page` data as much as possible from the routing.json
+        // It will be easier for the framework if set from the controller.
+        // e.g.:
+        //      var data = { page: { title: "my-title"}};
+        //      self.render(data, req, res)
+        if ( typeof(options.conf.content.routing[options.rule].param.page) !=  'undefined' ) {
+            var str = 'page.', p = options.conf.content.routing[options.rule].param.page;
+            for (var key in p) {
+                if (p.hasOwnProperty(key)) {
+                    str += key + '.';
+                    var obj = p[key], value = '';
+                    for (var prop in obj) {
+                        if (obj.hasOwnProperty(prop)) {
+                            value += obj[prop]
+                        } else {
+                            self.set(str.substr(0, str.length-1), value);
+                        }
+                    }
+                }
+            }
+        }
+
         local.req = req;
         local.res = res;
         local.next = next;
@@ -304,7 +326,8 @@ function Controller(options) {
      * @return {void}
      * */
     this.set = function(variable, value) {
-        self._data[variable] = value
+        if ( typeof(self._data[variable]) == 'undefined' )
+            self._data[variable] = value
     }
 
     /**

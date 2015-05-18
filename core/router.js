@@ -250,7 +250,8 @@ function Router(env) {
             conf            : conf,
             instance        : self.middlewareInstance,
             views           : ( routeHasViews ) ? conf.content.views : undefined,
-            cacheless       : cacheless
+            cacheless       : cacheless,
+            rule            : params.rule
         };
 
 
