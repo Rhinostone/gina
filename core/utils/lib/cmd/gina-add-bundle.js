@@ -2,7 +2,9 @@ var AddBundle;
 
 //imports
 var fs = require('fs');
-var utils = getContext('gina.utils');
+//var utils = getContext('gina.utils');
+var utils = require('gina').utils;
+var console = utils.logger;
 var GINA_PATH = _( getPath('gina.core') );
 var Config = require( _( GINA_PATH + '/config') );
 var readline = require('readline');
@@ -38,7 +40,7 @@ AddBundle = function(opt, project, env, bundle) {
         self.envData = require(env);
 
         self.bundle = bundle;
-        console.log('adding', bundle);
+        console.debug('adding', bundle);
 
         try {
             check()
@@ -74,7 +76,7 @@ AddBundle = function(opt, project, env, bundle) {
                         break;
                 }
             }).on('close', function() {
-                console.log('exiting bundle installation');
+                console.debug('exiting bundle installation');
                 process.exit(0)
             })
 
@@ -242,7 +244,7 @@ AddBundle = function(opt, project, env, bundle) {
             }
 
             if (f == files.length-1 && list.length == 0) { //end of all
-                console.info('Bundle [ '+bundle+' ] has been added to your project with success ;)');
+                console.info('Bundle [ '+bundle+' ] has been added to your project with success ;)\n');
                 process.exit(0)
             }
         }
@@ -255,7 +257,7 @@ AddBundle = function(opt, project, env, bundle) {
      * @param {}
      * */
     var parse = function(file, list) {
-        console.log('replacing: ', file);
+        console.debug('replacing: ', file);
         try {
             var f;
             f =(f=file.split(/\//))[f.length-1];

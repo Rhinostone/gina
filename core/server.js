@@ -499,7 +499,7 @@ function Server(options) {
                     } else {
                         // onRouting Event ???
                         if ( cacheless ) {
-                            config.refreshModels(params.bundle, function onModelRefreshed(){
+                            config.refreshModels(params.bundle, self.env, function onModelRefreshed(){
                                 router.route(req, res, next, params)
                             })
                         } else {

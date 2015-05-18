@@ -9,15 +9,16 @@
 //Imports.
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
-var Module          = require('module');
-var Config          = require( getPath('gina.core') + '/config');
+var corePath        = getPath('gina.core');
+var Config          = require( corePath + '/config' );
 var config          = new Config();
-var utils           = require('../utils');
+var utils           = require('gina').utils;
 var console         = utils.logger;
 var math            = utils.math;
 var inherits        = utils.inherits;
 var utilsConfig     = new utils.Config();
 var modelUtil       = new utils.Model();
+var Module          = require('module');
 
 
 
