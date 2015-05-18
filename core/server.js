@@ -440,7 +440,7 @@ function Server(options) {
 
         //Reloading assets & files.
         if (!cacheless) { // all but dev & debug
-            callback(err, bundle, pathname, false, req, res, next)
+            callback(err, bundle, pathname, options.config, req, res, next)
         } else {
             config.refresh(bundle, function(err, routing) {
                 if (err) {

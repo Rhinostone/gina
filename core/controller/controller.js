@@ -12,6 +12,7 @@ var EventEmitter    = require('events').EventEmitter;
 var utils           = require('./../utils') || require.cache[require.resolve('./../utils')];
 var merge           = utils.merge;
 var inherits        = utils.inherits;
+var console         = utils.logger;
 var swig            = require('swig');
 
 
@@ -45,7 +46,7 @@ function Controller(options) {
      * @constructor
      * */
     var init = function() {
-        //_request = request, _response = response, _next = next;
+
         if ( typeof(Controller.initialized) != 'undefined' ) {
             return getInstance()
         } else {

@@ -511,39 +511,17 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
         var core    = gna.core;
         //Get bundle name.
-//        if (appName == undefined) {
-//            var appName = getContext('bundle')
-//        }
         console.log('appName ', appName);
         core.startingApp = appName;
         core.executionPath =  root;
         core.ginaPath = ginaPath;
 
-//        var port;
-//
-//        if (protocol == undefined || protocol != undefined && protocols.indexOf(protocol) < 0) {
-//            if (protocols.indexOf(protocol) < 0) {
-//                throw Error('protocol '+ protocol + ' not supported.');
-//                process.exit(1)
-//            }
-//            var protocol = 'http'
-//        }
-//
-//        var envVars = require(root + '/env.json')[appName];
-//        port = envVars.env[protocol];
 
         //Inherits parent (gina) context.
         if ( typeof(process.argv[3]) != 'undefined' ) {
             setContext( JSON.parse(process.argv[3]) )
         }
 
-        //Setting log paths.
-//        logger.init({
-//            //logs : _(core.executionPath + '/logs'),
-//            logs : getPath('logsPath'),
-//            core: _(__dirname)
-//        });
-//        setContext('gina.utils.logger', logger);
 
         //check here for mount point source...
         if ( typeof(project.bundles[core.startingApp].release.version) == 'undefined' && typeof(project.bundles[core.startingApp].tag) != 'undefined') {
@@ -597,6 +575,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
                         //On user conf complete.
                         e.on('complete', function(instance){
+                            // ( !isStandalone || isStandalone && isMaster )
                             server.start(instance)
                         });
 
@@ -608,6 +587,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                             if (!gna.initialized) {
                                 e.emit('complete', instance);
                             }
+
                             console.info('mounted!! ', conf.bundle, process.pid)
                             // -- EO
                         } else {
