@@ -754,7 +754,12 @@ function Config(opt) {
                 ) {
                     if (files['views'].default.javascripts[i].substr(0,1) != '/')
                         files['views'].default.javascripts[i] = '/'+files['views'].default.javascripts[i];
-                    files['views'].default.javascripts[i] = conf[bundle][env].server.webroot + files['views'].default.javascripts[i]
+
+                    // support src like: `//ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js
+                    if (/^\/\//.test(files['views'].default.javascripts[i]) )
+                        files['views'].default.javascripts[i] = files['views'].default.javascripts[i]
+                    else
+                        files['views'].default.javascripts[i] = conf[bundle][env].server.webroot + files['views'].default.javascripts[i]
                 }
             }
         }
@@ -770,7 +775,11 @@ function Config(opt) {
                 ) {
                     if (files['views'].default.stylesheets[i].substr(0,1) != '/')
                         files['views'].default.stylesheets[i] = '/'+files['views'].default.stylesheets[i];
-                    files['views'].default.stylesheets[i] = conf[bundle][env].server.webroot + files['views'].default.stylesheets[i]
+
+                    if (/^\/\//.test(files['views'].default.stylesheets[i]) )
+                        files['views'].default.stylesheets[i] = files['views'].default.stylesheets[i]
+                    else
+                        files['views'].default.stylesheets[i] = conf[bundle][env].server.webroot + files['views'].default.stylesheets[i]
                 }
             }
         }
