@@ -848,9 +848,8 @@ function Config(opt) {
      * @callback {function} callback
      * @param {boolean} error
      * */
-    this.refreshModels = function(bundle, callback) {
-        var env = self.Env.get()
-            , conf = self.envConf[bundle][env]
+    this.refreshModels = function(bundle, env, callback) {
+        var conf = self.envConf[bundle][env]
             //Reload models.
             , modelsPath = _(conf.modelsPath);
 
