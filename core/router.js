@@ -204,6 +204,11 @@ function Router(env) {
         local.conf = conf;
         local.isStandalone  = config.Host.isStandalone();
         var action          = request.action = params.param.action;
+        // more can be added ... but it will always start by `on`Something.
+        var reservedActions = [
+            "onReady"
+        ];
+        if (reservedActions.indexOf(action) > -1) throwError(response, 500, '[ '+action+' ] is reserved for the framework');
         var middleware      = params.middleware || [];
         var actionFile      = params.param.file; // matches rule name
         var namespace       = params.param.namespace;
@@ -282,9 +287,22 @@ function Router(env) {
             if (middleware.length > 0) {
                 processMiddlewares(middleware, action, request, response, next,
                     function onDone(action, request, response, next){
+                        // handle superController events
+                        for (var e=0; e<reservedActions.length; ++e) {
+                            if ( typeof(controller[reservedActions[e]]) == 'function' ) {
+                                controller[reservedActions[e]](request, response, next)
+                            }
+                        }
                         controller[action](request, response, next)
                     })
             } else {
+                // handle superController events
+                // e.g.: inside your controller, you can defined: `this.onReady = function(){...}` which will always be called before the main action
+                for (var e=0; e<reservedActions.length; ++e) {
+                    if ( typeof(controller[reservedActions[e]]) == 'function' ) {
+                        controller[reservedActions[e]](request, response, next)
+                    }
+                }
                 controller[action](request, response, next)
             }
 
@@ -296,7 +314,6 @@ function Router(env) {
             } else {
                 superController.throwError(response, 500, err.stack);
             }
-
         }
 
         action = null
