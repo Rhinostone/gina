@@ -75,13 +75,29 @@ function Controller(options) {
     this.setOptions = function(req, res, next, options) {
         local.options = Controller.instance._options = options;
 
-        // N.B.: Avoid setting `page` data as much as possible from the routing.json
+        // N.B.: Avoid setting `page` properties as much as possible from the routing.json
         // It will be easier for the framework if set from the controller.
-        // e.g.:
-        //      var data = { page: { title: "my-title"}};
-        //      self.render(data, req, res)
-        if ( typeof(options.conf.content.routing[options.rule].param.page) !=  'undefined' ) {
-            var str = 'page.', p = options.conf.content.routing[options.rule].param.page;
+        //
+        // Here is a sample if you choose to set  `page.title` from the rule
+        // ------rouging rule sample -----
+        // {
+        //    "default": {
+        //        "url": ["", "/"],
+        //            "param": {
+        //            "action": "home",
+        //                "title": "My Title"
+        //        }
+        // }
+        //
+        // ------controller action sample -----
+        // Here is a sample if you decide to set `page.title` from your controller
+        //
+        // this.home = function(req, res, next) {
+        //      var data = { page: { title: "My Title"}};
+        //      self.render(data)
+        // }
+        if ( typeof(options.conf.content.routing[options.rule].param) !=  'undefined' ) {
+            var str = 'page.', p = options.conf.content.routing[options.rule].param;
             for (var key in p) {
                 if (p.hasOwnProperty(key)) {
                     str += key + '.';
@@ -91,6 +107,7 @@ function Controller(options) {
                             value += obj[prop]
                         } else {
                             self.set(str.substr(0, str.length-1), value);
+                            str = 'page.'
                         }
                     }
                 }
@@ -218,7 +235,7 @@ function Controller(options) {
                 path += data.page.ext
             }
 
-            var dic = {};
+            var dic = {}, msg = '';
             for (var d in data.page) {
                 dic['page.'+d] = data.page[d]
             }
@@ -229,7 +246,13 @@ function Controller(options) {
             //      html/namespace/page.html (GOOD)
             fs.readFile(path, function (err, content) {
                 if (err) {
-                    self.throwError(local.res, 500, err.stack);
+                    msg = 'could not open "'+ path +'"' +
+                            '\n1) The requested file does not exists in your views/html (views/template). Can you find: '+path +
+                            '\n2) Check the following rule in your routing(.json) and look around `param` to make sure that nothing is wrong with your declaration: '+
+                            '\n' + options.rule +':'+ JSON.stringify(options.conf.content.routing[options.rule], null, 4) +
+                            '\n3) At this point, if you still have problems trying to run this portion of code, you can contact us telling us how to reproduce the bug.';
+
+                    self.throwError(local.res, 500, new Error(msg));
                 }
 
                 try {
