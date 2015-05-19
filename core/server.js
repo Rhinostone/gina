@@ -340,7 +340,7 @@ function Server(options) {
                 loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
                     if (!req.handled) {
                         req.handled = true;
-                        console.debug('loadBundleConfiguration called back..');
+                        //console.debug('loadBundleConfiguration called back..');
                         if (err) {
                             throwError(response, 500, 'Internal server error\n' + err.stack, next)
                         } else {
