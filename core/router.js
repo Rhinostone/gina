@@ -286,7 +286,7 @@ function Router(env) {
             controller.setOptions(request, response, next, options);
 
             if (middleware.length > 0) {
-                processMiddlewares(middleware, action, request, response, next,
+                processMiddlewares(middleware, controller, action, request, response, next,
                     function onDone(action, request, response, next){
                         // handle superController events
                         for (var e=0; e<reservedActions.length; ++e) {
@@ -320,7 +320,7 @@ function Router(env) {
         action = null
     };//EO route()
 
-    var processMiddlewares = function(middlewares, action, req, res, next, cb){
+    var processMiddlewares = function(middlewares, controller, action, req, res, next, cb){
 
         var filename = _(local.conf.bundlePath)
             , middleware = {}
@@ -377,7 +377,9 @@ function Router(env) {
                             return JSON.parse(tmp)
                         }
                     };
-                    middleware.throwError = throwError;
+                    //middleware.throwError = throwError;
+                    middleware.throwError = controller.throwError;
+                    middleware.redirect = controller.redirect;
 
                     middleware[constructor](req, res, next,
                         function onMiddlewareProcessed(req, res, next){
