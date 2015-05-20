@@ -198,6 +198,10 @@ function Controller(options) {
     /**
      * Render HTML templates : Swig is the default template engine
      *
+     *
+     * Avilable filters:
+     *  - getBundleWebroot()
+     *
      * @param {object} _data
      * @return {void}
      * */
@@ -494,10 +498,20 @@ function Controller(options) {
         return refToObj(self._data)
     }
 
+    var isValidURL = function(url){
+        var re = /(http|ftp|https|sftp):\/\/[\w-]+(\.[\w-]+)+([\w.,@?^=%&amp;:\/~+#-]*[\w@?^=%&amp;\/~+#-])?/;
+        return (re.test(url)) ? true : false
+    }
+
     /**
      * redirect
      *
+     * You have to ways of using this method
+     *
+     * 1) Through routing.json
+     * ---------------------
      * Allows you to redirect to an internal [ route ], an internal [ path ], or an external [ url ]
+     *
      * For this to work you have to set in your routing.json a new route using  "param":
      * { "action": "redirect", "route": "one-valid-route" }
      * OR
@@ -506,20 +520,79 @@ function Controller(options) {
      * if you are free to use the redirection [ code ] of your choice, we've set it to 301 by default
      *
      *
-     * @param {object} req
-     * @param {object} res
+     * 2) By calling this.redirect(rule, [ignoreWebRoot]):
+     * ------------------------------------------------
+     * where `this` is :
+     *  - a Controller instance
+     *  - a Middleware instance
+     *
+     * Where `rule` is either a string defining
+     *  - the rule/route name => home
+     *  - an URI => /home
+     *  - a URL => http://www.google.com/
+     *
+     * And Where `ignoreWebRoot` is an optional parameter used to ignore web root settings (Standalone mode or user set web root)
+     * `ignoreWebRoot` behaves the like set to `false` by default
+     *
+     *
+     *
+     * @param {object|string} req|rule - Request Object or Rule/Route name
+     * @param {object|boolean} res|ignoreWebRoot - Response Object or Ignore WebRoot & start from domain root: /
      *
      * @callback [ next ]
      * */
     this.redirect = function(req, res, next) {
-        var route = req.routing.param.route;
-        var path = req.routing.param.path || "";
+        var conf = self.getConfig();
+        var wroot = conf.server.webroot;
+        var routing = conf.content.routing;
+        var route = '', rte = '';
+
+        if ( typeof(req) === 'string' ) {
+
+            if ( typeof(res) == 'undefined') {
+                // nothing to do
+            } else if (typeof(res) === 'string' || typeof(res) === 'number' || typeof(res) === 'boolean') {
+                var ignoreWebRoot = null;
+                if ( /true|1/.test(res) ) {
+                    ignoreWebRoot = true
+                } else if ( /false|0/.test(res) ) {
+                    ignoreWebRoot = false
+                } else {
+                    res = local.res;
+                    var stack = __stack.splice(1).toString().split(',').join('\n');
+                    self.throwError(res, 500, 'Internal Server Error\n@param `ignoreWebRoot` must be a boolean\n' + stack);
+                }
+            }
+
+            if ( req.substr(0,1) === '/') { // is relative (not checking if the URI is defined in the routing.json)
+                rte     = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot) ? req : wroot + req;
+                req     = local.req;
+                res     = local.res;
+                next    = local.next;
+                var isRelative = true;
+                req.routing.param.path = rte
+            } else if ( isValidURL(req) ) { // might be an URL
+                rte     = req;
+                req     = local.req;
+                res     = local.res;
+                next    = local.next;
+                req.routing.param.url = rte
+            } else { // is by default a route name
+                rte = route = ( new RegExp('^/'+conf.bundle+'-$').test(req) ) ? req : wroot.match(/[^/]/g).join('') +'-'+ req;
+                req     = local.req;
+                res     = local.res;
+                next    = local.next;
+                req.routing.param.route = routing[rte]
+            }
+        } else {
+            route = req.routing.param.route;
+        }
+
+        var path = req.routing.param.path || '';
         var url = req.routing.param.url;
         var code = req.routing.param.code || 301;
         var keepParams = req.routing.param['keep-params'] || false;
-        var conf = self.getConfig();
-        var routing = conf.content.routing;
-        var wroot = conf.server.webroot;
+
         var condition = true; //set by default for url @ path redirect
 
         if (route) { // will go with route first
@@ -537,8 +610,10 @@ function Controller(options) {
                 if (path instanceof Array) {
                     path = path[0] //if it is an array, we just take the first one
                 }
-            } else if (url) {
+            } else if (url && !path) {
                 path = ( (/\:\/\//).test(url) ) ? url : req.protocol + '://' + url;
+            } else if(path && typeof(isRelative) !=  'undfined') {
+                // nothing to do
             } else {
                 path = conf.hostname + path
             }
