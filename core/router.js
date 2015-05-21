@@ -342,16 +342,7 @@ function Router(env) {
                     throwError(res, 501, new Error('middleware not found '+ middleware).stack);
                 }
 
-                //if (local.cacheless) {
-                //    // because of the /index.js and sub files
-                //    for (var p in require.cache) {
-                //        if ( re.test(p) ) {
-                //            delete require.cache[p]
-                //        }
-                //    }
-                //}
-
-                delete require.cache[_(filename, true)];
+                if (local.cacheless) delete require.cache[_(filename, true)];
 
                 middleware = require(_(filename, true));
                 if ( !middleware[constructor] ) {
@@ -361,22 +352,23 @@ function Router(env) {
                 if ( typeof(middleware[constructor]) != 'undefined') {
 
                     // exporting config
-                    middleware.getConfig = function(name){
-                        var tmp = null;
-                        if ( typeof(name) != 'undefined' ) {
-                            try {
-                                //Protect it.
-                                tmp = JSON.stringify(local.conf.content[name]);
-                                return JSON.parse(tmp)
-                            } catch (err) {
-                                console.error(err.stack);
-                                return undefined
-                            }
-                        } else {
-                            tmp = JSON.stringify(local.conf);
-                            return JSON.parse(tmp)
-                        }
-                    };
+                    middleware.getConfig = controller.getConfig;
+                    //middleware.getConfig = function(name){
+                    //    var tmp = null;
+                    //    if ( typeof(name) != 'undefined' ) {
+                    //        try {
+                    //            //Protect it.
+                    //            tmp = JSON.stringify(local.conf.content[name]);
+                    //            return JSON.parse(tmp)
+                    //        } catch (err) {
+                    //            console.error(err.stack);
+                    //            return undefined
+                    //        }
+                    //    } else {
+                    //        tmp = JSON.stringify(local.conf);
+                    //        return JSON.parse(tmp)
+                    //    }
+                    //};
                     //middleware.throwError = throwError;
                     middleware.throwError = controller.throwError;
                     middleware.redirect = controller.redirect;
