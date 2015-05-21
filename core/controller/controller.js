@@ -243,6 +243,8 @@ function Controller(options) {
             for (var d in data.page) {
                 dic['page.'+d] = data.page[d]
             }
+
+
             // please, do not put any slashes when including...
             // ex.:
             //      /html/inc/_partial.html (BAD)
@@ -270,12 +272,56 @@ function Controller(options) {
                         return url
                     });
 
+                    /**
+                     * getUrl filter
+                     *
+                     * Usage:
+                     *      <a href="{{ 'users-add' | getUrl({ id: user.id }) }}">Add User</a>
+                     *      <a href="{{ 'users-edit' | getUrl({ id: user.id }) }}">Edit user</a>
+                     *      <a href="{{ 'users-list' | getUrl(null, 'http://domain.com') }}">Display all users</a>
+                     *
+                     * @param {string} route
+                     * @param {object} params - can't be left blank if base is required -> null if not defined
+                     * @param {string} [base] - can be a CDN or the http://domain.com
+                     *
+                     * @return {string} relativeUrl|absoluteUrl - /sample/url.html or http://domain.com/sample/url.html
+                     * */
+                    var config        = local.options.conf
+                        , wroot         = config.server.webroot
+                        , isStandalone  = (config.bundles.length > 1) ? true : false
+                        , isMaster      = (config.bundles[0] === config.bundle) ? true : false
+                        , routing       = config.content.routing
+                        , rule          = ''
+                        , url           = NaN
+                    ;
+                    swig.setFilter('getUrl', function (route, params, base) {
+                        if ( isStandalone && !isMaster ) {
+                            rule = config.bundle +'-'+ route
+                        } else {
+                            rule = route
+                        }
+
+                        if ( typeof(routing[rule]) != 'undefined' ) { //found
+                            url = routing[rule].url;
+                            if ( typeof(routing[rule].requirements) != 'undefined' ) {
+                                for (var p in routing[rule].requirements) {
+                                    url = url.replace(new RegExp(':'+p, 'g'), params[p])
+                                }
+                            }
+                        }
+
+                        if ( typeof(base) != 'undefined' ) url = base + url;
+
+                        return url
+                    });
+
                     content = swig.compile( content.toString() )(data)
                 } catch (err) {
                     // [ martin ]
                     // i sent an email to [ paul@paularmstrongdesigns.com ] on 2014/08 to see if there is
                     // a way of retrieving swig compilation stack traces
-                    self.throwError(local.res, 500, 'compilation exception encoutered: [ '+path+' ]\n');
+                    var stack = __stack.splice(1).toString().split(',').join('\n');
+                    self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\n'+stack);
                 }
 
                 dic['page.content'] = content;
@@ -565,6 +611,9 @@ function Controller(options) {
             }
 
             if ( req.substr(0,1) === '/') { // is relative (not checking if the URI is defined in the routing.json)
+                if (wroot.substr(wroot.length-1,1) == '/') {
+                    wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+                }
                 rte     = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot) ? req : wroot + req;
                 req     = local.req;
                 res     = local.res;
@@ -612,7 +661,7 @@ function Controller(options) {
                 }
             } else if (url && !path) {
                 path = ( (/\:\/\//).test(url) ) ? url : req.protocol + '://' + url;
-            } else if(path && typeof(isRelative) !=  'undfined') {
+            } else if(path && typeof(isRelative) !=  'undefined') {
                 // nothing to do
             } else {
                 path = conf.hostname + path
@@ -681,7 +730,7 @@ function Controller(options) {
      * TODO - Protect result
      * */
     this.getConfig = function(name) {
-        var tmp = '';
+        var tmp = null;
 
         if ( typeof(name) != 'undefined' ) {
             try {
