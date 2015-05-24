@@ -32,6 +32,7 @@ function Validator(data, errorLabels) {
             is: 'condition not satisfied',
             isEmail: '%n not valid',
             isRequired: '%n is required',
+            isBoolean: '%n not a valid boolean',
             isString: '%n must be an instance of String',
             validStringWithLen: '%n should be a %s characters length',
             validStringWithMaxLen: '%n should not be more than %s characters',
@@ -113,6 +114,32 @@ function Validator(data, errorLabels) {
             }
 
             return self[this.name]
+        }
+
+        /**
+         * Check if boolean and convert to `true/false` booloean if value is a string or a number
+         * */
+        self[el].isBoolean = function() {
+            var val = null;
+            switch(this.value) {
+                case 'true':
+                case true:
+                case 1:
+                    val = this.value = local.data[this.name] = true;
+                    break;
+                case 'false':
+                case false:
+                case 0:
+                    val = this.value = local.data[this.name] = false;
+                    break;
+            }
+            var valid = (val !== null) ? true : false;
+            if (!valid) {
+                if ( !(local.errors[this.name]) )
+                    local.errors[this.name] = {};
+
+                local.errors[this.name].isBoolean = replace(this.flash || local.errorLabels.isBoolean, this)
+            }
         }
 
         self[el].isRequired = function() {

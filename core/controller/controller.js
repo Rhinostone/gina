@@ -253,8 +253,8 @@ function Controller(options) {
             fs.readFile(path, function (err, content) {
                 if (err) {
                     msg = 'could not open "'+ path +'"' +
-                            '\n1) The requested file does not exists in your views/html (views/template). Can you find: '+path +
-                            '\n2) Check the following rule in your routing(.json) and look around `param` to make sure that nothing is wrong with your declaration: '+
+                            '\n1) The requested file does not exists in your views/html (check your template directory). Can you find: '+path +
+                            '\n2) Check the following rule in your `'+local.options.conf.bundlePath+'/config/routing.json` and look around `param` to make sure that nothing is wrong with your declaration: '+
                             '\n' + options.rule +':'+ JSON.stringify(options.conf.content.routing[options.rule], null, 4) +
                             '\n3) At this point, if you still have problems trying to run this portion of code, you can contact us telling us how to reproduce the bug.';
 

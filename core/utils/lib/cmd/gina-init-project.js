@@ -73,6 +73,7 @@ function iniProject(name) {
     }
 
     var end = function() {
+        // new _(self.root+'/common/'))
         console.log('project [ '+ self.name +' ] ready');
         process.exit(0)
     }

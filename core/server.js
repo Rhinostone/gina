@@ -121,7 +121,10 @@ function Server(options) {
             , tmpContent    = ''
             , tmpName       = ''
             , i             = 0
-            , wroot         = null;
+            , wroot         = null
+            , localWroot    = null
+            , originalRules = []
+            , oRuleCount    = 0;
 
         if (cacheless) {
             self.routing = {}
@@ -160,9 +163,10 @@ function Server(options) {
                     tmp = self.routing;
                     //Adding important properties; also done in core/config.
                     for (var rule in tmp){
-                        tmp[rule].bundle = apps[i]; // for reverse search
+                        tmp[rule].bundle = (tmp[rule].bundle) ? tmp[rule].bundle : apps[i]; // for reverse search
                         wroot = self.conf[apps[i]][self.env].server.webroot;
                         tmp[rule].param.file = ( typeof(tmp[rule].param.file) != 'undefined' ) ? tmp[rule].param.file : rule; // get template file
+
                         // renaming rule for standalone setup
                         if ( self.isStandalone && apps[i] != self.appName && wroot == '/') {
                             wroot = '/'+ apps[i];
@@ -180,7 +184,26 @@ function Server(options) {
                                 }
                             }
 
-                            tmp[rule].url = wroot + tmp[rule].url;
+
+                            if (tmp[rule].bundle != apps[i]) { // allowing to override bundle name in routing.json
+                                // originalRule is used to facilitate cross bundles (hypertext)linking
+                                originalRules[oRuleCount] = ( self.isStandalone && tmp[rule] && apps[i] != self.appName) ? apps[i] + '-' + rule : rule;
+                                ++oRuleCount;
+
+                                localWroot = self.conf[tmp[rule].bundle][self.env].server.webroot;
+                                // standalone setup
+                                if ( self.isStandalone && tmp[rule].bundle != self.appName && localWroot == '/') {
+                                    localWroot = '/'+ routing[rule].bundle;
+                                    self.conf[tmp[rule].bundle][self.env].server.webroot = localWroot
+                                }
+                                if (localWroot.substr(localWroot.length-1,1) == '/') {
+                                    localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
+                                }
+                                tmp[rule].url = localWroot + tmp[rule].url
+                            } else {
+                                tmp[rule].url = wroot + tmp[rule].url
+                            }
+
                         } else {
 
                             for (var u=0; u<tmp[rule].url.length; ++u) {
@@ -217,13 +240,14 @@ function Server(options) {
                         }
 
                         if ( self.isStandalone && tmp[rule]) {
-                            if (tmp[rule].bundle != self.appName) {
-                                standaloneTmp[tmp[rule].bundle + '-' + rule] = JSON.parse(JSON.stringify(tmp[rule]));
+                            if (apps[i] != self.appName) {
+                                standaloneTmp[apps[i] + '-' + rule] = JSON.parse(JSON.stringify(tmp[rule]))
                             } else {
                                 standaloneTmp[rule] = JSON.parse(JSON.stringify(tmp[rule]))
                             }
                         }
                     }
+
                 } catch (err) {
                     self.routing = null;
                     console.error(err.stack||err.message);
@@ -235,10 +259,14 @@ function Server(options) {
                 callback(err)
             }
 
-            self.conf[apps[i]][self.env].content.routing = (self.isStandalone) ? standaloneTmp : tmp;
+            //self.conf[apps[i]][self.env].content.routing = (self.isStandalone) ? standaloneTmp : tmp;
         }//EO for.
 
-        self.routing = self.conf[self.appName][self.env].content.routing
+        self.routing = merge(true, self.routing, ((self.isStandalone && apps[i] != self.appName ) ? standaloneTmp : tmp));
+        // originalRule is used to facilitate cross bundles (hypertext)linking
+        for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
+            self.routing[originalRules[r]].originalRule = (self.routing[originalRules[r]].bundle === self.appName ) ?  config.getOriginalRule(originalRules[r], self.routing) : config.getOriginalRule(self.routing[originalRules[r]].bundle +'-'+ originalRules[r], self.routing)
+        }
 
         callback(false)
     }
@@ -267,7 +295,7 @@ function Server(options) {
                     console.error('could not parse body: ' + el[1])
                 }
             }
-            obj[ el[0] ] = el[1]
+            obj[ el[0] ] = el[1].replace(/%2B/g, ' ') // & ensure true white spaces
         }
         return obj
     }
@@ -459,7 +487,8 @@ function Server(options) {
             , isRoute       = {}
             , withViews     = hasViews(bundle)
             , router        = local.router
-            , cacheless     = config.isCacheless();
+            , cacheless     = config.isCacheless()
+            , wroot         = null;
 
         console.debug('about to handle [ '+ pathname + ' ] route');
         router.setMiddlewareInstance(self.instance);
@@ -483,7 +512,7 @@ function Server(options) {
                 params = {
                     requirements : routing[rule].requirements,
                     url : pathname,
-                    rule: rule,
+                    rule: routing[rule].originalRule || rule,
                     param : routing[rule].param,
                     middleware : routing[rule].middleware,
                     bundle: routing[rule].bundle

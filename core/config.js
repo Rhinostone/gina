@@ -369,16 +369,6 @@ function Config(opt) {
                 }
                 self.allBundles.push(app);
 
-//                    console.log(
-//                        "\nenv                  => " + env,
-//                        "\napp parsed           => " + app,
-//                        "\napp is Standalone    => " + self.Host.isStandalone(),
-//                        "\nstarting app         => " + self.startingApp,
-//                        "\napp port             => " + content[app][env].port.http,
-//                        "\nmaster port          => " + masterPort + '  ' + content[self.startingApp][env].port.http,
-//                        "\nRegisterd bundles    => " + self.bundles
-//                    );
-                //console.log("Merging..."+ app, "\n", content[app][env], "\n AND \n", template[app][env]);
                 //Mergin user's & template.
                 newContent[app][env] = merge(
                     newContent[app][env],
@@ -453,6 +443,32 @@ function Config(opt) {
         return self.allBundles
     }
 
+    /**
+     * Get original rule
+     *
+     * @param {string} rule
+     * @param {object} routing
+     *
+     * @return {string} originalRule
+     * */
+    this.getOriginalRule = function(rule, routing) {
+
+        var currentRouting  = routing[rule]
+            , originalRule  = undefined;
+
+        for (var f in routing) {
+            if (
+                routing[f].param.action == currentRouting.param.action
+                && routing[f].bundle == currentRouting.bundle
+                && f != rule
+                && new RegExp(f+"$").test(rule)
+            ) {
+                originalRule = f
+            }
+        }
+        return originalRule
+    }
+
     var loadBundleConfig = function(bundles, b, callback, reload, collectedRules) {
 
         if ( typeof(bundles[b]) == "undefined") {
@@ -468,9 +484,9 @@ function Config(opt) {
 
         var routing     = {
             //"home": {
+            //    "bundle" : "framework",
             //    "url": "/@doc",
             //    "param": {
-            //        "bundle" : "framework",
             //        "action": "doc"
             //    }
             //}
@@ -482,7 +498,10 @@ function Config(opt) {
         var appPath     = '';
         var err         = false;
         var conf        = self.envConf
-            , wroot = conf[bundle][env].server.webroot;
+            , wroot         = conf[bundle][env].server.webroot
+            , localWroot    = null
+            , originalRules = []
+            , oRuleCount    = 0;
         // standalone setup
         if ( self.Host.isStandalone() && bundle != self.startingApp && wroot == '/') {
             wroot = '/'+ bundle;
@@ -535,7 +554,7 @@ function Config(opt) {
 
                 //setting app param
                 for (var rule in routing) {
-                    routing[rule].bundle = bundle; // for reverse search
+                    routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse search
                     //webroot control
                     routing[rule].param.file = ( typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: rule; // get template file
 
@@ -549,7 +568,25 @@ function Config(opt) {
                             }
                         }
 
-                        routing[rule].url = wroot + routing[rule].url;
+                        if (routing[rule].bundle != bundle) { // allowing to override bundle name in routing.json
+                            // originalRule is used to facilitate cross bundles (hypertext)linking
+                            originalRules[oRuleCount] = ( self.Host.isStandalone() && routing[rule] && bundle != self.startingApp) ? bundle + '-' + rule : rule;
+                            ++oRuleCount;
+
+                            localWroot = conf[routing[rule].bundle][env].server.webroot;
+                            // standalone setup
+                            if ( self.Host.isStandalone() && routing[rule].bundle != self.startingApp && localWroot == '/') {
+                                localWroot = '/'+ routing[rule].bundle;
+                                conf[routing[rule].bundle][env].server.webroot = localWroot
+                            }
+                            if (localWroot.substr(localWroot.length-1,1) == '/') {
+                                localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
+                            }
+
+                            routing[rule].url = localWroot + routing[rule].url
+                        } else {
+                            routing[rule].url = wroot + routing[rule].url
+                        }
                     } else {
                         for (var u=0; u<routing[rule].url.length; ++u) {
                             if (routing[rule].url[u].length > 1 && routing[rule].url[u].substr(0,1) != '/') {
@@ -572,6 +609,10 @@ function Config(opt) {
                 }
 
                 files[name] = collectedRules = merge(true, collectedRules, ((self.Host.isStandalone() && bundle != self.startingApp ) ? standaloneRouting : routing));
+                // originalRule is used to facilitate cross bundles (hypertext)linking
+                for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
+                    files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
+                }
                 continue;
             } else if (name == 'routing') {
                 continue;
