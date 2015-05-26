@@ -18,6 +18,9 @@ var console = require('./logger');
  *  }
  *
  *  TODO - validate date against country_code or pattern yyyy-mm-dd
+ *  dateObj
+ *      [ .format('timestamp') ]
+ *      .isDate('fr_FR')
  *
  * */
 function Validator(data, errorLabels) {
@@ -33,7 +36,11 @@ function Validator(data, errorLabels) {
             isEmail: '%n not valid',
             isRequired: '%n is required',
             isBoolean: '%n not a valid boolean',
+            isInteger: '%n not an integer',
+            toInteger: '%n cannot cast to integer',
+            isFloat: '%n not a proper float',
             isString: '%n must be an instance of String',
+            isDate: '%n invalid Date',
             validStringWithLen: '%n should be a %s characters length',
             validStringWithMaxLen: '%n should not be more than %s characters',
             validStringWithMinLen: '%n should be at least %s characters'
@@ -142,6 +149,57 @@ function Validator(data, errorLabels) {
             }
         }
 
+        self[el].toInteger = function() {
+            var val = this.value;
+            try {
+                val = this.value = local.data[this.name] = ~~(val.match(/[0-9]+/g).join(''));
+            } catch (err) {
+                if ( !(local.errors[this.name]) )
+                    local.errors[this.name] = {};
+
+                local.errors[this.name].toInteger = replace(this.flash || local.errorLabels.toInteger, this)
+            }
+
+            return self[this.name]
+        }
+
+        self[el].isInteger = function() {
+            var val = this.value, valid = false;
+            if ( typeof(val) === 'string' ) {
+                if ( /[^0-9]+/.test(val) ) return false;
+
+            }
+            valid = val === Number(val) && val% 1 === 0;
+            if (!valid) {
+                if ( !(local.errors[this.name]) )
+                    local.errors[this.name] = {};
+
+                local.errors[this.name].isInteger = replace(this.flash || local.errorLabels.isInteger, this)
+            }
+            return self[this.name]
+        }
+
+        self[el].isFloat = function(decimals) {
+            try {
+                this.value = parseFloat(this.value.replace(/,/g, '.'));
+                var valid = this.value === Number(this.value)  && this.value%1!==0;
+            } catch (err) {
+                if ( !(local.errors[this.name]) )
+                    local.errors[this.name] = {};
+
+                local.errors[this.name].isFloat = replace(this.flash || local.errorLabels.isFloat, this)
+            }
+
+
+            if (!valid) {
+                if ( !(local.errors[this.name]) )
+                    local.errors[this.name] = {};
+
+                local.errors[this.name].isFloat = replace(this.flash || local.errorLabels.isFloat, this)
+            }
+            return self[this.name]
+        }
+
         self[el].isRequired = function() {
             var valid = (typeof(this.value) != 'undefined' && this.value != null && this.value != '') ? true : false;
 
@@ -185,6 +243,51 @@ function Validator(data, errorLabels) {
 
             return self[this.name]
         }
+        /**
+         * Check if date
+         *
+         * @param {string} [mask] - by default "yyyy-mm-dd"
+         *
+         * @return {object} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
+         * */
+        self[el].isDate = function(mask) {
+            var val = this.value;
+            var m = mask.match(/[^\/\- ]+/g);
+            val = val.match(/[^\/\- ]+/g);
+            var dic = {}, d, len;
+            for (d=0, len=m.length; d<len; ++d) {
+                dic[m[d]] = val[d]
+            }
+            var newMask = 'yyyy-mm-dd';
+            for (var v in dic) {
+                newMask = newMask.replace(new RegExp(v, "g"), dic[v])
+            }
+
+            var date = this.value = local.data[this.name] = new Date(newMask);
+
+            if ( !date instanceof Date ) {
+                local.errors[this.name].isDate = replace(this.flash || local.errorLabels.isDate, this)
+            }
+
+            //return self[this.name]
+            return date
+        }
+
+        //self[el].format = function() {
+        //    var val = this.value;
+        //    if ( val instanceof Date ) {
+        //        try {
+        //            val = this.value = local.data[this.name] = ~~(val.match(/[0-9]+/g).join(''));
+        //        } catch (err) {}
+        //
+        //        return self[this.name]
+        //    } else {
+        //        if ( !(local.errors[this.name]) )
+        //            local.errors[this.name] = {};
+        //
+        //        local.errors[this.name].isDate = replace(this.flash || local.errorLabels.isDate, this)
+        //    }
+        //}
 
         /**
          * Set flash

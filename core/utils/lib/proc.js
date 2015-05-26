@@ -205,12 +205,7 @@ Proc = function(bundle, proc, usePidFile){
 
             //Will prevent the server from stopping.
             proc.on('uncaughtException', function(err) {
-                //console.log('fuck shit ! ' + err);
-//                logger.exception('gina', 'FATAL_EXCEPTION:1', 'Special care needed !! ' + err + err.stack, function(err){
-//                    //TODO - Send an email to the administrator/dev
-//                    //TODO - Have a delegate handler to allow the dev to do its stuff. Maybe it's already there if any dev can override.
-//                    console.log('Fix your shit...');
-//                });
+
                 console.error(err.stack);
                 var bundle = self.bundle;
                 //console.log("@=>", self.args);
@@ -219,7 +214,9 @@ Proc = function(bundle, proc, usePidFile){
 
                 //Wake up buddy !.
                 respawn(bundle, env, pid, function(err) {
-                    proc.exit(1)
+                    //TODO - Send an email to the administrator/dev
+                    //TODO - Have a delegate handler to allow the dev to do its stuff. Maybe it's already there if any dev can override.
+                    //proc.exit(1) // don't kill !!! It will stop the server
                 })
             });
 
@@ -242,11 +239,6 @@ Proc = function(bundle, proc, usePidFile){
                 for (var p=0; p<process.list.count(); p++) {
                     dismiss(process.list[p].pid)
                 }
-                    // First child.
-                    //dismiss(pid);
-                    // Then master.
-                    //dismiss(process.pid);
-                //}
             });
 
             proc.on('SIGHUP', function(code){
@@ -285,8 +277,7 @@ Proc = function(bundle, proc, usePidFile){
         } catch (err) {
             //Means that it does not exists anymore.
         }
-        process.kill(pid, "SIGINT");
-        //process.kill(pid, "SIGKILL");
+        process.kill(pid, "SIGINT");// soft...
     };
 
     /**
@@ -327,12 +318,6 @@ Proc = function(bundle, proc, usePidFile){
         try{
             return self.PID;
         } catch (err) {
-//            logger.error(
-//                'gina',
-//                'UTILS:PROC:ERR:2',
-//                'Could not get PID for bundle: '+ self.bundle,
-//                __stack
-//            );
             console.error('Could not get PID for bundle: '+ self.bundle + (err.stack||err.message));
             return null;
         }
@@ -385,12 +370,6 @@ Proc = function(bundle, proc, usePidFile){
 
     //Init.
     if ( typeof(this.bundle) == "undefined" ) {
-//        logger.warn(
-//            'gina',
-//            'UTILS:PROC:WARN:1',
-//            'Invalid or undefined proc name . Proc naming Aborted',
-//            __stack
-//        );
         console.warn('Invalid or undefined proc name . Proc naming Aborted',
             __stack)
     } else {
