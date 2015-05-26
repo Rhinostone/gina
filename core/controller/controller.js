@@ -293,6 +293,7 @@ function Controller(options) {
                         , routing       = config.content.routing
                         , rule          = ''
                         , url           = NaN
+                        , urlStr        = null
                     ;
                     swig.setFilter('getUrl', function (route, params, base) {
                         if ( isStandalone && !isMaster ) {
@@ -305,7 +306,22 @@ function Controller(options) {
                             url = routing[rule].url;
                             if ( typeof(routing[rule].requirements) != 'undefined' ) {
                                 for (var p in routing[rule].requirements) {
-                                    url = url.replace(new RegExp(':'+p, 'g'), params[p])
+                                    if ( Array.isArray(url) ) {
+                                        for (var i= 0, len = url.length; i< len; ++i) {
+                                            if ( params && /:/.test(url[i]) ) {
+                                                urlStr = url[i].replace(new RegExp(':'+p, 'g'), params[p]);
+                                                break;
+                                            }
+                                        }
+
+                                        if (urlStr != null) {
+                                            url = urlStr
+                                        } else { // just take the first one by default
+                                            url = url[0]
+                                        }
+                                    } else {
+                                        url = url.replace(new RegExp(':'+p, 'g'), params[p])
+                                    }
                                 }
                             }
                         }
@@ -320,8 +336,8 @@ function Controller(options) {
                     // [ martin ]
                     // i sent an email to [ paul@paularmstrongdesigns.com ] on 2014/08 to see if there is
                     // a way of retrieving swig compilation stack traces
-                    var stack = __stack.splice(1).toString().split(',').join('\n');
-                    self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\n'+stack);
+                    //var stack = __stack.splice(1).toString().split(',').join('\n');
+                    self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\n'+(err.stack||err.message));
                 }
 
                 dic['page.content'] = content;
@@ -753,21 +769,41 @@ function Controller(options) {
             var msg = code || null;
         }
 
-        if ( !res.headersSent ) {
-            if ( !hasViews() ) {
+        if ( !hasViews() ) {
+            if (!res.headersSent) {
                 res.writeHead(code, { 'Content-Type': 'application/json'} );
                 res.end(JSON.stringify({
                     status: code,
                     error: 'Error '+ code +'. '+ msg
                 }))
             } else {
-                res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
-                local.res.headersSent = true;
+                local.next()
             }
+
         } else {
-            local.next()
+            if (!res.headersSent) {
+                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>')
+            } else {
+                local.next()
+            }
         }
+
+        //if ( !res.headersSent ) {
+        //    if ( !hasViews() ) {
+        //        res.writeHead(code, { 'Content-Type': 'application/json'} );
+        //        res.end(JSON.stringify({
+        //            status: code,
+        //            error: 'Error '+ code +'. '+ msg
+        //        }))
+        //    } else {
+        //        res.writeHead(code, { 'Content-Type': 'text/html'} );
+        //        res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+        //        local.res.headersSent = true;
+        //    }
+        //} else {
+        //    local.next()
+        //}
     }
 
     // converting references to objects

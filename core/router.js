@@ -214,6 +214,7 @@ function Router(env) {
         var namespace       = params.param.namespace;
         var routeHasViews   = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
         local.routeHasViews = routeHasViews;
+        local.next = next;
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
         local.cacheless = cacheless;
@@ -268,10 +269,12 @@ function Router(env) {
                 Controllers[bundles[b]] = require(_(controllerFiles[bundles[b]], true));
             }
         } catch (err) {
-            var superController = new SuperController(options);
-            superController.setOptions(request, response, next, options);
-            console.log(err.stack);
-            superController.throwError(response, 500, err.stack);
+            // so you can use swig to customize error pages later
+            //var superController = new SuperController(options);
+            //superController.setOptions(request, response, next, options);
+            //console.log(err.stack);
+            //superController.throwError(response, 500, err.stack);
+            throwError(response, 500, err.stack);
         }
 
         // about to contact Controller ...
@@ -402,21 +405,42 @@ function Router(env) {
             }
         }
 
-        if ( !res.headersSent ) {
-            if ( !hasViews() ) {
+        if ( !hasViews() ) {
+            if (!res.headersSent) {
                 res.writeHead(code, { 'Content-Type': 'application/json'} );
                 res.end(JSON.stringify({
                     status: code,
                     error: 'Error '+ code +'. '+ msg
                 }))
             } else {
-                res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
-                local.res.headersSent = true;
+                local.next()
             }
+
         } else {
-            local.next()
+            if (!res.headersSent) {
+                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
+            } else {
+                local.next()
+            }
         }
+
+
+        //if ( !res.headersSent ) {
+        //    if ( !hasViews() ) {
+        //        res.writeHead(code, { 'Content-Type': 'application/json'} );
+        //        res.end(JSON.stringify({
+        //            status: code,
+        //            error: 'Error '+ code +'. '+ msg
+        //        }))
+        //    } else {
+        //        res.writeHead(code, { 'Content-Type': 'text/html'} );
+        //        res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+        //        local.res.headersSent = true;
+        //    }
+        //} else {
+        //    local.next()
+        //}
     };
 
     init()

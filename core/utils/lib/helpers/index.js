@@ -19,6 +19,7 @@
 var Helpers = {
         console     : require('./console')(),
         //DateTime    : require('./time')(),
+        dateFormat  : require('./dateFormat'),
         //Form        : require('./form')(),
         //I18n        : require('./i18n')(),
         path        : require('./path')(),
@@ -30,7 +31,21 @@ var Helpers = {
 die = function(){
     process.exit(42);
 };
+
 module.exports = Helpers;
+
+
+/**
+ * format date
+ * @return {array} Return formated date
+ **/
+Object.defineProperty( Date.prototype, 'format', {
+    writable:   false,
+    enumerable: false,
+    //If loaded several times, it can lead to an exception. That's why I put this.
+    configurable: true,
+    value: function(mask, utc){ return Helpers.dateFormat(this, mask, utc) }
+});
 
 
 /**
