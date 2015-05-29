@@ -37,8 +37,9 @@ function Validator(data, errorLabels) {
             isRequired: '%n is required',
             isBoolean: '%n not a valid boolean',
             isInteger: '%n not an integer',
-            toInteger: '%n cannot cast to integer',
+            toInteger: '%n cannot convert to integer',
             isFloat: '%n not a proper float',
+            toFloat: 'n cannot convert to float',
             isString: '%n must be an instance of String',
             isDate: '%n invalid Date',
             validStringWithLen: '%n should be a %s characters length',
@@ -151,15 +152,22 @@ function Validator(data, errorLabels) {
 
         self[el].toInteger = function() {
             var val = this.value;
-            try {
-                val = this.value = local.data[this.name] = ~~(val.match(/[0-9]+/g).join(''));
-            } catch (err) {
-                if ( !(local.errors[this.name]) )
+
+            if (!val) {
+                if (!(local.errors[this.name]))
                     local.errors[this.name] = {};
+                local.errors[this.name].toInteger = replace(this.flash || local.errorLabels.toInteger, this);
+            } else {
+                try {
+                    val = this.value = local.data[this.name] = ~~(val.match(/[0-9]+/g).join(''));
+                } catch (err) {
+                    if ( !(local.errors[this.name]) )
+                        local.errors[this.name] = {};
 
-                local.errors[this.name].toInteger = replace(this.flash || local.errorLabels.toInteger, this)
+                    local.errors[this.name].toInteger = replace(this.flash || local.errorLabels.toInteger, this)
+                }
+
             }
-
             return self[this.name]
         }
 
@@ -179,10 +187,38 @@ function Validator(data, errorLabels) {
             return self[this.name]
         }
 
+
+        self[el].toFloat = function(decimals) {
+            var val = this.value;
+            if (!val) {
+                if ( !(local.errors[this.name]) )
+                    local.errors[this.name] = {};
+                local.errors[this.name].toFloat = replace(this.flash || local.errorLabels.toFloat, this);
+            } else {
+                try {
+                    val = this.value = local.data[this.name] = parseFloat(val.match(/[0-9.,]+/g).join('').replace(/,/, '.'));
+                } catch (err) {
+                    if ( !(local.errors[this.name]) )
+                        local.errors[this.name] = {};
+
+                    local.errors[this.name].toFloat = replace(this.flash || local.errorLabels.toFloat, this)
+                }
+            }
+
+            if (decimals && val) {
+                this.value = this.value.toFixed(decimals)
+            }
+
+            return self[this.name]
+        }
+
         self[el].isFloat = function(decimals) {
             try {
                 this.value = parseFloat(this.value.replace(/,/g, '.'));
                 var valid = this.value === Number(this.value)  && this.value%1!==0;
+                if (decimals && valid) {
+                    this.value = this.value.toFixed(decimals)
+                }
             } catch (err) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
@@ -248,7 +284,7 @@ function Validator(data, errorLabels) {
          *
          * @param {string} [mask] - by default "yyyy-mm-dd"
          *
-         * @return {object} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
+         * @return {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
          * */
         self[el].isDate = function(mask) {
             var val = this.value;
@@ -272,22 +308,6 @@ function Validator(data, errorLabels) {
             //return self[this.name]
             return date
         }
-
-        //self[el].format = function() {
-        //    var val = this.value;
-        //    if ( val instanceof Date ) {
-        //        try {
-        //            val = this.value = local.data[this.name] = ~~(val.match(/[0-9]+/g).join(''));
-        //        } catch (err) {}
-        //
-        //        return self[this.name]
-        //    } else {
-        //        if ( !(local.errors[this.name]) )
-        //            local.errors[this.name] = {};
-        //
-        //        local.errors[this.name].isDate = replace(this.flash || local.errorLabels.isDate, this)
-        //    }
-        //}
 
         /**
          * Set flash
