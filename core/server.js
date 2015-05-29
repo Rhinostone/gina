@@ -6,11 +6,13 @@ var express         = require('express');
 var url             = require('url');
 var Config          = require('./config');
 var Router          = require('./router');
+var util            = require('util');
 var utils           = require('./utils');
 var inherits        = utils.inherits;
 var merge           = utils.merge;
 var Proc            = utils.Proc;
 var console         = utils.logger;
+var multiparty      = utils.multiparty;
 
 
 function Server(options) {
@@ -287,6 +289,7 @@ function Server(options) {
         var obj = {}, arr = body.split(/&/g);
         var el = {};
         for (var i=0; i<arr.length; ++i) {
+            if (!arr[i]) continue;
             el = arr[i].split(/=/);
             if ( /\{\}\"\:/.test(el[1]) ) { //might be a json
                 try {
@@ -295,7 +298,10 @@ function Server(options) {
                     console.error('could not parse body: ' + el[1])
                 }
             }
-            obj[ el[0] ] = el[1].replace(/%2B/g, ' ') // & ensure true white spaces
+
+            if ( typeof(el[1]) == 'string' && !/\[object /.test(el[1])) {
+                obj[ el[0] ] = el[1].replace(/%2B/g, ' ') // & ensure true white spaces
+            }
         }
         return obj
     }
@@ -326,58 +332,109 @@ function Server(options) {
             //request.delete = {}; //?
             request.body = {};
 
-            request.on('data', function(chunk){
-                if ( typeof(request.body) == 'object') {
-                    request.body = '';
-                }
-                request.body += chunk.toString()
-            });
-
-            request.on('end', function onEnd() {
-
-                switch( request.method.toLowerCase() ) {
-                    case 'post':
-                        var obj = {};
-                        if ( typeof(request.body) == 'string' ) {
-                            // get rid of encoding issues
-                            request.body = decodeURIComponent( request.body );
-                            if ( request.body.substr(0,1) == '?')
-                                request.body = request.body.substr(1);
-
-                            obj = parseBody(request.body)
-                        }
-                        request.body = request.post = obj;
-                        break;
-
-                    case 'get':
-                        request.get = request.query;
-                        break;
-                    //
-                    //case 'put':
-                    //    request.put = request.? || undefined;
-                    //    break;
-                    //
-                    //case 'delete':
-                    //    request.delete = request.? || undefined;
-                    //    break
-                };
 
 
-
-
-                loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
-                    if (!req.handled) {
-                        req.handled = true;
-                        //console.debug('loadBundleConfiguration called back..');
-                        if (err) {
-                            throwError(response, 500, 'Internal server error\n' + err.stack, next)
-                        } else {
-                            handle(req, res, next, bundle, pathname, config)
-                        }
+            // multipart wrapper for uploads
+            // files are available from your controller or any middlewares:
+            //  @param {object} req.files
+            if ( /multipart\/form-data;/.test(request.headers['content-type']) ) {
+                // TODO - get options from settings.json & settings.{env}.json ...
+                // -> https://github.com/andrewrk/node-multiparty
+                var opt = self.conf[self.appName][self.env].content.settings.upload;
+                var form = new multiparty.Form(opt);
+                form.parse(request, function(err, fields, files) {
+                    if (err) {
+                        self.throwError(response, 400, err.stack||err.message);
+                        return
                     }
-                })
-            });
 
+                    if ( request.method.toLowerCase() === 'post') {
+                        request.post = fields
+                    } else if ( request.method.toLowerCase() === 'get') {
+                        request.get = fields
+                    }
+
+                    request.files = files;
+
+                    loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
+                        if (!req.handled) {
+                            req.handled = true;
+                            if (err) {
+                                if (!res.headersSent)
+                                    throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                            } else {
+                                handle(req, res, next, bundle, pathname, config)
+                            }
+                        }
+                    })
+                })
+            } else {
+                request.on('data', function(chunk){
+                    if ( typeof(request.body) == 'object') {
+                        request.body = '';
+                    }
+                    request.body += chunk.toString()
+                });
+
+
+
+                request.on('end', function onEnd() {
+
+                    switch( request.method.toLowerCase() ) {
+                        case 'post':
+                            var obj = {}, configuring = false;
+                            if ( typeof(request.body) == 'string' ) {
+                                // get rid of encoding issues
+                                try {
+                                    if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                                        request.body = decodeURIComponent( request.body );
+                                        if ( request.body.substr(0,1) == '?')
+                                            request.body = request.body.substr(1);
+
+
+                                        obj = parseBody(request.body)
+                                    }
+
+                                } catch (err) {
+                                    var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
+                                    console.warn(msg);
+                                }
+                            }
+
+                            if ( obj.count() > 0 ) {
+                                request.body = request.post = obj;
+                            }
+                            break;
+
+                        case 'get':
+                            request.get = request.query;
+                            break;
+                        //
+                        //case 'put':
+                        //    request.put = request.? || undefined;
+                        //    break;
+                        //
+                        //case 'delete':
+                        //    request.delete = request.? || undefined;
+                        //    break
+
+
+                    };
+
+                    loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
+                        if (!req.handled) {
+                            req.handled = true;
+                            if (err) {
+                                if (!res.headersSent)
+                                    throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                            } else {
+                                handle(req, res, next, bundle, pathname, config)
+                            }
+                        }
+                    })
+
+                });
+            } //EO if multipart
 
         });//EO this.instance
 
@@ -445,14 +502,14 @@ function Server(options) {
         }
 
         onBundleConfigLoaded(bundle, {
-            err : false,
-            config : config,
-            pathname : pathname,
-            req : req,
-            res : res,
-            conf : config,
-            next : next,
-            callback : callback
+            err         : false,
+            config      : config,
+            pathname    : pathname,
+            req         : req,
+            res         : res,
+            conf        : config,
+            next        : next,
+            callback    : callback
         })
     }
 
@@ -656,7 +713,8 @@ function Server(options) {
                 res.end(JSON.stringify({
                     status: code,
                     error: 'Error '+ code +'. '+ msg
-                }))
+                }));
+                res.headersSent = true
             } else {
                 next()
             }
@@ -664,7 +722,8 @@ function Server(options) {
         } else {
             if (!res.headersSent) {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>')
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                res.headersSent = true
             } else {
                 next()
             }

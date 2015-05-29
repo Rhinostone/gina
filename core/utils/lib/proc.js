@@ -277,6 +277,7 @@ Proc = function(bundle, proc, usePidFile){
         } catch (err) {
             //Means that it does not exists anymore.
         }
+        // set a timeout maybe ???
         process.kill(pid, "SIGINT");// soft...
     };
 

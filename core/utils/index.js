@@ -45,6 +45,7 @@ function Utils() {
         math        : _require('./lib/math'),
         url         : _require('./lib/url'),
         cmd         : _require('./lib/cmd'),
+        multiparty  : _require('multiparty'),
         Validator   : _require('./lib/validator')
     };
 
