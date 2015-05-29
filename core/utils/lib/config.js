@@ -195,7 +195,6 @@ function ConfigUtil() {
             root : content.paths.root,
             utils : content.paths.utils
         };
-        console.error("blabla conf..", file, content);
         var gnaFolder = content.paths.root + '/.gna';
 
         self.project = content.project;

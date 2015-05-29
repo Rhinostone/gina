@@ -470,20 +470,10 @@ function PathHelper() {
         //console.log("starting copying ", p, " => ", target);
         cp(p, target, excluded)
             .onComplete( function(err, destination, method) {
-
-//                if (target == destination ||
-//                    typeof(method) != 'undefined'
-//                ) {
-
                 cb(err);
-                //}
             });
 
     }
-
-//    _.prototype.find = function(target, exlided, cb) {
-//
-//    }
 
     var cp = function(source, destination, excluded) {
 

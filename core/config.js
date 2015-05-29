@@ -710,8 +710,17 @@ function Config(opt) {
 
 
         try {
+            var settingsPath = _(getPath('gina.core') +'/template/conf/settings.json', true);
             var staticsPath = _(getPath('gina.core') +'/template/conf/statics.json', true);
             var viewsPath = _(getPath('gina.core') +'/template/conf/views.json', true);
+
+            if ( typeof(files['settings']) == 'undefined' ) {
+                files['settings'] = require(settingsPath)
+            } else if ( typeof(files['settings']) != 'undefined' ) {
+                var defaultSettings = require(settingsPath);
+
+                files['settings'] = merge(files['settings'], defaultSettings)
+            }
 
             if (fs.existsSync(staticsPath))
                 delete require.cache[staticsPath];
@@ -743,9 +752,9 @@ function Config(opt) {
             if (hasViews && typeof(files['views']) == 'undefined') {
                 files['views'] = require(viewsPath)
             } else if ( typeof(files['views']) != 'undefined' ) {
-                var defaultViewsSettings = require(viewsPath);
+                var defaultViews = require(viewsPath);
 
-                files['views'] = merge(files['views'], defaultViewsSettings)
+                files['views'] = merge(files['views'], defaultViews)
             }
         } catch (err) {
             callback(err)

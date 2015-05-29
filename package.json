@@ -28,7 +28,8 @@
   "dependencies": {
     "colors": "",
     "express": "4.x",
-    "swig": ""
+    "swig": "",
+    "multiparty": ""
   },
   "engine": [
     "node >=0.10.22"
