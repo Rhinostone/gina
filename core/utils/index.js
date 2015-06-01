@@ -22,8 +22,13 @@ function Utils() {
     var _require = function(path) {
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
         if (cacheless) {
-            delete require.cache[require.resolve(path)];
-            return require(path)
+            try {
+                delete require.cache[require.resolve(path)];
+                return require(path)
+            } catch (err) {
+                return {}
+            }
+
         } else {
             return require(path)
         }

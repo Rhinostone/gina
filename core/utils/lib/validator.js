@@ -39,6 +39,7 @@ function Validator(data, errorLabels) {
             isInteger: '%n not an integer',
             toInteger: '%n cannot convert to integer',
             isFloat: '%n not a proper float',
+            isFloatException: 'Exception found: %n',
             toFloat: 'n cannot convert to float',
             isString: '%n must be an instance of String',
             isDate: '%n invalid Date',
@@ -190,13 +191,19 @@ function Validator(data, errorLabels) {
 
         self[el].toFloat = function(decimals) {
             var val = this.value;
+            if (decimals) {
+                this.decimals = parseInt(decimals)
+            } else if ( typeof(this.decimals) == 'undefined' ) {
+                this.decimals = 2
+            }
+
             if (!val) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
                 local.errors[this.name].toFloat = replace(this.flash || local.errorLabels.toFloat, this);
             } else {
                 try {
-                    val = this.value = local.data[this.name] = parseFloat(val.match(/[0-9.,]+/g).join('').replace(/,/, '.'));
+                    val = this.value = local.data[this.name] = new Number(parseFloat(val.match(/[0-9.,]+/g).join('').replace(/,/, '.')));// Number <> number
                 } catch (err) {
                     if ( !(local.errors[this.name]) )
                         local.errors[this.name] = {};
@@ -205,27 +212,32 @@ function Validator(data, errorLabels) {
                 }
             }
 
-            if (decimals && val) {
-                this.value = this.value.toFixed(decimals)
+            if (this.decimals && val) {
+                this.value = local.data[this.name] = this.value.toFixed(this.decimals)
             }
 
             return self[this.name]
         }
+        /**
+         * Check if value is float. No trannsformation is done here.
+         * Can be used in combo preceded by *.toFloat(2) to transform data if needed:
+         *  1 => 1.0
+         *  or
+         *  3 500,5 => 3500.50
+         *
+         *
+         * @param {number} decimals
+         * */
+        self[el].isFloat = function() {
 
-        self[el].isFloat = function(decimals) {
-            try {
-                this.value = parseFloat(this.value.replace(/,/g, '.'));
-                var valid = this.value === Number(this.value)  && this.value%1!==0;
-                if (decimals && valid) {
-                    this.value = this.value.toFixed(decimals)
-                }
-            } catch (err) {
-                if ( !(local.errors[this.name]) )
-                    local.errors[this.name] = {};
-
-                local.errors[this.name].isFloat = replace(this.flash || local.errorLabels.isFloat, this)
+            //this.value = new Number(parseFloat(this.value.replace(/,/g, '.')));
+            this.value = this.value.replace(/,/g, '.');
+            var sp = this.value.split('.');
+            if ( /[.,]/.test(this.value) && sp.length === 2 ) {
+                this.value = parseFloat(this.value);
+                var valid = this.value === Number(this.value)  && this.value%1!==0 || this.value === Number(this.value) && ~~sp[1] === 0;
+                local.data[this.name] = this.value
             }
-
 
             if (!valid) {
                 if ( !(local.errors[this.name]) )
@@ -233,6 +245,7 @@ function Validator(data, errorLabels) {
 
                 local.errors[this.name].isFloat = replace(this.flash || local.errorLabels.isFloat, this)
             }
+
             return self[this.name]
         }
 
@@ -264,7 +277,7 @@ function Validator(data, errorLabels) {
             if ( minLen && typeof(minLen) == 'number') {
                 validStringWithMinLen = ( this.value.length >= minLen) ? true : false;
                 this.size = minLen;
-            } else if ( maxLen && typeof(maxLen) == 'number' ) {
+            } else if ( maxLen && typeof(maxLen) == 'number') {
                 validStringWithMaxLen = ( this.value.length <= maxLen) ? true : false;
                 this.size = maxLen;
             }
