@@ -341,7 +341,7 @@ function Server(options) {
                 // TODO - get options from settings.json & settings.{env}.json ...
                 // -> https://github.com/andrewrk/node-multiparty
                 var opt = self.conf[self.appName][self.env].content.settings.upload;
-                var form = new multiparty.Form(opt);
+                var i = 0, form = new multiparty.Form(opt);
                 form.parse(request, function(err, fields, files) {
                     if (err) {
                         self.throwError(response, 400, err.stack||err.message);
@@ -349,12 +349,24 @@ function Server(options) {
                     }
 
                     if ( request.method.toLowerCase() === 'post') {
-                        request.post = fields
+                        for (i in fields) {
+                            // should be: request.post[i] = fields[i];
+                            request.post[i] = fields[i][0]; // <-- to fixe on multiparty
+                        }
                     } else if ( request.method.toLowerCase() === 'get') {
-                        request.get = fields
+                        for (i in fields) {
+                            // should be: request.get[i] = fields[i];
+                            request.get[i] = fields[i][0]; // <-- to fixe on multiparty
+                        }
                     }
 
-                    request.files = files;
+                    request.files = {};
+                    for (var i in files) {
+                        // should be: request.files[i] = files[i];
+                        request.files[i] = files[i][0]; // <-- to fixe on multiparty
+                    }
+
+                    if (request.fields) delete request.fields; // <- not needed anymore
 
                     loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
                         if (!req.handled) {
