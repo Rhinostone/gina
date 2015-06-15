@@ -266,6 +266,56 @@ function ModelUtil() {
         }
     }
 
+
+    Collection = function(content) {
+        var content = content || [];
+
+        this.find = function(filter) {
+            if ( typeof(filter) !== 'object' ) {
+                throw new Error('filter must be an object');
+            } else {
+                var condition = filter.count()
+                    , i         = 0
+                    , found     = [];
+
+                for (var o in content) {
+                    for (var f in filter) {
+                        if ( typeof(content[o][f]) != 'undefined' && content[o][f].toHexString() === filter[f].toHexString() ) {
+                            ++i
+                        }
+                        if (i === condition) {
+                            found.push(content[o])
+                        }
+                    }
+                }
+            }
+            return found
+        }
+
+        this.findOne = function(filter) {
+            if ( typeof(filter) !== 'object' ) {
+                throw new Error('filter must be an object');
+            } else {
+                var condition = filter.count()
+                    , i         = 0;
+
+                if (condition == 0) return null;
+
+                for (var o in content) {
+                    for (var f in filter) {
+                        if ( typeof(content[o][f]) != 'undefined' && content[o][f].toHexString() === filter[f].toHexString() ) {
+                            ++i
+                        }
+                        if (i === condition) {
+                            return content[o];
+                        }
+                    }
+                }
+            }
+            return null
+        }
+    }
+
     return init()
 }
 
