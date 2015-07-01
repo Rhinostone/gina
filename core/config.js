@@ -591,8 +591,8 @@ function Config(opt) {
                         for (var u=0; u<routing[rule].url.length; ++u) {
                             if (routing[rule].url[u].length > 1 && routing[rule].url[u].substr(0,1) != '/') {
                                 routing[rule].url[u] = '/' + routing[rule].url[u]
-                            } else if (routing[rule].url.length > 1 && conf[bundle][env].server.webroot.substr(conf[bundle][env].server.webroot.length-1,1) == '/') {
-                                routing[rule].url[u] = routing[rule].url[u].substr(1)
+                            //} else if (routing[rule].url.length > 1 && conf[bundle][env].server.webroot.substr(conf[bundle][env].server.webroot.length-1,1) == '/' && routing[rule].url[u] != '/') {
+                            //    routing[rule].url[u] = routing[rule].url[u].substr(1)
                             } else {
                                 if (wroot.substr(wroot.length-1,1) == '/') {
                                     wroot = wroot.substr(wroot.length-1,1).replace('/', '')

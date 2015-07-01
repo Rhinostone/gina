@@ -2,6 +2,7 @@ var fs      = require('fs');
 var helpers = require('./helpers');
 var merge   = require('./merge');
 var console = require('./logger');
+var dateFormat  = helpers.dateFormat;
 
 /**
  * @class Validator
@@ -74,6 +75,8 @@ function Validator(data, errorLabels) {
         } else {
             val = self[el]
         }
+
+
         self[el] = {
             value: val,
             name: el,
@@ -155,9 +158,7 @@ function Validator(data, errorLabels) {
             var val = this.value;
 
             if (!val) {
-                if (!(local.errors[this.name]))
-                    local.errors[this.name] = {};
-                local.errors[this.name].toInteger = replace(this.flash || local.errorLabels.toInteger, this);
+                return self[this.name]
             } else {
                 try {
                     val = this.value = local.data[this.name] = ~~(val.match(/[0-9]+/g).join(''));
@@ -191,6 +192,7 @@ function Validator(data, errorLabels) {
 
         self[el].toFloat = function(decimals) {
             var val = this.value;
+
             if (decimals) {
                 this.decimals = parseInt(decimals)
             } else if ( typeof(this.decimals) == 'undefined' ) {
@@ -198,9 +200,7 @@ function Validator(data, errorLabels) {
             }
 
             if (!val) {
-                if ( !(local.errors[this.name]) )
-                    local.errors[this.name] = {};
-                local.errors[this.name].toFloat = replace(this.flash || local.errorLabels.toFloat, this);
+                return self[this.name]
             } else {
                 try {
                     val = this.value = local.data[this.name] = new Number(parseFloat(val.match(/[0-9.,]+/g).join('').replace(/,/, '.')));// Number <> number
@@ -229,6 +229,8 @@ function Validator(data, errorLabels) {
          * @param {number} decimals
          * */
         self[el].isFloat = function() {
+
+            if (!this.value) return self[this.name];
 
             //this.value = new Number(parseFloat(this.value.replace(/,/g, '.')));
             this.value = this.value.replace(/,/g, '.');
@@ -301,6 +303,8 @@ function Validator(data, errorLabels) {
          * */
         self[el].isDate = function(mask) {
             var val = this.value;
+            if (!val) return self[this.name];
+
             var m = mask.match(/[^\/\- ]+/g);
             val = val.match(/[^\/\- ]+/g);
             var dic = {}, d, len;
@@ -321,6 +325,23 @@ function Validator(data, errorLabels) {
             //return self[this.name]
             return date
         }
+
+        /**
+         * Formating date using DateFormatHelper
+         * Check out documentation in the helper source: `utils/helpers/dateFormat.js`
+         * e.g.:
+         *      d.start
+         *        .isDate('dd/mm/yyyy')
+         *        .format('isoDateTime');
+         *
+         *
+         * */
+        self[el].format = function(mask, utc) {
+            var val = this.value;
+            if (!val) return self[this.name];
+
+            return val.format(mask, utc)
+        };
 
         /**
          * Set flash
@@ -352,6 +373,7 @@ function Validator(data, errorLabels) {
          * @return {object} data
          * */
         self[el].exclude = function() {
+            if (!this.value) return self[this.name];
             //clonning
             for (var d in local.data) {
                 if (d === this.name) { //cleaning
