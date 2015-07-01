@@ -270,10 +270,6 @@ function Router(env) {
             }
         } catch (err) {
             // so you can use swig to customize error pages later
-            //var superController = new SuperController(options);
-            //superController.setOptions(request, response, next, options);
-            //console.log(err.stack);
-            //superController.throwError(response, 500, err.stack);
             throwError(response, 500, err.stack);
         }
 
@@ -354,32 +350,21 @@ function Router(env) {
 
                 if ( typeof(middleware[constructor]) != 'undefined') {
 
-                    // exporting config
-                    middleware.getConfig = controller.getConfig;
-                    //middleware.getConfig = function(name){
-                    //    var tmp = null;
-                    //    if ( typeof(name) != 'undefined' ) {
-                    //        try {
-                    //            //Protect it.
-                    //            tmp = JSON.stringify(local.conf.content[name]);
-                    //            return JSON.parse(tmp)
-                    //        } catch (err) {
-                    //            console.error(err.stack);
-                    //            return undefined
-                    //        }
-                    //    } else {
-                    //        tmp = JSON.stringify(local.conf);
-                    //        return JSON.parse(tmp)
-                    //    }
-                    //};
-                    //middleware.throwError = throwError;
-                    middleware.throwError = controller.throwError;
-                    middleware.redirect = controller.redirect;
+                    // exporting config & common methods
+                    middleware.getConfig    = controller.getConfig;
+                    middleware.throwError   = controller.throwError;
+                    middleware.redirect     = controller.redirect;
+                    middleware.render       = controller.render;
+                    middleware.renderJSON   = controller.renderJSON;
 
                     middleware[constructor](req, res, next,
                         function onMiddlewareProcessed(req, res, next){
                             middlewares.splice(m, 1);
-                            processMiddlewares(middlewares, action,  req, res, next, cb)
+                            if (middlewares.length > 0) {
+                                processMiddlewares(middlewares, action,  req, res, next, cb)
+                            } else {
+                                cb(action, req, res, next)
+                            }
                         }
                     );
                     break
@@ -424,23 +409,6 @@ function Router(env) {
                 local.next()
             }
         }
-
-
-        //if ( !res.headersSent ) {
-        //    if ( !hasViews() ) {
-        //        res.writeHead(code, { 'Content-Type': 'application/json'} );
-        //        res.end(JSON.stringify({
-        //            status: code,
-        //            error: 'Error '+ code +'. '+ msg
-        //        }))
-        //    } else {
-        //        res.writeHead(code, { 'Content-Type': 'text/html'} );
-        //        res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
-        //        local.res.headersSent = true;
-        //    }
-        //} else {
-        //    local.next()
-        //}
     };
 
     init()

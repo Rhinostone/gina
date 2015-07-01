@@ -211,8 +211,8 @@ function Server(options) {
                             for (var u=0; u<tmp[rule].url.length; ++u) {
                                 if (tmp[rule].url[u].length > 1 && tmp[rule].url[u].substr(0,1) != '/') {
                                     tmp[rule].url[u] = '/'+tmp[rule].url[u]
-                                } else if (tmp[rule].url[u].length > 1 && self.conf[apps[i]][self.env].server.webroot.substr(self.conf[apps[i]][self.env].server.webroot.length-1,1) == '/') {
-                                    tmp[rule].url[u] = tmp[rule].url[u].substr(1)
+                                //} else if (tmp[rule].url[u].length > 1 && self.conf[apps[i]][self.env].server.webroot.substr(self.conf[apps[i]][self.env].server.webroot.length-1,1) == '/') {
+                                //    tmp[rule].url[u] = tmp[rule].url[u].substr(1)
                                 } else {
                                     if (wroot.substr(wroot.length-1,1) == '/') {
                                         wroot = wroot.substr(wroot.length-1,1).replace('/', '')
@@ -311,6 +311,14 @@ function Server(options) {
         var apps = self.bundles;
         var webrootLen = self.conf[self.appName][self.env].server.webroot.length;
 
+        //var body = '';
+        //self.instance.on('data', function(chunk){
+        //    if ( typeof(body) == 'object') {
+        //        body = ''
+        //    }
+        //    body += chunk.toString()
+        //});
+
         self.instance.all('*', function onInstance(request, response, next) {
             // Fixing an express js bug :(
             // express is trying to force : /path/dir => /path/dir/
@@ -381,69 +389,67 @@ function Server(options) {
                     })
                 })
             } else {
-                request.on('data', function(chunk){
+                request.on('data', function(chunk){ // for this to work, don't forget the name attr for you form elements
                     if ( typeof(request.body) == 'object') {
                         request.body = '';
                     }
                     request.body += chunk.toString()
                 });
 
-
-
                 request.on('end', function onEnd() {
 
-                    switch( request.method.toLowerCase() ) {
-                        case 'post':
-                            var obj = {}, configuring = false;
-                            if ( typeof(request.body) == 'string' ) {
-                                // get rid of encoding issues
-                                try {
-                                    if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                                        request.body = decodeURIComponent( request.body );
-                                        if ( request.body.substr(0,1) == '?')
-                                            request.body = request.body.substr(1);
+                        switch( request.method.toLowerCase() ) {
+                            case 'post':
+                                var obj = {}, configuring = false;
+                                if ( typeof(request.body) == 'string' ) {
+                                    // get rid of encoding issues
+                                    try {
+                                        if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                                            request.body = decodeURIComponent( request.body );
+                                            if ( request.body.substr(0,1) == '?')
+                                                request.body = request.body.substr(1);
 
 
-                                        obj = parseBody(request.body)
+                                            obj = parseBody(request.body)
+                                        }
+
+                                    } catch (err) {
+                                        var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
+                                        console.warn(msg);
                                     }
+                                }
 
-                                } catch (err) {
-                                    var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
-                                    console.warn(msg);
+                                if ( obj.count() > 0 ) {
+                                    request.body = request.post = obj;
+                                }
+                                break;
+
+                            case 'get':
+                                request.get = request.query;
+                                break;
+                            //
+                            //case 'put':
+                            //    request.put = request.? || undefined;
+                            //    break;
+                            //
+                            //case 'delete':
+                            //    request.delete = request.? || undefined;
+                            //    break
+
+
+                        };
+
+                        loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
+                            if (!req.handled) {
+                                req.handled = true;
+                                if (err) {
+                                    if (!res.headersSent)
+                                        throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                                } else {
+                                    handle(req, res, next, bundle, pathname, config)
                                 }
                             }
-
-                            if ( obj.count() > 0 ) {
-                                request.body = request.post = obj;
-                            }
-                            break;
-
-                        case 'get':
-                            request.get = request.query;
-                            break;
-                        //
-                        //case 'put':
-                        //    request.put = request.? || undefined;
-                        //    break;
-                        //
-                        //case 'delete':
-                        //    request.delete = request.? || undefined;
-                        //    break
-
-
-                    };
-
-                    loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
-                        if (!req.handled) {
-                            req.handled = true;
-                            if (err) {
-                                if (!res.headersSent)
-                                    throwError(response, 500, 'Internal server error\n' + err.stack, next)
-                            } else {
-                                handle(req, res, next, bundle, pathname, config)
-                            }
-                        }
-                    })
+                        })
 
                 });
             } //EO if multipart
