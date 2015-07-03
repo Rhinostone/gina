@@ -586,14 +586,19 @@ function Server(options) {
                 //Preparing params to relay to the router.
                 params = {
                     requirements : routing[rule].requirements,
-                    url : pathname,
+                    url : unescape(pathname), /// avoid %20
                     rule: routing[rule].originalRule || rule,
                     param : routing[rule].param,
                     middleware : routing[rule].middleware,
                     bundle: routing[rule].bundle
                 };
                 //Parsing for the right url.
-                isRoute = router.compareUrls(req, params, routing[rule].url);
+                try {
+                    isRoute = router.compareUrls(req, params, routing[rule].url);
+                } catch (err) {
+                    throwError(res, 500, 'Rule [ '+rule+' ] needs your attention.\n'+err.stack)
+                }
+
                 if (pathname === routing[rule].url || isRoute.past) {
 
                     console.debug('Server routing to '+ pathname);
