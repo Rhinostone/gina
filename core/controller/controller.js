@@ -604,10 +604,10 @@ function Controller(options) {
      * @callback [ next ]
      * */
     this.redirect = function(req, res, next) {
-        var conf = self.getConfig();
-        var wroot = conf.server.webroot;
+        var conf    = self.getConfig();
+        var wroot   = conf.server.webroot;
         var routing = conf.content.routing;
-        var route = '', rte = '';
+        var route   = '', rte = '';
 
         if ( typeof(req) === 'string' ) {
 
@@ -653,12 +653,12 @@ function Controller(options) {
             route = req.routing.param.route;
         }
 
-        var path = req.routing.param.path || '';
-        var url = req.routing.param.url;
-        var code = req.routing.param.code || 301;
-        var keepParams = req.routing.param['keep-params'] || false;
+        var path        = req.routing.param.path || '';
+        var url         = req.routing.param.url;
+        var code        = req.routing.param.code || 301;
+        var keepParams  = req.routing.param['keep-params'] || false;
 
-        var condition = true; //set by default for url @ path redirect
+        var condition   = true; //set by default for url @ path redirect
 
         if (route) { // will go with route first
             condition = ( typeof(routing[route]) != 'undefined') ? true : false;
