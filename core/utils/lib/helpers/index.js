@@ -28,9 +28,6 @@ var Helpers = {
         task        : require('./task')()
 };
 
-die = function(){
-    process.exit(42);
-};
 
 module.exports = Helpers;
 
@@ -94,20 +91,6 @@ Object.defineProperty( Object.prototype, 'count', {
 
     }
 });
-/**
-Object.defineProperty( Object.prototype, 'push', {
-    writable:   true,
-    enumerable: false,
-    value: function(o){
-        this.set
-        //if (typeof(this.data) == "undefined") this.data = [];
-        console.log("pushing.. ", JSON.stringify(this, null, '/t'));
-        //this.data.push(o);
-        //this.arr[this.i] = o;
-        //++this.i;
-        //return this.arr;
-    }
-});*/
 
 /**
  * __stack Get current stack
@@ -128,118 +111,3 @@ Object.defineProperty(global, '__stack', {
         return stack;
     }
 });
-
-
-
-/**
- * __line Get current line number
- * @return {Number} stack Current line number
- * */
-Object.defineProperty(global, '__line', {
-    //If loaded several times, it can lead to an exception. That's why I put this.
-    configurable: true,
-    get: function() {
-        return __stack[1].getLineNumber();
-    }
-});
-
-
-/**
- * __function Get current function name
- * @return {String} function Current function name
- * */
-Object.defineProperty(global, '__function', {
-    //If loaded several times, it can lead to an exception. That's why I put this.
-    configurable: true,
-    get: function() {
-        return __stack[1].getFunctionName();
-    }
-});
-
-/**
- * __module Get current module name
- * @return {String} module Current module name
- * */
-Object.defineProperty(global, '__module', {
-    //If loaded several times, it can lead to an exception. That's why I put this.
-    configurable: true,
-    get: function() {
-        return __stack[1].getFunctionName().split('.')[0];
-    }
-});
-
-/**
- * __filename Get current file path
- * @return {String} stack Current file path
- * */
-Object.defineProperty(global, '__filename', {
-    //If loaded several times, it can lead to an exception. That's why I put this.
-    configurable: true,
-    get: function() {
-        return __stack[1].getFileName();
-    }
-});
-
-/**
- * __file Get current file name
- * @return {Integer} stack Current file name
- * */
-Object.defineProperty(global, '__file', {
-    //If loaded several times, it can lead to an exception. That's why I put this.
-    configurable: true,
-    get: function() {
-        var filename = __stack[1].getFileName().split(/[\\/]/);
-        return filename[filename.length-1];
-    }
-});
-
-/**
- * __column Get current column number
- * @return {Integer} stack Current column number
- * */
-Object.defineProperty(global, '__column', {
-    //If loaded several times, it can lead to an exception. That's why I put this.
-    configurable: true,
-    get: function() {
-        return  __stack[1].getColumnNumber();
-    }
-});
-
-// !!! also defined when using lodash :(
-Object.defineProperty( Object.prototype, 'toArray', {
-    writable:   false,
-    enumerable: false,
-    //If loaded several times, it can lead to an exception. That's why I put this.
-    configurable: true,
-    value: function(force) {
-        var arr = [],i = 0;
-        for (var prop in this) {
-            if ( this.hasOwnProperty(prop) ) {
-                if (force) {
-                    arr[i] = this[prop]
-                } else {
-                    arr[prop] = this[prop]
-                }
-                ++i
-            }
-        }
-        return arr
-    }
-});
-
-/**
- * String.toArray() Convert string path to array
- * @param {String} delimiter Delimiter caracter for implode
- * @return {Array} array Imploded Array
- * */
-String.prototype.toArray = function(delimiter) {
-    if (typeof(delimiter) != "undefined") {
-        var str = this.toString(), reg = new RegExp(delimiter, "g");
-        //Removing delimiter at the begining & at the end.
-        if (str.substring(str.length-1) == delimiter)
-            str = str.substring(0, str.length-1);
-        if (str.substring(0,1) == delimiter) str = str.substring(1);
-
-        return str.split(reg);
-    }
-};

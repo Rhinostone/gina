@@ -50,9 +50,6 @@ function Config(opt) {
             self.executionPath = opt.executionPath;
             self.task = opt.task || 'run'; // to be aible to filter later on non run task
 
-            //logger.debug('gina', 'CONFIG:DEBUG:1', 'Initalizing config ', __stack);
-            console.debug('Initalizing config ', __stack);
-
             self.userConf = false;
             var path = _(self.executionPath + '/env.json');
 
