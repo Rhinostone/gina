@@ -922,6 +922,15 @@ function Config(opt) {
         })
     }
 
+    /**
+     * Setting routing for non dev env
+     *
+     * @param {object} routing
+     * */
+    this.setRouting = function(bundle, env, routing) {
+        self.envConf[bundle][env].content.routing = routing
+    }
+
     if (!opt) {
 
         this.setBundles = function(bundles) {
