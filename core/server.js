@@ -269,7 +269,7 @@ function Server(options) {
         for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
             self.routing[originalRules[r]].originalRule = (self.routing[originalRules[r]].bundle === self.appName ) ?  config.getOriginalRule(originalRules[r], self.routing) : config.getOriginalRule(self.routing[originalRules[r]].bundle +'-'+ originalRules[r], self.routing)
         }
-
+        config.setRouting(self.appName, self.env, self.routing);
         callback(false)
     }
 
@@ -564,6 +564,7 @@ function Server(options) {
             , router        = local.router
             , cacheless     = config.isCacheless()
             , wroot         = null;
+
 
         console.debug('about to handle [ '+ pathname + ' ] route');
         router.setMiddlewareInstance(self.instance);
