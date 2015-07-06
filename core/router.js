@@ -229,7 +229,8 @@ function Router(env) {
         //TODO - to test
         if ( resHeaders.count() > 0 ) {
             for (var h in resHeaders) {
-                response.setHeader(h, resHeaders[h])
+                if (!response.headersSent)
+                    response.setHeader(h, resHeaders[h])
             }
         }
 

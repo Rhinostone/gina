@@ -205,8 +205,9 @@ Object.defineProperty(global, '__column', {
     }
 });
 
+// !!! also defined when using lodash :(
 Object.defineProperty( Object.prototype, 'toArray', {
-    writable:   true,
+    writable:   false,
     enumerable: false,
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
