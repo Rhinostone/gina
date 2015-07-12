@@ -43,7 +43,8 @@ function Model(namespace) {
         entitiesPath: null,
         connection: null,
         files: {},
-        toReload: []
+        toReload: [],
+        trying: 0
     };
 
     var _configuration = null;
@@ -78,8 +79,8 @@ function Model(namespace) {
         }
 
 
-        console.log("\nBundle", bundle);
-        console.log("Model", model);
+        console.log("\nBundle: ", bundle);
+        console.log("Model: ", model);
         self.name = _connector;
         self.bundle = bundle;
         self.model = model;
@@ -212,7 +213,15 @@ function Model(namespace) {
         if ( typeof(configuration) != 'undefined' && locals) {
             var tmp = JSON.stringify(configuration);
             tmp = JSON.parse(tmp);
-            console.log("getting config for bundle ", bundle);
+            //console.log("getting config for bundle ", bundle);
+            if (local.trying > 5) {
+                throw new Error('Cannot contact '+self.model+' !\n\rPlease, chech your network settings or contact the administrator.')
+            } else if ( local.trying == 1) {
+                console.warn('trying to connect to '+self.model+' ('+local.trying+')')
+            }
+
+            ++local.trying;
+
             // configuration object.
             var confObj = {
                 connectors   : tmp.content.connectors,
