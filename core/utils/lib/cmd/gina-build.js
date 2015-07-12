@@ -33,16 +33,15 @@ function BuildBundle(project, bundle) {
     }
 
     var init = function() {
-        console.log('init once !!');
         self.root = getPath('root');
         self.env = process.env.NODE_ENV;
 
         if ( typeof(bundle) != 'undefined' ) {
-            console.log('building', bundle, '[ '+ self.env +' ]');
+            console.info('building', bundle, '[ '+ self.env +' ]');
             // TODO add origin of the build.
             buildBundleFromSources(project, bundle);
         } else {
-            console.log('building whole project: [ '+ self.env +' ]');
+            console.info('building whole project: [ '+ self.env +' ]');
             //buildProjectFromSources(project);
         }
     }
@@ -128,8 +127,10 @@ function BuildBundle(project, bundle) {
 
                     var targetObj = new _(target);
                     targetObj.rm(function (err) {
-                        var sourceObj = new _(source)
+                        new _(source)
                             .cp(target, excluded, function (err) {
+                                console.info("Build [ "+bundle+"@"+version+" ] ready.");
+                                console.log('\n\r');
                                 self.emit('build#complete', err, version)
                             })
                     })
@@ -142,8 +143,6 @@ function BuildBundle(project, bundle) {
     }
 
     var getSourceInfos = function( package, bundle, callback) {
-
-
 
 
         try {
@@ -163,7 +162,7 @@ function BuildBundle(project, bundle) {
                 }
 
                 if (version == undefined) {
-                    console.log('You need a version reference to build.');
+                    console.error('You need a version reference to build.\n\r');
                     process.exit(1);
                 }
 
@@ -180,10 +179,10 @@ function BuildBundle(project, bundle) {
                 })
             } else if ( typeof(package['repo']) != 'undefined' ) {
                 //relies on configuration.
-                console.log('build from repo is a feature in progress.');
+                console.error('Build from repo is a feature in progress.\n\r');
                 process.exit(0)
             } else {
-                console.log('No source reference found for build. Need to add [src] or [repo]');
+                console.error('No source reference found for build. Need to add [src] or [repo]\n\r');
                 process.exit(0)
             }
         } catch (err) {
@@ -205,7 +204,7 @@ function BuildBundle(project, bundle) {
 
     this.onComplete = function(callback) {
         self.once('build#complete', function(err, version) {
-            if (!err) console.log("Build "+version+" ready.");
+            //if (!err) console.info("Build "+version+" ready.\n\r");
 
             callback(err)
         });

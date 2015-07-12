@@ -60,7 +60,7 @@ function Controller(options) {
 
     var getInstance = function() {
         local.options = Controller.instance._options = options;
-        self._data = Controller.instance._data;
+        //self._data = Controller.instance._data;
         return Controller.instance
     }
 
@@ -208,10 +208,10 @@ function Controller(options) {
     this.render = function(_data) {
 
         try {
-            var data = self.getData();
+            var data = self.getData(), path = '';
             if (!_data) {
                 _data = { page: {}}
-            } else if (!_data['page']) {
+            } else if ( _data && !_data['page']) {
                 data['page'] = {
                     data: _data
                 }
