@@ -30,10 +30,12 @@ var Generator = {
                 fs.unlink(target);
             }
             fs.writeFile(target, data, function(err, data){
-                if (err) throw err;
-                //Setting permission.
-                fs.chmodSync(target, 0755);
-                if ( typeof(callback) != 'undefined') callback(err)
+                setTimeout( function onChmod(){
+                    if (err) throw err;
+                    //Setting permission.
+                    fs.chmodSync(target, 0755);
+                    if ( typeof(callback) != 'undefined') callback(err)
+                }, 1000)
             });
         });
     },
