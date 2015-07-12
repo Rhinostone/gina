@@ -87,7 +87,7 @@ process.env.IS_CACHELESS = (env == "dev" || env == "debug") ? true : false;
 
 //console.log('ENV => ', env);
 //console.log('HOW  ', process.argv.length, process.argv);
-//var bundlesPath = _(root + '/bundles');
+
 var bundlesPath = getPath('mountPath');
 
 var p = new _(process.argv[1]).toUnixStyle().split("/");
@@ -202,8 +202,8 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
     //creating folders.
     //use junction when using Win XP os.release == '5.1.2600'
     var exists = fs.existsSync(source);
-    console.log('source: ', source);
-    console.log('checking before mounting ', target, fs.existsSync(target), bundlesPath);
+    console.debug('source: ', source);
+    console.debug('checking before mounting ', target, fs.existsSync(target), bundlesPath);
     if ( fs.existsSync(target) ) {
         try {
             fs.unlinkSync(target)
@@ -249,6 +249,66 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
         callback('Found no release to mount for: ', source)
     }
 };
+
+var mountChildrenSync = function(project, bundles, i) {
+    var i           = i || 1; // ignoring startingApp (master)
+    if (i > bundles.length -1) {
+        return
+    }
+    var source    = (env == 'dev' || env == 'debug') ? _( root +'/'+project.bundles[bundles[i]].src) : _( root +'/'+ project.bundles[bundles[i]].release.target )
+        , target    = _( root +'/'+ project.bundles[bundles[i]].release.link )
+        , type      = 'dir';
+
+
+
+
+    if ( fs.existsSync(target) ) {
+        try {
+            fs.unlinkSync(target)
+        } catch (err) {
+            console.emerg(err.stack);
+            process.exit(1)
+        }
+    }
+
+    if ( fs.existsSync(source) ) {
+        utils.generator.createPathSync(bundlesPath, function onPathCreated(err){
+            if (!err) {
+                try {
+                    if ( type != undefined)
+                        fs.symlinkSync(source, target, type)
+                    else
+                        fs.symlinkSync(source, target);
+
+                    mountChildrenSync(project, bundles, i+1)
+                } catch (err) {
+                    if (err) {
+                        console.emerg(err.stack||err.message);
+                        process.exit(1)
+                    }
+                    if ( fs.existsSync(target) ) {
+                        var stats = fs.lstatSync(target);
+                        if ( stats.isDirectory() ) {
+                            var d = new _(target).rm( function(err){
+                                console.error(err.stack);
+                                process.exit(1)
+                            })
+                        } else {
+                            fs.unlinkSync(target);
+                            console.error(err.stack);
+                            process.exit(1)
+                        }
+                    }
+                }
+            } else {
+                console.error(err.stack);
+                process.exit(1)
+            }
+        });
+    } else {
+        console.emerg( new Error('Found no release to mount for: '+ source).stack)
+    }
+}
 
 
 // get configuration
@@ -543,35 +603,16 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 env             : env,
                 executionPath   : core.executionPath,
                 startingApp     : core.startingApp,
-                ginaPath       : core.ginaPath
+                ginaPath        : core.ginaPath
             });
 
             setContext('gina.config', config);
             config.onReady( function(err, obj){
-                var isStandalone = obj.isStandalone;
 
                 if (err) console.error(err, err.stack);
 
-//                logger.info('gina', 'CORE:INFO:2', 'Execution Path : ' + core.executionPath);
-//                logger.info('gina', 'CORE:INFO:3', 'Standalone mode : ' + isStandalone);
-
-
-
                 var initialize = function(err, instance, middleware, conf) {
                     if (!err) {
-
-//                            logger.debug(
-//                                'gina',
-//                                'CORE:DEBUG:1',
-//                                'Server conf loaded',
-//                                __stack
-//                            );
-//
-//                            logger.notice(
-//                                'gina',
-//                                'CORE:NOTICE:2',
-//                                    'Starting [' + core.startingApp + '] instance'
-//                            );
 
                         //On user conf complete.
                         e.on('complete', function(instance){
@@ -588,30 +629,20 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                 e.emit('complete', instance);
                             }
 
-                            console.info('mounted!! ', conf.bundle, process.pid)
+                            console.info('[ '+core.startingApp+' ] mounted!! ', conf.bundle, process.pid)
                             // -- EO
                         } else {
-//                                logger.error(
-//                                    'gina',
-//                                    'CORE:ERR:2',
-//                                        'Could not mount bundle ' + core.startingApp + '. ' + err + '\n' + err.stack,
-//                                    err.stack
-//                                );
                             console.error( 'Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
 
                             abort(err)
                         }
 
                     } else {
-//                            logger.error(
-//                                'gina',
-//                                'CORE:ERROR:1',
-//                                'Gina::Core.setConf() error. '+ err+ '\n' + err.stack
-//                            )
                         console.error(err.stack||err.message)
                     }
                 };
 
+                var isStandalone = obj.isStandalone;
                 var opt = {
                     bundle          : core.startingApp,
                     //Apps list.
@@ -622,6 +653,12 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                     executionPath   : core.executionPath,
                     conf            : obj.conf
                 };
+
+
+                if (isStandalone && obj.bundles.length > 1) {
+                    // mount child as well
+                    mountChildrenSync(project, obj.bundles);
+                }
 
                 var server = new Server(opt);
                 server.onConfigured(initialize);

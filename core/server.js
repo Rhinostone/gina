@@ -116,12 +116,10 @@ function Server(options) {
             , apps          = conf.bundles
             , filename      = ''
             , appName       = ''
-            , name          = ''
             , tmp           = {}
             , standaloneTmp = {}
             , main          = ''
             , tmpContent    = ''
-            , tmpName       = ''
             , i             = 0
             , wroot         = null
             , localWroot    = null
@@ -156,13 +154,19 @@ function Server(options) {
 
                 if (filename != main) {
                     self.routing = merge(true, require(main), require(filename));
+
                 } else {
-                    self.routing = require(filename);
+                    try {
+                        tmpContent = require(filename);
+                    } catch (err) {
+                        console.emerg(err.stack);
+                        process.exit(1)
+                    }
                 }
 
                 try {
 
-                    tmp = self.routing;
+                    tmp = tmpContent;
                     //Adding important properties; also done in core/config.
                     for (var rule in tmp){
                         tmp[rule].bundle = (tmp[rule].bundle) ? tmp[rule].bundle : apps[i]; // for reverse search
@@ -248,7 +252,8 @@ function Server(options) {
                                 standaloneTmp[rule] = JSON.parse(JSON.stringify(tmp[rule]))
                             }
                         }
-                    }
+                    }// EO for
+
 
                 } catch (err) {
                     self.routing = null;
@@ -485,7 +490,7 @@ function Server(options) {
 
         var config = new Config();
         config.setBundles(self.bundles);
-        var conf = config.getInstance(bundle);
+        var conf = config.getInstance(); // for all loaded bundles
         if ( typeof(conf) != 'undefined') {//for cacheless mode
             self.conf = conf
         }
