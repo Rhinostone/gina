@@ -48,6 +48,7 @@ function Config(opt) {
 
             self.startingApp = opt.startingApp;
             self.executionPath = opt.executionPath;
+
             self.task = opt.task || 'run'; // to be aible to filter later on non run task
 
             self.userConf = false;
@@ -88,6 +89,8 @@ function Config(opt) {
 
                     if ( typeof(Config.initialized) == 'undefined' ) {
                         Config.initialized = true;
+                        self.isStandalone = self.Host.isStandalone();
+
                         Config.instance = self
                     }
 
@@ -247,10 +250,16 @@ function Config(opt) {
          **/
         getConf : function(bundle, env) {
             //console.log("get from ....", appName, env);
-            if ( typeof(bundle) != 'undefined' && typeof(env) != 'undefined' )
-                return ( typeof(self.envConf) != "undefined" ) ? self.envConf[bundle][env] : null;
-            else
-                return ( typeof(self.envConf) != "undefined" ) ? self.envConf : null;
+            if ( typeof(bundle) != 'undefined' && typeof(env) != 'undefined' ) {
+                if (!self.isStandalone) {
+                    return ( typeof(self.envConf) != "undefined" ) ? self.envConf[bundle][env] : null;
+                } else {
+                    return ( typeof(self.envConf) != "undefined" ) ? self.envConf[self.startingApp][env] : null;
+                }
+
+            } else {
+                return ( typeof(self.envConf) != "undefined" ) ? self.envConf : null
+            }
         },
         getDefault : function() {
             return {
@@ -430,13 +439,13 @@ function Config(opt) {
     this.getBundles = function() {
 
         //Registered apps only.
-        console.debug('Pushing apps ' + JSON.stringify(self.bundles, null, '\t'), __stack);
+        console.debug('Pushing apps ' + JSON.stringify(self.bundles, null, '\t'));
         return self.bundles
     }
 
     this.getAllBundles = function() {
         //Registered apps only.
-        console.debug('Pushing ALL apps ' + JSON.stringify(self.allBundles, null, '\t'), __stack);
+        console.debug('Pushing ALL apps ' + JSON.stringify(self.allBundles, null, '\t'));
         return self.allBundles
     }
 

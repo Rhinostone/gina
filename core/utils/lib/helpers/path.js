@@ -65,7 +65,7 @@ function PathHelper() {
             if (isConstructor) {
                 var self = _;
 
-                //console.log("creating path record: ", path, isConstructor );
+                //console.debug("creating path record: ", path, isConstructor );
                 this.path = path;
                 if (process.platform == "win32") {
                     //In case of mixed slashes.
@@ -80,11 +80,11 @@ function PathHelper() {
                         _this.paths.push(p)
                     }
                 } else {
-                    //console.log("linux style");
+                    //console.debug("linux style");
                     //we don't want empty spaces..
                     this.value = path.replace(/\\/g, "/");
                     var p = this.value;
-                    //console.log("path ", p);
+                    //console.debug("path ", p);
                     this.key = path;
                     if (_this.paths.indexOf(path) < 0 ) {
                         _this.paths.push(p)
@@ -355,7 +355,7 @@ function PathHelper() {
                                 if (typeof(callback) != 'undefined') {
                                     callback(err, path)
                                 } else {
-                                    console.log("no callback defined for mkdir ", path)
+                                    console.debug("no callback defined for mkdir ", path)
                                 }
                             }
                         }
@@ -415,7 +415,7 @@ function PathHelper() {
                 }
             })
         } else {
-            //console.log("calling end on ", self.value);
+            //console.debug("calling end on ", self.value);
             mkdirEnd(self, false, path)
         }
         return {
@@ -424,7 +424,7 @@ function PathHelper() {
              * @event mkdir#onComplete
              * */
             onComplete : function(callback) {
-                //console.log("listeners ", e.listeners('mkdir#complete') );
+                //console.debug("listeners ", e.listeners('mkdir#complete') );
                 //We want it once for the object path.
                 e.once('mkdir#complete#'+self.value, function(err, path) {
 
@@ -467,7 +467,7 @@ function PathHelper() {
         var self = this;
         //Enter dir & start rm.
         var p = self.value;
-        //console.log("starting copying ", p, " => ", target);
+        //console.debug("starting copying ", p, " => ", target);
         cp(p, target, excluded)
             .onComplete( function(err, destination, method) {
                 cb(err);
@@ -532,30 +532,30 @@ function PathHelper() {
                  *  [3.C] from  dir to dir (override if exists) equals to mv()
                  *        when creating
                  */
-                //console.log("man..", childElementsOnly);
+                //console.debug("man..", childElementsOnly);
                 var method = "3C", createDir;
                 if (
                     childElementsOnly['source'] && childElementsOnly['destination'] ||
                     childElementsOnly['source'] && !childElementsOnly['destination']
                 ) {
                     method = "3A";
-                    //console.log("....calling method ", method);
+                    //console.debug("....calling method ", method);
 
                     browseCopy(source, destination, excluded, function(err){
-                        console.log("copy Dir/ to Dir/ && Dir/ to Dir done");
+                        console.debug("copy Dir/ to Dir/ && Dir/ to Dir done");
                         e.emit("cp#complete", err, destination, method)
                     })
 
                 } else if (!childElementsOnly["source"] && childElementsOnly["destination"]) {
                     method = "3B";
-                    //console.log("....calling method ", method);
+                    //console.debug("....calling method ", method);
                     //Getting folder name.
                     var folder = new _(source).toArray().last();
                     destination += '/' + folder;
 
                     var target = new _(destination).mkdir( function(err, path) {
                         browseCopy(source, path, excluded, function(err) {
-                            //console.log("copy Dir to Dir/ done");
+                            //console.debug("copy Dir to Dir/ done");
                             e.emit("cp#complete", err, path, method)
                         })
                     })
@@ -583,7 +583,7 @@ function PathHelper() {
                                 var target = new _(destination).mkdir( function(err, path) {
 
                                     browseCopy(source, path, excluded, function(err) {
-                                        //console.log("copy Dir to Dir done");
+                                        //console.debug("copy Dir to Dir done");
                                         //removed = true;
                                         destination = null;
                                         e.emit("cp#complete", err, path, method)
@@ -624,7 +624,7 @@ function PathHelper() {
 
                     var d = _(destination);
                     fs.exists(d, function(exists){
-                        console.log("about to remove !! ", d, exists);
+                        console.debug("about to remove !! ", d, exists);
                         if (exists) {
                             rm(d).onComplete( onRemoved )
                         } else {
@@ -649,7 +649,7 @@ function PathHelper() {
                     if (err) {
                         console.error(err.stack)
                     }
-                    console.log('cp() completed copy to: ', method);
+                    console.debug('cp() completed copy to: ', method);
                     callback(err, destination, method)
                 })
             }
@@ -665,7 +665,7 @@ function PathHelper() {
 //                        __stack
 //                    );
 //                }
-//                console.log('cp() complete');
+//                console.debug('cp() complete');
 //                callback(err, destination)
 //            })
 //        };
@@ -901,14 +901,14 @@ function PathHelper() {
     }
 
     var mv = function(self, target) {
-        //console.log("starting mv/copy from ", self.value, " to ", target);
+        //console.debug("starting mv/copy from ", self.value, " to ", target);
         var task = new _(self.value);
         task.cp(target, function(err) {
             if (err) console.error(err);
 
-            //console.log("cp done... now unlinking source ", self.value);
+            //console.debug("cp done... now unlinking source ", self.value);
             rm(self.value).onComplete( function(err, path){
-                //console.log('rm() complete');
+                //console.debug('rm() complete');
                 e.emit('mv#complete', err, path)
             })
         });
@@ -1068,14 +1068,14 @@ function PathHelper() {
         self = cleanSlashes(self);
         var p = self.value;
         fs.exists(p, function(exists) {
-            console.log(" does it exists ? ", p, exists );
+            console.debug(" does it exists ? ", p, exists );
             if (!exists) {
-                console.log("done removing ", p);
+                console.debug("done removing ", p);
                 callback(false, p)
 
             } else {
                 rm(p).onComplete( function(err, path) {
-                    console.log("done removing... ", err);
+                    console.debug("done removing... ", err);
                     callback(err, path)
                 })
             }
@@ -1085,7 +1085,7 @@ function PathHelper() {
     var rm = function(source) {
 
         browseRemove(source,  function(err, path) {
-            console.log('rm done...', err, path, " VS ", source);
+            console.debug('rm done...', err, path, " VS ", source);
             e.emit('rm#complete', err, path)
         });
 
@@ -1099,7 +1099,7 @@ function PathHelper() {
                     if (err) {
                         console.error(err.stack)
                     }
-                    //console.log('calling back now...', err, path);
+                    //console.debug('calling back now...', err, path);
                     //This one is listened by several rm().
                     callback(err, path)
                 })
@@ -1194,7 +1194,7 @@ function PathHelper() {
                             folders[0] = [];
                             folders[0].push(source)
                         } else {
-                            //console.log("want it !! ", source, " VS ", folders[0][0], folders[0][0].length );
+                            //console.debug("want it !! ", source, " VS ", folders[0][0], folders[0][0].length );
                             var l =  source.substring( (folders[0][0].length) ).match(/\//g);
                             if (l == null) {
                                 l = 0
@@ -1310,7 +1310,7 @@ function PathHelper() {
             if ( typeof(_this.userPaths) == "undefined" || typeof(_this.userPaths[name]) == "undefined" )  {
                 _this.userPaths[name] = _(path);
                 //PathHelper.userPaths = _this.userPaths;
-                //console.log("what is this ", Helpers, " VS ", _this.userPaths);
+                //console.debug("what is this ", Helpers, " VS ", _this.userPaths);
                 var paths = getContext('paths');
                 //console.info(" 1) got config paths " +  paths + " VS "+ _this.userPaths, __stack);
                 merge(true, paths, _this.userPaths);
