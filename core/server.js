@@ -415,13 +415,20 @@ function Server(options) {
                                                 request.body = request.body.substr(1);
 
 
-                                            obj = parseBody(request.body)
+                                            obj = parseBody(request.body);
+                                            if (obj.count() == 0 && request.body.length > 1) {
+                                                try {
+                                                    request.post = JSON.parse(request.body);
+                                                } catch (err) {}
+                                            }
                                         }
 
                                     } catch (err) {
                                         var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
                                         console.warn(msg);
                                     }
+                                } else {
+                                    obj = JSON.parse(JSON.stringify(request.body))
                                 }
 
                                 if ( obj.count() > 0 ) {
