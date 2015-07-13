@@ -168,7 +168,7 @@ function ConfigUtil() {
                 } else {
                     var err = new Error(filename+ ' not found');
                     console.emerg(err.stack||err.message);
-                    return undefined
+                    process.exit(1);
                 }
             } catch (err) {
                 console.error(err.stack);
@@ -206,7 +206,11 @@ function ConfigUtil() {
 
             var createFolder = function(){
                 if ( fs.existsSync(gnaFolder) ) {
-                    callback(false);
+                    createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
+                        setTimeout(function(){
+                            callback(err)
+                        }, 500)
+                    })
                 } else {
                     fs.mkdir(gnaFolder, 0777, function(err){
                         if (err) {
@@ -215,7 +219,9 @@ function ConfigUtil() {
                         } else {
                             //Creating content.
                             createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
-                                callback(err)
+                                setTimeout(function(){
+                                    callback(err)
+                                }, 500)
                             })
                         }
                     })
@@ -368,7 +374,9 @@ function ConfigUtil() {
      * @private
      * */
     var createContent = function(filename, gnaFolder, content, callback){
-
+        if ( fs.existsSync(filename) ) {
+            fs.unlinkSync(filename)
+        }
         fs.appendFile(
             filename,
             JSON.stringify(content, null, '\t'),
@@ -379,33 +387,10 @@ function ConfigUtil() {
                     console.error(err.stack||err.message);
                     callback(err)
                 } else {
-                    callback(false)
+                    setTimeout(function(){
+                        callback(err)
+                    }, 1000)
                 }
-//                } else {
-//                    /** doesn't work on windows */
-//                    var target = content.paths.utils + '/.gna';
-//                    //You never know.. could be a manual delete on one side..
-//                    fs.exists(target, function(exists){
-//                        if (exists) {
-//                            fs.unlink(target, function(err){
-//                                if (!err) Fs.symlinkSync(gnaFolder, target);
-//
-//                                callback(err);
-//                            });
-//                        } else {
-//                            //Need administrator credentials on Windows. Like try to start webstorm as Administrator.
-//                            try {
-//                                fs.symlinkSync(gnaFolder, target);
-//
-//                            } catch (err) {
-//                                logger.error('gina', 'UTILS:CONFIG:ERR:12', err, __stack);
-//                            }
-//
-//                            callback(err);
-//                            //process.exit(42);
-//                        }
-//                    });
-//                }
             }//EO function
         )//EO fs.appendFile
     }
