@@ -619,6 +619,7 @@ function Config(opt) {
                 for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
                     files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
                 }
+                self.setRouting(self.startingApp, env, files[name]);
                 continue;
             } else if (name == 'routing') {
                 continue;
