@@ -126,6 +126,9 @@ function EntitySuper(conn) {
         }
     }
 
+    /**
+     * Get connection from entity
+     * */
     this.getConnection = function() {
         return ( typeof(conn) != 'undefined' ) ? conn : null;
     }

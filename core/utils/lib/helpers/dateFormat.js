@@ -128,6 +128,15 @@ module.exports = function(date, mask, utc) {
         return dateFormat(this, mask, utc);
     }
 
+    /**
+     *  Count days from the current date to another
+     *
+     *  TODO - add a closure to `ignoreWeekend()` based on Utils::Validator
+     *  TODO - add a closure to `ignoreFromList(array)` based on Utils::Validator
+     *
+     *  @param {object} date
+     *  @return {number} count
+     * */
     this.countDaysTo = function(date) {
 
         if ( ! date instanceof Date) {
@@ -142,11 +151,10 @@ module.exports = function(date, mask, utc) {
         var date2Ms = date.getTime()
 
         // Calculate the difference in milliseconds
-        var differenceMs = Math.abs(date1Ms - date2Ms)
+        var count = Math.abs(date1Ms - date2Ms)
 
         // Convert back to days and return
-        return Math.round(differenceMs/oneDay)
-
+        return Math.round(count/oneDay);
     }
 
     return init(date, mask, utc)
