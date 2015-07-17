@@ -250,15 +250,15 @@ function Config(opt) {
          **/
         getConf : function(bundle, env) {
             //console.log("get from ....", appName, env);
-            if ( typeof(bundle) != 'undefined' && typeof(env) != 'undefined' ) {
-                if (!self.isStandalone) {
-                    return ( typeof(self.envConf) != "undefined" ) ? self.envConf[bundle][env] : null;
-                } else {
-                    return ( typeof(self.envConf) != "undefined" ) ? self.envConf[self.startingApp][env] : null;
+            if (!self.isStandalone) {
+                return ( typeof(self.envConf) != "undefined" ) ? self.envConf[bundle][env] : null;
+            } else {
+                if ( typeof(self.envConf) != "undefined" ) {
+                    self.envConf[bundle][env].content.routing = self.envConf[self.startingApp][env].content.routing;
+                    return self.envConf[bundle][env]
                 }
 
-            } else {
-                return ( typeof(self.envConf) != "undefined" ) ? self.envConf : null
+                return null
             }
         },
         getDefault : function() {
