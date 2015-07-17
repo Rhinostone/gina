@@ -256,8 +256,10 @@ function Controller(options) {
                             '\n1) The requested file does not exists in your views/html (check your template directory). Can you find: '+path +
                             '\n2) Check the following rule in your `'+local.options.conf.bundlePath+'/config/routing.json` and look around `param` to make sure that nothing is wrong with your declaration: '+
                             '\n' + options.rule +':'+ JSON.stringify(options.conf.content.routing[options.rule], null, 4) +
-                            '\n3) At this point, if you still have problems trying to run this portion of code, you can contact us telling us how to reproduce the bug.';
+                            '\n3) At this point, if you still have problems trying to run this portion of code, you can contact us telling us how to reproduce the bug.' +
+                            '\n\r[ stack trace ] '+ err.stack;
 
+                    console.error(err);
                     self.throwError(local.res, 500, new Error(msg));
                 }
 
@@ -345,14 +347,17 @@ function Controller(options) {
                 fs.readFile(local.options.views[data.file].layout, function(err, layout) {
                     if (err) {
                         self.throwError(local.res, 500, err.stack);
-                    }
-                    layout = layout.toString();
-                    layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+                    } else {
+                        layout = layout.toString();
+                        layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
 
-                    if ( !local.res.headersSent ) {
-                        local.res.writeHead(200, { 'Content-Type': 'text/html' });
-                        local.res.end(layout);
-                        local.res.headersSent = true
+                        if ( !local.res.headersSent ) {
+                            local.res.writeHead(200, { 'Content-Type': 'text/html' });
+                            local.res.end(layout);
+                            local.res.headersSent = true
+                        } else {
+                            local.next()
+                        }
                     }
                 })
             })
