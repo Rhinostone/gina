@@ -137,25 +137,26 @@ module.exports = function(date, mask, utc) {
      *  @param {object} date
      *  @return {number} count
      * */
-    this.countDaysTo = function(date) {
+    //this.countDaysTo = function(mask, dateTo) {
+    //
+    //    if ( ! date instanceof Date) {
+    //        throw new Error('date2 is not instance of Date() !')
+    //    }
+    //
+    //    // The number of milliseconds in one day
+    //    var oneDay = 1000 * 60 * 60 * 24
+    //
+    //    // Convert both dates to milliseconds
+    //    var date1Ms = this.getTime()
+    //    var date2Ms = dateTo.getTime()
+    //
+    //    // Calculate the difference in milliseconds
+    //    var count = Math.abs(date1Ms - date2Ms)
+    //
+    //    // Convert back to days and return
+    //    return Math.round(count/oneDay);
+    //}
 
-        if ( ! date instanceof Date) {
-            throw new Error('date2 is not instance of Date() !')
-        }
-
-        // The number of milliseconds in one day
-        var oneDay = 1000 * 60 * 60 * 24
-
-        // Convert both dates to milliseconds
-        var date1Ms = this.getTime()
-        var date2Ms = date.getTime()
-
-        // Calculate the difference in milliseconds
-        var count = Math.abs(date1Ms - date2Ms)
-
-        // Convert back to days and return
-        return Math.round(count/oneDay);
-    }
-
-    return init(date, mask, utc)
+    //return init(date, mask, utc)
+    init(date, mask, utc)
 };
