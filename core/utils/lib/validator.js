@@ -152,6 +152,7 @@ function Validator(data, errorLabels) {
 
                 local.errors[this.name].isBoolean = replace(this.flash || local.errorLabels.isBoolean, this)
             }
+            return self[this.name]
         }
 
         self[el].toInteger = function() {
@@ -373,7 +374,7 @@ function Validator(data, errorLabels) {
          * @return {object} data
          * */
         self[el].exclude = function() {
-            if (!this.value) return self[this.name];
+            //if (!this.value) return self[this.name];
             //clonning
             for (var d in local.data) {
                 if (d === this.name) { //cleaning
