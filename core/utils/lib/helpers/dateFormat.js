@@ -18,11 +18,11 @@
  * @param {string} mask
  * @param {}
  */
-module.exports = function(date, mask, utc) {
+module.exports = function() {
 
-    var self = this;
+    var self = {};
 
-    this.masks = {
+    self.masks = {
         "default":      "ddd mmm dd yyyy HH:MM:ss",
         shortDate:      "m/d/yy",
         mediumDate:     "mmm d, yyyy",
@@ -37,7 +37,7 @@ module.exports = function(date, mask, utc) {
         isoUtcDateTime: "UTC:yyyy-mm-dd'T'HH:MM:ss'Z'"
     };
 
-    this.i18n = {
+    self.i18n = {
         dayNames: [
             "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat",
             "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
@@ -48,7 +48,7 @@ module.exports = function(date, mask, utc) {
         ]
     };
 
-    var init = function(date, mask, utc) {
+    var format = function(date, mask, utc) {
         var dF = self;
 
         var	token = /d{1,4}|m{1,4}|yy(?:yy)?|([HhMsTt])\1?|[LloSZ]|"[^"]*"|'[^']*'/g,
@@ -119,14 +119,13 @@ module.exports = function(date, mask, utc) {
                 S:    ["th", "st", "nd", "rd"][d % 10 > 3 ? 0 : (d % 100 - d % 10 != 10) * d % 10]
             };
 
+
+
         return mask.replace(token, function ($0) {
             return $0 in flags ? flags[$0] : $0.slice(1, $0.length - 1);
         });
     }
 
-    this.format = function (mask, utc) {
-        return dateFormat(this, mask, utc);
-    }
 
     /**
      *  Count days from the current date to another
@@ -134,29 +133,33 @@ module.exports = function(date, mask, utc) {
      *  TODO - add a closure to `ignoreWeekend()` based on Utils::Validator
      *  TODO - add a closure to `ignoreFromList(array)` based on Utils::Validator
      *
-     *  @param {object} date
+     *  @param {object} dateTo
      *  @return {number} count
      * */
-    //this.countDaysTo = function(mask, dateTo) {
-    //
-    //    if ( ! date instanceof Date) {
-    //        throw new Error('date2 is not instance of Date() !')
-    //    }
-    //
-    //    // The number of milliseconds in one day
-    //    var oneDay = 1000 * 60 * 60 * 24
-    //
-    //    // Convert both dates to milliseconds
-    //    var date1Ms = this.getTime()
-    //    var date2Ms = dateTo.getTime()
-    //
-    //    // Calculate the difference in milliseconds
-    //    var count = Math.abs(date1Ms - date2Ms)
-    //
-    //    // Convert back to days and return
-    //    return Math.round(count/oneDay);
-    //}
+    var countDaysTo = function(date, dateTo) {
 
-    //return init(date, mask, utc)
-    init(date, mask, utc)
+        if ( ! dateTo instanceof Date) {
+            throw new Error('dateTo is not instance of Date() !')
+        }
+
+        // The number of milliseconds in one day
+        var oneDay = 1000 * 60 * 60 * 24
+
+        // Convert both dates to milliseconds
+        var date1Ms = date.getTime()
+        var date2Ms = dateTo.getTime()
+
+        // Calculate the difference in milliseconds
+        var count = Math.abs(date1Ms - date2Ms)
+
+        // Convert back to days and return
+        return Math.round(count/oneDay);
+    }
+
+
+    return {
+        format: format,
+        countDaysTo: countDaysTo
+    }
+
 };
