@@ -19,7 +19,7 @@
 var Helpers = {
         console     : require('./console')(),
         //DateTime    : require('./time')(),
-        dateFormat  : require('./dateFormat'),
+        dateFormat  : require('./dateFormat')(),
         //Form        : require('./form')(),
         //I18n        : require('./i18n')(),
         path        : require('./path')(),
@@ -41,8 +41,20 @@ Object.defineProperty( Date.prototype, 'format', {
     enumerable: false,
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
-    value: function(mask, utc){ return Helpers.dateFormat(this, mask, utc) }
+    value: function(mask, utc){ return Helpers.dateFormat.format(this, mask, utc) }
 });
+/**
+ * count days between current & dateTo
+ * @return {array} Return formated date
+ **/
+Object.defineProperty( Date.prototype, 'countDaysTo', {
+    writable:   false,
+    enumerable: false,
+    //If loaded several times, it can lead to an exception. That's why I put this.
+    configurable: true,
+    value: function(dateTo){ return Helpers.dateFormat.countDaysTo(this, dateTo) }
+});
+
 
 
 /**
