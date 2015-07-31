@@ -272,13 +272,17 @@ Proc = function(bundle, proc, usePidFile){
         }
         try {
             if (bundleName != undefined && fs.existsSync(pathBundle)) {
-                fs.unlinkSync(pathBundle);
+                fs.unlinkSync(pathBundle)
             }
         } catch (err) {
             //Means that it does not exists anymore.
         }
         // set a timeout maybe ???
-        process.kill(pid, "SIGINT");// soft...
+        setTimeout(function(){
+            console.debug('sending SIGINT signal');
+            process.kill(pid, "SIGINT");// soft...
+        }, 500)
+
     };
 
     /**
