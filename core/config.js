@@ -519,6 +519,7 @@ function Config(opt) {
         conf[bundle][env].executionPath = getContext("paths").root;
 
 
+
         if ( self.task == 'run' && env != 'dev' ) {
             appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
         } else { //getting src path instead
@@ -850,6 +851,7 @@ function Config(opt) {
         conf[bundle][env].content   = files;
         conf[bundle][env].bundle    = bundle;
         conf[bundle][env].env       = env;
+        conf[bundle][env].hostname = conf[bundle][env].protocol + '://' + conf[bundle][env].host + ':' + conf[bundle][env].port[conf[bundle][env].protocol];
 
 
         ++b;

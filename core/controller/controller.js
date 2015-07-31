@@ -584,6 +584,9 @@ function Controller(options) {
      * OR
      * { "action": "redirect", "url": "http://www.somedomain.com/page.html" }
      *
+     * OR
+     * { "action": "redirect", "path": "/", "ignoreWebRoot": true }
+     *
      * if you are free to use the redirection [ code ] of your choice, we've set it to 301 by default
      *
      *
@@ -613,13 +616,13 @@ function Controller(options) {
         var wroot   = conf.server.webroot;
         var routing = conf.content.routing;
         var route   = '', rte = '';
+        var ignoreWebRoot = null;
 
         if ( typeof(req) === 'string' ) {
 
             if ( typeof(res) == 'undefined') {
                 // nothing to do
             } else if (typeof(res) === 'string' || typeof(res) === 'number' || typeof(res) === 'boolean') {
-                var ignoreWebRoot = null;
                 if ( /true|1/.test(res) ) {
                     ignoreWebRoot = true
                 } else if ( /false|0/.test(res) ) {
@@ -635,7 +638,7 @@ function Controller(options) {
                 if (wroot.substr(wroot.length-1,1) == '/') {
                     wroot = wroot.substr(wroot.length-1,1).replace('/', '')
                 }
-                rte     = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot) ? req : wroot + req;
+                rte     = ( ignoreWebRoot != null && ignoreWebRoot) ? req : wroot + req;
                 req     = local.req;
                 res     = local.res;
                 next    = local.next;
