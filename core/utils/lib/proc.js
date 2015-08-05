@@ -242,7 +242,7 @@ Proc = function(bundle, proc, usePidFile){
             });
 
             proc.on('SIGHUP', function(code){
-                console.log("Hanging up !", process.argv);
+                console.log("Hanging up ! Code: "+ code+"\n"+ process.argv);
 
                 var bundle = self.bundle;
                 var env =  process.env.NODE_ENV || 'prod';
