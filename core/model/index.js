@@ -267,7 +267,7 @@ function Model(namespace) {
         var i = that.i || 0;
         var files = fs.readdirSync(entitiesPath);
 
-        var entityName, exluded = ['index.js'];
+        var entityName, excluded = ['index.js'];
         if (_locals == undefined) {
             throw new Error("gina/utils/.gna not found.");
         }
@@ -344,9 +344,11 @@ function Model(namespace) {
         };//EO produce.
 
         if (that.i < files.length) {
+
             while (that.i < files.length) {
-                //console.log("TEsting entity exclusion ",  i + ": ", exluded.indexOf(files[i]) != -1 && files[i].match(/.js/), files[i]);
-                if ( files[that.i].match(/.js/) && exluded.indexOf(files[that.i]) == -1 && !files[that.i].match(/.json/)) {
+
+                //console.log("TEsting entity exclusion ",  i + ": ", excluded.indexOf(files[i]) != -1 && files[i].match(/.js/), files[i]);
+                if ( files[that.i].match(/.js/) && excluded.indexOf(files[that.i]) == -1 && !files[that.i].match(/.json/) && ! /^\./.test(files[that.i]) ) {
                     entityName = files[that.i].replace(/.js/, "") + suffix;
                     //entityName = entityName.substring(0, 1).toUpperCase() + entityName.substring(1);
                     //console.log("entityName  : ", entityName );
@@ -363,6 +365,7 @@ function Model(namespace) {
                 } else {
                     ++that.i;
                 }
+
             }//EO while.
         }
     }
