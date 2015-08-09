@@ -297,6 +297,8 @@ function Controller(options) {
                         , url           = NaN
                         , urlStr        = null
                     ;
+
+
                     swig.setFilter('getUrl', function (route, params, base) {
                         if ( isStandalone && !isMaster ) {
                             rule = config.bundle +'-'+ route
