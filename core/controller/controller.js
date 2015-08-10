@@ -218,7 +218,7 @@ function Controller(options) {
             } else {
                 data = merge(_data, data)
             }
-            self.setRessources(local.options.views, data.file);
+            self.setResources(local.options.views, data.file);
             var file = data.file;
 
 
@@ -300,6 +300,11 @@ function Controller(options) {
 
 
                     swig.setFilter('getUrl', function (route, params, base) {
+                        // if no route, returns current route
+                        if ( typeof(route) == 'undefined') {
+                            var route = local.options.rule
+                        }
+
                         if ( isStandalone && !isMaster ) {
                             rule = config.bundle +'-'+ route
                         } else {
@@ -327,7 +332,13 @@ function Controller(options) {
                                         url = url.replace(new RegExp(':'+p, 'g'), params[p])
                                     }
                                 }
+                            } else {
+                                if ( Array.isArray(url) ) {
+                                    url = url[0] // just taking the default one
+                                }
                             }
+                        } else {
+                            url = routing["404"].url || '/404.html';
                         }
 
                         if ( typeof(base) != 'undefined' ) url = base + url;
@@ -437,12 +448,12 @@ function Controller(options) {
     }
 
     /**
-     * Set ressources
+     * Set resources
      *
      * @param {object} viewConf - template configuration
      * @param {string} localRessouces - rule name
      * */
-    this.setRessources = function(viewConf, localRessource) {
+    this.setResources = function(viewConf, localRessource) {
         var res = '',
             tmpRes = {},
             css = {
@@ -680,8 +691,9 @@ function Controller(options) {
                 wroot = wroot.substr(wroot.length-1,1).replace('/', '')
             }
 
+
             if (route) { // will go with route first
-                path = routing[route].url;
+                path = (ignoreWebRoot) ? routing[route].url.replace(wroot, '') : routing[route].url;
                 if (path instanceof Array) {
                     path = path[0] //if it is an array, we just take the first one
                 }

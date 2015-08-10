@@ -248,8 +248,8 @@ Proc = function(bundle, proc, usePidFile){
                 var env =  process.env.NODE_ENV || 'prod';
                 var pid = self.getPidByBundleName(bundle);
 
-                dismiss(pid);
                 dismiss(process.pid);
+                dismiss(pid);
             });
 
         }
@@ -278,10 +278,10 @@ Proc = function(bundle, proc, usePidFile){
             //Means that it does not exists anymore.
         }
         // set a timeout maybe ???
-        setTimeout(function(){
+        //setTimeout(function(){
             console.debug('sending SIGINT signal');
             process.kill(pid, "SIGINT");// soft...
-        }, 500)
+        //}, 400)
 
     };
 
