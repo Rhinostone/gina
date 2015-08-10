@@ -265,7 +265,7 @@ function Controller(options) {
 
                 try {
                     // Allows you to get a bundle web root
-                    swig.setFilter('getBundleWebroot', function (input, obj) {
+                    swig.setFilter('getWebroot', function (input, obj) {
                         var prop = options.envObj.getConf(obj, options.conf.env),
                             url = prop.protocol + '://'+ prop.host +':'+ prop.port[prop.protocol];
                         if ( typeof(prop.server['webroot']) != 'undefined') {
@@ -278,9 +278,14 @@ function Controller(options) {
                      * getUrl filter
                      *
                      * Usage:
+                     *      <a href="{{ 'homepage' | getUrl() }}">Homepage</a>
                      *      <a href="{{ 'users-add' | getUrl({ id: user.id }) }}">Add User</a>
                      *      <a href="{{ 'users-edit' | getUrl({ id: user.id }) }}">Edit user</a>
                      *      <a href="{{ 'users-list' | getUrl(null, 'http://domain.com') }}">Display all users</a>
+                     *
+                     *      // can also be used with standalone mode: will add webroot if current bundle is not master
+                     *      <script src="{{ '/js/vendor/modernizr-2.8.3.min.js' | getUrl() }}"></script>
+                     *      compiled as => <script src="/my-bundle/js/vendor/modernizr-2.8.3.min.js"></script>
                      *
                      * @param {string} route
                      * @param {object} params - can't be left blank if base is required -> null if not defined
@@ -303,6 +308,17 @@ function Controller(options) {
                         // if no route, returns current route
                         if ( typeof(route) == 'undefined') {
                             var route = local.options.rule
+                        }
+
+                        // is path ?
+                        if (/\//.test(route)) {
+                            if ( isStandalone && !isMaster ) {
+                                if (route.substr(0,1) == '/') route = route.substr(1);
+                                url = wroot +'/'+ route
+                            } else {
+                                url = route
+                            }
+                            return url
                         }
 
                         if ( isStandalone && !isMaster ) {
@@ -346,7 +362,6 @@ function Controller(options) {
                         return url
                     });
 
-                    content = swig.compile( content.toString() )(data)
                 } catch (err) {
                     // [ martin ]
                     // i sent an email to [ paul@paularmstrongdesigns.com ] on 2014/08 to see if there is
@@ -363,6 +378,7 @@ function Controller(options) {
                     } else {
                         layout = layout.toString();
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+                        layout = swig.compile(layout)(data);
 
                         if ( !local.res.headersSent ) {
                             local.res.writeHead(200, { 'Content-Type': 'text/html' });
