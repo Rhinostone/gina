@@ -61,9 +61,9 @@ function ModelUtil() {
 
 
             self.models[name]['_connection'] = conn;
-            self.models[name]['getConnection'] = function() {
-                return self.models[name]['_connection']
-            }
+            //self.models[name]['getConnection'] = function() {
+            //    return self.models[name]['_connection']
+            //}
         } else {
             self.models = {}
         }
@@ -229,6 +229,9 @@ function ModelUtil() {
     getModel = function(model) {
         if ( typeof(model) != 'undefined' ) {
             try {
+                self.models[model]['getConnection'] = function() {
+                    return self.models[model]['_connection']
+                }
                 return self.models[model]
             } catch (err) {
                 return undefined

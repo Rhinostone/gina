@@ -805,39 +805,44 @@ function Config(opt) {
             conf[bundle][env].server.webroot  != '/' &&
             typeof(files['views'].default.javascripts) != 'undefined'
         ) {
-            for (var i=0; i<files['views'].default.javascripts.length; ++i) {
-                if (
-                    files['views'].default.javascripts[i].substr(0,1) != '{' &&
-                    !/\:\/\//.test(files['views'].default.javascripts[i])
-                ) {
-                    if (files['views'].default.javascripts[i].substr(0,1) != '/')
-                        files['views'].default.javascripts[i] = '/'+files['views'].default.javascripts[i];
+            for (var v in files['views']) {
+                for (var i=0; i<files['views'][v].javascripts.length; ++i) {
+                    if (
+                        files['views'][v].javascripts[i].substr(0,1) != '{' &&
+                        !/\:\/\//.test(files['views'][v].javascripts[i])
+                    ) {
+                        if (files['views'][v].javascripts[i].substr(0,1) != '/')
+                            files['views'][v].javascripts[i] = '/'+files['views'][v].javascripts[i];
 
-                    // support src like:
-                    if (/^\/\//.test(files['views'].default.javascripts[i]) )
-                        files['views'].default.javascripts[i] = files['views'].default.javascripts[i]
-                    else
-                        files['views'].default.javascripts[i] = conf[bundle][env].server.webroot + files['views'].default.javascripts[i]
+                        // support src like:
+                        if (/^\/\//.test(files['views'][v].javascripts[i]) )
+                            files['views'][v].javascripts[i] = files['views'][v].javascripts[i]
+                        else
+                            files['views'][v].javascripts[i] = conf[bundle][env].server.webroot + files['views'][v].javascripts[i]
+                    }
                 }
             }
+
         }
         //webroot stylesheets
         if (hasViews &&
             conf[bundle][env].server.webroot  != '/' &&
             typeof(files['views'].default.stylesheets) != 'undefined'
         ) {
-            for (var i=0; i<files['views'].default.stylesheets.length; ++i) {
-                if (
-                    files['views'].default.stylesheets[i].substr(0,1) != '{' &&
-                    !/\:\/\//.test(files['views'].default.stylesheets[i])
-                ) {
-                    if (files['views'].default.stylesheets[i].substr(0,1) != '/')
-                        files['views'].default.stylesheets[i] = '/'+files['views'].default.stylesheets[i];
+            for (var v in files['views']) {
+                for (var i=0; i<files['views'][v].stylesheets.length; ++i) {
+                    if (
+                        files['views'][v].stylesheets[i].substr(0,1) != '{' &&
+                        !/\:\/\//.test(files['views'][v].stylesheets[i])
+                    ) {
+                        if (files['views'][v].stylesheets[i].substr(0,1) != '/')
+                            files['views'][v].stylesheets[i] = '/'+files['views'][v].stylesheets[i];
 
-                    if (/^\/\//.test(files['views'].default.stylesheets[i]) )
-                        files['views'].default.stylesheets[i] = files['views'].default.stylesheets[i]
-                    else
-                        files['views'].default.stylesheets[i] = conf[bundle][env].server.webroot + files['views'].default.stylesheets[i]
+                        if (/^\/\//.test(files['views'][v].stylesheets[i]) )
+                            files['views'][v].stylesheets[i] = files['views'][v].stylesheets[i]
+                        else
+                            files['views'][v].stylesheets[i] = conf[bundle][env].server.webroot + files['views'][v].stylesheets[i]
+                    }
                 }
             }
         }
