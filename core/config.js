@@ -806,6 +806,7 @@ function Config(opt) {
             typeof(files['views'].default.javascripts) != 'undefined'
         ) {
             for (var v in files['views']) {
+                if (!files['views'][v].javascripts) continue;
                 for (var i=0; i<files['views'][v].javascripts.length; ++i) {
                     if (
                         files['views'][v].javascripts[i].substr(0,1) != '{' &&
@@ -830,6 +831,7 @@ function Config(opt) {
             typeof(files['views'].default.stylesheets) != 'undefined'
         ) {
             for (var v in files['views']) {
+                if (!files['views'][v].stylesheets) continue;
                 for (var i=0; i<files['views'][v].stylesheets.length; ++i) {
                     if (
                         files['views'][v].stylesheets[i].substr(0,1) != '{' &&
