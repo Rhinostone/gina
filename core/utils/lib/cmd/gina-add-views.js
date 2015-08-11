@@ -26,8 +26,7 @@ AddViews = function(bundle, env) {
         });
         config.onReady( function onConfigReady(err, config) {
             if (err) {
-                console.error(err.stack);
-                process.exit(1)
+                console.warn(err.stack);
             }
 
             self.src = config.conf[self.bundle][self.env].bundlePath;
