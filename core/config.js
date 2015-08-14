@@ -9,6 +9,7 @@
 
 //Imports.
 var fs              = require('fs');
+var dns             = require('dns');
 var util            = require('util');
 var Events          = require('events');
 var EventEmitter    = require('events').EventEmitter;
@@ -254,6 +255,7 @@ function Config(opt) {
                 return ( typeof(self.envConf) != "undefined" ) ? self.envConf[bundle][env] : null;
             } else {
                 if ( typeof(self.envConf) != "undefined" ) {
+                    self.envConf[bundle][env].hostname = self.envConf[self.startingApp][env].hostname;
                     self.envConf[bundle][env].content.routing = self.envConf[self.startingApp][env].content.routing;
                     return self.envConf[bundle][env]
                 }
@@ -858,7 +860,9 @@ function Config(opt) {
         conf[bundle][env].content   = files;
         conf[bundle][env].bundle    = bundle;
         conf[bundle][env].env       = env;
+        // this setting is replace on http requests by the value extracted form the request header
         conf[bundle][env].hostname = conf[bundle][env].protocol + '://' + conf[bundle][env].host + ':' + conf[bundle][env].port[conf[bundle][env].protocol];
+
 
 
         ++b;
@@ -948,6 +952,10 @@ function Config(opt) {
      * */
     this.setRouting = function(bundle, env, routing) {
         self.envConf[bundle][env].content.routing = routing
+    }
+
+    this.setHostname = function(bundle, env, hostname) {
+        self.envConf[bundle][env].hostname = hostname
     }
 
     if (!opt) {

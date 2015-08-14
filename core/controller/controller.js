@@ -718,7 +718,7 @@ function Controller(options) {
             } else if(path && typeof(isRelative) !=  'undefined') {
                 // nothing to do
             } else {
-                path = conf.hostname + path
+                path = conf.protocol + '://' +conf.hostname + path
             }
 
             if (req.headersSent) return next();
