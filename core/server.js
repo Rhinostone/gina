@@ -334,9 +334,8 @@ function Server(options) {
             ) {
                 request.url = self.conf[self.appName][self.env].server.webroot
             }
-            //Only for dev & debug.
+            //Only for dev & debug purposes.
             self.conf[self.appName][self.env]['protocol'] = request.protocol || self.conf[self.appName][self.env]['hostname'];
-            self.conf[self.appName][self.env]['hostname'] = self.conf[self.appName][self.env]['protocol'] +'://'+ request.headers.host;
 
             request.post = {};
             request.get = {};
@@ -577,7 +576,9 @@ function Server(options) {
             , cacheless     = config.isCacheless()
             , wroot         = null;
 
-
+        if (self.conf[self.appName][self.env]['hostname'] != req.headers.host) {
+            config.setHostname(bundle, self.env, req.headers.host)
+        }
         console.debug('about to handle [ '+ pathname + ' ] route');
         router.setMiddlewareInstance(self.instance);
 
@@ -620,6 +621,7 @@ function Server(options) {
                     if (!allowed) {
                         throwError(res, 405, 'Method Not Allowed for [' + params.bundle + '] => ' + req.originalUrl, next)
                     } else {
+
                         // onRouting Event ???
                         if ( cacheless ) {
                             config.refreshModels(params.bundle, self.env, function onModelRefreshed(){
