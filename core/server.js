@@ -577,7 +577,7 @@ function Server(options) {
             , wroot         = null;
 
         if (self.conf[self.appName][self.env]['hostname'] != req.headers.host) {
-            config.setHostname(bundle, self.env, req.headers.host)
+            self.conf[self.appName][self.env]['hostname'] = req.headers.host
         }
         console.debug('about to handle [ '+ pathname + ' ] route');
         router.setMiddlewareInstance(self.instance);

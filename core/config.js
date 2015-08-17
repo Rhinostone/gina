@@ -954,10 +954,6 @@ function Config(opt) {
         self.envConf[bundle][env].content.routing = routing
     }
 
-    this.setHostname = function(bundle, env, hostname) {
-        self.envConf[bundle][env].hostname = hostname
-    }
-
     if (!opt) {
 
         this.setBundles = function(bundles) {
