@@ -243,7 +243,7 @@ InstallTest = function(conf, exports) {
     }
 
     var hasBinary = function(callback) {
-        var file = ( isWin32() ) ? 'gina.bat' : 'gina';
+        var file = ( isWin32() ) ? 'gina.bat' : 'gina.sh';
         workspace.hasFile(file , function(err, found) {
             callback(err, found)
         })
