@@ -730,6 +730,127 @@ function Controller(options) {
         next()
     }
 
+    /**
+     * Move files to assets dir
+     *
+     * @param {object} res
+     * @param {collection} files
+     *
+     * @callback cb
+     * @param {object} [err]
+     * */
+    var movefiles = function (res, files, cb) {
+        if (!files.length || files.length == 0) {
+            cb(false)
+        }
+
+        if (fs.existsSync(files[0].target)) new _(files[0].target).rmSync();
+
+        var sourceStream = fs.createReadStream(files[0].source);
+        var destinationStream = fs.createWriteStream(files[0].target);
+
+        sourceStream
+            .pipe(destinationStream)
+            .on('error', function () {
+                var err = 'Error on Controller::copyFile(...): Not found ' + files[0].source + ' or ' + files[0].target;
+                cb(err)
+            })
+            .on('close', function () {
+
+                try {
+                    fs.unlinkSync(files[0].source);
+                    files.splice(0, 1);
+                } catch (err) {
+                    cb(err)
+                }
+
+                movefiles(res, files, cb)
+            })
+    }
+
+    /**
+     * Upload to target - Will create target if new
+     * Use `cb` callback or `onComplete` event
+     *
+     * @param {string} target
+     *
+     * @callback [cb]
+     *  @param {object} error
+     *  @param {array} files
+     *
+     * @event
+     *  @param {object} error
+     *  @param {array} files
+     *
+     * */
+    this.upload = function(target, cb) {
+
+        var start = function(target, cb) {
+            var files = local.req.files, uploadedFiles = [];
+
+            if ( typeof(files) == 'undefined' || files.count() == 0 ) {
+                if (cb) {
+                    cb(new Error('No file to upload'))
+                } else {
+                    self.emit('uploaded', new Error('No file to upload'))
+                }
+            } else {
+                // saving files
+                var uploadDir   = new _(target)
+                    , list      = []
+                    , i         = 0
+                    , folder    = uploadDir.mkdirSync()
+                    , el        = null;
+
+                if (folder instanceof Error) {
+                    if (cb) {
+                        cb(folder)
+                    } else {
+                        self.emit('uploaded', folder)
+                    }
+                } else {
+                    // files list
+                    for (el in files) {
+                        list[i] = {
+                            source: files[el].path,
+                            target: _(uploadDir.toString() + '/' + files[el].originalFilename)
+                        };
+                        uploadedFiles[i] = { location: list[i].target, file: files[el].originalFilename };
+                        ++i
+                    }
+
+                    movefiles(local.res, list, function (err) {
+                        if (err) {
+                            if (cb) {
+                                cb(new Error('No file to upload'))
+                            } else {
+                                self.emit('uploaded', new Error('No file to upload'))
+                            }
+                        } else {
+                            if (cb) {
+                                cb(false, uploadedFiles)
+                            } else {
+                                self.emit('uploaded', false, uploadedFiles)
+                            }
+                        }
+                    })
+                }
+            }
+        }
+
+        if ( typeof(cb) == 'undefined' ) {
+
+            return {
+                onComplete : function(cb){
+                    self.on('uploaded', cb);
+                    start(target)
+                }
+            }
+        } else {
+            start(target, cb)
+        }
+    }
+
 
     /**
      * forward404Unless
