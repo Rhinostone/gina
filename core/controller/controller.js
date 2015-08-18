@@ -378,7 +378,11 @@ function Controller(options) {
                     } else {
                         layout = layout.toString();
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
-                        layout = swig.compile(layout)(data);
+                        try {
+                            layout = swig.compile(layout)(data)
+                        } catch (err) {
+                            self.throwError(local.res, 500, err.stack)
+                        }
 
                         if ( !local.res.headersSent ) {
                             local.res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -739,33 +743,33 @@ function Controller(options) {
      * @callback cb
      * @param {object} [err]
      * */
-    var movefiles = function (res, files, cb) {
+    var movefiles = function (i, res, files, cb) {
         if (!files.length || files.length == 0) {
             cb(false)
-        }
+        } else {
+            if ( fs.existsSync(files[i].target) ) new _(files[i].target).rmSync();
 
-        if (fs.existsSync(files[0].target)) new _(files[0].target).rmSync();
+            var sourceStream = fs.createReadStream(files[i].source);
+            var destinationStream = fs.createWriteStream(files[i].target);
 
-        var sourceStream = fs.createReadStream(files[0].source);
-        var destinationStream = fs.createWriteStream(files[0].target);
-
-        sourceStream
-            .pipe(destinationStream)
-            .on('error', function () {
-                var err = 'Error on Controller::copyFile(...): Not found ' + files[0].source + ' or ' + files[0].target;
-                cb(err)
-            })
-            .on('close', function () {
-
-                try {
-                    fs.unlinkSync(files[0].source);
-                    files.splice(0, 1);
-                } catch (err) {
+            sourceStream
+                .pipe(destinationStream)
+                .on('error', function () {
+                    var err = 'Error on Controller::copyFile(...): Not found ' + files[i].source + ' or ' + files[i].target;
                     cb(err)
-                }
+                })
+                .on('close', function () {
 
-                movefiles(res, files, cb)
-            })
+                    try {
+                        fs.unlinkSync(files[i].source);
+                        files.splice(i, 1);
+                    } catch (err) {
+                        cb(err)
+                    }
+
+                    movefiles(i+1, res, files, cb)
+                })
+        }
     }
 
     /**
@@ -819,7 +823,7 @@ function Controller(options) {
                         ++i
                     }
 
-                    movefiles(local.res, list, function (err) {
+                    movefiles(0, local.res, list, function (err) {
                         if (err) {
                             if (cb) {
                                 cb(new Error('No file to upload'))
