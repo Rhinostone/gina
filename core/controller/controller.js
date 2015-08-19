@@ -412,9 +412,16 @@ function Controller(options) {
             if(typeof(local.options) != "undefined" && typeof(local.options.charset) != "undefined"){
                 local.res.setHeader("charset", local.options.charset);
             }
+
             if ( !local.res.get('Content-Type') ) {
                 local.res.setHeader("Content-Type", "application/json");
             }
+
+            // Internet Explorer override
+            if ( /msie/i.test(local.req.headers['user-agent']) ) {
+                local.res.setHeader("Content-Type", "text/plain");
+            }
+
             if ( !local.res.headersSent ) {
                 local.res.end(JSON.stringify(jsonObj));
                 local.res.headersSent = true
