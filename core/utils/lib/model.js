@@ -61,9 +61,6 @@ function ModelUtil() {
 
 
             self.models[name]['_connection'] = conn;
-            //self.models[name]['getConnection'] = function() {
-            //    return self.models[name]['_connection']
-            //}
         } else {
             self.models = {}
         }
@@ -87,11 +84,9 @@ function ModelUtil() {
             if( !self.entities[model] ) {
                 self.entities[model] = {}
             }
-            //if ( typeof(self.entities[model][name]) != "undefined") {
-            //    merge(self.entities[model][name], module)
-            //} else {
+
             self.entities[model][name] = module
-            //}
+
         } else {
             self.entities[model] = arguments[0]
         }
