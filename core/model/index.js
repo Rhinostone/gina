@@ -85,6 +85,7 @@ function Model(namespace) {
         self.bundle = bundle;
         self.model = model;
         self.modelDirName = model;
+        self.connectors = getContext('ModelConnectors') || {};
     }
 
     /**
@@ -179,10 +180,18 @@ function Model(namespace) {
     }
 
     this.connect = function(Connector, callback) {
-        var connector = new Connector( self.getConfig(_connector) );
-        connector.onReady( function(err, conn){
-            callback(err, conn);
-        })
+        if ( typeof(self.connectors[_connector]) == 'undefined' ) {
+            self.connectors[_connector] = {};
+            var connector = new Connector( self.getConfig(_connector) );
+            connector.onReady( function(err, conn){
+                self.connectors[_connector].err = err;
+                self.connectors[_connector].conn = conn;
+                setContext('ModelConnectors', self.connectors);
+                callback(err, conn);
+            })
+        } else {
+            callback(self.connectors[_connector].err, self.connectors[_connector].conn);
+        }
     }
 
     this.reload = function(conf, cb) {
