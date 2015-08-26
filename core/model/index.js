@@ -55,6 +55,7 @@ function Model(namespace) {
     //var utilsConfig = getContext('gina.utils.config');
 
     var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
+    var standalone = config.Host.isStandalone();
 
 
     var setup = function(namespace) {
@@ -79,8 +80,8 @@ function Model(namespace) {
         }
 
 
-        console.log("\nBundle: ", bundle);
-        console.log("Model: ", model);
+        console.debug("\nBundle: ", bundle);
+        console.debug("Model: ", model);
         self.name = _connector;
         self.bundle = bundle;
         self.model = model;
@@ -108,13 +109,13 @@ function Model(namespace) {
         if (conf) {
             _configuration = conf.connectors;
 
-            console.log("CONF READY ", model, conf.path);
+            console.debug("CONF READY ", model, conf.path);
             //TODO - More controls...
 
             //For now, I just need the F..ing entity name.
             var modelPath       = local.modelPath = _(conf.path + '/' + modelDirName);
             var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
-            console.log('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
+            console.debug('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
             if (!fs.existsSync(entitiesPath)) {
                 if (reload) {
                     reload(new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null)
@@ -169,12 +170,12 @@ function Model(namespace) {
             }
 
         } else {
+            console.debug("no configuration found...");
             if (reload) {
                 reload(new Error('no configuration found for your model: ' + model), self.name, null)
             } else {
                 self.emit('model#ready', new Error('no configuration found for your model: ' + model), self.name, null)
             }
-            console.log("no configuration found...")
         }
         return self
     }
@@ -222,7 +223,7 @@ function Model(namespace) {
         if ( typeof(configuration) != 'undefined' && locals) {
             var tmp = JSON.stringify(configuration);
             tmp = JSON.parse(tmp);
-            //console.log("getting config for bundle ", bundle);
+
             if (local.trying > 5) {
                 throw new Error('Cannot contact '+self.model+' !\n\rPlease, chech your network settings or contact the administrator.')
             } else if ( local.trying == 1) {
@@ -287,7 +288,7 @@ function Model(namespace) {
             //if (err) log.error('gina', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
 
             try {
-                console.log("producing ", self.name,":",entityName, ' ( '+i+' )');
+                console.debug("producing ", self.name,":",entityName, ' ( '+i+' )');
 
                 var className = entityName.substr(0,1).toUpperCase() + entityName.substr(1);
                 //entityName.substr(0,1).toLowerCase() + entityName.substr(1);
@@ -356,14 +357,11 @@ function Model(namespace) {
 
             while (that.i < files.length) {
 
-                //console.log("TEsting entity exclusion ",  i + ": ", excluded.indexOf(files[i]) != -1 && files[i].match(/.js/), files[i]);
                 if ( files[that.i].match(/.js/) && excluded.indexOf(files[that.i]) == -1 && !files[that.i].match(/.json/) && ! /^\./.test(files[that.i]) ) {
                     entityName = files[that.i].replace(/.js/, "") + suffix;
-                    //entityName = entityName.substring(0, 1).toUpperCase() + entityName.substring(1);
-                    //console.log("entityName  : ", entityName );
                     produce(entityName, that.i);
                 } else if (that.i == files.length-1) {
-                    //console.log("All done !");
+                    // All done
                     if ( reload ) {
                         reload(false, self.name, entitiesManager)
                     } else {
@@ -380,7 +378,6 @@ function Model(namespace) {
     }
 
     this.onReady = function(callback) {
-        console.log('binding...');
         self.once('model#ready', function(err, model, entities, conn) {
             // entities == null when the database server has not started.
             if ( err ) {

@@ -16,6 +16,7 @@
 var gna     = {core:{}};
 var fs      = require('fs');
 var Config  = require('./config');
+var config  = null;
 var utils   = require('./utils');
 
 var console = utils.logger;
@@ -407,8 +408,11 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
         gna.initialized = true;
         e.once('init', function(instance, middleware, conf) {
+            var configuration = config.getInstance();
             modelUtil.loadAllModels(
-                conf,
+                conf.bundles,
+                configuration,
+                env,
                 function() {
                     joinContext(conf.contexts);
                     gna.getConfig = function(name){
@@ -599,7 +603,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 console.error(mountErr.stack);
                 process.exit(1)
             }
-            var config = new Config({
+            config = new Config({
                 env             : env,
                 executionPath   : core.executionPath,
                 startingApp     : core.startingApp,

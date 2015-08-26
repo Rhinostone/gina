@@ -78,7 +78,7 @@ Proc = function(bundle, proc, usePidFile){
         var path = pathObj.toString();
 
         //Create dir if needed.
-        console.debug("MKDIR  pathObj (pid:"+self.proc.pid+") - ", self.bundle);
+        //console.debug("MKDIR  pathObj (pid:"+self.proc.pid+") - ", self.bundle);
 
         process.list = (process.list == undefined) ? [] : process.list;
         process.pids = (process.pids == undefined) ? {} : process.pids;
@@ -98,11 +98,7 @@ Proc = function(bundle, proc, usePidFile){
                     save(self.bundle, self.PID, self.proc)
                 }
             })
-        }// else {
-        //    self.PID = self.proc.pid;
-        //    self.path = path + pathObj.sep;
-        //    setPID(self.bundle, self.PID, self.proc)
-        //}
+        }
     };
 
     var isMaster = function() {
@@ -121,7 +117,7 @@ Proc = function(bundle, proc, usePidFile){
     var respawn = function(bundle, env, pid, callback) {
         //var loggerInstance = getContext('logger');
         //loggerInstance["trace"]('Fatal error !');
-        //console.log("Exiting and re spawning : ", bundle, env);
+        //console.debug("Exiting and re spawning : ", bundle, env);
         // TODO - Count the restarts and prevent unilimited loop
         // TODO - Send notification to admin or/and root to the Fatal Error Page.
 
@@ -133,7 +129,7 @@ Proc = function(bundle, proc, usePidFile){
             //var port = self.getBundlePortByBundleName(bundle);
             //console.log("Bundle ", bundle," already running or port[ "+port+" ] is taken by another process...");
             //loggerInstance["trace"]("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
-            console.log("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
+            console.debug("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
             dismiss(process.pid);
         }
 
@@ -186,7 +182,7 @@ Proc = function(bundle, proc, usePidFile){
 
 
         if ( typeof(PID) != "undefined" && typeof(PID) == "number" ) {
-            console.log("setting listeners for ", PID, ':', bundle);
+            console.debug("setting listeners for ", PID, ':', bundle);
 
             proc.dismiss = dismiss;
             proc.isMaster = isMaster;
@@ -199,7 +195,7 @@ Proc = function(bundle, proc, usePidFile){
             proc.on('SIGINT', function(code){
 
                 if (code == undefined) var code = 0;
-                console.log("\nGot exit code. Now killing: ", code, process.list, '\n');
+                console.info("\nGot exit code. Now killing: ", code, process.list, '\n');
                 proc.exit(code);//tigger exit event.
             });
 
@@ -242,7 +238,7 @@ Proc = function(bundle, proc, usePidFile){
             });
 
             proc.on('SIGHUP', function(code){
-                console.log("Hanging up ! Code: "+ code+"\n"+ process.argv);
+                console.debug("Hanging up ! Code: "+ code+"\n"+ process.argv);
 
                 var bundle = self.bundle;
                 var env =  process.env.NODE_ENV || 'prod';

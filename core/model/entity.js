@@ -76,46 +76,61 @@ function EntitySuper(conn) {
                     events[i] = shortName +'#'+ f;
                     ++i;
 
-                    console.debug('setting listener for: [ '+self.model+'/'+self.name+'::' + f +'(...) ]');
+                    //console.debug('setting listener for: [ '+self.model+'/'+self.name+'::' + f +'(...) ]');
                     entity[f] = (function(e, ev) {
+                        console.debug('setting listener for: [ '+self.model+'/'+self.name+'::' + e + ' ]');
                         var cached = entity[ev];
 
                         return function () {
                             //if (!entity.trigger) {
                             //    entity.trigger = e
                             //}
-                            this[ev].onComplete = function (cb) {
+                            //this[ev].onComplete = function (cb) {
+                            //    entity.once(entity.name + '#' + ev, function (args) {
+                            //        cb.apply(this[ev], args)
+                            //    })
+                            //}
+                            //
+                            //cached.apply(this[ev], arguments);
+                            //return this[ev] // chaining event & method
+
+
+                            entity[ev].onComplete = function (cb) {
                                 entity.once(entity.name + '#' + ev, function (args) {
-                                    cb.apply(this[ev], args)
+                                    cb.apply(entity[ev], args)
                                 })
                             }
 
-                            cached.apply(this[ev], arguments);
-                            return this[ev] // chaining event & method
+                            cached.apply(entity[ev], arguments);
+                            return entity[ev] // chaining event & method
+
+
+
+
                         }
-                    }(shortName +'#'+ f, f))
+                    //}(shortName +'#'+ f, f))
+                    }(entity.name +'#'+ f, f))
                 }
             }
             eCount += i;
 
-            self.setMaxListeners(entity.maxListeners || eCount);
-            //entity.setMaxListeners(entity.maxListeners || eCount);
+            self.setMaxListeners(entity.maxListeners || eCount);
+            //entity.setMaxListeners(entity.maxListeners || eCount);
 
-            console.debug('['+self.name+']setting max listeners to: ' + (entity.maxListeners || eCount) );
+            console.debug('['+self.name+']setting max listeners to: ' + (entity.maxListeners || eCount) );
 
             for (var i=0; i<events.length; ++i) {
 
                 entity.removeAllListeners(events[i]); // added on october 1st to prevent adding new listners on each new querie
-
+                console.debug('palcing event: '+ events[i]);
                 entity.on(events[i], (function(e) {
                     return function() {
                         console.debug('calling back from event: ' + e);
                         // TODO - put try catch, retrieve Controller [res] & throwError() on exception
                         var f = e.split(/\#/)[1];
                         entity.emit(entity.name+'#'+f, arguments);
+                        //entity[f]
                         // won't work here in some cases... save it for another case... out of here
-                        //if (this.trigger === e) {
-                        //}
                     }
                 }(events[i])))
             }
