@@ -251,13 +251,20 @@ function Config(opt) {
          **/
         getConf : function(bundle, env) {
             //console.log("get from ....", appName, env);
-            if (!self.isStandalone) {
+            if ( !self.isStandalone ) {
                 return ( typeof(self.envConf) != "undefined" ) ? self.envConf[bundle][env] : null;
             } else {
                 if ( typeof(self.envConf) != "undefined" ) {
                     self.envConf[bundle][env].hostname = self.envConf[self.startingApp][env].hostname;
                     self.envConf[bundle][env].content.routing = self.envConf[self.startingApp][env].content.routing;
-                    return self.envConf[bundle][env]
+
+                    if ( bundle && env ) {
+                        return self.envConf[bundle][env]
+                    } else if ( bundle && !env ) {
+                        return self.envConf[bundle]
+                    } else {
+                        return self.envConf
+                    }
                 }
 
                 return null
@@ -485,6 +492,7 @@ function Config(opt) {
             var bundle = bundles[b]
         }
         var cacheless   = self.isCacheless();
+        var standalone  = self.Host.isStandalone();
         var env         = self.env || self.Env.get();
         if ( typeof(collectedRules) == 'undefined') {
             var collectedRules = {}
@@ -511,13 +519,14 @@ function Config(opt) {
             , originalRules = []
             , oRuleCount    = 0;
         // standalone setup
-        if ( self.Host.isStandalone() && bundle != self.startingApp && wroot == '/') {
+        if ( standalone && bundle != self.startingApp && wroot == '/') {
             wroot = '/'+ bundle;
             conf[bundle][env].server.webroot = wroot
         }
 
-        conf[bundle][env].bundles = bundles;
-        conf[bundle][env].cacheless = cacheless;
+        conf[bundle][env].bundles       = bundles;
+        conf[bundle][env].cacheless     = cacheless;
+        conf[bundle][env].standalone    = standalone;
         conf[bundle][env].executionPath = getContext("paths").root;
 
 
@@ -579,12 +588,12 @@ function Config(opt) {
 
                         if (routing[rule].bundle != bundle) { // allowing to override bundle name in routing.json
                             // originalRule is used to facilitate cross bundles (hypertext)linking
-                            originalRules[oRuleCount] = ( self.Host.isStandalone() && routing[rule] && bundle != self.startingApp) ? bundle + '-' + rule : rule;
+                            originalRules[oRuleCount] = ( standalone && routing[rule] && bundle != self.startingApp) ? bundle + '-' + rule : rule;
                             ++oRuleCount;
 
                             localWroot = conf[routing[rule].bundle][env].server.webroot;
                             // standalone setup
-                            if ( self.Host.isStandalone() && routing[rule].bundle != self.startingApp && localWroot == '/') {
+                            if ( standalone && routing[rule].bundle != self.startingApp && localWroot == '/') {
                                 localWroot = '/'+ routing[rule].bundle;
                                 conf[routing[rule].bundle][env].server.webroot = localWroot
                             }
@@ -612,12 +621,12 @@ function Config(opt) {
                         }
                     }
 
-                    if ( self.Host.isStandalone() && routing[rule] && bundle != self.startingApp ) {
+                    if ( standalone && routing[rule] && bundle != self.startingApp ) {
                         standaloneRouting[bundle + '-' + rule] = JSON.parse(JSON.stringify(routing[rule]))
                     }
                 }
 
-                files[name] = collectedRules = merge(true, collectedRules, ((self.Host.isStandalone() && bundle != self.startingApp ) ? standaloneRouting : routing));
+                files[name] = collectedRules = merge(true, collectedRules, ((standalone && bundle != self.startingApp ) ? standaloneRouting : routing));
                 // originalRule is used to facilitate cross bundles (hypertext)linking
                 for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
                     files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
@@ -869,11 +878,11 @@ function Config(opt) {
         if (b < bundles.length) {
             loadBundleConfig(bundles, b, callback, reload, collectedRules)
         } else {
-            if ( !self.Host.isStandalone() ) {
+            //if ( !standalone ) {
+            //    callback(err, files, collectedRules)
+            //} else {
                 callback(err, files, collectedRules)
-            } else {
-                callback(err, files, collectedRules)
-            }
+            //}
         }
     }
 

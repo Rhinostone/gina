@@ -221,9 +221,7 @@ function Router(env) {
 
         if (cacheless) refreshCore();
 
-
-        //console.debug("conf content : \n", bundle, env,  JSON.stringify( conf, null, 4) );
-        console.debug("routing content : \n", bundle, env,  JSON.stringify( conf.content.routing, null, 4) );
+        //console.debug("routing content : \n", bundle, env,  JSON.stringify( conf.content.routing, null, 4) );
 
         //Middleware Filters when declared.
         var resHeaders = conf.server.response.header;

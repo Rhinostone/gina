@@ -6,11 +6,10 @@
  * file that was distributed with this source code.
  */
 
-
-var merge   = require('./merge');
-var console = require('./logger');
-var math    = require('./math');
-var checkSum = math.checkSum;
+var merge       = require('./merge');
+var console     = require('./logger');
+var math        = require('./math');
+var checkSum    = math.checkSum;
 
 /**
  * Model uitl
@@ -127,54 +126,136 @@ function ModelUtil() {
         }
     }
 
-    this.loadAllModels = function(conf, cb) {
+    this.loadAllModels = function(bundles, configuration, env, cb) {
 
-        if ( typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null) {
-            var Model = require( _( getPath('gina.core')+'/model') );
-            var mObj = {};
-            var models = conf.content.connectors;
+        var loadModel = function(b, bundles, configuration, env, cb) {
+            var bundle          = bundles[b]
+                , len           = bundles.length
+                , conf          = configuration[bundle][env]
+                , connectors    = conf.content['connectors'] || undefined;
 
-            var t = 0;
+            if ( typeof(connectors) != 'undefined' && connectors != null) {
+                var Model = require( _( getPath('gina.core')+'/model') );
+                var mObj = {};
 
-            var done = function(connector) {
-                if ( typeof(models[connector]) != 'undefined' ) {
-                    ++t
-                } else {
-                    console.error('connector '+ connector +' not found in configuration')
-                }
+                var models = connectors;
 
-                if ( t == models.count() ) {
-                    cb()
-                }
-            }
+                var t = 0;
 
-            for (var c in models) {//c as connector name
-                //e.g. var apiModel    = new Model(config.bundle + "/api");
-                // => var apiModel = getContext('apiModel')
-                console.log('....model ', c + 'Model');
-                mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
-                mObj[c+'Model']
-                    .onReady(
-                    function onModelReady( err, connector, entitiesObject, conn) {
-                        if (err) {
-                            console.error('found error ...');
-                            console.error(err.stack||err.message||err);
-                            done(connector)
+                var done = function(connector) {
+                    if ( typeof(models[connector]) != 'undefined' ) {
+                        ++t
+                    } else {
+                        console.error('connector '+ connector +' not found in configuration')
+                    }
+
+                    if ( t == models.count() ) {
+                        ++b
+                        if (b == len) {
+                            cb()
                         } else {
-                            // creating entities instances
-                            for (var ntt in entitiesObject) {
-                                entitiesObject[ntt] = new entitiesObject[ntt](conn)
-                            }
-                            done(connector)
+                            loadModel(b, bundles, configuration, env, cb)
                         }
-                    })
+                    }
+                }
+
+                for (var c in models) {//c as connector name
+                    //e.g. var apiModel    = new Model(config.bundle + "/api");
+                    // => var apiModel = getContext('apiModel')
+                    console.debug('....model ', conf.bundle + "/"+c + 'Model');
+                    mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
+                    mObj[c+'Model']
+                        .onReady(
+                        function onModelReady( err, connector, entitiesObject, conn) {
+                            if (err) {
+                                console.error('found error ...');
+                                console.error(err.stack||err.message||err);
+                                done(connector)
+                            } else {
+                                // creating entities instances
+                                for (var ntt in entitiesObject) {
+                                    entitiesObject[ntt] = new entitiesObject[ntt](conn)
+                                }
+                                done(connector)
+                            }
+                        })
+                }
+
+
+            } else {
+                //cb(new Error('no connector found'));
+                console.error( new Error('no connector found for bundle [ '+ bundle +' ]') );
+                loadModel(b+1, bundles, configuration, env, cb)
             }
-        } else {
-            cb(new Error('no connector found'))
-        }
+        };
+
+        loadModel(0, bundles, configuration, env, cb)
     }
 
     this.reloadModels = function(conf, cb) {
+
+        //var loadModel = function(b, bundles, configuration, env, cb) {
+        //    var bundle          = bundles[b]
+        //        , len           = bundles.length
+        //        , conf          = configuration[bundle][env]
+        //        , connectors    = conf.content['connectors'] || undefined;
+        //
+        //    if ( typeof(connectors) != 'undefined' && connectors != null) {
+        //        var Model = require( _( getPath('gina.core')+'/model') );
+        //        var mObj = {};
+        //
+        //        var models = connectors;
+        //
+        //        var t = 0;
+        //        var m = [];
+        //        for (var c in models) {
+        //            m.push(c)
+        //        }
+        //
+        //        var done = function(connector, t) {
+        //            if ( typeof(models[connector]) == 'undefined' ) {
+        //                console.error('connector '+ connector +' not found in configuration')
+        //            }
+        //
+        //            if ( t == models.count() ) {
+        //                ++b
+        //                if (b == len) {
+        //                    cb()
+        //                } else {
+        //                    loadModel(b, bundles, configuration, env, cb)
+        //                }
+        //            } else {
+        //                reload(t)
+        //            }
+        //        }
+        //
+        //        var reload = function(i) {
+        //
+        //            mObj[m[i]+'Model'] = new Model(conf.bundle + '/' + m[i]);
+        //            mObj[m[i]+'Model']
+        //                .reload( conf, function onReload(err, connector, entitiesObject, conn) { // entities to reload
+        //                    if (err) {
+        //                        console.error(err.stack||err.message||err)
+        //                    } else {
+        //                        self.models[connector] = {};
+        //                        for (var ntt in entitiesObject) {
+        //                            entitiesObject[ntt] = new entitiesObject[ntt](conn);
+        //                        }
+        //                    }
+        //                    done(connector, i+1);
+        //                })
+        //        };
+        //        reload(0)
+        //
+        //
+        //    } else {
+        //        console.error( new Error('no connector found for bundle [ '+ bundle +' ]') );
+        //        loadModel(b+1, bundles, configuration, env, cb)
+        //    }
+        //};
+        //
+        //loadModel(0, bundles, configuration, env, cb)
+
         if ( typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null ) {
 
             var Model = require( _( getPath('gina.core')+'/model') );
