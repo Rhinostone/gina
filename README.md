@@ -28,7 +28,7 @@ $ cd myproject
 You can now install the framework using npm:
 
 ```  tty
-$ npm install gina
+$ npm install gina@latest
 ```
 Then you need to __initialize your project__
 
