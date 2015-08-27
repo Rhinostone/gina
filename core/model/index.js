@@ -49,10 +49,6 @@ function Model(namespace) {
 
     var _configuration = null;
     var _connector = null;
-    var _locals = null;
-    //var utils   = require('../utils');
-    //var config = getContext('gina.config');
-    //var utilsConfig = getContext('gina.utils.config');
 
     var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
     var standalone = config.Host.isStandalone();
@@ -152,7 +148,7 @@ function Model(namespace) {
                                         reload(err, connector, entities, connexion)
                                     })
                                 } else {
-                                    modelUtil.setConnection(model, conn);
+                                    modelUtil.setConnection(bundle, model, conn);
                                     getModelEntities(entitiesManager, modelPath, entitiesPath, conn)
                                 }
                             }
@@ -318,6 +314,7 @@ function Model(namespace) {
 
                 EntityClass.prototype.name = className;
                 EntityClass.prototype.model = self.model;
+                EntityClass.prototype.bundle = self.bundle;
                 //EntityClass.prototype._ressource = require( _(entitiesPath + '/' + files[i], true) );
 
                 //for (var prop in Entity) {
@@ -339,7 +336,7 @@ function Model(namespace) {
                 // another one to instanciate and put in cache
                 for (var nttClass in entitiesManager) {
                     var _nttClass = nttClass.substr(0,1).toUpperCase() + nttClass.substr(1);
-                    modelUtil.setModelEntity(self.model, _nttClass, entitiesManager[nttClass])
+                    modelUtil.setModelEntity(self.bundle, self.model, _nttClass, entitiesManager[nttClass])
                 }
                 //finished.
                 if ( reload ) {

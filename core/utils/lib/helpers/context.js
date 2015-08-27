@@ -48,7 +48,7 @@ function ContextHelper(contexts) {
         merge(true, self.contexts, context)
     }
 
-    setContext = function(name, obj) {
+    setContext = function(name, obj, force) {
 
         if (arguments.length > 1) {
             //console.log("Globla setter active ", name, obj);
@@ -57,7 +57,7 @@ function ContextHelper(contexts) {
                 var name = 'global'
             }
 
-            if ( typeof(self.contexts[name]) != "undefined") {
+            if ( typeof(self.contexts[name]) != "undefined" && !force) {
                 merge(self.contexts[name], obj)
             } else {
                 self.contexts[name] = obj
