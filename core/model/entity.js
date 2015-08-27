@@ -12,8 +12,6 @@ var console = utils.logger;
 var helpers = utils.helpers;
 var inherits = utils.inherits;
 var modelUtil = new utils.Model();
-//var Config = require('../config');
-//var config = new Config();
 
 /**
  * @class Model.EntitySuper class
@@ -33,6 +31,23 @@ function EntitySuper(conn) {
             EntitySuper[self.name] = {}
         }
 
+        // TODO - Check if useful when used as singleton - I NOT, clean up
+        //var instance        = getContext('EntitySuper.'+ self.bundle +'.'+ self.name +'.instance') || undefined
+        //    , initialized   = getContext('EntitySuper.'+ self.bundle +'.'+ self.name +'.initialized') || false;
+
+        //if ( !instance ) {
+        //    EntitySuper[self.name].initialized = initialized;
+        //    if (EntitySuper[self.name].initialized) {
+        //        return setListeners(EntitySuper[self.name].instance)
+        //    } else {
+        //        return setListeners()
+        //    }
+        //} else {
+        //    EntitySuper[self.name].initialized = initialized;
+        //    EntitySuper[self.name].instance = instance;
+        //    return instance
+        //}
+
         if ( !EntitySuper[self.name].instance ) {
             if (EntitySuper[self.name].initialized) {
                 return setListeners(EntitySuper[self.name].instance)
@@ -50,6 +65,8 @@ function EntitySuper(conn) {
     var setListeners = function(instance) {
         if ( !EntitySuper[self.name].initialized ) {
             EntitySuper[self.name].initialized = true;
+            //setContext('EntitySuper.'+ self.bundle +'.'+ self.name +'.initialized', EntitySuper[self.name].initialized);
+
             // get entity objet
             var entity = instance || self.getEntity(self.name);
             if (!entity) return false;
@@ -62,6 +79,7 @@ function EntitySuper(conn) {
 
             var events = [], i = 0, cb = {};
             var eCount = 5; // default max listeners is 5
+
             for (var f in entity) {
                 if (
                     typeof(entity[f]) == 'function' &&
@@ -73,71 +91,55 @@ function EntitySuper(conn) {
                     f.substr(f.length-5) !== '_sync' &&
                     f.substr(f.length-5) !== '-sync'
                 ) {
-                    events[i] = shortName +'#'+ f;
+                    events[i] = {
+                        shortName   : shortName +'#'+ f,
+                        method      : f,
+                        entityName  : entity.name
+                    };
                     ++i;
-
-                    //console.debug('setting listener for: [ '+self.model+'/'+self.name+'::' + f +'(...) ]');
-                    entity[f] = (function(e, ev) {
-                        console.debug('setting listener for: [ '+self.model+'/'+self.name+'::' + e + ' ]');
-                        var cached = entity[ev];
-
-                        return function () {
-                            //if (!entity.trigger) {
-                            //    entity.trigger = e
-                            //}
-                            //this[ev].onComplete = function (cb) {
-                            //    entity.once(entity.name + '#' + ev, function (args) {
-                            //        cb.apply(this[ev], args)
-                            //    })
-                            //}
-                            //
-                            //cached.apply(this[ev], arguments);
-                            //return this[ev] // chaining event & method
-
-
-                            entity[ev].onComplete = function (cb) {
-                                entity.once(entity.name + '#' + ev, function (args) {
-                                    cb.apply(entity[ev], args)
-                                })
-                            }
-
-                            cached.apply(entity[ev], arguments);
-                            return entity[ev] // chaining event & method
-
-
-
-
-                        }
-                    //}(shortName +'#'+ f, f))
-                    }(entity.name +'#'+ f, f))
                 }
             }
+
             eCount += i;
-
             self.setMaxListeners(entity.maxListeners || eCount);
-            //entity.setMaxListeners(entity.maxListeners || eCount);
+            console.debug('['+self.name+'] setting max listeners to: ' + (entity.maxListeners || eCount) );
 
-            console.debug('['+self.name+']setting max listeners to: ' + (entity.maxListeners || eCount) );
-
+            var f = null;
             for (var i=0; i<events.length; ++i) {
 
-                entity.removeAllListeners(events[i]); // added on october 1st to prevent adding new listners on each new querie
-                console.debug('palcing event: '+ events[i]);
-                entity.on(events[i], (function(e) {
-                    return function() {
-                        console.debug('calling back from event: ' + e);
-                        // TODO - put try catch, retrieve Controller [res] & throwError() on exception
-                        var f = e.split(/\#/)[1];
-                        entity.emit(entity.name+'#'+f, arguments);
-                        //entity[f]
-                        // won't work here in some cases... save it for another case... out of here
-                    }
-                }(events[i])))
-            }
+                entity.removeAllListeners(events[i].shortName); // added on october 1st to prevent adding new listners on each new querie
+                console.debug('placing event: '+ events[i].shortName +'\n');
+                f = events[i].method;
+
+                entity[f] = (function(e, m, i) {
+                    console.debug('setting listener for: [ '+self.model+'/'+self.name+'::' + e + ' ]');
+
+                    var cached = entity[m];
+
+                    return function () {
+                        var args = arguments;
+                        this[m].onComplete = function (cb) {
+                            //Setting local listener
+                            entity.once(events[i].shortName, function () {
+                                cb.apply(this[m], arguments)
+                            });
+
+                            // running local code
+                            cached.apply(this[m], args);
+                        }
+
+                        return this[m] // chaining event & method
+                    };
+
+
+                }(events[i].shortName, f, i))
+            };
 
             EntitySuper[self.name].instance =  entity;
+            //setContext('EntitySuper.'+ self.bundle +'.'+ self.name +'.instance', EntitySuper[self.name].instance);
+
             // now merging with the current entity object
-            return modelUtil.updateEntityObject(self.model, entityName, entity)
+            return modelUtil.updateEntityObject(self.bundle, self.model, entityName, entity)
         }
     }
 
@@ -155,7 +157,7 @@ function EntitySuper(conn) {
         }
 
         try {
-            return getModelEntity(self.model, entity, conn)
+            return getModelEntity(self.bundle, self.model, entity, conn)
         } catch (err) {
             throw new Error(err.stack);
             return null

@@ -633,7 +633,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                 e.emit('complete', instance);
                             }
 
-                            console.info('[ '+core.startingApp+' ] mounted!! ', conf.bundle, process.pid)
+                            console.debug('[ '+core.startingApp+' ] mounted!! ', conf.bundle, process.pid)
                             // -- EO
                         } else {
                             console.error( 'Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
