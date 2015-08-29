@@ -58,8 +58,7 @@ function Router(env) {
      * @private
      * */
     var hasParams = function(pathname) {
-        var patt = /:/;
-        return ( patt.test(pathname) ) ? true : false
+        return ( /:/.test(pathname) ) ? true : false
     }
 
     this.setMiddlewareInstance = function(instance) {
@@ -81,15 +80,22 @@ function Router(env) {
         request.routing = params; // can be retried in controller with: req.routing
 
         if (uRe.length === uRo.length) {
+
             var maxLen = uRo.length;
             //console.info("-----------------FOUND MATCHING SCORE", uRe.length, uRo.length);
             //console.info(uRe, uRo);
             for (; i<maxLen; ++i) {
                 if (uRe[i] === uRo[i])
                     ++score
-                else if (hasParams(uRo[i]) && fitsWithRequirements(request, uRo[i], uRe[i], params))
+                else if (score == i && hasParams(uRo[i]) && fitsWithRequirements(request, uRo[i], uRe[i], params))
                     ++score
             }
+            //for (; i<maxLen; ++i) {
+            //    if (uRe[i] === uRo[i])
+            //        ++score
+            //    else if (hasParams(uRo[i]) && fitsWithRequirements(request, uRo[i], uRe[i], params))
+            //        ++score
+            //}
         }
         r.past = (score === maxLen) ? true : false;
         r.request = request;
@@ -137,30 +143,39 @@ function Router(env) {
     var fitsWithRequirements = function(request, urlVar, urlVal, params) {
 
 
-        var v = false, _param = null; //urlVar.replace(/:/, '');
-        for (var p in params.param) {
-            if ( urlVar != ':'+p && new RegExp(params.param[p]).test(urlVar) ) {
-                _param = p;
-                break; //only one at the time now ... `step:step.html` [ ok ]; but step:step:other.html is [ ko ], you'll need to handle arrays for this to work
-            }
-        }
+        var _param = urlVar.replace(/:/, '');
 
+        // fast one
         if (
+            typeof(params.param[_param]) != 'undefined' &&
             typeof(params.requirements) != 'undefined' &&
-            typeof(params.requirements[_param]) != 'undefined'
+            typeof(params.requirements[_param]) != 'undefined' &&
+            new RegExp(params.requirements[_param]).test( urlVal )
         ) {
+            request.params[_param] = urlVal;
+            return true
+        }
 
-            //v = urlVal.match(params.requirements[_param]);
-            //if (v != null && v[0] !== '') {
-            //    request.params[urlVar] = v[0]
-            //}
+        // slow one
+        for (var p in params.param) {
 
-            if ( new RegExp(params.requirements[_param]).test( request.params[':' + _param]) ) {
-                v = true
+            if ( urlVar != ':'+p && new RegExp(params.param[p]).test(urlVar) ) {
+
+                _param = p;
+
+                if (
+                    typeof(params.param[_param]) != 'undefined' &&
+                    typeof(params.requirements) != 'undefined' &&
+                    typeof(params.requirements[_param]) != 'undefined' &&
+                    new RegExp(params.requirements[_param]).test( urlVal )
+                ) {
+                    request.params[_param] = urlVal;
+                    return true
+                }
             }
         }
-        //return (v != null && v[0] == urlVal && v[0] != '') ? true : false
-        return v
+
+        return false
     }
 
     var refreshCore = function() {
