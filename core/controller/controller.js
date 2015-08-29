@@ -345,7 +345,12 @@ function Controller(options) {
                                             url = url[0]
                                         }
                                     } else {
-                                        url = url.replace(new RegExp(':'+p, 'g'), params[p])
+                                        try {
+                                            url = url.replace(new RegExp(':'+p, 'g'), params[p])
+                                        } catch (err) {
+                                            self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\nsounds like you are having troubles with a getUrl() filter call where `'+p+'` property might not been defined'  +'\n'+(err.stack||err.message));
+                                        }
+
                                     }
                                 }
                             } else {
@@ -774,7 +779,7 @@ function Controller(options) {
                         cb(err)
                     }
 
-                    movefiles(i+1, res, files, cb)
+                    movefiles(i, res, files, cb)
                 })
         }
     }
