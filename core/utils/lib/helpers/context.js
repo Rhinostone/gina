@@ -6,8 +6,9 @@
  * file that was distributed with this source code.
  */
 
-var os = require('os');
-var merge = require('./../merge');
+var os      = require('os');
+var merge   = require('./../merge');
+var console = require('./../logger');
 
 /**
  * ContextHelper
@@ -79,6 +80,74 @@ function ContextHelper(contexts) {
         } else {
             return self.contexts
         }
+    }
+
+    /**
+     * Get bundle library
+     *
+     * @param {string} [ bundle ] - Bundle name
+     * @param {string} lib  - Library name (module or file)
+     *
+     * */
+    getLib = function(bundle, lib) {
+        if (arguments.length == 1 || !bundle) {
+            //console.debug(
+            //    '\n[ 0 ] = '+ __stack[0].getFileName(),
+            //    '\n[ 1 ] = '+ __stack[1].getFileName(),
+            //    '\n[ 2 ] = '+ __stack[2].getFileName(),
+            //    '\n[ 3 ] = '+ __stack[3].getFileName(),
+            //    '\n[ 4 ] = '+ __stack[4].getFileName(),
+            //    '\n[ 5 ] = '+ __stack[5].getFileName(),
+            //    '\n[ 6 ] = '+ __stack[6].getFileName()
+            //);
+            var lib         = (arguments.length == 1) ? bundle : lib
+                , libPath   = null
+                , file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
+                , a         = file.replace('.js', '').split('/')
+                , i         = a.length-1
+                , conf      = getContext('gina.config')
+                , bundles   = conf.bundles
+                , env       = conf.env
+                , cacheless = conf.isCacheless()
+                , bundle    = null
+                , index     = 0;
+
+            for (; i >= 0; --i) {
+                index = bundles.indexOf(a[i]);
+                if ( index > -1 ) {
+                    bundle = bundles[index];
+                    break
+                }
+            }
+        } else {
+            var libPath     = null
+                , conf      = getContext('gina.config')
+                , env       = conf.env
+                , cacheless = conf.isCacheless();
+        }
+
+        if ( typeof(lib) != 'undefined' ) {
+
+            try {
+                libPath = _(conf.bundlesConfiguration.conf[bundle][env].libPath +'/'+ lib, true);
+                if (cacheless) delete require.cache[libPath];
+
+                // init with options
+                return require(libPath)({
+                    bundle      : bundle,
+                    env         : env,
+                    cacheless   : cacheless,
+                    libPath     : conf.bundlesConfiguration.conf[bundle][env].libPath
+                })
+            } catch (err) {
+                console.error(err.stack||err.message||err);
+                return undefined
+            }
+        } else {
+            console.error( new Error("no `lib` found"))
+            return undefined
+        }
+
     }
 
     /**

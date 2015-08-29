@@ -136,23 +136,31 @@ function Router(env) {
      * */
     var fitsWithRequirements = function(request, urlVar, urlVal, params) {
 
-        urlVar = urlVar.replace(/:/, '');
-        var v = null;
 
-        //console.info("ROUTE !!! ", urlVar, params.requirements);
-        if (
-            typeof(params.requirements) != 'undefined' &&
-            typeof(params.requirements[urlVar]) != 'undefined'
-            ) {
-            v = urlVal.match(params.requirements[urlVar]);
-            //console.info('does it match ?', v);
-            //works with regex like "([0-9]*)"
-            //console.log("PARAMMMMM !!! ", urlVar, params.requireclearments[urlVar], params.requirements);
-            if (v != null && v[0] !== '') {
-                request.params[urlVar] = v[0]
+        var v = false, _param = null; //urlVar.replace(/:/, '');
+        for (var p in params.param) {
+            if ( urlVar != ':'+p && new RegExp(params.param[p]).test(urlVar) ) {
+                _param = p;
+                break; //only one at the time now ... `step:step.html` [ ok ]; but step:step:other.html is [ ko ], you'll need to handle arrays for this to work
             }
         }
-        return (v != null && v[0] == urlVal && v[0] != '') ? true : false
+
+        if (
+            typeof(params.requirements) != 'undefined' &&
+            typeof(params.requirements[_param]) != 'undefined'
+        ) {
+
+            //v = urlVal.match(params.requirements[_param]);
+            //if (v != null && v[0] !== '') {
+            //    request.params[urlVar] = v[0]
+            //}
+
+            if ( new RegExp(params.requirements[_param]).test( request.params[':' + _param]) ) {
+                v = true
+            }
+        }
+        //return (v != null && v[0] == urlVal && v[0] != '') ? true : false
+        return v
     }
 
     var refreshCore = function() {
