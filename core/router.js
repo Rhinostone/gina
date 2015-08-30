@@ -226,6 +226,17 @@ function Router(env) {
         var bundles         = conf.bundles;
         local.conf = conf;
         local.isStandalone  = config.Host.isStandalone();
+
+        // for libs/context etc..
+        var routerObj = {
+            response: response,
+            next: next,
+            hasViews: ( typeof(conf.content.views) != 'undefined' ) ? true : false
+        };
+        setContext('router', routerObj);
+
+
+
         var action          = request.action = params.param.action;
         // more can be added ... but it will always start by `on`Something.
         var reservedActions = [

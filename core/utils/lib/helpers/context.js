@@ -82,6 +82,41 @@ function ContextHelper(contexts) {
         }
     }
 
+
+    var throwError = function(code, err) {
+        var router      = getContext('router')
+            , res       = router.response
+            , next      = router.next
+            , hasViews  = router.hasViews
+            , code      = code;
+
+
+        if (arguments.length < 2) {
+            var err = code;
+            code = 500
+        }
+
+        if ( !hasViews ) {
+            if (!res.headersSent) {
+                res.writeHead(code, { 'Content-Type': 'application/json'} );
+                res.end(JSON.stringify({
+                    status: code,
+                    error: 'Error '+ code +'. '+ err.stack
+                }))
+            } else {
+                next()
+            }
+
+        } else {
+            if (!res.headersSent) {
+                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ err.stack + '</pre>')
+            } else {
+                next()
+            }
+        }
+    }
+
     /**
      * Get bundle library
      *
@@ -133,12 +168,17 @@ function ContextHelper(contexts) {
                 if (cacheless) delete require.cache[libPath];
 
                 // init with options
-                return require(libPath)({
-                    bundle      : bundle,
-                    env         : env,
-                    cacheless   : cacheless,
-                    libPath     : conf.bundlesConfiguration.conf[bundle][env].libPath
-                })
+                try {
+                    return require(libPath)({
+                        bundle      : bundle,
+                        env         : env,
+                        cacheless   : cacheless,
+                        libPath     : conf.bundlesConfiguration.conf[bundle][env].libPath
+                    })
+                } catch(err) {
+                    throwError(500, err)
+                }
+
             } catch (err) {
                 console.error(err.stack||err.message||err);
                 return undefined
