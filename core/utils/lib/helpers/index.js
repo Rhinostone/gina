@@ -6,6 +6,7 @@
  * file that was distributed with this source code.
  */
 
+var fs = require('fs');
 /**
  * @module Helpers
  *
@@ -15,25 +16,41 @@
  * @namespace   Gina.Utils.Helpers
  * @author      Rhinostone <gina@rhinostone.com>
  */
+var _require = function(path) {
+    var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
+    if ( cacheless && !/context/.test(path) ) { // all but the context
+        try {
+            delete require.cache[require.resolve(path)];
+            return require(path)
+        } catch (err) {
+            throw err;
+            return {}
+        }
 
-var Helpers = {
-        console     : require('./console')(),
-        //DateTime    : require('./time')(),
-        dateFormat  : require('./dateFormat')(),
-        //Form        : require('./form')(),
-        //I18n        : require('./i18n')(),
-        path        : require('./path')(),
-        context     : require('./context')(),
-        text        : require('./text')(),
-        task        : require('./task')()
+    } else {
+        return require(path)
+    }
 };
 
+var helpers         = {}
+    , path          = __dirname
+    , files         = fs.readdirSync(path)
+    , f             = 0
+    , len           = files.length
+    , helper        = '';
 
-module.exports = Helpers;
+for (; f < len; ++f) {
+    if ( ! /^\./.test(files[f]) && files[f] != 'index.js') {
+        helper          = files[f].replace(/.js/, '');
+        helpers[helper] = _require('./' + helper)()
+    }
+}
+
+module.exports = helpers;
 
 
 /**
- * format date
+ * Format date
  * @return {array} Return formated date
  **/
 Object.defineProperty( Date.prototype, 'format', {
@@ -41,10 +58,10 @@ Object.defineProperty( Date.prototype, 'format', {
     enumerable: false,
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
-    value: function(mask, utc){ return Helpers.dateFormat.format(this, mask, utc) }
+    value: function(mask, utc){ return helpers.dateFormat.format(this, mask, utc) }
 });
 /**
- * count days between current & dateTo
+ * Count days between current & dateTo
  * @return {array} Return formated date
  **/
 Object.defineProperty( Date.prototype, 'countDaysTo', {
@@ -52,10 +69,30 @@ Object.defineProperty( Date.prototype, 'countDaysTo', {
     enumerable: false,
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
-    value: function(dateTo){ return Helpers.dateFormat.countDaysTo(this, dateTo) }
+    value: function(dateTo){ return helpers.dateFormat.countDaysTo(this, dateTo) }
 });
-
-
+/**
+ * Get days between current & dateTo
+ * @return {array} Return formated date
+ **/
+Object.defineProperty( Date.prototype, 'getDaysTo', {
+    writable:   false,
+    enumerable: false,
+    //If loaded several times, it can lead to an exception. That's why I put this.
+    configurable: true,
+    value: function(dateTo){ return helpers.dateFormat.getDaysTo(this, dateTo) }
+});
+/**
+ * Get days in the current month date
+ * @return {array} Return days
+ **/
+Object.defineProperty( Date.prototype, 'getDaysInMonth', {
+    writable:   false,
+    enumerable: false,
+    //If loaded several times, it can lead to an exception. That's why I put this.
+    configurable: true,
+    value: function(){ return helpers.dateFormat.getDaysInMonth(this) }
+});
 
 /**
  * clone array

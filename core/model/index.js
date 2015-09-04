@@ -94,13 +94,13 @@ function Model(namespace) {
      * */
     var init = function(reload) {
 
-        var bundle = self.bundle;
-        var model = self.model;
-        var modelDirName = self.modelDirName;
+        var bundle          = self.bundle;
+        var model           = self.model;
+        var modelDirName    = self.modelDirName;
 
         // this is supposed to happen on load or for dev env; on reload, with a checksum
-        var conf = getConfigSync(bundle);
-        local.locals = conf.locals;
+        var conf        = getConfigSync(bundle);
+        local.locals    = conf.locals;
 
         if (conf) {
             _configuration = conf.connectors;
@@ -141,7 +141,7 @@ function Model(namespace) {
                             } else {
                                 local.connection = conn;
                                 //Getting Entities Manager.
-                                var entitiesManager = new require( _(conf.path) )()[model];
+                                var entitiesManager = new require( _(conf.path) )(conn)[model];
 
                                 if (reload) {
                                     getModelEntities(entitiesManager, modelPath, entitiesPath, conn, function onReload(err, connector, entities, connexion){

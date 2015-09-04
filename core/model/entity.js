@@ -5,13 +5,13 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-var fs = require('fs');
-var EventEmitter = require('events').EventEmitter;
-var utils = require('gina').utils;
-var console = utils.logger;
-var helpers = utils.helpers;
-var inherits = utils.inherits;
-var modelUtil = new utils.Model();
+var fs              = require('fs');
+var EventEmitter    = require('events').EventEmitter;
+var utils           = require('gina').utils;
+var console         = utils.logger;
+var helpers         = utils.helpers;
+var inherits        = utils.inherits;
+var modelUtil       = new utils.Model();
 
 /**
  * @class Model.EntitySuper class
@@ -31,23 +31,6 @@ function EntitySuper(conn) {
             EntitySuper[self.name] = {}
         }
 
-        // TODO - Check if useful when used as singleton - I NOT, clean up
-        //var instance        = getContext('EntitySuper.'+ self.bundle +'.'+ self.name +'.instance') || undefined
-        //    , initialized   = getContext('EntitySuper.'+ self.bundle +'.'+ self.name +'.initialized') || false;
-
-        //if ( !instance ) {
-        //    EntitySuper[self.name].initialized = initialized;
-        //    if (EntitySuper[self.name].initialized) {
-        //        return setListeners(EntitySuper[self.name].instance)
-        //    } else {
-        //        return setListeners()
-        //    }
-        //} else {
-        //    EntitySuper[self.name].initialized = initialized;
-        //    EntitySuper[self.name].instance = instance;
-        //    return instance
-        //}
-
         if ( !EntitySuper[self.name].instance ) {
             if (EntitySuper[self.name].initialized) {
                 return setListeners(EntitySuper[self.name].instance)
@@ -65,7 +48,6 @@ function EntitySuper(conn) {
     var setListeners = function(instance) {
         if ( !EntitySuper[self.name].initialized ) {
             EntitySuper[self.name].initialized = true;
-            //setContext('EntitySuper.'+ self.bundle +'.'+ self.name +'.initialized', EntitySuper[self.name].initialized);
 
             // get entity objet
             var entity = instance || self.getEntity(self.name);
@@ -136,7 +118,6 @@ function EntitySuper(conn) {
             };
 
             EntitySuper[self.name].instance =  entity;
-            //setContext('EntitySuper.'+ self.bundle +'.'+ self.name +'.instance', EntitySuper[self.name].instance);
 
             // now merging with the current entity object
             return modelUtil.updateEntityObject(self.bundle, self.model, entityName, entity)
@@ -188,16 +169,6 @@ function EntitySuper(conn) {
     //        return JSON.parse(tmp)
     //    }
     //}
-
-    // self.trigger might be useless because of the existing self.emit(evt, err, data)
-    ///**
-    // * Trigger callback
-    // *
-    // * */
-    //this.trigger = function(err, data, evt) {
-    //    // eg.: evt = 'user#set';
-    //    self.emit(evt, err, data);
-    //};
 
     return init()
 };
