@@ -9,6 +9,8 @@
 //Imports.
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
+var http            = require('http');
+var https           = require('https');
 var utils           = require('./../utils') || require.cache[require.resolve('./../utils')];
 var merge           = utils.merge;
 var inherits        = utils.inherits;
@@ -38,7 +40,8 @@ function Controller(options) {
         req : null,
         res : null,
         next : null,
-        options: options || null
+        options: options || null,
+        query: {}
     };
 
     /**
@@ -864,6 +867,121 @@ function Controller(options) {
             }
         } else {
             start(target, cb)
+        }
+    }
+
+
+    /**
+     * Query
+     * */
+    local.query.data = {};
+    local.query.options = {
+        host    : undefined, // Must be an IP
+        hostname  : undefined, // cname of the host e.g.: `www.google.com` or `localhost`
+        path    : undefined, // e.g.: /test.html
+        port    : 80, // #80 by default but can be 3000
+        method  : 'POST', // POST | GET | PUT | DELETE
+        agent   : false,
+        auth    : undefined, // use `"username:password"` for basic authentification
+        rejectUnauthorized: undefined, // ignore verification when requesting on https (443)
+        headers : {
+            'Content-Type': 'application/json',
+            'Content-Length': local.query.data.length
+        }
+    };
+
+    this.query = function(options, data, callback) {
+
+        var queryData           = {}
+            , defaultOptions    = local.query.options
+            , path              = options.path
+            , browser           = null
+            , options           = merge(options, defaultOptions);
+
+        for (var o in options) {//cleaning
+            if ( typeof(options[o]) == 'undefined' || options[o] == undefined) {
+                delete options[o]
+            }
+        }
+
+        if ( !options.host && !options.hostname ) {
+            self.emit('query#complete', new Error('Controller::query() needs at least a `host IP` or a `hostname`'))
+        }
+
+        if (arguments.length <3) {
+            if ( typeof(data) == 'function') {
+                var callback = data;
+                var data = undefined;
+            } else {
+                callback = undefined;
+            }
+        }
+        if ( typeof(data) != "undefined" &&  data.count() > 0) {
+
+            queryData = '?';
+
+            for (var d in data) {
+                if ( typeof(data[d]) == 'object') {
+                    data[d] = JSON.stringify(data[d]);
+                }
+                queryData += d + '=' + data[d] + '&';
+            }
+
+            queryData = queryData.substring(0, queryData.length-1);
+            queryData = queryData.replace(/\s/g, '%20');
+            options.path += queryData;
+
+            //Sample request.
+            //options.path = '/updater/start?release={"version":"0.0.5-dev","url":"http://10.1.0.1:8080/project/bundle/repository/archive?ref=0.0.5-dev","date":1383669077141}&pid=46493';
+        }
+
+
+
+        //you need this, even when empty.
+        options.headers['Content-Length'] = queryData.length;
+        browser = (options.port == 443) ? https : http;
+
+        var req = browser.request(options, function(res) {
+
+            res.setEncoding('utf8');
+            var data = '';
+
+            res.on('data', function onData (chunk) {
+                data += chunk;
+            });
+
+            res.on('end', function onEnd() {
+                //Only when needed.
+                if ( typeof(callback) != "undefined") {
+                    callback( false, data ) // data will always be a string
+                } else {
+                    self.emit('query#complete', false, data)
+                }
+            })
+        });
+
+
+        //starting from from >0.10.15
+        req.on('error', function onError(err) {
+            if ( typeof(callback) != "undefined") {
+                callback(err)
+            } else {
+                //throw new Error(err)
+                self.emit('query#complete', err)
+            }
+        });
+
+        if (req) { // don't touch this please
+            if (req.write) req.write(queryData);
+            if (req.end) req.end();
+        }
+
+        return {
+            onComplete: function(cb) {
+                self.once('query#complete', function(err, data){
+                    cb(err, data)
+                })
+            }
         }
     }
 

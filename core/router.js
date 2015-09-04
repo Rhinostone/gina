@@ -180,7 +180,6 @@ function Router(env) {
 
     var refreshCore = function() {
         var core = new RegExp( getPath('gina.core') );
-        //var lib =  new RegExp( getPath('local.conf[local.bundle][local.env].libPath') );
         var excluded = [
             _(getPath('gina.core') + '/gna.js', true)
         ];
@@ -190,6 +189,7 @@ function Router(env) {
                 require.cache[c].exports = require( _(c, true) )
             }
         }
+
 
         //update utils
         delete require.cache[_(getPath('gina.core') +'/utils/index.js', true)];

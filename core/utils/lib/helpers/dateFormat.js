@@ -156,10 +156,55 @@ module.exports = function() {
         return Math.round(count/oneDay);
     }
 
+    /**
+     *  Will give an array of dates between the current date to a targeted date
+     *
+     *  TODO - add a closure to `ignoreWeekend()` based on Utils::Validator
+     *  TODO - add a closure to `ignoreFromList(array)` based on Utils::Validator
+     *
+     *  @param {object} dateTo
+     *  @return {array} dates
+     * */
+    var getDaysTo = function(date, dateTo) {
+
+        if ( ! dateTo instanceof Date) {
+            throw new Error('dateTo is not instance of Date() !')
+        }
+
+        var count       = countDaysTo(date, dateTo)
+            , month     = date.getMonth()
+            , year      = date.getFullYear()
+            , day       = date.getDate() + 2
+            , dateObj   = new Date(year, month, day)
+            , days      = []
+            , i         = 0;
+
+        for (; i < count; ++i) {
+            days.push(new Date(dateObj));
+            dateObj.setDate(dateObj.getDate() + 1);
+        }
+
+        return days || [];
+    }
+
+    var getDaysInMonth = function(date) {
+        var month   = date.getMonth();
+        var year    = date.getFullYear();
+        var dateObj = new Date(year, month, 1);
+        var days = [];
+        while (dateObj.getMonth() === month) {
+            days.push(new Date(dateObj));
+            dateObj.setDate(dateObj.getDate() + 1);
+        }
+        return days;
+    }
+
 
     return {
         format: format,
-        countDaysTo: countDaysTo
+        countDaysTo: countDaysTo,
+        getDaysTo: getDaysTo,
+        getDaysInMonth: getDaysInMonth
     }
 
 };
