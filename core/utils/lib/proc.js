@@ -195,7 +195,7 @@ Proc = function(bundle, proc, usePidFile){
             proc.on('SIGINT', function(code){
 
                 if (code == undefined) var code = 0;
-                console.info("\nGot exit code. Now killing: ", code, process.list, '\n');
+                console.info("\nGot exit code. Now killing: ", code);
                 proc.exit(code);//tigger exit event.
             });
 
@@ -232,9 +232,13 @@ Proc = function(bundle, proc, usePidFile){
                 //code = code || 0;
                 //var obj = logger.emerg('gina', 'UTILS:EMERG1', 'process exit code ' + code);
                 //if (code == 0  && env != "debug" && env != "dev"/***/) {
-                for (var p=0; p<process.list.count(); p++) {
-                    dismiss(process.list[p].pid)
-                }
+
+                //for (var p=0; p<process.list.count(); p++) {
+                //    dismiss(process.list[p].pid)
+                //}
+
+                // kill gina
+                dismiss(process.list[process.list.count()-1].pid, "SIGKILL")
             });
 
             proc.on('SIGHUP', function(code){
@@ -244,17 +248,14 @@ Proc = function(bundle, proc, usePidFile){
                 var env =  process.env.NODE_ENV || 'prod';
                 var pid = self.getPidByBundleName(bundle);
 
-                dismiss(process.pid);
-                dismiss(pid);
-            });
-
+                dismiss(process.pid, "SIGINT");
+                dismiss(pid, "SIGINT");
+            })
         }
     };
 
 
-
-
-    var dismiss = function(pid){
+    var dismiss = function(pid, signal){
         if (pid == undefined) {
             var pid = self.PID;
         }
@@ -273,12 +274,9 @@ Proc = function(bundle, proc, usePidFile){
         } catch (err) {
             //Means that it does not exists anymore.
         }
-        // set a timeout maybe ???
-        //setTimeout(function(){
-            console.debug('sending SIGINT signal');
-            process.kill(pid, "SIGINT");// soft...
-        //}, 400)
 
+        process.kill(pid, signal);// soft...
+        console.debug('sent '+ signal +' signal to end process [ '+ pid +' ]');
     };
 
     /**

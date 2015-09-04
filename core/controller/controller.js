@@ -43,6 +43,10 @@ function Controller(options) {
         options: options || null,
         query: {}
     };
+    var ports = {
+        'http': 80,
+        'https': 443
+    };
 
     /**
      * Controller Constructor
@@ -906,6 +910,12 @@ function Controller(options) {
 
         if ( !options.host && !options.hostname ) {
             self.emit('query#complete', new Error('Controller::query() needs at least a `host IP` or a `hostname`'))
+        }
+
+        if ( /\:\/\//.test(options.host) ) {
+            var hArr = options.host.split('://');
+            options.port = ports[hArr[0]];
+            options.host = hArr[1]
         }
 
         if (arguments.length <3) {
