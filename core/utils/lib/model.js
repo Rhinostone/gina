@@ -8,8 +8,8 @@
 
 var merge       = require('./merge');
 var console     = require('./logger');
-var math        = require('./math');
-var checkSum    = math.checkSum;
+//var math        = require('./math');
+//var checkSum    = math.checkSum;
 
 /**
  * Model uitl
@@ -144,10 +144,12 @@ function ModelUtil() {
     this.loadAllModels = function(bundles, configuration, env, cb) {
 
         var loadModel = function(b, bundles, configuration, env, cb) {
+
             var bundle          = bundles[b]
                 , len           = bundles.length
                 , conf          = configuration[bundle][env]
                 , connectors    = conf.content['connectors'] || undefined;
+
 
             if ( typeof(connectors) != 'undefined' && connectors != null) {
                 var Model = require( _( getPath('gina.core')+'/model') );
@@ -275,6 +277,8 @@ function ModelUtil() {
             //    '\n[ 5 ] = '+ __stack[5].getFileName(),
             //    '\n[ 6 ] = '+ __stack[6].getFileName()
             //);
+
+
             var model       = (arguments.length == 1) ? bundle : model
                 , file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
                 , a         = file.replace('.js', '').split('/')

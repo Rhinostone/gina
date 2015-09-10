@@ -254,6 +254,24 @@ function Config(opt) {
             if ( !self.isStandalone ) {
                 return ( typeof(self.envConf) != "undefined" ) ? self.envConf[bundle][env] : null;
             } else {
+
+                if (!bundle) { // if getContext().bundle is lost .. eg.: worker context
+                    var model       = (arguments.length == 1) ? bundle : model
+                        , file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
+                        , a         = file.replace('.js', '').split('/')
+                        , i         = a.length-1
+                        , bundles   = getContext('gina.config').bundles
+                        , index     = 0;
+
+                    for (; i >= 0; --i) {
+                        index = bundles.indexOf(a[i]);
+                        if ( index > -1 ) {
+                            bundle = bundles[index];
+                            break
+                        }
+                    }
+                }
+
                 if ( typeof(self.envConf) != "undefined" ) {
                     self.envConf[bundle][env].hostname = self.envConf[self.startingApp][env].hostname;
                     self.envConf[bundle][env].content.routing = self.envConf[self.startingApp][env].content.routing;

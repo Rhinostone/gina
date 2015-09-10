@@ -171,8 +171,6 @@ gna.getProjectConfiguration = function (callback){
                 project = dep;
             }
             gna.project = project;
-            //console.log("; )look for ");
-            //console.log("===> ", dep);
             callback(false, project);
         } catch (err) {
             gna.project = project;
@@ -180,7 +178,7 @@ gna.getProjectConfiguration = function (callback){
         }
 
     } else {
-        console.error('missing project???');
+        console.warn('missing project ???');
         gna.project = project;
         callback(false, project);
     }
