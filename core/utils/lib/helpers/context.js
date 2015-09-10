@@ -71,6 +71,9 @@ function ContextHelper(contexts) {
 
     getContext = function(name) {
         //console.log("getting ", name, self.contexts.content[name], self.contexts);
+
+
+
         if ( typeof(name) != 'undefined' ) {
             try {
                 return self.contexts[name]

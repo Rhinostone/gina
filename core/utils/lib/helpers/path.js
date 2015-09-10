@@ -1333,6 +1333,10 @@ function PathHelper() {
         }
     }
 
+    setPaths = function(paths) {
+        setContext('paths', paths)
+    }
+
     getPaths = function() {
         return getContext("paths")
     }
