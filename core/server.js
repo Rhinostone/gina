@@ -355,7 +355,7 @@ function Server(options) {
                 var opt = self.conf[self.appName][self.env].content.settings.upload;
                 // checking size
                 var maxSize     = parseInt(opt.maxFieldsSize);
-                var fileSize    = request.headers["content-length"]/1024; //MB
+                var fileSize    = request.headers["content-length"]/1024/1024; //MB
 
                 if (fileSize > maxSize) {
                     throwError(response, 431, 'Attachment exceeded maximum file size [ '+ opt.maxFieldsSize +' ]');
