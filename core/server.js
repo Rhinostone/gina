@@ -353,10 +353,19 @@ function Server(options) {
                 // TODO - get options from settings.json & settings.{env}.json ...
                 // -> https://github.com/andrewrk/node-multiparty
                 var opt = self.conf[self.appName][self.env].content.settings.upload;
+                // checking size
+                var maxSize     = parseInt(opt.maxFieldsSize);
+                var fileSize    = request.headers["content-length"]/1024; //MB
+
+                if (fileSize > maxSize) {
+                    throwError(response, 431, 'Attachment exceeded maximum file size [ '+ opt.maxFieldsSize +' ]');
+                    return false
+                }
+
                 var i = 0, form = new multiparty.Form(opt);
                 form.parse(request, function(err, fields, files) {
                     if (err) {
-                        self.throwError(response, 400, err.stack||err.message);
+                        throwError(response, 400, err.stack||err.message);
                         return
                     }
 
@@ -526,7 +535,7 @@ function Server(options) {
         }
 
         if ( /\/favicon\.ico/.test(pathname) && !hasViews(bundle)) {
-            callback(false, bundle, pathname, req, res, next);
+            callback(false, bundle, pathname, config, req, res, next);
             return false
         }
 

@@ -153,7 +153,11 @@ function ConfigUtil() {
      *
      * @private
      * */
-    this.getSync = function(project, file){
+    this.getSync = function(project, file, i){
+        var maxRetry    = 3
+            , delay     = 200
+            , i         = i || 0;
+
         if (typeof(file) == 'undefined') {
             var file = 'locals.json'
         }
@@ -166,14 +170,21 @@ function ConfigUtil() {
                 if ( fs.existsSync(filename) ) {
                     return require(filename)
                 } else {
-                    var err = new Error(filename+ ' not found');
-                    console.emerg(err.stack||err.message);
-                    process.exit(1);
+                    // you might just be experimenting some latencies
+                    if (i < maxRetry) {
+                        setTimeout(function(){
+                            self.getSync(project, file, i+1)
+                        }, delay);
+                        //return
+                    } else {
+                        var err = new Error(filename+ ' not found');
+                        console.emerg(err.stack||err.message);
+                        process.exit(1);
+                    }
                 }
             } catch (err) {
                 console.error(err.stack);
                 throw new Error(err.message);
-
             }
         }
     }
@@ -242,44 +253,6 @@ function ConfigUtil() {
                 } else {
                     createFolder()
                 }
-            //logger.error('gina', 'UTILS:CONFIG:ERR:1', err, __stack);
-//                    console.warn("waah ", gnaFolder+ '/' +file, gnaFolder, content);
-//                    fs.mkdir(gnaFolder, 0777, function(err){
-//                        if (err) logger.error('gina', 'UTILS:CONFIG:ERR:1', err, __stack);
-//
-//                        //Creating content.
-//                        createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
-//                            callback(err);
-//                        });
-//                    });
-
-//                } else {
-//                    //Means that folder was found.
-//                    if ( typeof(callback) != 'undefined') {
-//                        callback(false);
-//                    }
-//                }
-
-//                    //Means that folder was found.
-//                    /************************************************************
-//                    * Will remove this row once the project generator is ready. *
-//                    ************************************************************/
-//                    //Remove all: start with symlink. in order to replace it.
-//                    var path = self.paths.utils + '/.gna';
-//
-//                    removeSymlink(path, function(err){
-//                        if (err) logger.error('gina', 'UTILS:CONFIG:ERR:10', err, __stack);
-//
-//                        Fs.mkdir(gnaFolder, 0777, function(err){
-//                            if (err) logger.error('gina', 'UTILS:CONFIG:ERR:1', err, __stack);
-//
-//                            //Creating content.
-//                            createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
-//                                callback(err);
-//                            });
-//                        });
-//                    });
-//                }//EO if (!exists) {
             })
         } catch (err) {
             //log it.

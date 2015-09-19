@@ -163,13 +163,16 @@ module.exports = function() {
      *  TODO - add a closure to `ignoreFromList(array)` based on Utils::Validator
      *
      *  @param {object} dateTo
+     *  @param {string} [ mask ]
+     *
      *  @return {array} dates
      * */
-    var getDaysTo = function(date, dateTo) {
+    var getDaysTo = function(date, dateTo, mask) {
 
         if ( ! dateTo instanceof Date) {
             throw new Error('dateTo is not instance of Date() !')
         }
+
 
         var count       = countDaysTo(date, dateTo)
             , month     = date.getMonth()
@@ -180,7 +183,12 @@ module.exports = function() {
             , i         = 0;
 
         for (; i < count; ++i) {
-            days.push(new Date(dateObj));
+            if ( typeof(mask) != 'undefined' ) {
+                days.push(new Date(dateObj).format(mask));
+            } else {
+                days.push(new Date(dateObj));
+            }
+
             dateObj.setDate(dateObj.getDate() + 1);
         }
 

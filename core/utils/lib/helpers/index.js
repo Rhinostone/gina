@@ -80,7 +80,7 @@ Object.defineProperty( Date.prototype, 'getDaysTo', {
     enumerable: false,
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
-    value: function(dateTo){ return helpers.dateFormat.getDaysTo(this, dateTo) }
+    value: function(dateTo, mask){ return helpers.dateFormat.getDaysTo(this, dateTo, mask) }
 });
 /**
  * Get days in the current month date

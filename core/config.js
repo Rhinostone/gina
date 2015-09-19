@@ -17,6 +17,7 @@ var utils           = require("./utils");
 var merge           = utils.merge;
 var inherits        = utils.inherits;
 var console         = utils.logger;
+//var math            = utils.math;
 var modelUtil       = new utils.Model();
 
 
@@ -772,19 +773,22 @@ function Config(opt) {
             }
 
             // public root directories
-            var d = 0
-                , dirs = fs.readdirSync(reps['views'])
-                , statics = {};
-            // removing html/template directory
-            dirs.splice(dirs.indexOf(new _(reps.html, true).toArray().last()), 1);
-            // making statics allowed directories
-            while ( d < dirs.length) {
-                if ( !/^\./.test(dirs[d]) && fs.lstatSync(_(reps.views +'/'+ dirs[d], true)).isDirectory() ) {
-                    statics[dirs[d]] = _('{views}/'+dirs[d], true)
+            if (reps['views']) { // !== hasViews; you don't need views to access statics
+                var d = 0
+                    , dirs = fs.readdirSync(reps['views'])
+                    , statics = {};
+                // ignoring html (template) directory
+                dirs.splice(dirs.indexOf(new _(reps.html, true).toArray().last()), 1);
+                // making statics allowed directories
+                while ( d < dirs.length) {
+                    if ( !/^\./.test(dirs[d]) && fs.lstatSync(_(reps.views +'/'+ dirs[d], true)).isDirectory() ) {
+                        statics[dirs[d]] = _('{views}/'+dirs[d], true)
+                    }
+                    ++d
                 }
-                ++d
+                files['statics'] = merge(files['statics'], statics)
             }
-            files['statics'] = merge(files['statics'], statics);
+
 
             if (hasViews && typeof(files['views']) == 'undefined') {
                 files['views'] = require(viewsPath)

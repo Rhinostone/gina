@@ -66,12 +66,12 @@ function EntitySuper(conn) {
                 if (
                     typeof(entity[f]) == 'function' &&
                     !self[f] &&
-                    f != 'onComplete' &&
-                    f.substr(f.length-4) !== 'Sync' &&
-                    f.substr(f.length-4) !== 'Task' &&
-                    f.substr(f.length-4) !== '_task' &&
-                    f.substr(f.length-5) !== '_sync' &&
-                    f.substr(f.length-5) !== '-sync'
+                    f != 'onComplete' //&&
+                    //f.substr(f.length-4) !== 'Sync' &&  // deprecated
+                    //f.substr(f.length-4) !== 'Task' &&
+                    //f.substr(f.length-4) !== '_task' &&
+                    //f.substr(f.length-5) !== '_sync' &&
+                    //f.substr(f.length-5) !== '-sync'
                 ) {
                     events[i] = {
                         shortName   : shortName +'#'+ f,
@@ -84,37 +84,39 @@ function EntitySuper(conn) {
 
             eCount += i;
             self.setMaxListeners(entity.maxListeners || eCount);
-            console.debug('['+self.name+'] setting max listeners to: ' + (entity.maxListeners || eCount) );
+            //console.debug('['+self.name+'] setting max listeners to: ' + (entity.maxListeners || eCount) );
 
             var f = null;
             for (var i=0; i<events.length; ++i) {
 
                 entity.removeAllListeners(events[i].shortName); // added on october 1st to prevent adding new listners on each new querie
-                console.debug('placing event: '+ events[i].shortName +'\n');
+                //console.debug('placing event: '+ events[i].shortName +'\n');
                 f = events[i].method;
+                // only if method content is about the event
+                if ( new RegExp('('+ events[i].shortName +'\'|'+ events[i].shortName +'\"|'+ events[i].shortName +'$)').test(entity[f].toString()) ) {
+                    entity[f] = (function(e, m, i) {
+                        //console.debug('setting listener for: [ '+self.model+'/'+self.name+'::' + e + ' ]');
 
-                entity[f] = (function(e, m, i) {
-                    console.debug('setting listener for: [ '+self.model+'/'+self.name+'::' + e + ' ]');
+                        var cached = entity[m];
 
-                    var cached = entity[m];
+                        return function () {
+                            var args = arguments;
+                            this[m].onComplete = function (cb) {
+                                //Setting local listener
+                                entity.once(events[i].shortName, function () {
+                                    cb.apply(this[m], arguments)
+                                });
 
-                    return function () {
-                        var args = arguments;
-                        this[m].onComplete = function (cb) {
-                            //Setting local listener
-                            entity.once(events[i].shortName, function () {
-                                cb.apply(this[m], arguments)
-                            });
+                                // running local code
+                                cached.apply(this[m], args);
+                            }
 
-                            // running local code
-                            cached.apply(this[m], args);
-                        }
-
-                        return this[m] // chaining event & method
-                    };
+                            return this[m] // chaining event & method
+                        };
 
 
-                }(events[i].shortName, f, i))
+                    }(events[i].shortName, f, i))
+                }
             };
 
             EntitySuper[self.name].instance =  entity;

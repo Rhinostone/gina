@@ -141,7 +141,7 @@ function Model(namespace) {
                             } else {
                                 local.connection = conn;
                                 //Getting Entities Manager.
-                                var entitiesManager = new require( _(conf.path) )(conn)[model];
+                                var entitiesManager = new require( _(conf.path) )(conn)[model](conn);
 
                                 if (reload) {
                                     getModelEntities(entitiesManager, modelPath, entitiesPath, conn, function onReload(err, connector, entities, connexion){
@@ -158,9 +158,9 @@ function Model(namespace) {
 
                     //finished.
                     if ( reload ) {
-                        reload(false, self.name, null, conn)
+                        reload(new Error('[ '+self.name+' ] No connector found'), self.name, null, conn)
                     } else {
-                        self.emit('model#ready', false, self.name, null, conn)
+                        self.emit('model#ready', new Error('[ '+self.name+' ] No connector found'), self.name, null, conn)
                     }
                 }
             }
@@ -207,7 +207,9 @@ function Model(namespace) {
      *
      * @private
      * */
-    var getConfigSync = function(bundle) {
+    var getConfigSync = function(bundle, i) {
+        var i = i || 0, delay = 200, retry = 5;
+
         var configuration = config.getInstance(bundle);
 
         try {
@@ -236,8 +238,16 @@ function Model(namespace) {
             };
             return confObj
         } else {
-            throw new Error('Config not instantiated');
-            return undefined
+            if ( i < retry ) {
+                console.debug('retying to get config ...' + i);
+                setTimeout(function(){
+                    getConfigSync(bundle, i+1)
+                }, delay);
+                return false
+            } else {
+                throw new Error('Config not instantiated');
+                return undefined
+            }
         }
     }
 
@@ -280,11 +290,8 @@ function Model(namespace) {
 
         var produce = function(entityName, i){
 
-
-            //if (err) log.error('gina', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
-
             try {
-                console.debug("producing ", self.name,":",entityName, ' ( '+i+' )');
+                //console.debug("producing ", self.name,":",entityName, ' ( '+i+' )');
 
                 var className = entityName.substr(0,1).toUpperCase() + entityName.substr(1);
                 //entityName.substr(0,1).toLowerCase() + entityName.substr(1);
