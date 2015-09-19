@@ -273,6 +273,19 @@ var mountChildrenSync = function(project, bundles, i) {
     if ( fs.existsSync(source) ) {
         utils.generator.createPathSync(bundlesPath, function onPathCreated(err){
             if (!err) {
+                // cleanning first
+                var list    = fs.readdirSync(bundlesPath)
+                    , f     = 0
+                    , len   = list.length
+                    , fPath = null;
+
+                for (; f < len; ++f) {
+                    fPath = _(bundlesPath + '/'+ list[f], true)
+                    if ( !/^\./.test(fPath) ) {
+                        fs.unlinkSync( fPath )
+                    }
+                }
+                // mount
                 try {
                     if ( type != undefined)
                         fs.symlinkSync(source, target, type)
@@ -280,25 +293,12 @@ var mountChildrenSync = function(project, bundles, i) {
                         fs.symlinkSync(source, target);
 
                     mountChildrenSync(project, bundles, i+1)
+
                 } catch (err) {
-                    if (err) {
-                        console.emerg(err.stack||err.message);
-                        process.exit(1)
-                    }
-                    if ( fs.existsSync(target) ) {
-                        var stats = fs.lstatSync(target);
-                        if ( stats.isDirectory() ) {
-                            var d = new _(target).rm( function(err){
-                                console.error(err.stack);
-                                process.exit(1)
-                            })
-                        } else {
-                            fs.unlinkSync(target);
-                            console.error(err.stack);
-                            process.exit(1)
-                        }
-                    }
+                    console.emerg(err.stack||err.message);
+                    process.exit(1)
                 }
+
             } else {
                 console.error(err.stack);
                 process.exit(1)
