@@ -52,7 +52,7 @@ var AppCommand = {
         '--type',
         'dev',
         'debug',
-        '--stack',
+        //'--stack',
         'stage',
         'prod'
     ],
@@ -122,9 +122,11 @@ var AppCommand = {
 
         this.opt['argument'] = process.argv[4];
 
-        if (process.argv[5] != undefined && process.argv[5].indexOf('=')) {
-            var p = process.argv[5].split(/=/);
-            this.opt[p[0]] = p[1];
+        for (var a = 4, aLen = process.argv.length; a < aLen; ++a) {
+            if (process.argv[a] != undefined && process.argv[a].indexOf('=')) {
+                var p = process.argv[a].split(/=/);
+                this.opt[p[0]] = p[1];
+            }
         }
 
         this.bundle = process.argv[3].replace(/.js/, '');
@@ -551,6 +553,7 @@ var AppCommand = {
     start : function(opt) {
         var self = this;
 
+        console.debug('starting with options ', opt);
         this.isRealApp( function(err) {
             var real = false;
             if (err) {
@@ -586,14 +589,17 @@ var AppCommand = {
                 setContext('processList', process.list);
                 setContext('ginaProcess', process.pid);
                 var params = [
-                    //"--debug-brk=5858",//what ever port you want.
-                    (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
                     appPath,
                     opt['argument'],
                     JSON.stringify( getContext() )//Passing context to child.
                 ];
 
-
+                // passing V8 options
+                for (var name in opt) {
+                    if ( /\-\-/.test(name) ) {
+                        params.unshift(name +'='+ opt[name])
+                    }
+                }
 
                 for (var i=0; i<params.length; ++i) {
                     if (params[i] == '') {

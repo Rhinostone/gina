@@ -259,17 +259,22 @@ Proc = function(bundle, proc, usePidFile){
         if (pid == undefined) {
             var pid = self.PID;
         }
-        var bundleName = self.getBundleNameByPid(pid);
-        var pathPID = _(self.path + pid);
-        var pathBundle = _(getPath('mountPath') + '/' + bundleName);;
+
         try {
-            fs.unlinkSync(pathPID);
+
+            for (var p in process.list) {
+                fs.unlinkSync( _(self.path + process.list[p].pid) )
+            }
+
         } catch (err) {
             //Means that it does not exists anymore.
         }
         try {
-            if (bundleName != undefined && fs.existsSync(pathBundle)) {
-                fs.unlinkSync(pathBundle)
+            console.debug('\n=> '+ JSON.stringify(process.list, null, 4));
+            for (var p in process.list) {
+                if ( process.list[p].name != 'gina' ) {
+                    fs.unlinkSync( _(getPath('mountPath') + '/'  + process.list[p].name) )
+                }
             }
         } catch (err) {
             //Means that it does not exists anymore.

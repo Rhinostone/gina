@@ -76,6 +76,9 @@ cmd.onExec = function() {
             cmd.App = require(p).run( cmd.getOptions(), cmd.msg, longcmd )
         }
 
+    } else if ( process.argv[2] == '-s' && argCount > 2 || process.argv[2] == '--start' && argCount > 2 ) {
+        var p = _(__dirname + '/app.js');
+        cmd.App = require(p).run( cmd.getOptions(), cmd.msg, true )
     } else {
         ignore()
     }

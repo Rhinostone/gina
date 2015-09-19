@@ -542,7 +542,7 @@ function PathHelper() {
                     //console.debug("....calling method ", method);
 
                     browseCopy(source, destination, excluded, function(err){
-                        console.debug("copy Dir/ to Dir/ && Dir/ to Dir done");
+                        //console.debug("copy Dir/ to Dir/ && Dir/ to Dir done");
                         e.emit("cp#complete", err, destination, method)
                     })
 
@@ -624,7 +624,7 @@ function PathHelper() {
 
                     var d = _(destination);
                     fs.exists(d, function(exists){
-                        console.debug("about to remove !! ", d, exists);
+                        //console.debug("about to remove !! ", d, exists);
                         if (exists) {
                             rm(d).onComplete( onRemoved )
                         } else {
@@ -1068,14 +1068,14 @@ function PathHelper() {
         self = cleanSlashes(self);
         var p = self.value;
         fs.exists(p, function(exists) {
-            console.debug(" does it exists ? ", p, exists );
+            //console.debug(" does it exists ? ", p, exists );
             if (!exists) {
-                console.debug("done removing ", p);
+                //console.debug("done removing ", p);
                 callback(false, p)
 
             } else {
                 rm(p).onComplete( function(err, path) {
-                    console.debug("done removing... ", err);
+                    //console.debug("done removing... ", err);
                     callback(err, path)
                 })
             }
@@ -1085,7 +1085,7 @@ function PathHelper() {
     var rm = function(source) {
 
         browseRemove(source,  function(err, path) {
-            console.debug('rm done...', err, path, " VS ", source);
+            //console.debug('rm done...', err, path, " VS ", source);
             e.emit('rm#complete', err, path)
         });
 
