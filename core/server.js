@@ -292,7 +292,10 @@ function Server(options) {
 
     var parseBody = function(body) {
         var obj = {}, arr = body.split(/&/g);
-        var el = {};
+        if ( /(\"false\"|\"true\")/.test(body) )
+            body = body.replace(/\"false\"/g, false).replace(/\"true\"/g, true);
+
+        var el = {}, value = null;
         for (var i=0; i<arr.length; ++i) {
             if (!arr[i]) continue;
             el = arr[i].split(/=/);
@@ -422,6 +425,9 @@ function Server(options) {
                                             if ( request.body.substr(0,1) == '?')
                                                 request.body = request.body.substr(1);
 
+                                            // false & true case
+                                            if ( /(\"false\"|\"true\")/.test(request.body) )
+                                                request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true);
 
                                             obj = parseBody(request.body);
                                             if (obj.count() == 0 && request.body.length > 1) {
@@ -436,7 +442,12 @@ function Server(options) {
                                         console.warn(msg);
                                     }
                                 } else {
-                                    obj = JSON.parse(JSON.stringify(request.body))
+                                    var bodyStr = JSON.stringify(request.body);
+                                    // false & true case
+                                    if ( /(\"false\"|\"true\")/.test(bodyStr) )
+                                        bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true);
+
+                                    obj = JSON.parse(bodyStr)
                                 }
 
                                 if ( obj.count() > 0 ) {
