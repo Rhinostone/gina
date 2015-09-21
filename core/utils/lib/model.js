@@ -195,10 +195,13 @@ function ModelUtil() {
                                     done(connector)
                                 } else {
 
-                                    // creating entities instances
-                                    self.models[bundle][c]['getConnection'] = function() {
-                                        return self.models[bundle][c]['_connection']
+
+                                    if (self.models[bundle][c]) {// only used when tryin to import multiple models into the same entity
+                                        self.models[bundle][c]['getConnection'] = function() {
+                                            return self.models[bundle][c]['_connection']
+                                        }
                                     }
+                                    // creating entities instances
                                     for (var ntt in entitiesObject) {
                                         entitiesObject[ntt] = new entitiesObject[ntt](conn)
                                     }
@@ -327,7 +330,6 @@ function ModelUtil() {
                 , entitiesManager   = null
                 , env               = ctx['gina.config'].env
                 , conf              = ctx['gina.config'].bundlesConfiguration.conf[bundle][env]
-                , env
                 , modelPath         = _(conf.modelsPath + '/' + model)
                 , entitiesPath      = _(modelPath + '/entities')
                 ;
@@ -407,7 +409,7 @@ function ModelUtil() {
                 EntityClass.prototype.bundle    = bundle;
 
                 entitiesManager[entityName]     = EntityClass;
-                self.setModelEntity(bundle, model, entityName, EntityClass);
+                self.setModelEntity(bundle, model, className, EntityClass);
                 // creating instance
                 entityObject[entityName]        = new entitiesManager[entityName](conn)
             }
@@ -434,7 +436,33 @@ function ModelUtil() {
                     return self.models[bundle][model][shortName]
                 }
 
-                var entityObj = new self.entities[bundle][model][entityName](conn);
+                // loading order case ... when U comes after B & U is not loaded yet
+                if ( !self.entities[bundle][model][entityName] ) {
+                    var ctx                 = getContext()
+                        , env               = ctx['gina.config'].env
+                        , conf              = ctx['gina.config'].bundlesConfiguration.conf[bundle][env]
+                        , modelPath         = _(conf.modelsPath + '/' + model)
+                        , entitiesPath      = _(modelPath + '/entities')
+                        , filename          = _(entitiesPath + '/' + shortName.replace(/Entity/, '') +'.js')
+                        , EntityClass       = null
+                        ;
+
+                    if ( fs.existsSync(filename) ) {
+                        EntityClass         = require(filename);
+                        self.setModelEntity(bundle, model, entityName, EntityClass);
+
+                        var entityObj       =  new self.entities[bundle][model][entityName](conn);
+                        self.models[bundle][model][shortName] = entityObj;
+
+                        return entityObj
+                    } else {
+                        return undefined
+                    }
+
+                } else {
+                    var entityObj = new self.entities[bundle][model][entityName](conn);
+                }
+
 
                 return self.models[bundle][model][shortName] || entityObj
             } catch (err) {
