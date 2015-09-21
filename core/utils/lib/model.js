@@ -5,9 +5,10 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-
+var fs          = require('fs');
 var merge       = require('./merge');
 var console     = require('./logger');
+var inherits    = require('./inherits');
 //var math        = require('./math');
 //var checkSum    = math.checkSum;
 
@@ -28,16 +29,16 @@ function ModelUtil() {
      * */
     var init = function() {
 
-        if ( !ModelUtil.instance && !getContext('ModelUtil') ) {
+        if ( !ModelUtil.instance && !getContext('modelUtil') ) {
             self.models = self.models || {};
             self.entities = {};
             self.files = {};
-            setContext('ModelUtil', self);
+            setContext('modelUtil', self);
             ModelUtil.instance = self;
             return self
         } else {
             if (!ModelUtil.instance) {
-                ModelUtil.instance = getContext('ModelUtil')
+                ModelUtil.instance = getContext('modelUtil')
             }
             self = ModelUtil.instance;
             return ModelUtil.instance
@@ -88,7 +89,7 @@ function ModelUtil() {
             }
 
             if ( typeof(name) == 'undefined' || name == '' ) {
-                throw new Error('ModelUtil cannot set ModelEntity whitout a name !')
+                throw new Error('`modelUtil cannot set `modelEntity whitout a name !')
             }
 
             if( !self.entities[bundle][model] ) {
@@ -105,11 +106,11 @@ function ModelUtil() {
     this.updateEntityObject = function(bundle, model, name, entityObject) {
 
         if ( typeof(model) == 'undefined' || model == '' ) {
-            throw new Error('ModelUtil cannot update EntityObject whitout a connector !')
+            throw new Error('`modelUtil` cannot update `entityObject` whitout a connector !')
         }
 
         if ( typeof(name) == 'undefined' || name == '' ) {
-            throw new Error('ModelUtil cannot set ModelEntity whitout a name !')
+            throw new Error('`modelUtil` cannot set `modelEntity` whitout a name !')
         }
 
         if (!self.models[bundle][model][name]) {
@@ -141,11 +142,12 @@ function ModelUtil() {
         }
     }
 
+
     this.loadAllModels = function(bundles, configuration, env, cb) {
 
         var loadModel = function(b, bundles, configuration, env, cb) {
-
-            var bundle          = bundles[b]
+            var modelObject     = getContext('modelUtil').entities[bundles[b]] // to check if already laoded
+                , bundle        = bundles[b]
                 , len           = bundles.length
                 , conf          = configuration[bundle][env]
                 , connectors    = conf.content['connectors'] || undefined;
@@ -177,25 +179,34 @@ function ModelUtil() {
                 }
 
                 for (var c in models) {//c as connector name
-                    //e.g. var apiModel    = new Model(config.bundle + "/api");
-                    // => var apiModel = getContext('apiModel')
-                    console.debug('....model ', conf.bundle + "/"+c + 'Model');
-                    mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
-                    mObj[c+'Model']
-                        .onReady(
-                        function onModelReady( err, connector, entitiesObject, conn) {
-                            if (err) {
-                                console.error('found error ...');
-                                console.error(err.stack||err.message||err);
-                                done(connector)
-                            } else {
-                                // creating entities instances
-                                for (var ntt in entitiesObject) {
-                                    entitiesObject[ntt] = new entitiesObject[ntt](conn)
+                    if ( modelObject && typeof(modelObject[c]) != 'undefined' ) {
+                        done(connector)
+                    } else {
+                        //e.g. var apiModel    = new Model(config.bundle + "/api");
+                        // => var apiModel = getContext('apiModel')
+                        console.debug('....model ', conf.bundle + "/"+c + 'Model');
+                        mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
+                        mObj[c+'Model']
+                            .onReady(
+                            function onModelReady( err, connector, entitiesObject, conn) {
+                                if (err) {
+                                    console.error('found error ...');
+                                    console.error(err.stack||err.message||err);
+                                    done(connector)
+                                } else {
+
+                                    // creating entities instances
+                                    self.models[bundle][c]['getConnection'] = function() {
+                                        return self.models[bundle][c]['_connection']
+                                    }
+                                    for (var ntt in entitiesObject) {
+                                        entitiesObject[ntt] = new entitiesObject[ntt](conn)
+                                    }
+                                    done(connector)
                                 }
-                                done(connector)
-                            }
-                        })
+                            })
+                   }
+
                 }
 
 
@@ -296,7 +307,7 @@ function ModelUtil() {
             }
         }
 
-        if ( typeof(model) != 'undefined' ) {
+        if ( typeof(model) != 'undefined' && typeof(self.models[bundle]) != 'undefined' ) {
             try {
                 self.models[bundle][model]['getConnection'] = function() {
                     return self.models[bundle][model]['_connection']
@@ -306,8 +317,104 @@ function ModelUtil() {
                 return undefined
             }
         } else {
-            return self.models[bundle]
+            // we might be in a case where we are trying to import a model into another while the targetd model is not yet loaded
+            // this will happen if you are trying to do it from within an entity: ModelA::entity trying to getModel(ModelB) while ModelB is not loaded yet
+
+            // Check if targetd model exists and load it synchronously if found
+            var ctx                 = getContext()
+                , modelConnector    = ctx.modelConnectors[model] || null
+                , conn              = modelConnector.conn
+                , entitiesManager   = null
+                , env               = ctx['gina.config'].env
+                , conf              = ctx['gina.config'].bundlesConfiguration.conf[bundle][env]
+                , env
+                , modelPath         = _(conf.modelsPath + '/' + model)
+                , entitiesPath      = _(modelPath + '/entities')
+                ;
+
+            if ( modelConnector && conf && fs.existsSync(modelPath) ) {
+                conn            = modelConnector.conn;
+                entitiesManager = new require( modelPath )(conn);
+
+                self.setConnection(bundle, model, conn);
+
+                return importModelEntitiesSync(bundle, model, conn, entitiesManager, modelPath, entitiesPath, ctx)
+            } else {
+                return undefined
+            }
         }
+    }
+
+    /**
+     * Import Model Entities synchronously
+     *
+     * @param {string} bundle
+     * @param {string} model
+     * @param {object} conn
+     * @param {object} entitiesManager
+     * @param {string} modelPath
+     * @param {string} entitiesPath
+     * @param {object} ctx - Context
+     *
+     *
+     * @return {object} modelEntities
+     *
+     * TODO - Refacto gina/core/model/index.js `getModelEntities` to look less messed up: loading entities can be synchronously, they are loaded during the server init or page refresh if `cacheless` is active. Maybe, it is possible to make this one `public`and call it from the main model load ?
+     * */
+    var importModelEntitiesSync = function(bundle, model, conn, entitiesManager, modelPath, entitiesPath, ctx) {
+        var ginaCorePath        = getPath('gina.core')
+            , ctx               = ctx || getContext()
+            , cacheless         = ctx['gina.config'].isCacheless()
+            , suffix            = 'Entity'
+            , files             = fs.readdirSync(entitiesPath)
+            , i                 = 0
+            , len               = files.length
+            , entityName        = null
+            , excluded          = ['index.js']
+            , className         = null
+            , filename          = null
+            , EntitySuperClass  = null
+            , EntityClass       = null
+            , entityObject      = {}
+            ;
+
+        try {
+            self.models[bundle][model]['getConnection'] = function() {
+                return self.models[bundle][model]['_connection']
+            }
+        } catch (err) {
+            return undefined
+        }
+
+        for (; i < len; ++i) {
+            if ( /\.js/.test(files[i]) && excluded.indexOf(files[i]) == -1 && !/\.json/.test(files[i]) && ! /^\./.test(files[i]) ) {
+                entityName  = files[i].replace(/\.js/, '') + suffix;
+                className   = entityName.substr(0,1).toUpperCase() + entityName.substr(1);
+                filename    = _(ginaCorePath + '/model/entity.js', true);
+
+                if (cacheless)
+                    delete require.cache[_(filename, true)]; //EntitySuperClass
+
+                EntitySuperClass                = require(_(filename, true));
+                if (cacheless)
+                    delete require.cache[_(entitiesPath + '/' + files[i], true)];//child
+
+                EntityClass                     = require( _(entitiesPath + '/' + files[i], true) );
+                //Inherits.
+                EntityClass                     = inherits(EntityClass, EntitySuperClass);
+                EntityClass.prototype.name      = className;
+                EntityClass.prototype.model     = model;
+                EntityClass.prototype.bundle    = bundle;
+
+                entitiesManager[entityName]     = EntityClass;
+                self.setModelEntity(bundle, model, entityName, EntityClass);
+                // creating instance
+                entityObject[entityName]        = new entitiesManager[entityName](conn)
+            }
+        }
+
+        self.models[bundle][model] = entityObject;
+        return self.models[bundle][model]
     }
 
     /**
