@@ -82,7 +82,7 @@ function Model(namespace) {
         self.bundle = bundle;
         self.model = model;
         self.modelDirName = model;
-        self.connectors = getContext('ModelConnectors') || {};
+        self.connectors = getContext('modelConnectors') || {};
     }
 
     /**
@@ -140,6 +140,7 @@ function Model(namespace) {
                                 }
                             } else {
                                 local.connection = conn;
+
                                 //Getting Entities Manager.
                                 var entitiesManager = new require( _(conf.path) )(conn)[model](conn);
 
@@ -176,6 +177,7 @@ function Model(namespace) {
         return self
     }
 
+
     this.connect = function(Connector, callback) {
         if ( typeof(self.connectors[_connector]) == 'undefined' ) {
             self.connectors[_connector] = {};
@@ -183,7 +185,7 @@ function Model(namespace) {
             connector.onReady( function(err, conn){
                 self.connectors[_connector].err = err;
                 self.connectors[_connector].conn = conn;
-                setContext('ModelConnectors', self.connectors);
+                setContext('modelConnectors', self.connectors);
                 callback(err, conn);
             })
         } else {

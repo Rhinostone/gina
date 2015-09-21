@@ -438,8 +438,9 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                         // TODO Output this to the error logger.
                         console.error('Could not complete initialization: ', err.stack)
                     }
-                }
-            )
+
+                })// EO modelUtil
+
         })
     }
 
