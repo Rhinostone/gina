@@ -377,7 +377,6 @@ function ModelUtil() {
             , filename          = null
             , EntitySuperClass  = null
             , EntityClass       = null
-            , entityObject      = {}
             ;
 
         try {
@@ -409,13 +408,17 @@ function ModelUtil() {
                 EntityClass.prototype.bundle    = bundle;
 
                 entitiesManager[entityName]     = EntityClass;
-                self.setModelEntity(bundle, model, className, EntityClass);
-                // creating instance
-                entityObject[entityName]        = new entitiesManager[entityName](conn)
+
+                self.setModelEntity(bundle, model, className, EntityClass)
             }
         }
 
-        self.models[bundle][model] = entityObject;
+        // don't be a smart ass, you need 2 loops because of the local referencesto other entities thru `this.getEntity(...)` (relations/mapping)
+        for (var _ntt in entitiesManager) {
+            // creating instance
+            self.models[bundle][model][_ntt]  = new entitiesManager[_ntt](conn);
+        }
+
         return self.models[bundle][model]
     }
 
@@ -437,31 +440,31 @@ function ModelUtil() {
                 }
 
                 // loading order case ... when U comes after B & U is not loaded yet
-                if ( !self.entities[bundle][model][entityName] ) {
-                    var ctx                 = getContext()
-                        , env               = ctx['gina.config'].env
-                        , conf              = ctx['gina.config'].bundlesConfiguration.conf[bundle][env]
-                        , modelPath         = _(conf.modelsPath + '/' + model)
-                        , entitiesPath      = _(modelPath + '/entities')
-                        , filename          = _(entitiesPath + '/' + shortName.replace(/Entity/, '') +'.js')
-                        , EntityClass       = null
-                        ;
-
-                    if ( fs.existsSync(filename) ) {
-                        EntityClass         = require(filename);
-                        self.setModelEntity(bundle, model, entityName, EntityClass);
-
-                        var entityObj       =  new self.entities[bundle][model][entityName](conn);
-                        self.models[bundle][model][shortName] = entityObj;
-
-                        return entityObj
-                    } else {
-                        return undefined
-                    }
-
-                } else {
+                //if ( !self.entities[bundle][model][entityName] ) {
+                //    var ctx                 = getContext()
+                //        , env               = ctx['gina.config'].env
+                //        , conf              = ctx['gina.config'].bundlesConfiguration.conf[bundle][env]
+                //        , modelPath         = _(conf.modelsPath + '/' + model)
+                //        , entitiesPath      = _(modelPath + '/entities')
+                //        , filename          = _(entitiesPath + '/' + shortName.replace(/Entity/, '') +'.js')
+                //        , EntityClass       = null
+                //        ;
+                //
+                //    if ( fs.existsSync(filename) ) {
+                //        EntityClass         = require(filename);
+                //        self.setModelEntity(bundle, model, entityName, EntityClass);
+                //
+                //        var entityObj       =  new self.entities[bundle][model][entityName](conn);
+                //        self.models[bundle][model][shortName] = entityObj;
+                //
+                //        return entityObj
+                //    } else {
+                //        return undefined
+                //    }
+                //
+                //} else {
                     var entityObj = new self.entities[bundle][model][entityName](conn);
-                }
+                //}
 
 
                 return self.models[bundle][model][shortName] || entityObj
