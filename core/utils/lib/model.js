@@ -256,6 +256,9 @@ function ModelUtil() {
                         if (err) {
                             console.error(err.stack||err.message||err)
                         } else {
+                            if (! self.models[bundle]) {
+                                self.models[bundle] = {}
+                            }
                             self.models[bundle][connector] = {};
                             for (var ntt in entitiesObject) {
                                 entitiesObject[ntt] = new entitiesObject[ntt](conn);
