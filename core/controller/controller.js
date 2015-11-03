@@ -943,6 +943,8 @@ function Controller(options) {
 
             //Sample request.
             //options.path = '/updater/start?release={"version":"0.0.5-dev","url":"http://10.1.0.1:8080/project/bundle/repository/archive?ref=0.0.5-dev","date":1383669077141}&pid=46493';
+        } else {
+            queryData = ''
         }
 
 

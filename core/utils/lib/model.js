@@ -480,6 +480,22 @@ function ModelUtil() {
     }
 
 
+    /**
+     * Collection cLass
+     * Allows you to handle your own collections as you would normaly with mongodb
+     *
+     * @param {array} collection
+     * @return {object} instance
+     *
+     * Collection::find
+     *  @param {object} filter eg.: { uid: "someUID" }
+     *  @return {array} result
+     *
+     * Collection::findOne
+     *  @param {object} filter
+     *  @return {object} result
+     *
+     * */
     Collection = function(content) {
         var content = content || [];
 
@@ -493,9 +509,10 @@ function ModelUtil() {
 
                 for (var o in content) {
                     for (var f in filter) {
-                        if ( typeof(content[o][f]) != 'undefined' && content[o][f].toHexString() === filter[f].toHexString() ) {
+                        if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
                             ++i
                         }
+
                         if (i === condition) {
                             found.push(content[o])
                         }
@@ -516,9 +533,10 @@ function ModelUtil() {
 
                 for (var o in content) {
                     for (var f in filter) {
-                        if ( typeof(content[o][f]) != 'undefined' && content[o][f].toHexString() === filter[f].toHexString() ) {
+                        if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
                             ++i
                         }
+
                         if (i === condition) {
                             return content[o];
                         }
