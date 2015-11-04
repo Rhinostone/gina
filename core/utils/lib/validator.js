@@ -80,6 +80,7 @@ function Validator(data, errorLabels) {
         self[el] = {
             value: val,
             name: el,
+            valid: false,
             // is name by default, but you should use setLabe(name) to change it if you need to
             label: el,
             // check as field to exclude while sending datas to the model
@@ -105,6 +106,7 @@ function Validator(data, errorLabels) {
                 }
             }
 
+            this.valid = valid;
             if (!valid) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
@@ -118,6 +120,8 @@ function Validator(data, errorLabels) {
         self[el].isEmail = function() {
             var rgx = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
             var valid = rgx.test(this.value) ? true : false;
+            this.valid = valid;
+
             if (!valid) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
@@ -146,6 +150,7 @@ function Validator(data, errorLabels) {
                     break;
             }
             var valid = (val !== null) ? true : false;
+            this.valid = valid;
             if (!valid) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
@@ -181,6 +186,7 @@ function Validator(data, errorLabels) {
 
             }
             valid = val === Number(val) && val% 1 === 0;
+            this.valid = (!valid) ? false : true;
             if (!valid) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
@@ -242,6 +248,7 @@ function Validator(data, errorLabels) {
                 local.data[this.name] = this.value
             }
 
+            this.valid = (!valid) ? false : true;
             if (!valid) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
@@ -255,6 +262,7 @@ function Validator(data, errorLabels) {
         self[el].isRequired = function() {
             var valid = (typeof(this.value) != 'undefined' && this.value != null && this.value != '') ? true : false;
 
+            this.valid = valid;
             if (!valid) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
@@ -293,6 +301,8 @@ function Validator(data, errorLabels) {
             if ( !validStringWithMinLen && minLen) local.errors[this.name].validStringWithMinLen = replace(this.flash || local.errorLabels.validStringWithMinLen, this);
             if ( !validStringWithMaxLen && maxLen ) local.errors[this.name].validStringWithMaxLen = replace(this.flash || local.errorLabels.validStringWithMaxLen, this);
 
+            this.valid = ( !validString || !validStringWithMinLen && minLen || !validStringWithMaxLen && maxLen) ? false : true;
+
             return self[this.name]
         }
         /**
@@ -318,6 +328,8 @@ function Validator(data, errorLabels) {
             }
 
             var date = this.value = local.data[this.name] = new Date(newMask);
+
+            this.valid = ( !date instanceof Date ) ? false : true;
 
             if ( !date instanceof Date ) {
                 local.errors[this.name].isDate = replace(this.flash || local.errorLabels.isDate, this)
@@ -401,6 +413,7 @@ function Validator(data, errorLabels) {
             // exporting errors
             self.errors = local.errors
         }
+
         return valid
     }
 
