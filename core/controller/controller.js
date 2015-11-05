@@ -127,7 +127,10 @@ function Controller(options) {
 
         getParams(req);
         if ( typeof(local.options.views) != 'undefined' && typeof(local.options.action) != 'undefined' ) {
-            var action = local.options.action;
+            var action      = local.options.action
+                , namespace = local.options.namespace
+                , rule      = local.options.rule;
+
             var ext = 'html';
             if ( typeof(local.options.views.default) != 'undefined' ) {
                 ext = local.options.views.default.ext || ext;
@@ -141,7 +144,8 @@ function Controller(options) {
             self.set('page.ext', ext);
             self.set('page.content', content);
             self.set('page.action', action);
-            self.set('page.title', action);
+            self.set('page.namespace', namespace);
+            self.set('page.title', rule);
 
             if (typeof(req.headers['accept-language']) != 'undefined') {
                 self.set('page.lang', req.headers['accept-language'].split(',')[0]);

@@ -285,15 +285,15 @@ function ModelUtil() {
     getModel = function(bundle, model) {
 
         if (arguments.length == 1 || !bundle) {
-            console.debug(
-                '\n[ 0 ] = '+ __stack[0].getFileName(),
-                '\n[ 1 ] = '+ __stack[1].getFileName(),
-                '\n[ 2 ] = '+ __stack[2].getFileName(),
-                '\n[ 3 ] = '+ __stack[3].getFileName(),
-                '\n[ 4 ] = '+ __stack[4].getFileName(),
-                '\n[ 5 ] = '+ __stack[5].getFileName(),
-                '\n[ 6 ] = '+ __stack[6].getFileName()
-            );
+            //console.debug(
+            //    '\n[ 0 ] = '+ __stack[0].getFileName(),
+            //    '\n[ 1 ] = '+ __stack[1].getFileName(),
+            //    '\n[ 2 ] = '+ __stack[2].getFileName(),
+            //    '\n[ 3 ] = '+ __stack[3].getFileName(),
+            //    '\n[ 4 ] = '+ __stack[4].getFileName(),
+            //    '\n[ 5 ] = '+ __stack[5].getFileName(),
+            //    '\n[ 6 ] = '+ __stack[6].getFileName()
+            //);
 
 
             var model       = (arguments.length == 1) ? bundle : model
@@ -327,6 +327,7 @@ function ModelUtil() {
             // this will happen if you are trying to do it from within an entity: ModelA::entity trying to getModel(ModelB) while ModelB is not loaded yet
 
             // Check if targetd model exists and load it synchronously if found
+            debugger;
             var ctx                 = getContext()
                 , modelConnector    = ctx.modelConnectors[model] || null
                 , conn              = modelConnector.conn

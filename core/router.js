@@ -279,6 +279,7 @@ function Router(env) {
         var options = {
             action          : action,
             file            : actionFile,
+            namespace       : namespace,
             bundle          : bundle,//module
             bundlePath      : conf.bundlesPath +'/'+ bundle,
             rootPath        : self.executionPath,
