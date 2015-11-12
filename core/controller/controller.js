@@ -128,8 +128,8 @@ function Controller(options) {
         getParams(req);
         if ( typeof(local.options.views) != 'undefined' && typeof(local.options.action) != 'undefined' ) {
             var action      = local.options.action
-                , namespace = local.options.namespace
-                , rule      = local.options.rule;
+                , rule      = local.options.rule
+                , namespace = local.options.namespace || rule;
 
             var ext = 'html';
             if ( typeof(local.options.views.default) != 'undefined' ) {
@@ -162,6 +162,7 @@ function Controller(options) {
 
             self.set('file', local.options.file);
             self.set('page.title', local.options.file);
+            self.set('page.namespace', local.options.namespace);
 
             //TODO - detect when to use swig
             var dir = self.views || local.options.views.default.views;
