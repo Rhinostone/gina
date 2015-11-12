@@ -171,10 +171,11 @@ function Controller(options) {
                 local.options.file = 'index'
             }
 
+            var namespace = local.options.namespace || rule;
 
             self.set('file', local.options.file);
             self.set('page.title', local.options.file);
-            //self.set('page.namespace', local.options.namespace);
+            self.set('page.namespace', namespace);
 
             //TODO - detect when to use swig
             var dir = self.views || local.options.views.default.views;
