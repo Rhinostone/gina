@@ -1163,7 +1163,8 @@ function Controller(options) {
                 obj = curObj;
                 last = tmp[o]
             }
-            data = merge(true, data, obj);
+            //data = merge(true, data, obj);
+            data = merge(obj, data);
             obj = {};
             curObj = {}
         }
