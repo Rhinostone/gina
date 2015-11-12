@@ -54,15 +54,43 @@ if (process.argv.length >= 4) {
 tmp = null;
 
 setPath( 'node', _(process.argv[0]) );
-var root = getPath('root');
-
-gna.executionPath = root;
 
 var ginaPath = getPath('gina.core');
 if ( typeof(ginaPath) == 'undefined') {
     ginaPath = _(__dirname);
     setPath('gina.core', ginaPath);
 }
+
+var gina = getPath('gina');
+if (!gina) {
+    var pathArr = new _(ginaPath).toUnixStyle().split('/'), pathStr = '';
+    for (var i = 0, len = pathArr.length; i<len; ++i) {
+        if (pathArr[i] === 'gina') {
+            pathArr.splice(i+1);
+            pathStr = pathArr.join('/');
+            break
+        }
+    }
+
+    gina = _(pathStr);
+    setPath('gina', gina)
+}
+
+var root = getPath('root');
+if (!root) {
+    var pathArr = new _(ginaPath).toUnixStyle().split('/'), pathStr = '';
+    for (var i = 0, len = pathArr.length; i<len; ++i) {
+        if (pathArr[i] === 'node_modules') {
+            pathArr.splice(i);
+            pathStr = pathArr.join('/');
+            break
+        }
+    }
+
+    root = _(pathStr);
+    setPath('root', root)
+}
+gna.executionPath = root;
 
 setContext('gina.utils', utils);
 

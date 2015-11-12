@@ -293,10 +293,6 @@ function Router(env) {
 
 
         try {
-            // TODO - namespace handling
-            if ( typeof(namespace) != 'undefined' ) {
-                options.namespace = namespace
-            }
 
             if (cacheless) delete require.cache[_(controllerFiles[bundle], true)];
 
