@@ -142,7 +142,6 @@ function Router(env) {
      * */
     var fitsWithRequirements = function(request, urlVar, urlVal, params) {
 
-
         var _param = urlVar.replace(/:/, '');
 
         // fast one
@@ -276,10 +275,9 @@ function Router(env) {
         }
 
 
+        // default param setting
         var options = {
-            action          : action,
             file            : actionFile,
-            namespace       : namespace,
             bundle          : bundle,//module
             bundlePath      : conf.bundlesPath +'/'+ bundle,
             rootPath        : self.executionPath,
@@ -290,7 +288,9 @@ function Router(env) {
             rule            : params.rule
         };
 
-
+        for (var p in params.param) {
+            options[p] = params.param[p]
+        }
 
         try {
 

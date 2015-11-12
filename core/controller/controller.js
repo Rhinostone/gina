@@ -113,7 +113,14 @@ function Controller(options) {
                         if (obj.hasOwnProperty(prop)) {
                             value += obj[prop]
                         } else {
-                            self.set(str.substr(0, str.length-1), value);
+
+                            if ( /^:/.test(value) ) {
+                                self.set(str.substr(0, str.length-1), req.params[value.substr(1)])
+                            } else {
+                                self.set(str.substr(0, str.length-1), value)
+                            }
+
+
                             str = 'page.'
                         }
                     }
@@ -127,11 +134,15 @@ function Controller(options) {
 
         getParams(req);
         if ( typeof(local.options.views) != 'undefined' && typeof(local.options.action) != 'undefined' ) {
-            var action      = local.options.action
+
+
+            var  action     = local.options.action
                 , rule      = local.options.rule
                 , namespace = local.options.namespace || rule;
-
             var ext = 'html';
+
+
+
             if ( typeof(local.options.views.default) != 'undefined' ) {
                 ext = local.options.views.default.ext || ext;
             }
@@ -140,10 +151,10 @@ function Controller(options) {
                 local.options.views.default.ext = ext
             }
 
+            // new declaration && overrides
             var content = action;
             self.set('page.ext', ext);
             self.set('page.content', content);
-            self.set('page.action', action);
             self.set('page.namespace', namespace);
             self.set('page.title', rule);
 
@@ -160,9 +171,10 @@ function Controller(options) {
                 local.options.file = 'index'
             }
 
+
             self.set('file', local.options.file);
             self.set('page.title', local.options.file);
-            self.set('page.namespace', local.options.namespace);
+            //self.set('page.namespace', local.options.namespace);
 
             //TODO - detect when to use swig
             var dir = self.views || local.options.views.default.views;
