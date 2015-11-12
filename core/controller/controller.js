@@ -171,7 +171,8 @@ function Controller(options) {
                 local.options.file = 'index'
             }
 
-            var namespace = local.options.namespace || rule;
+            var rule        = local.options.rule
+                , namespace = local.options.namespace || rule;
 
             self.set('file', local.options.file);
             self.set('page.title', local.options.file);
