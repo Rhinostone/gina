@@ -392,12 +392,13 @@ function Router(env) {
                         function onMiddlewareProcessed(req, res, next){
                             middlewares.splice(m, 1);
                             if (middlewares.length > 0) {
-                                processMiddlewares(middlewares, action,  req, res, next, cb)
+                                processMiddlewares(middlewares, controller, action,  req, res, next, cb)
                             } else {
                                 cb(action, req, res, next)
                             }
                         }
                     );
+
                     break
                 }
             }
