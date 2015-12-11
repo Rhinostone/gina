@@ -327,7 +327,7 @@ function ModelUtil() {
             // this will happen if you are trying to do it from within an entity: ModelA::entity trying to getModel(ModelB) while ModelB is not loaded yet
 
             // Check if targetd model exists and load it synchronously if found
-            debugger;
+            //debugger;
             var ctx                 = getContext()
                 , modelConnector    = ctx.modelConnectors[model] || null
                 , conn              = modelConnector.conn
