@@ -276,11 +276,13 @@ function Validator(data, errorLabels) {
         self[el].isString = function(minLen, maxLen) {
             var validString = ( typeof(this.value) == 'string' ) ? true : false;
             var validStringWithMinLen = true, validStringWithMaxLen = true;
+
             // max or min - valid if true
             if ( minLen && typeof(minLen) == 'number') {
                 validStringWithMinLen = ( this.value.length >= minLen) ? true : false;
                 this.size = minLen;
-            } else if ( maxLen && typeof(maxLen) == 'number') {
+            }
+            if ( maxLen && typeof(maxLen) == 'number' && validStringWithMinLen == true) {
                 validStringWithMaxLen = ( this.value.length <= maxLen) ? true : false;
                 this.size = maxLen;
             }
@@ -293,7 +295,10 @@ function Validator(data, errorLabels) {
             if ( !validStringWithMinLen && minLen) local.errors[this.name].validStringWithMinLen = replace(this.flash || local.errorLabels.validStringWithMinLen, this);
             if ( !validStringWithMaxLen && maxLen ) local.errors[this.name].validStringWithMaxLen = replace(this.flash || local.errorLabels.validStringWithMaxLen, this);
 
+            this.valid = ( !validString || !validStringWithMinLen && minLen || !validStringWithMaxLen && maxLen) ? false : true;
+
             return self[this.name]
+        }urn self[this.name]
         }
         /**
          * Check if date
