@@ -498,6 +498,7 @@ function Server(options) {
 
 
         self.instance.listen(self.conf[self.appName][self.env].port.http);//By Default 3100
+        //self.instance.timeout = 120000; // check node.js express & documentation
     }
 
     var getHead = function(file) {

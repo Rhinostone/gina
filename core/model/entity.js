@@ -141,11 +141,14 @@ function EntitySuper(conn) {
 
         try {
             return getModelEntity(self.bundle, self.model, entity, conn)
+
         } catch (err) {
             throw new Error(err.stack);
             return null
         }
     }
+
+
 
     ///**
     // * Get config

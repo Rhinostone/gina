@@ -59,7 +59,7 @@ function Config(opt) {
             if ( fs.existsSync(path) ) {
 
                 self.userConf = require(path);
-                console.debug('Applicaiton config file loaded ['
+                console.debug('Application config file loaded ['
                     + _(self.executionPath + '/env.json') + ']');
             }
 
@@ -113,7 +113,6 @@ function Config(opt) {
                     //To reset it, just delete the hidden folder.
                     var ginaPath = opt.ginaPath;
                     var utilsConfig = new utils.Config();
-                    //setContext('gina.utils.config', utilsConfig);
 
                     utilsConfig.set('gina', 'locals.json', {
                         project : utilsConfig.getProjectName(),
@@ -129,6 +128,9 @@ function Config(opt) {
                         //envs :
                     }, function(err) {
                         self.Env.loaded = true;
+                        if (err != null)
+                            console.error('Error found while settings up locals' + err);
+
                         self.emit('complete', err, self.bundlesConfiguration)
                     })
 

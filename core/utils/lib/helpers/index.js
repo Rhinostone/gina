@@ -82,6 +82,7 @@ Object.defineProperty( Date.prototype, 'getDaysTo', {
     configurable: true,
     value: function(dateTo, mask){ return helpers.dateFormat.getDaysTo(this, dateTo, mask) }
 });
+
 /**
  * Get days in the current month date
  * @return {array} Return days
@@ -92,6 +93,19 @@ Object.defineProperty( Date.prototype, 'getDaysInMonth', {
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
     value: function(){ return helpers.dateFormat.getDaysInMonth(this) }
+});
+
+/**
+ * Add or subtract hours from current date
+ * @param {number} h
+ * @return {date} Return date
+ **/
+Object.defineProperty( Date.prototype, 'addHours', {
+    writable:   false,
+    enumerable: false,
+    //If loaded several times, it can lead to an exception. That's why I put this.
+    configurable: true,
+    value: function(h){ return helpers.dateFormat.addHours(this, h) }
 });
 
 /**
