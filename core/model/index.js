@@ -210,46 +210,45 @@ function Model(namespace) {
      * @private
      * */
     var getConfigSync = function(bundle, i) {
-        var i = i || 0, delay = 200, retry = 5;
-
+        var i = i || 0;
         var configuration = config.getInstance(bundle);
 
         try {
+
             var locals = _locals = utilsConfig.getSync('gina', 'locals.json')
         } catch (err) {
-            console.emerg(err.stack||err.message)
+            console.emerg('Error while calling `Model::getConfigSync()` '+ err.stack||err.message);
+            if ( i < 10) {
+                console.debug('about to retry to load locals.json');
+                setTimeout(function(){
+
+                    i = i+1;
+                    console.debug('retry ('+i+') ...');
+                    return getConfigSync(bundle, i)
+                }, 300)
+
+            } else {
+                throw new Error('Config could not be loaded');
+                process.exit(1)
+            }
+            return false
         }
 
         if ( typeof(configuration) != 'undefined' && locals) {
             var tmp = JSON.stringify(configuration);
             tmp = JSON.parse(tmp);
 
-            if (local.trying > 5) {
-                throw new Error('Cannot contact '+self.model+' !\n\rPlease, chech your network settings or contact the administrator.')
-            } else if ( local.trying == 1) {
-                console.warn('trying to connect to '+self.model+' ('+local.trying+')')
-            }
-
-            ++local.trying;
-
             // configuration object.
             var confObj = {
-                connectors   : tmp.content.connectors,
+                connectors  : tmp.content.connectors,
                 path        : tmp.modelsPath,
                 locals      : locals
             };
+
             return confObj
         } else {
-            if ( i < retry ) {
-                console.debug('retying to get config ...' + i);
-                setTimeout(function(){
-                    getConfigSync(bundle, i+1)
-                }, delay);
-                return false
-            } else {
-                throw new Error('Config not instantiated');
-                return undefined
-            }
+            throw new Error('Config not instantiated');
+            return undefined
         }
     }
 
@@ -329,7 +328,7 @@ function Model(namespace) {
                 //for (var prop in Entity) {
                 //    console.log('PROP FOUND ', prop);
                 //}
-
+                //console.debug('Producing model:  [ '+self.model+'::' + className +' ] @ [ '+self.bundle+' ]');
                 entitiesManager[entityName] = EntityClass;
 
             } catch (err) {

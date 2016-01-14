@@ -38,23 +38,25 @@
  * { name: 'SIGXCPU', action: 'A', desc: 'CPU time limit exceeded.' },
  * { name: 'SIGXFSZ', action: 'A', desc: 'File size limit exceeded. ' }
  * */
-var Proc;
+
 
 //Imports
-var fs      = require('fs');
-//var logger  = require( _(__dirname + '/logger') );
-var spawn = require('child_process').spawn;
-var UtilsConfig = require( _(__dirname + '/config'));
-var console = require( _(__dirname + '/logger'));
+var fs          = require('fs');
+var Emitter     = require('events').EventEmitter;
+var spawn       = require('child_process').spawn;
+var UtilsConfig = require( _(__dirname + '/config') );
+var inherits    = require( _(__dirname + '/inherits') );
+var console     = require( _(__dirname + '/logger') );
+
 /**
  * @constructor
  *
  * @param {string} bundle
  *
  * */
-Proc = function(bundle, proc, usePidFile){
+function Proc(bundle, proc, usePidFile){
 
-    var self   = this;
+    var self    = this;
     this.PID    = null;
     this.path   = null;
     this.master = false;//used only by master.
@@ -302,12 +304,20 @@ Proc = function(bundle, proc, usePidFile){
             && typeof(PID) != "undefined" && PID != "" && PID != null
             && typeof(proc) != "undefined" && proc != "" && proc != null
         ) {
-            var fileStream = fs.createWriteStream(path + PID);
-            fileStream.once('open', function(fd) {
-                fileStream.write(bundle);
-                console.debug('registered ', self.proc.pid);
-                fileStream.end();
-            });
+            try {
+                var fileStream = fs.createWriteStream(path + PID);
+                fileStream.once('open', function(fd) {
+                    fileStream.write(bundle);
+                    console.debug('registered ', self.proc.pid);
+                    fileStream.end();
+                    self.emit('proc#complete', false)
+                });
+            } catch (err) {
+                self.emit('proc#complete', err)
+            }
+
+        } else {
+            self.emit('proc#complete', new Error('encountered troubles while trying to save Process file'))
         }
     };
 
@@ -372,13 +382,19 @@ Proc = function(bundle, proc, usePidFile){
         }
     };
 
+    this.onReady = function(cb) {
+        self.once('proc#complete', function(err){
+            cb(err)
+        })
+    }
+
     //Init.
     if ( typeof(this.bundle) == "undefined" ) {
-        console.warn('Invalid or undefined proc name . Proc naming Aborted',
-            __stack)
+        console.error('Invalid or undefined proc name . Proc naming Aborted')
     } else {
         init()
     }
 };
 
+Proc = inherits(Proc, Emitter);
 module.exports = Proc;

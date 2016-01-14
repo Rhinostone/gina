@@ -1071,7 +1071,7 @@ function PathHelper() {
             //console.debug(" does it exists ? ", p, exists );
             if (!exists) {
                 //console.debug("done removing ", p);
-                callback(false, p)
+                callback(new Error('`'+p+'` does not found'), p)
 
             } else {
                 rm(p).onComplete( function(err, path) {

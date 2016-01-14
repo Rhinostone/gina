@@ -29,7 +29,7 @@ function ConfigUtil() {
 
         if ( !ConfigUtil.instance ) {
             try {
-                self.paths = getContext("paths")
+                self.paths = getContext('paths')
             } catch (err) {
                 self.paths = {}
             }
@@ -118,20 +118,22 @@ function ConfigUtil() {
 
                     } else {
                         //Getting paths.
-                        if ( typeof(self.paths.root) != "undefined" ) {
+                        if ( typeof(self.paths.root) != 'undefined' ) {
                             //console.error("requiring :=> ",  self.paths.root + '/.gna/locals.json');
                             try {
                                 config = require(self.paths.root  + '/.gna/' + file);
                                 self.value = config;
-                                self.paths = config["paths"];
+                                self.paths = config['paths'];
 
                             } catch (err) {
                                 //Means that the file was not found..
-                                err = self.__dirname  + '/.gna/locals.json: project configuration file not found. \n' + err;
+                                console.error(err.stack || err.message);
+                                err = new Error(self.__dirname  + '/.gna/locals.json: project configuration file not found.');
+                                process.exit(1)
                             }
                         }
                     }
-                    callback(false, config)
+                    callback(err, config)
 
                 } catch (err) {
                     var err = new Error('.gna/locals.json: project configuration file not found. \n' + (err.stack||err.message));
@@ -154,8 +156,8 @@ function ConfigUtil() {
      * @private
      * */
     this.getSync = function(project, file, i){
-        var maxRetry    = 3
-            , delay     = 200
+        var maxRetry    = 7
+            , delay     = 300
             , i         = i || 0;
 
         if (typeof(file) == 'undefined') {
@@ -166,13 +168,19 @@ function ConfigUtil() {
             return self.value;
         } else {
             var filename = self.paths.root +'/.gna/'+ file;
+            if (i > 0) {
+                console.debug('retrying [ '+i+' ] to load: ' + filename)
+            }
+
             try {
                 if ( fs.existsSync(filename) ) {
                     return require(filename)
                 } else {
                     // you might just be experimenting some latencies
                     if (i < maxRetry) {
+                        console.debug('retrying to load config after timeout');
                         setTimeout(function(){
+                            console.debug('It is time re reload config');
                             self.getSync(project, file, i+1)
                         }, delay);
                         //return
@@ -183,8 +191,16 @@ function ConfigUtil() {
                     }
                 }
             } catch (err) {
-                console.error(err.stack);
-                throw new Error(err.message);
+                if (i < maxRetry) {
+                    console.debug('(catched) retrying to load config after timeout');
+                    setTimeout(function(){
+                        console.debug('It is time re reload config');
+                        self.getSync(project, file, i+1)
+                    }, delay);
+                } else {
+                    console.error(err.stack);
+                    throw new Error(err.message);
+                }
             }
         }
     }
@@ -200,6 +216,7 @@ function ConfigUtil() {
      * TOTO - Avoid systematics file override.
      * @private
      * */
+
     var setFile = function(app, file, content, callback) {
 
         var paths = {
@@ -213,52 +230,71 @@ function ConfigUtil() {
         self.paths = paths;
 
         //Create path.
-        try {
-
-            var createFolder = function(){
-                if ( fs.existsSync(gnaFolder) ) {
-                    createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
+        var createFolder = function(){
+            if ( fs.existsSync(gnaFolder) ) {
+                if ( !fs.existsSync(gnaFolder +'/'+ file) ) {
+                    createContent(gnaFolder +'/'+ file, gnaFolder, content, function(err){
                         setTimeout(function(){
                             callback(err)
                         }, 500)
                     })
-                } else {
-                    fs.mkdir(gnaFolder, 0777, function(err){
-                        if (err) {
-                            console.error(err.stack);
-                            callback(err)
-                        } else {
-                            //Creating content.
-                            createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
-                                setTimeout(function(){
-                                    callback(err)
-                                }, 500)
-                            })
-                        }
-                    })
+                } else { // already existing ... won't overwrite
+                    callback(false)
                 }
 
-            };
+            } else {
+                fs.mkdir(gnaFolder, 0777, function(err){
+                    if (err) {
+                        console.error(err.stack);
+                        callback(err)
+                    } else {
+                        //Creating content.
+                        createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
+                            setTimeout(function(){
+                                callback(err)
+                            }, 500)
+                        })
+                    }
+                })
+            }
 
-            fs.exists(gnaFolder, function(exists){
-                //console.log("file exists ? ", gnaFolder, exists);
-                if (exists) {
-                    var folder = new _(gnaFolder).rm( function(err){
-                        if (!err) {
-                            createFolder()
-                        } else {
-                            callback(err)
-                        }
-                    })
+        };
+
+        fs.exists(gnaFolder, function(exists){
+            //console.log("file exists ? ", gnaFolder, exists);
+
+            if (!exists) {
+                createFolder()
+            } else {
+                // test if decalred path matches real path and overwrite if not the same
+                // in case you move your project
+                if ( fs.existsSync(gnaFolder +'/'+ file) ) {
+                    var locals = require(gnaFolder +'/'+ file);
+
+                    if (paths.utils != locals.paths.utils) {
+
+                        new _(gnaFolder).rm( function(err){
+                            if (err) {
+                                console.warn('found error while trying to remove `.gna`\n' + err.stack)
+                            }
+
+                            setTimeout(function(){
+                                //console.debug('Done removing `gnaFolder` : '+ gnaFolder);
+                                createFolder();
+                            }, 200);
+                        })
+                    } else {
+                        callback(false)// nothing to do
+                    }
                 } else {
-                    createFolder()
+                    callback(false)// nothing to do
                 }
-            })
-        } catch (err) {
-            //log it.
-            console.error(err)
-        }
+            }
+
+
+        })
     }
+
 
     /**
      * Remove symbolic link
@@ -357,7 +393,7 @@ function ConfigUtil() {
             function(err){
                 if (err) {
                     //logger.error('gina', 'UTILS:CONFIG:ERR:2', err, __stack);
-                    console.error(err.stack||err.message);
+                    console.error('`Error on while calling createContent()`: ' + err.stack||err.message);
                     callback(err)
                 } else {
                     setTimeout(function(){

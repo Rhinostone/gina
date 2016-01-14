@@ -207,12 +207,25 @@ module.exports = function() {
         return days;
     }
 
+    /**
+     * Add or subtract hours
+     *  Adding 2 hours
+     *      => myDate.addHours(2)
+     *  Subtracting 10 hours
+     *      => myDate.addHours(-10)
+     * */
+    var addHours = function(date, h) {
+        var copiedDate = new Date(date.getTime());
+        copiedDate.setHours(copiedDate.getHours()+h);
+        return copiedDate;
+    }
 
     return {
-        format: format,
-        countDaysTo: countDaysTo,
-        getDaysTo: getDaysTo,
-        getDaysInMonth: getDaysInMonth
+        format          : format,
+        countDaysTo     : countDaysTo,
+        getDaysTo       : getDaysTo,
+        getDaysInMonth  : getDaysInMonth,
+        addHours        : addHours
     }
 
 };

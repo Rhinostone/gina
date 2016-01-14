@@ -203,6 +203,7 @@ function ModelUtil() {
                                     }
                                     // creating entities instances
                                     for (var ntt in entitiesObject) {
+                                        //console.debug('Creating instance of [ '+c+'::' + ntt +' ] @ [ '+bundle+' ]');
                                         entitiesObject[ntt] = new entitiesObject[ntt](conn)
                                     }
                                     done(connector)
@@ -261,6 +262,7 @@ function ModelUtil() {
                             }
                             self.models[bundle][connector] = {};
                             for (var ntt in entitiesObject) {
+                                //console.debug('Reloading instance of [ '+c+'::' + ntt +' ] @ [ '+bundle+' ]');
                                 entitiesObject[ntt] = new entitiesObject[ntt](conn);
                             }
                         }
@@ -439,9 +441,12 @@ function ModelUtil() {
         if ( typeof(entityName) != 'undefined' ) {
             try {
                 var shortName = entityName.substr(0, 1).toLowerCase() + entityName.substr(1);
+
+                //console.debug(parent+'->getEntity('+shortName+')');
                 if ( self.models[bundle][model][shortName] ) {
                     return self.models[bundle][model][shortName]
                 }
+                //console.debug('\n'+parent+'->getEntity('+entityName+')');
 
                 // loading order case ... when U comes after B & U is not loaded yet
                 //if ( !self.entities[bundle][model][entityName] ) {
