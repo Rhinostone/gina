@@ -34,19 +34,26 @@ function Validator(data, errorLabels) {
         },
         errorLabels: {
             is: 'condition not satisfied',
-            isEmail: '%n not valid',
+            isEmail: '%n is not a valid email',
             isRequired: '%n is required',
-            isBoolean: '%n not a valid boolean',
-            isInteger: '%n not an integer',
-            toInteger: '%n cannot convert to integer',
-            isFloat: '%n not a proper float',
+            isBoolean: '%n is not a valid boolean',
+            isNumber: '%n is not a number',
+            isNumberLength: '%n must have %s characters',
+            isNumberMinLength: '%n should be at least %s characters',
+            isNumberMaxLength: '%n should not be more than %s characters',
+            isInteger: '%n is not an integer',
+            isIntegerLength: '%n must have %s characters',
+            isIntegerMinLength: '%n should be at least %s characters',
+            isIntegerMaxLength: '%n should not be more than %s characters',
+            toInteger: '%n cannot be converted to an integer',
+            isFloat: '%n is not a proper float',
             isFloatException: 'Exception found: %n',
-            toFloat: 'n cannot convert to float',
-            isString: '%n must be an instance of String',
-            isDate: '%n invalid Date',
-            validStringWithLen: '%n should be a %s characters length',
-            validStringWithMaxLen: '%n should not be more than %s characters',
-            validStringWithMinLen: '%n should be at least %s characters'
+            toFloat: '%n cannot be converted to a float',
+            isDate: '%n is an invalid Date',
+            isString: '%n must be an instance of a string',
+            isStringLength: '%n must have %s characters',
+            isStringMinLength: '%n should be at least %s characters',
+            isStringMaxLength: '%n should not be more than %s characters'
         },
         data: {} // output to send
     };
@@ -80,6 +87,7 @@ function Validator(data, errorLabels) {
         self[el] = {
             value: val,
             name: el,
+            valid: false,
             // is name by default, but you should use setLabe(name) to change it if you need to
             label: el,
             // check as field to exclude while sending datas to the model
@@ -105,6 +113,7 @@ function Validator(data, errorLabels) {
                 }
             }
 
+            this.valid = valid;
             if (!valid) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
@@ -118,6 +127,8 @@ function Validator(data, errorLabels) {
         self[el].isEmail = function() {
             var rgx = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
             var valid = rgx.test(this.value) ? true : false;
+            this.valid = valid;
+
             if (!valid) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
@@ -146,12 +157,59 @@ function Validator(data, errorLabels) {
                     break;
             }
             var valid = (val !== null) ? true : false;
+            this.valid = valid;
             if (!valid) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
 
                 local.errors[this.name].isBoolean = replace(this.flash || local.errorLabels.isBoolean, this)
             }
+            return self[this.name]
+        }
+
+        /**
+         * Check if value is an a Number. No transformation is done here.
+         * */
+        self[el].isNumber = function(minLength, maxLength) {
+            var val = this.value
+              , isValid = false
+              , isMinLength = true
+              , isMaxLength = true
+            ;
+            // if val is a string replaces comas by points
+            if (typeof(val) == 'string' && /,/g.test(val)) {
+                val = val.replace(/,/g, '.');
+            }
+            // test if val is a number
+            if ( +val === +val ) {
+                isValid = true;
+                // if so also test max and min length if defined
+                if (minLength && typeof(minLength) == 'number' && val.length < minLength) {
+                    isMinLength = false;
+                    this.size = minLength;
+                }
+                if (maxLength && typeof(maxLength) == 'number' && val.length > maxLength) {
+                    isMaxLength = false;
+                    this.size = maxLength;
+                }
+            }
+            // if val is invalid return error message
+            if ( !isValid || !isMinLength || !isMaxLength ) {
+                if ( !local.errors[this.name] )
+                    local.errors[this.name] = {};
+                if ( !isValid )
+                    local.errors[this.name].isNumber = replace(this.flash || local.errorLabels.isNumber, this);
+                if ( !isMinLength || !isMaxLength ) {
+                    if ( !isMinLength )
+                        local.errors[this.name].isNumberLength = replace(this.flash || local.errorLabels.isNumberMinLength, this);
+                    if ( !isMaxLength )
+                        local.errors[this.name].isNumberLength = replace(this.flash || local.errorLabels.isNumberMaxLength, this);
+                    if ( minLength === maxLength )
+                        local.errors[this.name].isNumberLength = replace(this.flash || local.errorLabels.isNumberLength, this);
+                }
+                isValid = false;
+            }
+            this.valid = isValid;
             return self[this.name]
         }
 
@@ -174,19 +232,42 @@ function Validator(data, errorLabels) {
             return self[this.name]
         }
 
-        self[el].isInteger = function() {
-            var val = this.value, valid = false;
-            if ( typeof(val) === 'string' ) {
-                if ( /[^0-9]+/.test(val) ) return false;
-
+        self[el].isInteger = function(minLength, maxLength) {
+            var val = this.value
+              , isValid = false
+              , isMinLength = true
+              , isMaxLength = true
+            ;
+            // test if val is a number
+            if ( +val === +val && val % 1 === 0 ) {
+                isValid = true;
+                // if so also test max and min length if defined
+                if (minLength && typeof(minLength) == 'number' && val.length < minLength) {
+                    isMinLength = false;
+                    this.size = minLength;
+                }
+                if (maxLength && typeof(maxLength) == 'number' && val.length > maxLength) {
+                    isMaxLength = false;
+                    this.size = maxLength;
+                }
             }
-            valid = val === Number(val) && val% 1 === 0;
-            if (!valid) {
-                if ( !(local.errors[this.name]) )
+            // if val is invalid return error message
+            if ( !isValid || !isMinLength || !isMaxLength ) {
+                if ( !local.errors[this.name] )
                     local.errors[this.name] = {};
-
-                local.errors[this.name].isInteger = replace(this.flash || local.errorLabels.isInteger, this)
+                if ( !isValid )
+                    local.errors[this.name].isInteger = replace(this.flash || local.errorLabels.isInteger, this);
+                if ( !isMinLength || !isMaxLength ) {
+                    if ( !isMinLength )
+                        local.errors[this.name].isIntegerLength = replace(this.flash || local.errorLabels.isIntegerMinLength, this);
+                    if ( !isMaxLength )
+                        local.errors[this.name].isIntegerLength = replace(this.flash || local.errorLabels.isIntegerMaxLength, this);
+                    if ( minLength === maxLength )
+                        local.errors[this.name].isIntegerLength = replace(this.flash || local.errorLabels.isIntegerLength, this);
+                }
+                isValid = false;
             }
+            this.valid = isValid;
             return self[this.name]
         }
 
@@ -219,8 +300,9 @@ function Validator(data, errorLabels) {
 
             return self[this.name]
         }
+
         /**
-         * Check if value is float. No trannsformation is done here.
+         * Check if value is float. No transformation is done here.
          * Can be used in combo preceded by *.toFloat(2) to transform data if needed:
          *  1 => 1.0
          *  or
@@ -230,22 +312,23 @@ function Validator(data, errorLabels) {
          * @param {number} decimals
          * */
         self[el].isFloat = function() {
+            var val = this.value, isValid = false;
 
-            if (!this.value) return self[this.name];
-
-            //this.value = new Number(parseFloat(this.value.replace(/,/g, '.')));
-            this.value = this.value.replace(/,/g, '.');
-            var sp = this.value.split('.');
-            if ( /[.,]/.test(this.value) && sp.length === 2 ) {
-                this.value = parseFloat(this.value);
-                var valid = this.value === Number(this.value)  && this.value%1!==0 || this.value === Number(this.value) && ~~sp[1] === 0;
-                local.data[this.name] = this.value
+            // if string replaces comas by points
+            if (typeof(val) == 'string' && /,/g.test(val)) {
+                val = val.replace(/,/g, '.');
+            }
+            // test if val can be a number and if it is a float
+            if ( Number(val) && val % 1 !== 0) {
+                isValid = true;
             }
 
-            if (!valid) {
-                if ( !(local.errors[this.name]) )
-                    local.errors[this.name] = {};
+            this.valid = isValid;
 
+            if (!isValid) {
+                if ( !(local.errors[this.name]) ) {
+                    local.errors[this.name] = {};
+                }
                 local.errors[this.name].isFloat = replace(this.flash || local.errorLabels.isFloat, this)
             }
 
@@ -253,9 +336,10 @@ function Validator(data, errorLabels) {
         }
 
         self[el].isRequired = function() {
-            var valid = (typeof(this.value) != 'undefined' && this.value != null && this.value != '') ? true : false;
+            var isValid = (typeof(this.value) != 'undefined' && this.value != null && this.value != '') ? true : false;
 
-            if (!valid) {
+            this.valid = isValid;
+            if (!isValid) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
 
@@ -273,28 +357,45 @@ function Validator(data, errorLabels) {
          * @param {number|undefined} minLen
          * @param {number} [ maxLen ]
          * */
-        self[el].isString = function(minLen, maxLen) {
-            var validString = ( typeof(this.value) == 'string' ) ? true : false;
-            var validStringWithMinLen = true, validStringWithMaxLen = true;
-            // max or min - valid if true
-            if ( minLen && typeof(minLen) == 'number') {
-                validStringWithMinLen = ( this.value.length >= minLen) ? true : false;
-                this.size = minLen;
-            } else if ( maxLen && typeof(maxLen) == 'number') {
-                validStringWithMaxLen = ( this.value.length <= maxLen) ? true : false;
-                this.size = maxLen;
+        self[el].isString = function(minLength, maxLength) {
+            var val = this.value
+              , isValid = false
+              , isMinLength = true
+              , isMaxLength = true
+            ;
+            // test if val is a string
+            if ( typeof(val) == 'string' ) {
+                isValid =  true;
+                // if so also test max and min length if defined
+                if (minLength && typeof(minLength) == 'number' && val.length < minLength) {
+                    isMinLength = false;
+                    this.size = minLength;
+                }
+                if (maxLength && typeof(maxLength) == 'number' && val.length > maxLength) {
+                    isMaxLength = false;
+                    this.size = maxLength;
+                }
             }
-
-            if ( !validString || !validStringWithMinLen || !validStringWithMaxLen ) {
-                if ( !local.errors[this.name] ) local.errors[this.name] = {}
+            // if val is invalid return error message
+            if ( !isValid || !isMinLength || !isMaxLength ) {
+                if ( !local.errors[this.name] )
+                    local.errors[this.name] = {};
+                if ( !isValid )
+                    local.errors[this.name].isString = replace(this.flash || local.errorLabels.isString, this);
+                if ( !isMinLength || !isMaxLength) {
+                    if ( !isMinLength )
+                        local.errors[this.name].isStringLength = replace(this.flash || local.errorLabels.isStringMinLength, this);
+                    if ( !isMaxLength )
+                        local.errors[this.name].isStringLength = replace(this.flash || local.errorLabels.isStringMaxLength, this);
+                    if (minLength === maxLength)
+                        local.errors[this.name].isStringLength = replace(this.flash || local.errorLabels.isStringLength, this);
+                }
+                isValid = false
             }
-
-            if ( !validString ) local.errors[this.name].isString = replace(this.flash || local.errorLabels.isString, this);
-            if ( !validStringWithMinLen && minLen) local.errors[this.name].validStringWithMinLen = replace(this.flash || local.errorLabels.validStringWithMinLen, this);
-            if ( !validStringWithMaxLen && maxLen ) local.errors[this.name].validStringWithMaxLen = replace(this.flash || local.errorLabels.validStringWithMaxLen, this);
-
+            this.valid = isValid;
             return self[this.name]
         }
+
         /**
          * Check if date
          *
@@ -318,6 +419,8 @@ function Validator(data, errorLabels) {
             }
 
             var date = this.value = local.data[this.name] = new Date(newMask);
+
+            this.valid = ( !date instanceof Date ) ? false : true;
 
             if ( !date instanceof Date ) {
                 local.errors[this.name].isDate = replace(this.flash || local.errorLabels.isDate, this)
@@ -401,6 +504,7 @@ function Validator(data, errorLabels) {
             // exporting errors
             self.errors = local.errors
         }
+
         return valid
     }
 
