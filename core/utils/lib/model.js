@@ -342,7 +342,7 @@ function ModelUtil() {
 
             if ( modelConnector && conf && fs.existsSync(modelPath) ) {
                 conn            = modelConnector.conn;
-                entitiesManager = new require( modelPath )(conn);
+                entitiesManager = new require( modelPath )(conn, {model: model, bundle: bundle});
 
                 self.setConnection(bundle, model, conn);
 
@@ -397,23 +397,32 @@ function ModelUtil() {
             if ( /\.js/.test(files[i]) && excluded.indexOf(files[i]) == -1 && !/\.json/.test(files[i]) && ! /^\./.test(files[i]) ) {
                 entityName  = files[i].replace(/\.js/, '') + suffix;
                 className   = entityName.substr(0,1).toUpperCase() + entityName.substr(1);
-                filename    = _(ginaCorePath + '/model/entity.js', true);
 
-                if (cacheless)
-                    delete require.cache[_(filename, true)]; //EntitySuperClass
+                if ( typeof(entitiesManager[entityName]) == 'undefined' ) {
 
-                EntitySuperClass                = require(_(filename, true));
-                if (cacheless)
-                    delete require.cache[_(entitiesPath + '/' + files[i], true)];//child
+                    filename    = _(ginaCorePath + '/model/entity.js', true);
 
-                EntityClass                     = require( _(entitiesPath + '/' + files[i], true) );
-                //Inherits.
-                EntityClass                     = inherits(EntityClass, EntitySuperClass);
-                EntityClass.prototype.name      = className;
-                EntityClass.prototype.model     = model;
-                EntityClass.prototype.bundle    = bundle;
+                    if (cacheless)
+                        delete require.cache[_(filename, true)]; //EntitySuperClass
 
-                entitiesManager[entityName]     = EntityClass;
+                    EntitySuperClass                = require(_(filename, true));
+                    if (cacheless)
+                        delete require.cache[_(entitiesPath + '/' + files[i], true)];//child
+
+                    EntityClass                     = require( _(entitiesPath + '/' + files[i], true) );
+                    //Inherits.
+                    EntityClass                     = inherits(EntityClass, EntitySuperClass);
+                    EntityClass.prototype.name      = className;
+                    EntityClass.prototype.model     = model;
+                    EntityClass.prototype.bundle    = bundle;
+
+                    entitiesManager[entityName]     = EntityClass;
+
+                } else {
+                    EntityClass = entitiesManager[entityName];
+                }
+
+
 
                 self.setModelEntity(bundle, model, className, EntityClass)
             }

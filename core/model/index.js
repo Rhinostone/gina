@@ -16,6 +16,7 @@ var utils           = require('gina').utils;
 var console         = utils.logger;
 var math            = utils.math;
 var inherits        = utils.inherits;
+//var merge           = utils.merge;
 var utilsConfig     = new utils.Config();
 var modelUtil       = new utils.Model();
 var Module          = require('module');
@@ -141,8 +142,8 @@ function Model(namespace) {
                             } else {
                                 local.connection = conn;
 
-                                //Getting Entities Manager.
-                                var entitiesManager = new require( _(conf.path) )(conn)[model](conn);
+                                //Getting Entities Manager thru connector.
+                                var entitiesManager = new require( _(conf.path) )(conn)[model](conn, { model: self.name, bundle: self.bundle});
 
                                 if (reload) {
                                     getModelEntities(entitiesManager, modelPath, entitiesPath, conn, function onReload(err, connector, entities, connexion){
@@ -329,7 +330,21 @@ function Model(namespace) {
                 //    console.log('PROP FOUND ', prop);
                 //}
                 //console.debug('Producing model:  [ '+self.model+'::' + className +' ] @ [ '+self.bundle+' ]');
-                entitiesManager[entityName] = EntityClass;
+
+
+                // inherited properties fromthe user's driver `/models/connectorName/index.js`
+                //var inheritedProperties     = entitiesManager[entityName].prototype;
+                //
+                //for (var p in inheritedProperties) {
+                //    if ( p != 'constructor' && inheritedProperties.hasOwnProperty(p) ) {
+                //        try {
+                //            // Super properties cannot be overriden
+                //            EntityClass.prototype[p] = inheritedProperties[p]
+                //        } catch(err) {}
+                //    }
+                //}
+
+                entitiesManager[entityName] = EntityClass
 
             } catch (err) {
                 console.error(err.stack);

@@ -128,7 +128,7 @@ function Config(opt) {
                         //envs :
                     }, function(err) {
                         self.Env.loaded = true;
-                        if (err != null)
+                        if (err != null && err != false)
                             console.error('Error found while settings up locals' + err);
 
                         self.emit('complete', err, self.bundlesConfiguration)

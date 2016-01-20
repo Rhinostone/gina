@@ -278,10 +278,10 @@ function ConfigUtil() {
                                 console.warn('found error while trying to remove `.gna`\n' + err.stack)
                             }
 
-                            setTimeout(function(){
+                            //setTimeout(function(){
                                 //console.debug('Done removing `gnaFolder` : '+ gnaFolder);
                                 createFolder();
-                            }, 200);
+                            //}, 200);
                         })
                     } else {
                         callback(false)// nothing to do
