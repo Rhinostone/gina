@@ -134,12 +134,12 @@ __Are you trying to reinstall from the project root ?__
 
 - Go to your project root (where you can see `env.json` & `project.json`)
 - Remove the file `gina`. This bug is related to npm since node 0.12.x and only found on POSIX Operating Systems
-``` tty   
+``` tty
 $ rm ./gina
 ```
 - You can now reinstall
-``` tty   
-$ npm install gina 
+``` tty
+$ npm install gina
 ```
 
 
@@ -148,7 +148,7 @@ More documentation and tutorials are coming !
 
 ## License (MIT)
 
-Copyright (c) 2009-2015 [Rhinostone](http://www.rhinostone.com/)
+Copyright (c) 2009-2016 [Rhinostone](http://www.rhinostone.com/)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

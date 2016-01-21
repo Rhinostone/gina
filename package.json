@@ -24,7 +24,7 @@
     "name": "Rhinostone",
     "email": "gina@rhinosotne.com"
   },
-  "copyright": "Copyright (c) 2009-2015 Rhinostone <gina@rhinostone.com>",
+  "copyright": "Copyright (c) 2009-2016 Rhinostone <gina@rhinostone.com>",
   "dependencies": {
     "colors": "",
     "express": "4.x",
