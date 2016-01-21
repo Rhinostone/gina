@@ -110,7 +110,7 @@ function EntitySuper(conn) {
                                 });
 
                                 //Setting local listener : with increment when emit occurs whithin a loop or recursive function
-                                entity.once(events[i].shortName + events[i].seq, function () {
+                                entity.on(events[i].shortName + events[i].seq, function () {
                                     cb.apply(this[m], arguments)
                                 });
                                 ++events[i].seq;
