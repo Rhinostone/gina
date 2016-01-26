@@ -110,7 +110,7 @@ function Server(options) {
     var onRoutesLoaded = function(callback) {
 
         var config          = new Config()
-            , conf          =  config.getInstance(self.appName)
+            , conf          = config.getInstance(self.appName)
             , cacheless     = config.isCacheless()
             , env           = self.env
             , apps          = conf.bundles
@@ -153,7 +153,7 @@ function Server(options) {
                 }
 
                 if (filename != main) {
-                    self.routing = merge(true, require(main), require(filename));
+                    self.routing = tmpContent = merge(true, require(main), require(filename));
 
                 } else {
                     try {
@@ -171,7 +171,7 @@ function Server(options) {
                     for (var rule in tmp){
                         tmp[rule].bundle = (tmp[rule].bundle) ? tmp[rule].bundle : apps[i]; // for reverse search
                         wroot = self.conf[apps[i]][self.env].server.webroot;
-                        tmp[rule].param.file = ( typeof(tmp[rule].param.file) != 'undefined' ) ? tmp[rule].param.file : rule; // get template file
+                        tmp[rule].param.file = ( typeof(tmp) != 'string' && typeof(tmp[rule].param.file) != 'undefined' ) ? tmp[rule].param.file : rule; // get template file
 
                         // renaming rule for standalone setup
                         if ( self.isStandalone && apps[i] != self.appName && wroot == '/') {

@@ -61,7 +61,7 @@ function EntitySuper(conn) {
             var shortName = entityName.replace(/Entity/, '');
 
             var events = [], i = 0, cb = {};
-            var eCount = 5; // default max listeners is 5
+            var eCount = 100; // default max listeners is 5
 
             for (var f in entity) {
                 if (
