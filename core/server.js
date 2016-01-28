@@ -524,7 +524,6 @@ function Server(options) {
 
         var pathname    = url.parse(req.url, true).pathname;
         var bundle      = self.appName; // by default
-        var wroot       = conf[bundle][self.env].server.webroot;
 
         // finding bundle
         if (self.isStandalone) {
