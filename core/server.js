@@ -522,29 +522,31 @@ function Server(options) {
             self.conf = conf
         }
 
-        var pathname = url.parse(req.url, true).pathname;
-        var bundle = self.appName; // by default
+        var pathname    = url.parse(req.url, true).pathname;
+        var bundle      = self.appName; // by default
+        var wroot       = conf[bundle][self.env].server.webroot;
 
         // finding bundle
         if (self.isStandalone) {
 
-            end:
-                for (var b in conf) {
-                    if ( typeof(conf[b][self.env].content.statics) != 'undefined' && conf[b][self.env].content.statics.count() > 0 ) {
-                        for (var s in conf[b][self.env].content.statics) {
-                            s = (s.substr(0,1) == '/') ? s.substr(1) : s;
-                            if ( (new RegExp('^/'+s)).test(pathname) ) {
-                                bundle = b;
-                                break end
-                            }
+        end:
+            for (var b in conf) {
+                if ( typeof(conf[b][self.env].content) != 'undefined' && typeof(conf[b][self.env].content.statics) != 'undefined' && conf[b][self.env].content.statics.count() > 0 ) {
+                    for (var s in conf[b][self.env].content.statics) {
+                        s = (s.substr(0,1) == '/') ? s.substr(1) : s;
+                        if ( (new RegExp('^/'+s)).test(pathname) ) {
+                            bundle = b;
+                            break end
                         }
-                    } else {
-                        // no statics ... use startingApp and leave it to handle()
-                        self.isNotStatic = true
-                        break
                     }
+                } else {
+                    // no statics ... use startingApp and leave it to handle()
+                    self.isNotStatic = true
+                    break
                 }
+            }
         }
+
 
         if ( /\/favicon\.ico/.test(pathname) && !hasViews(bundle)) {
             callback(false, bundle, pathname, config, req, res, next);

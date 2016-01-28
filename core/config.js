@@ -774,6 +774,7 @@ function Config(opt) {
                 files['statics'] = merge(files['statics'], defaultAliases)
             }
 
+
             // public root directories
             if (reps['views']) { // !== hasViews; you don't need views to access statics
                 var d = 0
@@ -788,7 +789,7 @@ function Config(opt) {
                     }
                     ++d
                 }
-                files['statics'] = merge(files['statics'], statics)
+                files['statics'] = merge(files['statics'], statics);
             }
 
 
@@ -805,8 +806,8 @@ function Config(opt) {
 
 
 
-        //webroot statics
-        if (hasViews &&
+        //webroot vs statics
+        if (// Please, don't add `hasViews` condition. You can download files without having views: like for a `webdrive` API
             conf[bundle][env].server.webroot  != '/' &&
             typeof(files['statics']) != 'undefined'
         ) {
@@ -830,8 +831,10 @@ function Config(opt) {
                 } else {
                     newStatics[k] = files['statics'][k]
                 }
+
                 delete files['statics'][k]
             }
+
             files['statics'] = JSON.parse( JSON.stringify(newStatics) );
         }
 
