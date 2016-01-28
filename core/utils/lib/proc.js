@@ -283,7 +283,7 @@ function Proc(bundle, proc, usePidFile){
         }
 
         process.kill(pid, signal);// soft...
-        console.debug('sent '+ signal +' signal to end process [ '+ pid +' ]');
+        console.debug('\nsent '+ signal +' signal to end process [ '+ pid +' ]\n');
     };
 
     /**
