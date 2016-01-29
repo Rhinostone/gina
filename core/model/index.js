@@ -114,11 +114,11 @@ function Model(namespace) {
             var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
             console.debug('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
             if (!fs.existsSync(entitiesPath)) {
-                if (reload) {
-                    reload(new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null)
-                } else {
+                //if (reload) {
+                //    self.reload(new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null)
+                //} else {
                     self.emit('model#ready', new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null)
-                }
+                //}
             } else {
                 var connectorPath   = _(modelPath + '/lib/connector.js');
                 //Getting Entities Manager.
@@ -134,46 +134,51 @@ function Model(namespace) {
                         function onConnect(err, conn) {
                             if (err) {
                                 console.error(err.stack);
-                                if (reload) {
-                                    reload(err, self.name, null)
-                                } else {
+                                //if (reload) {
+                                //    self.reload(err, self.name, null)
+                                //} else {
                                     self.emit('model#ready', err, self.name, null)
-                                }
+                                //}
                             } else {
                                 local.connection = conn;
 
-                                //Getting Entities Manager thru connector.
-                                var entitiesManager = new require( _(conf.path) )(conn)[model](conn, { model: self.name, bundle: self.bundle});
+                                self.emit('model#ready', false, self.name, conn)
 
-                                if (reload) {
+
+                                /** must be done only when all models conn are alive because of `cross models/database use cases`
+
+                                 //Getting Entities Manager thru connector.
+                                 var entitiesManager = new require( _(conf.path) )(conn)[model](conn, { model: self.name, bundle: self.bundle});
+
+                                 if (reload) {
                                     getModelEntities(entitiesManager, modelPath, entitiesPath, conn, function onReload(err, connector, entities, connexion){
                                         reload(err, connector, entities, connexion)
                                     })
                                 } else {
                                     modelUtil.setConnection(bundle, model, conn);
                                     getModelEntities(entitiesManager, modelPath, entitiesPath, conn)
-                                }
+                                }*/
                             }
                         }
                     )
                 } else {//Means that no connector was found in models.
 
                     //finished.
-                    if ( reload ) {
-                        reload(new Error('[ '+self.name+' ] No connector found'), self.name, null, conn)
-                    } else {
-                        self.emit('model#ready', new Error('[ '+self.name+' ] No connector found'), self.name, null, conn)
-                    }
+                    //if ( reload ) {
+                    //    self.reload(new Error('[ '+self.name+' ] No connector found'), self.name, conn)
+                    //} else {
+                        self.emit('model#ready', new Error('[ '+self.name+' ] No connector found'), self.name, conn)
+                    //}
                 }
             }
 
         } else {
             console.debug("no configuration found...");
-            if (reload) {
-                reload(new Error('no configuration found for your model: ' + model), self.name, null)
-            } else {
+            //if (reload) {
+            //    self.reload(new Error('no configuration found for your model: ' + model), self.name, null)
+            //} else {
                 self.emit('model#ready', new Error('no configuration found for your model: ' + model), self.name, null)
-            }
+            //}
         }
         return self
     }
@@ -278,10 +283,13 @@ function Model(namespace) {
      * @param {string} entitiesPath
      * @param {object} [conn]
      * */
-    var getModelEntities = function(entitiesManager, modelPath, entitiesPath, conn, reload) {
+    this.getModelEntities = function(entitiesManager, modelPath, entitiesPath, conn, reload) {
         var suffix = 'Entity';
-
         var that = self;
+        if (reload && cacheless) {
+            that.i = 0
+        }
+
         var i = that.i || 0;
         var files = fs.readdirSync(entitiesPath);
 
@@ -310,7 +318,7 @@ function Model(namespace) {
 
                 var EntityClass = require( _(entitiesPath + '/' + files[i], true) );
                 var sum = math.checkSumSync( _(entitiesPath + '/' + files[i]) );
-                if ( typeof(local.files[ files[i] ]) != 'undefined' && local.files[ files[i] ] !== sum ) {
+                if ( typeof(local.files[ files[i] ]) != 'undefined' && local.files[ files[i] ] !== sum) {
                     // will only be used for cacheless anyway
                     local.toReload.push( _(entitiesPath + '/' + files[i]) )
                 } else if (typeof(local.files[ files[i] ]) == 'undefined') {
@@ -348,11 +356,11 @@ function Model(namespace) {
 
             } catch (err) {
                 console.error(err.stack);
-                if ( reload ) {
-                    reload(err, self.name, undefined)
-                } else {
+                //if ( reload ) {
+                //    self.reload(err, self.name, undefined)
+                //} else {
                     self.emit('model#ready', err, self.name, undefined)
-                }
+                //}
             }
             //console.log('::::i '+i+' vs '+(files.length-1))
             if (i == files.length-1) {
@@ -362,11 +370,11 @@ function Model(namespace) {
                     modelUtil.setModelEntity(self.bundle, self.model, _nttClass, entitiesManager[nttClass])
                 }
                 //finished.
-                if ( reload ) {
-                    reload(false, self.name, entitiesManager, conn)
-                } else {
-                    self.emit('model#ready', false, self.name, entitiesManager, conn)
-                }
+                //if ( reload ) {
+                //    self.reload(false, self.name, entitiesManager, conn)
+                //} //else {
+                    //self.emit('model#ready', false, self.name, entitiesManager, conn)
+                //}
 
             }
             ++that.i
@@ -380,14 +388,14 @@ function Model(namespace) {
                 if ( files[that.i].match(/.js/) && excluded.indexOf(files[that.i]) == -1 && !files[that.i].match(/.json/) && ! /^\./.test(files[that.i]) ) {
                     entityName = files[that.i].replace(/.js/, "") + suffix;
                     produce(entityName, that.i);
-                } else if (that.i == files.length-1) {
-                    // All done
-                    if ( reload ) {
-                        reload(false, self.name, entitiesManager)
-                    } else {
-                        self.emit('model#ready', false, self.name, entitiesManager)
-                    }
-                    //delete entitiesManager;
+                } else if (that.i == files.length-1) {// All done
+
+                    //if ( reload ) {
+                    //    self.reload(false, self.name, entitiesManager)
+                    //} else {
+                    //    self.emit('model#ready', false, self.name, entitiesManager)
+                    //}
+
                     ++that.i;
                 } else {
                     ++that.i;

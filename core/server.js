@@ -645,8 +645,12 @@ function Server(options) {
 
                         // onRouting Event ???
                         if ( cacheless ) {
-                            config.refreshModels(params.bundle, self.env, function onModelRefreshed(){
-                                router.route(req, res, next, params)
+                            config.refreshModels(params.bundle, self.env, function onModelRefreshed(err){
+                                if (err) {
+                                    throwError(res, 500, err.msg||err.stack , next)
+                                } else {
+                                    router.route(req, res, next, params)
+                                }
                             })
                         } else {
                             router.route(req, res, next, params)
