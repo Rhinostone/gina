@@ -969,8 +969,8 @@ function Config(opt) {
             if (exists) {
                 modelUtil.reloadModels(
                     conf,
-                    function doneReloadingModel() {
-                        callback(false)
+                    function doneReloadingModel(err) {
+                        callback(err)
                     })
             } else {
                 callback(false)
