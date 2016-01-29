@@ -385,7 +385,14 @@ function Controller(options) {
                                 }
                             }
                         } else {
-                            url = routing["404"].url || '/404.html';
+                            if ( typeof(routing['404']) != 'undefined' && typeof(routing['404'].url) != 'undefined' ) {
+                                if (routing["404"].url.substr(0,1) == '/')
+                                    routing["404"].url = routing["404"].url.substr(1);
+
+                                url = wroot +'/'+ routing["404"].url
+                            } else {
+                                url = wroot +'/404.html'
+                            }
                         }
 
                         if ( typeof(base) != 'undefined' ) url = base + url;
