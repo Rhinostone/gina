@@ -338,12 +338,11 @@ function Controller(options) {
 
                         // is path ?
                         if (/\//.test(route)) {
-                            if ( isStandalone && !isMaster ) {
-                                if (route.substr(0,1) == '/') route = route.substr(1);
-                                url = wroot +'/'+ route
-                            } else {
-                                url = route
-                            }
+
+                            if (route.substr(0,1) == '/')
+                                route = route.substr(1);
+
+                            url = wroot +'/'+ route;
                             return url
                         }
 
