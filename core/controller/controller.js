@@ -342,7 +342,11 @@ function Controller(options) {
                             if (route.substr(0,1) == '/')
                                 route = route.substr(1);
 
+                            if (wroot.length == 1)
+                                wroot = '';
+
                             url = wroot +'/'+ route;
+
                             return url
                         }
 
