@@ -196,7 +196,7 @@ function ModelUtil() {
                                 // must be done only when all models conn are alive because of `cross models/database use cases`
                                 for (var ntt in entitiesObject) {
                                     //console.debug('Creating instance of [ '+c+'::' + ntt +' ] @ [ '+bundle+' ]');
-                                    entitiesObject[ntt] = new entitiesObject[ntt](conn)
+                                    new entitiesObject[ntt](conn)
                                 }
                             }
                         }
@@ -257,142 +257,6 @@ function ModelUtil() {
         loadModel(0, bundles, configuration, env, cb)
     }
 
-    // TODO - remove this
-    //this.loadModelSync = function(bundle, model, conf, env) {
-    //    var connector   = conf.content['connectors'][model] || undefined;
-    //    var local       = { files: {}, toReload: [] };
-    //
-    //    if ( typeof(connector) != 'undefined' && connector != null) {
-    //
-    //
-    //        var i                   = 0
-    //            , f                 = 0
-    //            , entityName        = null
-    //            , ginaCorePath      = getPath('gina.core')
-    //            , path              = _( ginaCorePath +'/model/index')
-    //            , modelPath         = conf.modelsPath +'/'+ model
-    //            , entitiesPath      = _(modelPath + '/entities')
-    //            , entitiesManager = new require( _(modelPath) )(conn)[model](conn, { model: model, bundle: bundle})
-    //            , files             = fs.readdirSync(entitiesPath)
-    //            ;
-    //
-    //
-    //        while (f < files.length) {
-    //
-    //            if ( files[f].match(/.js/) && excluded.indexOf(files[f]) == -1 && !files[f].match(/.json/) && ! /^\./.test(files[f]) ) {
-    //                entityName = files[f].replace(/.js/, '') + 'Entity';
-    //                produce(entityName, i);
-    //                ++i
-    //            }
-    //            ++f
-    //
-    //        }//EO while.
-    //
-    //
-    //        var produce = function(entityName, i){
-    //
-    //            try {
-    //
-    //                var className = entityName.substr(0,1).toUpperCase() + entityName.substr(1);
-    //
-    //                // superEntity
-    //                var filename =  ginaCorePath + '/model/entity.js';
-    //                if (cacheless)
-    //                    delete require.cache[_(filename, true)]; //EntitySuperClass
-    //
-    //                var EntitySuperClass = require(_(filename, true));
-    //                if (cacheless) { //checksum
-    //                    delete require.cache[_(entitiesPath + '/' + files[i], true)];//child
-    //                }
-    //
-    //                var EntityClass = require( _(entitiesPath + '/' + files[i], true) );
-    //                var sum = math.checkSumSync( _(entitiesPath + '/' + files[i]) );
-    //                if ( typeof(local.files[ files[i] ]) != 'undefined' && local.files[ files[i] ] !== sum ) {
-    //                    // will only be used for cacheless anyway
-    //                    local.toReload.push( _(entitiesPath + '/' + files[i]) )
-    //                } else if (typeof(local.files[ files[i] ]) == 'undefined') {
-    //                    // recording
-    //                    local.files[ files[i] ] = sum
-    //                }
-    //
-    //                //Inherits.
-    //                EntityClass = inherits(EntityClass, EntitySuperClass);
-    //
-    //                EntityClass.prototype.name      = className;
-    //                EntityClass.prototype.model     = self.model;
-    //                EntityClass.prototype.bundle    = self.bundle;
-    //
-    //
-    //                entitiesManager[entityName]     = EntityClass
-    //
-    //            } catch (err) {
-    //                console.error(err.stack);
-    //                if ( reload ) {
-    //                    reload(err, self.name, undefined)
-    //                } else {
-    //                    self.emit('model#ready', err, self.name, undefined)
-    //                }
-    //            }
-    //            //console.log('::::i '+i+' vs '+(files.length-1))
-    //            if (i == files.length-1) {
-    //                // another one to instanciate and put in cache
-    //                for (var nttClass in entitiesManager) {
-    //                    var _nttClass = nttClass.substr(0,1).toUpperCase() + nttClass.substr(1);
-    //                    modelUtil.setModelEntity(bundle, model, _nttClass, entitiesManager[nttClass])
-    //                }
-    //                //finished.
-    //                if ( reload ) {
-    //                    reload(false, model, entitiesManager, conn)
-    //                } else {
-    //                    //self.emit('model#ready', false, self.name, entitiesManager, conn)
-    //
-    //                }
-    //
-    //            }
-    //            //++i
-    //
-    //        };//EO produce.
-    //
-    //
-    //        return entitiesManager;
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //        //var mObj = new Model(conf.bundle + "/" + model);
-    //        //
-    //        //mObj.onReady(
-    //        //    function onModelReady( err, connector, entitiesObject, conn) {
-    //        //        if (err) {
-    //        //            console.error('found error ...');
-    //        //            console.error(err.stack||err.message||err);
-    //        //            return { model: connector }
-    //        //        } else {
-    //        //
-    //        //
-    //        //            if (self.models[bundle][model]) {// only used when tryin to import multiple models into the same entity
-    //        //                self.models[bundle][model]['getConnection'] = function() {
-    //        //                    return self.models[bundle][model]['_connection']
-    //        //                }
-    //        //            }
-    //        //            // creating entities instances
-    //        //            for (var ntt in entitiesObject) {
-    //        //                entitiesObject[ntt] = new entitiesObject[ntt](conn)
-    //        //            }
-    //        //            return { model: connector }
-    //        //        }
-    //        //    })
-    //
-    //    } else {
-    //        throw new Error('no connector found for bundle [ '+ model +'/'+ bundle +' ]');
-    //        return null
-    //    }
-    //}
-
-
 
     this.reloadModels = function(conf, cb) {
         if ( typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null ) {
@@ -402,7 +266,9 @@ function ModelUtil() {
                 , entitiesManager   = null
                 , modelPath         = null
                 , entitiesPath      = null
-                , entitiesObject    = null;
+                , entitiesObject    = null
+                , wait              = 0
+                , mObj              = {};
 
             // end - now, loading entities for each `loaded` model
             for (var bundle in self.models) {
@@ -414,18 +280,60 @@ function ModelUtil() {
 
                     //Getting Entities Manager thru connector.
                     entitiesManager = new require( _(conf.modelsPath) )(conn)[name](conn, { model: name, bundle: bundle});
-                    self.models[bundle][name].getModelEntities(entitiesManager, modelPath, entitiesPath, conn, true);
-                    entitiesObject  = self.entities[bundle][name];
+                    if ( typeof(self.models[bundle][name].getModelEntities) != 'undefined' ) {
 
-                    // creating entities instances
-                    // must be done only when all models conn are alive because of `cross models/database use cases`
-                    for (var ntt in entitiesObject) {
-                        entitiesObject[ntt] = new entitiesObject[ntt](conn)
+                        self.models[bundle][name].getModelEntities(entitiesManager, modelPath, entitiesPath, conn, true);
+
+                        entitiesObject  = self.entities[bundle][name];
+
+                        // creating entities instances
+                        // must be done only when all models conn are alive because of `cross models/database use cases`
+                        for (var ntt in entitiesObject) {
+                            new entitiesObject[ntt](conn)
+                        }
+                    } else {
+
+                        ++wait;
+                        var Model = require( _( getPath('gina.core')+'/model') );
+                        mObj[name + 'Model'] = new Model(conf.bundle + '/' + name);
+                        mObj[name + 'Model']
+                            .onReady(
+                                function onModelReady( err, connector, conn) {
+                                    conn            = self.models[bundle][connector]['_connection'];
+                                    modelPath       = _(conf.modelsPath + '/' + connector);
+                                    entitiesPath    = _(modelPath + '/entities');
+
+                                    entitiesManager = new require( _(conf.modelsPath) )(conn)[connector](conn, { model: connector, bundle: bundle});
+                                    self.setConnection(bundle, connector, conn);
+                                    self.models[bundle][connector]['getModelEntities'] = mObj[connector+'Model'].getModelEntities;
+
+                                    mObj[connector+'Model'].getModelEntities(entitiesManager, modelPath, entitiesPath, conn);
+                                    entitiesObject  = self.entities[bundle][connector];
+
+                                    // creating entities instances
+                                    // must be done only when all models conn are alive because of `cross models/database use cases`
+                                    for (var ntt in entitiesObject) {
+                                        //console.debug('Creating instance of [ '+c+'::' + ntt +' ] @ [ '+bundle+' ]');
+                                        new entitiesObject[ntt](conn)
+                                    }
+
+                                    --wait;
+                                    if (wait == 0) {
+                                        cb(false)
+                                    }
+                                })
+
                     }
+
+
+
                 }
             }
 
-            cb(false)
+            if (wait == 0) {
+                cb(false)
+            }
+
 
         } else {
             cb(new Error('[ '+ conf.bundle+' ] no connector found !'))
