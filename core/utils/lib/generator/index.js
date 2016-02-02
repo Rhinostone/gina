@@ -39,6 +39,29 @@ var Generator = {
             });
         });
     },
+    /**
+     * Create file form template sync
+     * Added to support node v5.5.0
+     * */
+    createFileFromTemplateSync : function(source, target) {
+        var data = fs.readFileSync(source);
+        if (data instanceof Error) {
+            throw data
+        } else {
+            if(fs.existsSync(target)){
+                //Just in case.
+                fs.chmodSync(target, 0755);
+                fs.unlink(target);
+            }
+
+            fs.writeFileSync(target, data);
+
+            //Setting permission.
+            try {
+                fs.chmodSync(target, 0755)
+            } catch (err) {} // file not found
+        }
+    },
     createFoldersFromStructureSync : function(structure){
 
     },

@@ -28,12 +28,8 @@ function PostInstall() {
         self.path = _( __dirname.substring(0, (__dirname.length - "script".length)-1 ) );
         self.root = process.cwd().toString();
 
-        createVersionFile(function onFileCreated(err) {
-            if (err) {
-                console.error(err.stack)
-            }
-            createGinaFileForPlatform()
-        })
+        createVersionFile();
+        createGinaFileForPlatform();
     }
 
     var createVersionFile = function(callback) {
@@ -44,14 +40,14 @@ function PostInstall() {
                 fs.unlinkSync(target)
             }
             fs.writeFileSync(target, version);
-            callback(false)
         } catch(err) {
-            callback(err)
+            throw err;
+            process.exit(1)
         }
     }
 
     //Creating framework command line file for nix.
-    var createGinaFile = function(win32Name, callback) {
+    var createGinaFile = function(win32Name) {
         var name = require( _(self.path + '/package.json') ).name;
         var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
         var source = _(self.path + '/core/template/command/gina.tpl');
@@ -60,13 +56,7 @@ function PostInstall() {
             target = _(appPath +'/'+ win32Name)
         }
         //Will override.
-        if ( typeof(callback) != 'undefined') {
-            utils.generator.createFileFromTemplate(source, target, function onGinaFileCreated(err) {
-                callback(err)
-            })
-        } else {
-            utils.generator.createFileFromTemplate(source, target)
-        }
+        utils.generator.createFileFromTemplateSync(source, target)
     }
 
     var createGinaFileForPlatform = function() {
@@ -77,40 +67,37 @@ function PostInstall() {
 
         var keepGoing = function(filename) {
 
-            createGinaFile(filename, function onFileCreated(err) {
-                if (err) console.error(err.stack);
+            createGinaFile(filename);
 
-                // this is done to allow multiple calls of post_install.js
-                var filename = _(self.path + '/SUCCESS');
-                var installed = fs.existsSync( filename );
-                if (installed && /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
-                    var msg = "Gina's command line tool has been installed.";
-                    console.info(msg);
-                    process.exit(0)
-                } else  {
-                    fs.writeFileSync(filename, true );
-                }
-                // do something that can be called after the first time installation
+            // this is done to allow multiple calls of post_install.js
+            var filename = _(self.path + '/SUCCESS');
+            var installed = fs.existsSync( filename );
+            if (installed && /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
+                var msg = "Gina's command line tool has been installed.";
+                console.info(msg);
+                process.exit(0)
+            } else  {
+                fs.writeFileSync(filename, true );
+            }
+            // do something that can be called after the first time installation
 
 
-                // Check if npm install has been done
-                if ( !hasNodeModulesSync() ) {
-                    npmInstall()
+            // Check if npm install has been done
+            if ( !hasNodeModulesSync() ) {
+                npmInstall()
+            } else {
+                var target = new _(self.path + '/node_modules');
+                console.debug('replacing: ', target.toString() );
+                var err = target.rmSync();
+                if (err instanceof Error) {
+                    throw err;
+                    process.exit(1)
                 } else {
-                    var target = new _(self.path + '/node_modules');
-                    console.debug('replacing: ', target.toString() );
-                    target
-                        .rm( function(err) {
-                            if (err) {
-                                console.error(err.stack);
-                                process.exit(1)
-                            } else {
-                                npmInstall()
-                            }
-                        })
+                    npmInstall()
                 }
+            }
 
-            })
+
         }
 
         if (self.isWin32) {
@@ -121,11 +108,11 @@ function PostInstall() {
                 fs.unlinkSync(target);
                 // have to wait for windows to complete this
                 setTimeout( function(){
-                    utils.generator.createFileFromTemplate(source, target);
+                    utils.generator.createFileFromTemplateSync(source, target);
                     keepGoing(filename)
                 }, 1000)
             } else {
-                utils.generator.createFileFromTemplate(source, target);
+                utils.generator.createFileFromTemplateSync(source, target);
                 keepGoing(filename)
             }
         } else {
