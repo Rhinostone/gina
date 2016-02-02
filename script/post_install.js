@@ -8,8 +8,10 @@
 
 //Imports
 var fs      = require('fs');
+var child   = require('child_process');
 var os      = require('os');
 var utils   = require('./../core/utils');
+
 var console = utils.logger;
 
 
@@ -29,7 +31,9 @@ function PostInstall() {
         self.root = process.cwd().toString();
 
         createVersionFile();
+        //console.log('[ debug ] createVersionFile()');
         createGinaFileForPlatform();
+        //console.log('[ debug ] createGinaFileForPlatform()');
     }
 
     var createVersionFile = function(callback) {
@@ -60,44 +64,29 @@ function PostInstall() {
     }
 
     var createGinaFileForPlatform = function() {
-        console.info('creating platform file');
+        console.log('creating platform file');
+        //console.log('[ debug ] about to open ' + _(self.path + '/package.json'));
         var name = require( _(self.path + '/package.json') ).name;
 
         var filename = ( (self.isWin32) ? '.' : '' ) + name;
 
         var keepGoing = function(filename) {
 
+
+
             createGinaFile(filename);
 
             // this is done to allow multiple calls of post_install.js
             var filename = _(self.path + '/SUCCESS');
             var installed = fs.existsSync( filename );
-            if (installed && /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
-                var msg = "Gina's command line tool has been installed.";
-                console.info(msg);
-                process.exit(0)
-            } else  {
-                fs.writeFileSync(filename, true );
-            }
-            // do something that can be called after the first time installation
-
-
-            // Check if npm install has been done
-            if ( !hasNodeModulesSync() ) {
-                npmInstall()
-            } else {
-                var target = new _(self.path + '/node_modules');
-                console.debug('replacing: ', target.toString() );
-                var err = target.rmSync();
-                if (err instanceof Error) {
-                    throw err;
-                    process.exit(1)
-                } else {
-                    npmInstall()
-                }
+            if (!installed /**&& /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) */ ) {
+                fs.writeFileSync(filename, true )
             }
 
-
+            // old NPM : < 3 & compatible 3+
+            console.log('> now installing dependencies, please wait ...\n\r');
+            var dependencies = require( _(self.path + '/package.json') ).ginaDependencies;
+            npmInstall(dependencies);
         }
 
         if (self.isWin32) {
@@ -121,27 +110,44 @@ function PostInstall() {
         }
     }
 
-    var hasNodeModulesSync = function() {
-        return fs.existsSync( _(self.path + '/node_modules') )
-    }
 
+    var npmInstall = function(modules) {
+        if ( modules.count() == 0 ) {
+            console.log("\nGina's command line tool has been installed !\n");
+            process.exit(0)
+        }
 
-
-    var npmInstall = function() {
-        console.info('now installing modules: please, wait ...');
         var cmd = ( isWin32() ) ? 'npm.cmd install' : 'npm install';
+        var key = null;
+        for (var m in modules) {
+            key = m;
+            if ( modules[m] != '') {
+                cmd += ' '+ m +'@'+ modules[m];
+                console.log('installing [ '+ m +'@'+ modules[m] +' ]');
+            } else {
+                cmd += ' '+ m + '@latest';
+                console.log('installing [ '+ m + '@latest ]');
+            }
+
+            break
+        }
+
+        delete modules[key];
+
 
         run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp')  })
             .onData(function(data){
-                console.info(data)
+                //console.info(data)
             })
             .onComplete( function done(err, data){
-                if (err) {
-                    console.error(err)
-                } else {
+                //if (err) {
+                //    console.error(err)
+                //} else {
                     //console.info(data);
-                    end()
-                }
+                    //end()
+                //}
+
+                npmInstall(modules)
             })
     }
 
