@@ -22,6 +22,24 @@ function PreInstall() {
         self.isWin32 = ( os.platform() == 'win32' ) ? true : false;
         self.path = __dirname.substring(0, (__dirname.length - 'script'.length));
 
+        console.debug('paths -> '+ self.path);
+
+        if ( hasNodeModulesSync() ) { // cleaining old
+            var target = new _(self.path + '/node_modules');
+            console.debug('replacing: ', target.toString() );
+            var err = target.rmSync();
+            if (err instanceof Error) {
+                throw err;
+                process.exit(1)
+            }
+
+            fs.mkdirSync(_(self.path) + '/node_modules');
+        }
+
+    }
+
+    var hasNodeModulesSync = function() {
+        return fs.existsSync( _(self.path + '/node_modules') )
     }
     // compare with post_install.js if you want to use this
     //var filename = _(self.path + '/SUCCESS');

@@ -1,5 +1,6 @@
 {
   "name": "gina",
+  "version": "0.0.9p70",
   "description": "MVC Framework for Node.",
   "keywords": [
     "framework",
@@ -15,7 +16,6 @@
     "gina.io",
     "gina js"
   ],
-  "version": "0.0.9p68",
   "repository": {
     "type": "git",
     "url": "https://github.com/rhinostone/gina.git"
@@ -25,7 +25,7 @@
     "email": "gina@rhinosotne.com"
   },
   "copyright": "Copyright (c) 2009-2016 Rhinostone <gina@rhinostone.com>",
-  "dependencies": {
+  "ginaDependencies": {
     "colors": "",
     "express": "4.x",
     "swig": "",
