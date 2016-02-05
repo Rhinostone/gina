@@ -114,11 +114,7 @@ function Model(namespace) {
             var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
             console.debug('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
             if (!fs.existsSync(entitiesPath)) {
-                //if (reload) {
-                //    self.reload(new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null)
-                //} else {
-                    self.emit('model#ready', new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null)
-                //}
+                self.emit('model#ready', new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null)
             } else {
                 var connectorPath   = _(modelPath + '/lib/connector.js');
                 //Getting Entities Manager.
@@ -127,7 +123,7 @@ function Model(namespace) {
                     if (cacheless)
                         delete require.cache[_(connectorPath, true)];
 
-                    var Connector = require(connectorPath);
+                    var Connector = require(_(connectorPath, true));
 
                     self.connect(
                         Connector,
@@ -193,7 +189,8 @@ function Model(namespace) {
                 self.connectors[_connector].conn = conn;
                 setContext('modelConnectors', self.connectors);
                 callback(err, conn);
-            })
+            });
+
         } else {
             callback(self.connectors[_connector].err, self.connectors[_connector].conn);
         }
@@ -406,13 +403,13 @@ function Model(namespace) {
     }
 
     this.onReady = function(callback) {
-        self.once('model#ready', function(err, model, entities, conn) {
+        self.once('model#ready', function(err, model, conn) {
             // entities == null when the database server has not started.
             if ( err ) {
                 console.error(err.stack||err.message)
                 //console.log('No entities found for [ '+ self.name +':'+ entityName +'].\n 1) Check if the database is started.\n2) Check if exists: /models/entities/'+ entityName);
             }
-            callback(err, model, entities, conn)
+            callback(err, model, conn)
         });
         setup(namespace);
         return init()

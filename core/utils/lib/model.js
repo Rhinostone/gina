@@ -306,8 +306,12 @@ function ModelUtil() {
                                     entitiesManager = new require( _(conf.modelsPath) )(conn)[connector](conn, { model: connector, bundle: bundle});
                                     self.setConnection(bundle, connector, conn);
                                     self.models[bundle][connector]['getModelEntities'] = mObj[connector+'Model'].getModelEntities;
+                                    if (cacheless) {
+                                        mObj[connector+'Model'].getModelEntities(entitiesManager, modelPath, entitiesPath, conn, true);
+                                    } else {
+                                        mObj[connector+'Model'].getModelEntities(entitiesManager, modelPath, entitiesPath, conn);
+                                    }
 
-                                    mObj[connector+'Model'].getModelEntities(entitiesManager, modelPath, entitiesPath, conn);
                                     entitiesObject  = self.entities[bundle][connector];
 
                                     // creating entities instances
