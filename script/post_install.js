@@ -41,9 +41,21 @@ function PostInstall() {
         var target = _(self.path + '/VERSION');
         try {
             if ( fs.existsSync(target) ) {
-                fs.unlinkSync(target)
+                fs.unlinkSync(target);
+                if (callback) {
+
+                    setTimeout(function(){
+
+                        fs.writeFileSync(target, version);
+                        callback()
+                    }, 1000)
+                } else {
+                    fs.writeFileSync(target, version);
+                }
+            } else {
+                fs.writeFileSync(target, version);
             }
-            fs.writeFileSync(target, version);
+
         } catch(err) {
             throw err;
             process.exit(1)
@@ -51,7 +63,7 @@ function PostInstall() {
     }
 
     //Creating framework command line file for nix.
-    var createGinaFile = function(win32Name) {
+    var createGinaFile = function(win32Name, callback) {
         var name = require( _(self.path + '/package.json') ).name;
         var appPath = _( self.path.substring(0, (self.path.length - ("node_modules/" + name + '/').length)) );
         var source = _(self.path + '/core/template/command/gina.tpl');
@@ -59,8 +71,14 @@ function PostInstall() {
         if ( typeof(win32Name) != 'undefined') {
             target = _(appPath +'/'+ win32Name)
         }
+
         //Will override.
-        utils.generator.createFileFromTemplateSync(source, target)
+        if (callback) {
+            utils.generator.createFileFromTemplateSync(source, target);
+            setTimeout(callback, 1000)
+        } else {
+            utils.generator.createFileFromTemplateSync(source, target)
+        }
     }
 
     var createGinaFileForPlatform = function() {
@@ -74,19 +92,19 @@ function PostInstall() {
 
 
 
-            createGinaFile(filename);
+            createGinaFile(filename, function(){
+                // this is done to allow multiple calls of post_install.js
+                var filename = _(self.path + '/SUCCESS');
+                var installed = fs.existsSync( filename );
+                if (!installed /**&& /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) */ ) {
+                    fs.writeFileSync(filename, true )
+                }
 
-            // this is done to allow multiple calls of post_install.js
-            var filename = _(self.path + '/SUCCESS');
-            var installed = fs.existsSync( filename );
-            if (!installed /**&& /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) */ ) {
-                fs.writeFileSync(filename, true )
-            }
-
-            // old NPM : < 3 & compatible 3+
-            console.log('> now installing dependencies, please wait ...\n\r');
-            var dependencies = require( _(self.path + '/package.json') ).ginaDependencies;
-            npmInstall(dependencies);
+                // old NPM : < 3 & compatible 3+
+                console.log('> now installing dependencies, please wait ...\n\r');
+                var dependencies = require( _(self.path + '/package.json') ).ginaDependencies;
+                npmInstall(dependencies);
+            });
         }
 
         if (self.isWin32) {

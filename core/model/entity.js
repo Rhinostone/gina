@@ -60,8 +60,11 @@ function EntitySuper(conn) {
             var entityName = self.name.substr(0,1).toLowerCase() + self.name.substr(1);
             var shortName = entityName.replace(/Entity/, '');
 
-            var events = [], i = 0, cb = {};
-            var eCount = 100; // default max listeners is 5
+            var events      = []
+                , listeners = []
+                , i         = 0
+                , cb        = {}
+                , eCount = 100; // default max listeners is 5
 
             for (var f in entity) {
                 if (
@@ -75,6 +78,8 @@ function EntitySuper(conn) {
                         entityName  : entity.name,
                         seq         : 0
                     };
+
+                    listeners.push(shortName +'#'+ f);
                     ++i;
                 }
             }
@@ -105,15 +110,30 @@ function EntitySuper(conn) {
                             this[m].onComplete = function (cb) {
 
                                 //Setting local listener : normal case
-                                entity.once(events[i].shortName, function () {
-                                    cb.apply(this[m], arguments)
-                                });
+                                if ( !/d+/.test(events[i].shortName) ) {
+                                    entity.once(events[i].shortName, function () {
+                                        cb.apply(this[m], arguments)
+                                    })
+                                }
 
                                 //Setting local listener : with increment when emit occurs whithin a loop or recursive function
-                                entity.on(events[i].shortName + events[i].seq, function () {
-                                    cb.apply(this[m], arguments)
-                                });
-                                ++events[i].seq;
+                                // can also start from 0
+                                if ( listeners.indexOf(events[i].shortName + i) > -1 ) {
+                                    entity.on(events[i].shortName + i, function () {
+                                        cb.apply(this[m], arguments)
+                                    })
+                                }
+
+
+                                //Setting local listener : with increment when emit occurs whithin a loop or recursive function
+                                //if ( typeof(events[i]) != 'undefined' ) {
+                                //    entity.on(events[i].shortName + events[i].seq, function () {
+                                //        cb.apply(this[m], arguments)
+                                //    });
+                                //    ++events[i].seq;
+                                //}
+
+
 
                                 // running local code (retrieving arguments)
                                 //cached.apply(this[m], args);
