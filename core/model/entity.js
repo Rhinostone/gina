@@ -24,6 +24,7 @@ var modelUtil       = new utils.Model();
  */
 function EntitySuper(conn) {
 
+    this._maxListeners = 10;
     var self = this;
 
     var init = function() {
@@ -40,6 +41,48 @@ function EntitySuper(conn) {
         } else {
             return EntitySuper[self.name].instance
         }
+    }
+
+
+    var setListener = function(trigger) {
+
+        //self.removeAllListener(trigger);
+        if ( !/\#/.test(trigger) ) {
+            throw new Error('trigger name not properly set: use `#` between the entity name and the method reference');
+            process.exit(1)
+        } else {
+
+            self._triggers.push(trigger);
+
+            ++self._maxListeners;
+            self.setMaxListeners(self._maxListeners);
+
+            var alias       = trigger.split(/\#/)[1]
+                , method    = alias.replace(/[0-9]/g, '')
+                , events    = null
+                , i         = 0
+            ;
+
+            self._listeners.push({
+                shortName   : trigger,
+                method      : method,
+                entityName  : self.name
+            });
+
+            events  = self._listeners;
+            i       = events.length-1;
+
+            if ( self._triggers.indexOf(events[i].shortName) > -1 ) {
+                // reusable event
+                self.on(events[i].shortName, function () {
+                    //debugger;
+                    this._callbacks[trigger.replace(/[0-9]/g, '')].apply(this[method], arguments);
+                })
+            }
+        }
+
+        //return
+
     }
 
     /**
@@ -61,10 +104,9 @@ function EntitySuper(conn) {
             var shortName = entityName.replace(/Entity/, '');
 
             var events      = []
-                , listeners = []
+                , triggers  = []
                 , i         = 0
-                , cb        = {}
-                , eCount = 100; // default max listeners is 5
+                , cb        = {};
 
             for (var f in entity) {
                 if (
@@ -75,17 +117,19 @@ function EntitySuper(conn) {
                     events[i] = {
                         shortName   : shortName +'#'+ f,
                         method      : f,
-                        entityName  : entity.name,
-                        seq         : 0
+                        entityName  : entity.name
                     };
 
-                    listeners.push(shortName +'#'+ f);
+                    triggers.push(shortName +'#'+ f);
                     ++i;
                 }
             }
 
-            eCount += i;
-            self.setMaxListeners(entity.maxListeners || eCount);
+            entity._listeners       = events;
+            entity._triggers        = triggers;
+            entity._callbacks       = {};
+            entity._maxListeners    += i; // default max listeners is 10
+            entity.setMaxListeners(entity._maxListeners);
             //console.debug('['+self.name+'] setting max listeners to: ' + (entity.maxListeners || eCount) );
 
             var f = null;
@@ -110,33 +154,13 @@ function EntitySuper(conn) {
                             this[m].onComplete = function (cb) {
 
                                 //Setting local listener : normal case
-                                if ( !/d+/.test(events[i].shortName) ) {
+                                if ( entity._triggers.indexOf(events[i].shortName) > -1 ) {
                                     entity.once(events[i].shortName, function () {
                                         cb.apply(this[m], arguments)
-                                    })
+                                    });
+                                    // backing up callback
+                                    entity._callbacks[events[i].shortName] = cb;
                                 }
-
-                                //Setting local listener : with increment when emit occurs whithin a loop or recursive function
-                                // can also start from 0
-                                if ( listeners.indexOf(events[i].shortName + i) > -1 ) {
-                                    entity.on(events[i].shortName + i, function () {
-                                        cb.apply(this[m], arguments)
-                                    })
-                                }
-
-
-                                //Setting local listener : with increment when emit occurs whithin a loop or recursive function
-                                //if ( typeof(events[i]) != 'undefined' ) {
-                                //    entity.on(events[i].shortName + events[i].seq, function () {
-                                //        cb.apply(this[m], arguments)
-                                //    });
-                                //    ++events[i].seq;
-                                //}
-
-
-
-                                // running local code (retrieving arguments)
-                                //cached.apply(this[m], args);
                             }
 
 
@@ -154,6 +178,140 @@ function EntitySuper(conn) {
             return modelUtil.updateEntityObject(self.bundle, self.model, entityName, entity)
         }
     }
+
+    var arrayClone = function(arr, i) {
+        var copy = new Array(i);
+        while (i--)
+            copy[i] = arr[i];
+        return copy;
+    }
+
+    var emitOne = function(handler, isFn, self, arg1) {
+        if (isFn)
+            handler.call(self, arg1);
+        else {
+            var len = handler.length;
+            var listeners = arrayClone(handler, len);
+            for (var i = 0; i < len; ++i)
+                listeners[i].call(self, arg1);
+        }
+    }
+    var emitTwo = function(handler, isFn, self, arg1, arg2) {
+        if (isFn)
+            handler.call(self, arg1, arg2);
+        else {
+            var len = handler.length;
+            var listeners = arrayClone(handler, len);
+            for (var i = 0; i < len; ++i)
+                listeners[i].call(self, arg1, arg2);
+        }
+    }
+    var emitThree = function(handler, isFn, self, arg1, arg2, arg3) {
+        if (isFn)
+            handler.call(self, arg1, arg2, arg3);
+        else {
+            var len = handler.length;
+            var listeners = arrayClone(handler, len);
+            for (var i = 0; i < len; ++i)
+                listeners[i].call(self, arg1, arg2, arg3);
+        }
+    }
+
+    var emitMany = function(handler, isFn, self, args) {
+        if (isFn)
+            handler.apply(self, args);
+        else {
+            var len = handler.length;
+            var listeners = arrayClone(handler, len);
+            for (var i = 0; i < len; ++i)
+                listeners[i].apply(self, args);
+        }
+    }
+
+    /**
+     * custom emit based on node.js emit source
+     * Added on 2016-02-09
+     * */
+    this.emit = function emit(type) {
+        // BO Added to handle trigger with increment when `emit occurs whithin a loop or recursive function
+        if ( self._triggers.indexOf(type) == -1 && self._triggers.indexOf(type.replace(/[0-9]/g, '')) > -1 ) {
+            setListener(type)
+        }
+        // EO Added to handle trigger with increment
+
+        var er, handler, len, args, i, events, domain;
+        var needDomainExit = false;
+        var doError = (type === 'error');
+
+        events = this._events;
+        if (events)
+            doError = (doError && events.error == null);
+        else if (!doError)
+            return false;
+
+        domain = this.domain;
+
+        // If there is no 'error' event listener then throw.
+        if (doError) {
+            er = arguments[1];
+            if (domain) {
+                if (!er)
+                    er = new Error('Uncaught, unspecified "error" event');
+                er.domainEmitter = this;
+                er.domain = domain;
+                er.domainThrown = false;
+                domain.emit('error', er);
+            } else if (er instanceof Error) {
+                throw er; // Unhandled 'error' event
+            } else {
+                // At least give some kind of context to the user
+                var err = new Error('Uncaught, unspecified "error" event. (' + er + ')');
+                err.context = er;
+                throw err;
+            }
+            return false;
+        }
+
+        handler = events[type];
+
+        if (!handler)
+            return false;
+
+        if (domain && this !== process) {
+            domain.enter();
+            needDomainExit = true;
+        }
+
+        var isFn = typeof handler === 'function';
+        len = arguments.length;
+        switch (len) {
+            // fast cases
+            case 1:
+                emitNone(handler, isFn, this);
+                break;
+            case 2:
+                emitOne(handler, isFn, this, arguments[1]);
+                break;
+            case 3:
+                emitTwo(handler, isFn, this, arguments[1], arguments[2]);
+                break;
+            case 4:
+                emitThree(handler, isFn, this, arguments[1], arguments[2], arguments[3]);
+                break;
+            // slower
+            default:
+                args = new Array(len - 1);
+                for (i = 1; i < len; i++)
+                    args[i - 1] = arguments[i];
+                emitMany(handler, isFn, this, args);
+        }
+
+        if (needDomainExit)
+            domain.exit();
+
+        return true;
+    }
+
 
     /**
      * Get connection from entity
