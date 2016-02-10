@@ -24,7 +24,7 @@ var modelUtil       = new utils.Model();
  */
 function EntitySuper(conn) {
 
-    this._maxListeners = 10;
+    this._maxListeners = 50;
     var self = this;
 
     var init = function() {
@@ -80,9 +80,6 @@ function EntitySuper(conn) {
                 })
             }
         }
-
-        //return
-
     }
 
     /**
