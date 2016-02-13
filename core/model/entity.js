@@ -171,6 +171,9 @@ function EntitySuper(conn) {
 
             EntitySuper[self.name].instance =  entity;
 
+            if ( !/Entity$/.test(entityName) ) {
+                entityName = entityName + 'Entity'
+            }
             // now merging with the current entity object
             return modelUtil.updateEntityObject(self.bundle, self.model, entityName, entity)
         }
@@ -231,7 +234,7 @@ function EntitySuper(conn) {
      * */
     this.emit = function emit(type) {
         // BO Added to handle trigger with increment when `emit occurs whithin a loop or recursive function
-        if ( self._triggers.indexOf(type) == -1 && self._triggers.indexOf(type.replace(/[0-9]/g, '')) > -1 ) {
+        if ( self._triggers && self._triggers.indexOf(type) == -1 && self._triggers.indexOf(type.replace(/[0-9]/g, '')) > -1 ) {
             setListener(type)
         }
         // EO Added to handle trigger with increment
@@ -319,7 +322,7 @@ function EntitySuper(conn) {
 
     this.getEntity = function(entity) {
         entity = entity.substr(0,1).toUpperCase() + entity.substr(1);
-        if (entity.substr(entity.length-6) != 'Entity') {
+        if ( !/Entity$/.test(entity) ) {
             entity = entity + 'Entity'
         }
 

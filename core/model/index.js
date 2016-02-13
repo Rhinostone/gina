@@ -283,9 +283,9 @@ function Model(namespace) {
     this.getModelEntities = function(entitiesManager, modelPath, entitiesPath, conn, reload) {
         var suffix = 'Entity';
         var that = self;
-        if (reload && cacheless) {
-            that.i = 0
-        }
+        //if (reload && cacheless) {
+        //    that.i = 0
+        //}
 
         var i = that.i || 0;
         var files = fs.readdirSync(entitiesPath);
@@ -349,7 +349,7 @@ function Model(namespace) {
                 //    }
                 //}
 
-                entitiesManager[entityName] = EntityClass
+                entitiesManager[className] = EntityClass
 
             } catch (err) {
                 console.error(err.stack);
@@ -362,17 +362,16 @@ function Model(namespace) {
             //console.log('::::i '+i+' vs '+(files.length-1))
             if (i == files.length-1) {
                 // another one to instanciate and put in cache
+                var ntt = null;
                 for (var nttClass in entitiesManager) {
-                    var _nttClass = nttClass.substr(0,1).toUpperCase() + nttClass.substr(1);
-                    modelUtil.setModelEntity(self.bundle, self.model, _nttClass, entitiesManager[nttClass])
+                    ntt = nttClass.substr(0,1).toLowerCase() + nttClass.substr(1);
+                    modelUtil.setModelEntity(self.bundle, self.model, nttClass, entitiesManager[nttClass])
                 }
-                //finished.
-                //if ( reload ) {
-                //    self.reload(false, self.name, entitiesManager, conn)
-                //} //else {
-                    //self.emit('model#ready', false, self.name, entitiesManager, conn)
-                //}
-
+                // var nttClass = null;
+                // for (var ntt in entitiesManager) {
+                //     nttClass = ntt.substr(0,1).toUpperCase() + ntt.substr(1);
+                //     modelUtil.setModelEntity(self.bundle, self.model, nttClass, entitiesManager[ntt])
+                // }
             }
             ++that.i
 
@@ -386,7 +385,6 @@ function Model(namespace) {
                     entityName = files[that.i].replace(/.js/, "") + suffix;
                     produce(entityName, that.i);
                 } else if (that.i == files.length-1) {// All done
-
                     //if ( reload ) {
                     //    self.reload(false, self.name, entitiesManager)
                     //} else {
@@ -399,6 +397,13 @@ function Model(namespace) {
                 }
 
             }//EO while.
+        } else if (reload) {
+
+            var ntt = null;
+            for (var nttClass in entitiesManager) {
+                ntt = nttClass.substr(0,1).toLowerCase() + nttClass.substr(1);
+                modelUtil.setModelEntity(self.bundle, self.model, nttClass, entitiesManager[nttClass])
+            }
         }
     }
 
