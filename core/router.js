@@ -296,7 +296,7 @@ function Router(env) {
 
             if (cacheless) delete require.cache[_(controllerFiles[bundle], true)];
 
-            for (var b in bundles) {
+            for (var b = 0, len = bundles.length; b<len; ++b) {
                 Controllers[bundles[b]] = require(_(controllerFiles[bundles[b]], true));
             }
         } catch (err) {
@@ -310,8 +310,10 @@ function Router(env) {
             Controllers[bundle] = SuperController.prototype[namespace];
         }
 
-        Controllers[bundle] = inherits(Controllers[bundle], SuperController);
+
         try {
+            Controllers[bundle] = inherits(Controllers[bundle], SuperController);
+
             var controller = new Controllers[bundle](options);
             controller.setOptions(request, response, next, options);
 

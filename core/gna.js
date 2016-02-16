@@ -435,11 +435,13 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         gna.initialized = true;
         e.once('init', function(instance, middleware, conf) {
             var configuration = config.getInstance();
+
             modelUtil.loadAllModels(
                 conf.bundles,
                 configuration,
                 env,
                 function() {
+
                     joinContext(conf.contexts);
                     gna.getConfig = function(name){
                         var tmp = "";
@@ -657,7 +659,24 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                             e.emit('init', instance, middleware, conf);
                             //In case there is no user init.
                             if (!gna.initialized) {
-                                e.emit('complete', instance);
+                                // we want to be able to load the model
+                                var configuration = config.getInstance();
+                                modelUtil.loadAllModels(
+                                    conf.bundles,
+                                    configuration,
+                                    env,
+                                    function() {
+
+                                        joinContext(conf.contexts);
+                                        try {
+                                            //configureMiddleware(instance, express); // no, no and no...
+                                            e.emit('complete', instance);
+                                        } catch (err) {
+                                            // TODO Output this to the error logger.
+                                            console.error('Could not complete initialization: ', err.stack)
+                                        }
+
+                                    })// EO modelUtil
                             }
 
                             console.debug('[ '+core.startingApp+' ] mounted!! ', conf.bundle, process.pid)
