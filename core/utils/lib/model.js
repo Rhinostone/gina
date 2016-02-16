@@ -175,6 +175,7 @@ function ModelUtil() {
                     if ( t == models.count() ) {
 
                         var conn                = null
+                            //, connections       = {}
                             , entitiesManager   = null
                             , modelPath         = null
                             , entitiesPath      = null
@@ -268,6 +269,7 @@ function ModelUtil() {
 
             var models              = conf.content.connectors
                 , conn              = null
+                //, _conns            = {}
                 , entitiesManager   = null
                 , modelPath         = null
                 , entitiesPath      = null
@@ -275,11 +277,14 @@ function ModelUtil() {
                 , wait              = 0
                 , mObj              = {};
 
+            setContext('modelConnectors', models);
+
             // end - now, loading entities for each `loaded` model
             for (var bundle in self.models) {
 
                 for (var name in self.models[bundle]) {//name as connector name
                     conn            = self.models[bundle][name]['_connection'];
+
                     modelPath       = _(conf.modelsPath + '/' + name);
                     entitiesPath    = _(modelPath + '/entities');
 
@@ -414,7 +419,9 @@ function ModelUtil() {
             } catch (err) {
                 return undefined
             }
-        } else {
+        }
+        // TODO - remove this
+        /** else { // not supposed to work
             // we might be in a case where we are trying to import a model into another while the targetd model is not yet loaded
             // this will happen if you are trying to do it from within an entity: ModelA::entity trying to getModel(ModelB) while ModelB is not loaded yet
 
@@ -424,18 +431,18 @@ function ModelUtil() {
                 , env               = ctx['gina.config'].env
                 , conf              = ctx['gina.config'].bundlesConfiguration.conf[bundle][env]
                 , modelConnector    = ctx.modelConnectors[model] || null //self.loadModelSync(bundle, model, conf, env)
-                , conn              = modelConnector.conn
+                , conn              = ctx.modelConnections[bundle][model]
                 , entitiesManager   = null
                 , modelPath         = _(conf.modelsPath + '/' + model)
                 , entitiesPath      = _(modelPath + '/entities')
                 ;
 
             if ( modelConnector && conf && fs.existsSync(modelPath) ) {
-                conn            = modelConnector.conn;
+                conn            = modelConnector;
                 if ( cacheless )
-                    delete require.cache[_(modelPath + '/' + model + '/index.js', true)];
+                    delete require.cache[_(modelPath + '/index.js', true)];
 
-                entitiesManager = new require( _(modelPath + '/' + model + '/index.js', true) )(conn, {model: model, bundle: bundle});
+                entitiesManager = new require( _(modelPath + '/index.js', true) )(conn, {model: model, bundle: bundle});
 
                 self.setConnection(bundle, model, conn);
 
@@ -454,7 +461,7 @@ function ModelUtil() {
             } else {
                 return undefined
             }
-        }
+        }*/
     }
 
     // /**
