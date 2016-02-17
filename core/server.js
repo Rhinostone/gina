@@ -308,7 +308,7 @@ function Server(options) {
             }
 
             if ( typeof(el[1]) == 'string' && !/\[object /.test(el[1])) {
-                obj[ el[0] ] = el[1].replace(/%2B/g, ' ') // & ensure true white spaces
+                obj[ el[0] ] = decodeURIComponent(el[1])
             }
         }
         return obj
@@ -318,14 +318,6 @@ function Server(options) {
 
         var apps = self.bundles;
         var webrootLen = self.conf[self.appName][self.env].server.webroot.length;
-
-        //var body = '';
-        //self.instance.on('data', function(chunk){
-        //    if ( typeof(body) == 'object') {
-        //        body = ''
-        //    }
-        //    body += chunk.toString()
-        //});
 
         self.instance.all('*', function onInstance(request, response, next) {
             // Fixing an express js bug :(
@@ -421,7 +413,10 @@ function Server(options) {
                                     // get rid of encoding issues
                                     try {
                                         if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                                            request.body = decodeURIComponent( request.body );
+                                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
+                                                request.body = request.body.replace(/\+/g, ' ');
+                                            }
+
                                             if ( request.body.substr(0,1) == '?')
                                                 request.body = request.body.substr(1);
 
