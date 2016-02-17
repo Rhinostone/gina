@@ -11,6 +11,7 @@
 //Imports.
 var fs      = require('fs');
 var console = require('./logger');
+var math    = require('./math');
 
 
 /**
@@ -45,31 +46,6 @@ function ConfigUtil() {
         }
     }
 
-
-    ///**
-    // * Init Utils config
-    // *
-    // * @private
-    // * */
-    //var init = function(){
-    //
-    //    //getting context path thru path helper.
-    //    console.log("asking for dirname ", __dirname);
-    //    var path = new _(__dirname).toUnixStyle();
-    //    self.__dirname =  _( path.substring(0, (path.length - 4)) );
-    //
-    //    if ( self.paths.utils == undefined) {
-    //        self.paths.utils = self.__dirname
-    //    }
-    //
-    //    self.get('gina', 'locals.json', function(err, obj){
-    //        if( !err ) {
-    //            mainConfig = require(obj.paths.gina + '/config')()
-    //        } else {
-    //            console.log(err.stack)
-    //        }
-    //    })
-    //}
 
     /**
      * Set config file if !exists
@@ -261,14 +237,30 @@ function ConfigUtil() {
         };
 
         fs.exists(gnaFolder, function(exists){
-            //console.log("file exists ? ", gnaFolder, exists);
-
             if (!exists) {
                 createFolder()
             } else {
                 // test if decalred path matches real path and overwrite if not the same
                 // in case you move your project
-                if ( fs.existsSync(gnaFolder +'/'+ file) ) {
+                var filename        = _(gnaFolder +'/'+ file, true);
+                var checksumFileOld = _(gnaFolder +'/'+ math.checkSumSync( JSON.stringify( require(filename) ), 'sha1'), true) + '.txt';
+                var checksumFile    = _(gnaFolder +'/'+ math.checkSumSync( JSON.stringify(content), 'sha1'), true) + '.txt';
+
+                var verified        = (checksumFileOld == checksumFile) ? true : false;
+
+
+                if ( !fs.existsSync(checksumFile) && fs.existsSync(filename) || !fs.existsSync(filename) || !verified) {
+                    if ( fs.existsSync(filename) ) fs.unlinkSync(filename);
+                    if ( fs.existsSync(checksumFile) ) fs.unlinkSync(checksumFile);
+
+                    createContent(filename, gnaFolder, content, function(err){
+                        fs.openSync(checksumFile, 'w');
+                        setTimeout(function(){
+                            callback(err)
+                        }, 500)
+                    })
+                } else if ( fs.existsSync(filename) ) {
+
                     var locals = require(gnaFolder +'/'+ file);
 
                     if (paths.utils != locals.paths.utils) {
@@ -280,7 +272,7 @@ function ConfigUtil() {
 
                             //setTimeout(function(){
                                 //console.debug('Done removing `gnaFolder` : '+ gnaFolder);
-                                createFolder();
+                            createFolder();
                             //}, 200);
                         })
                     } else {
@@ -290,8 +282,6 @@ function ConfigUtil() {
                     callback(false)// nothing to do
                 }
             }
-
-
         })
     }
 
