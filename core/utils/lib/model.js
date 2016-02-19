@@ -183,6 +183,7 @@ function ModelUtil() {
                             , foundInitError    = false;
 
                         // end - now, loading entities for each `loaded` model
+                        //
                         for (var bundle in self.models) {
 
                             for (var name in self.models[bundle]) {//name as connector name
@@ -194,7 +195,7 @@ function ModelUtil() {
 
                                 self.setConnection(bundle, name, conn);
 
-                                // creating entities instances
+                                // step 1: creating entities classes in the context
                                 // must be done only when all models conn are alive because of `cross models/database use cases`
                                 for (var nttClass in entitiesManager) {
                                     if ( !/^[A-Z]/.test( nttClass ) ) {
@@ -202,11 +203,15 @@ function ModelUtil() {
                                         foundInitError = true
                                     }
                                     self.setModelEntity(bundle, name, nttClass, entitiesManager[nttClass])
+                                }
 
+                                // step 2: creating entities instances
+                                for (var nttClass in entitiesManager) {
                                     new entitiesManager[nttClass](conn) // will update self.models
                                 }
                             }
                         }
+
 
                         if (foundInitError) process.exit(1)
 
@@ -303,6 +308,9 @@ function ModelUtil() {
                             foundInitError = true
                         }
                         self.setModelEntity(bundle, name, nttClass, entitiesManager[nttClass])
+                    }
+
+                    for (var nttClass in entitiesManager) {
                         new entitiesManager[nttClass](conn) // will update self.models
                     }
                 }
@@ -512,14 +520,14 @@ function ModelUtil() {
                 var shortName = entityClassName.substr(0, 1).toLowerCase() + entityClassName.substr(1);
 
                 //console.debug(parent+'->getEntity('+shortName+')');
-                if ( self.models[bundle][model][shortName] && !cacheless) {
+                if ( self.models[bundle][model][shortName] ) { // cacheless is filtered thanks to self.reloadModels(...)
                     return self.models[bundle][model][shortName]
+                } else {
+                    return new self.entities[bundle][model][entityClassName](conn);
                 }
 
-                var entityObj = new self.entities[bundle][model][entityClassName](conn);
-                return entityObj
-
             } catch (err) {
+                throw err;
                 return undefined
             }
         } else {
