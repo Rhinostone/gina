@@ -24,8 +24,9 @@ var modelUtil       = new utils.Model();
  */
 function EntitySuper(conn) {
 
-    this._maxListeners = 50;
-    var self = this;
+    this._maxListeners  = 50;
+    var self            = this;
+    var cacheless       = (process.env.IS_CACHELESS == 'false') ? false : true;
 
     var init = function() {
         if (!EntitySuper[self.name]) {
@@ -138,7 +139,7 @@ function EntitySuper(conn) {
                 // only if method content is about the event
                 if ( new RegExp('('+ events[i].shortName +'\'|'+ events[i].shortName +'\"|'+ events[i].shortName +'$)').test(entity[f].toString()) ) {
 
-                    entity[f] = (function(e, m, i) {
+                    entity[f] = (function onEntityEvent(e, m, i) {
                         //console.debug('setting listener for: [ '+self.model+'/'+self.name+'::' + e + ' ]');
 
                         var cached = entity[m];
@@ -152,6 +153,7 @@ function EntitySuper(conn) {
 
                                 //Setting local listener : normal case
                                 if ( entity._triggers.indexOf(events[i].shortName) > -1 ) {
+
                                     entity.once(events[i].shortName, function () {
                                         cb.apply(this[m], arguments)
                                     });
@@ -330,7 +332,7 @@ function EntitySuper(conn) {
             return getModelEntity(self.bundle, self.model, entity, conn)
 
         } catch (err) {
-            throw new Error(err.stack);
+            throw err;
             return null
         }
     }

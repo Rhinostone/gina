@@ -247,7 +247,8 @@ function Router(env) {
         var namespace       = params.param.namespace;
         var routeHasViews   = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
         local.routeHasViews = routeHasViews;
-        local.next = next;
+        local.next          = next;
+        local.isXMLRequest  = params.isXMLRequest;
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
         local.cacheless = cacheless;
@@ -285,7 +286,8 @@ function Router(env) {
             instance        : self.middlewareInstance,
             views           : ( routeHasViews ) ? conf.content.views : undefined,
             cacheless       : cacheless,
-            rule            : params.rule
+            rule            : params.rule,
+            isXMLRequest    : params.isXMLRequest
         };
 
         for (var p in params.param) {
@@ -416,9 +418,10 @@ function Router(env) {
 
     var throwError = function(res, code, msg) {
         if (arguments.length < 3) {
-            var res = local.res;
-            var code = res || 500;
-            var msg = code || null;
+            var msg     = code || null
+                , code  = res || 500
+                , res   = local.res;
+
             if ( typeof(msg) != 'string' ) {
                 msg = JSON.stringify(msg)
             }
@@ -437,8 +440,16 @@ function Router(env) {
 
         } else {
             if (!res.headersSent) {
-                res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
+                if (local.isXMLRequest) {
+                    res.writeHead(code, { 'Content-Type': 'application/json'} );
+                    res.end(JSON.stringify({
+                        status: code,
+                        error: 'Error '+ code +'. '+ msg
+                    }))
+                } else {
+                    res.writeHead(code, { 'Content-Type': 'text/html'} );
+                    res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
+                }
             } else {
                 local.next()
             }

@@ -57,6 +57,11 @@ function Server(options) {
             self.conf[self.appName][self.env] = options.conf[self.appName][self.env];
             self.conf[self.appName][self.env].bundlesPath = options.conf[self.appName][self.env].bundlesPath;
             self.conf[self.appName][self.env].modelsPath =  options.conf[self.appName][self.env].modelsPath;
+            if (!self.conf[self.appName][self.env].server.request) {
+                self.conf[self.appName][self.env].server.request = {
+                    isXMLRequest: false
+                }
+            }
         } else {
 
             //console.log("Running mode not handled yet..", self.appName, " VS ", self.bundles);
@@ -67,6 +72,11 @@ function Server(options) {
                 self.conf[apps[i]][self.env] = options.conf[apps[i]][self.env];
                 self.conf[apps[i]][self.env].bundlesPath = options.conf[apps[i]][self.env].bundlesPath;
                 self.conf[apps[i]][self.env].modelsPath = options.conf[apps[i]][self.env].modelsPath;
+                if (!self.conf[apps[i]][self.env].server.request) {
+                    self.conf[apps[i]][self.env].server.request = {
+                        isXMLRequest: false
+                    }
+                }
             }
         }
 
@@ -339,7 +349,7 @@ function Server(options) {
             //request.delete = {}; //?
             request.body = {};
 
-
+            self.conf[self.appName][self.env].server.request.isXMLRequest  = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
 
             // multipart wrapper for uploads
             // files are available from your controller or any middlewares:
@@ -591,10 +601,11 @@ function Server(options) {
             , withViews     = hasViews(bundle)
             , router        = local.router
             , cacheless     = config.isCacheless()
-            , wroot         = null;
+            , wroot         = null
+            , isXMLRequest  = self.conf[bundle][self.env].server.request.isXMLRequest;
 
-        if (self.conf[self.appName][self.env]['hostname'] != req.headers.host) {
-            self.conf[self.appName][self.env]['hostname'] = req.headers.host
+        if (self.conf[bundle][self.env]['hostname'] != req.headers.host) {
+            self.conf[bundle][self.env]['hostname'] = req.headers.host
         }
         console.debug('about to handle [ '+ pathname + ' ] route');
         router.setMiddlewareInstance(self.instance);
@@ -616,12 +627,13 @@ function Server(options) {
 
                 //Preparing params to relay to the router.
                 params = {
-                    requirements : routing[rule].requirements,
-                    url : unescape(pathname), /// avoid %20
-                    rule: routing[rule].originalRule || rule,
-                    param : routing[rule].param,
-                    middleware : routing[rule].middleware,
-                    bundle: routing[rule].bundle
+                    requirements    : routing[rule].requirements,
+                    url             : unescape(pathname), /// avoid %20
+                    rule            : routing[rule].originalRule || rule,
+                    param           : routing[rule].param,
+                    middleware      : routing[rule].middleware,
+                    bundle          : routing[rule].bundle,
+                    isXMLRequest    : isXMLRequest
                 };
                 //Parsing for the right url.
                 try {
@@ -764,7 +776,8 @@ function Server(options) {
     }
 
     var throwError = function(res, code, msg, next) {
-        var withViews = local.hasViews[self.appName] || hasViews(self.appName);
+        var withViews       = local.hasViews[self.appName] || hasViews(self.appName);
+        var isXMLRequest    = self.conf[self.appName][self.env].server.request.isXMLRequest;
 
         if ( !withViews ) {
             if (!res.headersSent) {
@@ -780,9 +793,18 @@ function Server(options) {
 
         } else {
             if (!res.headersSent) {
-                res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
-                res.headersSent = true
+                if (isXMLRequest) {
+                    res.writeHead(code, { 'Content-Type': 'application/json'} );
+                    res.end(JSON.stringify({
+                        status: code,
+                        error: 'Error '+ code +'. '+ msg
+                    }));
+                    res.headersSent = true
+                } else {
+                    res.writeHead(code, { 'Content-Type': 'text/html'} );
+                    res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                    res.headersSent = true
+                }
             } else {
                 next()
             }

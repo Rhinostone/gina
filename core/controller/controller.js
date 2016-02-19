@@ -440,11 +440,15 @@ function Controller(options) {
         }
     }
 
+    this.isXMLRequest = function() {
+        return local.options.isXMLRequest
+    }
 
     /**
      * Render JSON
      *
      * @param {object|string} jsonObj
+     *
      * @return {void}
      * */
     this.renderJSON = function(jsonObj) {
@@ -474,6 +478,7 @@ function Controller(options) {
         }
 
     }
+
 
     this.renderTEXT = function(content) {
         if ( typeof(content) != "string" ) {
@@ -1096,11 +1101,24 @@ function Controller(options) {
         }
     }
 
+    /**
+     * Throw error
+     *
+     * @param {object} [ res ]
+     * @param {number} code
+     * @param {string} msg
+     *
+     * @return {void}
+     * */
     this.throwError = function(res, code, msg) {
         if (arguments.length < 3) {
-            var res = local.res;
-            var code = res || 500;
-            var msg = code || null;
+            var msg     = code || null
+                , code  = res || 500
+                , res   = local.res;
+
+            if ( typeof(msg) != 'string' ) {
+                msg = JSON.stringify(msg)
+            }
         }
 
         if ( !hasViews() ) {
@@ -1116,28 +1134,20 @@ function Controller(options) {
 
         } else {
             if (!res.headersSent) {
-                res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>')
+                if ( self.isXMLRequest() ) {
+                    res.writeHead(code, { 'Content-Type': 'application/json'} );
+                    res.end(JSON.stringify({
+                        status: code,
+                        error: 'Error '+ code +'. '+ msg
+                    }))
+                } else {
+                    res.writeHead(code, { 'Content-Type': 'text/html'} );
+                    res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>')
+                }
             } else {
                 local.next()
             }
         }
-
-        //if ( !res.headersSent ) {
-        //    if ( !hasViews() ) {
-        //        res.writeHead(code, { 'Content-Type': 'application/json'} );
-        //        res.end(JSON.stringify({
-        //            status: code,
-        //            error: 'Error '+ code +'. '+ msg
-        //        }))
-        //    } else {
-        //        res.writeHead(code, { 'Content-Type': 'text/html'} );
-        //        res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
-        //        local.res.headersSent = true;
-        //    }
-        //} else {
-        //    local.next()
-        //}
     }
 
     // converting references to objects
