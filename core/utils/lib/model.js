@@ -262,9 +262,14 @@ function ModelUtil() {
 
 
             } else {
-                //cb(new Error('no connector found'));
-                console.error( new Error('no connector found for bundle [ '+ bundle +' ]') );
-                loadModel(b+1, bundles, configuration, env, cb)
+                //throw new Error('no connector found for bundle [ '+ bundle +' ]');
+                // this is normal if there is no connector.json found in the source
+                if (b < bundles.length-1) {
+                    loadModel(b+1, bundles, configuration, env, cb)
+                } else {
+                    cb()
+                }
+
             }
         };
 
