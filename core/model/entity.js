@@ -154,7 +154,7 @@ function EntitySuper(conn) {
                                 //Setting local listener : normal case
                                 if ( entity._triggers.indexOf(events[i].shortName) > -1 ) {
 
-                                    entity.once(events[i].shortName, function () {
+                                    entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
                                         cb.apply(this[m], arguments)
                                     });
                                     // backing up callback
