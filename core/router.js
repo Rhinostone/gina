@@ -391,6 +391,7 @@ function Router(env) {
                     middleware.redirect     = controller.redirect;
                     middleware.render       = controller.render;
                     middleware.renderJSON   = controller.renderJSON;
+                    middleware.isXMLRequest = controller.isXMLRequest;
 
                     middleware[constructor](req, res, next,
                         function onMiddlewareProcessed(req, res, next){
