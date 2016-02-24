@@ -355,16 +355,23 @@ function ModelUtil() {
                 , file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
                 , a         = file.replace('.js', '').split('/')
                 , i         = a.length-1
-                , bundles   = getContext('gina.config').bundles
-                , bundle    = null
-                , index     = 0;
+                , bundle    = null;
 
-            for (; i >= 0; --i) {
-                index = bundles.indexOf(a[i]);
-                if ( index > -1 ) {
-                    bundle = bundles[index];
-                    break
+            var conf        = getContext('gina.config') || null;
+            if (conf) {
+                var bundles     = conf.bundles
+                    , index     = 0;
+
+                for (; i >= 0; --i) {
+                    index = bundles.indexOf(a[i]);
+                    if ( index > -1 ) {
+                        bundle = bundles[index];
+                        break
+                    }
                 }
+            } else {
+                conf    = getContext();
+                bundle  = conf.bundle;
             }
         }
 

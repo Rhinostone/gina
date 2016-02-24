@@ -113,6 +113,7 @@ gna.env.isWin32 = process.env.isWin32 = isWin32
 
 //Cahceless is also defined in the main config : Config::isCacheless().
 process.env.IS_CACHELESS = (env == "dev" || env == "debug") ? true : false;
+setContext('cacheless', process.env.IS_CACHELESS);
 
 //console.log('ENV => ', env);
 //console.log('HOW  ', process.argv.length, process.argv);
@@ -413,6 +414,10 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
             abort('No bundle found for path: ' + path)
         } else {
             setContext('bundle', appName);
+            setContext('env', env);
+            setContext('bundlesPath', _( root +'/'+ path.split('/')[0]) );
+            setContext('bundlePath', _( root +'/'+ path) );
+            setPath('bundlesPath', _( root +'/'+ path.split('/')[0]) );
             //to remove after merging gina processes into a single process.
             var processList = getContext('processList');
             process.list = processList;
