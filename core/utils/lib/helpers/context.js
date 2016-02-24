@@ -87,36 +87,40 @@ function ContextHelper(contexts) {
 
 
     var throwError = function(code, err) {
-        var router      = getContext('router')
-            , res       = router.response
-            , next      = router.next
-            , hasViews  = router.hasViews
-            , code      = code;
+        var router      = getContext('router');
+        if (router) {
+            var res       = router.response
+                , next      = router.next
+                , hasViews  = router.hasViews
+                , code      = code;
 
 
-        if (arguments.length < 2) {
-            var err = code;
-            code = 500
-        }
-
-        if ( !hasViews ) {
-            if (!res.headersSent) {
-                res.writeHead(code, { 'Content-Type': 'application/json'} );
-                res.end(JSON.stringify({
-                    status: code,
-                    error: 'Error '+ code +'. '+ err.stack
-                }))
-            } else {
-                next()
+            if (arguments.length < 2) {
+                var err = code;
+                code = 500
             }
 
+            if ( !hasViews ) {
+                if (!res.headersSent) {
+                    res.writeHead(code, { 'Content-Type': 'application/json'} );
+                    res.end(JSON.stringify({
+                        status: code,
+                        error: 'Error '+ code +'. '+ err.stack
+                    }))
+                } else {
+                    next()
+                }
+
+            } else {
+                if (!res.headersSent) {
+                    res.writeHead(code, { 'Content-Type': 'text/html'} );
+                    res.end('<h1>Error '+ code +'.</h1><pre>'+ err.stack + '</pre>')
+                } else {
+                    next()
+                }
+            }
         } else {
-            if (!res.headersSent) {
-                res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('<h1>Error '+ code +'.</h1><pre>'+ err.stack + '</pre>')
-            } else {
-                next()
-            }
+            throw err
         }
     }
 
@@ -142,21 +146,33 @@ function ContextHelper(contexts) {
                 , libPath   = null
                 , file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
                 , a         = file.replace('.js', '').split('/')
-                , i         = a.length-1
-                , conf      = getContext('gina.config')
-                , bundles   = conf.bundles
-                , env       = conf.env
-                , cacheless = conf.isCacheless()
-                , bundle    = null
-                , index     = 0;
+                , i         = a.length-1;
 
-            for (; i >= 0; --i) {
-                index = bundles.indexOf(a[i]);
-                if ( index > -1 ) {
-                    bundle = bundles[index];
-                    break
+            var conf        = getContext('gina.config') || null;
+
+            if (conf) {
+                var bundles   = conf.bundles
+                    , env       = conf.env
+                    , cacheless = conf.isCacheless()
+                    , bundle    = null
+                    , index     = 0;
+
+                for (; i >= 0; --i) {
+                    index = bundles.indexOf(a[i]);
+                    if ( index > -1 ) {
+                        bundle = bundles[index];
+                        break
+                    }
                 }
+            } else { // by default
+                conf            = getContext();
+                bundle          = conf.bundle;
+                libPath         = _( conf.bundlePath +'/lib', true); // TODO - to replace by the env.json variable
+                var env         = conf.env
+                    , cacheless = conf.cacheless;
+
             }
+
         } else {
             var libPath     = null
                 , conf      = getContext('gina.config')
@@ -167,16 +183,20 @@ function ContextHelper(contexts) {
         if ( typeof(lib) != 'undefined' ) {
 
             try {
-                libPath = _(conf.bundlesConfiguration.conf[bundle][env].libPath +'/'+ lib, true);
-                if (cacheless) delete require.cache[libPath];
+                if (!libPath)
+                    libPath = conf.bundlesConfiguration.conf[bundle][env].libPath;
+
+                var libToLoad = _(libPath +'/'+ lib, true);
+
+                if (cacheless) delete require.cache[libToLoad];
 
                 // init with options
                 try {
-                    return require(libPath)({
+                    return require(libToLoad)({
                         bundle      : bundle,
                         env         : env,
                         cacheless   : cacheless,
-                        libPath     : conf.bundlesConfiguration.conf[bundle][env].libPath
+                        libPath     : libPath
                     })
                 } catch(err) {
                     throwError(500, err)
