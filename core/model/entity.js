@@ -52,32 +52,43 @@ function EntitySuper(conn) {
             throw new Error('trigger name not properly set: use `#` between the entity name and the method reference');
             process.exit(1)
         } else {
+            if ( self._triggers.indexOf(trigger) < 0 ) {
+                self._triggers.push(trigger);
 
-            self._triggers.push(trigger);
+                ++self._maxListeners;
+                self.setMaxListeners(self._maxListeners);
 
-            ++self._maxListeners;
-            self.setMaxListeners(self._maxListeners);
+                var alias       = trigger.split(/\#/)[1]
+                    , method    = alias.replace(/[0-9]/g, '')
+                    , events    = null
+                    , i         = 0
+                    ;
 
-            var alias       = trigger.split(/\#/)[1]
-                , method    = alias.replace(/[0-9]/g, '')
-                , events    = null
-                , i         = 0
-            ;
+                self._listeners.push({
+                    shortName   : trigger,
+                    method      : method,
+                    entityName  : self.name
+                });
 
-            self._listeners.push({
-                shortName   : trigger,
-                method      : method,
-                entityName  : self.name
-            });
+                events  = self._listeners;
+                i       = events.length-1;
 
-            events  = self._listeners;
-            i       = events.length-1;
+                if ( self._triggers.indexOf(events[i].shortName) > -1 ) {
+                    // reusable event
+                    self.on(events[i].shortName, function () {
+                        //debugger;
+                        this._callbacks[trigger.replace(/[0-9]/g, '')].apply(this[method], arguments);
+                    })
+                }
 
-            if ( self._triggers.indexOf(events[i].shortName) > -1 ) {
-                // reusable event
-                self.on(events[i].shortName, function () {
-                    //debugger;
-                    this._callbacks[trigger.replace(/[0-9]/g, '')].apply(this[method], arguments);
+            } else { // patched for Air Liquide: case when emit occurs before listener is ready
+
+                self.once(trigger, function () {
+                    if (!this._arguments) {
+                        this._arguments = {}
+                    }
+                    // retrieving local arguments, & binding it to the event callback
+                    this._arguments[trigger] = arguments;
                 })
             }
         }
@@ -154,14 +165,18 @@ function EntitySuper(conn) {
                                 //Setting local listener : normal case
                                 if ( entity._triggers.indexOf(events[i].shortName) > -1 ) {
 
-                                    entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
-                                        cb.apply(this[m], arguments)
-                                    });
-                                    // backing up callback
-                                    entity._callbacks[events[i].shortName] = cb;
+                                    if ( typeof(entity._arguments) == 'undefined' || typeof(entity._arguments) != 'undefined' && typeof(entity._arguments[events[i].shortName]) == 'undefined' ) {
+                                        entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
+                                            cb.apply(this[m], arguments)
+                                        });
+
+                                        // backing up callback
+                                        entity._callbacks[events[i].shortName] = cb;
+                                    } else { // in case the event is not ready yet
+                                        cb.apply(entity[m], entity._arguments[events[i].shortName])
+                                    }
                                 }
                             }
-
 
                             return this[m] // chaining event & method
                         };
@@ -236,7 +251,11 @@ function EntitySuper(conn) {
      * */
     this.emit = function emit(type) {
         // BO Added to handle trigger with increment when `emit occurs whithin a loop or recursive function
-        if ( self._triggers && self._triggers.indexOf(type) == -1 && self._triggers.indexOf(type.replace(/[0-9]/g, '')) > -1 ) {
+        if (
+            self._triggers && self._triggers.indexOf(type) == -1 && self._triggers.indexOf(type.replace(/[0-9]/g, '')) > -1
+            || self._triggers.indexOf(type) > -1 && typeof(self._callbacks[type]) == 'undefined' && typeof(self._events[type]) == 'undefined'
+
+        ) {
             setListener(type)
         }
         // EO Added to handle trigger with increment
