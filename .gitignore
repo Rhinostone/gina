@@ -24,3 +24,4 @@ desktop.ini
 /data
 /cgi-bin
 ._.DS_Store
+npm-debug.log
