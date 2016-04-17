@@ -384,7 +384,10 @@ function Controller(options) {
                                 }
                             } else {
                                 if ( Array.isArray(url) ) {
-                                    url = url[0] // just taking the default one
+                                    url = url[0] || url[1] // just taking the default one: using the first element unless it is empty.
+                                    if (!url) {
+                                        self.throwError(local.res, 500, new Error('please check your `routing.json` at the defined rule `'+rule+'` : `url` attribute cannot be empty').stack)
+                                    }
                                 }
                             }
                         } else {
