@@ -456,13 +456,23 @@ function Controller(options) {
      * */
     this.renderJSON = function(jsonObj) {
         try {
+            // just in case
+            if ( typeof(jsonObj) == 'string') {
+                jsonObj = JSON.parse(jsonObj)
+            }
 
-            if(typeof(local.options) != "undefined" && typeof(local.options.charset) != "undefined"){
+            if( typeof(local.options) != "undefined" && typeof(local.options.charset) != "undefined" ){
                 local.res.setHeader("charset", local.options.charset);
             }
 
             if ( !local.res.get('Content-Type') ) {
                 local.res.setHeader("Content-Type", "application/json");
+            }
+
+            //catching errors
+            if ( typeof(jsonObj.errno) != 'undefined' && local.res.statusCode == 200 || typeof(jsonObj.status) != 'undefined' && jsonObj.status == 500) {
+                local.res.statusCode    = 500;
+                local.res.statusMessage = 'Internal Server Error';
             }
 
             // Internet Explorer override
