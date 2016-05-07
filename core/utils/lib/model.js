@@ -31,8 +31,9 @@ function ModelUtil() {
     var init = function() {
 
         if ( !ModelUtil.instance && !getContext('modelUtil') ) {
-            self.models = self.models || {};
+            self.models = self.models || {}; // used when getModel(modelName) is called
             self.entities = {};
+            self.entitiesCollection = {}; // used when getEntity(entityName) is called - handles entity relations
             self.files = {};
             setContext('modelUtil', self);
             ModelUtil.instance = self;
@@ -51,8 +52,14 @@ function ModelUtil() {
             if (!self.models) {
                 self.models = {}
             }
+            if (!self.entitiesCollection) {
+                self.entitiesCollection = {}
+            }
             if (!self.models[bundle]) {
                 self.models[bundle] = {}
+            }
+            if (!self.entitiesCollection[bundle]) {
+                self.entitiesCollection[bundle] = {}
             }
             if ( typeof(name) == 'undefined' || name == '' ) {
                 throw new Error('Connection must have a name !')
@@ -66,10 +73,16 @@ function ModelUtil() {
                 self.files[bundle][name] = {}
             }
 
+            if (typeof(self.entitiesCollection[bundle][name]) == 'undefined') {
+                self.entitiesCollection[bundle][name] = {};
+            }
+
 
             self.models[bundle][name]['_connection'] = conn;
+            self.entitiesCollection[bundle][name]['_connection'] = conn;
         } else {
-            self.models[bundle] = {}
+            self.models[bundle] = {};
+            self.entitiesCollection[bundle] = {}
         }
     }
 
@@ -107,7 +120,7 @@ function ModelUtil() {
         }
     }
 
-    this.updateEntityObject = function(bundle, model, name, entityObject) {
+    this.updateModel = function(bundle, model, name, entityObject) {
 
         if ( typeof(model) == 'undefined' || model == '' ) {
             throw new Error('`modelUtil` cannot update `entityObject` whitout a connector !')
@@ -126,6 +139,25 @@ function ModelUtil() {
         return self.models[bundle][model][name]
     }
 
+    this.updateEntities = function(bundle, model, name, entityObject) {
+
+        if ( typeof(model) == 'undefined' || model == '' ) {
+            throw new Error('`modelUtil` cannot update `entityObject` whitout a connector !')
+        }
+
+        if ( typeof(name) == 'undefined' || name == '' ) {
+            throw new Error('`modelUtil` cannot set `modelEntity` whitout a name !')
+        }
+
+        if (!self.entitiesCollection[bundle][model][name]) {
+            self.entitiesCollection[bundle][model][name] = {}
+        }
+
+        self.entitiesCollection[bundle][model][name] =  entityObject;
+
+        return self.entitiesCollection[bundle][model][name]
+    }
+
     this.setModel = function(bundle, name, obj) {
         if (arguments.length > 2) {
             if ( typeof(name) == 'undefined' || name == '' ) {
@@ -135,15 +167,24 @@ function ModelUtil() {
             if (!self.models[bundle]) {
                 self.models[bundle] = {}
             }
+            if (!self.entitiesCollection[bundle]) {
+                self.entitiesCollection[bundle] = {}
+            }
+            //entitiesCollection
 
             if (!self.models[bundle][name]) {
                 self.models[bundle][name] = {}
             }
+            if (!self.entitiesCollection[bundle][name]) {
+                self.entitiesCollection[bundle][name] = {}
+            }
 
-            self.models[bundle][name] = merge(self.models[bundle][name], obj)
+            self.models[bundle][name] = merge(self.models[bundle][name], obj);
+            self.entitiesCollection[bundle][name] = merge(self.entitiesCollection[bundle][name], obj)
 
         } else {
-            self.models[bundle][name] = {}
+            self.models[bundle][name] = {};
+            self.entitiesCollection[bundle][name] = {}
         }
     }
 
@@ -533,7 +574,8 @@ function ModelUtil() {
 
                 //console.debug(parent+'->getEntity('+shortName+')');
                 if ( self.models[bundle][model][shortName] ) { // cacheless is filtered thanks to self.reloadModels(...)
-                    return self.models[bundle][model][shortName]
+                    //return self.models[bundle][model][shortName]
+                    return self.entitiesCollection[bundle][model][shortName]
                 } else {
                     return new self.entities[bundle][model][entityClassName](conn);
                 }

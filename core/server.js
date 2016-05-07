@@ -215,9 +215,13 @@ function Server(options) {
                                 if (localWroot.substr(localWroot.length-1,1) == '/') {
                                     localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
                                 }
-                                tmp[rule].url = localWroot + tmp[rule].url
+                                if ( typeof(tmp[rule].param.ignoreWebRoot) == 'undefined' || !tmp[rule].param.ignoreWebRoot )
+                                    tmp[rule].url = localWroot + tmp[rule].url
                             } else {
-                                tmp[rule].url = wroot + tmp[rule].url
+                                if ( typeof(tmp[rule].param.ignoreWebRoot) == 'undefined' || !tmp[rule].param.ignoreWebRoot )
+                                    tmp[rule].url = wroot + tmp[rule].url
+                                else if (!tmp[rule].url.length)
+                                    tmp[rule].url += '/'
                             }
 
                         } else {
@@ -225,15 +229,15 @@ function Server(options) {
                             for (var u=0; u<tmp[rule].url.length; ++u) {
                                 if (tmp[rule].url[u].length > 1 && tmp[rule].url[u].substr(0,1) != '/') {
                                     tmp[rule].url[u] = '/'+tmp[rule].url[u]
-                                //} else if (tmp[rule].url[u].length > 1 && self.conf[apps[i]][self.env].server.webroot.substr(self.conf[apps[i]][self.env].server.webroot.length-1,1) == '/') {
-                                //    tmp[rule].url[u] = tmp[rule].url[u].substr(1)
                                 } else {
                                     if (wroot.substr(wroot.length-1,1) == '/') {
                                         wroot = wroot.substr(wroot.length-1,1).replace('/', '')
                                     }
                                 }
-
-                                tmp[rule].url[u] = wroot + tmp[rule].url[u]
+                                if ( typeof(tmp[rule].param.ignoreWebRoot) == 'undefined' || !tmp[rule].param.ignoreWebRoot )
+                                    tmp[rule].url[u] = wroot + tmp[rule].url[u]
+                                else if (!tmp[rule].url.length)
+                                    tmp[rule].url += '/'
                             }
                         }
 

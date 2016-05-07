@@ -34,11 +34,7 @@ function EntitySuper(conn) {
         }
 
         if ( !EntitySuper[self.name].instance ) {
-            if (EntitySuper[self.name].initialized) {
-                return setListeners(EntitySuper[self.name].instance)
-            } else {
-                return setListeners()
-            }
+            return setListeners()
         } else {
             return EntitySuper[self.name].instance
         }
@@ -98,16 +94,21 @@ function EntitySuper(conn) {
      * Set all main listenners at once
      * TODO - add a mutex in case you have 2 threads trying to access the same method at the same time
      * */
-    var setListeners = function(instance) {
-        if ( !EntitySuper[self.name].initialized ) {
-            EntitySuper[self.name].initialized = true;
+    //var setListeners = function(instance) {
 
+
+    var setListeners = function() {
+        if ( !EntitySuper[self.name].initialized ) {
+
+            EntitySuper[self.name].initialized = true;
             // get entity objet
-            var entity = instance || self.getEntity(self.name);
+            //var entity = instance || self.getEntity(self.name);
+            var entity = self.getEntity(self.name);
             if (!entity) return false;
 
+
             // use this property inside your entity to disable listeners
-            if (entity.hasOwnEvents) return false;
+            if (self.hasOwnEvents) return false;
 
             var entityName = self.name.substr(0,1).toLowerCase() + self.name.substr(1);
             var shortName = entityName.replace(/Entity/, '');
@@ -186,15 +187,18 @@ function EntitySuper(conn) {
                 }
             };
 
-            EntitySuper[self.name].instance =  entity;
+            EntitySuper[self.name].instance = entity;
 
             if ( !/Entity$/.test(entityName) ) {
                 entityName = entityName + 'Entity'
             }
+
             // now merging with the current entity object
-            return modelUtil.updateEntityObject(self.bundle, self.model, entityName, entity)
+            modelUtil.updateEntities(self.bundle, self.model, entityName, self); // to handle this.getEntity(...)
+            return modelUtil.updateModel(self.bundle, self.model, entityName, entity);
         }
     }
+
 
     var arrayClone = function(arr, i) {
         var copy = new Array(i);
@@ -253,8 +257,7 @@ function EntitySuper(conn) {
         // BO Added to handle trigger with increment when `emit occurs whithin a loop or recursive function
         if (
             self._triggers && self._triggers.indexOf(type) == -1 && self._triggers.indexOf(type.replace(/[0-9]/g, '')) > -1
-            || self._triggers.indexOf(type) > -1 && typeof(self._callbacks[type]) == 'undefined' && typeof(self._events[type]) == 'undefined'
-
+            || self._triggers && self._triggers.indexOf(type) > -1 && typeof(self._callbacks[type]) == 'undefined' && typeof(self._events[type]) == 'undefined'
         ) {
             setListener(type)
         }
@@ -348,7 +351,7 @@ function EntitySuper(conn) {
         }
 
         try {
-            return getModelEntity(self.bundle, self.model, entity, conn)
+            return getModelEntity(self.bundle, self.model, entity, conn);
 
         } catch (err) {
             throw err;

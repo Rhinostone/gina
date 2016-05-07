@@ -621,24 +621,27 @@ function Config(opt) {
                             if (localWroot.substr(localWroot.length-1,1) == '/') {
                                 localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
                             }
-
-                            routing[rule].url = localWroot + routing[rule].url
+                            if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
+                                routing[rule].url = localWroot + routing[rule].url
                         } else {
-                            routing[rule].url = wroot + routing[rule].url
+                            if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
+                                routing[rule].url = wroot + routing[rule].url
+                            else if (!routing[rule].url.length)
+                                routing[rule].url += '/'
                         }
                     } else {
                         for (var u=0; u<routing[rule].url.length; ++u) {
                             if (routing[rule].url[u].length > 1 && routing[rule].url[u].substr(0,1) != '/') {
                                 routing[rule].url[u] = '/' + routing[rule].url[u]
-                            //} else if (routing[rule].url.length > 1 && conf[bundle][env].server.webroot.substr(conf[bundle][env].server.webroot.length-1,1) == '/' && routing[rule].url[u] != '/') {
-                            //    routing[rule].url[u] = routing[rule].url[u].substr(1)
                             } else {
                                 if (wroot.substr(wroot.length-1,1) == '/') {
                                     wroot = wroot.substr(wroot.length-1,1).replace('/', '')
                                 }
                             }
-
-                            routing[rule].url[u] =  wroot + routing[rule].url[u]
+                            if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
+                                routing[rule].url[u] =  wroot + routing[rule].url[u]
+                            else if (!routing[rule].url.length)
+                                routing[rule].url += '/'
                         }
                     }
 
