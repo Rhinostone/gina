@@ -1,6 +1,6 @@
 {
   "name": "gina",
-  "version": "0.0.9p77a",
+  "version": "0.0.9p77m46",
   "description": "MVC Framework for Node.",
   "keywords": [
     "framework",
@@ -25,20 +25,21 @@
     "email": "gina@rhinosotne.com"
   },
   "copyright": "Copyright (c) 2009-2016 Rhinostone <gina@rhinostone.com>",
+  "_bundledDependencies": [ {"express": "4.x"}, {"swig": ""}, {"multiparty": ""}, {"colors": ""} ],
   "ginaDependencies": {
-    "colors": "",
     "express": "4.x",
     "swig": "",
-    "multiparty": ""
+    "multiparty": "",
+    "colors": ""
   },
   "engines": {
-    "node": ">=0.10.22 <=0.12"
+    "node": ">=0.10.22"
   },
   "main": "core/gna",
   "scripts": {
-    "test": "nodeunit test",
-    "preinstall": "node script/pre_install.js",
-    "postinstall": "node script/post_install.js"
+    "preinstall": "node ./script/pre_install.js",
+    "postinstall": "node ./script/post_install.js",
+    "test": "nodeunit test"
   },
   "license": "MIT",
   "readmeFilename": "README.md"

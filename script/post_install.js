@@ -8,7 +8,6 @@
 
 //Imports
 var fs      = require('fs');
-var child   = require('child_process');
 var os      = require('os');
 var utils   = require('./../core/utils');
 
@@ -30,6 +29,7 @@ function PostInstall() {
         self.path = _( __dirname.substring(0, (__dirname.length - "script".length)-1 ) );
         self.root = process.cwd().toString();
 
+
         createVersionFile();
         //console.log('[ debug ] createVersionFile()');
         createGinaFileForPlatform();
@@ -42,23 +42,26 @@ function PostInstall() {
         try {
             if ( fs.existsSync(target) ) {
                 fs.unlinkSync(target);
-                if (callback) {
+                setTimeout(function(){
+                    if (callback) {
 
-                    setTimeout(function(){
 
+
+                            fs.writeFileSync(target, version);
+                            callback()
+
+                    } else {
                         fs.writeFileSync(target, version);
-                        callback()
-                    }, 1000)
-                } else {
-                    fs.writeFileSync(target, version);
-                }
+                    }
+                }, 1000)
+
             } else {
                 fs.writeFileSync(target, version);
             }
 
         } catch(err) {
             throw err;
-            process.exit(1)
+            process.exit(0)
         }
     }
 
@@ -103,7 +106,10 @@ function PostInstall() {
                 // old NPM : < 3 & compatible 3+
                 console.log('> now installing dependencies, please wait ...\n\r');
                 var dependencies = require( _(self.path + '/package.json') ).ginaDependencies;
+
+                // starting from NodeJS v5.x, it is done automatically
                 npmInstall(dependencies);
+
             });
         }
 
@@ -152,15 +158,30 @@ function PostInstall() {
 
         delete modules[key];
 
+        if ( !fs.existsSync(self.path) ) {
+            fs.mkdirSync(self.path)
+        }
+
+        if ( !fs.existsSync(self.path +'/node_modules') ) {
+            fs.mkdirSync(self.path +'/node_modules')
+        }
+
+        if ( !fs.existsSync(self.path +'/tmp') ) {
+            fs.mkdirSync(self.path +'/tmp')
+        }
+
+        //console.debug('cwd: ' + _(self.path));
+        //console.debug('tmp: ' +  _(self.root +'/tmp'));
 
         run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp')  })
             .onData(function(data){
                 //console.info(data)
             })
             .onComplete( function done(err, data){
-                //if (err) {
-                //    console.error(err)
-                //} else {
+                if (err && err != 'false') {
+                    console.error(err);
+                    //console.debug('\nCommand was: \n'+ cmd)
+                } //else {
                     //console.info(data);
                     //end()
                 //}
@@ -189,35 +210,56 @@ function PostInstall() {
             middleware = 'express@' + middleware;
         } else if (typeof(middleware) == 'undefined') {
             throw new Error('No middleware found !!');
-            process.exit(1)
+            process.exit(0)
         }
 
         if ( fs.existsSync(filename) ) { // update
             var def = fs.readFileSync(filename).toString;
             // TODO - uninstall old if installed ??
             if (def !== middleware) {
-                fs.writeFile(filename, middleware, function onWrote(err){
-                    if (err) {
-                        throw new Error(err.stack||err.message||err);
-                        process.exit(1)
-                    } else {
-                        console.log(msg)
-                    }
-                })
+
+                try {
+
+                    fs.writeFileSync(filename, middleware);
+                    console.log(msg)
+                } catch (err) {
+                    throw new Error(err.stack||err.message||err);
+                    process.exit(0)
+                }
+
+                // fs.writeFile(filename, middleware, function onWrote(err){
+                //     if (err) {
+                //         throw new Error(err.stack||err.message||err);
+                //         process.exit(1)
+                //     } else {
+                //         console.log(msg)
+                //     }
+                // })
             } // else, nothing to do
         } else { // create
-            fs.writeFile(filename, middleware, function onWrote(err){
-                if (err) {
-                    throw new Error(err.stack||err.message||err);
-                    process.exit(1)
-                } else {
-                    console.log(msg)
-                }
-            })
+
+            try {
+
+                fs.writeFileSync(filename, middleware);
+                console.log(msg)
+            } catch (err) {
+                throw new Error(err.stack||err.message||err);
+                process.exit(0)
+            }
+
+            // fs.writeFile(filename, middleware, function onWrote(err){
+            //     if (err) {
+            //         throw new Error(err.stack||err.message||err);
+            //         process.exit(1)
+            //     } else {
+            //         console.log(msg)
+            //     }
+            // })
         }
     }
 
     //var createGinaHome = function() { };
+
 
     init()
 };
