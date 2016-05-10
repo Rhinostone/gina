@@ -470,7 +470,11 @@ function Controller(options) {
             }
 
             //catching errors
-            if ( typeof(jsonObj.errno) != 'undefined' && local.res.statusCode == 200 || typeof(jsonObj.status) != 'undefined' && jsonObj.status == 500) {
+            if (
+                typeof(jsonObj.errno) != 'undefined' && local.res.statusCode == 200
+                || typeof(jsonObj.status) != 'undefined' && jsonObj.status == 500
+                || typeof(jsonObj.error) != 'undefined' && typeof(jsonObj.error.status) != 'undefined' && /^5/.test(jsonObj.error.status)
+            ) {
                 local.res.statusCode    = 500;
                 local.res.statusMessage = 'Internal Server Error';
             }
