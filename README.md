@@ -6,6 +6,14 @@
 
 Node.js(100%)
 
+**Compatible with Node.js: **
+- `v6.x.x` (npm install not supported for this version, install via github),
+- `v5.x.x` (npm install not supported for this version, install via github),
+- `v4.x.x`,
+- `v0.12.x`, 
+- `v0.11.x`,
+- `v0.10.x`
+
 ## Philosophy behind
 
 Gina was designed to be accessible, flexible, scalable and maintainable. Our main purpose was to allow developpers to create easier and faster web applications.
@@ -30,6 +38,14 @@ You can now install the framework using npm:
 ```  tty
 $ npm install gina@latest
 ```
+**OR by cloning**
+```tty
+$ mkdir node_modules
+$ mkdir node_modules/gina
+$ git clone https://github.com/Rhinostone/gina.git ./node_modules/gina
+$ node ./node_modules/gina/script/post_install.js
+```
+
 Then you need to __initialize your project__
 
 > On Mac Os X or on Linux
