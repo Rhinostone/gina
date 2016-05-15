@@ -6,9 +6,9 @@
 
 Node.js(100%)
 
-**Compatible with Node.js: **
-- `v6.x.x` (npm install not supported for this version, install via github),
-- `v5.x.x` (npm install not supported for this version, install via github),
+__Gina is compatible with the following versions of Node.js:__
+- `v6.x.x` (npm install not supported for this version, see install via github),
+- `v5.x.x` (npm install not supported for this version, see install via github),
 - `v4.x.x`,
 - `v0.12.x`, 
 - `v0.11.x`,
@@ -23,7 +23,8 @@ Gina comes with essential features at this moment, but most of the things we don
 ## Getting started with Gina I/O
 
 ### Initializing a project
-Let's create our first project and install gina.
+Let's create our first project and install gina.   
+Type everything after the __`$`__
 
 ``` tty
 $ mkdir myproject

@@ -135,21 +135,6 @@ function Model(namespace) {
                             } else {
                                 local.connection = conn;
                                 self.emit('model#ready', false, self.name, conn)
-
-
-                                /** must be done only when all models conn are alive because of `cross models/database use cases`
-
-                                 //Getting Entities Manager thru connector.
-                                 var entitiesManager = new require( _(conf.path) )(conn)[model](conn, { model: self.name, bundle: self.bundle});
-
-                                 if (reload) {
-                                    getModelEntities(entitiesManager, modelPath, entitiesPath, conn, function onReload(err, connector, entities, connexion){
-                                        reload(err, connector, entities, connexion)
-                                    })
-                                } else {
-                                    modelUtil.setConnection(bundle, model, conn);
-                                    getModelEntities(entitiesManager, modelPath, entitiesPath, conn)
-                                }*/
                             }
                         }
                     )

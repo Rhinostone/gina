@@ -545,10 +545,11 @@ function Config(opt) {
             conf[bundle][env].server.webroot = wroot
         }
 
+        conf[bundle][env].project       = getContext('project');
         conf[bundle][env].bundles       = bundles;
         conf[bundle][env].cacheless     = cacheless;
         conf[bundle][env].standalone    = standalone;
-        conf[bundle][env].executionPath = getContext("paths").root;
+        conf[bundle][env].executionPath = getContext('paths').root;
 
 
 

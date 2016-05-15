@@ -413,6 +413,11 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
             setContext('bundle', undefined);
             abort('No bundle found for path: ' + path)
         } else {
+            var projectName = null;
+            if ( typeof(project.name) != 'undefined' ) {
+                projectName = project.name
+            }
+            setContext('project', projectName);
             setContext('bundle', appName);
             setContext('env', env);
             setContext('bundlesPath', _( root +'/'+ path.split('/')[0]) );
@@ -490,6 +495,13 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 // TODO Output this to the error logger.
                 console.error('Could not complete routing: ', err.stack)
             }
+        })
+    }
+
+    gna.onError = process.onError = function(callback) {
+        gna.errorCatched = true;
+        e.on('error', function(err, request, response, next) {
+            callback(err, request, response, next)
         })
     }
 
@@ -662,6 +674,18 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                         if (!mountErr) {
                             // -- BO
                             e.emit('init', instance, middleware, conf);
+
+                            // catching unhandled errors
+                            if ( typeof(instance.use) != 'function' ) {
+                                instance.use( function onUnhandledError(err, req, res, next){
+                                    if (err) {
+                                        e.emit('error', err, req, res, next)
+                                    } else {
+                                        next()
+                                    }
+                                })
+                            }
+
                             //In case there is no user init.
                             if (!gna.initialized) {
                                 // we want to be able to load the model
