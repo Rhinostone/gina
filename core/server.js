@@ -451,6 +451,10 @@ function Server(options) {
                                         console.warn(msg);
                                     }
                                 } else {
+                                    // 2016-05-19: fix to handle requests from swagger/express
+                                    if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
+                                        request.body = request.query
+                                    }
                                     var bodyStr = JSON.stringify(request.body);
                                     // false & true case
                                     if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
