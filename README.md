@@ -108,6 +108,34 @@ Once it's done, you just need to refresh your browser.
 
 Gina is shipped with [Swig](http://paularmstrong.github.io/swig/docs/api/) as the default template engine. If you are more comfortable with another template engine, you can use your own.
 
+## Debugging in Gina
+
+You can attach a remote debuger like [Visual Studio Code](https://code.visualstudio.com/Download) to Gina.
+
+1. Open your project   
+![New window](./documentation/img/debug-new1.png)   
+![New window](./documentation/img/debug-new2.png)   
+2. Click to the `Debug` tab   
+![New conf](./documentation/img/debug-conf1.png)   
+3. Open your configuration file and select `Node.js`   
+![New conf](./documentation/img/debug-conf2.png)   
+![New conf](./documentation/img/debug-conf3.png)   
+4. Select `Attach` and clean your configuration   
+![New conf](./documentation/img/debug-conf4.png)   
+![New conf](./documentation/img/debug-conf5.png)   
+5. Change the __port number__ to match the one you will be listening from Gina (e.g.: `5959`)   
+![New conf](./documentation/img/debug-conf6.png)   
+
+6. Save, and go back to your terminal to start your bundle with the debug argument:
+```tty 
+$ ./gina.sh -s frontend dev --debug-brk=5959
+```
+> Gina will be waiting for you to launch the remote debugger.
+
+7. Launch your remote debugger & have fun !   
+![New conf](./documentation/img/debug-conf7.png)   
+	Debugger in action
+    ![Debugger in action](./documentation/img/debug-start.png)   
 
 ## Troubleshooting
 
