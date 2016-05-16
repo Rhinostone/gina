@@ -444,6 +444,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
         gna.initialized = true;
         e.once('init', function(instance, middleware, conf) {
+
             var configuration = config.getInstance();
 
             modelUtil.loadAllModels(
@@ -662,21 +663,13 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 if (err) console.error(err, err.stack);
 
                 var initialize = function(err, instance, middleware, conf) {
+
                     if (!err) {
 
                         //On user conf complete.
                         e.on('complete', function(instance){
-                            // ( !isStandalone || isStandalone && isMaster )
-                            server.start(instance)
-                        });
-
-
-                        if (!mountErr) {
-                            // -- BO
-                            e.emit('init', instance, middleware, conf);
-
                             // catching unhandled errors
-                            if ( typeof(instance.use) != 'function' ) {
+                            if ( typeof(instance.use) == 'function' ) {
                                 instance.use( function onUnhandledError(err, req, res, next){
                                     if (err) {
                                         e.emit('error', err, req, res, next)
@@ -685,6 +678,14 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                     }
                                 })
                             }
+                            // ( !isStandalone || isStandalone && isMaster )
+                            server.start(instance)
+                        });
+
+
+                        if (!mountErr) {
+                            // -- BO
+                            e.emit('init', instance, middleware, conf);
 
                             //In case there is no user init.
                             if (!gna.initialized) {
