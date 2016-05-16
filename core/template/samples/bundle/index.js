@@ -15,4 +15,10 @@ var {bundle} = require('gina');
 //    event.emit('complete', app);// this is important !
 //});
 
+// Catch unhandled errors
+// {bundle}.onError(function(err, req, res, next){
+//     console.error('<{bundle}> fatal error: ' + err.message + '\nstack:\n'+ err.stack);
+//     next(err);
+// });
+
 {bundle}.start();

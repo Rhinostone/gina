@@ -112,11 +112,13 @@ var fs = require('fs'),
             "number"        : this.options.version,
             "platform"      : process.platform,
             "arch"          : process.arch,
+            "nodejs"        : process.versions.node,
             "middleware"    : this.options.middleware,
             "copyright"     : this.options.copyright
         };
 
         vers = this.msg.basic[4]
+                .replace(/%nodeVersion%/, version.nodejs +' '+ version.platform +' '+ version.arch)
                 .replace(/%version%/, version.number +' '+ version.platform +' '+ version.arch)
                 .replace(/%middleware%/, version.middleware)
                 .replace(/%copyright%/, version.copyright);
