@@ -114,35 +114,35 @@ function Model(namespace) {
             var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
             console.debug('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
             if (!fs.existsSync(entitiesPath)) {
-                self.emit('model#ready', new Error('no entities found for your model: [ ' + model + ' ]'), self.name, null)
-            } else {
-                var connectorPath   = _(modelPath + '/lib/connector.js');
-                //Getting Entities Manager.
-                var exists = fs.existsSync(connectorPath);
-                if (exists) {
-                    if (cacheless)
-                        delete require.cache[_(connectorPath, true)];
+                fs.mkdirSync(entitiesPath) // creating empty path
+            }
 
-                    var Connector = require(_(connectorPath, true));
+            var connectorPath   = _(modelPath + '/lib/connector.js');
+            //Getting Entities Manager.
+            var exists = fs.existsSync(connectorPath);
+            if (exists) {
+                if (cacheless)
+                    delete require.cache[_(connectorPath, true)];
 
-                    self.connect(
-                        Connector,
-                        function onConnect(err, conn) {
-                            if (err) {
-                                console.error(err.stack);
-                                self.emit('model#ready', err, self.name, null)
+                var Connector = require(_(connectorPath, true));
 
-                            } else {
-                                local.connection = conn;
-                                self.emit('model#ready', false, self.name, conn)
-                            }
+                self.connect(
+                    Connector,
+                    function onConnect(err, conn) {
+                        if (err) {
+                            console.error(err.stack);
+                            self.emit('model#ready', err, self.name, null)
+
+                        } else {
+                            local.connection = conn;
+                            self.emit('model#ready', false, self.name, conn)
                         }
-                    )
-                } else {//Means that no connector was found in models.
+                    }
+                )
+            } else {//Means that no connector was found in models.
 
-                    //finished.
-                    self.emit('model#ready', new Error('[ '+self.name+' ] No connector found'), self.name, conn)
-                }
+                //finished.
+                self.emit('model#ready', new Error('[ '+self.name+' ] No connector found'), self.name, conn)
             }
 
         } else {
