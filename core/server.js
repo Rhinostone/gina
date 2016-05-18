@@ -690,6 +690,7 @@ function Server(options) {
             var allowed     = null
                 , conf      = null
                 , uri       = ''
+                , tmpKey    = ''
                 , key       = ''
                 , filename  = ''
                 , conf      = self.conf[bundle][self.env]
@@ -701,9 +702,16 @@ function Server(options) {
                 var len = wroot.split('/').length;
                 key = uri.splice(1, len).join('/');
             } else {
+
                 uri = pathname.split('/');
-                uri.splice(0, 1);
-                key = uri.join('/')
+                tmpKey = uri.splice(1, 1)[0];
+
+                if ( typeof(conf.content.statics[tmpKey]) != 'undefined' ) {
+                    key = tmpKey
+                } else {
+                    uri.splice(0, 1);
+                    key = tmpKey + '/'+ uri.join('/')
+                }
             }
 
             //static filter
@@ -718,7 +726,7 @@ function Server(options) {
                 }
 
                 uri = uri.join('/');
-                if (uri === key) {
+                if ( /\//.test(key) ) {
                     filename = path.join(conf.content.statics[key])
                 } else {
                     filename = path.join(conf.content.statics[key], uri)
