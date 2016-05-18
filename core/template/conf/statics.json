@@ -1,4 +1,4 @@
 {
-   "favicon.ico": "{views}/favicon.ico",
-   "common": "{root}/common"
+  "favicon.ico": "{views}/favicon.ico",
+  "common": "{root}/common"
 }

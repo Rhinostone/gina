@@ -1,4 +1,4 @@
 {
-    "name" : "{project}",
-    "bundles" : {}
+  "name": "{project}",
+  "bundles": {}
 }

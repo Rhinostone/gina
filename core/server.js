@@ -785,9 +785,10 @@ function Server(options) {
 
     var throwError = function(res, code, msg, next) {
         var withViews       = local.hasViews[self.appName] || hasViews(self.appName);
+        var isUsingTemplate = self.conf[self.appName][self.env].template;
         var isXMLRequest    = self.conf[self.appName][self.env].server.request.isXMLRequest;
 
-        if ( !withViews ) {
+        if ( !withViews || !isUsingTemplate ) {
             if (!res.headersSent) {
                 res.writeHead(code, { 'Content-Type': 'application/json'} );
                 res.end(JSON.stringify({
