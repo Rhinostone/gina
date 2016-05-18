@@ -1,6 +1,8 @@
 {
-    "default": {
-        "url": "/",
-        "param": { "action": "init" }
+  "default": {
+    "url": "/",
+    "param": {
+      "action": "init"
     }
+  }
 }

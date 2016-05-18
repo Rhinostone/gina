@@ -191,8 +191,6 @@ function Config(opt) {
             try {
 
                 var envConf = '';
-                //console.error("loading once ", this.parent.userConf);
-                //require(this.executionPath + '/env.json');
 
                 if (this.parent.userConf) {
 
@@ -233,7 +231,6 @@ function Config(opt) {
                 if (typeof(env) == "undefined") {
                     this.current = this.template.defEnv;
                 } else {
-                    //logger.error('gina', 'CONFIG:ENV:ERR:1', 'Env: ' + env + '] not found');
                     console.error(new Error('Env: ' + env + '] not found'));
                     process.exit(1);
                 }
@@ -253,7 +250,7 @@ function Config(opt) {
          * @return {Object} json conf
          **/
         getConf : function(bundle, env) {
-            //console.log("get from ....", appName, env);
+
             if ( !self.isStandalone ) {
                 return ( typeof(self.envConf) != "undefined" ) ? self.envConf[bundle][env] : null;
             } else {
@@ -699,6 +696,12 @@ function Config(opt) {
 
         var hasViews = (typeof(files['views']) != 'undefined' && typeof(files['views']['default']) != 'undefined') ? true : false;
 
+        // e.g.: 404 rendering for JSON APIs by checking `env.template`: JSON response can be forced even if the bundle has views
+        if ( hasViews && typeof(self.userConf[bundle][env].template) != 'undefined' && self.userConf[bundle][env].template == false) {
+            conf[bundle][env].template = false
+        } else if (hasViews) {
+            conf[bundle][env].template = true
+        }
 
         //Set default keys/values for views
         if ( hasViews &&  typeof(files['views'].default.views) == 'undefined' ) {
@@ -904,16 +907,11 @@ function Config(opt) {
         conf[bundle][env].hostname = conf[bundle][env].protocol + '://' + conf[bundle][env].host + ':' + conf[bundle][env].port[conf[bundle][env].protocol];
 
 
-
         ++b;
         if (b < bundles.length) {
             loadBundleConfig(bundles, b, callback, reload, collectedRules)
         } else {
-            //if ( !standalone ) {
-            //    callback(err, files, collectedRules)
-            //} else {
-                callback(err, files, collectedRules)
-            //}
+            callback(err, files, collectedRules)
         }
     }
 

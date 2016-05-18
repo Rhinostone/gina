@@ -89,10 +89,11 @@ function ContextHelper(contexts) {
     var throwError = function(code, err) {
         var router      = getContext('router');
         if (router) {
-            var res       = router.response
-                , next      = router.next
-                , hasViews  = router.hasViews
-                , code      = code;
+            var res                 = router.response
+                , next              = router.next
+                , hasViews          = router.hasViews
+                , isUsingTemplate   = isUsingTemplate
+                , code              = code;
 
 
             if (arguments.length < 2) {
@@ -100,7 +101,7 @@ function ContextHelper(contexts) {
                 code = 500
             }
 
-            if ( !hasViews ) {
+            if ( !hasViews || !isUsingTemplate ) {
                 if (!res.headersSent) {
                     res.writeHead(code, { 'Content-Type': 'application/json'} );
                     res.end(JSON.stringify({

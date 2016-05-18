@@ -1138,7 +1138,7 @@ function Controller(options) {
             }
         }
 
-        if ( !hasViews() ) {
+        if ( !hasViews() || !local.options.isUsingTemplate ) {
             if (!res.headersSent) {
                 res.writeHead(code, { 'Content-Type': 'application/json'} );
                 res.end(JSON.stringify({

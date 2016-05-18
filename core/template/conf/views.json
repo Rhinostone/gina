@@ -1,9 +1,13 @@
 {
-    "default" : {
-        "layout" : "{views}/html/layout.html",
-        "useRouteNameAsFilename": true,
-        "http-metas" : { "content-type": "text/html" },
-        "stylesheets" : [ "/css/default.css" ],
-        "javascripts" : []
-    }
+  "default": {
+    "layout": "{views}/html/layout.html",
+    "useRouteNameAsFilename": true,
+    "http-metas": {
+      "content-type": "text/html"
+    },
+    "stylesheets": [
+      "/css/default.css"
+    ],
+    "javascripts": []
+  }
 }

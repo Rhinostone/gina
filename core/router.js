@@ -228,9 +228,10 @@ function Router(env) {
 
         // for libs/context etc..
         var routerObj = {
-            response: response,
-            next: next,
-            hasViews: ( typeof(conf.content.views) != 'undefined' ) ? true : false
+            response        : response,
+            next            : next,
+            hasViews        : ( typeof(conf.content.views) != 'undefined' ) ? true : false,
+            isUsingTemplate : conf.template
         };
         setContext('router', routerObj);
 
@@ -246,9 +247,12 @@ function Router(env) {
         var actionFile      = params.param.file; // matches rule name
         var namespace       = params.param.namespace;
         var routeHasViews   = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
-        local.routeHasViews = routeHasViews;
-        local.next          = next;
-        local.isXMLRequest  = params.isXMLRequest;
+        var isUsingTemplate = conf.template;
+
+        local.routeHasViews     = routeHasViews;
+        local.isUsingTemplate   = isUsingTemplate;
+        local.next              = next;
+        local.isXMLRequest      = params.isXMLRequest;
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
         local.cacheless = cacheless;
@@ -285,6 +289,7 @@ function Router(env) {
             conf            : conf,
             instance        : self.middlewareInstance,
             views           : ( routeHasViews ) ? conf.content.views : undefined,
+            isUsingTemplate : local.isUsingTemplate,
             cacheless       : cacheless,
             rule            : params.rule,
             isXMLRequest    : params.isXMLRequest
@@ -428,7 +433,7 @@ function Router(env) {
             }
         }
 
-        if ( !hasViews() ) {
+        if ( !hasViews() || !local.isUsingTemplate ) {
             if (!res.headersSent) {
                 res.writeHead(code, { 'Content-Type': 'application/json'} );
                 res.end(JSON.stringify({
