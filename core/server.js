@@ -691,6 +691,7 @@ function Server(options) {
                 , conf      = null
                 , uri       = ''
                 , key       = ''
+                , filename  = ''
                 , conf      = self.conf[bundle][self.env]
                 , wroot     = conf.server.webroot;
 
@@ -701,7 +702,8 @@ function Server(options) {
                 key = uri.splice(1, len).join('/');
             } else {
                 uri = pathname.split('/');
-                key = uri.splice(1, 1)[0]
+                uri.splice(0, 1);
+                key = uri.join('/')
             }
 
             //static filter
@@ -716,7 +718,11 @@ function Server(options) {
                 }
 
                 uri = uri.join('/');
-                var filename = path.join(conf.content.statics[key], uri);
+                if (uri === key) {
+                    filename = path.join(conf.content.statics[key])
+                } else {
+                    filename = path.join(conf.content.statics[key], uri)
+                }
 
                 fs.exists(filename, function(exists) {
 
