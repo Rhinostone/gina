@@ -707,7 +707,7 @@ function Controller(options) {
      * And Where `ignoreWebRoot` is an optional parameter used to ignore web root settings (Standalone mode or user set web root)
      * `ignoreWebRoot` behaves the like set to `false` by default
      *
-     *
+     * N.B.: Gina will tell browsers not to cache redirections
      *
      * @param {object|string} req|rule - Request Object or Rule/Route name
      * @param {object|boolean} res|ignoreWebRoot - Response Object or Ignore WebRoot & start from domain root: /
@@ -797,7 +797,13 @@ function Controller(options) {
 
             if (req.headersSent) return next();
 
-            res.writeHead(code, { 'Location': path });
+            res.writeHead(code, {
+                'Location': path,
+                'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
+
             res.end();
             local.res.headersSent = true;// done for the render() method
         }

@@ -8,6 +8,8 @@ var {bundle} = require('gina');
 
 // do whatever things you need to do before server starts
 //{bundle}.onInitialize( function(event, app, express){//
+//    var self = {bundle};
+//    var conf = self.getConfig(); // getting config/app.json would be: self.getConfig('app')
 //    // you can use express middleware components
 //    // eg.: app.use( session({secret: '1234567890QWERTY'}) );
 //

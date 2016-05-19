@@ -516,31 +516,31 @@ function Config(opt) {
             var collectedRules = {}
         }
 
-        var routing     = {
-            //"home": {
-            //    "bundle" : "framework",
-            //    "url": "/@doc",
-            //    "param": {
-            //        "action": "doc"
-            //    }
-            //}
-        };
-
         var standaloneRouting = {};
         var tmp         = '';
         var filename    = '';
         var appPath     = '';
         var err         = false;
+        if ( !/^\//.test(self.envConf[bundle][env].server.webroot) ) {
+            self.envConf[bundle][env].server.webroot = '/' + self.envConf[bundle][env].server.webroot
+        }
         var conf        = self.envConf
-            , wroot         = conf[bundle][env].server.webroot
-            , localWroot    = null
-            , originalRules = []
-            , oRuleCount    = 0;
+            , wroot                 = conf[bundle][env].server.webroot
+            , hasWebRoot            = false
+            , webrootAutoredirect   = conf[bundle][env].server.webrootAutoredirect
+            , localWroot            = null
+            , originalRules         = []
+            , oRuleCount            = 0;
+
         // standalone setup
         if ( standalone && bundle != self.startingApp && wroot == '/') {
             wroot = '/'+ bundle;
             conf[bundle][env].server.webroot = wroot
         }
+
+        if (wroot.length >1) hasWebRoot = true;
+
+        var routing     = {};
 
         conf[bundle][env].project       = getContext('project');
         conf[bundle][env].bundles       = bundles;
@@ -594,6 +594,13 @@ function Config(opt) {
                     routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse search
                     //webroot control
                     routing[rule].param.file = ( typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: rule; // get template file
+
+                    if (
+                        hasWebRoot && typeof(routing[rule].param.path) != 'undefined' && typeof(routing[rule].param.ignoreWebRoot) == 'undefined'
+                        || hasWebRoot && typeof(routing[rule].param.path) != 'undefined' && !routing[rule].param.ignoreWebRoot
+                    ) {
+                        routing[rule].param.path = wroot + routing[rule].param.path
+                    }
 
                     if ( typeof(routing[rule].url) != 'object' ) {
                         // adding / if missing
@@ -653,6 +660,19 @@ function Config(opt) {
                 for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
                     files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
                 }
+                // creating rule for auto redirect: / => /webroot
+                if (hasWebRoot && webrootAutoredirect) {
+                    files[name]["@webroot"] = {
+                        url: "/",
+                        param: {
+                            action: "redirect",
+                            path: wroot,
+                            code: 302
+                        },
+                        bundle: (files[name].bundle) ? files[name].bundle : bundle
+                    }
+                }
+
                 self.setRouting(self.startingApp, env, files[name]);
                 continue;
             } else if (name == 'routing') {
@@ -745,7 +765,6 @@ function Config(opt) {
 
         var localEnv = conf[bundle][env].executionPath + '/env.local.json';
         if ( env == 'dev' && fs.existsSync(localEnv) ) {
-            //conf[bundle][env] = merge(true, require(localEnv), conf[bundle][env]);
             conf[bundle][env] = merge(true, conf[bundle][env], require(localEnv));
         }
         var envKeys = conf[bundle][env];
@@ -796,6 +815,14 @@ function Config(opt) {
                     }
                     ++d
                 }
+
+                if (hasWebRoot) {
+                    var wrootKey = wroot.substr(1);
+                    for (var p in files['statics']) {
+                        files['statics'][wrootKey +'/'+ p] = files['statics'][p]
+                    }
+                }
+
                 files['statics'] = merge(files['statics'], statics);
             }
 

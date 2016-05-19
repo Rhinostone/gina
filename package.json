@@ -1,20 +1,13 @@
 {
   "name": "gina",
-  "version": "0.0.9p78e",
+  "version": "0.0.9p79",
   "description": "MVC Framework for Node.",
   "keywords": [
     "framework",
-    "micro service",
     "mvc",
     "mvc framework",
     "micro framework",
-    "router",
-    "api",
-    "web",
-    "gina",
-    "gina I/O",
-    "gina.io",
-    "gina js"
+    "micro services"
   ],
   "repository": {
     "type": "git",
