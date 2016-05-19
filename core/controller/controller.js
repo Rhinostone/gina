@@ -157,12 +157,15 @@ function Controller(options) {
             self.set('page.content', content);
             self.set('page.namespace', namespace);
             self.set('page.title', rule);
-
-            if (typeof(req.headers['accept-language']) != 'undefined') {
-                self.set('page.lang', req.headers['accept-language'].split(',')[0]);
-            } else {
-                self.set('page.lang', local.options.conf.server.response.header['accept-language'].split(',')[0]);
+            
+            var acceptLanguage = 'en-US'; // by default
+            if ( typeof(req.headers['accept-language']) != 'undefined' ) {
+                acceptLanguage = req.headers['accept-language']
+            } else if ( typeof(local.options.conf.server.response.header['accept-language']) != 'undefined' ) {
+                acceptLanguage = local.options.conf.server.response.header['accept-language']
             }
+
+            self.set('page.lang', acceptLanguage.split(',')[0]);
         }
 
         if ( hasViews() ) {
