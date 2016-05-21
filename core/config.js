@@ -690,17 +690,22 @@ function Config(opt) {
 
             //Can't do a thing without.
             try {
-                if (cacheless) {
+                var exists = fs.existsSync(_(filename, true));
+                if (cacheless && exists) {
                     delete require.cache[_(filename, true)];
                 }
-                files[name] = require(_(filename, true));
-                tmp = '';
 
-                if (filename != main) {
-                    if (cacheless) {
-                        delete require.cache[_(main, true)];
+                if ( exists ) {
+                    files[name] = require(_(filename, true));
+                    tmp = '';
+                    if ( filename != main && fs.existsSync(_(main, true)) ) {
+                        if (cacheless) {
+                            delete require.cache[_(main, true)];
+                        }
+                        files[name] = merge(files[name], require(_(main, true)));
                     }
-                    files[name] = merge(files[name], require(_(main, true)));
+                } else {
+                    continue
                 }
             } catch (_err) {
 
