@@ -81,7 +81,9 @@ function Server(options) {
         }
 
 
-        self.emit('configured', false, express(), express, self.conf[self.appName][self.env])
+        self.emit('configured', false, express(), express, self.conf[self.appName][self.env]);
+
+        return this
     }
 
 
@@ -177,7 +179,7 @@ function Server(options) {
                 }
 
                 try {
-                    
+
                     wroot               = self.conf[apps[i]][self.env].server.webroot;
                     webrootAutoredirect = self.conf[apps[i]][self.env].server.webrootAutoredirect;
                     // renaming rule for standalone setup
@@ -541,6 +543,7 @@ function Server(options) {
 
         self.instance.listen(self.conf[self.appName][self.env].port.http);//By Default 3100
         //self.instance.timeout = 120000; // check node.js express & documentation
+        self.emit('started')
     }
 
     var getHead = function(file) {
@@ -878,7 +881,19 @@ function Server(options) {
         self.once('configured', function(err, instance, middleware, conf) {
             callback(err, instance, middleware, conf)
         });
-        init(options)
+
+        init(options);
+
+        return {
+            onStarted: self.onStarted
+        }
+    }
+
+    this.onStarted = function(callback) {
+        self.once('started', function(){
+            callback()
+        });
+        return this
     }
 
     return this
