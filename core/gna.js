@@ -460,7 +460,6 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                             try {
                                 //Protect it.
                                 tmp = JSON.stringify(conf.content[name]);
-                                console.warn("parsing ", conf.content);
                                 return JSON.parse(tmp)
                             } catch (err) {
                                 console.error(err.stack);
@@ -482,6 +481,20 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
                 })// EO modelUtil
 
+        })
+    }
+
+    /**
+     * On Server started
+     *
+     * @callback callback
+     *
+     * */
+    gna.onStarted = process.onStarted = function(callback) {
+        
+        gna.started = true;
+        e.once('server#started', function(){
+            callback()
         })
     }
 
@@ -741,7 +754,11 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 }
 
                 var server = new Server(opt);
-                server.onConfigured(initialize);
+                server
+                    .onConfigured(initialize)
+                    .onStarted( function() {
+                        e.emit('server#started')
+                    });
 
             })//EO config.
         })//EO mount.
