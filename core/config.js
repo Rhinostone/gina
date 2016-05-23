@@ -540,7 +540,7 @@ function Config(opt) {
 
         if (wroot.length >1) hasWebRoot = true;
 
-        var routing     = {};
+        var routing = {}, reverseRouting = {};
 
         conf[bundle][env].project       = getContext('project');
         conf[bundle][env].bundles       = bundles;
@@ -603,6 +603,7 @@ function Config(opt) {
                     }
 
                     if ( typeof(routing[rule].url) != 'object' ) {
+
                         // adding / if missing
                         if (routing[rule].url.length > 1 && routing[rule].url.substr(0,1) != '/') {
                             routing[rule].url = '/' + routing[rule].url
@@ -634,6 +635,7 @@ function Config(opt) {
                             else if (!routing[rule].url.length)
                                 routing[rule].url += '/'
                         }
+
                     } else {
                         for (var u=0; u<routing[rule].url.length; ++u) {
                             if (routing[rule].url[u].length > 1 && routing[rule].url[u].substr(0,1) != '/') {
@@ -643,10 +645,12 @@ function Config(opt) {
                                     wroot = wroot.substr(wroot.length-1,1).replace('/', '')
                                 }
                             }
-                            if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
-                                routing[rule].url[u] =  wroot + routing[rule].url[u]
-                            else if (!routing[rule].url.length)
+
+                            if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
+                                routing[rule].url[u] = wroot + routing[rule].url[u]
+                            } else if (!routing[rule].url.length) {
                                 routing[rule].url += '/'
+                            }
                         }
                     }
 
@@ -674,6 +678,17 @@ function Config(opt) {
                 }
 
                 self.setRouting(self.startingApp, env, files[name]);
+                // reverse routing
+                for (var rule in files[name]) {
+                    if ( typeof(files[name][rule].url) != 'object' ) {
+                        reverseRouting[files[name][rule].url] = rule
+                    } else {
+                        for (var u=0, len=files[name][rule].url.length; u<len; ++u) {
+                            reverseRouting[files[name][rule].url[u]] = rule
+                        }
+                    }
+                }
+                self.setReverseRouting(self.startingApp, env, reverseRouting);
                 continue;
             } else if (name == 'routing') {
                 continue;
@@ -1022,6 +1037,10 @@ function Config(opt) {
      * */
     this.setRouting = function(bundle, env, routing) {
         self.envConf[bundle][env].content.routing = routing
+    }
+
+    this.setReverseRouting = function(bundle, env, reverseRouting) {
+        self.envConf[bundle][env].content.reverseRouting = reverseRouting
     }
 
     if (!opt) {

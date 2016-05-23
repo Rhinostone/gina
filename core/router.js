@@ -142,14 +142,27 @@ function Router(env) {
      * */
     var fitsWithRequirements = function(request, urlVar, urlVal, params) {
 
-        var _param = urlVar.replace(/:/, '');
+        var _param      = urlVar.replace(/:/, '')
+            , regex     = params.requirements[_param]
+            , matched   = false;
+
+        if ( /^\//.test(regex) ) {
+            var re      = regex.match(/\/(.*)\//).pop()
+                , flags = regex.replace('/'+ re +'/', '');
+
+            matched = new RegExp(re, flags).test( urlVal )
+
+        } else {
+            matched = new RegExp(params.requirements[_param]).test( urlVal )
+        }
 
         // fast one
         if (
             typeof(params.param[_param]) != 'undefined' &&
             typeof(params.requirements) != 'undefined' &&
             typeof(params.requirements[_param]) != 'undefined' &&
-            new RegExp(params.requirements[_param]).test( urlVal )
+            matched
+            //new RegExp(params.requirements[_param]).test( urlVal )
         ) {
             request.params[_param] = urlVal;
             return true
@@ -160,13 +173,26 @@ function Router(env) {
 
             if ( urlVar != ':'+p && new RegExp(params.param[p]).test(urlVar) ) {
 
-                _param = p;
+                _param  = p;
+                regex   = params.requirements[_param];
+                matched = false;
+
+                if ( /^\//.test(regex) ) {
+                    var re      = regex.match(/\/(.*)\//).pop()
+                        , flags = regex.replace('/'+ re +'/', '');
+
+                    matched = new RegExp(re, flags).test( urlVal )
+
+                } else {
+                    matched = new RegExp(params.requirements[_param]).test( urlVal )
+                }
 
                 if (
                     typeof(params.param[_param]) != 'undefined' &&
                     typeof(params.requirements) != 'undefined' &&
                     typeof(params.requirements[_param]) != 'undefined' &&
-                    new RegExp(params.requirements[_param]).test( urlVal )
+                    //new RegExp(params.requirements[_param]).test( urlVal )
+                    matched
                 ) {
                     request.params[_param] = urlVal;
                     return true

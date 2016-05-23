@@ -1096,9 +1096,49 @@ function Controller(options) {
         req.getParams = function() {
             // copy
             var params = JSON.parse(JSON.stringify(req.params));
-            params = merge(true, params, req.get);
-            params = merge(true, params, req.post);
+            switch( req.method.toLowerCase() ) {
+                case 'get':
+                    params = merge(true, params, req.get);
+                    break;
+
+                case 'post':
+                    params = merge(true, params, req.post);
+                    break;
+
+                case 'put':
+                    params = merge(true, params, req.put);
+                    break;
+
+                case 'delete':
+                    params = merge(true, params, req.delete);
+                    break;
+            }
+            
             return params
+        }
+
+        req.getParam = function(name) {
+            // copy
+            var param = null, params = JSON.parse(JSON.stringify(req.params));
+            switch( req.method.toLowerCase() ) {
+                case 'get':
+                    param = req.get[name];
+                    break;
+
+                case 'post':
+                    param = req.post[name];
+                    break;
+
+                case 'put':
+                    param= req.put[name];
+                    break;
+
+                case 'delete':
+                    param = req.delete[name];
+                    break;
+            }
+
+            return param
         }
     }
 

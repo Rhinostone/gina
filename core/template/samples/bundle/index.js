@@ -17,6 +17,11 @@ var {bundle} = require('gina');
 //    event.emit('complete', app);// this is important !
 //});
 
+// If you need to do something once the server has started
+// {bundle}.onStarted(function(){
+//     console.info('{bundle} has started ! ');
+// });
+
 // Catch unhandled errors
 // {bundle}.onError(function(err, req, res, next){
 //     console.error('<{bundle}> fatal error: ' + err.message + '\nstack:\n'+ err.stack);

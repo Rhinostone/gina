@@ -82,8 +82,6 @@ function Server(options) {
 
 
         self.emit('configured', false, express(), express, self.conf[self.appName][self.env]);
-
-        return this
     }
 
 
@@ -141,7 +139,8 @@ function Server(options) {
             , oRuleCount            = 0;
 
         if (cacheless) {
-            self.routing = {}
+            self.routing = {};
+            self.reverseRouting = {}
         }
 
         //Standalone or shared instance mode. It doesn't matter.
@@ -298,19 +297,6 @@ function Server(options) {
                 callback(err)
             }
 
-            // creating rule for auto redirect: / => /webroot
-            if (hasWebRoot && webrootAutoredirect) {
-                self.routing["@webroot"] = {
-                    url: "/",
-                    param: {
-                        action: "redirect",
-                        path: wroot,
-                        code: 302
-                    },
-                    bundle: apps[i]
-                }
-            }
-
         }//EO for.
 
         self.routing = merge(true, self.routing, ((self.isStandalone && apps[i] != self.appName ) ? standaloneTmp : tmp));
@@ -319,7 +305,22 @@ function Server(options) {
         for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
             self.routing[originalRules[r]].originalRule = (self.routing[originalRules[r]].bundle === self.appName ) ?  config.getOriginalRule(originalRules[r], self.routing) : config.getOriginalRule(self.routing[originalRules[r]].bundle +'-'+ originalRules[r], self.routing)
         }
+
         config.setRouting(self.appName, self.env, self.routing);
+
+        // reverse routing
+        for (var rule in self.routing) {
+            if ( typeof(self.routing[rule].url) != 'object' ) {
+                self.reverseRouting[self.routing[rule].url] = rule
+            } else {
+                for (var u=0, len=self.routing[rule].url.length; u<len; ++u) {
+                    self.reverseRouting[self.routing[rule].url[u]] = rule
+                }
+            }
+
+        }
+        config.setReverseRouting(self.appName, self.env, self.reverseRouting);
+
         callback(false)
     }
 
@@ -377,12 +378,14 @@ function Server(options) {
             //Only for dev & debug purposes.
             self.conf[self.appName][self.env]['protocol'] = request.protocol || self.conf[self.appName][self.env]['hostname'];
 
-            request.post = {};
-            request.get = {};
+            request.body    = {};
+            request.get     = {};
+            request.post    = {};
+            request.put     = {};
+            request.delete  = {};
+            //request.patch = {}; ???
             //request.cookies = {}; // ???
-            //request.put = {}; //?
-            //request.delete = {}; //?
-            request.body = {};
+
 
             self.conf[self.appName][self.env].server.request.isXMLRequest  = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
 
@@ -450,7 +453,7 @@ function Server(options) {
                 });
 
                 request.on('end', function onEnd() {
-
+                        // to compare with /core/controller/controller.js -> getParams()
                         switch( request.method.toLowerCase() ) {
                             case 'post':
                                 var obj = {}, configuring = false;
@@ -481,6 +484,7 @@ function Server(options) {
                                         var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
                                         console.warn(msg);
                                     }
+
                                 } else {
                                     // 2016-05-19: fix to handle requests from swagger/express
                                     if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
@@ -495,21 +499,56 @@ function Server(options) {
                                 }
 
                                 if ( obj.count() > 0 ) {
-                                    request.body = request.post = obj;
+                                    //request.body = request.post = obj;
+                                    request.post = obj;
                                 }
+
+                                // cleaning
+                                delete request.body;
+                                delete request.query;
+                                delete request.get;
+                                delete request.put;
+                                delete request.delete;
                                 break;
 
                             case 'get':
-                                request.get = request.query;
+                                if ( request.query.count() > 0 ) {
+                                    request.get = request.query;
+                                }
+                                // else, matching route params against url context instead once route is identified
+
+
+                                // cleaning
+                                delete request.body;
+                                delete request.post;
+                                delete request.put;
+                                delete request.delete;
                                 break;
-                            //
-                            //case 'put':
-                            //    request.put = request.? || undefined;
-                            //    break;
-                            //
-                            //case 'delete':
-                            //    request.delete = request.? || undefined;
-                            //    break
+
+                            case 'put':
+                                if ( request.query.count() > 0 ) {
+                                    request.put = request.query;
+                                }
+                                // else, matching route params against url context instead once route is identified
+
+                                delete request.body;
+                                delete request.post;
+                                delete request.delete;
+                                delete request.get;
+                                break;
+
+
+                            case 'delete':
+                                if ( request.query.count() > 0 ) {
+                                    request.delete = request.query;
+                                }
+                                // else, matching route params against url context instead once route is identified
+
+                                delete request.body;
+                                delete request.post;
+                                delete request.put;
+                                delete request.get;
+                                break
 
 
                         };
@@ -658,8 +697,8 @@ function Server(options) {
             throwError(res, 500, 'Internal server error\nMalformed routing or Null value for bundle [' + bundle + '] => ' + req.originalUrl, next);
         }
 
-        var params = {}
-            , routing = JSON.parse(JSON.stringify(self.routing));
+        var params      = {}
+            , routing   = JSON.parse(JSON.stringify(self.routing));
         out:
             for (var rule in routing) {
                 if (typeof(routing[rule]['param']) == 'undefined')
@@ -684,12 +723,39 @@ function Server(options) {
 
                 if (pathname === routing[rule].url || isRoute.past) {
 
-                    console.debug('Server routing to '+ pathname);
+                    console.debug('Server is about to route to '+ pathname);
+
+                    if (!routing[rule].method && req.method) { // setting client request method if no method is defined in routing
+                        routing[rule].method  = req.method
+                    } else if (!routing[rule].method) { // by default
+                        routing[rule].method = 'GET'
+                    }
 
                     var allowed = (typeof(routing[rule].method) == 'undefined' || routing[rule].method.length > 0 || routing[rule].method.indexOf(req.method) != -1)
                     if (!allowed) {
-                        throwError(res, 405, 'Method Not Allowed for [' + params.bundle + '] => ' + req.originalUrl, next)
+                        throwError(res, 405, 'Method Not Allowed for [' + params.bundle + '] => ' + req.originalUrl);
+                        break;
                     } else {
+
+
+                        // comparing routing method VS request.url method
+                        if ( routing[rule].method.toLowerCase() != req.method.toLowerCase() ) {
+                            throwError(res, 405, 'Method Not Allowed.\n'+ 'Route [ '+rule+' ] is expecting `' + routing[rule].method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
+                            break
+                        }
+
+                        // handling GET method exception - if no param found
+                        var methods = ['get', 'put', 'delete'], method = req.method.toLowerCase();
+                        if ( methods.indexOf(method) > -1 && req.query.count() == 0 ) {
+                            var p = 0;
+                            for (var parameter in req.params) {
+                                if (p > 0) {
+                                    req[method][parameter] = req.params[parameter]
+                                }
+                                ++p
+                            }
+                        }
+
 
                         // onRouting Event ???
                         if ( cacheless ) {
@@ -893,7 +959,10 @@ function Server(options) {
         self.once('started', function(){
             callback()
         });
-        return this
+
+        return {
+            onConfigured: self.onConfigured
+        }
     }
 
     return this
