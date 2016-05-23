@@ -4,5 +4,11 @@
     "encoding": "utf8",
     "maxFieldsSize": "2MB",
     "maxFields": "1000"
+  },
+  "engine.io": {
+    "port": 8888
+  },
+  "livereload": {
+
   }
 }

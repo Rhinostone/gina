@@ -15,6 +15,7 @@
 
 var gna     = {core:{}};
 var fs      = require('fs');
+var child   = require('child_process');
 var Config  = require('./config');
 var config  = null;
 var utils   = require('./utils');
@@ -493,7 +494,24 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
     gna.onStarted = process.onStarted = function(callback) {
         
         gna.started = true;
-        e.once('server#started', function(){
+        e.once('server#started', function(conf){
+
+            
+            // open default browser for dev env only
+            // if (env == 'dev') {
+            //     var payload = JSON.stringify({
+            //         code    : 200,
+            //         command  : "reload"
+            //     });
+            //
+            //     if (self.ioClient) { // if client has already made connexion
+            //
+            //     } else {
+            //         // get default home
+            //         child.spawn('open', [conf.hostname])
+            //     }
+            // }
+            
             // will start watchers from here
             callback()
         })
@@ -757,8 +775,8 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 var server = new Server(opt);
                 server
                     .onConfigured(initialize)
-                    .onStarted( function() {
-                        e.emit('server#started')
+                    .onStarted( function(conf) {
+                        e.emit('server#started', conf)
                     });
 
             })//EO config.
