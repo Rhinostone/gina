@@ -494,6 +494,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         
         gna.started = true;
         e.once('server#started', function(){
+            // will start watchers from here
             callback()
         })
     }
