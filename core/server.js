@@ -499,12 +499,11 @@ function Server(options) {
                                 }
 
                                 if ( obj.count() > 0 ) {
-                                    //request.body = request.post = obj;
-                                    request.post = obj;
+                                    // still need this to allow compatibility with express & connect middlewares
+                                    request.body = request.post = obj;
                                 }
 
                                 // cleaning
-                                delete request.body;
                                 delete request.query;
                                 delete request.get;
                                 delete request.put;
@@ -519,7 +518,7 @@ function Server(options) {
 
 
                                 // cleaning
-                                delete request.body;
+                                delete request.query;
                                 delete request.post;
                                 delete request.put;
                                 delete request.delete;
@@ -531,7 +530,6 @@ function Server(options) {
                                 }
                                 // else, matching route params against url context instead once route is identified
 
-                                delete request.body;
                                 delete request.post;
                                 delete request.delete;
                                 delete request.get;
@@ -544,7 +542,6 @@ function Server(options) {
                                 }
                                 // else, matching route params against url context instead once route is identified
 
-                                delete request.body;
                                 delete request.post;
                                 delete request.put;
                                 delete request.get;
@@ -582,7 +579,7 @@ function Server(options) {
 
         self.instance.listen(self.conf[self.appName][self.env].port.http);//By Default 3100
         //self.instance.timeout = 120000; // check node.js express & documentation
-        self.emit('started')
+        self.emit('started', self.conf[self.appName][self.env])
     }
 
     var getHead = function(file) {
@@ -746,7 +743,7 @@ function Server(options) {
 
                         // handling GET method exception - if no param found
                         var methods = ['get', 'put', 'delete'], method = req.method.toLowerCase();
-                        if ( methods.indexOf(method) > -1 && req.query.count() == 0 ) {
+                        if ( methods.indexOf(method) > -1 && typeof(req.query) != 'undefined' && req.query.count() == 0 ) {
                             var p = 0;
                             for (var parameter in req.params) {
                                 if (p > 0) {
@@ -956,8 +953,8 @@ function Server(options) {
     }
 
     this.onStarted = function(callback) {
-        self.once('started', function(){
-            callback()
+        self.once('started', function(conf){
+            callback(conf)
         });
 
         return {

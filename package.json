@@ -1,6 +1,6 @@
 {
   "name": "gina",
-  "version": "0.0.9p79b",
+  "version": "0.0.9p79c",
   "description": "MVC Framework for Node.",
   "keywords": [
     "framework",
@@ -23,7 +23,8 @@
     "express": "4.x",
     "swig": "",
     "multiparty": "",
-    "colors": ""
+    "colors": "",
+    "engine.io": ""
   },
   "engines": {
     "node": ">=0.10.22"
