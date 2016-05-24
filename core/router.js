@@ -14,6 +14,7 @@ var url                 = require('url')
     , utils             = require('./utils')
     , console           = utils.logger
     , inherits          = utils.inherits
+    , merge             = utils.merge
     , SuperController   = require('./controller')
     , Config            = require('./config')
     //init
@@ -266,7 +267,8 @@ function Router(env) {
         var action          = request.action = params.param.action;
         // more can be added ... but it will always start by `on`Something.
         var reservedActions = [
-            "onReady"
+            "onReady",
+            "setup"
         ];
         if (reservedActions.indexOf(action) > -1) throwError(response, 500, '[ '+action+' ] is reserved for the framework');
         var middleware      = params.middleware || [];
@@ -274,6 +276,7 @@ function Router(env) {
         var namespace       = params.param.namespace;
         var routeHasViews   = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
         var isUsingTemplate = conf.template;
+        var hasSetup        = false;
 
         local.routeHasViews     = routeHasViews;
         local.isUsingTemplate   = isUsingTemplate;
@@ -284,8 +287,6 @@ function Router(env) {
         local.cacheless = cacheless;
 
         if (cacheless) refreshCore();
-
-        //console.debug("routing content : \n", bundle, env,  JSON.stringify( conf.content.routing, null, 4) );
 
         //Middleware Filters when declared.
         var resHeaders = conf.server.response.header;
@@ -300,8 +301,11 @@ function Router(env) {
         console.debug('ACTION ON  ROUTING IS : ' + action);
 
         //Getting superCleasses & extending it with super Models.
-        var controllerFiles = {}, Controllers = {};
+        var controllerFiles = {}
+            , setupFiles    = {}
+            , Controllers   = {};
         for (var b in bundles) {
+            setupFiles[bundles[b]]      = conf.bundlesPath +'/'+ bundles[b] + '/controllers/setup.js';
             controllerFiles[bundles[b]] = conf.bundlesPath +'/'+ bundles[b] + '/controllers/controller.js'; // /{namespace}.js ??
         }
 
@@ -327,7 +331,15 @@ function Router(env) {
 
         try {
 
-            if (cacheless) delete require.cache[_(controllerFiles[bundle], true)];
+            if ( fs.existsSync(_(setupFiles[bundle], true)) )
+                hasSetup = true;
+
+            if (cacheless) {
+                delete require.cache[_(setupFiles[bundle], true)];
+
+                if ( hasSetup )
+                    delete require.cache[_(controllerFiles[bundle], true)];
+            }
 
             for (var b = 0, len = bundles.length; b<len; ++b) {
                 Controllers[bundles[b]] = require(_(controllerFiles[bundles[b]], true));
@@ -345,10 +357,40 @@ function Router(env) {
 
 
         try {
+
             Controllers[bundle] = inherits(Controllers[bundle], SuperController);
 
             var controller = new Controllers[bundle](options);
+
             controller.setOptions(request, response, next, options);
+
+            if (hasSetup) { // adding setup
+                controller.setup = function(request, response, next) {
+                    if (!this._setupDone) {
+                        this._setupDone = true;
+                        return function (request, response, next) { // getting rid of the controller context
+                            var Setup = require(_(setupFiles[bundle], true));
+
+                            // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
+                            // inheriting SuperController functions & objects
+
+                            // exporting config & common methods
+                            Setup.engine        = controller.engine;
+                            Setup.getConfig     = controller.getConfig;
+                            Setup.throwError    = controller.throwError;
+                            Setup.redirect      = controller.redirect;
+                            Setup.render        = controller.render;
+                            Setup.renderJSON    = controller.renderJSON;
+                            Setup.isXMLRequest  = controller.isXMLRequest;
+                            Setup.isCacheless   = controller.isCacheless;
+
+                            Setup.apply(Setup, arguments);
+
+                            return Setup;
+                        }(request, response, next)
+                    }
+                }
+            }
 
             if (middleware.length > 0) {
                 processMiddlewares(middleware, controller, action, request, response, next,
@@ -387,10 +429,10 @@ function Router(env) {
 
     var processMiddlewares = function(middlewares, controller, action, req, res, next, cb){
 
-        var filename = _(local.conf.bundlePath)
-            , middleware = {}
-            , constructor = null
-            , re = new RegExp('^'+filename);
+        var filename        = _(local.conf.bundlePath)
+            , middleware    = {}
+            , constructor   = null
+            , re            = new RegExp('^'+filename);
 
         if ( middlewares.length > 0 ) {
             for (var m=0; m<middlewares.length; ++m) {
@@ -416,6 +458,7 @@ function Router(env) {
 
                 if ( typeof(middleware[constructor]) != 'undefined') {
 
+                    // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
                     // exporting config & common methods
                     middleware.getConfig    = controller.getConfig;
                     middleware.throwError   = controller.throwError;
