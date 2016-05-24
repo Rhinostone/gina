@@ -5,13 +5,14 @@
  * */
 function {Bundle}Controller() {
     var self = this;
+    // var appConf = this.getConfig('app');
 
     /**
      * Init default action
      *
      * @param {object} req
      * @param {object} res
-     * @param {object} [next]
+     * @callback [next]
      * */
     this.init = function(req, res) {
         console.log('got init action');
@@ -23,6 +24,7 @@ function {Bundle}Controller() {
     //this.onReady = function(req, res, next){
     //    // e.g: Define a setup function that you call when the controller is ready
     //    //setup(req, res, next)
+    //    // Or you can just complete and reuse the `setup.js` and call self.setup(req, res, next)
     //}
 };
 
