@@ -178,6 +178,25 @@ function Config(opt) {
     }
 
     /**
+     * Set server core conf
+     *
+     * Status Code, Mime Types etc ...
+     * */
+    this.setServerCoreConf = function(bundle, env, conf) {
+        self.envConf[bundle][env].server['coreConfiguration'] = conf
+    }
+
+    this.getServerCoreConf = function(bundle, env) {
+        try {
+            return self.envConf[bundle][env].server['coreConfiguration']
+        } catch(err) {
+            console.debug('Could not get server core configuration for <'+ bundle +'>:<'+ env +'>');
+            console.error(err.stack||err.message);
+            process.exit(1)
+        }
+    }
+
+    /**
      * @class Env Sub class
      *
      *

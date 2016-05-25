@@ -22,7 +22,10 @@ function Server(options) {
         hasViews: {}
     };
 
-    this.conf = {};
+    this.conf = {
+        core: {}
+    };
+
     this.routing = {};
     //this.activeChild = 0;
 
@@ -49,7 +52,6 @@ function Server(options) {
         self.executionPath = options.executionPath;
 
         self.bundles = options.bundles;
-        self.conf = {};
 
         if (!self.isStandalone) {
             //Only load the related conf / env.
@@ -80,6 +82,28 @@ function Server(options) {
             }
         }
 
+        // getting server core config
+        var statusCodes = null
+            , mime      = null;
+
+        try {
+            statusCodes = fs.readFileSync( _( getPath('gina.core') + '/status.codes') ).toString();
+            statusCodes = JSON.parse(statusCodes);
+            if ( typeof(statusCodes['_comment']) != 'undefined' )
+                delete statusCodes['_comment'];
+
+            mime  = fs.readFileSync(getPath('gina.core') + '/mime.types').toString();
+            mime  = JSON.parse(mime);
+            if ( typeof(mime['_comment']) != 'undefined' )
+                delete mime['_comment'];
+
+            self.conf.core.statusCodes  = statusCodes;
+            self.conf.core.mime         = mime
+
+        } catch(err) {
+            console.error(err.stack||err.message);
+            process.exit(1)
+        }
 
         self.emit('configured', false, express(), express, self.conf[self.appName][self.env]);
     }
@@ -89,14 +113,6 @@ function Server(options) {
 
         if (instance) {
             self.instance = instance
-        }
-
-        try {
-            self.validHeads =  fs.readFileSync(getPath('gina.core') + '/mime.types').toString();
-            self.validHeads = JSON.parse(self.validHeads)
-        } catch(err) {
-            console.error(err.stack||err.message);
-            process.exit(1)
         }
 
         onRoutesLoaded( function(err) {//load all registered routes in routing.json
@@ -138,6 +154,7 @@ function Server(options) {
             , originalRules         = []
             , oRuleCount            = 0;
 
+
         if (cacheless) {
             self.routing = {};
             self.reverseRouting = {}
@@ -145,6 +162,8 @@ function Server(options) {
 
         //Standalone or shared instance mode. It doesn't matter.
         for (; i<apps.length; ++i) {
+            config.setServerCoreConf(apps[i], self.env, self.conf.core);
+
             var appPath = _(self.conf[apps[i]][self.env].bundlesPath+ '/' + apps[i]);
             appName     =  apps[i];
 
@@ -366,6 +385,8 @@ function Server(options) {
         var webrootLen = self.conf[self.appName][self.env].server.webroot.length;
 
         self.instance.all('*', function onInstance(request, response, next) {
+
+            response.setHeader('X-Powered-By', 'Gina')
             // Fixing an express js bug :(
             // express is trying to force : /path/dir => /path/dir/
             // which causes : /path/dir/path/dir/  <---- by trying to add a slash in the end
@@ -585,8 +606,8 @@ function Server(options) {
     var getHead = function(file) {
         var s = file.split(/\./);
         var type = undefined;
-        if( typeof(self.validHeads[s[s.length-1]]) != 'undefiend' ) {
-            type = self.validHeads[s[s.length-1]];
+        if( typeof(self.conf.core.mime[s[s.length-1]]) != 'undefiend' ) {
+            type = self.conf.core.mime[s[s.length-1]];
             if (!type) {
                 console.warn('[ '+file+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Replacing with `plain/text` ')
             }
@@ -845,9 +866,10 @@ function Server(options) {
 
                         fs.readFile(filename, "binary", function(err, file) {
                             if (err) {
-                                res.writeHead(500, {"Content-Type": "text/plain"});
-                                res.write(err.stack + "\n");
-                                res.end();
+                                //res.writeHead(500, {"Content-Type": "text/plain"});
+                                //res.write(err.stack + "\n");
+                                //res.end();
+                                throwError(res, 404, 'Page not found: \n' + filename, next);
                                 return
                             }
                             if (!res.headersSent) {

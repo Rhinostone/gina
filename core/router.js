@@ -250,7 +250,7 @@ function Router(env) {
         var bundle          = local.bundle = params.bundle;
         var conf            = config.Env.getConf( bundle, env );
         var bundles         = conf.bundles;
-        local.conf = conf;
+        local.conf          = conf;
         local.isStandalone  = config.Host.isStandalone();
 
         // for libs/context etc..
@@ -304,9 +304,11 @@ function Router(env) {
         var controllerFiles = {}
             , setupFiles    = {}
             , Controllers   = {};
+
         for (var b in bundles) {
             setupFiles[bundles[b]]      = conf.bundlesPath +'/'+ bundles[b] + '/controllers/setup.js';
-            controllerFiles[bundles[b]] = conf.bundlesPath +'/'+ bundles[b] + '/controllers/controller.js'; // /{namespace}.js ??
+            controllerFiles[bundles[b]] = conf.bundlesPath +'/'+ bundles[b] + '/controllers/controller.js';
+            
         }
 
 
@@ -359,8 +361,7 @@ function Router(env) {
         try {
 
             Controllers[bundle] = inherits(Controllers[bundle], SuperController);
-
-            var controller = new Controllers[bundle](options);
+            var controller      = new Controllers[bundle](options);
 
             controller.setOptions(request, response, next, options);
 

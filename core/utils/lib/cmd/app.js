@@ -402,6 +402,10 @@ var AppCommand = {
             console.warn(err.stack);
         }
         var defaultBuildScript = 'script/build.js';
+        if ( typeof(project.bundles[bundle]) == 'undefined') {
+            console.error('bundle [ '+bundle+' ] not found in project');
+            process.exit(1)
+        }
         var defaultBuildScriptPath = _(_( getPath('root') +'/'+ project.bundles[bundle].src +'/'+defaultBuildScript ));
 
         //Getting project infos.

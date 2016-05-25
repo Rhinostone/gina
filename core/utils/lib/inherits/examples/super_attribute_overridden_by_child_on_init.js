@@ -1,11 +1,15 @@
 var inherits = require('../index.js');// Not needed if the framework installed
 
 var A = function() {
+    this.name = "A";
+
     this.age = 32;// Overriding Super (46)
     this.init(); // triggers Super init()
 };
 
 var B = function() {//Super Class
+    this.name = "B";
+
     var self = this;
     this.age = 46; // by default
 
