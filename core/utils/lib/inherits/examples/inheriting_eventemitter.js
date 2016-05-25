@@ -2,11 +2,15 @@ var inherits = require('../index.js');// Not needed if the framework installed
 var EventEmitter  = require('events').EventEmitter;
 
 var A = function() {
+    this.name = "A";
+
     console.log('You once were '+ this.age); // You once were 33
     this.init(); // triggers Super init()
 };
 
 var B = function() {//Super Class
+    this.name = "B";
+
     var self = this;
     this.age = 33; // by default
 

@@ -19,7 +19,7 @@ var swig            = require('swig');
 
 
 /**
- * @class Controller
+ * @class SuperController
  *
  *
  * @package     Gina
@@ -28,59 +28,60 @@ var swig            = require('swig');
  *
  * @api         Public
  */
-function Controller(options) {
-
-    //public
-    this.name       = "Controller";
-    this._data      = {};
+function SuperController(options) {
 
     //private
     var self = this;
     var local = {
-        req : null,
-        res : null,
-        next : null,
-        options: options || null,
-        query: {}
+        req     : null,
+        res     : null,
+        next    : null,
+        options : options || null,
+        query   : {},
+        _data   : {}
     };
     var ports = {
         'http': 80,
         'https': 443
     };
 
+
+
     /**
-     * Controller Constructor
+     * SuperController Constructor
      * @constructor
      * */
     var init = function() {
 
-        if ( typeof(Controller.initialized) != 'undefined' ) {
+        if ( typeof(SuperController.initialized) != 'undefined' ) {
             return getInstance()
         } else {
-            Controller.initialized = true;
-            Controller.instance = self;
+            SuperController.initialized = true;
+            SuperController.instance = self;
             if (local.options) {
-                Controller.instance._options = local.options
+                SuperController.instance._options = local.options
             }
         }
     }
 
     var getInstance = function() {
-        local.options = Controller.instance._options = options;
-        //self._data = Controller.instance._data;
-        return Controller.instance
+        local.options = SuperController.instance._options = options;
+        return SuperController.instance
     }
 
     var hasViews = function() {
         return ( typeof(local.options.views) != 'undefined' ) ? true : false;
     }
 
+    /**
+     * Check if env is running cacheless
+     * */
     this.isCacheless = function() {
         return local.options.cacheless
     }
 
     this.setOptions = function(req, res, next, options) {
-        local.options = Controller.instance._options = options;
+        local.options = SuperController.instance._options = options;
 
         // N.B.: Avoid setting `page` properties as much as possible from the routing.json
         // It will be easier for the framework if set from the controller.
@@ -115,9 +116,9 @@ function Controller(options) {
                         } else {
 
                             if ( /^:/.test(value) ) {
-                                self.set(str.substr(0, str.length-1), req.params[value.substr(1)])
+                                set(str.substr(0, str.length-1), req.params[value.substr(1)])
                             } else {
-                                self.set(str.substr(0, str.length-1), value)
+                                set(str.substr(0, str.length-1), value)
                             }
 
 
@@ -138,9 +139,8 @@ function Controller(options) {
 
             var  action     = local.options.action
                 , rule      = local.options.rule
+                , ext       = 'html'
                 , namespace = local.options.namespace || rule;
-            var ext = 'html';
-
 
 
             if ( typeof(local.options.views.default) != 'undefined' ) {
@@ -153,10 +153,10 @@ function Controller(options) {
 
             // new declaration && overrides
             var content = action;
-            self.set('page.ext', ext);
-            self.set('page.content', content);
-            self.set('page.namespace', namespace);
-            self.set('page.title', rule);
+            set('page.ext', ext);
+            set('page.content', content);
+            set('page.namespace', namespace);
+            set('page.title', rule);
             
             var acceptLanguage = 'en-US'; // by default
             if ( typeof(req.headers['accept-language']) != 'undefined' ) {
@@ -165,7 +165,7 @@ function Controller(options) {
                 acceptLanguage = local.options.conf.server.response.header['accept-language']
             }
 
-            self.set('page.lang', acceptLanguage.split(',')[0]);
+            set('page.lang', acceptLanguage.split(',')[0]);
         }
 
         if ( hasViews() ) {
@@ -177,9 +177,9 @@ function Controller(options) {
             var rule        = local.options.rule
                 , namespace = local.options.namespace || rule;
 
-            self.set('file', local.options.file);
-            self.set('page.title', local.options.file);
-            self.set('page.namespace', namespace);
+            set('file', local.options.file);
+            set('page.title', local.options.file);
+            set('page.namespace', namespace);
 
             //TODO - detect when to use swig
             var dir = self.views || local.options.views.default.views;
@@ -194,35 +194,28 @@ function Controller(options) {
     }
 
     /**
+     * DEPRECATED
      * Set views|templates location
      *
      * @param {string} dir
      * @param {string} [ layout ] - Is by default dir + '/layout.html'
      * */
-    this.setViewsLocation = function(dir, layout) {
-        local.options.views.default.views = dir;
-        local.options.views.default.html = _(dir + '/html');
-        if ( typeof(local.options.namespace) != 'undefined') {
-            local.options.views.default.html = _(local.options.views.default.html+'/'+local.options.namespace)
-        }
-        local.options.views.default.layout = layout || _(local.options.views.default.html + '/layout.html');
-        swig.setDefaults({
-            loader: swig.loaders.fs(dir)
-        })
-    }
+    // this.setViewsLocation = function(dir, layout) {
+    //     local.options.views.default.views = dir;
+    //     local.options.views.default.html = _(dir + '/html');
+    //     if ( typeof(local.options.namespace) != 'undefined') {
+    //         local.options.views.default.html = _(local.options.views.default.html+'/'+local.options.namespace)
+    //     }
+    //     local.options.views.default.layout = layout || _(local.options.views.default.html + '/layout.html');
+    //     swig.setDefaults({
+    //         loader: swig.loaders.fs(dir)
+    //     })
+    // }
 
-    this.hasOptions = function() {
-        return ( typeof(local.options) != 'undefined') ? true : false
-    }
+    // this.hasOptions = function() {
+    //     return ( typeof(local.options) != 'undefined') ? true : false
+    // }
 
-    /**
-     * Set Layout path
-     *
-     * @param {string} filename
-     * */
-    this.setLayout = function(rule, filename) {//means path
-        local.options.views[rule].layout = filename
-    }
 
     /**
      * Render HTML templates : Swig is the default template engine
@@ -237,7 +230,7 @@ function Controller(options) {
     this.render = function(_data) {
 
         try {
-            var data = self.getData(), path = '';
+            var data = getData(), path = '';
             if (!_data) {
                 _data = { page: {}}
             } else if ( _data && !_data['page']) {
@@ -247,12 +240,12 @@ function Controller(options) {
             } else {
                 data = merge(_data, data)
             }
-            self.setResources(local.options.views, data.file);
+            setResources(local.options.views, data.file);
             var file = data.file;
 
 
             // pre-compiling variables
-            data = merge(data, self.getData()); // needed !!
+            data = merge(data, getData()); // needed !!
             if ( typeof(local.options.namespace) != 'undefined' ) {
                 file = ''+ file.replace(local.options.namespace+'-', '');
                 // means that rule name === namespace -> pointing to root namespace dir
@@ -481,6 +474,7 @@ function Controller(options) {
                 local.res.statusCode    = 500;
                 local.res.statusMessage = 'Internal Server Error';
             }
+            
 
             // Internet Explorer override
             if ( /msie/i.test(local.req.headers['user-agent']) ) {
@@ -525,9 +519,9 @@ function Controller(options) {
      * @param {string} value Data value to set
      * @return {void}
      * */
-    this.set = function(variable, value) {
-        if ( typeof(self._data[variable]) == 'undefined' )
-            self._data[variable] = value
+    var set = function(variable, value) {
+        if ( typeof(local._data[variable]) == 'undefined' )
+            local._data[variable] = value
     }
 
     /**
@@ -536,8 +530,8 @@ function Controller(options) {
      * @param {String} variable Data name to set
      * @return {Object | String} data Data object or String
      * */
-    this.get = function(variable) {
-        return self._data[variable]
+    var get = function(variable) {
+        return local._data[variable]
     }
 
     /**
@@ -546,7 +540,7 @@ function Controller(options) {
      * @param {object} viewConf - template configuration
      * @param {string} localRessouces - rule name
      * */
-    this.setResources = function(viewConf, localRessource) {
+    var setResources = function(viewConf, localRessource) {
         var res = '',
             tmpRes = {},
             css = {
@@ -595,8 +589,8 @@ function Controller(options) {
             tmpRes = null
         }
 
-        self.set('page.stylesheets', cssStr);
-        self.set('page.scripts', jsStr)
+        set('page.stylesheets', cssStr);
+        set('page.scripts', jsStr)
     }
 
     /**
@@ -661,14 +655,14 @@ function Controller(options) {
     }
 
     /**
-     * TODO -  Controller.setMeta()
+     * TODO -  SuperController.setMeta()
      * */
-    this.setMeta = function(metaName, metacontent) {
+    // this.setMeta = function(metaName, metacontent) {
+    //
+    // }
 
-    }
-
-    this.getData = function() {
-        return refToObj(self._data)
+    var getData = function() {
+        return refToObj(local._data)
     }
 
     var isValidURL = function(url){
@@ -834,7 +828,7 @@ function Controller(options) {
             sourceStream
                 .pipe(destinationStream)
                 .on('error', function () {
-                    var err = 'Error on Controller::copyFile(...): Not found ' + files[i].source + ' or ' + files[i].target;
+                    var err = 'Error on SuperController::copyFile(...): Not found ' + files[i].source + ' or ' + files[i].target;
                     cb(err)
                 })
                 .on('close', function () {
@@ -850,6 +844,24 @@ function Controller(options) {
                 })
         }
     }
+
+    // TODO - download file
+    /**
+     * Download to targeteded filename.ext - Will create target if new
+     * Use `cb` callback or `onComplete` event
+     *
+     * @param {string} filename
+     * @param {string} content
+     *
+     * @callback [cb]
+     *  @param {object|null} error
+     *
+     * @event
+     *  @param {object|null} error
+     **/
+    //this.download(filename, content, cb) {}
+
+    //this.downloadLocalfile = function(pathname){}
 
     /**
      * Upload to target - Will create target if new
@@ -969,7 +981,7 @@ function Controller(options) {
         }
 
         if ( !options.host && !options.hostname ) {
-            self.emit('query#complete', new Error('Controller::query() needs at least a `host IP` or a `hostname`'))
+            self.emit('query#complete', new Error('SuperController::query() needs at least a `host IP` or a `hostname`'))
         }
 
         if ( /\:\/\//.test(options.host) ) {
@@ -1113,7 +1125,7 @@ function Controller(options) {
                     params = merge(true, params, req.delete);
                     break;
             }
-            
+
             return params
         }
 
@@ -1178,12 +1190,12 @@ function Controller(options) {
      * */
     this.throwError = function(res, code, msg) {
         if (arguments.length < 3) {
-            var msg     = code || null
-                , code  = res || 500
-                , res   = local.res;
+            var msg             = code || null
+                , code          = res || 500
+                , res           = local.res;
 
             if ( typeof(msg) != 'string' ) {
-                msg = JSON.stringify(msg)
+                msg = JSON.stringify(msg);
             }
         }
 
@@ -1192,7 +1204,7 @@ function Controller(options) {
                 res.writeHead(code, { 'Content-Type': 'application/json'} );
                 res.end(JSON.stringify({
                     status: code,
-                    error: 'Error '+ code +'. '+ msg
+                    error: msg
                 }))
             } else {
                 local.next()
@@ -1260,5 +1272,5 @@ function Controller(options) {
     init()
 };
 
-Controller = inherits(Controller, EventEmitter);
-module.exports = Controller
+SuperController = inherits(SuperController, EventEmitter);
+module.exports = SuperController

@@ -24,34 +24,52 @@ function Inherits(a, b) {
      * */
     var init = function(a, b) {
         var err = check(a, b);
+
+
         if (!err) {
+
             var z = (function() {
-                var cache = a;
-                return function() {
-                    //super class
-                    if (this) {
-                        this.prototype = {};
-                        //makes it compatible with node.js classes like EventEmitter
-                        for (var prop in b.prototype) {
-                            if (!this[prop]) {
-                                this[prop] = b.prototype[prop];
-                                //this.prototype[prop] = b.prototype[prop]
+                var _inherited = false, cache = a;
+
+                if (!_inherited) {
+                    _inherited = true;
+
+                    return function() {
+
+                        if (this) {
+                            this.prototype = {};
+                            if (!this.name) this.name = cache.name;
+
+                            this.prototype.name = this.name;
+
+                            //makes it compatible with node.js classes like EventEmitter
+                            for (var prop in b.prototype) {
+                                if (!this[prop] && prop != 'instance') {// all but instances
+                                    this[prop] = b.prototype[prop]
+                                }
                             }
+
+                            b.apply(this, arguments);
+                            cache.apply(this, arguments);
+                            if (this.prototype.name)
+                                this.name = this.prototype.name
                         }
-                        //this.prototype.name = b.name;
-                        b.apply(this, arguments);
-                        cache.apply(this, arguments)
                     }
                 }
-            }());
+
+            }(a, b));
 
             //makes it compatible with node.js classes like EventEmitter
+            if (a.prototype == undefined) {
+                a.prototype = {}
+            }
+
             if (b.prototype == undefined) {
                 b.prototype = {}
             }
 
             a.prototype = Object.create(b.prototype, {});
-            z.prototype = Object.create(a.prototype, {});
+            z.prototype = Object.create(a.prototype, {}); //{ name: { writable: true, configurable: true, value: name }
 
             return z
         } else {
