@@ -29,6 +29,7 @@ var swig            = require('swig');
  * @api         Public
  */
 function SuperController(options) {
+    this.name = 'SuperController';
 
     //private
     var self = this;
@@ -474,7 +475,7 @@ function SuperController(options) {
                 local.res.statusCode    = 500;
                 local.res.statusMessage = 'Internal Server Error';
             }
-            
+
 
             // Internet Explorer override
             if ( /msie/i.test(local.req.headers['user-agent']) ) {
