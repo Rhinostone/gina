@@ -604,10 +604,13 @@ function Server(options) {
     }
 
     var getHead = function(file) {
-        var s = file.split(/\./);
-        var type = undefined;
-        if( typeof(self.conf.core.mime[s[s.length-1]]) != 'undefiend' ) {
-            type = self.conf.core.mime[s[s.length-1]];
+        var s       = file.split(/\./);
+        var ext     = s[s.length-1];
+        var type    = undefined;
+        var mime    = self.conf[self.appName][self.env].server.coreConfiguration.mime;
+
+        if( typeof(mime[ext]) != 'undefiend' ) {
+            type = mime[ext];
             if (!type) {
                 console.warn('[ '+file+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Replacing with `plain/text` ')
             }
@@ -725,6 +728,7 @@ function Server(options) {
                 //Preparing params to relay to the router.
                 params = {
                     requirements    : routing[rule].requirements,
+                    namespace       : routing[rule].namespace || undefined,
                     url             : unescape(pathname), /// avoid %20
                     rule            : routing[rule].originalRule || rule,
                     param           : routing[rule].param,

@@ -273,10 +273,11 @@ function Router(env) {
         if (reservedActions.indexOf(action) > -1) throwError(response, 500, '[ '+action+' ] is reserved for the framework');
         var middleware      = params.middleware || [];
         var actionFile      = params.param.file; // matches rule name
-        var namespace       = params.param.namespace;
+        var namespace       = params.namespace;
         var routeHasViews   = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
         var isUsingTemplate = conf.template;
         var hasSetup        = false;
+        var hasNamespace    = false;
 
         local.routeHasViews     = routeHasViews;
         local.isUsingTemplate   = isUsingTemplate;
@@ -301,20 +302,31 @@ function Router(env) {
         console.debug('ACTION ON  ROUTING IS : ' + action);
 
         //Getting superCleasses & extending it with super Models.
-        var controllerFiles = {}
-            , setupFiles    = {}
-            , Controllers   = {};
+        var controllerFile         = {}
+            , setupFile            = {}
+            , Controller           = {};
 
-        for (var b in bundles) {
-            setupFiles[bundles[b]]      = conf.bundlesPath +'/'+ bundles[b] + '/controllers/setup.js';
-            controllerFiles[bundles[b]] = conf.bundlesPath +'/'+ bundles[b] + '/controllers/controller.js';
-            
+        // TODO -  ?? merge all controllers into a single file while building for other env than `dev`
+
+        setupFile     = conf.bundlesPath +'/'+ bundle + '/controllers/setup.js';
+        var filename = '';
+        if (namespace) {
+            if ( fs.existsSync(filename) ) {
+                filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.'+ namespace +'.js';
+            } else {
+                filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
+                console.warn('namespace found, but no `'+filename+'` to load: just ignore this message if this is ok with you')
+            }
+        } else {
+            filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
         }
+        controllerFile = filename
 
 
         // default param setting
         var options = {
             file            : actionFile,
+            namespace       : namespace,
             bundle          : bundle,//module
             bundlePath      : conf.bundlesPath +'/'+ bundle,
             rootPath        : self.executionPath,
@@ -333,35 +345,30 @@ function Router(env) {
 
         try {
 
-            if ( fs.existsSync(_(setupFiles[bundle], true)) )
+            if ( fs.existsSync(_(setupFile, true)) )
                 hasSetup = true;
 
             if (cacheless) {
-                delete require.cache[_(setupFiles[bundle], true)];
+
+                delete require.cache[_(controllerFile, true)];
 
                 if ( hasSetup )
-                    delete require.cache[_(controllerFiles[bundle], true)];
+                    delete require.cache[_(setupFile, true)];
             }
 
-            for (var b = 0, len = bundles.length; b<len; ++b) {
-                Controllers[bundles[b]] = require(_(controllerFiles[bundles[b]], true));
-            }
+            Controller = require(_(controllerFile, true));
+
         } catch (err) {
             // so you can use swig to customize error pages later
             throwError(response, 500, err.stack);
         }
 
         // about to contact Controller ...
-        // namespaces should be supported for every bundles
-        if ( typeof(namespace) != 'undefined' && namespace == 'framework' ) {
-            Controllers[bundle] = SuperController.prototype[namespace];
-        }
-
-
         try {
 
-            Controllers[bundle] = inherits(Controllers[bundle], SuperController);
-            var controller      = new Controllers[bundle](options);
+            Controller      = inherits(Controller, SuperController);
+
+            var controller  = new Controller(options);
 
             controller.setOptions(request, response, next, options);
 
@@ -370,7 +377,7 @@ function Router(env) {
                     if (!this._setupDone) {
                         this._setupDone = true;
                         return function (request, response, next) { // getting rid of the controller context
-                            var Setup = require(_(setupFiles[bundle], true));
+                            var Setup = require(_(setupFile, true));
 
                             // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
                             // inheriting SuperController functions & objects
@@ -419,7 +426,7 @@ function Router(env) {
             var superController = new SuperController(options);
             superController.setOptions(request, response, next, options);
             if ( typeof(controller) != 'undefined' && typeof(controller[action]) == 'undefined') {
-                superController.throwError(response, 500, (new Error('Action not found: `'+ action+'`. Please, check your routing.json or the related control in your `controller.js`.')).stack);
+                superController.throwError(response, 500, (new Error('action not found: `'+ action+'`. Please, check your routing.json or the related control in your `controller.js`.')).stack);
             } else {
                 superController.throwError(response, 500, err.stack);
             }
