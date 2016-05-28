@@ -20,9 +20,8 @@ var math        = require('./math');
  * @api public
  * */
 function ModelUtil() {
-    var self = this;
-    this.reloadingModel = false;
-    var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
+    var self        = this;
+    var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
 
     /**
      * Init
@@ -318,9 +317,15 @@ function ModelUtil() {
     }
 
 
+    /**
+     * Reload modes
+     * cacheless mode only
+     *
+     * @param {obj} conf
+     * @callback cb
+     * */
     this.reloadModels = function(conf, cb) {
         if ( typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null ) {
-            //self.reloadingModel = true;
 
             var models              = conf.content.connectors
                 , conn              = null
@@ -329,8 +334,7 @@ function ModelUtil() {
                 , modelPath         = null
                 , entitiesPath      = null
                 , entitiesObject    = null
-                , wait              = 0
-                , mObj              = {};
+                , wait              = 0;
 
             setContext('modelConnectors', models);
 
@@ -350,14 +354,15 @@ function ModelUtil() {
                     // must be done only when all models conn are alive because of `cross models/database use cases`
                     for (var nttClass in entitiesManager) {
                         if ( !/^[A-Z]/.test( nttClass ) ) {
-                            throw new Error('Entity Class `'+ nttClass +'` should start with an uppercase !');
+                            throw new Error('Entity Class `'+ nttClass +'` should start with an uppercase ?');
                             foundInitError = true
                         }
                         self.setModelEntity(bundle, name, nttClass, entitiesManager[nttClass])
                     }
 
                     for (var nttClass in entitiesManager) {
-                        new entitiesManager[nttClass](conn) // will update self.models
+                        // will force updates on self.models
+                        self.models[bundle][name][nttClass.toLowerCase()+'Entity'] = new entitiesManager[nttClass](conn)
                     }
                 }
             }

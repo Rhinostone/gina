@@ -461,10 +461,7 @@ function SuperController(options) {
             if( typeof(local.options) != "undefined" && typeof(local.options.charset) != "undefined" ){
                 local.res.setHeader("charset", local.options.charset);
             }
-
-            if ( !local.res.get('Content-Type') ) {
-                local.res.setHeader("Content-Type", "application/json");
-            }
+            
 
             //catching errors
             if (
@@ -1215,12 +1212,12 @@ function SuperController(options) {
                     code    = code.status;
                 }
 
-                if ( !res.get('Content-Type') ) {
+                // Internet Explorer override
+                if ( /msie/i.test(local.req.headers['user-agent']) ) {
                     res.writeHead(code, "Content-Type", "text/plain")
                 } else {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
-
 
                 res.end(JSON.stringify({
                     status: code,
