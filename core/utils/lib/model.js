@@ -247,7 +247,9 @@ function ModelUtil() {
 
                                 // step 2: creating entities instances
                                 for (var nttClass in entitiesManager) {
-                                    new entitiesManager[nttClass](conn) // will update self.models
+                                    // will update self.models
+                                    delete self.models[bundle][name][nttClass.toLowerCase() +'Entity'];
+                                    new entitiesManager[nttClass](conn)
                                 }
                             }
                         }
@@ -362,7 +364,8 @@ function ModelUtil() {
 
                     for (var nttClass in entitiesManager) {
                         // will force updates on self.models
-                        self.models[bundle][name][nttClass.toLowerCase()+'Entity'] = new entitiesManager[nttClass](conn)
+                        //self.models[bundle][name][nttClass.toLowerCase()+'Entity'] = new entitiesManager[nttClass](conn)
+                        new entitiesManager[nttClass](conn)
                     }
                 }
             }
@@ -573,12 +576,13 @@ function ModelUtil() {
      * @return {object} entity
      * */
     getModelEntity = function(bundle, model, entityClassName, conn) {
+        var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
         if ( typeof(entityClassName) != 'undefined' ) {
             try {
                 var shortName = entityClassName.substr(0, 1).toLowerCase() + entityClassName.substr(1);
 
                 //console.debug(parent+'->getEntity('+shortName+')');
-                if ( self.models[bundle][model][shortName] ) { // cacheless is filtered thanks to self.reloadModels(...)
+                if ( self.models[bundle][model][shortName] && !cacheless) { // cacheless is filtered thanks to self.reloadModels(...)
                     //return self.models[bundle][model][shortName]
                     return self.entitiesCollection[bundle][model][shortName]
                 } else {
