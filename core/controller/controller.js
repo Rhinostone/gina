@@ -469,11 +469,16 @@ function SuperController(options) {
             //catching errors
             if (
                 typeof(jsonObj.errno) != 'undefined' && local.res.statusCode == 200
-                || typeof(jsonObj.status) != 'undefined' && jsonObj.status == 500
-                || typeof(jsonObj.error) != 'undefined' && typeof(jsonObj.error.status) != 'undefined' && /^5/.test(jsonObj.error.status)
+                || typeof(jsonObj.status) != 'undefined' && jsonObj.status != 200
             ) {
-                local.res.statusCode    = 500;
-                local.res.statusMessage = 'Internal Server Error';
+
+                try {
+                    local.res.statusCode    = jsonObj.status;
+                    local.res.statusMessage = local.options.conf.server.coreConfiguration.statusCodes[jsonObj.status];
+                } catch (err){
+                    local.res.statusCode    = 500;
+                    local.res.statusMessage = err.stack;
+                }
             }
 
 
@@ -705,7 +710,7 @@ function SuperController(options) {
      * And Where `ignoreWebRoot` is an optional parameter used to ignore web root settings (Standalone mode or user set web root)
      * `ignoreWebRoot` behaves the like set to `false` by default
      *
-     * N.B.: Gina will tell browsers not to cache redirections
+     * N.B.: Gina will tell browsers not to cache redirections if you are using `dev` environement
      *
      * @param {object|string} req|rule - Request Object or Rule/Route name
      * @param {object|boolean} res|ignoreWebRoot - Response Object or Ignore WebRoot & start from domain root: /
@@ -795,12 +800,18 @@ function SuperController(options) {
 
             if (req.headersSent) return next();
 
-            res.writeHead(code, {
-                'Location': path,
-                'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            });
+            if (conf.env == 'dev') {
+                res.writeHead(code, {
+                    'Location': path,
+                    'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                })
+            } else {
+                res.writeHead(code, { 'Location': path })
+            }
+
+
 
             res.end();
             local.res.headersSent = true;// done for the render() method
@@ -1194,38 +1205,33 @@ function SuperController(options) {
             var msg             = code || null
                 , code          = res || 500
                 , res           = local.res;
-
-            if ( typeof(msg) != 'string' ) {
-                msg = JSON.stringify(msg);
-            }
         }
 
-        if ( !hasViews() || !local.options.isUsingTemplate ) {
-            if (!res.headersSent) {
-                res.writeHead(code, { 'Content-Type': 'application/json'} );
+        if (!res.headersSent) {
+            if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate ) {
+                // allowing this.throwError(err)
+                if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
+                    msg     = code.error;
+                    code    = code.status;
+                }
+
+                if ( !res.get('Content-Type') ) {
+                    res.writeHead(code, "Content-Type", "text/plain")
+                } else {
+                    res.writeHead(code, { 'Content-Type': 'application/json'} )
+                }
+
+
                 res.end(JSON.stringify({
                     status: code,
                     error: msg
                 }))
             } else {
-                local.next()
+                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>')
             }
-
         } else {
-            if (!res.headersSent) {
-                if ( self.isXMLRequest() ) {
-                    res.writeHead(code, { 'Content-Type': 'application/json'} );
-                    res.end(JSON.stringify({
-                        status: code,
-                        error: 'Error '+ code +'. '+ msg
-                    }))
-                } else {
-                    res.writeHead(code, { 'Content-Type': 'text/html'} );
-                    res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>')
-                }
-            } else {
-                local.next()
-            }
+            local.next()
         }
     }
 
