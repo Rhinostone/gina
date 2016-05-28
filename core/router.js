@@ -311,9 +311,8 @@ function Router(env) {
         setupFile     = conf.bundlesPath +'/'+ bundle + '/controllers/setup.js';
         var filename = '';
         if (namespace) {
-            if ( fs.existsSync(filename) ) {
-                filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.'+ namespace +'.js';
-            } else {
+            filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.'+ namespace +'.js';
+            if ( !fs.existsSync(filename) ) {
                 filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
                 console.warn('namespace found, but no `'+filename+'` to load: just ignore this message if this is ok with you')
             }
@@ -359,8 +358,10 @@ function Router(env) {
             Controller = require(_(controllerFile, true));
 
         } catch (err) {
-            // so you can use swig to customize error pages later
-            throwError(response, 500, err.stack);
+            // means that you have a syntax errors in you controller file
+            // TODO - increase `stack-trace` from 10 (default value) to 500 or more to get the exact error --stack-trace-limit=1000
+            // TODO - also check `stack-size` why not set it to at the same time => --stack-size=1024
+            throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` ').stack);
         }
 
         // about to contact Controller ...
@@ -426,7 +427,7 @@ function Router(env) {
             var superController = new SuperController(options);
             superController.setOptions(request, response, next, options);
             if ( typeof(controller) != 'undefined' && typeof(controller[action]) == 'undefined') {
-                superController.throwError(response, 500, (new Error('action not found: `'+ action+'`. Please, check your routing.json or the related control in your `controller.js`.')).stack);
+                superController.throwError(response, 500, (new Error('action not found: `'+ action+'`. Please, check your routing.json or the related control in your `'+controllerFile+'`.')).stack);
             } else {
                 superController.throwError(response, 500, err.stack);
             }
@@ -504,38 +505,26 @@ function Router(env) {
             var msg     = code || null
                 , code  = res || 500
                 , res   = local.res;
-
-            if ( typeof(msg) != 'string' ) {
-                msg = JSON.stringify(msg)
-            }
         }
 
-        if ( !hasViews() || !local.isUsingTemplate ) {
-            if (!res.headersSent) {
-                res.writeHead(code, { 'Content-Type': 'application/json'} );
+        if (!res.headersSent) {
+            if (local.isXMLRequest || !hasViews() || !local.isUsingTemplate) {
+                if ( !res.get('Content-Type') ) {
+                    res.writeHead(code, "Content-Type", "text/plain")
+                } else {
+                    res.writeHead(code, { 'Content-Type': 'application/json'} )
+                }
+
                 res.end(JSON.stringify({
                     status: code,
-                    error: 'Error '+ code +'. '+ msg
+                    error: msg
                 }))
             } else {
-                local.next()
+                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
             }
-
         } else {
-            if (!res.headersSent) {
-                if (local.isXMLRequest) {
-                    res.writeHead(code, { 'Content-Type': 'application/json'} );
-                    res.end(JSON.stringify({
-                        status: code,
-                        error: 'Error '+ code +'. '+ msg
-                    }))
-                } else {
-                    res.writeHead(code, { 'Content-Type': 'text/html'} );
-                    res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
-                }
-            } else {
-                local.next()
-            }
+            local.next()
         }
     };
 

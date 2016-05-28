@@ -524,6 +524,14 @@ function Server(options) {
                                     request.body = request.post = obj;
                                 }
 
+                                // see.: https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#POST
+                                //     Responses to this method are not cacheable,
+                                //     unless the response includes appropriate Cache-Control or Expires header fields.
+                                //     However, the 303 (See Other) response can be used to direct the user agent to retrieve a cacheable resource.
+                                response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                                response.setHeader('Pragma', 'no-cache');
+                                response.setHeader('Expires', '0');
+
                                 // cleaning
                                 delete request.query;
                                 delete request.get;
@@ -768,7 +776,10 @@ function Server(options) {
 
                         // handling GET method exception - if no param found
                         var methods = ['get', 'put', 'delete'], method = req.method.toLowerCase();
-                        if ( methods.indexOf(method) > -1 && typeof(req.query) != 'undefined' && req.query.count() == 0 ) {
+                        if (
+                            methods.indexOf(method) > -1 && typeof(req.query) != 'undefined' && req.query.count() == 0
+                            || methods.indexOf(method) > -1 && typeof(req.query) == 'undefined' && typeof(req.params) != 'undefined' && req.params.count() > 1
+                        ) {
                             var p = 0;
                             for (var parameter in req.params) {
                                 if (p > 0) {
@@ -933,35 +944,32 @@ function Server(options) {
         var isUsingTemplate = self.conf[self.appName][self.env].template;
         var isXMLRequest    = self.conf[self.appName][self.env].server.request.isXMLRequest;
 
-        if ( !withViews || !isUsingTemplate ) {
-            if (!res.headersSent) {
-                res.writeHead(code, { 'Content-Type': 'application/json'} );
+        if (!res.headersSent) {
+            if (isXMLRequest || !withViews || !isUsingTemplate ) {
+                // allowing this.throwError(err)
+                if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
+                    msg     = code.error;
+                    code    = code.status;
+                }
+
+                if ( !res.get('Content-Type') ) {
+                    res.writeHead(code, "Content-Type", "text/plain")
+                } else {
+                    res.writeHead(code, { 'Content-Type': 'application/json'} )
+                }
+                
                 res.end(JSON.stringify({
                     status: code,
-                    error: 'Error '+ code +'. '+ msg
+                    error: msg
                 }));
                 res.headersSent = true
             } else {
-                next()
+                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                res.headersSent = true
             }
-
         } else {
-            if (!res.headersSent) {
-                if (isXMLRequest) {
-                    res.writeHead(code, { 'Content-Type': 'application/json'} );
-                    res.end(JSON.stringify({
-                        status: code,
-                        error: 'Error '+ code +'. '+ msg
-                    }));
-                    res.headersSent = true
-                } else {
-                    res.writeHead(code, { 'Content-Type': 'text/html'} );
-                    res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
-                    res.headersSent = true
-                }
-            } else {
-                next()
-            }
+            next()
         }
     }
 

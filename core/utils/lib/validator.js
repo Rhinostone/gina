@@ -118,22 +118,23 @@ function Validator(data, errorLabels) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
 
-                local.errors[this.name].is = replace(this.flash || flash || local.errorLabels.is, this)
+                local.errors[this.name].is = replace(this.error || flash || local.errorLabels.is, this)
             }
 
             return self[this.name]
         }
 
         self[el].isEmail = function() {
-            var rgx = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
-            var valid = rgx.test(this.value) ? true : false;
-            this.valid = valid;
+            this.value  = local.data[this.name] = this.value.toLowerCase();
+            var rgx     = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+            var valid   = rgx.test(this.value) ? true : false;
+            this.valid  = valid;
 
             if (!valid) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
 
-                local.errors[this.name].isEmail = replace(this.flash || local.errorLabels.isEmail, this)
+                local.errors[this.name].isEmail = replace(this.error || local.errorLabels.isEmail, this)
             }
 
             return self[this.name]
@@ -162,7 +163,7 @@ function Validator(data, errorLabels) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
 
-                local.errors[this.name].isBoolean = replace(this.flash || local.errorLabels.isBoolean, this)
+                local.errors[this.name].isBoolean = replace(this.error || local.errorLabels.isBoolean, this)
             }
             return self[this.name]
         }
@@ -198,14 +199,14 @@ function Validator(data, errorLabels) {
                 if ( !local.errors[this.name] )
                     local.errors[this.name] = {};
                 if ( !isValid )
-                    local.errors[this.name].isNumber = replace(this.flash || local.errorLabels.isNumber, this);
+                    local.errors[this.name].isNumber = replace(this.error || local.errorLabels.isNumber, this);
                 if ( !isMinLength || !isMaxLength ) {
                     if ( !isMinLength )
-                        local.errors[this.name].isNumberLength = replace(this.flash || local.errorLabels.isNumberMinLength, this);
+                        local.errors[this.name].isNumberLength = replace(this.error || local.errorLabels.isNumberMinLength, this);
                     if ( !isMaxLength )
-                        local.errors[this.name].isNumberLength = replace(this.flash || local.errorLabels.isNumberMaxLength, this);
+                        local.errors[this.name].isNumberLength = replace(this.error || local.errorLabels.isNumberMaxLength, this);
                     if ( minLength === maxLength )
-                        local.errors[this.name].isNumberLength = replace(this.flash || local.errorLabels.isNumberLength, this);
+                        local.errors[this.name].isNumberLength = replace(this.error || local.errorLabels.isNumberLength, this);
                 }
                 isValid = false;
             }
@@ -225,7 +226,7 @@ function Validator(data, errorLabels) {
                     if ( !(local.errors[this.name]) )
                         local.errors[this.name] = {};
 
-                    local.errors[this.name].toInteger = replace(this.flash || local.errorLabels.toInteger, this)
+                    local.errors[this.name].toInteger = replace(this.error || local.errorLabels.toInteger, this)
                 }
 
             }
@@ -256,14 +257,14 @@ function Validator(data, errorLabels) {
                 if ( !local.errors[this.name] )
                     local.errors[this.name] = {};
                 if ( !isValid )
-                    local.errors[this.name].isInteger = replace(this.flash || local.errorLabels.isInteger, this);
+                    local.errors[this.name].isInteger = replace(this.error || local.errorLabels.isInteger, this);
                 if ( !isMinLength || !isMaxLength ) {
                     if ( !isMinLength )
-                        local.errors[this.name].isIntegerLength = replace(this.flash || local.errorLabels.isIntegerMinLength, this);
+                        local.errors[this.name].isIntegerLength = replace(this.error || local.errorLabels.isIntegerMinLength, this);
                     if ( !isMaxLength )
-                        local.errors[this.name].isIntegerLength = replace(this.flash || local.errorLabels.isIntegerMaxLength, this);
+                        local.errors[this.name].isIntegerLength = replace(this.error || local.errorLabels.isIntegerMaxLength, this);
                     if ( minLength === maxLength )
-                        local.errors[this.name].isIntegerLength = replace(this.flash || local.errorLabels.isIntegerLength, this);
+                        local.errors[this.name].isIntegerLength = replace(this.error || local.errorLabels.isIntegerLength, this);
                 }
                 isValid = false;
             }
@@ -290,7 +291,7 @@ function Validator(data, errorLabels) {
                     if ( !(local.errors[this.name]) )
                         local.errors[this.name] = {};
 
-                    local.errors[this.name].toFloat = replace(this.flash || local.errorLabels.toFloat, this)
+                    local.errors[this.name].toFloat = replace(this.error || local.errorLabels.toFloat, this)
                 }
             }
 
@@ -329,7 +330,7 @@ function Validator(data, errorLabels) {
                 if ( !(local.errors[this.name]) ) {
                     local.errors[this.name] = {};
                 }
-                local.errors[this.name].isFloat = replace(this.flash || local.errorLabels.isFloat, this)
+                local.errors[this.name].isFloat = replace(this.error || local.errorLabels.isFloat, this)
             }
 
             return self[this.name]
@@ -343,7 +344,7 @@ function Validator(data, errorLabels) {
                 if ( !(local.errors[this.name]) )
                     local.errors[this.name] = {};
 
-                local.errors[this.name].isRequired = replace(this.flash || local.errorLabels.isRequired, this)
+                local.errors[this.name].isRequired = replace(this.error || local.errorLabels.isRequired, this)
             }
 
             return self[this.name]
@@ -381,14 +382,14 @@ function Validator(data, errorLabels) {
                 if ( !local.errors[this.name] )
                     local.errors[this.name] = {};
                 if ( !isValid )
-                    local.errors[this.name].isString = replace(this.flash || local.errorLabels.isString, this);
+                    local.errors[this.name].isString = replace(this.error || local.errorLabels.isString, this);
                 if ( !isMinLength || !isMaxLength) {
                     if ( !isMinLength )
-                        local.errors[this.name].isStringLength = replace(this.flash || local.errorLabels.isStringMinLength, this);
+                        local.errors[this.name].isStringLength = replace(this.error || local.errorLabels.isStringMinLength, this);
                     if ( !isMaxLength )
-                        local.errors[this.name].isStringLength = replace(this.flash || local.errorLabels.isStringMaxLength, this);
+                        local.errors[this.name].isStringLength = replace(this.error || local.errorLabels.isStringMaxLength, this);
                     if (minLength === maxLength)
-                        local.errors[this.name].isStringLength = replace(this.flash || local.errorLabels.isStringLength, this);
+                        local.errors[this.name].isStringLength = replace(this.error || local.errorLabels.isStringLength, this);
                 }
                 isValid = false
             }
@@ -423,7 +424,7 @@ function Validator(data, errorLabels) {
             this.valid = ( !date instanceof Date ) ? false : true;
 
             if ( !date instanceof Date ) {
-                local.errors[this.name].isDate = replace(this.flash || local.errorLabels.isDate, this)
+                local.errors[this.name].isDate = replace(this.error || local.errorLabels.isDate, this)
             }
 
             //return self[this.name]
@@ -454,7 +455,7 @@ function Validator(data, errorLabels) {
          * */
         self[el].setFlash = function(regex, flash) {
             if ( typeof(flash) != 'undefined' && flash != '') {
-                this.flash = flash
+                this.error = flash
             }
             return self[this.name]
         }
