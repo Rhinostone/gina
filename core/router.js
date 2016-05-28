@@ -250,6 +250,7 @@ function Router(env) {
         var bundle          = local.bundle = params.bundle;
         var conf            = config.Env.getConf( bundle, env );
         var bundles         = conf.bundles;
+        local.request       = request;
         local.conf          = conf;
         local.isStandalone  = config.Host.isStandalone();
 
@@ -509,7 +510,8 @@ function Router(env) {
 
         if (!res.headersSent) {
             if (local.isXMLRequest || !hasViews() || !local.isUsingTemplate) {
-                if ( !res.get('Content-Type') ) {
+                // Internet Explorer override
+                if ( /msie/i.test(local.request.headers['user-agent']) ) {
                     res.writeHead(code, "Content-Type", "text/plain")
                 } else {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )

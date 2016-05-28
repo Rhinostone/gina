@@ -385,8 +385,8 @@ function Server(options) {
         var webrootLen = self.conf[self.appName][self.env].server.webroot.length;
 
         self.instance.all('*', function onInstance(request, response, next) {
-
-            response.setHeader('X-Powered-By', 'Gina')
+            local.request = request;
+            response.setHeader('X-Powered-By', 'Gina');
             // Fixing an express js bug :(
             // express is trying to force : /path/dir => /path/dir/
             // which causes : /path/dir/path/dir/  <---- by trying to add a slash in the end
@@ -952,7 +952,8 @@ function Server(options) {
                     code    = code.status;
                 }
 
-                if ( !res.get('Content-Type') ) {
+                // Internet Explorer override
+                if ( /msie/i.test(local.request.headers['user-agent']) ) {
                     res.writeHead(code, "Content-Type", "text/plain")
                 } else {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
