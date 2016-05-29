@@ -94,16 +94,13 @@ function EntitySuper(conn) {
      * Set all main listenners at once
      * TODO - add a mutex in case you have 2 threads trying to access the same method at the same time
      * */
-    //var setListeners = function(instance) {
-
-
     var setListeners = function() {
         if ( !EntitySuper[self.name].initialized ) {
 
             EntitySuper[self.name].initialized = true;
             // get entity objet
-            //var entity = instance || self.getEntity(self.name);
             var entity = self.getEntity(self.name);
+
             if (!entity) return false;
 
 

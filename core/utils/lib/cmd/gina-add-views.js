@@ -1,6 +1,6 @@
 var AddViews;
 var fs = require('fs');
-var utils = getContext('gina.utils');
+var utils = getContext('gina').utils;
 var GINA_PATH = _( getPath('gina.core') );
 var Config = require( _( GINA_PATH + '/config') );
 var readline = require('readline');

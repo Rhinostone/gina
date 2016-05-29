@@ -2,7 +2,7 @@ var AddBundle;
 
 //imports
 var fs = require('fs');
-//var utils = getContext('gina.utils');
+//var utils = getContext('gina').utils;
 var utils = require('gina').utils;
 var console = utils.logger;
 var GINA_PATH = _( getPath('gina.core') );

@@ -279,7 +279,7 @@ function Config(opt) {
                         , file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
                         , a         = file.replace('.js', '').split('/')
                         , i         = a.length-1
-                        , bundles   = getContext('gina.config').bundles
+                        , bundles   = getContext('gina').config.bundles
                         , index     = 0;
 
                     for (; i >= 0; --i) {

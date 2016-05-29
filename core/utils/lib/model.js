@@ -195,7 +195,8 @@ function ModelUtil() {
                 , bundle        = bundles[b]
                 , len           = bundles.length
                 , conf          = configuration[bundle][env]
-                , connectors    = conf.content['connectors'] || undefined;
+                , connectors    = conf.content['connectors'] || undefined
+                , modelConnectors  = {};
 
 
             if ( typeof(connectors) != 'undefined' && connectors != null) {
@@ -206,7 +207,7 @@ function ModelUtil() {
 
                 var t = 0;
 
-                var done = function(connector) {
+                var done = function(connector, modelConnectors) {
                     if ( typeof(models[connector]) != 'undefined' ) {
                         ++t
                     } else {
@@ -214,6 +215,7 @@ function ModelUtil() {
                     }
 
                     if ( t == models.count() ) {
+                        setContext('modelConnectors', modelConnectors);
 
                         var conn                = null
                             , entitiesManager   = null
@@ -234,6 +236,7 @@ function ModelUtil() {
                                 entitiesManager = new require( _(conf.modelsPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle});
 
                                 self.setConnection(bundle, name, conn);
+                                //setContext('modelConnectors.'+self.bundle, self.connectors, true);
 
                                 // step 1: creating entities classes in the context
                                 // must be done only when all models conn are alive because of `cross models/database use cases`
@@ -263,7 +266,7 @@ function ModelUtil() {
 
                 for (var c in models) {//c as connector name
                     if ( modelObject && typeof(modelObject[c]) != 'undefined' ) {
-                        done(connector)
+                        done(connector, modelConnectors)
                     } else {
                         //e.g. var apiModel    = new Model(config.bundle + "/api");
                         // => var apiModel = getContext('apiModel')
@@ -271,11 +274,20 @@ function ModelUtil() {
                         mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
                         mObj[c+'Model']
                             .onReady(
-                            function onModelReady( err, connector, conn) {
+                            function onModelReady( err, bundle, connector, conn) {
                                 if (err) {
                                     console.error('found error ...');
                                     console.error(err.stack||err.message||err);
                                 } else {
+
+                                    if (!modelConnectors[bundle]) {
+                                        modelConnectors[bundle] = {}
+                                    }
+                                    if (!modelConnectors[bundle][connector]) {
+                                        modelConnectors[bundle][connector] = {
+                                            conn: conn
+                                        }
+                                    }
 
                                     if ( typeof(self.models[bundle]) == 'undefined') {
                                         self.models[bundle] = {}
@@ -296,7 +308,7 @@ function ModelUtil() {
                                     }
                                 }
 
-                                done(connector)
+                                done(connector, modelConnectors)
                             })
                    }
 
@@ -327,6 +339,7 @@ function ModelUtil() {
      * @callback cb
      * */
     this.reloadModels = function(conf, cb) {
+
         if ( typeof(conf.content['connectors']) != 'undefined' && conf.content['connectors'] != null ) {
 
             var models              = conf.content.connectors
@@ -336,20 +349,34 @@ function ModelUtil() {
                 , modelPath         = null
                 , entitiesPath      = null
                 , entitiesObject    = null
+                , modelConnectors   = null
                 , wait              = 0;
 
-            setContext('modelConnectors', models);
 
             // end - now, loading entities for each `loaded` model
             for (var bundle in self.models) {
 
                 for (var name in self.models[bundle]) { //name as connector name
+
+                    self.models[bundle][name] = {}
+
+                    if ( typeof(self.models[bundle][name]['_connection']) == 'undefined' ) {
+                        self.models[bundle][name]['_connection'] = getContext('modelConnectors')[bundle][name].conn
+                    }
+
+                    if ( typeof(self.models[bundle][name]['getConnection']) == 'undefined' ) {// only used when tryin to import multiple models into the same entity
+                        self.models[bundle][name]['getConnection'] = function() {
+                            return self.models[bundle][name]['_connection']
+                        }
+                    }
+
                     conn            = self.models[bundle][name]['_connection'];
 
                     modelPath       = _(conf.modelsPath + '/' + name);
                     entitiesPath    = _(modelPath + '/entities');
 
                     //Getting Entities Manager thru connector.
+                    delete require.cache[_(conf.modelsPath + '/index.js', true)];//child
                     entitiesManager = new require( _(conf.modelsPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle});
 
                     // creating entities instances
@@ -364,7 +391,6 @@ function ModelUtil() {
 
                     for (var nttClass in entitiesManager) {
                         // will force updates on self.models
-                        //self.models[bundle][name][nttClass.toLowerCase()+'Entity'] = new entitiesManager[nttClass](conn)
                         new entitiesManager[nttClass](conn)
                     }
                 }
@@ -406,7 +432,7 @@ function ModelUtil() {
                 , i         = a.length-1
                 , bundle    = null;
 
-            var conf        = getContext('gina.config') || null;
+            var conf        = getContext('gina').config || null;
             if (conf) {
                 var bundles     = conf.bundles
                     , index     = 0;
@@ -438,133 +464,7 @@ function ModelUtil() {
                 return undefined
             }
         }
-        // TODO - remove this
-        /** else { // not supposed to work
-            // we might be in a case where we are trying to import a model into another while the targetd model is not yet loaded
-            // this will happen if you are trying to do it from within an entity: ModelA::entity trying to getModel(ModelB) while ModelB is not loaded yet
-
-            // Check if targetd model exists and load it synchronously if found
-            //debugger;
-            var ctx                 = getContext()
-                , env               = ctx['gina.config'].env
-                , conf              = ctx['gina.config'].bundlesConfiguration.conf[bundle][env]
-                , modelConnector    = ctx.modelConnectors[model] || null //self.loadModelSync(bundle, model, conf, env)
-                , conn              = ctx.modelConnections[bundle][model]
-                , entitiesManager   = null
-                , modelPath         = _(conf.modelsPath + '/' + model)
-                , entitiesPath      = _(modelPath + '/entities')
-                ;
-
-            if ( modelConnector && conf && fs.existsSync(modelPath) ) {
-                conn            = modelConnector;
-                if ( cacheless )
-                    delete require.cache[_(modelPath + '/index.js', true)];
-
-                entitiesManager = new require( _(modelPath + '/index.js', true) )(conn, {model: model, bundle: bundle});
-
-                self.setConnection(bundle, model, conn);
-
-                //var ntt = null;
-                for (var nttClass in entitiesManager) {
-                    //ntt = nttClass.substr(0,1).toLowerCase() + nttClass.substr(1);
-                    // creating instance
-                    //self.models[bundle][model][ntt]  = new entitiesManager[nttClass](conn);
-                    new entitiesManager[nttClass](conn);
-                }
-
-                return self.models[bundle][model]
-
-                // remove the whole method ... useless since classes are now produced from model/index.js
-                //return importModelEntitiesSync(bundle, model, conn, entitiesManager, modelPath, entitiesPath, ctx)
-            } else {
-                return undefined
-            }
-        }*/
     }
-
-    // /**
-    //  * Import Model Entities synchronously
-    //  *
-    //  * @param {string} bundle
-    //  * @param {string} model
-    //  * @param {object} conn
-    //  * @param {object} entitiesManager
-    //  * @param {string} modelPath
-    //  * @param {string} entitiesPath
-    //  * @param {object} ctx - Context
-    //  *
-    //  *
-    //  * @return {object} modelEntities
-    //  *
-    //  * TODO - Refacto gina/core/model/index.js `getModelEntities` to look less messed up: loading entities can be synchronously, they are loaded during the server init or page refresh if `cacheless` is active. Maybe, it is possible to make this one `public`and call it from the main model load ?
-    //  * */
-    // var importModelEntitiesSync = function(bundle, model, conn, entitiesManager, modelPath, entitiesPath, ctx) {
-    //     var ginaCorePath        = getPath('gina.core')
-    //         , ctx               = ctx || getContext()
-    //         , cacheless         = ctx['gina.config'].isCacheless()
-    //         , suffix            = 'Entity'
-    //         , files             = fs.readdirSync(entitiesPath)
-    //         , i                 = 0
-    //         , len               = files.length
-    //         , entityName        = null
-    //         , excluded          = ['index.js']
-    //         , className         = null
-    //         , filename          = null
-    //         , EntitySuperClass  = null
-    //         , EntityClass       = null
-    //         ;
-    //
-    //     try {
-    //         self.models[bundle][model]['getConnection'] = function() {
-    //             return self.models[bundle][model]['_connection']
-    //         }
-    //     } catch (err) {
-    //         return undefined
-    //     }
-    //
-    //     filename    = _(ginaCorePath + '/model/entity.js', true);
-    //     if (cacheless)
-    //         delete require.cache[_(filename, true)]; //EntitySuperClass
-    //
-    //     EntitySuperClass                = require(_(filename, true));
-    //
-    //     for (; i < len; ++i) {
-    //         if ( /\.js/.test(files[i]) && excluded.indexOf(files[i]) == -1 && !/\.json/.test(files[i]) && ! /^\./.test(files[i]) ) {
-    //             entityName  = files[i].replace(/\.js/, '') + suffix;
-    //             className   = entityName.substr(0,1).toUpperCase() + entityName.substr(1);
-    //
-    //             if ( typeof(entitiesManager[entityName]) == 'undefined' ) {
-    //
-    //                 if (cacheless)
-    //                     delete require.cache[_(entitiesPath + '/' + files[i], true)];//child
-    //
-    //                 EntityClass                     = require( _(entitiesPath + '/' + files[i], true) );
-    //                 //Inherits.
-    //                 EntityClass                     = inherits(EntityClass, EntitySuperClass);
-    //                 EntityClass.prototype.name      = className;
-    //                 EntityClass.prototype.model     = model;
-    //                 EntityClass.prototype.bundle    = bundle;
-    //
-    //                 entitiesManager[entityName]     = EntityClass;
-    //
-    //             } else {
-    //                 EntityClass = entitiesManager[entityName];
-    //             }
-    //
-    //
-    //
-    //             self.setModelEntity(bundle, model, className, EntityClass)
-    //         }
-    //     }
-    //
-    //     // don't be a smart ass, you need 2 loops because of the local referencesto other entities thru `this.getEntity(...)` (relations/mapping)
-    //     for (var _ntt in entitiesManager) {
-    //         // creating instance
-    //         self.models[bundle][model][_ntt]  = new entitiesManager[_ntt](conn);
-    //     }
-    //
-    //     return self.models[bundle][model]
-    // }
 
     /**
      * Get Model Entity
@@ -576,17 +476,18 @@ function ModelUtil() {
      * @return {object} entity
      * */
     getModelEntity = function(bundle, model, entityClassName, conn) {
-        var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
         if ( typeof(entityClassName) != 'undefined' ) {
             try {
                 var shortName = entityClassName.substr(0, 1).toLowerCase() + entityClassName.substr(1);
 
                 //console.debug(parent+'->getEntity('+shortName+')');
-                if ( self.models[bundle][model][shortName] && !cacheless) { // cacheless is filtered thanks to self.reloadModels(...)
+                if ( self.models[bundle][model][shortName]) { // cacheless is filtered thanks to self.reloadModels(...)
                     //return self.models[bundle][model][shortName]
                     return self.entitiesCollection[bundle][model][shortName]
                 } else {
-                    return new self.entities[bundle][model][entityClassName](conn);
+                    var entityObject = new self.entities[bundle][model][entityClassName](conn)
+                    self.entitiesCollection[bundle][model][shortName] = entityObject;
+                    return entityObject;
                 }
 
             } catch (err) {
