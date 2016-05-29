@@ -49,6 +49,19 @@ function ContextHelper(contexts) {
         merge(true, self.contexts, context)
     }
 
+    var parseCtxObject = function (o, obj) {
+
+        for (var i in o) {
+            if (o[i] !== null && typeof(o[i]) == 'object') {
+                parseCtxObject(o[i], obj);
+            } else if (o[i] == '_content_'){
+                o[i] = obj
+            }
+        }
+
+        return o
+    }
+
     setContext = function(name, obj, force) {
 
         if (arguments.length > 1) {
@@ -58,11 +71,40 @@ function ContextHelper(contexts) {
                 var name = 'global'
             }
 
-            if ( typeof(self.contexts[name]) != "undefined" && !force) {
-                merge(self.contexts[name], obj)
+            if (/\./.test(name) ) {
+                var keys        = name.split(/\./g)
+                    , newObj    = {}
+                    , str       = '{'
+                    , _count    = 0;
+
+                for (var k = 0, len = keys.length; k<len; ++k) {
+                    str +=  "\""+ keys.splice(0,1)[0] + "\":{";
+
+                    ++_count;
+                    if (k == len-1) {
+                        str = str.substr(0, str.length-1);
+                        str += "\"_content_\"";
+                        for (var c = 0; c<_count; ++c) {
+                            str += "}"
+                        }
+                    }
+                }
+
+                newObj = parseCtxObject(JSON.parse(str), obj);
+                if (force) {
+                    self.contexts = merge(true, self.contexts, newObj)
+                } else {
+                    self.contexts =  merge(self.contexts, newObj)
+                }
+
             } else {
-                self.contexts[name] = obj
+                if ( typeof(self.contexts[name]) != "undefined" && !force) {
+                    self.contexts[name] = merge(self.contexts[name], obj)
+                } else {
+                    self.contexts[name] = obj
+                }
             }
+
         } else {
             //console.log("setting context ", arguments[0]);
             self.contexts = arguments[0]
@@ -149,7 +191,7 @@ function ContextHelper(contexts) {
                 , a         = file.replace('.js', '').split('/')
                 , i         = a.length-1;
 
-            var conf        = getContext('gina.config') || null;
+            var conf        = getContext('gina').config || null;
 
             if (conf) {
                 var bundles   = conf.bundles
@@ -176,7 +218,7 @@ function ContextHelper(contexts) {
 
         } else {
             var libPath     = null
-                , conf      = getContext('gina.config')
+                , conf      = getContext('gina').config
                 , env       = conf.env
                 , cacheless = conf.isCacheless();
         }
