@@ -748,7 +748,8 @@ function Server(options) {
                 try {
                     isRoute = router.compareUrls(req, params, routing[rule].url);
                 } catch (err) {
-                    throwError(res, 500, 'Rule [ '+rule+' ] needs your attention.\n'+err.stack)
+                    throwError(res, 500, 'Rule [ '+rule+' ] needs your attention.\n'+err.stack);
+                    break;
                 }
 
                 if (pathname === routing[rule].url || isRoute.past) {
@@ -791,17 +792,20 @@ function Server(options) {
 
 
                         // onRouting Event ???
-                        if ( cacheless ) {
-                            config.refreshModels(params.bundle, self.env, function onModelRefreshed(err){
-                                if (err) {
-                                    throwError(res, 500, err.msg||err.stack , next)
-                                } else {
-                                    router.route(req, res, next, params)
-                                }
-                            })
-                        } else {
-                            router.route(req, res, next, params)
+                        if (isRoute.past) {
+                            if ( cacheless ) {
+                                config.refreshModels(params.bundle, self.env, function onModelRefreshed(err){
+                                    if (err) {
+                                        throwError(res, 500, err.msg||err.stack , next)
+                                    } else {
+                                        router.route(req, res, next, params)
+                                    }
+                                })
+                            } else {
+                                router.route(req, res, next, params)
+                            }
                         }
+
                     }
                     matched = true;
                     isRoute = {};
@@ -881,9 +885,6 @@ function Server(options) {
 
                         fs.readFile(filename, "binary", function(err, file) {
                             if (err) {
-                                //res.writeHead(500, {"Content-Type": "text/plain"});
-                                //res.write(err.stack + "\n");
-                                //res.end();
                                 throwError(res, 404, 'Page not found: \n' + filename, next);
                                 return
                             }

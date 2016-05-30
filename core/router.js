@@ -17,7 +17,7 @@ var url                 = require('url')
     , merge             = utils.merge
     , SuperController   = require('./controller')
     , Config            = require('./config')
-    //init
+    //get config instance
     , config            = new Config();
 
 /**
@@ -50,6 +50,44 @@ function Router(env) {
         }
     }
 
+    this.setMiddlewareInstance = function(instance) {
+        self.middlewareInstance = instance
+    }
+
+    this.getInstance = function() {
+        return self
+    }
+
+
+    /**
+     * Compare urls
+     *
+     * @param {object} request
+     * @param {object} params - Route params
+     * @param {string} urlRouting
+     *
+     * @return {object|false} routes
+     * */
+    this.compareUrls = function(request, params, urlRouting) {
+
+        if ( Array.isArray(urlRouting) ) {
+            var i       = 0
+                , res   = {
+                    past    : false,
+                    request : request
+                };
+
+            while (i < urlRouting.length && !res.past) {
+                res = parseRouting(request, params, urlRouting[i]);
+                ++i
+            }
+
+            return res
+        } else {
+            return parseRouting(request, params, urlRouting)
+        }
+    }
+
     /**
      * Check if rule has params
      *
@@ -62,71 +100,41 @@ function Router(env) {
         return ( /:/.test(pathname) ) ? true : false
     }
 
-    this.setMiddlewareInstance = function(instance) {
-        self.middlewareInstance = instance
-    }
-
-    this.getInstance = function() {
-        return self
-    }
-
+    /**
+     * Parse routing for mathcing url
+     *
+     * @param {object} request
+     * @param {object} params
+     * @param {str} route
+     *
+     * @return
+     *
+     * */
     var parseRouting = function(request, params, route) {
-        var uRe     = params.url.split(/\//)
-            , uRo   = route.split(/\//)
-            , score = 0
-            , r     = {}
-            , i     = 0;
+        var uRe         = params.url.split(/\//)
+            , uRo       = route.split(/\//)
+            , maxLen    = uRo.length
+            , score     = 0
+            , r         = {}
+            , i         = 0;
 
         //attaching routing description for this request
         request.routing = params; // can be retried in controller with: req.routing
 
         if (uRe.length === uRo.length) {
-
-            var maxLen = uRo.length;
-            //console.info("-----------------FOUND MATCHING SCORE", uRe.length, uRo.length);
-            //console.info(uRe, uRo);
             for (; i<maxLen; ++i) {
-                if (uRe[i] === uRo[i])
+                if (uRe[i] === uRo[i]) {
                     ++score
-                else if (score == i && hasParams(uRo[i]) && fitsWithRequirements(request, uRo[i], uRe[i], params))
+                } else if (score == i && hasParams(uRo[i]) && fitsWithRequirements(request, uRo[i], uRe[i], params)) {
                     ++score
+                }
             }
-            //for (; i<maxLen; ++i) {
-            //    if (uRe[i] === uRo[i])
-            //        ++score
-            //    else if (hasParams(uRo[i]) && fitsWithRequirements(request, uRo[i], uRe[i], params))
-            //        ++score
-            //}
         }
+
         r.past = (score === maxLen) ? true : false;
         r.request = request;
-        return r
-    }
-    /**
-     * Compare urls
-     *
-     * @param {object} request
-     * @param {object} params - Route params
-     * @param {string} urlRouting
-     *
-     * @return {object|false} routes
-     * */
-    this.compareUrls = function(request, params, urlRouting) {
 
-        if ( typeof(urlRouting) == 'object' ) {
-            var i = 0
-                , res = {
-                    past : false,
-                    request : request
-                };
-            while (i < urlRouting.count() && !res.past) {
-                res = parseRouting(request, params, urlRouting[i]);
-                ++i
-            }
-            return res
-        } else {
-            return parseRouting(request, params, urlRouting)
-        }
+        return r
     }
 
     /**
@@ -143,62 +151,129 @@ function Router(env) {
      * */
     var fitsWithRequirements = function(request, urlVar, urlVal, params) {
 
-        var _param      = urlVar.replace(/:/, '')
-            , regex     = params.requirements[_param]
-            , matched   = false;
+        var matched     = -1
+            , _param    = urlVar.match(/\:\w+/g)
+            , regex     = null
+            , tested    = false;
 
-        if ( /^\//.test(regex) ) {
-            var re      = regex.match(/\/(.*)\//).pop()
-                , flags = regex.replace('/'+ re +'/', '');
+        if (!_param.length) return false;
 
-            matched = new RegExp(re, flags).test( urlVal )
+        if (_param.length == 1) {// fast one
+            matched =  ( _param.indexOf(urlVar) > -1 ) ? _param.indexOf(urlVar) : false;
 
-        } else {
-            matched = new RegExp(params.requirements[_param]).test( urlVal )
-        }
+            if (matched === false) return matched;
 
-        // fast one
-        if (
-            typeof(params.param[_param]) != 'undefined' &&
-            typeof(params.requirements) != 'undefined' &&
-            typeof(params.requirements[_param]) != 'undefined' &&
-            matched
-            //new RegExp(params.requirements[_param]).test( urlVal )
-        ) {
-            request.params[_param] = urlVal;
-            return true
-        }
+            var key = _param[matched].substr(1);
+            regex   = params.requirements[key];
 
-        // slow one
-        for (var p in params.param) {
+            if ( /^\//.test(regex) ) {
+                var re      = regex.match(/\/(.*)\//).pop()
+                    , flags = regex.replace('/'+ re +'/', '');
 
-            if ( urlVar != ':'+p && new RegExp(params.param[p]).test(urlVar) ) {
+                tested = new RegExp(re, flags).test( urlVal )
 
-                _param  = p;
-                regex   = params.requirements[_param];
-                matched = false;
-
-                if ( /^\//.test(regex) ) {
-                    var re      = regex.match(/\/(.*)\//).pop()
-                        , flags = regex.replace('/'+ re +'/', '');
-
-                    matched = new RegExp(re, flags).test( urlVal )
-
-                } else {
-                    matched = new RegExp(params.requirements[_param]).test( urlVal )
-                }
-
-                if (
-                    typeof(params.param[_param]) != 'undefined' &&
-                    typeof(params.requirements) != 'undefined' &&
-                    typeof(params.requirements[_param]) != 'undefined' &&
-                    //new RegExp(params.requirements[_param]).test( urlVal )
-                    matched
-                ) {
-                    request.params[_param] = urlVal;
-                    return true
-                }
+            } else {
+                tested = new RegExp(params.requirements[key]).test( urlVal )
             }
+
+            if (
+                typeof(params.param[key]) != 'undefined' &&
+                typeof(params.requirements) != 'undefined' &&
+                typeof(params.requirements[key]) != 'undefined' &&
+                tested
+            ) {
+                request.params[key] = urlVal;
+                return true
+            }
+
+        } else { // slow one
+
+            // In order to support rules defined like :
+            //      { params.url }  => `/section/:name/page:number`
+            //      { request.url } => `/section/plante/page4`
+            //
+            //      with keys = [ ":name", ":number" ]
+
+            var keys        = _param
+                , tplUrl    = params.url
+                , url       = request.url
+                , values    = {}
+                , strVal    = ''
+                , started   = false
+                , i         = 0;
+
+            for (var c = 0, posLen = url.length; c < posLen; ++c) {
+                if (url.charAt(c) == tplUrl.charAt(i) && !started) {
+                    ++i
+                    continue
+                } else if (strVal == '') { // start
+
+                    started = true;
+                    strVal += url.charAt(c);
+                } else if ( c > (tplUrl.indexOf(keys[0]) + keys[0].length) ) {
+
+                    regex   = params.requirements[keys[0]];
+                    urlVal  = strVal.substr(0, strVal.length);
+
+                    if ( /^\//.test(regex) ) {
+                        var re      = regex.match(/\/(.*)\//).pop()
+                            , flags = regex.replace('/'+ re +'/', '');
+
+                        tested = new RegExp(re, flags).test( urlVal )
+
+                    } else {
+                        tested = new RegExp(params.requirements[key]).test( urlVal )
+                    }
+
+                    if (tested) {
+                        values[ keys[0].substr(1) ] = urlVal
+                    } else {
+                        return false
+                    }
+
+                    strVal =  '';
+                    started = false;
+                    i = (tplUrl.indexOf(keys[0]) + keys[0].length);
+                    c -= 1;
+
+                    keys.splice(0,1)
+                } else {
+                    strVal += url.charAt(c);
+                    ++i
+                }
+
+                if (c == posLen - 1 ) {
+
+                    regex   = params.requirements[keys[0]];
+                    urlVal  = strVal.substr(0, strVal.length);
+
+                    if ( /^\//.test(regex) ) {
+                        var re      = regex.match(/\/(.*)\//).pop()
+                            , flags = regex.replace('/'+ re +'/', '');
+
+                        tested = new RegExp(re, flags).test( urlVal )
+
+                    } else {
+                        tested = new RegExp(params.requirements[key]).test( urlVal )
+                    }
+
+                    if (tested) {
+                        values[ keys[0].substr(1) ] = urlVal
+                    } else {
+                        return false
+                    }
+
+                }
+
+            }
+
+            if (values.count() == keys.length) {
+                for (var key in values) {
+                    request.params[key] = values[key];
+                }
+                return true
+            }
+
         }
 
         return false
@@ -216,7 +291,6 @@ function Router(env) {
             }
         }
 
-
         //update utils
         delete require.cache[_(getPath('gina.core') +'/utils/index.js', true)];
         require.cache[_(getPath('gina.core') +'/utils/index.js', true)] = require( _(getPath('gina.core') +'/utils/index.js', true) );
@@ -227,11 +301,6 @@ function Router(env) {
         require.cache[_(getPath('gina.core') +'/controller/index.js', true)] = require( _(getPath('gina.core') +'/controller/index.js', true) );
         SuperController = require.cache[_(getPath('gina.core') +'/controller/index.js', true)];
 
-
-        //update server
-
-
-        //TODO - do the same with lib
     }
 
     /**
@@ -261,9 +330,8 @@ function Router(env) {
             hasViews        : ( typeof(conf.content.views) != 'undefined' ) ? true : false,
             isUsingTemplate : conf.template
         };
+
         setContext('router', routerObj);
-
-
 
         var action          = request.action = params.param.action;
         // more can be added ... but it will always start by `on`Something.
