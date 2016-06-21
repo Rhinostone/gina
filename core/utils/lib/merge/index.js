@@ -74,8 +74,9 @@ function Merge() {
                     } else {
                         // Merge the base object
                         for (var name in options) {
-                            src = target[ name ];
-                            copy = options[ name ];
+
+                            src     = target[ name ];
+                            copy    = options[ name ];
 
 
                             // Prevent never-ending loop
@@ -102,24 +103,28 @@ function Merge() {
                                 //[propose] Supposed to go deep... deep... deep...
                                 if (!override) {
                                     for (var prop in copy) {
-                                        if (typeof(clone[ prop ]) != "undefined") {
+                                        if (typeof(clone[ prop ]) != 'undefined') {
                                             copy[ prop ] = clone[ prop ];
                                         }
                                     }
 
+                                    // Never move original objects, clone them
+                                    if (typeof(src) != "boolean") {//if property is not boolean
+                                        target[ name ] = browse(override, clone, copy)
+                                    }
+                                    // Don't bring in undefined values
+
                                 } else {
+
                                     for (var prop in copy) {
-                                        if (typeof(clone[ prop ]) != "undefined") {
-                                            clone[ prop ] = copy[ prop ]
+                                        if ( typeof(copy[ prop ]) != 'undefined' ) {
+                                            if (!target[name]) target[name] = {};
+
+                                            target[name][ prop ] = copy[ prop ];
                                         }
                                     }
                                 }
 
-                                // Never move original objects, clone them
-                                if (typeof(src) != "boolean") {//if property is not boolean
-                                    target[ name ] = browse(override, clone, copy)
-                                }
-                                // Don't bring in undefined values
                             } else if (copy !== undefined) {
                                 //[propose]Don't override existing if prop defined or override @ false
                                 if (
@@ -139,7 +144,6 @@ function Merge() {
         }
 
 
-        // Return the modified object
         return target
     }
 

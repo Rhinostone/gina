@@ -7,7 +7,6 @@
  */
 'use strict';
 
-
 /**
  * @class Inherits
  *
@@ -18,6 +17,8 @@
  * @api Public
  * */
 function Inherits(a, b) {
+    //var self = this;
+
     /**
      * init
      * @constructor
@@ -37,22 +38,21 @@ function Inherits(a, b) {
                     return function() {
 
                         if (this) {
-                            this.prototype = {};
+                            this.prototype = cache.prototype;
+
                             if (!this.name) this.name = cache.name;
 
                             this.prototype.name = this.name;
 
                             //makes it compatible with node.js classes like EventEmitter
                             for (var prop in b.prototype) {
-                                if (!this[prop] && prop != 'instance') {// all but instances
+                                if (!this[prop] /**&& prop != 'instance'*/) {// all but instances
                                     this[prop] = b.prototype[prop]
                                 }
                             }
 
                             b.apply(this, arguments);
                             cache.apply(this, arguments);
-                            if (this.prototype.name)
-                                this.name = this.prototype.name
                         }
                     }
                 }

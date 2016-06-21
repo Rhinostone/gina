@@ -66,7 +66,6 @@ function ContextHelper(contexts) {
 
         if (arguments.length > 1) {
             //console.log("Globla setter active ", name, obj);
-            //if (type)
             if ( typeof(name) == 'undefined' || name == '' ) {
                 var name = 'global'
             }
@@ -92,29 +91,30 @@ function ContextHelper(contexts) {
 
                 newObj = parseCtxObject(JSON.parse(str), obj);
                 if (force) {
-                    self.contexts = merge(true, self.contexts, newObj)
+                    var key = name.split(/\./g);
+                    self.contexts = merge(true, self.contexts, newObj);
                 } else {
                     self.contexts =  merge(self.contexts, newObj)
                 }
 
             } else {
-                if ( typeof(self.contexts[name]) != "undefined" && !force) {
+                if ( typeof(self.contexts[name]) != 'undefined' && !force) {
                     self.contexts[name] = merge(self.contexts[name], obj)
                 } else {
-                    self.contexts[name] = obj
+                    if (!self.contexts[name])
+                        self.contexts[name] = {};
+
+                    self.contexts[name] = merge(self.contexts[name], obj)
                 }
             }
 
         } else {
-            //console.log("setting context ", arguments[0]);
+            //console.debug("setting context ", arguments[0]);
             self.contexts = arguments[0]
         }
     }
 
     getContext = function(name) {
-        //console.log("getting ", name, self.contexts.content[name], self.contexts);
-
-
 
         if ( typeof(name) != 'undefined' ) {
             try {

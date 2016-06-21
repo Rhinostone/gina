@@ -11,6 +11,7 @@ var utils           = require('gina').utils;
 var console         = utils.logger;
 var helpers         = utils.helpers;
 var inherits        = utils.inherits;
+var merge           = utils.merge;
 var modelUtil       = new utils.Model();
 
 /**
@@ -22,26 +23,330 @@ var modelUtil       = new utils.Model();
  * @author      Rhinostone <gina@rhinostone.com>
  * @api         Public
  */
-function EntitySuper(conn) {
+function EntitySuper(conn, caller) {
 
+    this.initialized    = false;
     this._maxListeners  = 50;
+    this._methods       = [];
+    this._relations     = {};
+
+    var local           = {}
     var self            = this;
+    var caller          = caller || undefined;
     var cacheless       = (process.env.IS_CACHELESS == 'false') ? false : true;
 
-    var init = function() {
+    var init = function(conn, caller) {
+
+        local.conn = conn;
+
         if (!EntitySuper[self.name]) {
             EntitySuper[self.name] = {}
         }
 
         if ( !EntitySuper[self.name].instance ) {
-            return setListeners()
+            return setListeners(caller)
         } else {
             return EntitySuper[self.name].instance
         }
     }
 
+    // TODO - remove this ...
+    // var loadMembers = function(caller) {
+    //
+    //     var filename    = self._filename
+    //         , imports   = ''
+    //         , str       = fs.readFileSync(filename).toString()
+    //         , source    = str;
+    //
+    //     var first   = source.indexOf('{') + 1
+    //     var last    = source.lastIndexOf('}') -1;
+    //
+    //     // extract imports
+    //     imports = str.substring(0, first)
+    //         .replace(/function(.*)/, '')
+    //         .replace(/require\(/g, 'module.require(')
+    //         .replace(/(\/\*([^*]|[\r\n]|(\*+([^*\/]|[\r\n])))*\*+\/)|(\/\/.*)/g, '');//remove comments
+    //
+    //     // extract function body
+    //     source = source.substring(first, last);
+    //
+    //     source = 'var module = arguments[0];\n\r' + imports + source;
+    //
+    //
+    //
+    //     var EntityOrigin = new Function(source);
+    //     for (var c in self) {
+    //         if (!EntityOrigin[c])
+    //             EntityOrigin.prototype[c] = self[c]
+    //     }
+    //
+    //     var obj = new EntityOrigin(module);
+    //
+    //
+    //
+    //     var methodList      = {}
+    //         , args          = []
+    //         , variables     = ''
+    //         , placeholder   = ''
+    //         , functionBody  = '';
+    //
+    //     obj._methods = [];
+    //     for (var prop in obj) {
+    //         if (typeof(obj[prop]) != 'function') continue;
+    //
+    //         str         = obj[prop].toString();
+    //         variables   = str.match(/\((.*)\)/g)[0];
+    //         args        = [];
+    //
+    //         if (variables.length) {
+    //             variables = variables.replace(/\(|\)/g, '').replace(/\s*/g, '');
+    //             if (variables) args = variables.split(/\,/g);
+    //         }
+    //
+    //         first   = str.indexOf('{') + 1
+    //         last    = str.lastIndexOf('}') - 1;
+    //         str     = str.substring(first, last);
+    //
+    //         if (!self[prop]) {
+    //             if (typeof(obj[prop]) == 'function') {
+    //                 self[prop] = obj[prop];
+    //                 self._methods.push(prop);
+    //             }
+    //         }
+    //     }
+    //
+    //
+    //     if (caller) {
+    //         if ( !EntitySuper[caller].instance ) {
+    //             EntitySuper[caller].instance = {
+    //                 _relations: {}
+    //             }
+    //         }
+    //
+    //     } else {
+    //         if ( !EntitySuper[self.name].instance ) {
+    //             EntitySuper[self.name].instance = {
+    //                 _relations: {}
+    //             }
+    //         }
+    //     }
+    //
+    //     return setListeners(caller)
+    //
+    // }
 
-    var setListener = function(trigger) {
+    /**
+     * Set all main listenners at once
+     *
+     * */
+    var setListeners = function(caller) {
+
+        var entityName  = self.name.substr(0, 1).toLowerCase() + self.name.substr(1);
+        var shortName   = self.name.replace(/Entity/, '');
+        shortName       = shortName.substr(0, 1).toLowerCase() + shortName.substr(1);
+
+        var entity      = null;
+
+        if ( EntitySuper[self.name].initialized ) {
+
+            self.initialized = EntitySuper[self.name].initialized;
+            entity = self
+
+        } else {
+            EntitySuper[self.name].initialized = true;
+            entity = self.getEntity(self.name)
+        }
+
+
+
+        var eventName = '';
+        for (var prop in entity) {
+            eventName = shortName +'#'+ prop;
+            if ( typeof(entity[prop]) == 'function' && new RegExp('(' + eventName + '\'|' + eventName + '\"|' + eventName + '$)').test(entity[prop].toString()) ) {
+                self._methods.push(prop)
+            }
+        }
+
+        // use this property inside your entity to disable listeners
+        if ( typeof(entity.hasOwnEvents) != 'undefined' && entity.hasOwnEvents ) return false;
+
+        var events = []
+            , triggers = []
+            , i = 0
+            , cb = {}
+            , methods = self._methods;
+
+
+        for (var f = 0, fLen = methods.length; f < fLen; ++f) {
+            if (
+                typeof(entity[methods[f]]) == 'function'
+                && f != 'onComplete'
+            ) {
+
+                events[i] = {
+                    shortName: shortName + '#' + methods[f],
+                    method: methods[f],
+                    entityName: entityName
+                };
+
+                triggers.push(shortName + '#' + methods[f]);
+                ++i;
+            }
+        }
+
+        entity._listeners = events;
+        entity._triggers = triggers;
+        entity._callbacks = {};
+        entity._maxListeners += i; // default max listeners is 10
+        entity.setMaxListeners(entity._maxListeners || 50);
+        //console.debug('['+self.name+'] setting max listeners to: ' + (entity.maxListeners || eCount) );
+
+        var f           = null
+            , fSource   = '';
+
+        for (var i = 0; i < events.length; ++i) {
+
+            entity.removeAllListeners(events[i].shortName); // added on october 1st to prevent adding new listners on each new querie
+            //console.debug('placing event: '+ events[i].shortName +'\n');
+            f       = events[i].method;
+            fSource = entity[f].toString();
+
+            // only if method content is about the event
+            if (methods.indexOf(f) > -1 && new RegExp('(' + events[i].shortName + '\'|' + events[i].shortName + '\"|' + events[i].shortName + '$)').test(fSource)) {
+
+
+                entity[f] = (function onEntityEvent(e, m, i, source) {
+
+                    var cached      = entity[m];
+
+                    var variables   = source.match(/\((.*)\)/g)[0];
+                    var args        = [];
+
+                    if (variables.length) {
+                        variables = variables.replace(/\(|\)/g, '').replace(/\s*/g, '');
+                        if (variables) args = variables.split(/\,/g);
+                    }
+
+                    // TODO - retrieve argument while the method is being rewritten
+                    return function () {
+
+                        // retrieving local arguments, & binding it to the event callback
+
+                        cached.apply(this[m], arguments);
+
+                        this[m].onComplete = function (cb) {
+
+                            console.debug('setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
+
+                            //Setting local listener : normal case
+                            if (entity._triggers.indexOf(events[i].shortName) > -1) {
+
+                                if (typeof(entity._arguments) == 'undefined' || typeof(entity._arguments) != 'undefined' && typeof(entity._arguments[events[i].shortName]) == 'undefined') {
+                                    entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
+                                        // check if not already fired
+                                        if (entity._callbacks[events[i].shortName])
+                                            cb.apply(this[m], arguments);
+                                    });
+
+                                    // backing up callback
+                                    entity._callbacks[events[i].shortName] = cb;
+                                } else { // in case the event is not ready yet
+                                    cb.apply(entity[m], entity._arguments[events[i].shortName])
+                                }
+                            }
+                        }
+
+                        return this[m] // chaining event & method
+                    };
+
+
+                    // var func = function () {
+                    //
+                    //     // retrieving local arguments, & binding it to the event callback
+                    //
+                    //     cached.apply(this[m], arguments);
+                    //
+                    //     this[m].onComplete = function (cb) {
+                    //
+                    //         console.debug('setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
+                    //
+                    //         //Setting local listener : normal case
+                    //         if (entity._triggers.indexOf(events[i].shortName) > -1) {
+                    //
+                    //             if (typeof(entity._arguments) == 'undefined' || typeof(entity._arguments) != 'undefined' && typeof(entity._arguments[events[i].shortName]) == 'undefined') {
+                    //                 entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
+                    //                     // check if not already fired
+                    //                     if (entity._callbacks[events[i].shortName])
+                    //                         cb.apply(this[m], arguments);
+                    //                 });
+                    //
+                    //                 // backing up callback
+                    //                 entity._callbacks[events[i].shortName] = cb;
+                    //             } else { // in case the event is not ready yet
+                    //                 cb.apply(entity[m], entity._arguments[events[i].shortName])
+                    //             }
+                    //         }
+                    //     }
+                    //
+                    //     return this[m] // chaining event & method
+                    // };
+                    //
+                    // var funcStr = func.toString();
+                    // var first   = funcStr.indexOf('{') + 1
+                    // var last    = funcStr.lastIndexOf('}') -1;
+                    //
+                    // funcStr = funcStr.substring(first, last);
+                    //
+                    // return new Function(variables, funcStr)
+
+                }(events[i].shortName, f, i, fSource));
+
+                // just for display purpose: will be overriden by the previous code
+                entity[f].onComplete = function (cb) {}
+
+            }
+        }
+
+
+        if (!/Entity$/.test(entityName)) {
+            entityName = entityName + 'Entity'
+        }
+
+        if (caller) {
+            if ( !EntitySuper[caller].instance ) {
+                EntitySuper[caller].instance = {
+                    _relations: {}
+                }
+            }
+
+        } else {
+            if ( !EntitySuper[self.name].instance ) {
+                EntitySuper[self.name].instance = {
+                    _relations: {}
+                }
+            }
+        }
+
+        if (caller) {
+            EntitySuper[caller].instance._relations[entity.name] = merge(EntitySuper[caller].instance._relations[entity.name], entity);
+            modelUtil.updateModel(self.bundle, self.model, entityName, EntitySuper[caller].instance._relations[entity.name] );
+
+            self._relations[entity.name] = EntitySuper[caller].instance._relations[entity.name];
+
+            return EntitySuper[caller].instance._relations[entity.name]
+        } else {
+            modelUtil.updateModel(self.bundle, self.model, entityName, entity);
+            EntitySuper[self.name].instance = entity;
+
+            return EntitySuper[self.name].instance
+        }
+    }
+
+    var setListener = function() {
+        arguments = arguments[0];
+
+        var args = Array.prototype.slice.call(arguments);
+        var trigger = args.splice(0, 1)[0];
 
         //self.removeAllListener(trigger);
         if ( !/\#/.test(trigger) ) {
@@ -74,125 +379,24 @@ function EntitySuper(conn) {
                     self.on(events[i].shortName, function () {
                         //debugger;
                         this._callbacks[trigger.replace(/[0-9]/g, '')].apply(this[method], arguments);
+                        delete self._callbacks[trigger];
                     })
                 }
 
-            } else { // patched for Air Liquide: case when emit occurs before listener is ready
-
-                self.once(trigger, function () {
-                    if (!this._arguments) {
-                        this._arguments = {}
-                    }
-                    // retrieving local arguments, & binding it to the event callback
-                    this._arguments[trigger] = arguments;
-                })
-            }
-        }
-    }
-
-    /**
-     * Set all main listenners at once
-     * TODO - add a mutex in case you have 2 threads trying to access the same method at the same time
-     * */
-    var setListeners = function() {
-        if ( !EntitySuper[self.name].initialized ) {
-
-            EntitySuper[self.name].initialized = true;
-            // get entity objet
-            var entity = self.getEntity(self.name);
-
-            if (!entity) return false;
-
-
-            // use this property inside your entity to disable listeners
-            if (self.hasOwnEvents) return false;
-
-            var entityName = self.name.substr(0,1).toLowerCase() + self.name.substr(1);
-            var shortName = entityName.replace(/Entity/, '');
-
-            var events      = []
-                , triggers  = []
-                , i         = 0
-                , cb        = {};
-
-            for (var f in entity) {
-                if (
-                    typeof(entity[f]) == 'function' &&
-                    !self[f] &&
-                    f != 'onComplete'
-                ) {
-                    events[i] = {
-                        shortName   : shortName +'#'+ f,
-                        method      : f,
-                        entityName  : entity.name
-                    };
-
-                    triggers.push(shortName +'#'+ f);
-                    ++i;
+            } else {
+                if ( typeof(self._callbacks[trigger]) != 'undefined' ) {
+                    self._callbacks[trigger].apply(this, args);
+                    delete self._callbacks[trigger];
+                } else {
+                    self.once(trigger, function () {// patched for Air Liquide: case when emit occurs before listener is ready
+                        if (!this._arguments) {
+                            this._arguments = {}
+                        }
+                        // retrieving local arguments, & binding it to the event callback
+                        this._arguments[trigger] = arguments;
+                    })
                 }
             }
-
-            entity._listeners       = events;
-            entity._triggers        = triggers;
-            entity._callbacks       = {};
-            entity._maxListeners    += i; // default max listeners is 10
-            entity.setMaxListeners(entity._maxListeners);
-            //console.debug('['+self.name+'] setting max listeners to: ' + (entity.maxListeners || eCount) );
-
-            var f = null;
-            for (var i=0; i<events.length; ++i) {
-
-                entity.removeAllListeners(events[i].shortName); // added on october 1st to prevent adding new listners on each new querie
-                //console.debug('placing event: '+ events[i].shortName +'\n');
-                f = events[i].method;
-                // only if method content is about the event
-                if ( new RegExp('('+ events[i].shortName +'\'|'+ events[i].shortName +'\"|'+ events[i].shortName +'$)').test(entity[f].toString()) ) {
-
-                    entity[f] = (function onEntityEvent(e, m, i) {
-                        //console.debug('setting listener for: [ '+self.model+'/'+self.name+'::' + e + ' ]');
-
-                        var cached = entity[m];
-
-                        return function () {
-
-                            // retrieving local arguments, & binding it to the event callback
-                            cached.apply(this[m], arguments);
-
-                            this[m].onComplete = function (cb) {
-
-                                //Setting local listener : normal case
-                                if ( entity._triggers.indexOf(events[i].shortName) > -1 ) {
-
-                                    if ( typeof(entity._arguments) == 'undefined' || typeof(entity._arguments) != 'undefined' && typeof(entity._arguments[events[i].shortName]) == 'undefined' ) {
-                                        entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
-                                            cb.apply(this[m], arguments)
-                                        });
-
-                                        // backing up callback
-                                        entity._callbacks[events[i].shortName] = cb;
-                                    } else { // in case the event is not ready yet
-                                        cb.apply(entity[m], entity._arguments[events[i].shortName])
-                                    }
-                                }
-                            }
-
-                            return this[m] // chaining event & method
-                        };
-
-
-                    }(events[i].shortName, f, i))
-                }
-            };
-
-            EntitySuper[self.name].instance = entity;
-
-            if ( !/Entity$/.test(entityName) ) {
-                entityName = entityName + 'Entity'
-            }
-
-            // now merging with the current entity object
-            modelUtil.updateEntities(self.bundle, self.model, entityName, self); // to handle this.getEntity(...)
-            return modelUtil.updateModel(self.bundle, self.model, entityName, entity);
         }
     }
 
@@ -255,8 +459,9 @@ function EntitySuper(conn) {
         if (
             self._triggers && self._triggers.indexOf(type) == -1 && self._triggers.indexOf(type.replace(/[0-9]/g, '')) > -1
             || self._triggers && self._triggers.indexOf(type) > -1 && typeof(self._callbacks[type]) == 'undefined' && typeof(self._events[type]) == 'undefined'
+            || self._triggers && self._triggers.indexOf(type) > -1 && typeof(self._callbacks[type]) != 'undefined'
         ) {
-            setListener(type)
+            setListener(arguments)
         }
         // EO Added to handle trigger with increment
 
@@ -338,22 +543,49 @@ function EntitySuper(conn) {
      * Get connection from entity
      * */
     this.getConnection = function() {
+        var conn =  local.conn ;
         return ( typeof(conn) != 'undefined' ) ? conn : null;
     }
 
     this.getEntity = function(entity) {
+
+        var ntt = entity;
         entity = entity.substr(0,1).toUpperCase() + entity.substr(1);
+
         if ( !/Entity$/.test(entity) ) {
             entity = entity + 'Entity'
         }
 
         try {
-            return getModelEntity(self.bundle, self.model, entity, conn);
+            var callerName = self.name;
+            var entityName = entity.replace('Entity', '');
+
+            if (!callerName) {
+                throw new Error('no name defined for this Entity !!');
+            } else { // imported
+                if ( callerName == entity.replace('Entity', '')) {
+                    if ( !EntitySuper[self.name].instance ) {
+                        return getModelEntity(self.bundle, self.model, entity, self.getConnection())
+                    } else {
+                        return EntitySuper[self.name].instance
+                    }
+
+                } else if ( typeof(EntitySuper[callerName].instance) != 'undefined' && EntitySuper[callerName].instance._relations[entityName] ) {
+                    return EntitySuper[callerName].instance._relations[entityName]
+                } else {
+                    new modelUtil.entities[self.bundle][self.model][entity](self.getConnection(), callerName);
+                    return EntitySuper[callerName].instance._relations[entityName]
+                }
+            }
 
         } catch (err) {
             throw err;
             return null
         }
+    }
+
+    this.setInstance = function(instance) {
+        EntitySuper[self.name].instance = instance
     }
 
 
@@ -383,7 +615,7 @@ function EntitySuper(conn) {
     //    }
     //}
 
-    return init()
+    return init(conn, caller)
 };
 
 EntitySuper = inherits(EntitySuper, EventEmitter);

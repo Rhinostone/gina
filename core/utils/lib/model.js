@@ -30,18 +30,24 @@ function ModelUtil() {
     var init = function() {
 
         if ( !ModelUtil.instance && !getContext('modelUtil') ) {
-            self.models = self.models || {}; // used when getModel(modelName) is called
-            self.entities = {};
+            self.models             = self.models || {}; // used when getModel(modelName) is called
+            self.entities           = {};
             self.entitiesCollection = {}; // used when getEntity(entityName) is called - handles entity relations
-            self.files = {};
-            setContext('modelUtil', self);
-            ModelUtil.instance = self;
+            self.files              = {};
+            ModelUtil.instance      = self;
+
+            setContext('modelUtil', ModelUtil.instance);
+
             return self
         } else {
-            if (!ModelUtil.instance) {
-                ModelUtil.instance = getContext('modelUtil')
-            }
-            self = ModelUtil.instance;
+            //if (!ModelUtil.instance) {
+            //    ModelUtil.instance = getContext('modelUtil')
+            //}
+            //self = ModelUtil.instance;
+            //ModelUtil.instance = getContext('modelUtil');
+            //ModelUtil.instance = ModelUtil.instance || getContext('modelUtil');
+            //self = merge(true, self, ModelUtil.instance);
+            // return self
             return ModelUtil.instance
         }
     }
@@ -83,6 +89,9 @@ function ModelUtil() {
             self.models[bundle] = {};
             self.entitiesCollection[bundle] = {}
         }
+
+        //setContext('modelUtil.entitiesCollection', self.entitiesCollection, true)
+        ModelUtil.instance.entitiesCollection = self.entitiesCollection;
     }
 
     /**
@@ -92,6 +101,8 @@ function ModelUtil() {
     *
     * */
     this.setModelEntity = function(bundle, model, name, module) {
+        var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
+        
         if (arguments.length > 1) {
             if (!self.entities) {
                 self.entities = {}
@@ -117,6 +128,9 @@ function ModelUtil() {
         } else {
             self.entities[bundle][model] = arguments[0]
         }
+
+        setContext('modelUtil.entities', self.entities, true);
+        ModelUtil.instance.entities = self.entities;
     }
 
     this.updateModel = function(bundle, model, name, entityObject) {
@@ -134,6 +148,10 @@ function ModelUtil() {
         }
 
         self.models[bundle][model][name] =  entityObject;
+
+
+        ModelUtil.instance.models = self.models;
+        setContext('modelUtil.models', self.models, true);
 
         return self.models[bundle][model][name]
     }
@@ -225,7 +243,6 @@ function ModelUtil() {
                             , foundInitError    = false;
 
                         // end - now, loading entities for each `loaded` model
-                        //
                         for (var bundle in self.models) {
 
                             for (var name in self.models[bundle]) {//name as connector name
@@ -236,7 +253,6 @@ function ModelUtil() {
                                 entitiesManager = new require( _(conf.modelsPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle});
 
                                 self.setConnection(bundle, name, conn);
-                                //setContext('modelConnectors.'+self.bundle, self.connectors, true);
 
                                 // step 1: creating entities classes in the context
                                 // must be done only when all models conn are alive because of `cross models/database use cases`
@@ -250,15 +266,15 @@ function ModelUtil() {
 
                                 // step 2: creating entities instances
                                 for (var nttClass in entitiesManager) {
-                                    // will update self.models
-                                    delete self.models[bundle][name][nttClass.toLowerCase() +'Entity'];
-                                    new entitiesManager[nttClass](conn)
+                                    new entitiesManager[nttClass](conn);
                                 }
+
                             }
                         }
 
+                        setContext('modelUtil', ModelUtil.instance, true);
+                        if (foundInitError) process.exit(1);
 
-                        if (foundInitError) process.exit(1)
 
                         cb()
                     }
@@ -348,17 +364,15 @@ function ModelUtil() {
                 , entitiesManager   = null
                 , modelPath         = null
                 , entitiesPath      = null
-                , entitiesObject    = null
-                , modelConnectors   = null
-                , wait              = 0;
+                , modelConnectors   = null;
 
 
             // end - now, loading entities for each `loaded` model
             for (var bundle in self.models) {
 
                 for (var name in self.models[bundle]) { //name as connector name
-
-                    self.models[bundle][name] = {}
+                    
+                    self.models[bundle][name] = {};
 
                     if ( typeof(self.models[bundle][name]['_connection']) == 'undefined' ) {
                         self.models[bundle][name]['_connection'] = getContext('modelConnectors')[bundle][name].conn
@@ -370,7 +384,7 @@ function ModelUtil() {
                         }
                     }
 
-                    conn            = self.models[bundle][name]['_connection'];
+                    conn            = getContext('modelConnectors')[bundle][name].conn;
 
                     modelPath       = _(conf.modelsPath + '/' + name);
                     entitiesPath    = _(modelPath + '/entities');
@@ -379,6 +393,7 @@ function ModelUtil() {
                     delete require.cache[_(conf.modelsPath + '/index.js', true)];//child
                     entitiesManager = new require( _(conf.modelsPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle});
 
+                    self.setConnection(bundle, name, conn);
                     // creating entities instances
                     // must be done only when all models conn are alive because of `cross models/database use cases`
                     for (var nttClass in entitiesManager) {
@@ -391,10 +406,15 @@ function ModelUtil() {
 
                     for (var nttClass in entitiesManager) {
                         // will force updates on self.models
-                        new entitiesManager[nttClass](conn)
+                        new entitiesManager[nttClass](conn);
                     }
+
+                    console.log('loaded model ', bundle+'/'+name);
                 }
             }
+
+
+            setContext('modelUtil', self, true);
 
             cb(false)
 
@@ -453,6 +473,7 @@ function ModelUtil() {
         if ( typeof(model) != 'undefined' && typeof(self.models[bundle]) != 'undefined' ) {
 
             try {
+
                 if ( typeof(self.models[bundle][model]['getConnection']) == 'undefined' ) {
                     self.models[bundle][model]['getConnection'] = function() {
                         return self.models[bundle][model]['_connection']
@@ -477,16 +498,37 @@ function ModelUtil() {
      * */
     getModelEntity = function(bundle, model, entityClassName, conn) {
         if ( typeof(entityClassName) != 'undefined' ) {
+            var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
             try {
                 var shortName = entityClassName.substr(0, 1).toLowerCase() + entityClassName.substr(1);
 
+                if (!self.entities) {
+                    if (!ModelUtil.instance) {
+                        ModelUtil.instance = getContext('modelUtil')
+                    }
+                    self.entities           = ModelUtil.instance.entities;
+                    self.entitiesCollection = ModelUtil.instance.entitiesCollection;
+                    self.models             = ModelUtil.instance.models;
+
+                    if (typeof(self.models) == 'function' ) {
+                        self.models                 = {};
+                        self.models[bundle]         = {};
+                        self.models[bundle][model]  = {}
+                    }
+
+                }
+
                 //console.debug(parent+'->getEntity('+shortName+')');
-                if ( self.models[bundle][model][shortName]) { // cacheless is filtered thanks to self.reloadModels(...)
+                if ( self.models[bundle][model][shortName] /**&& !cacheless*/) { // cacheless is filtered thanks to self.reloadModels(...)
                     //return self.models[bundle][model][shortName]
                     return self.entitiesCollection[bundle][model][shortName]
                 } else {
                     var entityObject = new self.entities[bundle][model][entityClassName](conn)
                     self.entitiesCollection[bundle][model][shortName] = entityObject;
+
+                    //setContext('modelUtil.entitiesCollection', self.entitiesCollection, true);
+                    ModelUtil.instance.entitiesCollection = self.entitiesCollection;
+
                     return entityObject;
                 }
 
