@@ -470,6 +470,10 @@ function ModelUtil() {
             }
         }
 
+        if (!self.models) {
+            self.models = ModelUtil.instance.models
+        }
+
         if ( typeof(model) != 'undefined' && typeof(self.models[bundle]) != 'undefined' ) {
 
             try {
