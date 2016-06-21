@@ -481,7 +481,9 @@ function SuperController(options) {
 
             // Internet Explorer override
             if ( /msie/i.test(local.req.headers['user-agent']) ) {
-                local.res.setHeader("Content-Type", "text/plain");
+                local.res.setHeader("Content-Type", "text/plain")
+            } else {
+                local.res.setHeader("Content-Type", local.options.conf.server.coreConfiguration.mime['json'])
             }
 
             if ( !local.res.headersSent ) {
