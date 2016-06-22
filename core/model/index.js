@@ -217,13 +217,14 @@ function Model(namespace) {
         }
 
         if ( typeof(configuration) != 'undefined' && locals) {
-            var tmp = JSON.stringify(configuration);
-            tmp = JSON.parse(tmp);
+
+            var env = configuration.Env.current;
+            var conf = configuration.Env.getConf(bundle, env);
 
             // configuration object.
             var confObj = {
-                connectors  : tmp.content.connectors,
-                path        : tmp.modelsPath,
+                connectors  : conf.content.connectors,
+                path        : conf.modelsPath,
                 locals      : locals
             };
 
