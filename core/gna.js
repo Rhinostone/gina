@@ -78,6 +78,7 @@ if (!gina) {
 }
 
 var root = getPath('root');
+
 if (!root) {
     var pathArr = new _(ginaPath).toUnixStyle().split('/'), pathStr = '';
     for (var i = 0, len = pathArr.length; i<len; ++i) {
@@ -94,6 +95,7 @@ if (!root) {
 gna.executionPath = root;
 
 setContext('gina.utils', utils);
+setContext('gina.Config', Config);
 
 var envs = ['dev', 'debug', 'stage', 'prod'];
 var protocols = ['http', 'https']; // will support https for the 0.0.10
@@ -672,22 +674,27 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         }
         project.bundles[core.startingApp].release.target = 'releases/'+ core.startingApp +'/' + env +'/'+ project.bundles[core.startingApp].release.version;
 
-        var source = (env == 'dev' || env == 'debug') ? _( root +'/'+project.bundles[core.startingApp].src) : _( root +'/'+ project.bundles[core.startingApp].release.target );
-        var tmpSource = _(bundlesPath +'/'+ core.startingApp);
-
-        var linkPath =  _( root +'/'+ project.bundles[core.startingApp].release.link );
+        var source      = (env == 'dev' || env == 'debug') ? _( root +'/'+project.bundles[core.startingApp].src) : _( root +'/'+ project.bundles[core.startingApp].release.target );
+        var bundlesPath = getPath('bundlesPath');
+        var tmpSource   = _(bundlesPath +'/'+ core.startingApp);
+        var linkPath    =  _( root +'/'+ project.bundles[core.startingApp].release.link );
 
         gna.mount( bundlesPath, source, linkPath, function onBundleMounted(mountErr) {
             if (mountErr) {
                 console.error(mountErr.stack);
                 process.exit(1)
             }
-            config = new Config({
-                env             : env,
-                executionPath   : core.executionPath,
-                startingApp     : core.startingApp,
-                ginaPath        : core.ginaPath
-            });
+
+            if (!Config.instance) {
+                config = new Config({
+                    env             : env,
+                    executionPath   : core.executionPath,
+                    startingApp     : core.startingApp,
+                    ginaPath        : core.ginaPath
+                });
+            } else {
+                config = Config.instance
+            }
 
             setContext('gina.config', config);
             config.onReady( function(err, obj){

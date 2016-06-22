@@ -48,7 +48,7 @@ function ModelUtil() {
             //ModelUtil.instance = ModelUtil.instance || getContext('modelUtil');
             //self = merge(true, self, ModelUtil.instance);
             // return self
-            return ModelUtil.instance
+            return ModelUtil.instance || getContext('modelUtil')
         }
     }
 
@@ -415,6 +415,7 @@ function ModelUtil() {
 
 
             setContext('modelUtil', self, true);
+            ModelUtil.instance = self;
 
             cb(false)
 
@@ -470,9 +471,9 @@ function ModelUtil() {
             }
         }
 
-        if (!self.models) {
+        //if (!self.models) {
             self.models = ModelUtil.instance.models
-        }
+        //}
 
         if ( typeof(model) != 'undefined' && typeof(self.models[bundle]) != 'undefined' ) {
 

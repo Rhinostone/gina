@@ -19,34 +19,101 @@ var console = require('./../logger');
  * */
 function ContextHelper(contexts) {
 
-    var self = this;
+    var self = {};
 
     /**
      * ContextHelper Constructor
      * */
     var init = function(contexts) {
-        if ( typeof(ContextHelper.initialized) != "undefined" ) {
-            return ContextHelper.instance
-        } else {
-            ContextHelper.initialized = true;
-            ContextHelper.instance = self
-        }
 
         if ( typeof(contexts) == 'undefined' ) {
             var contexts = {
                 paths : {}
             }
         }
+
         self.contexts = contexts;
+
+        if ( typeof(ContextHelper.initialized) != 'undefined' && ContextHelper.instance) {
+            self = ContextHelper.instance;
+        } else {
+            ContextHelper.initialized = true;
+            ContextHelper.instance = self
+        }
+
+
+
         return self
     }
 
-    this.configure = function(contexts) {
+    self.configure = function(contexts) {
         joinContext(contexts)
     }
 
     joinContext = function(context) {
         merge(true, self.contexts, context)
+    }
+
+    // var clone = function (obj) {
+    //     // if ( obj && typeof(obj) === 'object' &&  typeof(obj.__proto__) == 'undefined' ) {
+    //     //
+    //     //     var temp = {};
+    //     //
+    //     //     for (var p in obj) {
+    //     //         if (obj.hasOwnProperty(p))
+    //     //             temp[p] = clone(obj[p]);
+    //     //     };
+    //     //
+    //     //     return temp
+    //     // }
+    //
+    //     if (obj === null || typeof(obj) !== 'object' || Array.isArray(obj) || typeof(obj) == 'undefined' || 'isActiveClone' in obj )
+    //         return obj;
+    //
+    //     // if (!obj.__proto__) {
+    //     //     return {}
+    //     // }
+    //
+    //     var temp = obj;
+    //     //if (  obj.__proto__.constructor && !/\[native code\]/.test(obj.__proto__.constructor.toString()) )
+    //         temp = Object.create(obj.__proto__); // give temp the original obj's constructor
+    //
+    //     for (var prop in obj) {
+    //         //if (obj.hasOwnProperty(prop))
+    //         if (Object.prototype.hasOwnProperty.call(obj, prop))
+    //             temp[prop] = clone(obj[prop]);
+    //     }
+    //
+    //     return temp;
+    // }
+
+    var clone = function(obj) {
+        if (obj === null || typeof(obj) !== 'object' || 'isActiveClone' in obj || Array.isArray(obj))
+            return obj;
+
+        //if (obj instanceof Date)
+        //    var temp = new obj.constructor(); //or new Date(obj);
+        //else
+        //var temp = obj.constructor();
+        //var temp = Object.create(obj.__proto__);
+
+        var temp = obj;
+        if (  obj.__proto__.constructor && !/\[native code\]/.test(obj.__proto__.constructor.toString()) )
+            temp = Object.create(obj.__proto__); // give temp the original obj's constructor
+
+        for (var key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                obj['isActiveClone'] = null;
+                if ( typeof(obj[key]) === 'object' && !Object.hasOwnProperty(key) )
+                    temp[key] = {};
+                else
+                    temp[key] = clone(obj[key]);
+
+                delete obj['isActiveClone'];
+            }
+        }
+
+        return temp;
     }
 
     var parseCtxObject = function (o, obj) {
@@ -98,13 +165,13 @@ function ContextHelper(contexts) {
                 }
 
             } else {
-                if ( typeof(self.contexts[name]) != 'undefined' && !force) {
-                    self.contexts[name] = merge(self.contexts[name], obj)
-                } else {
-                    if (!self.contexts[name])
-                        self.contexts[name] = {};
+                if (!self.contexts[name])
+                    self.contexts[name] = {};
 
-                    self.contexts[name] = merge(self.contexts[name], obj)
+                if ( typeof(self.contexts[name]) != 'undefined' && !force) {
+                    self.contexts[name] = obj
+                } else {
+                    self.contexts[name] = merge(force, self.contexts[name], obj)
                 }
             }
 
@@ -112,12 +179,15 @@ function ContextHelper(contexts) {
             //console.debug("setting context ", arguments[0]);
             self.contexts = arguments[0]
         }
+
+        ContextHelper.instance = self;
     }
 
     getContext = function(name) {
 
         if ( typeof(name) != 'undefined' ) {
             try {
+                //return clone(self.contexts[name])
                 return self.contexts[name]
             } catch (err) {
                 return undefined
@@ -175,6 +245,8 @@ function ContextHelper(contexts) {
      *
      * */
     getLib = function(bundle, lib) {
+        var ctx       = self.contexts;
+
         if (arguments.length == 1 || !bundle) {
             //console.debug(
             //    '\n[ 0 ] = '+ __stack[0].getFileName(),
@@ -191,37 +263,49 @@ function ContextHelper(contexts) {
                 , a         = file.replace('.js', '').split('/')
                 , i         = a.length-1;
 
-            var conf        = getContext('gina').config || null;
-
-            if (conf) {
-                var bundles   = conf.bundles
-                    , env       = conf.env
-                    , cacheless = conf.isCacheless()
-                    , bundle    = null
-                    , index     = 0;
-
-                for (; i >= 0; --i) {
-                    index = bundles.indexOf(a[i]);
-                    if ( index > -1 ) {
-                        bundle = bundles[index];
-                        break
-                    }
-                }
-            } else { // by default
-                conf            = getContext();
-                bundle          = conf.bundle;
-                libPath         = _( conf.bundlePath +'/lib', true); // TODO - to replace by the env.json variable
-                var env         = conf.env
-                    , cacheless = conf.cacheless;
-
+            if (bundle == lib) {
+                bundle = ctx.bundle
             }
 
-        } else {
-            var libPath     = null
-                , conf      = getContext('gina').config
-                , env       = conf.env
-                , cacheless = conf.isCacheless();
+            // if (conf) {
+            //     var bundles   = conf.bundles
+            //         , env       = conf.env
+            //         , cacheless = conf.isCacheless()
+            //         , bundle    = null
+            //         , index     = 0;
+            //
+            //     for (; i >= 0; --i) {
+            //         index = bundles.indexOf(a[i]);
+            //         if ( index > -1 ) {
+            //             bundle = bundles[index];
+            //             break
+            //         }
+            //     }
+            // } else { // by default
+            //     conf            = getContext();
+            //     bundle          = conf.bundle;
+            //     libPath         = _( conf.bundlePath +'/lib', true); // TODO - to replace by the env.json variable
+            //     var env         = conf.env
+            //         , cacheless = conf.cacheless;
+            //
+            // }
+
         }
+        // else {
+        //     var libPath     = null
+        //         , conf      = getContext('gina').config
+        //         , env       = conf.env
+        //         , cacheless = conf.isCacheless();
+        // }
+        var env     = ctx.env;
+        var cacheless = ctx.cacheless;
+        var Config  = ctx.gina.Config;
+        var conf = new Config({
+            env             : env,
+            executionPath   : getPath('root'),
+            startingApp     : bundle,
+            ginaPath        : getPath('gina.core')
+        });
 
         if ( typeof(lib) != 'undefined' ) {
 

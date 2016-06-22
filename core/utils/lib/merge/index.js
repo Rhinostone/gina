@@ -112,18 +112,25 @@ function Merge() {
                                     if (typeof(src) != "boolean") {//if property is not boolean
                                         target[ name ] = browse(override, clone, copy)
                                     }
-                                    // Don't bring in undefined values
 
                                 } else {
 
                                     for (var prop in copy) {
                                         if ( typeof(copy[ prop ]) != 'undefined' ) {
-                                            if (!target[name]) target[name] = {};
+                                        //if ( typeof(copy[ prop ]) != 'undefined' ) {
 
-                                            target[name][ prop ] = copy[ prop ];
+                                            //target[name][ prop ] = copy[ prop ];
+                                            clone[prop] = copy[prop]
                                         }
                                     }
+
+                                    target[ name ] = clone
                                 }
+
+                                // // Never move original objects, clone them
+                                // if (typeof(src) != "boolean") {//if property is not boolean
+                                //     target[ name ] = browse(override, clone, copy)
+                                // }
 
                             } else if (copy !== undefined) {
                                 //[propose]Don't override existing if prop defined or override @ false
@@ -141,10 +148,12 @@ function Merge() {
                     }
                 }
             }
+
+            return target
         }
 
 
-        return target
+        //return target
     }
 
     /**

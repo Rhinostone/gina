@@ -70,9 +70,15 @@ function Config(opt) {
 
             //Do some checking please.. like already has a PID ?.
             //if yes, join in case of standalone.. or create a new thread.
-            self.Host.setMaster(self.startingApp);
+            self.Host.setMaster(opt.startingApp);
 
             getConf()
+        } else {
+            if (!opt) {
+                return Config.instance
+            } else {
+                return self.getInstance(opt.startingApp)
+            }
         }
     }
 
@@ -148,23 +154,27 @@ function Config(opt) {
 
     this.getInstance = function(bundle) {
 
-        self = Config.instance;
-        var configuration = self.envConf;
+        //self = Config.instance;
+        var configuration = Config.instance.envConf;
         var env = self.env;
 
-        self.Env.parent = self;
-        if (env != 'undefined')
-            self.Env.set(self.env);
+        Config.instance.Env.parent = Config.instance;
 
-        self.Host.parent = self;
+        if (env != 'undefined')
+            Config.instance.Env.set(Config.instance.env);
+
+        Config.instance.Host.parent = Config.instance;
 
         //Do some checking please.. like already has a PID ?.
         //if yes, join in case of standalone.. or create a new thread.
-        self.Host.setMaster(bundle);
-        if ( typeof(bundle) != 'undefined' && typeof(configuration) != 'undefined' ) {
+        Config.instance.Host.setMaster(bundle);
 
+        self = Config.instance;
+
+        if ( typeof(bundle) != 'undefined' && typeof(configuration) != 'undefined' ) {
             try {
-                return configuration[bundle][self.Env.get()];
+                //return configuration[bundle][env];
+                return Config.instance || configuration[bundle][env];
             } catch (err) {
                 //logger.error('gina', 'CONFIG:ERR:1', err, __stack);
                 console.error(err.stack||err.message);
@@ -1067,6 +1077,10 @@ function Config(opt) {
         this.setBundles = function(bundles) {
             self.bundles = bundles
         }
+
+        if (Config.instance)
+            return Config.instance;
+
     } else {
 
         //Defined before init.
