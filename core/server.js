@@ -771,7 +771,7 @@ function Server(options) {
 
                         // comparing routing method VS request.url method
                         if ( routing[rule].method.toLowerCase() != req.method.toLowerCase() ) {
-                            throwError(res, 405, 'Method Not Allowed.\n'+ 'Route [ '+rule+' ] is expecting `' + routing[rule].method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
+                            throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.originalUrl+'` is expecting `' + routing[rule].method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
                             break
                         }
 
