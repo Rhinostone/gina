@@ -117,9 +117,6 @@ function Merge() {
 
                                     for (var prop in copy) {
                                         if ( typeof(copy[ prop ]) != 'undefined' ) {
-                                        //if ( typeof(copy[ prop ]) != 'undefined' ) {
-
-                                            //target[name][ prop ] = copy[ prop ];
                                             clone[prop] = copy[prop]
                                         }
                                     }
