@@ -452,6 +452,10 @@ function SuperController(options) {
      * @return {void}
      * */
     this.renderJSON = function(jsonObj) {
+        if (!jsonObj) {
+            var jsonObj = {}
+        }
+        
         try {
             // just in case
             if ( typeof(jsonObj) == 'string') {

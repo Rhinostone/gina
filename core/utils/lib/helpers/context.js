@@ -54,67 +54,37 @@ function ContextHelper(contexts) {
         merge(true, self.contexts, context)
     }
 
-    // var clone = function (obj) {
-    //     // if ( obj && typeof(obj) === 'object' &&  typeof(obj.__proto__) == 'undefined' ) {
-    //     //
-    //     //     var temp = {};
-    //     //
-    //     //     for (var p in obj) {
-    //     //         if (obj.hasOwnProperty(p))
-    //     //             temp[p] = clone(obj[p]);
-    //     //     };
-    //     //
-    //     //     return temp
-    //     // }
-    //
-    //     if (obj === null || typeof(obj) !== 'object' || Array.isArray(obj) || typeof(obj) == 'undefined' || 'isActiveClone' in obj )
+
+    // does not work for all cases ...
+    // TODO - remove this
+    // var clone = function(obj) {
+    //     if (obj === null || typeof(obj) !== 'object' || 'isActiveClone' in obj || Array.isArray(obj))
     //         return obj;
     //
-    //     // if (!obj.__proto__) {
-    //     //     return {}
-    //     // }
+    //     //if (obj instanceof Date)
+    //     //    var temp = new obj.constructor(); //or new Date(obj);
+    //     //else
+    //     //var temp = obj.constructor();
+    //     //var temp = Object.create(obj.__proto__);
     //
     //     var temp = obj;
-    //     //if (  obj.__proto__.constructor && !/\[native code\]/.test(obj.__proto__.constructor.toString()) )
+    //     if (  obj.__proto__.constructor && !/\[native code\]/.test(obj.__proto__.constructor.toString()) )
     //         temp = Object.create(obj.__proto__); // give temp the original obj's constructor
     //
-    //     for (var prop in obj) {
-    //         //if (obj.hasOwnProperty(prop))
-    //         if (Object.prototype.hasOwnProperty.call(obj, prop))
-    //             temp[prop] = clone(obj[prop]);
+    //     for (var key in obj) {
+    //         if (Object.prototype.hasOwnProperty.call(obj, key)) {
+    //             obj['isActiveClone'] = null;
+    //             if ( typeof(obj[key]) === 'object' && !Object.hasOwnProperty(key) )
+    //                 temp[key] = {};
+    //             else
+    //                 temp[key] = clone(obj[key]);
+    //
+    //             delete obj['isActiveClone'];
+    //         }
     //     }
     //
     //     return temp;
     // }
-
-    var clone = function(obj) {
-        if (obj === null || typeof(obj) !== 'object' || 'isActiveClone' in obj || Array.isArray(obj))
-            return obj;
-
-        //if (obj instanceof Date)
-        //    var temp = new obj.constructor(); //or new Date(obj);
-        //else
-        //var temp = obj.constructor();
-        //var temp = Object.create(obj.__proto__);
-
-        var temp = obj;
-        if (  obj.__proto__.constructor && !/\[native code\]/.test(obj.__proto__.constructor.toString()) )
-            temp = Object.create(obj.__proto__); // give temp the original obj's constructor
-
-        for (var key in obj) {
-            if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                obj['isActiveClone'] = null;
-                if ( typeof(obj[key]) === 'object' && !Object.hasOwnProperty(key) )
-                    temp[key] = {};
-                else
-                    temp[key] = clone(obj[key]);
-
-                delete obj['isActiveClone'];
-            }
-        }
-
-        return temp;
-    }
 
     var parseCtxObject = function (o, obj) {
 
@@ -239,6 +209,8 @@ function ContextHelper(contexts) {
 
     /**
      * Get bundle library
+     *
+     * TODO - cleanup
      *
      * @param {string} [ bundle ] - Bundle name
      * @param {string} lib  - Library name (module or file)
