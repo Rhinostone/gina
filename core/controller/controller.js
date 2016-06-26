@@ -301,10 +301,11 @@ function SuperController(options) {
                      * getUrl filter
                      *
                      * Usage:
-                     *      <a href="{{ 'homepage' | getUrl() }}">Homepage</a>
+                     *      <a href="{{ '/homepage' | getUrl() }}">Homepage</a>
                      *      <a href="{{ 'users-add' | getUrl({ id: user.id }) }}">Add User</a>
                      *      <a href="{{ 'users-edit' | getUrl({ id: user.id }) }}">Edit user</a>
                      *      <a href="{{ 'users-list' | getUrl(null, 'http://domain.com') }}">Display all users</a>
+                     *      <a href="{{ '/dashboard' | getUrl(null, 'admin') }}">Go to admin bundle's dashboard page</a>
                      *
                      *      // can also be used with standalone mode: will add webroot if current bundle is not master
                      *      <script src="{{ '/js/vendor/modernizr-2.8.3.min.js' | getUrl() }}"></script>
@@ -312,15 +313,16 @@ function SuperController(options) {
                      *
                      * @param {string} route
                      * @param {object} params - can't be left blank if base is required -> null if not defined
-                     * @param {string} [base] - can be a CDN or the http://domain.com
+                     * @param {string} [base] - can be a CDN, the http://domain.com or a bundle name
                      *
                      * @return {string} relativeUrl|absoluteUrl - /sample/url.html or http://domain.com/sample/url.html
                      * */
-                    var config        = local.options.conf
-                        , wroot         = config.server.webroot
-                        , isStandalone  = (config.bundles.length > 1) ? true : false
-                        , isMaster      = (config.bundles[0] === config.bundle) ? true : false
-                        , routing       = config.content.routing
+                    var config          = null
+                        , hostname      = null
+                        , wroot         = null
+                        , isStandalone  = null
+                        , isMaster      = null
+                        , routing       = null
                         , rule          = ''
                         , url           = NaN
                         , urlStr        = null
@@ -333,18 +335,50 @@ function SuperController(options) {
                             var route = local.options.rule
                         }
 
+                        // setting default config
+                        config          = local.options.conf;
+                        hostname        = '';
+                        wroot           = config.server.webroot;
+                        isStandalone    = (config.bundles.length > 1) ? true : false;
+                        isMaster        = (config.bundles[0] === config.bundle) ? true : false;
+                        routing         = config.content.routing;
+
+                        if ( typeof(base) != 'undefined' ) {
+
+                            // if base is not an URL, must be a bundle
+                            if ( !/^http\:/.test(base) ) {
+                                var mainConf = getContext('gina').Config.instance;
+                                // is real bundle ?
+                                if ( mainConf.allBundles.indexOf(base) > -1 ) {
+                                    // config override
+                                    config          = mainConf.Env.getConf(base, mainConf.env);
+
+                                    // retrieve hostname, webroot & routing
+                                    hostname        = config.hostname;
+                                    routing         = config.content.routing;
+                                    wroot           = config.server.webroot;
+
+                                    config.bundle   = base;
+                                    isStandalone    = (mainConf.bundles.length > 1) ? true : false;
+                                    isMaster        = (mainConf.bundles[0] === config.bundle) ? true : false;
+
+                                } else {
+                                    self.throwError(local.res, 500, new Error('bundle `'+ base +'` not found: Swig.getUrl() filter encountered a problem while trying to compile base `'+base+'` and route `'+route+'`').stack)
+                                }
+                            }
+                        }
+
                         // is path ?
                         if (/\//.test(route)) {
 
                             if (route.substr(0,1) == '/')
                                 route = route.substr(1);
 
+
                             if (wroot.length == 1)
                                 wroot = '';
 
-                            url = wroot +'/'+ route;
-
-                            return url
+                            return hostname + wroot +'/'+ route;
                         }
 
                         if ( isStandalone && !isMaster ) {
@@ -392,13 +426,11 @@ function SuperController(options) {
                                 if (routing["404"].url.substr(0,1) == '/')
                                     routing["404"].url = routing["404"].url.substr(1);
 
-                                url = wroot +'/'+ routing["404"].url
+                                url = hostname + wroot +'/'+ routing["404"].url
                             } else {
-                                url = wroot +'/404.html'
+                                url = hostname + wroot +'/404.html'
                             }
                         }
-
-                        if ( typeof(base) != 'undefined' ) url = base + url;
 
                         return url
                     });
@@ -798,7 +830,8 @@ function SuperController(options) {
             } else if(path && typeof(isRelative) !=  'undefined') {
                 // nothing to do
             } else {
-                path = conf.protocol + '://' +conf.hostname + path
+                //path = conf.protocol + '://' +conf.hostname + path
+                path = conf.hostname + path
             }
 
             if (req.headersSent) return next();
