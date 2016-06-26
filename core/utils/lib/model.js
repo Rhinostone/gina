@@ -391,7 +391,11 @@ function ModelUtil() {
 
                     //Getting Entities Manager thru connector.
                     delete require.cache[_(conf.modelsPath + '/index.js', true)];//child
-                    entitiesManager = new require( _(conf.modelsPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle});
+                    try {
+                        entitiesManager = new require( _(conf.modelsPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle});
+                    } catch (err) {
+                        cb(err)
+                    }
 
                     self.setConnection(bundle, name, conn);
                     // creating entities instances

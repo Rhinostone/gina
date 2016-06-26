@@ -117,7 +117,7 @@ function Server(options) {
 
         onRoutesLoaded( function(err) {//load all registered routes in routing.json
             console.debug('Routing loaded' + '\n'+ JSON.stringify(self.routing, null, '\t'));
-
+            
             if ( hasViews(self.appName) ) {
                 utils.url(self.conf[self.appName][self.env], self.routing)
             }
@@ -137,9 +137,12 @@ function Server(options) {
 
         var config                  = new Config()
             , conf                  = config.getInstance(self.appName)
+            , serverCoreConf        = self.conf.core
+            , routing               = {}
+            , reverseRouting        = {}
             , cacheless             = config.isCacheless()
             , env                   = self.env
-            , apps                  = conf.bundles
+            , apps                  = conf.allBundles//conf.bundles
             , filename              = ''
             , appName               = ''
             , tmp                   = {}
@@ -154,26 +157,20 @@ function Server(options) {
             , originalRules         = []
             , oRuleCount            = 0;
 
-
-        if (cacheless) {
-            self.routing = {};
-            self.reverseRouting = {}
-        }
-
         //Standalone or shared instance mode. It doesn't matter.
         for (; i<apps.length; ++i) {
-            config.setServerCoreConf(apps[i], self.env, self.conf.core);
+            config.setServerCoreConf(apps[i], self.env, serverCoreConf);
 
-            var appPath = _(self.conf[apps[i]][self.env].bundlesPath+ '/' + apps[i]);
+            var appPath = _(conf.envConf[apps[i]][self.env].bundlesPath+ '/' + apps[i]);
             appName     =  apps[i];
 
             //Specific case.
             if (!self.isStandalone && i == 0) appName = apps[i];
 
             try {
-                main        = _(appPath + '/config/' + self.conf[apps[i]][self.env].files.routing);
+                main        = _(appPath + '/config/' + conf.envConf[apps[i]][self.env].files.routing);
                 filename    = main;//by default
-                filename    = self.conf[apps[i]][self.env].files.routing.replace(/.json/, '.' +env + '.json');
+                filename    = conf.envConf[apps[i]][self.env].files.routing.replace(/.json/, '.' +env + '.json');
                 filename    = _(appPath + '/config/' + filename);
                 //Can't do a thing without.
                 if ( !fs.existsSync(filename) ) {
@@ -185,7 +182,7 @@ function Server(options) {
                 }
 
                 if (filename != main) {
-                    self.routing = tmpContent = merge(true, require(main), require(filename));
+                    routing = tmpContent = merge(true, require(main), require(filename));
 
                 } else {
                     try {
@@ -198,12 +195,12 @@ function Server(options) {
 
                 try {
 
-                    wroot               = self.conf[apps[i]][self.env].server.webroot;
-                    webrootAutoredirect = self.conf[apps[i]][self.env].server.webrootAutoredirect;
+                    wroot               = conf.envConf[apps[i]][self.env].server.webroot;
+                    webrootAutoredirect = conf.envConf[apps[i]][self.env].server.webrootAutoredirect;
                     // renaming rule for standalone setup
                     if ( self.isStandalone && apps[i] != self.appName && wroot == '/') {
                         wroot = '/'+ apps[i];
-                        self.conf[apps[i]][self.env].server.webroot = wroot
+                        conf.envConf[apps[i]][self.env].server.webroot = wroot
                     }
 
                     if (wroot.length >1) {
@@ -228,7 +225,7 @@ function Server(options) {
                         if (typeof(tmp[rule].url) != 'object') {
                             if (tmp[rule].url.length > 1 && tmp[rule].url.substr(0,1) != '/') {
                                 tmp[rule].url = '/'+tmp[rule].url
-                            } else if (tmp[rule].url.length > 1 && self.conf[apps[i]][self.env].server.webroot.substr(self.conf[apps[i]][self.env].server.webroot.length-1,1) == '/') {
+                            } else if (tmp[rule].url.length > 1 && conf.envConf[apps[i]][self.env].server.webroot.substr(conf.envConf[apps[i]][self.env].server.webroot.length-1,1) == '/') {
                                 tmp[rule].url = tmp[rule].url.substr(1)
                             } else {
                                 if (wroot.substr(wroot.length-1,1) == '/') {
@@ -242,11 +239,11 @@ function Server(options) {
                                 originalRules[oRuleCount] = ( self.isStandalone && tmp[rule] && apps[i] != self.appName) ? apps[i] + '-' + rule : rule;
                                 ++oRuleCount;
 
-                                localWroot = self.conf[tmp[rule].bundle][self.env].server.webroot;
+                                localWroot = conf.envConf[tmp[rule].bundle][self.env].server.webroot;
                                 // standalone setup
                                 if ( self.isStandalone && tmp[rule].bundle != self.appName && localWroot == '/') {
                                     localWroot = '/'+ routing[rule].bundle;
-                                    self.conf[tmp[rule].bundle][self.env].server.webroot = localWroot
+                                    conf.envConf[tmp[rule].bundle][self.env].server.webroot = localWroot
                                 }
                                 if (localWroot.substr(localWroot.length-1,1) == '/') {
                                     localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
@@ -281,7 +278,7 @@ function Server(options) {
                             // This is only an issue when it comes to the frontend dev
                             // views.useRouteNameAsFilename is set to true by default
                             // IF [ false ] the action is used as filename
-                            if ( !self.conf[apps[i]][self.env].content['views']['default'].useRouteNameAsFilename && tmp[rule].param.bundle != 'framework') {
+                            if ( !conf.envConf[apps[i]][self.env].content['views']['default'].useRouteNameAsFilename && tmp[rule].param.bundle != 'framework') {
                                 var tmpRouting = [];
                                 for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
                                     if (/[A-Z]/.test(tmp[rule].param.file.charAt(r))) {
@@ -306,7 +303,7 @@ function Server(options) {
 
 
                 } catch (err) {
-                    self.routing = null;
+                    self.routing = routing = null;
                     console.error(err.stack||err.message);
                     callback(err)
                 }
@@ -316,39 +313,44 @@ function Server(options) {
                 callback(err)
             }
 
-        }//EO for.
 
-        self.routing = merge(true, self.routing, ((self.isStandalone && apps[i] != self.appName ) ? standaloneTmp : tmp));
+            routing = merge(true, routing, ((self.isStandalone && apps[i] != self.appName ) ? standaloneTmp : tmp));
+            // originalRule is used to facilitate cross bundles (hypertext)linking
+            for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
+                routing[originalRules[r]].originalRule = (routing[originalRules[r]].bundle === self.appName ) ?  config.getOriginalRule(originalRules[r], routing) : config.getOriginalRule(routing[originalRules[r]].bundle +'-'+ originalRules[r], routing)
+            }
 
-        // originalRule is used to facilitate cross bundles (hypertext)linking
-        for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
-            self.routing[originalRules[r]].originalRule = (self.routing[originalRules[r]].bundle === self.appName ) ?  config.getOriginalRule(originalRules[r], self.routing) : config.getOriginalRule(self.routing[originalRules[r]].bundle +'-'+ originalRules[r], self.routing)
-        }
-
-        config.setRouting(self.appName, self.env, self.routing);
-
-        // reverse routing
-        for (var rule in self.routing) {
-            if ( typeof(self.routing[rule].url) != 'object' ) {
-                self.reverseRouting[self.routing[rule].url] = rule
-            } else {
-                for (var u=0, len=self.routing[rule].url.length; u<len; ++u) {
-                    self.reverseRouting[self.routing[rule].url[u]] = rule
+            // reverse routing
+            for (var rule in routing) {
+                if ( typeof(routing[rule].url) != 'object' ) {
+                    reverseRouting[routing[rule].url] = rule
+                } else {
+                    for (var u = 0, len = routing[rule].url.length; u < len; ++u) {
+                        reverseRouting[routing[rule].url[u]] = rule
+                    }
                 }
             }
 
-        }
-        config.setReverseRouting(self.appName, self.env, self.reverseRouting);
+            config.setRouting(apps[i], self.env, routing);
+            config.setReverseRouting(apps[i], self.env, reverseRouting);
+
+            if (apps[i] == self.appName) {
+                self.routing        = routing;
+                self.reverseRouting = reverseRouting
+            }
+
+        }//EO for.
+        
 
         callback(false)
     }
 
     var hasViews = function(bundle) {
-        var _hasViews = false;
+        var _hasViews = false, conf = new Config().getInstance(bundle);
         if (typeof(local.hasViews[bundle]) != 'undefined') {
             _hasViews = local.hasViews[bundle];
         } else {
-            _hasViews = ( typeof(self.conf[bundle][self.env].content['views']) != 'undefined' ) ? true : false;
+            _hasViews = ( typeof(conf.envConf[bundle][self.env].content['views']) != 'undefined' ) ? true : false;
             local.hasViews[bundle] = _hasViews;
         }
 
@@ -721,13 +723,20 @@ function Server(options) {
         //Middleware configuration.
         req.setEncoding(self.conf[bundle][self.env].encoding);
 
-        if ( self.routing == null || self.routing.count() == 0 ) {
-            console.error('Malformed routing or Null value for bundle [' + bundle + '] => ' + req.originalUrl);
-            throwError(res, 500, 'Internal server error\nMalformed routing or Null value for bundle [' + bundle + '] => ' + req.originalUrl, next);
+        try {
+            var params      = {}
+                , routing   = JSON.parse(JSON.stringify( config.getRouting(bundle, self.env) ));
+
+            if ( routing == null || routing.count() == 0 ) {
+                console.error('Malformed routing or Null value for bundle [' + bundle + '] => ' + req.originalUrl);
+                throwError(res, 500, 'Internal server error\nMalformed routing or Null value for bundle [' + bundle + '] => ' + req.originalUrl, next);
+            }
+
+        } catch (err) {
+            throwError(res, 500, err.stack, next)
         }
 
-        var params      = {}
-            , routing   = JSON.parse(JSON.stringify(self.routing));
+
         out:
             for (var rule in routing) {
                 if (typeof(routing[rule]['param']) == 'undefined')

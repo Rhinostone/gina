@@ -572,7 +572,7 @@ function Config(opt) {
         var routing = {}, reverseRouting = {};
 
         conf[bundle][env].project       = getContext('project');
-        conf[bundle][env].bundles       = bundles;
+        conf[bundle][env].allBundles    = bundles;
         conf[bundle][env].cacheless     = cacheless;
         conf[bundle][env].standalone    = standalone;
         conf[bundle][env].executionPath = getContext('paths').root;
@@ -706,7 +706,7 @@ function Config(opt) {
                     }
                 }
 
-                self.setRouting(self.startingApp, env, files[name]);
+                self.setRouting(bundle, env, files[name]);
                 // reverse routing
                 for (var rule in files[name]) {
                     if ( typeof(files[name][rule].url) != 'object' ) {
@@ -717,7 +717,7 @@ function Config(opt) {
                         }
                     }
                 }
-                self.setReverseRouting(self.startingApp, env, reverseRouting);
+                self.setReverseRouting(bundle, env, reverseRouting);
                 continue;
             } else if (name == 'routing') {
                 continue;
@@ -978,11 +978,15 @@ function Config(opt) {
 
         conf[bundle][env].content   = files;
         conf[bundle][env].bundle    = bundle;
+        if (bundle == self.startingApp)
+            conf[bundle][env].bundles   = self.getBundles();
+
         conf[bundle][env].env       = env;
         // this setting is replace on http requests by the value extracted form the request header
         conf[bundle][env].hostname = conf[bundle][env].protocol + '://' + conf[bundle][env].host + ':' + conf[bundle][env].port[conf[bundle][env].protocol];
 
 
+        self.envConf[bundle][env] = conf[bundle][env];
         ++b;
         if (b < bundles.length) {
             loadBundleConfig(bundles, b, callback, reload, collectedRules)
@@ -997,7 +1001,8 @@ function Config(opt) {
      * TODO - simplify / optimize
      * */
     var loadBundlesConfiguration = function(callback) {
-        var bundles = self.getBundles();
+        //var bundles = self.getBundles();
+        var bundles = self.getAllBundles();
 
         loadBundleConfig(bundles, 0, callback)
     }
@@ -1023,7 +1028,7 @@ function Config(opt) {
     this.refresh = function(bundle, callback) {
         //Reload conf. who likes repetition ?
         loadBundleConfig(
-            self.bundles,
+            self.allBundles,
             0,
             function doneLoadingBundleConfig(err, files, routing) {
                 if (!err) {
@@ -1042,12 +1047,13 @@ function Config(opt) {
      * @param {boolean} error
      * */
     this.refreshModels = function(bundle, env, callback) {
-        var conf = self.envConf[bundle][env]
+        var conf            = self.envConf[bundle][env]
             //Reload models.
-            , modelsPath = _(conf.modelsPath);
+            , modelsPath    = _(conf.modelsPath);
+
 
         fs.exists(modelsPath, function(exists){
-            if (exists) {
+            if (exists && self.startingApp == conf.bundle) {
                 modelUtil.reloadModels(
                     conf,
                     function doneReloadingModel(err) {
@@ -1065,7 +1071,16 @@ function Config(opt) {
      * @param {object} routing
      * */
     this.setRouting = function(bundle, env, routing) {
-        self.envConf[bundle][env].content.routing = routing
+        if (!self.envConf[bundle][env].content)
+            self.envConf[bundle][env].content = {};
+
+        self.envConf[bundle][env].content.routing = routing;
+        //Config.instance.envConf[bundle][env].content = self.envConf[bundle][env].content;
+    }
+
+    this.getRouting = function(bundle, env) {
+        return self.envConf[bundle][env].content.routing;
+        //Config.instance.envConf[bundle][env].content = self.envConf[bundle][env].content;
     }
 
     this.setReverseRouting = function(bundle, env, reverseRouting) {
