@@ -409,7 +409,7 @@ function Server(options) {
             //request.patch = {}; ???
             //request.cookies = {}; // ???
 
-
+            // be carfull, if you are using jQuery + cross domain, you have to set the header manually in your $.ajax query -> headers: {'X-Requested-With': 'XMLHttpRequest'}
             self.conf[self.appName][self.env].server.request.isXMLRequest  = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
 
             // multipart wrapper for uploads
