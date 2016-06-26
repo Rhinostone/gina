@@ -1237,7 +1237,12 @@ function SuperController(options) {
      * @return {void}
      * */
     this.throwError = function(res, code, msg) {
-        if (arguments.length < 3) {
+        if (arguments.length == 1 && res instanceof Error) {
+            var code    = 500
+                , msg   = res.stack || res.message
+                , res   = local.res;
+
+        } else if (arguments.length < 3) {
             var msg             = code || null
                 , code          = res || 500
                 , res           = local.res;
@@ -1247,8 +1252,8 @@ function SuperController(options) {
             if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate ) {
                 // allowing this.throwError(err)
                 if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
-                    msg     = code.error;
-                    code    = code.status;
+                    msg     = code.error || code.message;
+                    code    = code.status || 500;
                 }
 
                 // Internet Explorer override
