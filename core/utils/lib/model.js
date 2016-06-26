@@ -564,7 +564,7 @@ function ModelUtil() {
      *
      * Collection::findOne
      *  @param {object} filter
-     *  @return {object} result
+     *  @return {object|array|string} result
      *
      * */
     Collection = function(content) {
@@ -581,15 +581,13 @@ function ModelUtil() {
                 for (var o in content) {
                     for (var f in filter) {
                         if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
-                            ++i
-                        }
-
-                        if (i === condition) {
-                            found.push(content[o])
+                            ++i;
+                            if (i === condition) found.push(content[o])
                         }
                     }
                 }
             }
+
             return found
         }
 
@@ -598,23 +596,22 @@ function ModelUtil() {
                 throw new Error('filter must be an object');
             } else {
                 var condition = filter.count()
-                    , i         = 0;
+                    , i         = 0
+                    , found     = null;
 
                 if (condition == 0) return null;
 
                 for (var o in content) {
                     for (var f in filter) {
                         if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
-                            ++i
-                        }
-
-                        if (i === condition) {
-                            return content[o];
+                            ++i;
+                            if (i === condition) found = content[o]
                         }
                     }
                 }
             }
-            return null
+
+            return found
         }
     }
 
