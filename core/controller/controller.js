@@ -241,6 +241,8 @@ function SuperController(options) {
             } else {
                 data = merge(_data, data)
             }
+
+
             setResources(local.options.views, data.file);
             var file = data.file;
 
@@ -458,7 +460,25 @@ function SuperController(options) {
                         }
 
                         if ( !local.res.headersSent ) {
-                            local.res.writeHead(200, { 'Content-Type': 'text/html' });
+                            local.res.statusCode = 200; // by default
+                            //catching errors
+                            if (
+                                typeof(data.page.data.errno) != 'undefined' && local.res.statusCode == 200
+                                || typeof(data.page.data.status) != 'undefined' && data.page.data.status != 200
+                            ) {
+
+                                try {
+                                    local.res.statusCode    = data.page.data.status;
+                                    local.res.statusMessage = local.options.conf.server.coreConfiguration.statusCodes[data.page.data.status];
+                                } catch (err){
+                                    local.res.statusCode    = 500;
+                                    local.res.statusMessage = err.stack;
+                                }
+                            }
+
+                            local.res.setHeader("Content-Type", local.options.conf.server.coreConfiguration.mime['html']);
+
+
                             local.res.end(layout);
                             local.res.headersSent = true
                         } else {
