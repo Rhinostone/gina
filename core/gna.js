@@ -676,6 +676,10 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
         var source      = (env == 'dev' || env == 'debug') ? _( root +'/'+project.bundles[core.startingApp].src) : _( root +'/'+ project.bundles[core.startingApp].release.target );
         var bundlesPath = getPath('bundlesPath');
+        var mountPath = getPath('mountPath')
+        if ( !fs.existsSync(mountPath) )
+            fs.mkdirSync(mountPath);
+
         var tmpSource   = _(bundlesPath +'/'+ core.startingApp);
         var linkPath    =  _( root +'/'+ project.bundles[core.startingApp].release.link );
 
