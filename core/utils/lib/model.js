@@ -559,7 +559,10 @@ function ModelUtil() {
      * @return {object} instance
      *
      * Collection::find
-     *  @param {object} filter eg.: { uid: "someUID" }
+     *  @param {object} filter
+     *      eg.: { uid: "someUID" }
+     *      eg.: { type: "not null" }
+     *
      *  @return {array} result
      *
      * Collection::findOne
@@ -571,18 +574,26 @@ function ModelUtil() {
         var content = content || [];
 
         this.find = function(filter) {
+
             if ( typeof(filter) !== 'object' ) {
                 throw new Error('filter must be an object');
             } else {
-                var condition = filter.count()
+                var condition   = filter.count()
                     , i         = 0
-                    , found     = [];
+                    , found     = []
+                    , keywords  = ['not null']; // TODO - null, exists
 
                 for (var o in content) {
                     for (var f in filter) {
-                        if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
-                            ++i;
-                            if (i === condition) found.push(content[o])
+                        if ( filter[f] && keywords.indexOf(filter[f].toLocaleLowerCase()) > -1 && filter[f].toLowerCase() == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
+                            if (found.indexOf(content[o][f]) < 0 ) {
+                                found[i] = content[o][f];
+                                ++i
+                            }
+
+                        } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
+                            found[i] = content[o];
+                            ++i
                         }
                     }
                 }
@@ -597,13 +608,20 @@ function ModelUtil() {
             } else {
                 var condition = filter.count()
                     , i         = 0
-                    , found     = null;
+                    , found     = null
+                    , keywords  = ['not null']; // TODO - null, exists
 
                 if (condition == 0) return null;
 
                 for (var o in content) {
                     for (var f in filter) {
-                        if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
+                        if ( filter[f] && keywords.indexOf(filter[f].toLocaleLowerCase()) > -1 && filter[f].toLowerCase() == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
+                            if (found.indexOf(content[o][f]) < 0 ) {
+                                ++i;
+                                if (i === condition) found = content[o]
+                            }
+
+                        } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
                             ++i;
                             if (i === condition) found = content[o]
                         }
