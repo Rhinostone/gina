@@ -362,7 +362,10 @@ function Server(options) {
         if ( /(\"false\"|\"true\"|\"on\")/.test(body) )
             body = body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
 
-        var el = {}, value = null;
+        var el      = {}
+            , value = null
+            , key   = null;
+
         for (var i=0; i<arr.length; ++i) {
             if (!arr[i]) continue;
             el = arr[i].split(/=/);
@@ -375,9 +378,47 @@ function Server(options) {
             }
 
             if ( typeof(el[1]) == 'string' && !/\[object /.test(el[1])) {
-                obj[ el[0] ] = decodeURIComponent(el[1])
+                key    = null;
+                el[0]   = decodeURIComponent(el[0]);
+
+                if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
+                    key = el[0].replace(/\]/g, '').split(/\[/g);
+                    obj = parseLocalObj(obj, key, 0, el[1])
+                } else {
+                    obj[ el[0] ] = decodeURIComponent(el[1])
+                }
             }
         }
+
+        return obj
+    }
+
+    var parseLocalObj = function(obj, key, k, value, i) {
+
+        if ( typeof(obj[ key[k] ]) == 'undefined' ) {
+            obj[ key[k] ] = {};
+        }
+
+
+        for (var prop in obj) {
+
+            if (k == key.length-1) {
+
+                if (prop == key[k]) {
+                    obj[prop] = (value) ? value : '';
+                }
+
+            } else {
+                ++k;
+                if (! obj[prop][ key[k] ] )
+                    obj[prop][ key[k] ] = {};
+
+
+                parseLocalObj(obj[prop], key, k, value)
+            }
+
+        }
+
         return obj
     }
 
@@ -556,10 +597,54 @@ function Server(options) {
                                 break;
 
                             case 'put':
-                                if ( request.query.count() > 0 ) {
-                                    request.put = request.query;
+                                // eg.: PUT /user/set/1
+                                var obj = {};
+                                if ( typeof(request.body) == 'string' ) {
+                                    // get rid of encoding issues
+                                    try {
+                                        if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
+                                                request.body = request.body.replace(/\+/g, ' ');
+                                            }
+
+                                            if ( request.body.substr(0,1) == '?')
+                                                request.body = request.body.substr(1);
+
+                                            // false & true case
+                                            if ( /(\"false\"|\"true\"|\"on\")/.test(request.body) )
+                                                request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+
+                                            obj = parseBody(request.body);
+                                            if ( typeof(obj) != 'undefined' && obj.count() == 0 && request.body.length > 1 ) {
+                                                try {
+                                                    request.put = merge(request.put, JSON.parse(request.body));
+                                                } catch (err) {}
+                                            }
+                                        }
+
+                                    } catch (err) {
+                                        var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
+                                        console.warn(msg);
+                                    }
+
+                                } else {
+                                    // 2016-05-19: fix to handle requests from swagger/express
+                                    if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
+                                        request.body = request.query
+                                    }
+                                    var bodyStr = JSON.stringify(request.body);
+                                    // false & true case
+                                    if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                                        bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+
+                                    obj = JSON.parse(bodyStr)
                                 }
-                                // else, matching route params against url context instead once route is identified
+
+                                if ( obj && typeof(obj) != 'undefined' && obj.count() > 0 ) {
+                                    // still need this to allow compatibility with express & connect middlewares
+                                    request.body = request.put = merge(request.put, obj);
+                                }
+
 
                                 delete request.post;
                                 delete request.delete;
@@ -785,11 +870,19 @@ function Server(options) {
                         }
 
                         // handling GET method exception - if no param found
-                        var methods = ['get', 'put', 'delete'], method = req.method.toLowerCase();
+                        var methods = ['get', 'delete'], method = req.method.toLowerCase();
                         if (
                             methods.indexOf(method) > -1 && typeof(req.query) != 'undefined' && req.query.count() == 0
                             || methods.indexOf(method) > -1 && typeof(req.query) == 'undefined' && typeof(req.params) != 'undefined' && req.params.count() > 1
                         ) {
+                            var p = 0;
+                            for (var parameter in req.params) {
+                                if (p > 0) {
+                                    req[method][parameter] = req.params[parameter]
+                                }
+                                ++p
+                            }
+                        } else if (method == 'put') {
                             var p = 0;
                             for (var parameter in req.params) {
                                 if (p > 0) {
