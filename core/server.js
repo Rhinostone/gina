@@ -378,14 +378,15 @@ function Server(options) {
             }
 
             if ( typeof(el[1]) == 'string' && !/\[object /.test(el[1])) {
-                key    = null;
-                el[0]   = decodeURIComponent(el[0]);
+                key     = null;
+                el[0]   = decodeURIComponent(el[0])
+                el[1]   = decodeURIComponent(el[1]);
 
                 if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
                     key = el[0].replace(/\]/g, '').split(/\[/g);
                     obj = parseLocalObj(obj, key, 0, el[1])
                 } else {
-                    obj[ el[0] ] = decodeURIComponent(el[1])
+                    obj[ el[0] ] = el[1]
                 }
             }
         }

@@ -396,7 +396,7 @@ function SuperController(options) {
                                     if ( Array.isArray(url) ) {
                                         for (var i= 0, len = url.length; i< len; ++i) {
                                             if ( params && /:/.test(url[i]) ) {
-                                                urlStr = url[i].replace(new RegExp(':'+p, 'g'), params[p]);
+                                                urlStr = url[i].replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]);
                                                 break;
                                             }
                                         }
@@ -408,7 +408,7 @@ function SuperController(options) {
                                         }
                                     } else {
                                         try {
-                                            url = url.replace(new RegExp(':'+p, 'g'), params[p])
+                                            url = url.replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p])
                                         } catch (err) {
                                             self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\nsounds like you are having troubles with a getUrl() filter call where `'+p+'` property might not been defined'  +'\n'+(err.stack||err.message));
                                         }
