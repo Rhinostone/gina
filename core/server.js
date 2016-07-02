@@ -368,26 +368,36 @@ function Server(options) {
 
         for (var i=0; i<arr.length; ++i) {
             if (!arr[i]) continue;
-            el = arr[i].split(/=/);
-            if ( /\{\}\"\:/.test(el[1]) ) { //might be a json
+
+            if ( /^\{/.test(arr[i]) ) { // is a json string
                 try {
-                    el[1] = JSON.parse(el[1])
+                    obj = JSON.parse(arr[i]);
+                    break;
                 } catch (err) {
-                    console.error('could not parse body: ' + el[1])
+                    console.error('could not parse body:\n' + arr[i])
                 }
-            }
-
-            if ( typeof(el[1]) == 'string' && !/\[object /.test(el[1])) {
-                key     = null;
-                el[0]   = decodeURIComponent(el[0])
-                el[1]   = decodeURIComponent(el[1]);
-
-                if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
-                    key = el[0].replace(/\]/g, '').split(/\[/g);
-                    obj = parseLocalObj(obj, key, 0, el[1])
-                } else {
-                    obj[ el[0] ] = el[1]
+            } else {
+                el = arr[i].split(/=/);
+                if ( /\{\}\"\:/.test(el[1]) ) { //might be a json
+                    try {
+                        el[1] = JSON.parse(el[1])
+                    } catch (err) {
+                        console.error('could not parse body: ' + el[1])
+                    }
                 }
+
+                if ( typeof(el[1]) == 'string' && !/\[object /.test(el[1])) {
+                    key     = null;
+                    el[0]   = decodeURIComponent(el[0])
+                    el[1]   = decodeURIComponent(el[1]);
+
+                    if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
+                        key = el[0].replace(/\]/g, '').split(/\[/g);
+                        obj = parseLocalObj(obj, key, 0, el[1])
+                    } else {
+                        obj[ el[0] ] = el[1]
+                    }
+                }    
             }
         }
 
