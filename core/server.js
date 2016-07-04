@@ -358,6 +358,13 @@ function Server(options) {
     }
 
     var parseBody = function(body) {
+        if ( /^(\{|%7B)/.test(body) ) {
+            try {
+                return ( /^\{/.test(body) ) ? JSON.parse(body) : JSON.parse(decodeURIComponent(body));
+            } catch (err) {
+                console.error('[665] could not parse body:\n' + body)
+            }
+        }
         var obj = {}, arr = body.split(/&/g);
         if ( /(\"false\"|\"true\"|\"on\")/.test(body) )
             body = body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
@@ -374,7 +381,7 @@ function Server(options) {
                     obj = JSON.parse(arr[i]);
                     break;
                 } catch (err) {
-                    console.error('could not parse body:\n' + arr[i])
+                    console.error('[377] could not parse body:\n' + arr[i])
                 }
             } else {
                 el = arr[i].split(/=/);
@@ -382,7 +389,7 @@ function Server(options) {
                     try {
                         el[1] = JSON.parse(el[1])
                     } catch (err) {
-                        console.error('could not parse body: ' + el[1])
+                        console.error('[385] could not parse body:\n' + el[1])
                     }
                 }
 

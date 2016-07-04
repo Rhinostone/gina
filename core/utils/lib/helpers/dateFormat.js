@@ -18,7 +18,7 @@
  * @param {string} mask
  * @param {}
  */
-module.exports = function() {
+function DateFormatHelper() {
 
     var self = {};
 
@@ -229,3 +229,4 @@ module.exports = function() {
     }
 
 };
+module.exports = DateFormatHelper
