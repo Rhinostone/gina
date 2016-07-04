@@ -1,7 +1,5 @@
-var fs      = require('fs');
-var helpers = require('./helpers');
-var merge   = require('./merge');
-var console = require('./logger');
+var helpers     = require('./helpers');
+var merge       = require('./merge');
 var dateFormat  = helpers.dateFormat;
 
 /**

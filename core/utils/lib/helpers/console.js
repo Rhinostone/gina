@@ -14,7 +14,7 @@
  * @author      Rhinostone <gina@rhinostone.com>
  * */
 
-module.exports = function() {
+function ConsoleHelper() {
     /**
      * @function log
      * @param {string} content to be printed by the terminal
@@ -40,4 +40,5 @@ module.exports = function() {
             process.stdout.write(content + '\n');
     };
     return false
-}
+};
+module.exports = ConsoleHelper

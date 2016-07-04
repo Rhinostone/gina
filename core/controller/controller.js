@@ -1036,6 +1036,9 @@ function SuperController(options) {
 
     this.query = function(options, data, callback) {
 
+        local.query.options.method                  = local.req.method;
+        local.query.options.headers['Content-Type'] = local.req.headers['content-type'];
+
         var queryData           = {}
             , defaultOptions    = local.query.options
             , path              = options.path
@@ -1069,20 +1072,34 @@ function SuperController(options) {
         if ( typeof(data) != "undefined" &&  data.count() > 0) {
 
             queryData = '?';
+            // TODO - if 'application/json' && method == (put|post)
+            if ( ['put', 'post'].indexOf(options.method.toLowerCase()) >-1 && /(text\/plain|application\/json|application\/x\-www\-form)/i.test(local.req.headers['content-type']) ) {
+                // replacing
+                queryData = encodeURIComponent(JSON.stringify(data));
 
-            for (var d in data) {
-                if ( typeof(data[d]) == 'object') {
-                    data[d] = JSON.stringify(data[d]);
+                // Internet Explorer override
+                if ( /msie/i.test(local.req.headers['user-agent']) ) {
+                    options.headers['Content-Type'] = 'text/plain';
+                } else {
+                    options.headers['Content-Type'] = local.options.conf.server.coreConfiguration.mime['json'];
                 }
-                queryData += d + '=' + data[d] + '&';
+
+            } else {
+                //Sample request.
+                //options.path = '/updater/start?release={"version":"0.0.5-dev","url":"http://10.1.0.1:8080/project/bundle/repository/archive?ref=0.0.5-dev","date":1383669077141}&pid=46493';
+
+                for (var d in data) {
+                    if ( typeof(data[d]) == 'object') {
+                        data[d] = JSON.stringify(data[d]);
+                    }
+                    queryData += d + '=' + data[d] + '&';
+                }
+
+                queryData = queryData.substring(0, queryData.length-1);
+                queryData = queryData.replace(/\s/g, '%20');
+                options.path += queryData;
             }
 
-            queryData = queryData.substring(0, queryData.length-1);
-            queryData = queryData.replace(/\s/g, '%20');
-            options.path += queryData;
-
-            //Sample request.
-            //options.path = '/updater/start?release={"version":"0.0.5-dev","url":"http://10.1.0.1:8080/project/bundle/repository/archive?ref=0.0.5-dev","date":1383669077141}&pid=46493';
         } else {
             queryData = ''
         }
@@ -1104,10 +1121,29 @@ function SuperController(options) {
 
             res.on('end', function onEnd() {
                 //Only when needed.
-                if ( typeof(callback) != "undefined") {
-                    callback( false, data ) // data will always be a string
+                if ( typeof(callback) != 'undefined' ) {
+                    if ( typeof(data) == 'string' && /^(\{|%7B)/.test(data) ) {
+                        try {
+                            data = JSON.parse(data);
+                            callback( false, data ) // data will always be a string
+                        } catch (err) {
+                            callback( err )
+                        }
+                    } else {
+                        callback( false, data ) // data will always be a string
+                    }
+
                 } else {
-                    self.emit('query#complete', false, data)
+                    if ( typeof(data) == 'string' && /^(\{|%7B)/.test(data) ) {
+                        try {
+                            data = JSON.parse(data);
+                            self.emit('query#complete', false, data)
+                        } catch (err) {
+                            self.emit('query#complete', err)
+                        }
+                    } else {
+                        self.emit('query#complete', false, data)
+                    }
                 }
             })
         });
@@ -1131,6 +1167,15 @@ function SuperController(options) {
         return {
             onComplete: function(cb) {
                 self.once('query#complete', function(err, data){
+
+                    if ( typeof(data) == 'string' && /^(\{|%7B)/.test(data) ) {
+                        try {
+                            data = JSON.parse(data)
+                        } catch (err) {
+                            cb(err)
+                        }
+                    }
+
                     cb(err, data)
                 })
             }
