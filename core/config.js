@@ -802,9 +802,9 @@ function Config(opt) {
         };
 
         if (hasViews && typeof(files['views'].default) != 'undefined') {
-            reps['views'] = files['views'].default.views;
-            reps['html'] = files['views'].default.html;
-            reps['theme'] = files['views'].default.theme;
+            reps['views']   = files['views'].default.views;
+            reps['html']    = files['views'].default.html;
+            reps['theme']   = files['views'].default.theme;
         }
 
         var ports = conf[bundle][env].port;
@@ -972,6 +972,15 @@ function Config(opt) {
 
         files = whisper(reps, files);
 
+        // loading forms rules
+        if (hasViews && typeof(files['views'].default.forms) != 'undefined') {
+            try {
+                files['forms'] = loadForms(files['views'].default.forms)
+            } catch (err) {
+                callback(err)
+            }
+        }
+
         if ( typeof(conf[bundle][env].content) == 'undefined') {
             conf[bundle][env].content = {}
         }
@@ -993,6 +1002,51 @@ function Config(opt) {
         } else {
             callback(err, files, collectedRules)
         }
+    }
+
+    var loadForms = function(formsDir) {
+        var forms = {}, cacheless = self.isCacheless();
+
+        if ( fs.existsSync(formsDir) ) {
+            // browsing dir
+            var readDir = function (dir, forms, key) {
+                var files       = fs.readdirSync(dir)
+                    , filename  = ''
+                    , k         = null;
+
+                for (var i = 0, len = files.length; i < len; ++i) {
+                    if ( !/^\./.test(files[i]) ) {
+                        filename = _(dir + '/' + files[i], true);
+                        if ( fs.statSync(filename).isDirectory() ) {
+                            key += files[i] + '/';
+                            k = key.split(/\//g);
+                            forms[k[k.length-2]] = {};
+
+                            readDir( filename, forms[ k[k.length-2] ], key );
+
+                        } else {
+                            key += files[i].replace('.json', '');
+                            try {
+
+                                if (cacheless) {
+                                    delete require.cache[filename];
+                                }
+
+                                k = key.split(/\//g);
+                                forms[ k[k.length-1] ] = require(filename)
+
+                            } catch(err) {
+                                throw new Error('[ ' +filename + ' ] is malformed !!')
+                            }
+                        }
+                    }
+                }
+            };
+
+            readDir(formsDir, forms, '/')
+        }
+
+        return forms;
     }
 
     /**
