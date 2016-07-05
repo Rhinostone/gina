@@ -362,7 +362,7 @@ function Server(options) {
             try {
                 return ( /^\{/.test(body) ) ? JSON.parse(body) : JSON.parse(decodeURIComponent(body));
             } catch (err) {
-                console.error('[665] could not parse body:\n' + body)
+                console.error('[365] could not parse body:\n' + body)
             }
         }
         var obj = {}, arr = body.split(/&/g);
@@ -381,7 +381,7 @@ function Server(options) {
                     obj = JSON.parse(arr[i]);
                     break;
                 } catch (err) {
-                    console.error('[377] could not parse body:\n' + arr[i])
+                    console.error('[384] could not parse body:\n' + arr[i])
                 }
             } else {
                 el = arr[i].split(/=/);
@@ -389,7 +389,7 @@ function Server(options) {
                     try {
                         el[1] = JSON.parse(el[1])
                     } catch (err) {
-                        console.error('[385] could not parse body:\n' + el[1])
+                        console.error('[392] could not parse body:\n' + el[1])
                     }
                 }
 

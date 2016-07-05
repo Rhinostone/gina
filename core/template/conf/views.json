@@ -1,6 +1,7 @@
 {
   "default": {
     "layout": "{views}/html/layout.html",
+    "forms": "{views}/forms",
     "useRouteNameAsFilename": true,
     "http-metas": {
       "content-type": "text/html"
