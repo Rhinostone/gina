@@ -158,6 +158,7 @@ function SuperController(options) {
             set('page.content', content);
             set('page.namespace', namespace);
             set('page.title', rule);
+            set('page.forms', options.conf.content.forms);
             
             var acceptLanguage = 'en-US'; // by default
             if ( typeof(req.headers['accept-language']) != 'undefined' ) {

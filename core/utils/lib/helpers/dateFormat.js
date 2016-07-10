@@ -138,22 +138,22 @@ function DateFormatHelper() {
      * */
     var countDaysTo = function(date, dateTo) {
 
-        if ( ! dateTo instanceof Date) {
+        if ( dateTo instanceof Date) {
+            // The number of milliseconds in one day
+            var oneDay = 1000 * 60 * 60 * 24
+
+            // Convert both dates to milliseconds
+            var date1Ms = date.getTime()
+            var date2Ms = dateTo.getTime()
+
+            // Calculate the difference in milliseconds
+            var count = Math.abs(date1Ms - date2Ms)
+
+            // Convert back to days and return
+            return Math.round(count/oneDay);
+        } else {
             throw new Error('dateTo is not instance of Date() !')
         }
-
-        // The number of milliseconds in one day
-        var oneDay = 1000 * 60 * 60 * 24
-
-        // Convert both dates to milliseconds
-        var date1Ms = date.getTime()
-        var date2Ms = dateTo.getTime()
-
-        // Calculate the difference in milliseconds
-        var count = Math.abs(date1Ms - date2Ms)
-
-        // Convert back to days and return
-        return Math.round(count/oneDay);
     }
 
     /**
@@ -169,30 +169,29 @@ function DateFormatHelper() {
      * */
     var getDaysTo = function(date, dateTo, mask) {
 
-        if ( ! dateTo instanceof Date) {
-            throw new Error('dateTo is not instance of Date() !')
-        }
+        if ( dateTo instanceof Date) {
+            var count       = countDaysTo(date, dateTo)
+                , month     = date.getMonth()
+                , year      = date.getFullYear()
+                , day       = date.getDate() + 1
+                , dateObj   = new Date(year, month, day)
+                , days      = []
+                , i         = 0;
 
+            for (; i < count; ++i) {
+                if ( typeof(mask) != 'undefined' ) {
+                    days.push(new Date(dateObj).format(mask));
+                } else {
+                    days.push(new Date(dateObj));
+                }
 
-        var count       = countDaysTo(date, dateTo)
-            , month     = date.getMonth()
-            , year      = date.getFullYear()
-            , day       = date.getDate() + 1
-            , dateObj   = new Date(year, month, day)
-            , days      = []
-            , i         = 0;
-
-        for (; i < count; ++i) {
-            if ( typeof(mask) != 'undefined' ) {
-                days.push(new Date(dateObj).format(mask));
-            } else {
-                days.push(new Date(dateObj));
+                dateObj.setDate(dateObj.getDate() + 1);
             }
 
-            dateObj.setDate(dateObj.getDate() + 1);
+            return days || [];
+        } else {
+            throw new Error('dateTo is not instance of Date() !')
         }
-
-        return days || [];
     }
 
     var getDaysInMonth = function(date) {

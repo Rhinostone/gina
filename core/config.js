@@ -1017,6 +1017,7 @@ function Config(opt) {
                 for (var i = 0, len = files.length; i < len; ++i) {
                     if ( !/^\./.test(files[i]) ) {
                         filename = _(dir + '/' + files[i], true);
+
                         if ( fs.statSync(filename).isDirectory() ) {
                             key += files[i] + '/';
                             k = key.split(/\//g);
@@ -1046,7 +1047,7 @@ function Config(opt) {
             readDir(formsDir, forms, '/')
         }
 
-        return forms;
+        return forms
     }
 
     /**
