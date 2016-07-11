@@ -393,18 +393,13 @@ function SuperController(options) {
                         if ( typeof(routing[rule]) != 'undefined' ) { //found
                             url = routing[rule].url;
                             if ( typeof(routing[rule].requirements) != 'undefined' ) {
-                                var _p = 1, _pLen = params.count();
+                                
                                 for (var p in routing[rule].requirements) {
                                     if ( Array.isArray(url) ) {
                                         for (var i= 0, len = url.length; i< len; ++i) {
                                             if ( params && /:/.test(url[i]) ) {
-                                                if (_p == _pLen)
-                                                    urlStr = url[i].replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]);
-                                                else
-                                                    urlStr = url[i].replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p] + '/');
-
-                                                ++_p;
-                                                break;
+                                                urlStr = url[i].replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]+'$1');
+                                                break
                                             }
                                         }
 
