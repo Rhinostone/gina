@@ -393,11 +393,17 @@ function SuperController(options) {
                         if ( typeof(routing[rule]) != 'undefined' ) { //found
                             url = routing[rule].url;
                             if ( typeof(routing[rule].requirements) != 'undefined' ) {
+                                var _p = 1, _pLen = params.count();
                                 for (var p in routing[rule].requirements) {
                                     if ( Array.isArray(url) ) {
                                         for (var i= 0, len = url.length; i< len; ++i) {
                                             if ( params && /:/.test(url[i]) ) {
-                                                urlStr = url[i].replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]);
+                                                if (_p == _pLen)
+                                                    urlStr = url[i].replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]);
+                                                else
+                                                    urlStr = url[i].replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p] + '/');
+
+                                                ++_p;
                                                 break;
                                             }
                                         }
@@ -1125,11 +1131,17 @@ function SuperController(options) {
                 if ( typeof(callback) != 'undefined' ) {
                     if ( typeof(data) == 'string' && /^(\{|%7B)/.test(data) ) {
                         try {
-                            data = JSON.parse(data);
-                            callback( false, data ) // data will always be a string
+                            data = JSON.parse(data)
                         } catch (err) {
-                            callback( err )
+                            data = {
+                                status    : 500,
+                                error     : data
+                            }
                         }
+                    }
+
+                    if ( data.status && !/^2/.test(data.status) ) {
+                        callback(data)
                     } else {
                         callback( false, data ) // data will always be a string
                     }
@@ -1137,11 +1149,18 @@ function SuperController(options) {
                 } else {
                     if ( typeof(data) == 'string' && /^(\{|%7B)/.test(data) ) {
                         try {
-                            data = JSON.parse(data);
-                            self.emit('query#complete', false, data)
+                            data = JSON.parse(data)
                         } catch (err) {
-                            self.emit('query#complete', err)
+                            data = {
+                                status    : 500,
+                                error     : data
+                            }
+                            self.emit('query#complete', data)
                         }
+                    }
+
+                    if ( data.status && !/^2/.test(data.status) ) {
+                        self.emit('query#complete', data)
                     } else {
                         self.emit('query#complete', false, data)
                     }
@@ -1155,8 +1174,12 @@ function SuperController(options) {
             if ( typeof(callback) != "undefined") {
                 callback(err)
             } else {
-                //throw new Error(err)
-                self.emit('query#complete', err)
+                var data = {
+                    status    : 500,
+                    error     : err.stack || err.message
+                };
+
+                self.emit('query#complete', data)
             }
         });
 
@@ -1173,11 +1196,18 @@ function SuperController(options) {
                         try {
                             data = JSON.parse(data)
                         } catch (err) {
-                            cb(err)
+                            data = {
+                                status    : 500,
+                                error     : data
+                            }
                         }
                     }
 
-                    cb(err, data)
+                    if ( data.status && !/^2/.test(data.status) ) {
+                        cb(data)
+                    } else {
+                        cb(err, data)
+                    }
                 })
             }
         }
