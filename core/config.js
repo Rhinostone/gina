@@ -1026,7 +1026,8 @@ function Config(opt) {
                             readDir( filename, forms[ k[k.length-2] ], key );
 
                         } else {
-                            key += files[i].replace('.json', '');
+                            
+                            key = files[i].replace('.json', '');
                             try {
 
                                 if (cacheless) {
