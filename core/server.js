@@ -357,10 +357,51 @@ function Server(options) {
         return _hasViews
     }
 
+    var parseCollection = function (collection, obj) {
+        for(var i = 0, len = collection.length; i<len; ++i) {
+            obj[i] = parseObject(collection[i], obj);
+        }
+
+        return obj
+    }
+
+    var parseObject = function (tmp, obj) {
+        var el = [], key = null;
+        for (var o in tmp) {
+            el[0]   = decodeURIComponent(o)
+            el[1]   = ( typeof(tmp[o]) == 'string' ) ? decodeURIComponent(tmp[o]) : tmp[o];
+
+            //if ( Array.isArray(el[1]) ) {
+            //    obj = parseCollection(el[1], obj)
+            //} else {
+                if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
+                    key = el[0].replace(/\]/g, '').split(/\[/g);
+                    obj = parseLocalObj(obj, key, 0, el[1])
+                } else {
+                    obj[ el[0] ] = el[1]
+                }
+            //}
+        }
+
+        return obj
+    }
+
     var parseBody = function(body) {
         if ( /^(\{|%7B)/.test(body) ) {
             try {
-                return ( /^\{/.test(body) ) ? JSON.parse(body) : JSON.parse(decodeURIComponent(body));
+                if ( /(.*)\[(.*)\]/.test(body) ) {
+                    var obj = {}, tmp = JSON.parse(decodeURIComponent(body));
+
+                    if ( Array.isArray(tmp) ) {
+                        obj = parseCollection(tmp, obj)
+                    } else {
+                        obj = parseObject(tmp, obj)
+                    }
+
+                    return obj
+                } else {
+                    return ( /^\{/.test(body) ) ? JSON.parse(body) : JSON.parse(decodeURIComponent(body));
+                }
             } catch (err) {
                 console.error('[365] could not parse body:\n' + body)
             }
@@ -992,9 +1033,9 @@ function Server(options) {
 
                 uri = uri.join('/');
                 if ( /\//.test(key) ) {
-                    filename = path.join(conf.content.statics[key])
+                    filename = _(path.join(conf.content.statics[key]), true)
                 } else {
-                    filename = path.join(conf.content.statics[key], uri)
+                    filename = _(path.join(conf.content.statics[key], uri), true)
                 }
 
                 fs.exists(filename, function(exists) {
@@ -1002,6 +1043,10 @@ function Server(options) {
                     if(exists) {
 
                         if (fs.statSync(filename).isDirectory()) filename += '/index.html';
+
+                        if (cacheless) {
+                            delete require.cache[filename]
+                        }
 
                         fs.readFile(filename, "binary", function(err, file) {
                             if (err) {
@@ -1016,9 +1061,18 @@ function Server(options) {
                                         if ( /\.js$/.test(filename) && fs.existsSync(filename +'.map') ) {
                                             res.setHeader("X-SourceMap", pathname +'.map')
                                         }
+
+                                        // serve without cache
+                                        res.writeHead(200, {
+                                            'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
+                                            'Pragma': 'no-cache',
+                                            'Expires': '0'
+                                        });
+
+                                    } else {
+                                        res.writeHead(200)
                                     }
 
-                                    res.writeHead(200)
                                     res.write(file, 'binary');
                                     res.end()
                                 } catch(err) {
