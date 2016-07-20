@@ -1172,6 +1172,7 @@ function SuperController(options) {
 
         //starting from from >0.10.15
         req.on('error', function onError(err) {
+            // you can get here if you are trying to query using: `enctype="multipart/form-data"`
             if ( typeof(callback) != "undefined") {
                 callback(err)
             } else {
