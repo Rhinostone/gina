@@ -1019,6 +1019,8 @@ function SuperController(options) {
 
     /**
      * Query
+     *
+     * Allows you to act as a proxy between your frontend and a 1/3 API
      * */
     local.query.data = {};
     local.query.options = {
@@ -1028,6 +1030,7 @@ function SuperController(options) {
         port    : 80, // #80 by default but can be 3000
         method  : 'POST', // POST | GET | PUT | DELETE
         agent   : false,
+        keepAlive: true,
         auth    : undefined, // use `"username:password"` for basic authentification
         rejectUnauthorized: undefined, // ignore verification when requesting on https (443)
         headers : {
@@ -1115,6 +1118,7 @@ function SuperController(options) {
         var req = browser.request(options, function(res) {
 
             res.setEncoding('utf8');
+
             var data = '';
 
             res.on('data', function onData (chunk) {
@@ -1160,7 +1164,9 @@ function SuperController(options) {
                         self.emit('query#complete', false, data)
                     }
                 }
-            })
+            });
+
+
         });
 
 

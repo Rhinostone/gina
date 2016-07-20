@@ -410,6 +410,7 @@ function Server(options) {
         if ( /(\"false\"|\"true\"|\"on\")/.test(body) )
             body = body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
 
+
         var el      = {}
             , value = null
             , key   = null;
@@ -436,7 +437,7 @@ function Server(options) {
 
                 if ( typeof(el[1]) == 'string' && !/\[object /.test(el[1])) {
                     key     = null;
-                    el[0]   = decodeURIComponent(el[0])
+                    el[0]   = decodeURIComponent(el[0]);
                     el[1]   = decodeURIComponent(el[1]);
 
                     if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
@@ -568,6 +569,7 @@ function Server(options) {
                     })
                 })
             } else {
+
                 request.on('data', function(chunk){ // for this to work, don't forget the name attr for you form elements
                     if ( typeof(request.body) == 'object') {
                         request.body = '';
@@ -683,7 +685,8 @@ function Server(options) {
 
                                     } catch (err) {
                                         var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
-                                        console.warn(msg);
+                                        console.error(msg);
+                                        throwError(response, 500, msg);
                                     }
 
                                 } else {
@@ -738,6 +741,9 @@ function Server(options) {
                         })
 
                 });
+
+                if (request.end) request.end();
+
             } //EO if multipart
 
         });//EO this.instance
