@@ -1,7 +1,7 @@
 
 //imports
 var fs = require('fs');
-var utils = getContext('gina').utils;
+var utils = require(__dirname + '/../../index');
 var GINA_PATH = _( getPath('gina.core') );
 var readline = require('readline');
 var rl = readline.createInterface(process.stdin, process.stdout);
