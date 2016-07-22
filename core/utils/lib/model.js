@@ -569,9 +569,17 @@ function ModelUtil() {
      *  @param {object} filter
      *  @return {object|array|string} result
      *
+     * Collection::update
+     *  @param {object} filter
+     *  @param {object} set
+     *
+     *  @return {array} result
+     *
      * */
     Collection = function(content) {
-        var content = content || [];
+        var content     = content || []
+            , keywords  = ['not null'] // TODO - null, exists
+        ;
 
         this.find = function(filter) {
 
@@ -580,8 +588,7 @@ function ModelUtil() {
             } else {
                 var condition   = filter.count()
                     , i         = 0
-                    , found     = []
-                    , keywords  = ['not null']; // TODO - null, exists
+                    , found     = [];
 
                 for (var o in content) {
                     for (var f in filter) {
@@ -608,8 +615,7 @@ function ModelUtil() {
             } else {
                 var condition = filter.count()
                     , i         = 0
-                    , found     = null
-                    , keywords  = ['not null']; // TODO - null, exists
+                    , found     = null;
 
                 if (condition == 0) return null;
 
@@ -630,6 +636,37 @@ function ModelUtil() {
             }
 
             return found
+        }
+
+        this.update = function(filter, set) {
+            if ( typeof(filter) !== 'object' ) {
+                throw new Error('filter must be an object');
+            } else {
+                var condition       = filter.count()
+                    , i             = 0
+                    , found         = []
+                    , newContent    = JSON.parse(JSON.stringify(content));
+
+                for (var o in content) {
+                    for (var f in filter) {
+                        if ( filter[f] && keywords.indexOf(filter[f].toLocaleLowerCase()) > -1 && filter[f].toLowerCase() == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
+                            // if (found.indexOf(content[o][f]) < 0 ) {
+                            //     found[i] = content[o][f];
+                            //
+                            //     ++i
+                            // }
+                            newContent[o][f] = set;
+
+                        } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
+                            //found[i] = content[o];
+                            //++i
+                            newContent[o] = set;
+                        }
+                    }
+                }
+            }
+
+            return newContent
         }
     }
 
