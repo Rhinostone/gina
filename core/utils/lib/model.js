@@ -643,23 +643,14 @@ function ModelUtil() {
                 throw new Error('filter must be an object');
             } else {
                 var condition       = filter.count()
-                    , i             = 0
-                    , found         = []
                     , newContent    = JSON.parse(JSON.stringify(content));
 
                 for (var o in content) {
                     for (var f in filter) {
                         if ( filter[f] && keywords.indexOf(filter[f].toLocaleLowerCase()) > -1 && filter[f].toLowerCase() == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
-                            // if (found.indexOf(content[o][f]) < 0 ) {
-                            //     found[i] = content[o][f];
-                            //
-                            //     ++i
-                            // }
                             newContent[o][f] = set;
 
                         } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
-                            //found[i] = content[o];
-                            //++i
                             newContent[o] = set;
                         }
                     }
