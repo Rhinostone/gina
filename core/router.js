@@ -430,7 +430,7 @@ function Router(env) {
             // means that you have a syntax errors in you controller file
             // TODO - increase `stack-trace` from 10 (default value) to 500 or more to get the exact error --stack-trace-limit=1000
             // TODO - also check `stack-size` why not set it to at the same time => --stack-size=1024
-            throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` ').stack);
+            throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (err.stack || err.message) );
         }
 
         // about to contact Controller ...

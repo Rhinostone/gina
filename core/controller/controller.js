@@ -1128,7 +1128,7 @@ function SuperController(options) {
             res.on('end', function onEnd() {
                 //Only when needed.
                 if ( typeof(callback) != 'undefined' ) {
-                    if ( typeof(data) == 'string' && /^(\{|%7B)/.test(data) ) {
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
                         try {
                             data = JSON.parse(data)
                         } catch (err) {
@@ -1142,11 +1142,11 @@ function SuperController(options) {
                     if ( data.status && !/^2/.test(data.status) ) {
                         callback(data)
                     } else {
-                        callback( false, data ) // data will always be a string
+                        callback( false, data )
                     }
 
                 } else {
-                    if ( typeof(data) == 'string' && /^(\{|%7B)/.test(data) ) {
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
                         try {
                             data = JSON.parse(data)
                         } catch (err) {
@@ -1194,7 +1194,7 @@ function SuperController(options) {
             onComplete: function(cb) {
                 self.once('query#complete', function(err, data){
 
-                    if ( typeof(data) == 'string' && /^(\{|%7B)/.test(data) ) {
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
                         try {
                             data = JSON.parse(data)
                         } catch (err) {
