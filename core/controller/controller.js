@@ -412,7 +412,7 @@ function SuperController(options) {
                                         try {
                                             url = url.replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p])
                                         } catch (err) {
-                                            self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\nsounds like you are having troubles with a getUrl() filter call where `'+p+'` property might not been defined'  +'\n'+(err.stack||err.message));
+                                            self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\nsounds like you are having troubles with the following call `{{ "'+route+'" | getUrl() }}` where `'+p+'` parameter is expected according to your `routing.json`'  +'\n'+(err.stack||err.message));
                                         }
 
                                     }

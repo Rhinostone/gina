@@ -16,7 +16,6 @@
  *
  * @param {string} date
  * @param {string} mask
- * @param {}
  */
 function DateFormatHelper() {
 
