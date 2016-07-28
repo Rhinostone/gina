@@ -455,6 +455,7 @@ function SuperController(options) {
                     } else {
                         layout = layout.toString();
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+
                         try {
                             layout = swig.compile(layout)(data)
                         } catch (err) {
@@ -462,19 +463,19 @@ function SuperController(options) {
                         }
 
                         if ( !local.res.headersSent ) {
-                            local.res.statusCode = 200; // by default
+                            local.res.statusCode = data.page.data.status || 200; // by default
                             //catching errors
                             if (
-                                typeof(data.page.data.errno) != 'undefined' && local.res.statusCode == 200
-                                || typeof(data.page.data.status) != 'undefined' && data.page.data.status != 200
+                                typeof(data.page.data.errno) != 'undefined' && /^2/.test(data.page.data.status)
+                                || typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status)
                             ) {
 
                                 try {
-                                    local.res.statusCode    = data.page.data.status;
+                                    //local.res.statusCode    = data.page.data.status;
                                     local.res.statusMessage = local.options.conf.server.coreConfiguration.statusCodes[data.page.data.status];
                                 } catch (err){
                                     local.res.statusCode    = 500;
-                                    local.res.statusMessage = err.stack;
+                                    local.res.statusMessage = err.stack||err.message||local.options.conf.server.coreConfiguration.statusCodes[local.res.statusCode];
                                 }
                             }
 
@@ -1363,7 +1364,7 @@ function SuperController(options) {
 
                 res.end(JSON.stringify({
                     status: code,
-                    error: msg
+                    error: msg.stack || msg.message || msg
                 }))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
