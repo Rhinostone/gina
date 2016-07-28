@@ -32,7 +32,7 @@ function Logger(opt) {
                 code: 0,
                 label: 'Emergency',
                 desciption: 'System is unusable.',
-                color: 'magenta'
+                color: 'red'
             },
             alert: {
                 code: 1,
@@ -45,7 +45,7 @@ function Logger(opt) {
                 code: 2,
                 label: 'Critical',
                 desciption: 'Critical conditions.',
-                color: 'magenta'
+                color: 'red'
             },
             error : {
                 code: 3,
@@ -63,7 +63,7 @@ function Logger(opt) {
                 code: 5,
                 label: 'Notice',
                 desciption: 'Normal but significant condition.',
-                color: 'black'
+                color: 'yellow'
             },
             info : {
                 code: 6,
