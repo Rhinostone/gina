@@ -250,6 +250,11 @@ function SuperController(options) {
 
             // pre-compiling variables
             data = merge(data, getData()); // needed !!
+
+            if ( typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status) && typeof(data.page.data.error) != 'undefined' ) {
+                self.throwError(data.page.data.status, data.page.data.error)
+            }
+
             if ( typeof(local.options.namespace) != 'undefined' ) {
                 file = ''+ file.replace(local.options.namespace+'-', '');
                 // means that rule name === namespace -> pointing to root namespace dir
@@ -410,7 +415,7 @@ function SuperController(options) {
                                         }
                                     } else {
                                         try {
-                                            url = url.replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p])
+                                            url = url.replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]+'$1')
                                         } catch (err) {
                                             self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\nsounds like you are having troubles with the following call `{{ "'+route+'" | getUrl() }}` where `'+p+'` parameter is expected according to your `routing.json`'  +'\n'+(err.stack||err.message));
                                         }
