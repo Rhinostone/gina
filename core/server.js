@@ -1018,7 +1018,7 @@ function Server(options) {
                 uri = pathname.split('/');
                 tmpKey = uri.splice(1, 1)[0];
 
-                if ( typeof(conf.content.statics[tmpKey]) != 'undefined' ) {
+                if ( typeof(conf.content.statics) == 'undefined' || typeof(conf.content.statics[tmpKey]) != 'undefined' ) {
                     key = tmpKey
                 } else {
                     uri.splice(0, 1);
