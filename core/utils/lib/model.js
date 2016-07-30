@@ -46,7 +46,7 @@ function ModelUtil() {
             //self = ModelUtil.instance;
             //ModelUtil.instance = getContext('modelUtil');
             //ModelUtil.instance = ModelUtil.instance || getContext('modelUtil');
-            //self = merge(true, self, ModelUtil.instance);
+            //self = merge(self, ModelUtil.instance, true);
             // return self
             return ModelUtil.instance || getContext('modelUtil')
         }
@@ -218,7 +218,7 @@ function ModelUtil() {
 
 
             if ( typeof(connectors) != 'undefined' && connectors != null) {
-                var Model = require( _( getPath('gina.core')+'/model') );
+                var Model = require( _( getPath('gina').core + '/model') );
                 var mObj = {};
 
                 var models = connectors;

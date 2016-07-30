@@ -41,17 +41,16 @@ function Server(options) {
     var init = function(options) {
 
         //Starting app.
-        self.appName = options.bundle;
+        self.appName        = options.bundle;
 
-        self.env = options.env;
-        local.router = new Router(self.env);
+        self.env            = options.env;
+        self.version        = options.version;
+        local.router        = new Router(self.env);
 
         //True => multiple bundles sharing the same server (port).
-        self.isStandalone = options.isStandalone;
-
-        self.executionPath = options.executionPath;
-
-        self.bundles = options.bundles;
+        self.isStandalone   = options.isStandalone;
+        self.executionPath  = options.executionPath;
+        self.bundles        = options.bundles;
 
         if (!self.isStandalone) {
             //Only load the related conf / env.
@@ -87,12 +86,14 @@ function Server(options) {
             , mime      = null;
 
         try {
-            statusCodes = fs.readFileSync( _( getPath('gina.core') + '/status.codes') ).toString();
+            //var corePath = getPath('gina.core');
+            var corePath = getPath('gina').core;
+            statusCodes = fs.readFileSync( _( corePath + '/status.codes') ).toString();
             statusCodes = JSON.parse(statusCodes);
             if ( typeof(statusCodes['_comment']) != 'undefined' )
                 delete statusCodes['_comment'];
 
-            mime  = fs.readFileSync(getPath('gina.core') + '/mime.types').toString();
+            mime  = fs.readFileSync(corePath + '/mime.types').toString();
             mime  = JSON.parse(mime);
             if ( typeof(mime['_comment']) != 'undefined' )
                 delete mime['_comment'];
@@ -182,14 +183,15 @@ function Server(options) {
                 }
 
                 if (filename != main) {
-                    routing = tmpContent = merge(true, require(main), require(filename));
+                    routing = tmpContent = merge(require(main), require(filename), true);
 
                 } else {
                     try {
                         tmpContent = require(filename);
                     } catch (err) {
-                        console.emerg(err.stack);
-                        process.exit(1)
+                        // do not block here because the bundle is not build for the same env
+                        console.warn(err.stack);
+                        continue
                     }
                 }
 
@@ -314,7 +316,7 @@ function Server(options) {
             }
 
 
-            routing = merge(true, routing, ((self.isStandalone && apps[i] != self.appName ) ? standaloneTmp : tmp));
+            routing = merge(routing, ((self.isStandalone && apps[i] != self.appName ) ? standaloneTmp : tmp), true);
             // originalRule is used to facilitate cross bundles (hypertext)linking
             for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
                 routing[originalRules[r]].originalRule = (routing[originalRules[r]].bundle === self.appName ) ?  config.getOriginalRule(originalRules[r], routing) : config.getOriginalRule(routing[originalRules[r]].bundle +'-'+ originalRules[r], routing)
@@ -415,7 +417,7 @@ function Server(options) {
             , value = null
             , key   = null;
 
-        for (var i=0; i<arr.length; ++i) {
+        for (var i = 0, len = arr.length; i < len; ++i) {
             if (!arr[i]) continue;
 
             if ( /^\{/.test(arr[i]) ) { // is a json string
@@ -423,7 +425,7 @@ function Server(options) {
                     obj = JSON.parse(arr[i]);
                     break;
                 } catch (err) {
-                    console.error('[384] could not parse body:\n' + arr[i])
+                    console.error('[parseBody#1] could not parse body:\n' + arr[i])
                 }
             } else {
                 el = arr[i].split(/=/);
@@ -431,7 +433,7 @@ function Server(options) {
                     try {
                         el[1] = JSON.parse(el[1])
                     } catch (err) {
-                        console.error('[392] could not parse body:\n' + el[1])
+                        console.error('[parseBody#2] could not parse body:\n' + el[1])
                     }
                 }
 
@@ -489,7 +491,7 @@ function Server(options) {
 
         self.instance.all('*', function onInstance(request, response, next) {
             local.request = request;
-            response.setHeader('X-Powered-By', 'Gina');
+            response.setHeader('X-Powered-By', 'Gina/'+self.version );
             // Fixing an express js bug :(
             // express is trying to force : /path/dir => /path/dir/
             // which causes : /path/dir/path/dir/  <---- by trying to add a slash in the end

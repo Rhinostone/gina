@@ -591,7 +591,7 @@ var AppCommand = {
 
                 process.list = (process.list == undefined) ? [] : process.list;
                 setContext('processList', process.list);
-                setContext('ginaProcess', process.pid);
+                setContext('gina.process', process.pid);
                 var params = [
                     appPath,
                     opt['argument'],

@@ -9,7 +9,8 @@
 //Imports.
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
-var corePath        = getPath('gina.core');
+//var corePath        = getPath('gina.core');
+var corePath        = getPath('gina').core;
 var Config          = require( corePath + '/config' );
 var config          = new Config();
 var utils           = require('gina').utils;
@@ -22,7 +23,7 @@ var modelUtil       = new utils.Model();
 var Module          = require('module');
 
 //UtilsConfig = Utils.Config(),
-//dev     = require(_(getPath('gina.core')'/dev') ),
+//dev     = require(_(corePath + '/dev') ),
 
 
 /**

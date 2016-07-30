@@ -106,6 +106,7 @@ function Config(opt) {
                     //logger.debug('gina', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
                     self.bundlesConfiguration = {
                         env             : self.Env.get(),
+                        version         : self.version,
                         conf            : self.getInstance(),
                         bundles         : self.getBundles(),
                         allBundles      : self.getAllBundles(),
@@ -441,7 +442,9 @@ function Config(opt) {
                 //Variables replace. Compare with gina/core/template/conf/env.json.
                 var version = undefined;
                 try {
-                    version = require(_(getPath('gina') +'/package.json' )).version
+                    self.version = version = require(_(getPath('gina').root +'/package.json' )).version;
+
+                    setContext('gina.version', version)
                 } catch (err) {
                     console.debug(err.stack)
                 }
@@ -602,7 +605,7 @@ function Config(opt) {
 
                 delete require.cache[_(filename, true)];
                 try {
-                    routing = merge( true, require(_(filename, true)), routing);
+                    routing = merge( require(_(filename, true)), routing, true );
                 } catch (err) {
                     callback(err)
                 }
@@ -610,7 +613,7 @@ function Config(opt) {
                 if (filename != main) {
                     delete require.cache[_(main, true)];
                     try {
-                        routing = merge(true, require(main), routing)
+                        routing = merge(require(main), routing, true)
                     } catch (err) {
                         callback(err)
                     }
@@ -688,7 +691,7 @@ function Config(opt) {
                     }
                 }
 
-                files[name] = collectedRules = merge(true, collectedRules, ((standalone && bundle != self.startingApp ) ? standaloneRouting : routing));
+                files[name] = collectedRules = merge(collectedRules, ((standalone && bundle != self.startingApp ) ? standaloneRouting : routing), true);
                 // originalRule is used to facilitate cross bundles (hypertext)linking
                 for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
                     files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
@@ -814,7 +817,7 @@ function Config(opt) {
 
         var localEnv = conf[bundle][env].executionPath + '/env.local.json';
         if ( env == 'dev' && fs.existsSync(localEnv) ) {
-            conf[bundle][env] = merge(true, conf[bundle][env], require(localEnv));
+            conf[bundle][env] = merge(conf[bundle][env], require(localEnv), true);
         }
         var envKeys = conf[bundle][env];
         for (var k in envKeys) {
@@ -825,9 +828,11 @@ function Config(opt) {
 
 
         try {
-            var settingsPath = _(getPath('gina.core') +'/template/conf/settings.json', true);
-            var staticsPath = _(getPath('gina.core') +'/template/conf/statics.json', true);
-            var viewsPath = _(getPath('gina.core') +'/template/conf/views.json', true);
+            //var corePath = getPath('gina.core');
+            var corePath = getPath('gina').core;
+            var settingsPath = _(corePath +'/template/conf/settings.json', true);
+            var staticsPath = _(corePath +'/template/conf/statics.json', true);
+            var viewsPath = _(corePath +'/template/conf/views.json', true);
 
             if ( typeof(files['settings']) == 'undefined' ) {
                 files['settings'] = require(settingsPath)

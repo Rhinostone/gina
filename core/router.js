@@ -280,9 +280,11 @@ function Router(env) {
     }
 
     var refreshCore = function() {
-        var core = new RegExp( getPath('gina.core') );
+        //var corePath = getPath('gina.core');
+        var corePath = getPath('gina').core;
+        var core = new RegExp( corePath );
         var excluded = [
-            _(getPath('gina.core') + '/gna.js', true)
+            _(corePath + '/gna.js', true)
         ];
 
         for (var c in require.cache) {
@@ -292,14 +294,14 @@ function Router(env) {
         }
 
         //update utils
-        delete require.cache[_(getPath('gina.core') +'/utils/index.js', true)];
-        require.cache[_(getPath('gina.core') +'/utils/index.js', true)] = require( _(getPath('gina.core') +'/utils/index.js', true) );
-        require.cache[_(getPath('gina.core') + '/gna.js', true)].exports.utils = require.cache[_(getPath('gina.core') +'/utils/index.js', true)];
+        delete require.cache[_(corePath +'/utils/index.js', true)];
+        require.cache[_(corePath +'/utils/index.js', true)] = require( _(corePath +'/utils/index.js', true) );
+        require.cache[_(corePath + '/gna.js', true)].exports.utils = require.cache[_(corePath +'/utils/index.js', true)];
 
         // Super controller
-        delete require.cache[_(getPath('gina.core') +'/controller/index.js', true)];
-        require.cache[_(getPath('gina.core') +'/controller/index.js', true)] = require( _(getPath('gina.core') +'/controller/index.js', true) );
-        SuperController = require.cache[_(getPath('gina.core') +'/controller/index.js', true)];
+        delete require.cache[_(corePath +'/controller/index.js', true)];
+        require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
+        SuperController = require.cache[_(corePath +'/controller/index.js', true)];
 
     }
 

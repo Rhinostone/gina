@@ -44,7 +44,7 @@ if (process.argv.length >= 4) {
     try {
         setContext('paths', JSON.parse(tmp[3]).paths);//And so on if you need to.
         setContext('processList', JSON.parse(tmp[3]).processList);
-        setContext('ginaProcess', JSON.parse(tmp[3]).ginaProcess);
+        setContext('gina.process', JSON.parse(tmp[3]).process);
         //Cleaning process argv.
         process.argv.splice(3);
     } catch (err) {}
@@ -56,13 +56,14 @@ tmp = null;
 
 setPath( 'node', _(process.argv[0]) );
 
-var ginaPath = getPath('gina.core');
+//var ginaPath = getPath('gina.core');
+var ginaPath = getPath('gina').core;
 if ( typeof(ginaPath) == 'undefined') {
     ginaPath = _(__dirname);
     setPath('gina.core', ginaPath);
 }
 
-var gina = getPath('gina');
+var gina = getPath('gina').root;
 if (!gina) {
     var pathArr = new _(ginaPath).toUnixStyle().split('/'), pathStr = '';
     for (var i = 0, len = pathArr.length; i<len; ++i) {
@@ -74,7 +75,7 @@ if (!gina) {
     }
 
     gina = _(pathStr);
-    setPath('gina', gina)
+    setPath('gina.root', gina)
 }
 
 var root = getPath('root');
@@ -210,7 +211,7 @@ gna.getProjectConfiguration = function (callback){
         }
 
     } else {
-        console.warn('missing project ???');
+        console.warn('missing project !');
         gna.project = project;
         callback(false, project);
     }
@@ -589,7 +590,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         var shutdown = [];
         var shutdownGina = [];
 
-        var bundleGinaPid = getContext('ginaProcess');
+        var bundleGinaPid = getContext('gina').process;
 
         //Sort Bundle / Gina instance to get a array [BUNDLE,GINA,SHUTDOWN,GINASHUTDOWN].
         for (var f=0; f<files.length; ++f) {
@@ -772,6 +773,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                     bundles         : obj.bundles,
                     allBundles      : obj.allBundles,
                     env             : obj.env,
+                    version         : obj.version,
                     isStandalone    : isStandalone,
                     executionPath   : core.executionPath,
                     conf            : obj.conf

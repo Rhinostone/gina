@@ -28,9 +28,9 @@ var setVariable = function () {
 };
 
 setVariable();
-var AtoBwithOverride    = merge(true, a, b);
+var AtoBwithOverride    = merge(a, b, true);
 setVariable();
-var BtoAwithOverride    = merge(true, b, a);
+var BtoAwithOverride    = merge(b, a, true);
 setVariable();
 var AtoBwithoutOverride = merge(a, b);
 setVariable();

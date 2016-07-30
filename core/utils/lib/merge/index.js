@@ -1,30 +1,25 @@
 function Merge() {
+    var newTarget = [];
     /**
      *
-     * @param {boolean} [override] - Override when copying
      * @param {object} target - Target object
      * @param {object} source - Source object
+     * @param {boolean} [override] - Override when copying
      *
      * @return {object} [result]
      * */
-    var init = browse = function () {
-        var target = arguments[0] || (Array.isArray(arguments[1]) ? [] : {});
+    var browse = function (target, source) {
+
+        var override = false;
+        if (( typeof(arguments[arguments.length-1]) == 'boolean' )) {
+            override = arguments[arguments.length-1]
+        }
+
         var i = 1;
         var length = arguments.length;
-        var override = false;
+
         var options, name, src, copy, copyIsArray, clone;
 
-        // Handle an override copy situation || target value is boolean
-        if (typeof(target) === 'boolean') {
-            if (arguments.length > 2) {
-                override = target;
-                target = arguments[1] ||  (Array.isArray(arguments[1]) ? [] : {});
-                // skip the boolean and the target
-                i = 2
-            } else {
-                target = arguments[0] || false;
-            }
-        }
 
         // Handle case when target is a string or something (possible in deep copy)
         if (typeof(target) !== 'object' && typeof(target) !== 'function') {
@@ -43,34 +38,31 @@ function Merge() {
             }
 
         } else {
+
             for (; i < length; i++) {
                 // Only deal with non-null/undefined values
-                if (( options = arguments[i]) != null) {
+                if ( typeof(arguments[i]) != 'boolean' && ( options = arguments[i]) != null) {
                     if ( typeof(options) != 'object') {
-                        target = options;
-                        break;
+                       target = options;
+                       break;
                     }
                     // both target & options are arrays
                     if ( Array.isArray(options) && Array.isArray(target) ) {
-                        var newTarget = [];
+
                         for (var a = 0; a < options.length; ++a ) {
                             if ( target.indexOf(options[a]) > -1 && override) {
                                 target.splice(target.indexOf(options[a]), 1, options[a])
-                            } else if (target.indexOf(options[a]) < 0) {
+                            } else if (target.indexOf(options[a]) == -1) {
                                 // required to keep keys in the dependancy order
                                 // !!! don't change this !!!
-                                newTarget.push(options[a])
+                                if (newTarget.indexOf(options[a]) == -1)
+                                    newTarget.push(options[a]);
                             }
                         }
 
-                        if (newTarget.length > 0 && target.length > 0) {
-                            for (var t=0; t<target.length; ++t) {
-                                newTarget.push(target[t])
-                            }
-                            target = newTarget
-                        } else if (newTarget.length > 0 ) {
-                            target = newTarget
-                        }
+                         if (newTarget.length > 0 && target.length > 0) {
+                             target = newTarget
+                         }
                     } else {
                         // Merge the base object
                         for (var name in options) {
@@ -88,29 +80,52 @@ function Merge() {
                             if (
                                 copy
                                 && (
-                                isObject(copy) ||
-                                ( copyIsArray = Array.isArray(copy) )
+                                    isObject(copy) ||
+                                    ( copyIsArray = Array.isArray(copy) )
                                 )
                             ) {
 
+                                var createMode = false;
                                 if (copyIsArray) {
                                     copyIsArray = false;
                                     clone = src && Array.isArray(src) ? src : []
                                 } else {
-                                    clone = src && isObject(src) ? src : {}
+
+                                    clone = src && isObject(src) ? src : null;
+
+                                    if (!clone) {
+                                        createMode = true;
+                                        clone = {};
+                                        // copy props
+                                        for (var prop in copy) {
+                                            clone[prop] = copy[prop]
+                                        }
+                                    }
                                 }
+
+
 
                                 //[propose] Supposed to go deep... deep... deep...
                                 if (!override) {
+                                    // add those in copy not in clone (target)
                                     for (var prop in copy) {
-                                        if (typeof(clone[ prop ]) != 'undefined') {
-                                            copy[ prop ] = clone[ prop ];
+                                        if (typeof(clone[ prop ]) == 'undefined') {
+                                            clone[ prop ] = copy[ prop ] // don't override existing
                                         }
                                     }
 
+
+
+
                                     // Never move original objects, clone them
-                                    if (typeof(src) != "boolean") {//if property is not boolean
-                                        target[ name ] = browse(override, clone, copy)
+                                    if (typeof(src) != "boolean" && !createMode) {//if property is not boolean
+                                        //target[ name ] = browse(clone, copy, override)
+                                        process.nextTick(function onBrowse() {
+                                            target[ name ] = browse(clone, copy, override)
+                                        });
+
+                                    } else if (createMode) {
+                                        target[ name ] = clone
                                     }
 
                                 } else {
@@ -126,7 +141,7 @@ function Merge() {
 
                                 // // Never move original objects, clone them
                                 // if (typeof(src) != "boolean") {//if property is not boolean
-                                //     target[ name ] = browse(override, clone, copy)
+                                //     target[ name ] = browse(clone, copy, override)
                                 // }
 
                             } else if (copy !== undefined) {
@@ -144,13 +159,14 @@ function Merge() {
                         }
                     }
                 }
+
             }
 
-            return target
+            //return target
         }
 
+        return target
 
-        //return target
     }
 
     /**
@@ -158,10 +174,10 @@ function Merge() {
      * */
     var isObject = function (obj) {
         if (
-            !obj ||
-            {}.toString.call(obj) !== '[object Object]' ||
-            obj.nodeType ||
-            obj.setInterval
+            !obj
+            || {}.toString.call(obj) !== '[object Object]'
+            || obj.nodeType
+            || obj.setInterval
         ) {
             return false
         }
@@ -183,7 +199,7 @@ function Merge() {
         return key === undefined || hasOwn.call(obj, key)
     }
 
-    return init
+    return browse
 }
 
 module.exports = Merge()

@@ -23,6 +23,6 @@ var b = {
     }
 };
 
-var result = merge(true, a, b);
+var result = merge(a, b, true);
 
 console.log('result: ', JSON.stringify(result, null, 4));

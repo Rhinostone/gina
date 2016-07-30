@@ -51,40 +51,8 @@ function ContextHelper(contexts) {
     }
 
     joinContext = function(context) {
-        merge(true, self.contexts, context)
+        merge(self.contexts, context, true)
     }
-
-
-    // does not work for all cases ...
-    // TODO - remove this
-    // var clone = function(obj) {
-    //     if (obj === null || typeof(obj) !== 'object' || 'isActiveClone' in obj || Array.isArray(obj))
-    //         return obj;
-    //
-    //     //if (obj instanceof Date)
-    //     //    var temp = new obj.constructor(); //or new Date(obj);
-    //     //else
-    //     //var temp = obj.constructor();
-    //     //var temp = Object.create(obj.__proto__);
-    //
-    //     var temp = obj;
-    //     if (  obj.__proto__.constructor && !/\[native code\]/.test(obj.__proto__.constructor.toString()) )
-    //         temp = Object.create(obj.__proto__); // give temp the original obj's constructor
-    //
-    //     for (var key in obj) {
-    //         if (Object.prototype.hasOwnProperty.call(obj, key)) {
-    //             obj['isActiveClone'] = null;
-    //             if ( typeof(obj[key]) === 'object' && !Object.hasOwnProperty(key) )
-    //                 temp[key] = {};
-    //             else
-    //                 temp[key] = clone(obj[key]);
-    //
-    //             delete obj['isActiveClone'];
-    //         }
-    //     }
-    //
-    //     return temp;
-    // }
 
     var parseCtxObject = function (o, obj) {
 
@@ -129,7 +97,7 @@ function ContextHelper(contexts) {
                 newObj = parseCtxObject(JSON.parse(str), obj);
                 if (force) {
                     var key = name.split(/\./g);
-                    self.contexts = merge(true, self.contexts, newObj);
+                    self.contexts = merge(self.contexts, newObj, true);
                 } else {
                     self.contexts =  merge(self.contexts, newObj)
                 }
@@ -141,7 +109,7 @@ function ContextHelper(contexts) {
                 if ( typeof(self.contexts[name]) != 'undefined' && !force) {
                     self.contexts[name] = obj
                 } else {
-                    self.contexts[name] = merge(force, self.contexts[name], obj)
+                    self.contexts[name] = merge(self.contexts[name], obj, force)
                 }
             }
 
@@ -276,7 +244,7 @@ function ContextHelper(contexts) {
             env             : env,
             executionPath   : getPath('root'),
             startingApp     : bundle,
-            ginaPath        : getPath('gina.core')
+            ginaPath        : getPath('gina').core
         });
 
         if ( typeof(lib) != 'undefined' ) {

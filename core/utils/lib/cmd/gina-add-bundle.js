@@ -4,7 +4,7 @@ var AddBundle;
 var fs = require('fs');
 var utils = require(__dirname + '/../../index');
 var console = utils.logger;
-var GINA_PATH = _( getPath('gina.core') );
+var GINA_PATH = _( getPath('gina').core );
 var Config = require( _( GINA_PATH + '/config') );
 var readline = require('readline');
 var rl = readline.createInterface(process.stdin, process.stdout);
