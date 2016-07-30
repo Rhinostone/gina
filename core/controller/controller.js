@@ -631,10 +631,8 @@ function SuperController(options) {
             }
 
             newObj = parseDataObject(JSON.parse(str), value);
-
-
             local._data = merge(local._data, newObj);
-            console.log('setting data ', JSON.stringify(local._data), ' WITH ', JSON.stringify(newObj))
+            
         } else if ( typeof(local._data[name]) == 'undefined' ) {
             local._data[name] = value
         }
