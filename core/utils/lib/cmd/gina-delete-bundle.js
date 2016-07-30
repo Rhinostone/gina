@@ -1,7 +1,7 @@
 //imports
 var fs              = require('fs');
 var console         = require('../logger');
-var GINA_PATH      = _( getPath('gina.core') );
+var GINA_PATH      = _( getPath('gina').core );
 var Config          = require( _( GINA_PATH + '/config') );
 
 /**

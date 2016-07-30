@@ -154,6 +154,8 @@ function SuperController(options) {
 
             // new declaration && overrides
             var content = action;
+            set('page.gina.env', options.conf.env);
+            set('page.gina.version', getContext('gina').version);
             set('page.ext', ext);
             set('page.content', content);
             set('page.namespace', namespace);
@@ -581,16 +583,61 @@ function SuperController(options) {
         }
     }
 
+    var parseDataObject = function (o, obj) {
+
+        for (var i in o) {
+            if (o[i] !== null && typeof(o[i]) == 'object') {
+                parseDataObject(o[i], obj);
+            } else if (o[i] == '_content_'){
+                o[i] = obj
+            }
+        }
+
+        return o
+    }
+
     /**
      * Set data
      *
-     * @param {string} variable Data name to set
-     * @param {string} value Data value to set
+     * @param {string} nave -  variable name to set
+     * @param {string|object} value - value to set
+     *
      * @return {void}
      * */
-    var set = function(variable, value) {
-        if ( typeof(local._data[variable]) == 'undefined' )
-            local._data[variable] = value
+    // var set = function(variable, value) {
+    //     if ( typeof(local._data[variable]) == 'undefined' )
+    //         local._data[variable] = value
+    // }
+
+    var set = function(name, value) {
+
+        if ( typeof(name) == 'string' && /\./.test(name) ) {
+            var keys        = name.split(/\./g)
+                , newObj    = {}
+                , str       = '{'
+                , _count    = 0;
+
+            for (var k = 0, len = keys.length; k<len; ++k) {
+                str +=  "\""+ keys.splice(0,1)[0] + "\":{";
+
+                ++_count;
+                if (k == len-1) {
+                    str = str.substr(0, str.length-1);
+                    str += "\"_content_\"";
+                    for (var c = 0; c<_count; ++c) {
+                        str += "}"
+                    }
+                }
+            }
+
+            newObj = parseDataObject(JSON.parse(str), value);
+
+
+            local._data = merge(local._data, newObj);
+            console.log('setting data ', JSON.stringify(local._data), ' WITH ', JSON.stringify(newObj))
+        } else if ( typeof(local._data[name]) == 'undefined' ) {
+            local._data[name] = value
+        }
     }
 
     /**
@@ -731,7 +778,8 @@ function SuperController(options) {
     // }
 
     var getData = function() {
-        return refToObj(local._data)
+        //return refToObj( JSON.parse(JSON.stringify(local._data)) )
+            return refToObj( local._data )
     }
 
     var isValidURL = function(url){
@@ -1088,12 +1136,12 @@ function SuperController(options) {
                 // replacing
                 queryData = encodeURIComponent(JSON.stringify(data));
 
-                // Internet Explorer override
-                if ( /msie/i.test(local.req.headers['user-agent']) ) {
-                    options.headers['Content-Type'] = 'text/plain';
-                } else {
-                    options.headers['Content-Type'] = local.options.conf.server.coreConfiguration.mime['json'];
-                }
+                // // Internet Explorer override
+                // if ( /msie/i.test(local.req.headers['user-agent']) ) {
+                //     options.headers['Content-Type'] = 'text/plain';
+                // } else {
+                //     options.headers['Content-Type'] = local.options.conf.server.coreConfiguration.mime['json'];
+                // }
 
             } else {
                 //Sample request.
@@ -1116,6 +1164,13 @@ function SuperController(options) {
         }
 
 
+
+        // Internet Explorer override
+        if ( /msie/i.test(local.req.headers['user-agent']) ) {
+            options.headers['Content-Type'] = 'text/plain';
+        } else {
+            options.headers['Content-Type'] = local.options.conf.server.coreConfiguration.mime['json'];
+        }
 
         //you need this, even when empty.
         options.headers['Content-Length'] = queryData.length;
@@ -1262,19 +1317,19 @@ function SuperController(options) {
             var params = JSON.parse(JSON.stringify(req.params));
             switch( req.method.toLowerCase() ) {
                 case 'get':
-                    params = merge(true, params, req.get);
+                    params = merge(params, req.get, true);
                     break;
 
                 case 'post':
-                    params = merge(true, params, req.post);
+                    params = merge(params, req.post, true);
                     break;
 
                 case 'put':
-                    params = merge(true, params, req.put);
+                    params = merge(params, req.put, true);
                     break;
 
                 case 'delete':
-                    params = merge(true, params, req.delete);
+                    params = merge(params, req.delete, true);
                     break;
             }
 
@@ -1413,7 +1468,7 @@ function SuperController(options) {
                 obj = curObj;
                 last = tmp[o]
             }
-            //data = merge(true, data, obj);
+            //data = merge(data, obj, true);
             data = merge(obj, data);
             obj = {};
             curObj = {}

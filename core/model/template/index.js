@@ -115,8 +115,8 @@ Model = function(namespace){
                                         console.log("Factory is ",  EntityFactory);
 
                                         //var Entity = new Entity();
-                                        merge(true, Entity, EntityFactory);
-                                        console.log("\nEntity CONTENT ", Entity, " \nVS\n", EntityFactory);
+                                        merge(Entity, EntityFactory, true);
+                                        //console.log("\nEntity CONTENT ", Entity, " \nVS\n", EntityFactory);
 
                                     } else {
                                         throw new Error('Gina.Model.getContext(...): [entityName] is undefined.');
@@ -127,7 +127,7 @@ Model = function(namespace){
                                 }
 
                                 //Entity = new entitiesManager[model]();
-                                //utils.merge(true, _this, Entity);
+                                //utils.merge(_this, Entity, true);
                                 console.log("EntityManager  \n",  entitiesManager,"\n VS \n",  EntityFactory);
                                 if (i == files.length-1) {
                                     console.log("All done !");

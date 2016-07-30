@@ -57,7 +57,7 @@ var b = {
     }
 }
 
-var result = merge(true, a, b);
+var result = merge(a, b, true);
 
 console.log('Name: ', result.getName());  // Michael Jackson
 console.log('Age: ', result.getAge());   // 46

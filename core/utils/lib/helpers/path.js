@@ -32,7 +32,6 @@ e.setMaxListeners(100);
 function PathHelper() {
 
     this.paths = [];
-    this.userPaths = {};
     var _this = this;
 
     /**
@@ -1296,28 +1295,94 @@ function PathHelper() {
      * @param {String} name Path name
      * @return {String}
      * */
+    // TODO - remove this
+    // setPath = function(name, path) {
+    //
+    //     if ( typeof(name) == 'object') {
+    //         var paths = getContext('paths');
+    //         for (var n in name) {
+    //             _this.userPaths[n] = _(name[n]);
+        //             merge(paths, _this.userPaths, true)
+    //         }
+    //         setContext("paths", paths)
+    //
+    //     } else {
+    //         if ( typeof(_this.userPaths) == "undefined" || typeof(_this.userPaths[name]) == "undefined" )  {
+    //             _this.userPaths[name] = _(path);
+    //             //PathHelper.userPaths = _this.userPaths;
+    //             //console.debug("what is this ", Helpers, " VS ", _this.userPaths);
+    //             var paths = getContext('paths');
+    //             //console.info(" 1) got config paths " +  paths + " VS "+ _this.userPaths, __stack);
+        //             merge(paths, _this.userPaths, true);
+    //             setContext("paths", paths)
+    //         }
+    //     }
+    // }
+
+    var parseCtxObject = function (o, obj) {
+
+        for (var i in o) {
+            if (o[i] !== null && typeof(o[i]) == 'object') {
+                parseCtxObject(o[i], obj);
+            } else if (o[i] == '_content_'){
+                o[i] = obj
+            }
+        }
+
+        return o
+    }
+
     setPath = function(name, path) {
 
-        if ( typeof(name) == 'object') {
-            var paths = getContext('paths');
-            for (var n in name) {
-                _this.userPaths[n] = _(name[n]);
-                merge(true, paths, _this.userPaths)
+        if ( typeof(name) == 'string' && /\./.test(name) ) {
+            var keys        = name.split(/\./g)
+                , newObj    = {}
+                , str       = '{'
+                , _count    = 0;
+
+            for (var k = 0, len = keys.length; k<len; ++k) {
+                str +=  "\""+ keys.splice(0,1)[0] + "\":{";
+
+                ++_count;
+                if (k == len-1) {
+                    str = str.substr(0, str.length-1);
+                    str += "\"_content_\"";
+                    for (var c = 0; c<_count; ++c) {
+                        str += "}"
+                    }
+                }
             }
+
+            newObj = parseCtxObject(JSON.parse(str), path);
+
+            var paths = getContext('paths');
+            paths = merge(paths, newObj);
             setContext("paths", paths)
 
         } else {
-            if ( typeof(_this.userPaths) == "undefined" || typeof(_this.userPaths[name]) == "undefined" )  {
-                _this.userPaths[name] = _(path);
-                //PathHelper.userPaths = _this.userPaths;
-                //console.debug("what is this ", Helpers, " VS ", _this.userPaths);
-                var paths = getContext('paths');
-                //console.info(" 1) got config paths " +  paths + " VS "+ _this.userPaths, __stack);
-                merge(true, paths, _this.userPaths);
+            // normal case
+            var paths = getContext('paths');
+
+            var userPaths = {};
+            if ( typeof(name) == 'object') {
+                for (var n in name) {
+                    if ( typeof(name) == 'string' && /\./.test(name) ) {
+                        setPath(n, name[n])
+                    } else {
+                        userPaths[n] = _(name[n]);
+                        merge(paths, userPaths, true)
+                    }
+                }
+                setContext("paths", paths)
+
+            } else {
+                paths[name] = path;
                 setContext("paths", paths)
             }
         }
     }
+
+
 
     /**
      * Get path by name

@@ -47,6 +47,9 @@ var spawn       = require('child_process').spawn;
 var UtilsConfig = require( _(__dirname + '/config') );
 var inherits    = require( _(__dirname + '/inherits') );
 var console     = require( _(__dirname + '/logger') );
+//var helpers     = require( _(__dirname + '/helpers') );
+
+//console.log('path ? ', getPaths());
 
 /**
  * @constructor
@@ -106,6 +109,18 @@ function Proc(bundle, proc, usePidFile){
     var isMaster = function() {
         return (self.master) ? true : false;
     };
+
+    // var getShutdownConnectorSync = function(bundle) {
+    //     var bundlesPath = getPath('bundlesPath');
+    //     var connPath = _(bundlesPath +'/'+ bundle + '/config/connector.json');
+    //     try {
+    //         console.log('reading connPath: ', connPath);
+    //         var content = fs.readFileSync(connPath);
+    //         return JSON.parse(content).httpClient.shutdown
+    //     } catch (err) {
+    //         return undefined
+    //     }
+    // }
     /**
      * Going to force restart by third party (kill 9).
      *
@@ -141,31 +156,32 @@ function Proc(bundle, proc, usePidFile){
         var nodePath = getPath('node');
         var ginaPath = _(root + '/gina');
 
-        if (env == 'prod') { //won't loop forever for others env.
-
-            var opt = process.getShutdownConnectorSync();
-            //Should kill existing one..
-            opt.path = '/' + bundle + '/restart/' + pid + '/' + env;
-
-            var HttpClient = require('gina.com').Http;
-            var httpClient = new HttpClient();
-
-            if (httpClient) {
-                //httpClient.query(opt);
-                //We are not waiting for anything particular...do we ?
-                httpClient.query(opt, function (err, msg) {
-                    //Now start new bundle.
-                    callback(err);
-                });
-            } else {
-                var err = new Error('No shutdown connector found.');
-                console.error(err);
-                callback(err);
-            }
-
-        } else {
+        // if (env == 'prod') { //won't loop forever for others env.
+        //
+        //     //var opt = process.getShutdownConnectorSync();
+        //     var opt = getShutdownConnectorSync(bundle);
+        //     //Should kill existing one..
+        //     opt.path = '/' + bundle + '/restart/' + pid + '/' + env;
+        //
+        //     var HttpClient = require('gina.com').Http;
+        //     var httpClient = new HttpClient();
+        //
+        //     if (httpClient) {
+        //         //httpClient.query(opt);
+        //         //We are not waiting for anything particular...do we ?
+        //         httpClient.query(opt, function (err, msg) {
+        //             //Now start new bundle.
+        //             callback(err);
+        //         });
+        //     } else {
+        //         var err = new Error('No shutdown connector found.');
+        //         console.error(err);
+        //         callback(err);
+        //     }
+        //
+        // } else {
             callback(false);
-        }
+        //}
     };
 
     var setPID = function(bundle, PID, proc) {

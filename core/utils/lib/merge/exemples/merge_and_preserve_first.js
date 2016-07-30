@@ -73,7 +73,7 @@ var c = {
     ]
 };
 
-var result = merge(true, a, b, c);
+var result = merge(a, b, c, true);
 console.log(JSON.stringify(result, null, 4));
 //=>
 //{

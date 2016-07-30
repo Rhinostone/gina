@@ -3,7 +3,7 @@ var EventEmitter    = require('events').EventEmitter;
 var helpers         = require('../helpers');
 var inherits        = require('../inherits');
 var console         = require('../logger');
-var GINA_PATH      = _( getPath('gina.core') );
+var GINA_PATH      = _( getPath('gina').core );
 var Config          = require( _( GINA_PATH + '/config') );
 
 function BuildBundle(project, bundle) {

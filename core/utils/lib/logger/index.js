@@ -84,7 +84,7 @@ function Logger(opt) {
     };
 
     if (opt) {
-        opt = merge(true, defaultOptions, opt)
+        opt = merge(defaultOptions, opt, true)
     } else {
         opt = defaultOptions
     }

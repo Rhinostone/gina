@@ -119,9 +119,9 @@ cmd.load = function(root, package){
     ]);
 
     //Set gina path.
-    setPath('gina', ginaPath);
+    setPath('gina.root', ginaPath);
     setPath('gina.core', _(ginaPath +'/core'));
-    setPath('gina.core.utils', _(ginaPath +'/core/utils/lib'));
+    setPath('gina.utils', _(ginaPath +'/core/utils/lib'));
     setPath('gina.documentation', _(ginaPath +'/documentation'));
 
     var defaultConf = require( _(ginaPath + '/core/template/conf/env.json') );
