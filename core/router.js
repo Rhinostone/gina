@@ -105,7 +105,7 @@ function Router(env) {
      *
      * @param {object} request
      * @param {object} params
-     * @param {str} route
+     * @param {string} route
      *
      * @return
      *
