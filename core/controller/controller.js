@@ -253,6 +253,10 @@ function SuperController(options) {
             // pre-compiling variables
             data = merge(data, getData()); // needed !!
 
+            if  (typeof(data.page.data) == 'undefined' ) {
+                data.page.data = {}
+            }
+
             if ( typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status) && typeof(data.page.data.error) != 'undefined' ) {
                 self.throwError(data.page.data.status, data.page.data.error)
             }
@@ -632,7 +636,7 @@ function SuperController(options) {
 
             newObj = parseDataObject(JSON.parse(str), value);
             local._data = merge(local._data, newObj);
-            
+
         } else if ( typeof(local._data[name]) == 'undefined' ) {
             local._data[name] = value
         }
