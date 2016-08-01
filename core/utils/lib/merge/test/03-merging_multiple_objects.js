@@ -58,13 +58,14 @@ var CtoBtoAwithoutOverride = merge(c, b, a);
 
 exports['Merge : A<-B<-C with override'] = function(test) {
     var res = {
+        "actor": "tom hanks",
         "actress": "julia roberts",
         "job": "singer",
         "films": [
             "captain eo",
             "The Wiz"
         ],
-        "actor": "tom hanks",
+
         "singer": "michael jackson"
     }
     test.equal( typeof(AtoBtoCwithOverride), 'object' );
@@ -158,12 +159,12 @@ exports['Merge : A<-B<-C without override'] = function(test) {
         "actor": "tom hanks",
         "actress": "julia roberts",
         "films": [
-            "captain eo",
-            "The Wiz",
+            "pretty woman",
+            "mirror, mirror",
             "philadelphia",
             "forrest gump",
-            "pretty woman",
-            "mirror, mirror"
+            "captain eo",
+            "The Wiz"
         ],
         "job": "actress",
         "singer": "michael jackson"
@@ -178,12 +179,12 @@ exports['Merge : A<-C<-B without override'] = function(test) {
         "actor": "tom hanks",
         "actress": "julia roberts",
         "films": [
+            "pretty woman",
+            "mirror, mirror",
             "captain eo",
             "The Wiz",
             "philadelphia",
-            "forrest gump",
-            "pretty woman",
-            "mirror, mirror"
+            "forrest gump"
         ],
         "job": "actress",
         "singer": "michael jackson"
@@ -198,12 +199,12 @@ exports['Merge : B<-A<-C without override'] = function(test) {
         "actor": "tom hanks",
         "actress": "julia roberts",
         "films": [
-            "captain eo",
-            "The Wiz",
             "philadelphia",
             "forrest gump",
             "pretty woman",
-            "mirror, mirror"
+            "mirror, mirror",
+            "captain eo",
+            "The Wiz"
         ],
         "job": "actor",
         "singer": "michael jackson"
@@ -218,10 +219,10 @@ exports['Merge : B<-C<-A without override'] = function(test) {
         "actor": "tom hanks",
         "actress": "julia roberts",
         "films": [
-            "captain eo",
-            "The Wiz",
             "philadelphia",
             "forrest gump",
+            "captain eo",
+            "The Wiz",
             "pretty woman",
             "mirror, mirror"
         ],
@@ -240,10 +241,10 @@ exports['Merge : C<-A<-B without override'] = function(test) {
         "films": [
             "captain eo",
             "The Wiz",
-            "philadelphia",
-            "forrest gump",
             "pretty woman",
-            "mirror, mirror"
+            "mirror, mirror",
+            "philadelphia",
+            "forrest gump"
         ],
         "job": "singer",
         "singer": "michael jackson"
@@ -276,7 +277,7 @@ exports['Merge : C<-B<-A without override'] = function(test) {
 
 
 exports['Compare : (A<-B<-C && A<-C<-B without override) && (B<-C<-A && C<-B<-A with override)'] = function(test) {
-    test.deepEqual(AtoBtoCwithoutOverride, AtoCtoBwithoutOverride);
+    test.notDeepEqual(AtoBtoCwithoutOverride, AtoCtoBwithoutOverride);
     test.notDeepEqual(AtoCtoBwithoutOverride, BtoCtoAwithOverride);
     test.deepEqual(BtoCtoAwithOverride, CtoBtoAwithOverride);
     test.notDeepEqual(CtoBtoAwithOverride, AtoBtoCwithoutOverride);
@@ -284,7 +285,7 @@ exports['Compare : (A<-B<-C && A<-C<-B without override) && (B<-C<-A && C<-B<-A 
     test.done()
 }
 exports['Compare : (B<-A<-C && B<-C<-A without override) && (A<-C<-B && C<-A<-B with override)'] = function(test) {
-    test.deepEqual(BtoAtoCwithoutOverride, BtoCtoAwithoutOverride);
+    test.notDeepEqual(BtoAtoCwithoutOverride, BtoCtoAwithoutOverride);
     test.notDeepEqual(BtoCtoAwithoutOverride, AtoCtoBwithOverride);
     test.deepEqual(AtoCtoBwithOverride, CtoAtoBwithOverride);
     test.notDeepEqual(CtoAtoBwithOverride, BtoAtoCwithoutOverride);
@@ -292,7 +293,7 @@ exports['Compare : (B<-A<-C && B<-C<-A without override) && (A<-C<-B && C<-A<-B 
     test.done()
 }
 exports['Compare : (C<-A<-B && C<-B<-A without override) && (A<-B<-C && B<-A<-C with override)'] = function(test) {
-    test.deepEqual(CtoAtoBwithoutOverride, CtoBtoAwithoutOverride);
+    test.notDeepEqual(CtoAtoBwithoutOverride, CtoBtoAwithoutOverride);
     test.notDeepEqual(CtoBtoAwithoutOverride, AtoBtoCwithOverride);
     test.deepEqual(AtoBtoCwithOverride, BtoAtoCwithOverride);
     test.notDeepEqual(BtoAtoCwithOverride, CtoAtoBwithoutOverride);

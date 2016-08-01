@@ -21,6 +21,7 @@ function Merge() {
         var options, name, src, copy, copyIsArray, clone;
 
 
+
         // Handle case when target is a string or something (possible in deep copy)
         if (typeof(target) !== 'object' && typeof(target) !== 'function') {
             if (override) {
@@ -46,23 +47,25 @@ function Merge() {
                        target = options;
                        break;
                     }
+
                     // both target & options are arrays
                     if ( Array.isArray(options) && Array.isArray(target) ) {
 
-                        for (var a = 0; a < options.length; ++a ) {
-                            if ( target.indexOf(options[a]) > -1 && override) {
-                                target.splice(target.indexOf(options[a]), 1, options[a])
-                            } else if (target.indexOf(options[a]) == -1) {
-                                // required to keep keys in the dependancy order
-                                // !!! don't change this !!!
-                                if (newTarget.indexOf(options[a]) == -1)
-                                    newTarget.push(options[a]);
-                            }
-                        }
 
-                         if (newTarget.length > 0 && target.length > 0) {
-                             target = newTarget
-                         }
+                        target = mergeArray(options, target, override);
+
+                        // for (var a = 0; a < options.length; ++a ) {
+                        //     if ( target.indexOf(options[a]) > -1 && override) {
+                        //         target.splice(target.indexOf(options[a]), 1, options[a])
+                        //     } else {
+                        //         if (newTarget.indexOf(options[a]) == -1)
+                        //             newTarget.push(options[a]);
+                        //     }
+                        // }
+                        //
+                        //  if (newTarget.length > 0 && target.length > 0) {
+                        //      target = newTarget
+                        //  }
                     } else {
                         // Merge the base object
                         for (var name in options) {
@@ -88,7 +91,13 @@ function Merge() {
                                 var createMode = false;
                                 if (copyIsArray) {
                                     copyIsArray = false;
-                                    clone = src && Array.isArray(src) ? src : []
+                                    clone = src && Array.isArray(src) ? src : [];
+
+                                    newTarget = clone;
+                                    clone = mergeArray(copy, clone, override);
+                                    target[ name ] = clone;
+                                    continue
+
                                 } else {
 
                                     clone = src && isObject(src) ? src : null;
@@ -106,8 +115,9 @@ function Merge() {
 
 
                                 //[propose] Supposed to go deep... deep... deep...
-                                if (!override) {
+                                if ( !override ) {
                                     // add those in copy not in clone (target)
+
                                     for (var prop in copy) {
                                         if (typeof(clone[ prop ]) == 'undefined') {
                                             clone[ prop ] = copy[ prop ] // don't override existing
@@ -116,16 +126,15 @@ function Merge() {
 
 
 
-
                                     // Never move original objects, clone them
-                                    if (typeof(src) != "boolean" && !createMode) {//if property is not boolean
+                                    if (typeof(src) != "boolean" && !createMode ) {//if property is not boolean
                                         //target[ name ] = browse(clone, copy, override)
                                         process.nextTick(function onBrowse() {
                                             target[ name ] = browse(clone, copy, override)
                                         });
 
                                     } else if (createMode) {
-                                        target[ name ] = clone
+                                        target[ name ] = clone;
                                     }
 
                                 } else {
@@ -138,11 +147,6 @@ function Merge() {
 
                                     target[ name ] = clone
                                 }
-
-                                // // Never move original objects, clone them
-                                // if (typeof(src) != "boolean") {//if property is not boolean
-                                //     target[ name ] = browse(clone, copy, override)
-                                // }
 
                             } else if (copy !== undefined) {
                                 //[propose]Don't override existing if prop defined or override @ false
@@ -162,11 +166,28 @@ function Merge() {
 
             }
 
-            //return target
         }
 
         return target
+    }
 
+    var mergeArray = function(options, target, override) {
+        if (override) {
+            newTarget = options;
+            return newTarget
+        }
+        for (var a = 0; a < options.length; ++a ) {
+            if ( target.indexOf(options[a]) > -1 && override) {
+                target.splice(target.indexOf(options[a]), 1, options[a])
+            } else {
+                if (newTarget.indexOf(options[a]) == -1)
+                    newTarget.push(options[a]);
+            }
+        }
+
+        if (newTarget.length > 0 && target.length > 0) {
+            return newTarget
+        }
     }
 
     /**
