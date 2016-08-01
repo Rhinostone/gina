@@ -682,9 +682,6 @@ function SuperController(options) {
 
 
         //cascading merging
-        // if (!viewConf[localRessource]["stylesheets"]) {
-        //     viewConf[localRessource]["stylesheets"] = []
-        // }
         if (localRessource !== 'default') {
             if ( typeof(viewConf[localRessource]) != 'undefined') {
                 viewConf[localRessource] = merge(viewConf[localRessource], viewConf.default)
