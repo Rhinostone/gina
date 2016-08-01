@@ -578,7 +578,7 @@ function ModelUtil() {
      * */
     Collection = function(content) {
         var content     = content || []
-            , keywords  = ['not null'] // TODO - null, exists
+            , keywords  = ['not null'] // TODO - null, exists (`true` if property is defined)
         ;
 
         this.find = function(filter) {
@@ -588,11 +588,13 @@ function ModelUtil() {
             } else {
                 var condition   = filter.count()
                     , i         = 0
-                    , found     = [];
+                    , found     = []
+                    , localeLowerCase = '';
 
                 for (var o in content) {
                     for (var f in filter) {
-                        if ( filter[f] && keywords.indexOf(filter[f].toLocaleLowerCase()) > -1 && filter[f].toLowerCase() == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
+                        localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
+                        if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
                             if (found.indexOf(content[o][f]) < 0 ) {
                                 found[i] = content[o][f];
                                 ++i
@@ -615,13 +617,15 @@ function ModelUtil() {
             } else {
                 var condition = filter.count()
                     , i         = 0
-                    , found     = null;
+                    , found     = null
+                    , localeLowerCase = '';
 
                 if (condition == 0) return null;
 
                 for (var o in content) {
                     for (var f in filter) {
-                        if ( filter[f] && keywords.indexOf(filter[f].toLocaleLowerCase()) > -1 && filter[f].toLowerCase() == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
+                        localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
+                        if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
                             if (found.indexOf(content[o][f]) < 0 ) {
                                 ++i;
                                 if (i === condition) found = content[o]
