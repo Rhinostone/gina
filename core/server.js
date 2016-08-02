@@ -869,7 +869,7 @@ function Server(options) {
         if (self.conf[bundle][self.env]['hostname'] != req.headers.host) {
             self.conf[bundle][self.env]['hostname'] = req.headers.host
         }
-        console.debug('about to handle [ '+ pathname + ' ] route');
+
         router.setMiddlewareInstance(self.instance);
 
         //Middleware configuration.
@@ -919,7 +919,7 @@ function Server(options) {
 
                 if (pathname === routing[rule].url || isRoute.past) {
 
-                    console.debug('Server is about to route to '+ pathname);
+                    //console.debug('Server is about to route to '+ pathname);
 
                     if (!routing[rule].method && req.method) { // setting client request method if no method is defined in routing
                         routing[rule].method  = req.method
@@ -975,6 +975,7 @@ function Server(options) {
                                     }
                                 })
                             } else {
+                                console.debug('[ 200 ] '+ pathname);
                                 router.route(req, res, next, params)
                             }
                         }
@@ -1145,7 +1146,8 @@ function Server(options) {
                 } else {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
-                
+
+                console.debug('[ '+code+' ] '+ pathname);
                 res.end(JSON.stringify({
                     status: code,
                     error: msg

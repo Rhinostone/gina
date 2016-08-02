@@ -498,13 +498,13 @@ function Config(opt) {
     this.getBundles = function() {
 
         //Registered apps only.
-        console.debug('Pushing apps ' + JSON.stringify(self.bundles, null, '\t'));
+        //console.debug('Pushing apps ' + JSON.stringify(self.bundles, null, '\t'));
         return self.bundles
     }
 
     this.getAllBundles = function() {
         //Registered apps only.
-        console.debug('Pushing ALL apps ' + JSON.stringify(self.allBundles, null, '\t'));
+        //console.debug('Pushing ALL apps ' + JSON.stringify(self.allBundles, null, '\t'));
         return self.allBundles
     }
 

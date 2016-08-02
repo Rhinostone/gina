@@ -556,6 +556,8 @@ function ModelUtil() {
      * Allows you to handle your own collections as you would normaly with mongodb
      *
      * @param {array} collection
+     * @param {object} [options]
+     *
      * @return {object} instance
      *
      * Collection::find
@@ -576,39 +578,79 @@ function ModelUtil() {
      *  @return {array} result
      *
      * */
-    Collection = function(content) {
-        var content     = content || []
+    var collectionOptions = {
+        'locale': 'en' // get settigs.region, or user.region
+    };
+
+    Collection = function(content, option) {
+        var content     = JSON.parse(JSON.stringify(content)) || [] // original content -> not to be touched
+            , options   = (typeof(options) == 'object') ? merge(options, collectionOptions) : collectionOptions
             , keywords  = ['not null'] // TODO - null, exists (`true` if property is defined)
         ;
+        var op  = {
+            //result      : JSON.parse(JSON.stringify(content))
+            result      : null
+        }; // operations meta
+
+
+        // checking
+        var instance = this;
 
         this.find = function(filter) {
 
-            if ( typeof(filter) !== 'object' ) {
+            if ( typeof(filter) != 'undefined' && typeof(filter) !== 'object' ) {
                 throw new Error('filter must be an object');
-            } else {
+            } else if ( typeof(filter) != 'undefined' ) {
+
                 var condition   = filter.count()
                     , i         = 0
-                    , found     = []
-                    , localeLowerCase = '';
+                    , result    = []
+                    , localeLowerCase = ''
+                ;
 
                 for (var o in content) {
                     for (var f in filter) {
                         localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
                         if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
-                            if (found.indexOf(content[o][f]) < 0 ) {
-                                found[i] = content[o][f];
+                            if (result.indexOf(content[o][f]) < 0 ) {
+                                result[i] = content[o][f];
                                 ++i
                             }
 
                         } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
-                            found[i] = content[o];
+                            result[i] = content[o];
                             ++i
                         }
                     }
                 }
+            } else {
+                result = content
             }
 
-            return found
+            //op.result = result;
+
+            // chaining
+            result.orderBy = instance.orderBy;
+
+            return result
+        }
+
+        this.limit = function(resultLimit) {
+            if ( typeof(resultLimit) == 'undefined' || typeof(resultLimit) != 'number' ) {
+                throw new Error('[Collection::result->limit(resultLimit)] : `resultLimit` parametter must by a `number`')
+            }
+
+            var result = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+
+            //resultLimit
+            result = result.splice(0, resultLimit);
+
+            // chaining
+            result.orderBy = instance.orderBy;
+
+            //op.result = result;
+
+            return result
         }
 
         this.findOne = function(filter) {
@@ -617,7 +659,7 @@ function ModelUtil() {
             } else {
                 var condition = filter.count()
                     , i         = 0
-                    , found     = null
+                    , result     = null
                     , localeLowerCase = '';
 
                 if (condition == 0) return null;
@@ -626,20 +668,21 @@ function ModelUtil() {
                     for (var f in filter) {
                         localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
                         if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
-                            if (found.indexOf(content[o][f]) < 0 ) {
+                            if (result.indexOf(content[o][f]) < 0 ) {
                                 ++i;
-                                if (i === condition) found = content[o]
+                                if (i === condition) result = content[o]
                             }
 
                         } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
                             ++i;
-                            if (i === condition) found = content[o]
+                            if (i === condition) result = content[o]
                         }
                     }
                 }
             }
 
-            return found
+
+            return result
         }
 
         this.update = function(filter, set) {
@@ -663,9 +706,113 @@ function ModelUtil() {
 
             return newContent
         }
+
+
+        var sortKeywords = [ 'asc', 'desc' ];
+        /**
+         * sort
+         *
+         * @param {object|array} filter
+         * */
+        this.orderBy = function (filter) {
+
+            if ( typeof(filter) == 'undefined' )
+                throw new Error('[ Collection->sort(filter) ] where `filter` must not be empty or null' );
+
+            var varaibleContent = untouchedContent  = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+            return sortResult(filter, varaibleContent)
+        }
+
+        /**
+         * sortResult
+         * ref.:
+         *  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort
+         *  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/localeCompare#Browser_compatibility
+         *
+         * e.g.:
+         *  { name: 'asc' }
+         *
+         * @param {object} filter
+         * */
+        var sortResult = function (filter, content) {
+            if ( typeof(filter) != 'object') {
+                throw new Error('`filter` parametter must be an object')
+            }
+
+            var condition           = filter.count()
+                , sortOp            = {}
+                , key               = null
+                , prop              = null
+                //, untouchedContent  = JSON.parse(JSON.stringify(op.result || content))
+                //, untouchedContent  = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content))
+                , result            = []
+            ;
+
+            if (condition == 0) return null;
+
+
+            // asc
+            sortOp['asc'] = function (prop, content) {
+                return content.sort(function onAscSort(a, b) {
+
+                    if ( typeof(a) == 'string' ) {
+                        // var fieldA = a.toUpperCase(); // ignore upper and lowercase
+                        // var fieldB = b.toUpperCase(); // ignore upper and lowercase
+                        //
+                        // if (fieldA < fieldB) {
+                        //     return -1;
+                        // }
+                        //
+                        // if (fieldA > fieldB) {
+                        //     return 1;
+                        // }
+                        //
+                        // // fields must be equal
+                        // return 0;
+
+                        return a.localeCompare(b)
+
+                    } else if ( typeof(a) == 'object' ) {
+                        return a[prop].localeCompare(b[prop])
+                    } else {
+                        if (a > b) {
+                            return 1;
+                        }
+                        if (a < b) {
+                            return -1;
+                        }
+                        // a must be equal to b
+                        return 0;
+                    }
+                })
+            }
+
+            sortOp['desc'] = function (prop, content) {
+                return sortOp['asc'](prop, content).reverse()
+            }
+
+
+            for (var f in filter) {
+
+                //prop    = Object.keys(filter)[0];
+                prop    = f;
+                key     = filter[prop];
+
+                result  = sortOp[key](prop, content);
+            }
+
+            //op.result = result;
+
+            // chaining
+            result.limit = instance.limit;
+
+
+            return result
+        };
+
     }
 
     return init()
-}
+};
 
-module.exports = ModelUtil
+module.exports = ModelUtil;
