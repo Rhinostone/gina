@@ -492,7 +492,7 @@ function SuperController(options) {
 
                             local.res.setHeader("Content-Type", local.options.conf.server.coreConfiguration.mime['html']);
 
-
+                            console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
                             local.res.end(layout);
                             local.res.headersSent = true
                         } else {
@@ -557,6 +557,7 @@ function SuperController(options) {
             }
 
             if ( !local.res.headersSent ) {
+                console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
                 local.res.end(JSON.stringify(jsonObj));
                 local.res.headersSent = true
             }
@@ -881,6 +882,7 @@ function SuperController(options) {
         var path        = req.routing.param.path || '';
         var url         = req.routing.param.url;
         var code        = req.routing.param.code || 301;
+        //var method      = req.routing.param.method;
         var keepParams  = req.routing.param['keep-params'] || false;
 
         var condition   = true; //set by default for url @ path redirect
