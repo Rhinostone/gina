@@ -587,11 +587,6 @@ function ModelUtil() {
             , options   = (typeof(options) == 'object') ? merge(options, collectionOptions) : collectionOptions
             , keywords  = ['not null'] // TODO - null, exists (`true` if property is defined)
         ;
-        var op  = {
-            //result      : JSON.parse(JSON.stringify(content))
-            result      : null
-        }; // operations meta
-
 
         // checking
         var instance = this;
@@ -627,10 +622,9 @@ function ModelUtil() {
                 result = content
             }
 
-            //op.result = result;
-
             // chaining
-            result.orderBy = instance.orderBy;
+            result.limit    = instance.limit;
+            result.orderBy  = instance.orderBy;
 
             return result
         }
@@ -647,8 +641,6 @@ function ModelUtil() {
 
             // chaining
             result.orderBy = instance.orderBy;
-
-            //op.result = result;
 
             return result
         }
@@ -719,7 +711,7 @@ function ModelUtil() {
             if ( typeof(filter) == 'undefined' )
                 throw new Error('[ Collection->sort(filter) ] where `filter` must not be empty or null' );
 
-            var varaibleContent = untouchedContent  = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+            var varaibleContent = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
             return sortResult(filter, varaibleContent)
         }
 
@@ -730,21 +722,20 @@ function ModelUtil() {
          *  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/localeCompare#Browser_compatibility
          *
          * e.g.:
-         *  { name: 'asc' }
+         *  .orderBy({ name: 'asc' })
+         *  .orderBy([ { updatedAt : 'desc'}, { name: 'asc' } ])
          *
-         * @param {object} filter
+         * @param {object|array} filter
          * */
         var sortResult = function (filter, content) {
             if ( typeof(filter) != 'object') {
-                throw new Error('`filter` parametter must be an object')
+                throw new Error('`filter` parametter must be an object or an array')
             }
 
             var condition           = filter.count()
                 , sortOp            = {}
                 , key               = null
                 , prop              = null
-                //, untouchedContent  = JSON.parse(JSON.stringify(op.result || content))
-                //, untouchedContent  = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content))
                 , result            = []
             ;
 
@@ -787,25 +778,32 @@ function ModelUtil() {
                 })
             }
 
+            // desc
             sortOp['desc'] = function (prop, content) {
                 return sortOp['asc'](prop, content).reverse()
             }
 
+            if ( Array.isArray(filter) ) {
 
-            for (var f in filter) {
+                for (var f = 0, len = filter.length; f < len; ++f) {
 
-                //prop    = Object.keys(filter)[0];
-                prop    = f;
+                    prop    = Object.keys(filter[f])[0];
+                    key     = filter[f][prop];
+
+                    result  = sortOp[key](prop, content);
+                }
+            } else {
+
+                prop    = Object.keys(filter)[0];
                 key     = filter[prop];
 
                 result  = sortOp[key](prop, content);
             }
 
-            //op.result = result;
+
 
             // chaining
             result.limit = instance.limit;
-
 
             return result
         };
