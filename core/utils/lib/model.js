@@ -754,7 +754,12 @@ function ModelUtil() {
          *
          * e.g.:
          *  .orderBy({ name: 'asc' })
+         *
+         *  // overriding filters -> last filter is always right
          *  .orderBy([ { updatedAt : 'desc'}, { name: 'asc' } ])
+         *
+         *  // combining filters -> the first one is always right
+         *  .orderBy({ updatedAt : 'desc'}, { name: 'asc' })
          *
          * @param {object|array} filter
          * */
@@ -825,10 +830,21 @@ function ModelUtil() {
                 }
             } else {
 
-                prop    = Object.keys(filter)[0];
-                key     = filter[prop];
+                if (filter.count() > 1) {
 
-                result  = sortOp[key](prop, content);
+                    for (var f in filter) {
+                        prop    = Object.keys(filter)[0];
+                        key     = filter[prop];
+
+                        result  = sortOp[key](prop, content);
+                    }
+
+                } else {
+                    prop    = Object.keys(filter)[0];
+                    key     = filter[prop];
+
+                    result  = sortOp[key](prop, content);
+                }
             }
 
 
