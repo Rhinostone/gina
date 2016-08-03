@@ -10,6 +10,10 @@ function Merge() {
      * */
     var browse = function (target, source) {
 
+        if ( typeof(target) == 'undefined' /**|| Array.isArray(target) && !target.length */) {
+            target = ( typeof(source) != 'undefined' && Array.isArray(source)) ? [] : {}
+        }
+
         var override = false;
         if (( typeof(arguments[arguments.length-1]) == 'boolean' )) {
             override = arguments[arguments.length-1]
@@ -168,24 +172,48 @@ function Merge() {
 
         }
 
+        newTarget = [];
         return target
     }
 
+    // Will not merge functions items: this is normal
     var mergeArray = function(options, target, override) {
         if (override) {
             newTarget = options;
             return newTarget
         }
-        for (var a = 0; a < options.length; ++a ) {
-            if ( target.indexOf(options[a]) > -1 && override) {
-                target.splice(target.indexOf(options[a]), 1, options[a])
-            } else {
-                if (newTarget.indexOf(options[a]) == -1)
-                    newTarget.push(options[a]);
+
+        if ( options.length == 0 &&  target.length > 0) {
+            newTarget = target;
+        }
+
+        if ( target.length == 0 && options.length > 0) {
+            for (var a = 0; a < options.length; ++a ) {
+                target.push(options[a]);
             }
         }
 
-        if (newTarget.length > 0 && target.length > 0) {
+        if (newTarget.length == 0 && target.length > 0) {
+            // ok, but don't merge objects
+            for (var a = 0; a < target.length; ++a ) {
+                if ( typeof(target[a]) != 'object' && newTarget.indexOf(target[a]) == -1)
+                    newTarget.push(target[a]);
+            }
+        }
+
+        if ( target.length > 0 ) {
+
+            for (var a = 0; a < options.length; ++a ) {
+                if ( target.indexOf(options[a]) > -1 && override) {
+                    target.splice(target.indexOf(options[a]), 1, options[a])
+                } else {
+                    if (newTarget.indexOf(options[a]) == -1)
+                        newTarget.push(options[a]);
+                }
+            }
+        }
+
+        if (newTarget.length > 0 && target.length > 0 ) {
             return newTarget
         }
     }

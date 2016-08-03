@@ -698,6 +698,10 @@ function ModelUtil() {
                 }
             }
 
+            // chaining
+            result.find     = instance.find;
+            result.orderBy  = instance.orderBy;
+
             return result
         }
 
@@ -737,8 +741,9 @@ function ModelUtil() {
             if ( typeof(filter) == 'undefined' )
                 throw new Error('[ Collection->sort(filter) ] where `filter` must not be empty or null' );
 
-            var varaibleContent = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
-            return sortResult(filter, varaibleContent)
+
+            var variableContent = (Array.isArray(this)) ? this : JSON.parse(JSON.stringify(content));
+            return sortResult(filter, variableContent)
         }
 
         /**
