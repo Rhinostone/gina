@@ -451,11 +451,11 @@ function SuperController(options) {
                         }
 
                         if ( !local.res.headersSent ) {
-                            local.res.statusCode = data.page.data.status || 200; // by default
+                            local.res.statusCode = ( typeof(local.options.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
                             //catching errors
                             if (
-                                typeof(data.page.data.errno) != 'undefined' && /^2/.test(data.page.data.status)
-                                || typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status)
+                                typeof(data.page.data.errno) != 'undefined' && /^2/.test(data.page.data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.page.data.status]) != 'undefined'
+                                || typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.page.data.status]) != 'undefined'
                             ) {
 
                                 try {
@@ -513,7 +513,7 @@ function SuperController(options) {
             //catching errors
             if (
                 typeof(jsonObj.errno) != 'undefined' && local.res.statusCode == 200
-                || typeof(jsonObj.status) != 'undefined' && jsonObj.status != 200
+                || typeof(jsonObj.status) != 'undefined' && jsonObj.status != 200 && typeof(local.options.conf.server.coreConfiguration.statusCodes[jsonObj.status]) != 'undefined'
             ) {
 
                 try {
@@ -1179,7 +1179,7 @@ function SuperController(options) {
                         }
                     }
 
-                    if ( data.status && !/^2/.test(data.status) ) {
+                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
                         callback(data)
                     } else {
                         callback( false, data )
@@ -1198,7 +1198,7 @@ function SuperController(options) {
                         }
                     }
 
-                    if ( data.status && !/^2/.test(data.status) ) {
+                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
                         self.emit('query#complete', data)
                     } else {
                         self.emit('query#complete', false, data)
@@ -1245,7 +1245,7 @@ function SuperController(options) {
                         }
                     }
 
-                    if ( data.status && !/^2/.test(data.status) ) {
+                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
                         cb(data)
                     } else {
                         cb(err, data)
