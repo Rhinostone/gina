@@ -370,7 +370,7 @@ function Router(env) {
             }
         }
 
-        console.debug('ACTION ON  ROUTING IS : ' + action);
+        //console.debug('ACTION ON  ROUTING IS : ' + action);
 
         //Getting superCleasses & extending it with super Models.
         var controllerFile         = {}
@@ -587,12 +587,14 @@ function Router(env) {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
 
+                console.error(res.req.method +' [ '+code+' ] '+ res.req.url);
                 res.end(JSON.stringify({
                     status: code,
                     error: msg
                 }))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
+                console.error(res.req.method +' [ '+code+' ] '+ res.req.url);
                 res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
             }
         } else {

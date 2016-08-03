@@ -197,29 +197,6 @@ function SuperController(options) {
         }
     }
 
-    /**
-     * DEPRECATED
-     * Set views|templates location
-     *
-     * @param {string} dir
-     * @param {string} [ layout ] - Is by default dir + '/layout.html'
-     * */
-    // this.setViewsLocation = function(dir, layout) {
-    //     local.options.views.default.views = dir;
-    //     local.options.views.default.html = _(dir + '/html');
-    //     if ( typeof(local.options.namespace) != 'undefined') {
-    //         local.options.views.default.html = _(local.options.views.default.html+'/'+local.options.namespace)
-    //     }
-    //     local.options.views.default.layout = layout || _(local.options.views.default.html + '/layout.html');
-    //     swig.setDefaults({
-    //         loader: swig.loaders.fs(dir)
-    //     })
-    // }
-
-    // this.hasOptions = function() {
-    //     return ( typeof(local.options) != 'undefined') ? true : false
-    // }
-
 
     /**
      * Render HTML templates : Swig is the default template engine
@@ -502,7 +479,7 @@ function SuperController(options) {
                 })
             })
         } catch (err) {
-            self.throwError(local.res, 500, err.stack)
+            self.throwError(local.res, 500, err.stack||err.message)
         }
     }
 
@@ -562,9 +539,8 @@ function SuperController(options) {
                 local.res.headersSent = true
             }
         } catch (err) {
-            local.res.end(JSON.stringify({error: err.stack}));
-            local.res.headersSent = true;
-            console.log(err.stack)
+
+            self.throwError(local.res, 500, err.stack||err.message)
         }
 
     }
@@ -583,6 +559,7 @@ function SuperController(options) {
         }
 
         if ( !local.res.headersSent ) {
+            console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
             local.res.end(content);
             local.res.headersSent = true
         }
@@ -882,7 +859,7 @@ function SuperController(options) {
         var path        = req.routing.param.path || '';
         var url         = req.routing.param.url;
         var code        = req.routing.param.code || 301;
-        //var method      = req.routing.param.method;
+
         var keepParams  = req.routing.param['keep-params'] || false;
 
         var condition   = true; //set by default for url @ path redirect
@@ -926,7 +903,7 @@ function SuperController(options) {
             }
 
 
-
+            console.warn(local.req.method +' ['+local.res.statusCode +'] '+ path);
             res.end();
             local.res.headersSent = true;// done for the render() method
         }
@@ -1424,12 +1401,14 @@ function SuperController(options) {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
 
+                console.error(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
                 res.end(JSON.stringify({
                     status: code,
                     error: msg.stack || msg.message || msg
                 }))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
+                console.error(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
                 res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>')
             }
         } else {
