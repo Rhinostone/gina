@@ -1147,7 +1147,7 @@ function Server(options) {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
 
-                console.debug('[ '+code+' ] '+ pathname);
+                console.error(res.req.method +' [ '+code+' ] '+ res.req.url);
                 res.end(JSON.stringify({
                     status: code,
                     error: msg
@@ -1155,6 +1155,7 @@ function Server(options) {
                 res.headersSent = true
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
+                console.error(res.req.method +' [ '+code+' ] '+ res.req.url);
                 res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
                 res.headersSent = true
             }

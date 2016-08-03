@@ -681,22 +681,48 @@ function ModelUtil() {
             if ( typeof(filter) !== 'object' ) {
                 throw new Error('filter must be an object');
             } else {
-                var condition       = filter.count()
-                    , newContent    = JSON.parse(JSON.stringify(content));
+                var condition           = filter.count()
+                    , localeLowerCase   = ''
+                    , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
 
                 for (var o in content) {
                     for (var f in filter) {
-                        if ( filter[f] && keywords.indexOf(filter[f].toLocaleLowerCase()) > -1 && filter[f].toLowerCase() == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
-                            newContent[o][f] = set;
+                        localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
+                        if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
+                            result[o][f] = set;
 
                         } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
-                            newContent[o] = set;
+                            result[o] = set;
                         }
                     }
                 }
             }
 
-            return newContent
+            return result
+        }
+
+        this.delete = function(filter) {
+            if ( typeof(filter) !== 'object' ) {
+                throw new Error('filter must be an object');
+            } else {
+                var condition           = filter.count()
+                    , localeLowerCase   = ''
+                    , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));;
+
+                for (var o in content) {
+                    for (var f in filter) {
+                        localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
+                        if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
+                            //delete result[o][f];
+                            result.splice(o, 1)
+                        } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
+                            result.splice(o, 1)
+                        }
+                    }
+                }
+            }
+
+            return result
         }
 
 
