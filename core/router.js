@@ -162,6 +162,8 @@ function Router(env) {
             matched =  ( _param.indexOf(urlVar) > -1 ) ? _param.indexOf(urlVar) : false;
 
             if (matched === false) return matched;
+            // filter on method
+            if (params.method !== request.method) return false;
 
             var key = _param[matched].substr(1);
             regex   = params.requirements[key];

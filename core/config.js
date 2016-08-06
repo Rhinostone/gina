@@ -627,6 +627,8 @@ function Config(opt) {
                     //webroot control
                     routing[rule].param.file = ( typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: rule; // get template file
 
+                    // by default, method is inherited from the request.method
+
                     if (
                         hasWebRoot && typeof(routing[rule].param.path) != 'undefined' && typeof(routing[rule].param.ignoreWebRoot) == 'undefined'
                         || hasWebRoot && typeof(routing[rule].param.path) != 'undefined' && !routing[rule].param.ignoreWebRoot
@@ -791,6 +793,7 @@ function Config(opt) {
 
         //Constants to be exposed in configuration files.
         var reps = {
+            "gina"          : getPath('gina').root,
             "root"          : conf[bundle][env].executionPath,
             "env"           : env,
             "executionPath" : conf[bundle][env].executionPath,

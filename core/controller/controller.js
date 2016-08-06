@@ -178,6 +178,10 @@ function SuperController(options) {
                 local.options.file = 'index'
             }
 
+            if ( typeof(local.options.isWithoutLayout) == 'undefined' ) {
+                local.options.isWithoutLayout = false;
+            }
+
             var rule        = local.options.rule
                 , namespace = local.options.namespace || rule;
 
@@ -198,14 +202,23 @@ function SuperController(options) {
     }
 
 
+
+    this.renderWithoutLayout = function (data) {
+        local.options.isWithoutLayout = true;
+        self.render(data)
+    }
+
     /**
      * Render HTML templates : Swig is the default template engine
      *
      *
      * Avilable filters:
-     *  - getBundleWebroot()
+     *  - getWebroot()
+     *  - getUrl()
+     *
      *
      * @param {object} _data
+     *
      * @return {void}
      * */
     this.render = function(_data) {
@@ -437,7 +450,9 @@ function SuperController(options) {
 
                 dic['page.content'] = content;
 
-                fs.readFile(local.options.views[data.file].layout, function(err, layout) {
+                var layoutPath = (local.options.isWithoutLayout) ? local.options.views[data.file].noLayout : local.options.views[data.file].layout;
+
+                fs.readFile(layoutPath, function(err, layout) {
                     if (err) {
                         self.throwError(local.res, 500, err.stack);
                     } else {
@@ -1245,7 +1260,7 @@ function SuperController(options) {
                         }
                     }
 
-                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
+                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
                         cb(data)
                     } else {
                         cb(err, data)

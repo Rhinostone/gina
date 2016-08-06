@@ -216,7 +216,7 @@ function Server(options) {
                     for (var rule in tmp){
                         tmp[rule].bundle        = (tmp[rule].bundle) ? tmp[rule].bundle : apps[i]; // for reverse search
                         tmp[rule].param.file    = ( typeof(tmp) != 'string' && typeof(tmp[rule].param.file) != 'undefined' ) ? tmp[rule].param.file : rule; // get template file
-
+                        // by default, method is inherited from the request
                         if (
                             hasWebRoot && typeof(tmp[rule].param.path) != 'undefined' && typeof(tmp[rule].param.ignoreWebRoot) == 'undefined'
                             || hasWebRoot && typeof(tmp[rule].param.path) != 'undefined' && !tmp[rule].param.ignoreWebRoot
@@ -896,6 +896,7 @@ function Server(options) {
 
                 //Preparing params to relay to the router.
                 params = {
+                    method          : routing[rule].method,
                     requirements    : routing[rule].requirements,
                     namespace       : routing[rule].namespace || undefined,
                     url             : unescape(pathname), /// avoid %20

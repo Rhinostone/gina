@@ -1,6 +1,7 @@
 {
   "default": {
     "layout": "{views}/html/layout.html",
+    "noLayout": "{gina}/core/assets/html/nolayout.html",
     "forms": "{views}/forms",
     "useRouteNameAsFilename": true,
     "http-metas": {
