@@ -462,7 +462,9 @@ function SuperController(options) {
                         try {
                             layout = swig.compile(layout)(data)
                         } catch (err) {
-                            self.throwError(local.res, 500, err.stack)
+                            var filename = local.options.views[data.file].html;
+                            filename += ( typeof(data.page.namespace) != 'undefined' && data.page.namespace != '' && new RegExp('^' + data.page.namespace +'-').test(data.file) ) ? '/' + data.page.namespace + data.file.split(data.page.namespace +'-').join('/') + ( (data.page.ext != '') ? data.page.ext: '' ) : '/' + data.file+ ( (data.page.ext != '') ? data.page.ext: '' );
+                            self.throwError(local.res, 500, 'Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message))
                         }
 
                         if ( !local.res.headersSent ) {

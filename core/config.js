@@ -1013,9 +1013,10 @@ function Config(opt) {
     }
 
     var loadForms = function(formsDir) {
-        var forms = {}, cacheless = self.isCacheless();
+        var forms = {}, cacheless = self.isCacheless(), root = '';
 
         if ( fs.existsSync(formsDir) ) {
+            root = ''+formsDir;
             // browsing dir
             var readDir = function (dir, forms, key) {
                 var files       = fs.readdirSync(dir)
@@ -1027,7 +1028,7 @@ function Config(opt) {
                         filename = _(dir + '/' + files[i], true);
 
                         if ( fs.statSync(filename).isDirectory() ) {
-                            key += files[i] + '/';
+                            key += dir.replace(root, '') +'/'+ files[i] + '/';
                             k = key.split(/\//g);
                             forms[k[k.length-2]] = {};
 

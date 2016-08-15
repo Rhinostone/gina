@@ -623,6 +623,7 @@ function ModelUtil() {
             }
 
             // chaining
+            result.findOne  = instance.findOne;
             result.limit    = instance.limit;
             result.orderBy  = instance.orderBy;
 
@@ -640,6 +641,7 @@ function ModelUtil() {
             result = result.splice(0, resultLimit);
 
             // chaining
+            result.findOne  = instance.findOne;
             result.orderBy = instance.orderBy;
 
             return result
@@ -650,24 +652,25 @@ function ModelUtil() {
                 throw new Error('filter must be an object');
             } else {
                 var condition = filter.count()
-                    , i         = 0
-                    , result     = null
-                    , localeLowerCase = '';
+                    , i                 = 0
+                    , tmpContent        = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content))
+                    , result            = []
+                    , localeLowerCase   = '';
 
                 if (condition == 0) return null;
 
-                for (var o in content) {
+                for (var o in tmpContent) {
                     for (var f in filter) {
                         localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
-                        if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
-                            if (result.indexOf(content[o][f]) < 0 ) {
+                        if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] === filter[f] && tmpContent[o][f] != 'null' && tmpContent[o][f] != 'undefined' ) {
+                            if (result.indexOf(tmpContent[o][f]) < 0 ) {
                                 ++i;
-                                if (i === condition) result = content[o]
+                                if (i === condition) result = tmpContent[o]
                             }
 
-                        } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
+                        } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] === filter[f] ) {
                             ++i;
-                            if (i === condition) result = content[o]
+                            if (i === condition) result = tmpContent[o]
                         }
                     }
                 }
@@ -700,6 +703,7 @@ function ModelUtil() {
 
             // chaining
             result.find     = instance.find;
+            result.findOne  = instance.findOne;
             result.orderBy  = instance.orderBy;
 
             return result
@@ -782,7 +786,7 @@ function ModelUtil() {
             sortOp['asc'] = function (prop, content) {
                 return content.sort(function onAscSort(a, b) {
 
-                    if ( typeof(a) == 'string' ) {
+                    if ( typeof(a) == 'string' && a != '') {
                         // var fieldA = a.toUpperCase(); // ignore upper and lowercase
                         // var fieldB = b.toUpperCase(); // ignore upper and lowercase
                         //
@@ -800,7 +804,12 @@ function ModelUtil() {
                         return a.localeCompare(b)
 
                     } else if ( typeof(a) == 'object' ) {
-                        return a[prop].localeCompare(b[prop])
+                        try {
+                            return a[prop].localeCompare(b[prop])
+                        } catch (err) {
+                            return -1
+                        }
+
                     } else {
                         if (a > b) {
                             return 1;
@@ -850,6 +859,7 @@ function ModelUtil() {
 
 
             // chaining
+            result.findOne  = instance.findOne;
             result.limit = instance.limit;
 
             return result
