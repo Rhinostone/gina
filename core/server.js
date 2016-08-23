@@ -455,12 +455,11 @@ function Server(options) {
         return obj
     }
 
-    var parseLocalObj = function(obj, key, k, value, i) {
+    var parseLocalObj = function(obj, key, k, value) {
 
         if ( typeof(obj[ key[k] ]) == 'undefined' ) {
             obj[ key[k] ] = {};
         }
-
 
         for (var prop in obj) {
 
@@ -470,18 +469,18 @@ function Server(options) {
                     obj[prop] = (value) ? value : '';
                 }
 
-            } else {
+            } else if ( key.indexOf(prop) > -1 ) {
                 ++k;
-                if (! obj[prop][ key[k] ] )
+                if ( !obj[prop][ key[k] ] )
                     obj[prop][ key[k] ] = {};
 
 
                 parseLocalObj(obj[prop], key, k, value)
             }
-
         }
 
-        return obj
+        return obj;
+
     }
 
     var onRequest = function() {
