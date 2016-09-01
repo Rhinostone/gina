@@ -487,6 +487,7 @@ function SuperController(options) {
                             local.res.setHeader("Content-Type", local.options.conf.server.coreConfiguration.mime['html']);
 
                             console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
+
                             local.res.end(layout);
                             local.res.headersSent = true
                         } else {

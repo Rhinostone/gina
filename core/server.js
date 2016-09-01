@@ -895,7 +895,7 @@ function Server(options) {
 
                 //Preparing params to relay to the router.
                 params = {
-                    method          : routing[rule].method,
+                    method          : routing[rule].method || req.method,
                     requirements    : routing[rule].requirements,
                     namespace       : routing[rule].namespace || undefined,
                     url             : unescape(pathname), /// avoid %20

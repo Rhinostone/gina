@@ -1,6 +1,7 @@
 {
   "default": {
     "url": "/",
+    "method": "GET",
     "param": {
       "action": "init"
     }
