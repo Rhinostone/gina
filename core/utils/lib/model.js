@@ -600,6 +600,8 @@ function ModelUtil() {
                 content[i]._uuid = makeId();
                 this.uuids[ content[i]._uuid ] = content[i]
             }
+        } else {
+            this.uuids = []
         }
 
         // checking
@@ -715,7 +717,7 @@ function ModelUtil() {
             } else {
                 var matched = 0;
                 for (var obj in resultObj) {
-                    if ( resultObj[obj].matched.count() == condition ) {
+                    if ( typeof(resultObj[obj].matched) != 'undefined' && resultObj[obj].matched.count() == condition ) {
                         result[i] = resultObj[obj];
                         ++i
                     }
@@ -858,7 +860,7 @@ function ModelUtil() {
             } else {
                 var condition           = filter.count()
                     , localeLowerCase   = ''
-                    , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+                    , result            = Array.isArray(this) ? JSON.parse(JSON.stringify(this)) : JSON.parse(JSON.stringify(content));
 
                 for (var o in content) {
                     for (var f in filter) {
