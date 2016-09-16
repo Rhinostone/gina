@@ -420,10 +420,21 @@ function Server(options) {
         for (var i = 0, len = arr.length; i < len; ++i) {
             if (!arr[i]) continue;
 
-            if ( /^\{/.test(arr[i]) ) { // is a json string
+            arr[i] = decodeURIComponent(arr[i]);
+
+            if ( /^\{/.test(arr[i]) || /\=\{/.test(arr[i]) || /\=\[/.test(arr[i]) ) {
+            //if ( /^\{/.test(arr[i]) ) { // is a json string
                 try {
-                    obj = JSON.parse(arr[i]);
-                    break;
+                    if (/^\{/.test(arr[i])) {
+                        obj = JSON.parse(arr[i]);
+                        break;
+                    } else {
+                        el = arr[i].match(/\=(.*)/);
+                        el[0] =  arr[i].split(/\=/)[0];
+                        obj[ el[0] ] = JSON.parse( el[1] );
+                    }
+
+
                 } catch (err) {
                     console.error('[parseBody#1] could not parse body:\n' + arr[i])
                 }
@@ -680,7 +691,9 @@ function Server(options) {
                                             if ( typeof(obj) != 'undefined' && obj.count() == 0 && request.body.length > 1 ) {
                                                 try {
                                                     request.put = merge(request.put, JSON.parse(request.body));
-                                                } catch (err) {}
+                                                } catch (err) {
+                                                    console.log('Case `put` [ merge error ]: ' + (err.stack||err.message))
+                                                }
                                             }
                                         }
 
@@ -709,6 +722,7 @@ function Server(options) {
                                 }
 
 
+                                delete request.query; // added on september 13 2016
                                 delete request.post;
                                 delete request.delete;
                                 delete request.get;
@@ -738,6 +752,8 @@ function Server(options) {
                                 } else {
                                     handle(req, res, next, bundle, pathname, config)
                                 }
+                            } else {
+                                next()
                             }
                         })
 

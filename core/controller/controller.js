@@ -1086,14 +1086,18 @@ function SuperController(options) {
         rejectUnauthorized: undefined, // ignore verification when requesting on https (443)
         headers : {
             'Content-Type': 'application/json',
+            //'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
             'Content-Length': local.query.data.length
         }
     };
 
     this.query = function(options, data, callback) {
 
-        local.query.options.method                  = local.req.method;
-        local.query.options.headers['Content-Type'] = local.req.headers['content-type'];
+        local.query.options.method                  = options.method || local.req.method;
+
+        if ( typeof(local.req.headers['content-type']) != 'undefined' ) {
+            local.query.options.headers['Content-Type'] = local.req.headers['content-type']
+        }
 
         var queryData           = {}
             , defaultOptions    = local.query.options
@@ -1125,20 +1129,13 @@ function SuperController(options) {
                 callback = undefined;
             }
         }
-        if ( typeof(data) != "undefined" &&  data.count() > 0) {
+        if ( typeof(data) != 'undefined' &&  data.count() > 0) {
 
             queryData = '?';
             // TODO - if 'application/json' && method == (put|post)
-            if ( ['put', 'post'].indexOf(options.method.toLowerCase()) >-1 && /(text\/plain|application\/json|application\/x\-www\-form)/i.test(local.req.headers['content-type']) ) {
+            if ( ['put', 'post'].indexOf(options.method.toLowerCase()) >-1 && /(text\/plain|application\/json|application\/x\-www\-form)/i.test(options.headers['Content-Type']) ) {
                 // replacing
-                queryData = encodeURIComponent(JSON.stringify(data));
-
-                // // Internet Explorer override
-                // if ( /msie/i.test(local.req.headers['user-agent']) ) {
-                //     options.headers['Content-Type'] = 'text/plain';
-                // } else {
-                //     options.headers['Content-Type'] = local.options.conf.server.coreConfiguration.mime['json'];
-                // }
+                queryData = encodeURIComponent(JSON.stringify(data))
 
             } else {
                 //Sample request.
@@ -1159,7 +1156,6 @@ function SuperController(options) {
         } else {
             queryData = ''
         }
-
 
 
         // Internet Explorer override
@@ -1184,6 +1180,7 @@ function SuperController(options) {
             });
 
             res.on('end', function onEnd() {
+
                 //Only when needed.
                 if ( typeof(callback) != 'undefined' ) {
                     if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
@@ -1222,6 +1219,8 @@ function SuperController(options) {
                         self.emit('query#complete', false, data)
                     }
                 }
+
+
             });
 
 
@@ -1230,7 +1229,11 @@ function SuperController(options) {
 
         //starting from from >0.10.15
         req.on('error', function onError(err) {
-            // you can get here if you are trying to query using: `enctype="multipart/form-data"`
+
+            console.error(err.stack||err.message);
+            // you can get here if :
+            //  - you are trying to query using: `enctype="multipart/form-data"`
+            //  -
             if ( typeof(callback) != "undefined") {
                 callback(err)
             } else {
@@ -1242,6 +1245,7 @@ function SuperController(options) {
                 self.emit('query#complete', data)
             }
         });
+
 
         if (req) { // don't touch this please
             if (req.write) req.write(queryData);
