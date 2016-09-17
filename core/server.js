@@ -649,10 +649,10 @@ function Server(options) {
                                 response.setHeader('Expires', '0');
 
                                 // cleaning
-                                delete request.query;
-                                delete request.get;
-                                delete request.put;
-                                delete request.delete;
+                                request.query   = undefined;
+                                request.get     = undefined;
+                                request.put     = undefined;
+                                request.delete  = undefined;
                                 break;
 
                             case 'get':
@@ -663,10 +663,10 @@ function Server(options) {
 
 
                                 // cleaning
-                                delete request.query;
-                                delete request.post;
-                                delete request.put;
-                                delete request.delete;
+                                request.query   = undefined;
+                                request.post    = undefined;
+                                request.put     = undefined;
+                                request.delete  = undefined;
                                 break;
 
                             case 'put':
@@ -722,10 +722,10 @@ function Server(options) {
                                 }
 
 
-                                delete request.query; // added on september 13 2016
-                                delete request.post;
-                                delete request.delete;
-                                delete request.get;
+                                request.query   = undefined; // added on september 13 2016
+                                request.post    = undefined;
+                                request.delete  = undefined;
+                                request.get     = undefined;
                                 break;
 
 
@@ -735,9 +735,9 @@ function Server(options) {
                                 }
                                 // else, matching route params against url context instead once route is identified
 
-                                delete request.post;
-                                delete request.put;
-                                delete request.get;
+                                request.post    = undefined;
+                                request.put     = undefined;
+                                request.get     = undefined;
                                 break
 
 

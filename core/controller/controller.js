@@ -1219,11 +1219,7 @@ function SuperController(options) {
                         self.emit('query#complete', false, data)
                     }
                 }
-
-
-            });
-
-
+            })
         });
 
 
