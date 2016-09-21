@@ -681,7 +681,15 @@ function ModelUtil() {
                                         //result[i] = tmpContent[o][f];
                                         //++i
                                         tmpContent[o].matched[f] = true;
-                                        resultObj[ tmpContent[o][f]._uuid ] = tmpContent[o][f]
+                                        if (typeof(tmpContent[o][f]) == 'object' ) {
+                                            resultObj[ tmpContent[o][f]._uuid ] = tmpContent[o][f]
+                                        } else {
+                                            if ( !resultObj[o] ) {
+                                                resultObj[o] = {}
+                                            }
+
+                                            resultObj[tmpContent[o]._uuid] = tmpContent[o];
+                                        }
                                     }
 
                                 } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && /(<|>|=)/.test(filter[f]) && !/undefined|function/.test( typeof(tmpContent[o][f]) ) ) { // with operations
@@ -718,6 +726,7 @@ function ModelUtil() {
                 var matched = 0;
                 for (var obj in resultObj) {
                     if ( typeof(resultObj[obj].matched) != 'undefined' && resultObj[obj].matched.count() == condition ) {
+                        delete resultObj[obj].matched;
                         result[i] = resultObj[obj];
                         ++i
                     }
