@@ -277,6 +277,10 @@ function Config(opt) {
 
         /**
          * Get env config
+         *
+         * @param {string} bundle
+         * @param {string} env
+         *
          * @return {Object} json conf
          **/
         getConf : function(bundle, env) {

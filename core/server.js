@@ -360,6 +360,7 @@ function Server(options) {
     }
 
     var parseCollection = function (collection, obj) {
+
         for(var i = 0, len = collection.length; i<len; ++i) {
             obj[i] = parseObject(collection[i], obj);
         }
@@ -368,102 +369,114 @@ function Server(options) {
     }
 
     var parseObject = function (tmp, obj) {
-        var el = [], key = null;
+        var el      = []
+            , key   = null
+            ;
+
+
         for (var o in tmp) {
-            el[0]   = decodeURIComponent(o)
-            el[1]   = ( typeof(tmp[o]) == 'string' ) ? decodeURIComponent(tmp[o]) : tmp[o];
+            //el[0]   = decodeURIComponent(o);
+            //el[1]   = ( typeof(tmp[o]) == 'string') ? decodeURIComponent(tmp[o]) : tmp[o];
+            el[0]   = o;
+            el[1]   = tmp[o];
 
             //if ( Array.isArray(el[1]) ) {
             //    obj = parseCollection(el[1], obj)
             //} else {
-                if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
-                    key = el[0].replace(/\]/g, '').split(/\[/g);
-                    obj = parseLocalObj(obj, key, 0, el[1])
-                } else {
-                    obj[ el[0] ] = el[1]
-                }
-            //}
+            if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
+                key = el[0].replace(/\]/g, '').split(/\[/g);
+                obj = parseLocalObj(obj, key, 0, el[1])
+            } else {
+                obj[ el[0] ] = el[1]
+            }
         }
 
         return obj
     }
 
     var parseBody = function(body) {
-        if ( /^(\{|%7B)/.test(body) ) {
+
+        if ( /^(\{|\[|\%7B|\%5B)/.test(body) ) {
             try {
-                if ( /(.*)\[(.*)\]/.test(body) ) {
-                    var obj = {}, tmp = JSON.parse(decodeURIComponent(body));
+                var obj = {}, tmp = null;
 
-                    if ( Array.isArray(tmp) ) {
-                        obj = parseCollection(tmp, obj)
-                    } else {
-                        obj = parseObject(tmp, obj)
-                    }
-
-                    return obj
+                if ( /^(\%7B|\%5B)/.test(body) ) {
+                    tmp = JSON.parse(decodeURIComponent(body))
                 } else {
-                    return ( /^\{/.test(body) ) ? JSON.parse(body) : JSON.parse(decodeURIComponent(body));
+                    tmp = JSON.parse(body)
                 }
+
+                if ( Array.isArray(tmp) ) {
+                    obj = parseCollection(tmp, obj)
+                } else {
+                    obj = parseObject(tmp, obj)
+                }
+
+                return obj
             } catch (err) {
                 console.error('[365] could not parse body:\n' + body)
             }
-        }
-        var obj = {}, arr = body.split(/&/g);
-        if ( /(\"false\"|\"true\"|\"on\")/.test(body) )
-            body = body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+
+        } else {
+            var obj = {}, arr = body.split(/&/g);
+            if ( /(\"false\"|\"true\"|\"on\")/.test(body) )
+                body = body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
 
 
-        var el      = {}
-            , value = null
-            , key   = null;
+            var el      = {}
+                , value = null
+                , key   = null;
 
-        for (var i = 0, len = arr.length; i < len; ++i) {
-            if (!arr[i]) continue;
+            for (var i = 0, len = arr.length; i < len; ++i) {
+                if (!arr[i]) continue;
 
-            arr[i] = decodeURIComponent(arr[i]);
+                arr[i] = decodeURIComponent(arr[i]);
 
-            if ( /^\{/.test(arr[i]) || /\=\{/.test(arr[i]) || /\=\[/.test(arr[i]) ) {
-            //if ( /^\{/.test(arr[i]) ) { // is a json string
-                try {
-                    if (/^\{/.test(arr[i])) {
-                        obj = JSON.parse(arr[i]);
-                        break;
-                    } else {
-                        el = arr[i].match(/\=(.*)/);
-                        el[0] =  arr[i].split(/\=/)[0];
-                        obj[ el[0] ] = JSON.parse( el[1] );
-                    }
-
-
-                } catch (err) {
-                    console.error('[parseBody#1] could not parse body:\n' + arr[i])
-                }
-            } else {
-                el = arr[i].split(/=/);
-                if ( /\{\}\"\:/.test(el[1]) ) { //might be a json
+                if ( /^\{/.test(arr[i]) || /\=\{/.test(arr[i]) || /\=\[/.test(arr[i]) ) {
+                    //if ( /^\{/.test(arr[i]) ) { // is a json string
                     try {
-                        el[1] = JSON.parse(el[1])
+                        if (/^\{/.test(arr[i])) {
+                            obj = JSON.parse(arr[i]);
+                            break;
+                        } else {
+                            el = arr[i].match(/\=(.*)/);
+                            el[0] =  arr[i].split(/\=/)[0];
+                            obj[ el[0] ] = JSON.parse( el[1] );
+                        }
+
+
                     } catch (err) {
-                        console.error('[parseBody#2] could not parse body:\n' + el[1])
+                        console.error('[parseBody#1] could not parse body:\n' + arr[i])
+                    }
+                } else {
+                    el = arr[i].split(/=/);
+                    if ( /\{\}\"\:/.test(el[1]) ) { //might be a json
+                        try {
+                            el[1] = JSON.parse(el[1])
+                        } catch (err) {
+                            console.error('[parseBody#2] could not parse body:\n' + el[1])
+                        }
+                    }
+
+                    if ( typeof(el[1]) == 'string' && !/\[object /.test(el[1])) {
+                        key     = null;
+                        el[0]   = decodeURIComponent(el[0]);
+                        el[1]   = decodeURIComponent(el[1]);
+
+                        if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
+                            key = el[0].replace(/\]/g, '').split(/\[/g);
+                            obj = parseLocalObj(obj, key, 0, el[1])
+                        } else {
+                            obj[ el[0] ] = el[1]
+                        }
                     }
                 }
-
-                if ( typeof(el[1]) == 'string' && !/\[object /.test(el[1])) {
-                    key     = null;
-                    el[0]   = decodeURIComponent(el[0]);
-                    el[1]   = decodeURIComponent(el[1]);
-
-                    if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
-                        key = el[0].replace(/\]/g, '').split(/\[/g);
-                        obj = parseLocalObj(obj, key, 0, el[1])
-                    } else {
-                        obj[ el[0] ] = el[1]
-                    }
-                }    
             }
+
+            return obj
         }
 
-        return obj
+
     }
 
     var parseLocalObj = function(obj, key, k, value) {
@@ -487,11 +500,11 @@ function Server(options) {
 
 
                 parseLocalObj(obj[prop], key, k, value)
+
             }
         }
 
         return obj;
-
     }
 
     var onRequest = function() {
@@ -688,6 +701,7 @@ function Server(options) {
                                                 request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
 
                                             obj = parseBody(request.body);
+
                                             if ( typeof(obj) != 'undefined' && obj.count() == 0 && request.body.length > 1 ) {
                                                 try {
                                                     request.put = merge(request.put, JSON.parse(request.body));
