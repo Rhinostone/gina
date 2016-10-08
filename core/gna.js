@@ -18,6 +18,7 @@ var fs      = require('fs');
 var child   = require('child_process');
 var Config  = require('./config');
 var config  = null;
+var tmp     = null;
 var utils   = require('./utils');
 
 var console = utils.logger;
@@ -35,22 +36,61 @@ var Server  = require('./server');//TODO require('./server').http
 // BO cooking..
 var startWithGina = false;
 //copy & backup for utils/cmd/app.js.
-var tmp = process.argv;
+tmp = process.argv;
 
 // filter $ node.. o $ gina  with or without env
-if (process.argv.length >= 4) {
-    startWithGina = true;
+if (tmp.length >= 4) {
+    if ( /\/index\.js/.test(tmp[1]) ) {
+        startWithGina = true;
 
-    try {
-        setContext('paths', JSON.parse(tmp[3]).paths);//And so on if you need to.
-        setContext('processList', JSON.parse(tmp[3]).processList);
-        setContext('gina.process', JSON.parse(tmp[3]).process);
-        //Cleaning process argv.
-        process.argv.splice(3);
-    } catch (err) {}
+        try {
+            setContext('paths', JSON.parse(tmp[3]).paths);//And so on if you need to.
+            setContext('processList', JSON.parse(tmp[3]).processList);
+            setContext('gina.process', JSON.parse(tmp[3]).process);
+            //Cleaning process argv.
+            tmp.splice(3);
+        } catch (err) {}
 
-    //if (process.argv[1] == 'gina' || process.argv[1] == _( getPath('root') + '/gina') ) {
-    //}
+    } else {
+        var matched = null, obj = {};
+        for (var p = 0, len = tmp.length; p < len; ++p ) {
+            if ( /\"paths\"/.test(tmp[p]) ) {
+                obj = JSON.parse(tmp[p]);
+                setContext('paths', obj.paths);//And so on if you need to.
+
+                if ( /\"bundle\"/.test(tmp[p]) ) {
+                    setContext('bundle', obj.bundle);//And so on if you need to.
+                }
+
+                if ( /\"bundles\"/.test(tmp[p]) ) {
+                    setContext('bundles', obj.bundles);//And so on if you need to.
+                }
+
+                if ( /\"config\"/.test(tmp[p]) ) {
+                    if ( typeof(obj.bundle) != 'undefined' )
+                        obj.config.bundle = obj.bundle;
+
+                    setContext('gina.config', obj.config);//And so on if you need to.
+                }
+
+                if ( /\"env\"/.test(tmp[p]) ) {
+                    setContext('env', obj.env);//And so on if you need to.
+                }
+
+                if ( /\"process\"/.test(tmp[p]) ) {
+                    setContext('gina.process', obj.process);//And so on if you need to.
+                }
+
+                if ( /\"processList\"/.test(tmp[p]) ) {
+                    setContext('processList', obj.processList);//And so on if you need to.
+                }
+
+                tmp.splice(3);
+
+                break;
+            }
+        }
+    }
 }
 tmp = null;
 
@@ -58,7 +98,7 @@ setPath( 'node', _(process.argv[0]) );
 
 //var ginaPath = getPath('gina.core');
 var ginaPath = getPath('gina').core;
-if ( typeof(ginaPath) == 'undefined') {
+if ( typeof(ginaPath) == 'undefined' ) {
     ginaPath = _(__dirname);
     setPath('gina.core', ginaPath);
 }
