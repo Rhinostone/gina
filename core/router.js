@@ -457,14 +457,15 @@ function Router(env) {
                             // inheriting SuperController functions & objects
 
                             // exporting config & common methods
-                            Setup.engine        = controller.engine;
-                            Setup.getConfig     = controller.getConfig;
-                            Setup.throwError    = controller.throwError;
-                            Setup.redirect      = controller.redirect;
-                            Setup.render        = controller.render;
-                            Setup.renderJSON    = controller.renderJSON;
-                            Setup.isXMLRequest  = controller.isXMLRequest;
-                            Setup.isCacheless   = controller.isCacheless;
+                            Setup.engine                = controller.engine;
+                            Setup.getConfig             = controller.getConfig;
+                            Setup.throwError            = controller.throwError;
+                            Setup.redirect              = controller.redirect;
+                            Setup.render                = controller.render;
+                            Setup.renderJSON            = controller.renderJSON;
+                            Setup.renderWithoutLayout   = controller.renderWithoutLayout
+                            Setup.isXMLRequest          = controller.isXMLRequest;
+                            Setup.isCacheless           = controller.isCacheless;
 
                             Setup.apply(Setup, arguments);
 
@@ -512,7 +513,7 @@ function Router(env) {
     var processMiddlewares = function(middlewares, controller, action, req, res, next, cb){
 
         var filename        = _(local.conf.bundlePath)
-            , middleware    = {}
+            , middleware    = null
             , constructor   = null
             , re            = new RegExp('^'+filename);
 
@@ -533,21 +534,55 @@ function Router(env) {
 
                 if (local.cacheless) delete require.cache[_(filename, true)];
 
-                middleware = require(_(filename, true));
+                var MiddlewareClass = function() {
+
+                    return function () { // getting rid of the middleware context
+
+                        var Middleware = require(_(filename, true));
+                        // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
+
+
+                        // exporting config & common methods
+                        //Middleware.engine             = controller.engine;
+                        Middleware.prototype.getConfig            = controller.getConfig;
+                        Middleware.prototype.throwError           = controller.throwError;
+                        Middleware.prototype.redirect             = controller.redirect;
+                        Middleware.prototype.render               = controller.render;
+                        Middleware.prototype.renderJSON           = controller.renderJSON;
+                        Middleware.prototype.renderWithoutLayout  = controller.renderWithoutLayout
+                        Middleware.prototype.isXMLRequest         = controller.isXMLRequest;
+                        Middleware.prototype.isCacheless          = controller.isCacheless;
+
+                        return Middleware;
+                    }()
+                }();
+
+                if (local.cacheless) {
+                    require.cache[_(filename, true)].exports = MiddlewareClass;
+                } else {
+                    var MiddlewareClass = require.cache[_(filename, true)].exports
+                }
+
+
+                middleware = new MiddlewareClass();
+
+
+                //middleware = require(_(filename, true));
+
+
                 if ( !middleware[constructor] ) {
                     throwError(res, 501, new Error('contructor [ '+constructor+' ] not found @'+ middlewares[m]).stack);
                 }
 
                 if ( typeof(middleware[constructor]) != 'undefined') {
 
-                    // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
-                    // exporting config & common methods
-                    middleware.getConfig    = controller.getConfig;
-                    middleware.throwError   = controller.throwError;
-                    middleware.redirect     = controller.redirect;
-                    middleware.render       = controller.render;
-                    middleware.renderJSON   = controller.renderJSON;
-                    middleware.isXMLRequest = controller.isXMLRequest;
+
+                    // middleware.getConfig    = controller.getConfig;
+                    // middleware.throwError   = controller.throwError;
+                    // middleware.redirect     = controller.redirect;
+                    // middleware.render       = controller.render;
+                    // middleware.renderJSON   = controller.renderJSON;
+                    // middleware.isXMLRequest = controller.isXMLRequest;
 
                     middleware[constructor](req, res, next,
                         function onMiddlewareProcessed(req, res, next){

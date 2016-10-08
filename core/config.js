@@ -96,10 +96,10 @@ function Config(opt) {
                 loadBundlesConfiguration( function(err, file, routing) {
 
                     if ( typeof(Config.initialized) == 'undefined' ) {
-                        Config.initialized = true;
-                        self.isStandalone = self.Host.isStandalone();
-
-                        Config.instance = self
+                        Config.initialized  = true;
+                        self.isStandalone   = self.Host.isStandalone();
+                        self.bundle         = self.startingApp;
+                        Config.instance     = self
                     }
 
 
@@ -155,8 +155,13 @@ function Config(opt) {
 
     this.getInstance = function(bundle) {
 
-        //self = Config.instance;
+        if ( typeof(Config.instance) == 'undefined' && typeof(getContext('gina')) != 'undefined' ) {
+            Config.instance = merge( self, getContext('gina').config, true );
+            self.envConf = Config.instance.envConf
+        }
+
         var configuration = Config.instance.envConf;
+
         var env = self.env;
 
         Config.instance.Env.parent = Config.instance;
@@ -286,6 +291,9 @@ function Config(opt) {
         getConf : function(bundle, env) {
 
             if ( !self.isStandalone ) {
+                if ( !bundle && typeof(self.bundle) != 'undefined' ) {
+                    var bundle = self.bundle
+                }
                 return ( typeof(self.envConf) != "undefined" ) ? self.envConf[bundle][env] : null;
             } else {
 

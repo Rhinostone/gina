@@ -245,11 +245,12 @@ function ContextHelper(contexts) {
             executionPath   : getPath('root'),
             startingApp     : bundle,
             ginaPath        : getPath('gina').core
-        });
+        }).getInstance(bundle);
 
         if ( typeof(lib) != 'undefined' ) {
 
             try {
+
                 if (!libPath)
                     libPath = conf.bundlesConfiguration.conf[bundle][env].libPath;
 

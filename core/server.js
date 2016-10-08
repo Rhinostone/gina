@@ -1009,7 +1009,6 @@ function Server(options) {
                                 router.route(req, res, next, params)
                             }
                         }
-
                     }
                     matched = true;
                     isRoute = {};
