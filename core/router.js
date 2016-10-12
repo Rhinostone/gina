@@ -557,13 +557,6 @@ function Router(env) {
                     }()
                 }();
 
-                if (local.cacheless) {
-                    require.cache[_(filename, true)].exports = MiddlewareClass;
-                } else {
-                    var MiddlewareClass = require.cache[_(filename, true)].exports
-                }
-
-
                 middleware = new MiddlewareClass();
 
 

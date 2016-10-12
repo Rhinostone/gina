@@ -926,11 +926,11 @@ function Config(opt) {
                 k = i;
                 if ( !(new RegExp(wroot)).test(i) ) {
 
-                    if (i.substr(0, 1) != '/') {
-                        i = '/' + i
-                    }
-
-                    newStatics[ _wroot + i] = files['statics'][k]
+                    // if (i.substr(0, 1) != '/') {
+                    //     i = '/' + i
+                    // }
+                    //newStatics[ _wroot + i] = files['statics'][k]
+                    newStatics[i] = files['statics'][k]
                 } else {
                     newStatics[k] = files['statics'][k]
                 }

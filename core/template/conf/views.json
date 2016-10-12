@@ -1,14 +1,15 @@
 {
   "default": {
     "layout": "{views}/html/layout.html",
-    "noLayout": "{gina}/core/assets/html/nolayout.html",
+    "noLayout": "{gina}/core/asset/html/nolayout.html",
     "forms": "{views}/forms",
     "useRouteNameAsFilename": true,
     "http-metas": {
       "content-type": "text/html"
     },
     "stylesheets": [
-      "/css/default.css"
+      "/js/vendor/gina/toolbar/toolbar.css",
+      "/js/vendor/gina/popin/css/gina-popin.css"
     ],
     "javascripts": []
   }
