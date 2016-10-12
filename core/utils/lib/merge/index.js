@@ -124,7 +124,13 @@ function Merge() {
 
                                     for (var prop in copy) {
                                         if (typeof(clone[ prop ]) == 'undefined') {
-                                            clone[ prop ] = copy[ prop ] // don't override existing
+                                            if ( Array.isArray(copy[ prop ]) && Array.isArray(clone[ prop ]) ) {
+                                                clone[ prop ] = mergeArray(copy[ prop ], clone[ prop ], override);
+                                            } else {
+                                                clone[ prop ] = copy[ prop ] // don't override existing
+                                            }
+                                        } else if ( Array.isArray(copy[ prop ]) && Array.isArray(clone[ prop ]) ) {
+                                            clone[ prop ] = mergeArray(copy[ prop ], clone[ prop ], override);
                                         }
                                     }
 
@@ -145,7 +151,14 @@ function Merge() {
 
                                     for (var prop in copy) {
                                         if ( typeof(copy[ prop ]) != 'undefined' ) {
-                                            clone[prop] = copy[prop]
+                                            //clone[prop] = copy[prop]
+                                            if ( Array.isArray(copy[ prop ]) && Array.isArray(clone[ prop ]) ) {
+                                                clone[ prop ] = mergeArray(copy[ prop ], clone[ prop ], override);
+                                            } else {
+                                                clone[ prop ] = copy[ prop ] // don't override existing
+                                            }
+                                        } else if ( Array.isArray(copy[ prop ]) && Array.isArray(clone[ prop ]) ) {
+                                            clone[ prop ] = mergeArray(copy[ prop ], clone[ prop ], override);
                                         }
                                     }
 

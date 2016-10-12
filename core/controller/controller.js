@@ -154,8 +154,9 @@ function SuperController(options) {
 
             // new declaration && overrides
             var content = action;
-            set('page.gina.env', options.conf.env);
-            set('page.gina.version', getContext('gina').version);
+            set('page.environment.version', getContext('gina').version);
+            set('page.environment.env', options.conf.env);
+            set('page.environment.webroot', options.conf.server.webroot);
             set('page.ext', ext);
             set('page.content', content);
             set('page.namespace', namespace);
@@ -224,7 +225,7 @@ function SuperController(options) {
     this.render = function(_data) {
 
         try {
-            var data = getData(), path = '';
+            var data = getData(), path = '', plugin = null;
             if (!_data) {
                 _data = { page: {}}
             } else if ( _data && !_data['page']) {
@@ -276,7 +277,7 @@ function SuperController(options) {
             // ex.:
             //      /html/inc/_partial.html (BAD)
             //      html/inc/_partial.html (GOOD)
-            //      html/namespace/page.html (GOOD)
+            //      ./html/namespace/page.html (GOOD)
             fs.readFile(path, function (err, content) {
                 if (err) {
                     msg = 'could not open "'+ path +'"' +
@@ -457,6 +458,49 @@ function SuperController(options) {
                         self.throwError(local.res, 500, err.stack);
                     } else {
                         layout = layout.toString();
+                        // adding plugins
+                        if ( hasViews() && local.options.conf.env == 'dev' && !local.options.isWithoutLayout ) {
+                            layout = ''
+                                + '{% set ginaDataInspector                = JSON.parse(JSON.stringify(page)) %}'
+                                + '{% set ginaDataInspector.scripts        = "ignored-by-toolbar" %}'
+                                + '{% set ginaDataInspector.stylesheets    = "ignored-by-toolbar" %}'
+                                + layout.replace('{{ page.scripts }}', '')
+
+                                ;
+
+                            plugin = '\t'
+                                + '{# Gina Toolbar #}'
+                                + '{% set userDataInspector                = page %}'
+                                + '{% set userDataInspector.scripts        = "ignored-by-toolbar" %}'
+                                + '{% set userDataInspector.stylesheets    = "ignored-by-toolbar" %}'
+                                + '{% include "'+getPath('gina').core+'/asset/js/plugin/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector} %}'
+                                + '{# END Gina Toolbar #}'
+                                + '\n<script src="{{ \'/js/vendor/gina/gina.js\' | getUrl() }}"></script>'
+                                + '\n<script src="{{ \'/js/vendor/gina/toolbar/toolbar.js\' | getUrl() }}"></script>'
+                                + '{{ page.scripts }}'
+                                + '\n<script type="text/javascript">'
+                                + ' \n<!--'
+                                + ' \n\tvar ginaFormValidator = null, ginaToolbar = null, ginaStorage = null;'
+                                + ' \n\twindow["onload"] = function() {'
+                                + ' \n\t    gina.isFrameworkLoaded  = true;'
+                                + ' \n\t    ginaStorage             = new gina.Storage({bucket: "gina"});'
+                                + ' \n\t    ginaToolbar             = new Toolbar();'
+                                + ' \n\t    '
+                                + ' \n\t    var ginaPageForms           = JSON.parse(\'{{ JSON.stringify(page.forms) }}\');'
+                                + ' \n\t    ginaFormValidator           = new gina.Validator(ginaPageForms.rules);'
+                                + ' \n\t    window.ginaFormValidator    = ginaFormValidator;'
+                                + ' \n\t}'
+                                + ' \n//-->'
+                                + '\n</script>'
+                            ;
+
+                            layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
+                        } else {
+                            if ( !/page\.scripts/.test(layout) ) {
+                                layout = layout.replace(/<\/body>/i, '\t{{ page.scripts }}\n\t</body>');
+                            }
+                        }
+
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
 
                         try {
@@ -751,12 +795,12 @@ function SuperController(options) {
                         js.type = (resArr[res].options.type) ? resArr[res].options.type : js.type;
                         if (!js.content[resArr[res]._]) {
                             js.content[resArr[res]._] = '<script type="'+ js.type +'" src="'+ resArr[res]._ +'"></script>';
-                            resStr += '\n\t' + js.content[resArr[res]._];
+                            resStr += '\n' + js.content[resArr[res]._];
                         }
 
                     } else {
                         js.content[resArr[res]] = '<script type="'+ js.type +'" src="'+ resArr[res] +'"></script>';
-                        resStr += '\n\t' + js.content[resArr[res]]
+                        resStr += '\n' + js.content[resArr[res]]
                     }
 
 
@@ -774,8 +818,7 @@ function SuperController(options) {
     // }
 
     var getData = function() {
-        //return refToObj( JSON.parse(JSON.stringify(local._data)) )
-            return refToObj( local._data )
+        return refToObj( local._data )
     }
 
     var isValidURL = function(url){

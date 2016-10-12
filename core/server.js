@@ -1028,6 +1028,7 @@ function Server(options) {
             var allowed     = null
                 , conf      = null
                 , uri       = ''
+                , score     = 0
                 , tmpKey    = ''
                 , key       = ''
                 , filename  = ''
@@ -1036,6 +1037,32 @@ function Server(options) {
 
             //webroot test
             if (wroot != '/') {
+                uri = (pathname.replace(wroot, '')).split('/');
+                for (var s in conf.content.statics) {
+                    s = (s.substr(0,1) == '/') ? s.substr(1) : s;
+                    if ( (new RegExp('^/'+s)).test( pathname ) ) {
+                        score = s.length;
+                        if ( score > 0 && score > tmpKey.length) {
+                            tmpKey = s
+                        }
+                    }
+                }
+
+                if ( typeof(conf.content.statics) == 'undefined' || typeof(conf.content.statics[tmpKey]) != 'undefined' ) {
+                    key = tmpKey
+                } else {
+                    key = pathname
+                }
+
+                // we add it into statics
+                if ( withViews && typeof(conf.content.statics[key]) == 'undefined' && conf.content.views.default.views != conf.content.views.default.html) {
+                    conf.content.statics[key] = conf.content.views.default.views +'/'+ uri.join('/')
+                } else if (withViews && typeof(conf.content.statics[key]) == 'undefined') {
+                    conf.content.statics[key] = conf.content.views.default.html +'/'+ uri.join('/') // normal case
+                }
+
+                uri = pathname.split('/');
+                /**
                 uri = (pathname.replace(wroot, '')).split('/');
                 var len = uri.length;
 
@@ -1048,11 +1075,20 @@ function Server(options) {
                 } else if (withViews && typeof(conf.content.statics[key]) == 'undefined') {
                     conf.content.statics[key] = conf.content.views.default.html +'/'+ uri.join('/') // normal case
                 }
+                */
 
             } else {
 
+                for (var s in conf.content.statics) {
+                    s = (s.substr(0,1) == '/') ? s.substr(1) : s;
+                    if ( (new RegExp('^/'+s)).test( pathname ) ) {
+                        score = s.length;
+                        if ( score > 0 && score > tmpKey.length) {
+                            tmpKey = s
+                        }
+                    }
+                }
                 uri = pathname.split('/');
-                tmpKey = uri.splice(1, 1)[0];
 
                 if ( typeof(conf.content.statics) == 'undefined' || typeof(conf.content.statics[tmpKey]) != 'undefined' ) {
                     key = tmpKey
@@ -1074,17 +1110,18 @@ function Server(options) {
                 }
 
                 uri = uri.join('/');
-                if ( /\//.test(key) ) {
+                //if ( !/\.(.*)$/.test(key) ) {
+                if ( /\/$/.test(key) ) {
                     filename = _(path.join(conf.content.statics[key]), true)
                 } else {
-                    filename = _(path.join(conf.content.statics[key], uri), true)
+                    filename = _(path.join(conf.content.statics[key], uri.replace(key, '')), true)
                 }
 
                 fs.exists(filename, function(exists) {
 
                     if(exists) {
 
-                        if (fs.statSync(filename).isDirectory()) filename += '/index.html';
+                        if (fs.statSync(filename).isDirectory()) filename += 'index.html';
 
                         if (cacheless) {
                             delete require.cache[filename]
