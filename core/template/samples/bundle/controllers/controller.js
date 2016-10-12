@@ -5,6 +5,7 @@
  * */
 function {Bundle}Controller() {
     var self = this;
+    // get config/app.json content
     // var appConf = this.getConfig('app');
 
     /**

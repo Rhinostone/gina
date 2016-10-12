@@ -560,22 +560,11 @@ function Router(env) {
                 middleware = new MiddlewareClass();
 
 
-                //middleware = require(_(filename, true));
-
-
                 if ( !middleware[constructor] ) {
                     throwError(res, 501, new Error('contructor [ '+constructor+' ] not found @'+ middlewares[m]).stack);
                 }
 
                 if ( typeof(middleware[constructor]) != 'undefined') {
-
-
-                    // middleware.getConfig    = controller.getConfig;
-                    // middleware.throwError   = controller.throwError;
-                    // middleware.redirect     = controller.redirect;
-                    // middleware.render       = controller.render;
-                    // middleware.renderJSON   = controller.renderJSON;
-                    // middleware.isXMLRequest = controller.isXMLRequest;
 
                     middleware[constructor](req, res, next,
                         function onMiddlewareProcessed(req, res, next){
