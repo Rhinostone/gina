@@ -490,7 +490,7 @@ function Server(options) {
             if (k == key.length-1) {
 
                 if (prop == key[k]) {
-                    obj[prop] = (value) ? value : '';
+                    obj[prop] = ( typeof(value) != 'undefined' ) ? value : '';
                 }
 
             } else if ( key.indexOf(prop) > -1 ) {

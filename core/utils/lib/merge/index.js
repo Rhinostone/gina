@@ -58,18 +58,6 @@ function Merge() {
 
                         target = mergeArray(options, target, override);
 
-                        // for (var a = 0; a < options.length; ++a ) {
-                        //     if ( target.indexOf(options[a]) > -1 && override) {
-                        //         target.splice(target.indexOf(options[a]), 1, options[a])
-                        //     } else {
-                        //         if (newTarget.indexOf(options[a]) == -1)
-                        //             newTarget.push(options[a]);
-                        //     }
-                        // }
-                        //
-                        //  if (newTarget.length > 0 && target.length > 0) {
-                        //      target = newTarget
-                        //  }
                     } else {
                         // Merge the base object
                         for (var name in options) {
