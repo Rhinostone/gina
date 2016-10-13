@@ -1938,7 +1938,7 @@ var gina = ( function onInit() {
             } else {
 
                 var $target = this;
-                var id      = $target.id;
+                var id      = $target.getAttribute('id');
 
                 event += '.' + id;
 
@@ -2065,6 +2065,7 @@ var gina = ( function onInit() {
             if (xhr) {
                 // catching ready state cb
                 xhr.onreadystatechange = function (event) {
+
                     if (xhr.readyState == 4) {
                         // 200, 201, 201' etc ...
                         if( /^2/.test(xhr.status) ) {
@@ -2108,10 +2109,10 @@ var gina = ( function onInit() {
 
                 // catching request progress
                 xhr.onprogress = function(event) {
-                    //console.log(
+                    // console.log(
                     //    'progress position '+ event.position,
                     //    '\nprogress total size '+ event.totalSize
-                    //);
+                    // );
 
                     var percentComplete = (event.position / event.totalSize)*100;
                     var result = {
@@ -2283,7 +2284,7 @@ var gina = ( function onInit() {
             } else {
 
                 var $target = this;
-                var id      = $target.id;
+                var id      = $target.getAttribute('id');
 
                 event += '.' + id;
 
@@ -2471,6 +2472,7 @@ var gina = ( function onInit() {
             if ( typeof(formId) == 'string') {
                 formId = formId.replace(/\#/, '')
             } else if ( typeof(formId) == 'object' ) { // weird exception
+
                 var $target = formId.form;
                 var _id = $target.getAttribute('id') || 'form.'+makeId();
 
@@ -2749,6 +2751,7 @@ var gina = ( function onInit() {
             if (xhr) {
                 // catching ready state cb
                 xhr.onreadystatechange = function (event) {
+
                     if (xhr.readyState == 4) {
                         // 200, 201, 201' etc ...
                         if( /^2/.test(xhr.status) ) {
@@ -2761,6 +2764,7 @@ var gina = ( function onInit() {
 
                                 self.eventData.success = result;
                                 //console.log('sending response ...');
+                                //console.log('event is ', 'success.' + id);
                                 //console.log('making response ' + JSON.stringify(result, null, 4));
 
                                 triggerEvent(instance, $form, 'success.' + id, result)
@@ -2792,10 +2796,10 @@ var gina = ( function onInit() {
 
                 // catching request progress
                 xhr.onprogress = function(event) {
-                    //console.log(
+                    // console.log(
                     //    'progress position '+ event.position,
                     //    '\nprogress total size '+ event.totalSize
-                    //);
+                    // );
 
                     var percentComplete = (event.position / event.totalSize)*100;
                     var result = {
@@ -2965,16 +2969,19 @@ var gina = ( function onInit() {
 
                         ++i
                     } else {
-                        if ( typeof($allForms[f].id) == 'object' ) { // weird exception
+                        // weird exception when having in the form an element with name="id"
+                        if ( typeof($allForms[f].id) == 'object' ) {
+                            delete self.$forms[$allForms[f].id];
 
-                            var $target = $allForms[f].id.form;
-                            var _id = $target.getAttribute("id") || 'form.'+makeId();
-                            //console.log('real form ' + _id, $target);
-                            $target.setAttribute('id', _id);// just in case
+                            var $target = $allForms[f];
+
+                            var _id = $allForms[f].attributes.getNamedItem('id').nodeValue || 'form.'+makeId();
+                            $target.setAttribute('id', _id);
+                            $target['id'] = _id;
+
                             self.$forms[_id] = merge({}, formProto);
                             self.$forms[_id]['target'] = $target;
                             self.$forms[_id]['id'] = _id;
-
 
                             if (customRule) {
                                 bindForm($target, customRule)
@@ -3251,7 +3258,7 @@ var gina = ( function onInit() {
                             formProto['id']     = event['target'].getAttribute('id');
 
                             self.$forms[event.target.id] = formProto;
-                            console.log('sending ... ', result['data']);
+                            //console.log('sending ... ', result['data']);
                             //console.log('just before sending ', self.$forms[event.target.id]);
                             self.$forms[event.target.id].send(result['data']);
 
@@ -3293,12 +3300,26 @@ var gina = ( function onInit() {
 
                 //console.log('$buttons ', $buttons.length, $buttons);
 
-
+                var onclickAttribute = null;
                 for (var b=0, len=$buttons.length; b<len; ++b) {
 
                     if ($buttons[b].type == 'submit' || $buttons[b].attributes.getNamedItem('data-submit') ) {
 
                         $submit = $buttons[b];
+
+                        if ($submit.tagName == 'A') { // without this test, XHR callback is ignored
+                            onclickAttribute = $submit.getAttribute('onclick');
+                            if ( !onclickAttribute ) {
+                                $submit.setAttribute('onclick', 'return false;')
+                            } else if ( !/return false/) {
+                                if ( /\;$/.test(onclickAttribute) ) {
+                                    onclickAttribute += 'return false;'
+                                } else {
+                                    onclickAttribute += '; return false;'
+                                }
+                            }
+                        }
+
                         if (!$submit['id']) {
 
                             evt = 'click.'+ makeId();
@@ -3375,7 +3396,6 @@ var gina = ( function onInit() {
                             self.events[evt] = $submit.id;
                             procced(evt, $submit)
                         }
-
                     }
                 }
             }
@@ -3385,11 +3405,8 @@ var gina = ( function onInit() {
             evt = 'submit';
 
             if ( typeof(self.events[evt]) != 'undefined' && self.events[evt] == _id ) {
-                //removeListener(instance, element, name, callback)
                 removeListener(instance, $form, evt)
-            }/** else {
-                self.events[evt] = _id
-            }*/
+            }
 
             //console.log('adding submit event ', evt, _id, self.events);
             // submit proxy
@@ -3573,7 +3590,7 @@ var gina = ( function onInit() {
                         $fields[field].setAttribute('data-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
                     }
 
-                    console.log('data => ',  d['toData']());
+                    //console.log('data => ',  d['toData']());
 
                     //calling back
                     cb({
