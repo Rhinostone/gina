@@ -1048,7 +1048,7 @@ function Config(opt) {
 
                         } else {
 
-                            key = files[i].replace('.json', '');
+                            key = files[i].replace('.json', '').replace(/\-/g, '.');
                             try {
 
                                 if (cacheless) {
