@@ -2973,20 +2973,19 @@ var gina = ( function onInit() {
                         if ( typeof($allForms[f].id) == 'object' ) {
                             delete self.$forms[$allForms[f].id];
 
-                            var $target = $allForms[f];
-
                             var _id = $allForms[f].attributes.getNamedItem('id').nodeValue || 'form.'+makeId();
-                            $target.setAttribute('id', _id);
-                            $target['id'] = _id;
+
+                            $allForms[f].setAttribute('id', _id);
+                            $allForms[f]['id'] = _id;
 
                             self.$forms[_id] = merge({}, formProto);
-                            self.$forms[_id]['target'] = $target;
+                            self.$forms[_id]['target'] = $allForms[f];
                             self.$forms[_id]['id'] = _id;
 
                             if (customRule) {
-                                bindForm($target, customRule)
+                                bindForm($allForms[f], customRule)
                             } else {
-                                bindForm($target)
+                                bindForm($allForms[f])
                             }
                         } else {
 
@@ -3034,7 +3033,7 @@ var gina = ( function onInit() {
         }
 
         var bindForm = function($form, customRule) {
-            var _id = $form.id;
+            var _id = $form.getAttribute('id');
             if ( typeof(_id) != 'string' ) {
                 try {
                     _id = $form.getAttribute('id') || 'form.'+makeId();
@@ -3179,15 +3178,7 @@ var gina = ( function onInit() {
 
                     procced = function ($el, evt) {
 
-
-
                         // recover default state only on value === true || false
-
-                        // addListener(instance, $el, 'change', function(event) {
-                        //     cancelEvent(event);
-                        //
-                        //     console.log('changed state ', event.target);
-                        // })
                         addListener(instance, $el, evt, function(event) {
 
                             //cancelEvent(event);
@@ -3212,7 +3203,6 @@ var gina = ( function onInit() {
 
                 } else if ( typeof(type) != 'undefined' && type == 'radio' ) {
                     evt = 'click.' + $inputs[i].id;
-
 
                     procced = function ($el, evt) {
                         addListener(instance, $el, evt, function(event) {
@@ -3291,14 +3281,16 @@ var gina = ( function onInit() {
                 }
 
                 $buttonsTMP = $form.getElementsByTagName('a');
+                console.log('$form ', _id);
                 if ( $buttonsTMP.length > 0 ) {
                     for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                        //console.log('   pushing ', $buttonsTMP[b]);
                         $buttons.push($buttonsTMP[b])
                     }
                 }
 
 
-                //console.log('$buttons ', $buttons.length, $buttons);
+
 
                 var onclickAttribute = null;
                 for (var b=0, len=$buttons.length; b<len; ++b) {
@@ -3308,7 +3300,9 @@ var gina = ( function onInit() {
                         $submit = $buttons[b];
 
                         if ($submit.tagName == 'A') { // without this test, XHR callback is ignored
+                            console.log('a#$buttons ', $buttonsTMP[b]);
                             onclickAttribute = $submit.getAttribute('onclick');
+                            //console.log('found link ', $submit);
                             if ( !onclickAttribute ) {
                                 $submit.setAttribute('onclick', 'return false;')
                             } else if ( !/return false/) {
