@@ -7,8 +7,8 @@
  */
 
 var os      = require('os');
-var merge   = require('./../merge');
-var console = require('./../logger');
+var merge   = require('./../lib/merge');
+var console = require('./../lib/logger');
 
 /**
  * ContextHelper

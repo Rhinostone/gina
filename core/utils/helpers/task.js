@@ -2,7 +2,7 @@ var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
 var spawn           = require('child_process').spawn;
 
-var console         = require('../logger');
+var console         = require('../lib/logger');
 
 module.exports = function () {
 

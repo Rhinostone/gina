@@ -10,8 +10,8 @@ var fs = require('fs');
 var Events = require('events');
 var Path = require('path');
 
-var merge = require('./../merge');
-var console = require('./../logger');
+var merge = require('./../lib/merge');
+var console = require('./../lib/logger');
 
 var ContextHelper = require('./context');
 var e =  new Events.EventEmitter();
