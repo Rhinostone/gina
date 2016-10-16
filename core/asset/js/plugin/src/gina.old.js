@@ -2415,27 +2415,29 @@ var gina = ( function onInit() {
                 $buttonsTMP = $form.target.getElementsByTagName('button');
                 if ( $buttonsTMP.length > 0 ) {
                     for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                        $buttons.push($buttonsTMP[b])
+                        if ($buttonsTMP[b].type == 'submit')
+                            $buttons.push($buttonsTMP[b])
                     }
                 }
 
                 $buttonsTMP = $form.target.getElementsByTagName('a');
                 if ( $buttonsTMP.length > 0 ) {
                     for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                        $buttons.push($buttonsTMP[b])
+                        if ($buttonsTMP[b].attributes.getNamedItem('data-submit'))
+                            $buttons.push($buttonsTMP[b])
                     }
                 }
 
                 for (var b=0, len=$buttons.length; b<len; ++b) {
-                    if ($buttons[b].type == 'submit' || $buttons[b].attributes.getNamedItem('data-submit') ) {
-                        $submit = $buttons[b];
-                        //console.log( $submit['id'] );
-                        if ( typeof(self.events[$submit['id']]) != 'undefined' ) {
-                            console.log('removing ', self.events[$submit['id']]);
-                            removeListener(instance, $submit, self.events[$submit['id']]);
-                            delete self.events[$submit['id']];
-                        }
+
+                    $submit = $buttons[b];
+                    //console.log( $submit['id'] );
+                    if ( typeof(self.events[$submit['id']]) != 'undefined' ) {
+                        console.log('removing ', self.events[$submit['id']]);
+                        removeListener(instance, $submit, self.events[$submit['id']]);
+                        delete self.events[$submit['id']];
                     }
+
                 }
 
                 delete self['$forms'][formId];
@@ -3276,121 +3278,117 @@ var gina = ( function onInit() {
                 $buttonsTMP = $form.getElementsByTagName('button');
                 if ( $buttonsTMP.length > 0 ) {
                     for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                        $buttons.push($buttonsTMP[b])
+                        if ($buttonsTMP[b].type == 'submit')
+                            $buttons.push($buttonsTMP[b])
                     }
                 }
 
                 $buttonsTMP = $form.getElementsByTagName('a');
-                console.log('$form ', _id);
                 if ( $buttonsTMP.length > 0 ) {
                     for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                        //console.log('   pushing ', $buttonsTMP[b]);
-                        $buttons.push($buttonsTMP[b])
+                        if ( $buttonsTMP[b].attributes.getNamedItem('data-submit'))
+                            $buttons.push($buttonsTMP[b])
                     }
                 }
-
-
 
 
                 var onclickAttribute = null;
                 for (var b=0, len=$buttons.length; b<len; ++b) {
 
-                    if ($buttons[b].type == 'submit' || $buttons[b].attributes.getNamedItem('data-submit') ) {
+                    $submit = $buttons[b];
 
-                        $submit = $buttons[b];
+                    if ($submit.tagName == 'A') { // without this test, XHR callback is ignored
+                        //console.log('a#$buttons ', $buttonsTMP[b]);
+                        onclickAttribute = $submit.getAttribute('onclick');
 
-                        if ($submit.tagName == 'A') { // without this test, XHR callback is ignored
-                            console.log('a#$buttons ', $buttonsTMP[b]);
-                            onclickAttribute = $submit.getAttribute('onclick');
-                            //console.log('found link ', $submit);
-                            if ( !onclickAttribute ) {
-                                $submit.setAttribute('onclick', 'return false;')
-                            } else if ( !/return false/) {
-                                if ( /\;$/.test(onclickAttribute) ) {
-                                    onclickAttribute += 'return false;'
-                                } else {
-                                    onclickAttribute += '; return false;'
-                                }
+                        if ( !onclickAttribute ) {
+                            $submit.setAttribute('onclick', 'return false;')
+                        } else if ( !/return false/) {
+                            if ( /\;$/.test(onclickAttribute) ) {
+                                onclickAttribute += 'return false;'
+                            } else {
+                                onclickAttribute += '; return false;'
                             }
                         }
+                    }
 
-                        if (!$submit['id']) {
+                    if (!$submit['id']) {
 
-                            evt = 'click.'+ makeId();
-                            $submit['id'] = evt;
-                            $submit.setAttribute( 'id', evt);
+                        evt = 'click.'+ makeId();
+                        $submit['id'] = evt;
+                        $submit.setAttribute( 'id', evt);
 
-                        } else {
-                            evt = $submit['id'];
-                        }
-                        
-                        procced = function (evt, $submit) {
-                            // attach submit events
-                            addListener(instance, $submit, evt, function(event) {
-                                //console.log('submiting ', evt, $submit);
-                                // start validation
-                                cancelEvent(event);
-                                // getting fields & values
-                                var $fields     = {}
-                                    , fields    = { '_length': 0 }
-                                    , name      = null
-                                    , value     = 0
-                                    , type      = null;
+                    } else {
+                        evt = $submit['id'];
+                    }
 
-                                for (var i = 0, len = $form.length; i<len; ++i) {
-                                    name = $form[i].getAttribute('name');
-                                    if (!name) continue;
+                    procced = function (evt, $submit) {
+                        // attach submit events
+                        addListener(instance, $submit, evt, function(event) {
+                            //console.log('submiting ', evt, $submit);
+                            // start validation
+                            cancelEvent(event);
+                            // getting fields & values
+                            var $fields     = {}
+                                , fields    = { '_length': 0 }
+                                , name      = null
+                                , value     = 0
+                                , type      = null;
 
-                                    // TODO - add switch cases against tagName (checkbox/radio)
+                            for (var i = 0, len = $form.length; i<len; ++i) {
+                                name = $form[i].getAttribute('name');
+                                if (!name) continue;
 
-                                    if ( typeof($form[i].type) != 'undefined' && $form[i].type == 'radio' ) {
-                                        //console.log('radio ', name, $form[i].checked, $form[i].value);
-                                        if ( $form[i].checked == true ) {
-                                            fields[name] = $form[i].value;
-                                        }
+                                // TODO - add switch cases against tagName (checkbox/radio)
 
-
-                                    } else {
-                                        fields[name]    = $form[i].value;
+                                if ( typeof($form[i].type) != 'undefined' && $form[i].type == 'radio' ) {
+                                    //console.log('radio ', name, $form[i].checked, $form[i].value);
+                                    if ( $form[i].checked == true ) {
+                                        fields[name] = $form[i].value;
                                     }
-                                    $fields[name]   = $form[i];
-                                    // reset filed error data attributes
-                                    $fields[name].setAttribute('data-errors', '');
 
-                                    ++fields['_length']
-                                }
-
-                                //console.log('$fields =>\n' + $fields);
-
-                                if ( fields['_length'] == 0 ) { // nothing to validate
-                                    delete fields['_length'];
-                                    var result = {
-                                        'errors'    : [],
-                                        'isValid'   : function() { return true },
-                                        'data'      : fields
-                                    };
-
-                                    triggerEvent(instance, $form, 'validate.' + _id, result)
 
                                 } else {
-                                    //console.log('testing rule [ '+_id.replace(/\-/g, '.') +' ]\n'+ JSON.stringify(rule, null, 4));
-                                    //console.log('validating ', $form, fields, rule);
-                                    validate($form, fields, $fields, rule, function onValidation(result){
-                                        //console.log('validation result ', 'validate.' + _id, JSON.stringify(result.data, null, 2));
-                                        //console.log('events ', 'validate.' + _id, self.events )
-                                        triggerEvent(instance, $form, 'validate.' + _id, result)
-                                    })
+                                    fields[name]    = $form[i].value;
                                 }
+                                $fields[name]   = $form[i];
+                                // reset filed error data attributes
+                                $fields[name].setAttribute('data-errors', '');
 
-                            });
-                        }
+                                ++fields['_length']
+                            }
 
+                            //console.log('$fields =>\n' + $fields);
 
-                        if ( typeof(self.events[evt]) == 'undefined' || self.events[evt] != $submit.id ) {
-                            self.events[evt] = $submit.id;
-                            procced(evt, $submit)
-                        }
+                            if ( fields['_length'] == 0 ) { // nothing to validate
+                                delete fields['_length'];
+                                var result = {
+                                    'errors'    : [],
+                                    'isValid'   : function() { return true },
+                                    'data'      : fields
+                                };
+
+                                triggerEvent(instance, $form, 'validate.' + _id, result)
+
+                            } else {
+                                //console.log('testing rule [ '+_id.replace(/\-/g, '.') +' ]\n'+ JSON.stringify(rule, null, 4));
+                                //console.log('validating ', $form, fields, rule);
+                                validate($form, fields, $fields, rule, function onValidation(result){
+                                    //console.log('validation result ', 'validate.' + _id, JSON.stringify(result.data, null, 2));
+                                    //console.log('events ', 'validate.' + _id, self.events )
+                                    triggerEvent(instance, $form, 'validate.' + _id, result)
+                                })
+                            }
+
+                        });
                     }
+
+
+                    if ( typeof(self.events[evt]) == 'undefined' || self.events[evt] != $submit.id ) {
+                        self.events[evt] = $submit.id;
+                        procced(evt, $submit)
+                    }
+
                 }
             }
 
@@ -3862,13 +3860,14 @@ var gina = ( function onInit() {
                 name    = $el.getAttribute(attr);
                 if ( $el.tagName == 'A' ) {
                     url = $el.getAttribute('href');
-                    if (url == '' || url =='#') {
+                    if (url == '' || url =='#' || /\#/.test(url) ) {
                         url = null
                     }
                 }
 
                 if ( !url && typeof( $el.getAttribute('data-gina-popin-url') ) != 'undefined') {
-                    url = $el.getAttribute('data-gina-popin-url')
+                    url = $el.getAttribute('data-gina-popin-url');
+
                 }
 
                 if (!url) {

@@ -18,13 +18,15 @@
     "email": "gina@rhinosotne.com"
   },
   "copyright": "Copyright (c) 2009-2016 Rhinostone <gina@rhinostone.com>",
-  "_bundledDependencies": [ {"express": "4.x"}, {"swig": ""}, {"multiparty": ""}, {"colors": ""} ],
   "ginaDependencies": {
-    "express": "4.x",
-    "swig": "",
-    "multiparty": "",
     "colors": "",
-    "engine.io": ""
+    "engine.io": "",
+    "engine.io-client": "",
+    "express": "4.x",
+    "multiparty": "",
+    "requirejs": "",
+    "node-uuid": "",
+    "swig": ""
   },
   "engines": {
     "node": ">=0.10.22"

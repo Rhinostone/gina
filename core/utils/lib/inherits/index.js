@@ -17,7 +17,6 @@
  * @api Public
  * */
 function Inherits(a, b) {
-    //var self = this;
 
     /**
      * init
@@ -87,4 +86,11 @@ function Inherits(a, b) {
     return init
 };
 
-module.exports = Inherits()
+
+if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
+    // Publish as node.js module
+    module.exports = Inherits()
+} else if ( typeof(define) === 'function' && define.amd) {
+    // Publish as AMD module
+    define( function() { return Inherits() })
+}

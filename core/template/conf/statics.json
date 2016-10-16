@@ -1,5 +1,5 @@
 {
   "favicon.ico": "{views}/favicon.ico",
   "common": "{root}/common",
-  "js/vendor/gina": "{gina}/core/asset/js/plugin"
+  "js/vendor/gina": "{gina}/core/asset/js/plugin/dist"
 }

@@ -1,0 +1,24 @@
+{
+  "baseUrl": "./src",
+  "paths": {
+    "requireLib": "../../../../../node_modules/requirejs/require",
+    "uuid"      : "../../../../../node_modules/node-uuid/uuid",
+    "engine.io" : "../../../../../node_modules/engine.io-client/engine.io",
+
+    "core"      : "core",
+    "utils/merge" : "../../../../utils/lib/merge/index",
+    "utils/inherits": "../../../../utils/lib/inherits/index",
+    "utils/collection": "../../../../utils/lib/collection/src/index",
+    "utils/helpers/dateFormat": "../../../../utils/lib/helpers/dateFormat"
+  },
+  "include": [
+    "requireLib",
+    "uuid",
+    "engine.io",
+    "utils/collection"
+  ],
+  "name": "gina",
+  "out": "./dist/gina.min.js",
+  "generateSourceMaps": true,
+  "preserveLicenseComments": false
+}

@@ -1,0 +1,8 @@
+{
+  "baseUrl": "./src",
+
+  "name": "loader/main",
+  "out": "./dist/gina.onload.min.js",
+  "generateSourceMaps": true,
+  "preserveLicenseComments": false
+}

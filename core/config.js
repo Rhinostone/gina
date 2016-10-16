@@ -786,7 +786,7 @@ function Config(opt) {
         if ( hasViews && typeof(self.userConf[bundle][env].template) != 'undefined' && self.userConf[bundle][env].template == false) {
             conf[bundle][env].template = false
         } else if (hasViews) {
-            conf[bundle][env].template = true
+            conf[bundle][env].template = true;
         }
 
         //Set default keys/values for views
@@ -903,6 +903,7 @@ function Config(opt) {
 
                 files['views'] = merge(files['views'], defaultViews)
             }
+
         } catch (err) {
             callback(err)
         }
@@ -996,6 +997,18 @@ function Config(opt) {
         if (hasViews && typeof(files['views'].default.forms) != 'undefined') {
             try {
                 files['forms'] = loadForms(files['views'].default.forms)
+            } catch (err) {
+                callback(err)
+            }
+        }
+
+        // plugin loader (frontend framework)
+        if ( hasViews && typeof(files['views'].default.pluginLoader) != 'undefined' ) {
+            var loaderSrcPath = null;
+            loaderSrcPath = files['views'].default.pluginLoader.replace(/(\{src\:|\})/g, '');
+            try {
+                // will get a buffer
+                files['views'].default.pluginLoader = fs.readFileSync(loaderSrcPath)
             } catch (err) {
                 callback(err)
             }

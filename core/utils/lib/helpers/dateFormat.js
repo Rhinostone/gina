@@ -227,4 +227,11 @@ function DateFormatHelper() {
     }
 
 };
-module.exports = DateFormatHelper
+
+if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
+    // Publish as node.js module
+    module.exports = DateFormatHelper
+} else if ( typeof(define) === 'function' && define.amd) {
+    // Publish as AMD module
+    define( function() { return DateFormatHelper })
+}

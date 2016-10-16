@@ -252,4 +252,10 @@ function Merge() {
     return browse
 }
 
-module.exports = Merge()
+if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
+    // Publish as node.js module
+    module.exports = Merge()
+} else if ( typeof(define) === 'function' && define.amd) {
+    // Publish as AMD module
+    define( function() { return Merge() })
+}
