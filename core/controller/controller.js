@@ -473,31 +473,34 @@ function SuperController(options) {
                                 + '{% set userDataInspector                = page %}'
                                 + '{% set userDataInspector.scripts        = "ignored-by-toolbar" %}'
                                 + '{% set userDataInspector.stylesheets    = "ignored-by-toolbar" %}'
-                                + '{% include "'+getPath('gina').core+'/asset/js/plugin/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector} %}'
+                                + '{% include "'+getPath('gina').core+'/asset/js/plugin/src/core/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector} %}'
                                 + '{# END Gina Toolbar #}'
-                                + '\n<script src="{{ \'/js/vendor/gina/gina.js\' | getUrl() }}"></script>'
-                                + '\n<script src="{{ \'/js/vendor/gina/toolbar/toolbar.js\' | getUrl() }}"></script>'
-                                + '{{ page.scripts }}'
+
                                 + '\n<script type="text/javascript">'
                                 + ' \n<!--'
-                                + ' \n\tvar ginaFormValidator = null, ginaToolbar = null, ginaStorage = null;'
-                                + ' \n\twindow["onload"] = function() {'
-                                + ' \n\t    gina.isFrameworkLoaded  = true;'
-                                + ' \n\t    ginaStorage             = new gina.Storage({bucket: "gina"});'
-                                + ' \n\t    ginaToolbar             = new Toolbar();'
-                                + ' \n\t    '
-                                + ' \n\t    var ginaPageForms           = JSON.parse(\'{{ JSON.stringify(page.forms) }}\');'
-                                + ' \n\t    ginaFormValidator           = new gina.Validator(ginaPageForms.rules);'
-                                + ' \n\t    window.ginaFormValidator    = ginaFormValidator;'
-                                + ' \n\t}'
-                                + ' \n//-->'
+                                + '\n' + local.options.views.default.pluginLoader.toString()
+                                + '//-->'
                                 + '\n</script>'
+
+                                + '\n<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
+
+                                + '{{ page.scripts }}'
                             ;
 
                             layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
                         } else {
                             if ( !/page\.scripts/.test(layout) ) {
-                                layout = layout.replace(/<\/body>/i, '\t{{ page.scripts }}\n\t</body>');
+                                plugin = '\t'
+                                    + '\n<script type="text/javascript">'
+                                    + ' \n<!--'
+                                    + '\n' + local.options.views.default.pluginLoader.toString()
+                                    + '//-->'
+                                    + '\n</script>'
+
+                                    + '\n<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
+                                ;
+
+                                layout = layout.replace(/<\/body>/i, plugin + '\t{{ page.scripts }}\n\t</body>');
                             }
                         }
 

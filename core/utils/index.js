@@ -42,6 +42,7 @@ function Utils() {
         helpers     : _require('./lib/helpers'),
         //this one must move to Dev since it's dev related
         Model       : _require('./lib/model'),
+        Collection  : _require('./lib/collection'),
         merge       : _require('./lib/merge'),
         generator   : _require('./lib/generator'),//move to gina.dev
         Proc        : _require('./lib/proc'),
@@ -50,7 +51,7 @@ function Utils() {
         math        : _require('./lib/math'),
         url         : _require('./lib/url'),
         cmd         : _require('./lib/cmd'),
-        multiparty  : _require('multiparty'),
+        //multiparty  : _require('multiparty'),
         Validator   : _require('./lib/validator')
     };
 
