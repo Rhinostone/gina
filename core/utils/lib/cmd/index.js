@@ -22,7 +22,7 @@
  */
 
 var fs      = require('fs');
-var helpers = require('../helpers');
+var helpers = require('../../helpers');
 
 var cmd = {},
     argCount = process.argv.length - 2;

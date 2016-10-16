@@ -39,7 +39,7 @@ function Utils() {
         Config      : _require('./lib/config'),
         //dev     : require('./lib/dev'),//must be at the same level than gina.utils => gina.dev
         inherits    : _require('./lib/inherits'),
-        helpers     : _require('./lib/helpers'),
+        helpers     : _require('./helpers'),
         //this one must move to Dev since it's dev related
         Model       : _require('./lib/model'),
         Collection  : _require('./lib/collection'),
@@ -52,7 +52,7 @@ function Utils() {
         url         : _require('./lib/url'),
         cmd         : _require('./lib/cmd'),
         //multiparty  : _require('multiparty'),
-        Validator   : _require('./lib/validator')
+        Validator   : _require('./plugin/validator')
     };
 
     /**
