@@ -8,23 +8,32 @@
  * Must be placed before gina <script> tag
  *
  * */
-//var ginaFormValidator = null, ginaToolbar = null, ginaStorage = null;
+var ginaFormValidator = null;
+var ginaToolbar = null;
 function onGinaLoaded(gina) {
 
     var options = {
-        "env"     : "{{ page.environment.env }}",
-        "version" : "{{ page.environment.version }}",
-        "webroot" : "{{ page.environment.webroot }}"
+        /**@js_externs env*/
+        env     : '{{ page.environment.env }}',
+        /**@js_externs version*/
+        version : '{{ page.environment.version }}',
+        /**@js_externs webroot*/
+        webroot : '{{ page.environment.webroot }}'
     };
 
     gina["setOptions"](options);
-    gina["isFrameworkLoaded"]  = true;
+    gina["isFrameworkLoaded"]       = true;
+    var ginaPageForms               = JSON.parse('{{ JSON.stringify(page.forms) }}');
 
-    //ginaStorage             = new gina.Storage({bucket: "gina"});
-    //ginaToolbar             = new Toolbar();
-    //var ginaPageForms           = JSON.parse(\'{{ JSON.stringify(page.forms) }}\');
-    //ginaFormValidator           = new gina.Validator(ginaPageForms.rules);
-    //window.ginaFormValidator    = ginaFormValidator;
+    // all required must be listed in `src/gina.js` defined modules list
+    var Validator   = require('gina/validator');
+    ginaFormValidator               = new Validator(ginaPageForms.rules);
+    window['ginaFormValidator']     = ginaFormValidator;
+
+    if (options.env == 'dev') {
+        var Toolbar     = require('gina/toolbar');
+        ginaToolbar     = new Toolbar();
+    }
 }
 
 if (document.addEventListener) {

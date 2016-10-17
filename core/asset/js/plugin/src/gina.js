@@ -81,7 +81,7 @@
  * Usage: var gina = require('gina');
  *
  * */
-define('gina', [ 'require', 'core/main' ], function onCoreInit(require) {
+define('gina', [ 'require', 'core/main', 'gina/toolbar', 'gina/validator' ], function onCoreInit(require) {
 
     var core    = require('./core/main');
 
@@ -91,6 +91,7 @@ define('gina', [ 'require', 'core/main' ], function onCoreInit(require) {
             , evt   = null
             , name  = 'ginaready'
             , args  = core // returning core instance
+        ;
 
         if (window.CustomEvent || document.createEvent) {
 
@@ -135,7 +136,18 @@ define('gina', [ 'require', 'core/main' ], function onCoreInit(require) {
 });
 
 // exposing packages
-requirejs(['gina', 'uuid', 'utils/collection']);
+requirejs([
+    "gina",
+    "gina/validator",
+    "gina/storage",
+    "gina/toolbar",
+    "gina/popin",
+    "utils/merge",
+    "utils/inherits",
+    "utils/collection",
+    "vendor/uuid",
+    "jquery"
+]);
 
 
 // catching freelancer script load event

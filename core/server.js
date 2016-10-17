@@ -3,6 +3,7 @@ var fs              = require('fs');
 var path            = require('path');
 var EventEmitter    = require('events').EventEmitter;
 var express         = require('express');
+var zlib            = require('zlib'); // gzip / deflate
 var url             = require('url');
 var Config          = require('./config');
 var Router          = require('./router');
@@ -151,6 +152,7 @@ function Server(options) {
             , main                  = ''
             , tmpContent            = ''
             , i                     = 0
+            , file                  = null // template file
             , wroot                 = null
             , hasWebRoot            = false
             , webrootAutoredirect   = null
@@ -214,8 +216,14 @@ function Server(options) {
                     tmp = tmpContent;
                     //Adding important properties; also done in core/config.
                     for (var rule in tmp){
+                        tmp[rule +'@'+ appName] = tmp[rule];
+                        delete tmp[rule];
+                        file = rule;
+                        rule = rule +'@'+ appName;
+
+
                         tmp[rule].bundle        = (tmp[rule].bundle) ? tmp[rule].bundle : apps[i]; // for reverse search
-                        tmp[rule].param.file    = ( typeof(tmp) != 'string' && typeof(tmp[rule].param.file) != 'undefined' ) ? tmp[rule].param.file : rule; // get template file
+                        tmp[rule].param.file    = ( typeof(tmp) != 'string' && typeof(tmp[rule].param.file) != 'undefined' ) ? tmp[rule].param.file : file; // get template file
                         // by default, method is inherited from the request
                         if (
                             hasWebRoot && typeof(tmp[rule].param.path) != 'undefined' && typeof(tmp[rule].param.ignoreWebRoot) == 'undefined'
@@ -295,11 +303,12 @@ function Server(options) {
                         }
 
                         if ( self.isStandalone && tmp[rule]) {
-                            if (apps[i] != self.appName) {
-                                standaloneTmp[apps[i] + '-' + rule] = JSON.parse(JSON.stringify(tmp[rule]))
-                            } else {
+                            // deprecated: rules are now unique per bundle : rule@bundle
+                            //if (apps[i] != self.appName) {
+                            //    standaloneTmp[apps[i] + '-' + rule] = JSON.parse(JSON.stringify(tmp[rule]))
+                            //} else {
                                 standaloneTmp[rule] = JSON.parse(JSON.stringify(tmp[rule]))
-                            }
+                            //}
                         }
                     }// EO for
 
@@ -1136,8 +1145,8 @@ function Server(options) {
                                 try {
                                     res.setHeader("Content-Type", getHead(filename));
                                     if (cacheless) {
-                                        // source maps integration for javascript
-                                        if ( /\.js$/.test(filename) && fs.existsSync(filename +'.map') ) {
+                                        // source maps integration for javascript & css
+                                        if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') ) {
                                             res.setHeader("X-SourceMap", pathname +'.map')
                                         }
 

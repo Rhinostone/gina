@@ -1,21 +1,10 @@
-define('core/main', [ 'require', 'utils/merge', 'utils/helpers/dateFormat' ], function (require) {
+define('core/main', [ 'require', 'utils/merge', 'helpers/dateFormat' ], function (require) {
     var merge           = require('utils/merge')
-        , dateFormat    = require('utils/helpers/dateFormat')()
+        , dateFormat    = require('helpers/dateFormat')()
 
         , proto         = { 'isFrameworkLoaded': false, 'hasPopinHandler': false, 'options': {} }
         , events        = [ 'ready' ]
         ;
-
-    // var components = {
-    //     'accordion'     : require('./accordion'),
-    //     'collapsable'   : require('./collapsable'),
-    //     'editInPlace'   : require('./edit-in-place'),
-    //     'submenu'       : require('./submenu'),
-    //     'tab'           : require('./tab'),
-    //     'toggle'        : require('./toggle'),
-    //     'tooltip'       : require('./tooltip')
-    // };
-
 
     /***
      * ready
@@ -79,7 +68,7 @@ define('core/main', [ 'require', 'utils/merge', 'utils/helpers/dateFormat' ], fu
         enumerable: false,
         //If loaded several times, it can lead to an exception. That's why I put this.
         configurable: true,
-        value: function(mask, utc){ return helpers.dateFormat.format(this, mask, utc) }
+        value: function(mask, utc){ return dateFormat.format(this, mask, utc) }
     });
 
 
@@ -249,6 +238,7 @@ define('core/main', [ 'require', 'utils/merge', 'utils/helpers/dateFormat' ], fu
      * Constructor
      * */
     var $gina = document;
+
     function construct (options) {
 
         if ( typeof(this.initialized) != 'undefined') {
