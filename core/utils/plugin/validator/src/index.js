@@ -10,6 +10,10 @@
  * */
 function FormValidator(data, $fields) {
 
+    var merge       = merge || require('utils/merge');
+    var helpers     = helpers || {};
+    var dateFormat  = helpers.dateFormat || require('helpers/dateFormat');
+
     var local = {
         'errors': {},
         'keys': {
@@ -666,12 +670,12 @@ function FormValidator(data, $fields) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var helpers     = require('./../helpers');
     var merge       = require('./../lib/merge');
+    var helpers     = require('./../helpers');
     var dateFormat  = helpers.dateFormat;
 
-    module.exports  = Collection
+    module.exports  = FormValidator
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define(function() { return Collection })
+    define('gina/validator', function() { return FormValidator })
 }

@@ -2,7 +2,9 @@
  * Collection cLass
  * Allows you to handle your own collections as you would normaly with mongodb
  * Dependencies :
+ *  - utils/merge
  *  - uuid
+ *
  *
  * @param {array} collection
  * @param {object} [options]
@@ -27,19 +29,19 @@
  *  @return {array} result
  *
  * */
-
-
-var collectionOptions = {
-    'useLocalStorage': false,
-    'locale': 'en' // get settigs.region, or user.region
-};
-
 function Collection(content, option) {
 
-    var instance = this, uuid = uuid || require('uuid');
+    var instance    = this
+        , merge     = merge || require('utils/merge')
+        , uuid      = uuid || require('vendor/uuid');
+
+    var defaultOptions = {
+        'useLocalStorage': false,
+        'locale': 'en' // get settigs.region, or user.region
+    };
 
     var content     = JSON.parse(JSON.stringify(content)) || [] // original content -> not to be touched
-        , options   = (typeof(options) == 'object') ? merge(options, collectionOptions) : collectionOptions
+        , options   = (typeof(options) == 'object') ? merge(options, defaultOptions) : defaultOptions
         , keywords  = ['not null'] // TODO - null, exists (`true` if property is defined)
         ;
     ;
@@ -471,7 +473,9 @@ function Collection(content, option) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var uuid = require('uuid');
+    var merge   = require('../merge');
+    var uuid    = require('uuid');
+
     module.exports = Collection
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module

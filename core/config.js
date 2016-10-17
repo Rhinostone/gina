@@ -568,7 +568,8 @@ function Config(opt) {
         if ( !/^\//.test(self.envConf[bundle][env].server.webroot) ) {
             self.envConf[bundle][env].server.webroot = '/' + self.envConf[bundle][env].server.webroot
         }
-        var conf        = self.envConf
+        var conf                    = self.envConf
+            , file                  = null // template file
             , wroot                 = conf[bundle][env].server.webroot
             , hasWebRoot            = false
             , webrootAutoredirect   = conf[bundle][env].server.webrootAutoredirect
@@ -635,9 +636,14 @@ function Config(opt) {
 
                 //setting app param
                 for (var rule in routing) {
+                    routing[rule +'@'+ bundle] = routing[rule];
+                    delete routing[rule];
+                    file = rule;
+                    rule = rule +'@'+ bundle;
+
                     routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse search
                     //webroot control
-                    routing[rule].param.file = ( typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: rule; // get template file
+                    routing[rule].param.file = ( typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
 
                     // by default, method is inherited from the request.method
 
@@ -700,12 +706,14 @@ function Config(opt) {
                         }
                     }
 
-                    if ( standalone && routing[rule] && bundle != self.startingApp ) {
-                        standaloneRouting[bundle + '-' + rule] = JSON.parse(JSON.stringify(routing[rule]))
-                    }
+                    // deprecated: rules are now unique per bundle : rule@bundle
+                    // if ( standalone && routing[rule] && bundle != self.startingApp ) {
+                    //     standaloneRouting[bundle + '-' + rule] = JSON.parse(JSON.stringify(routing[rule]))
+                    // }
                 }
 
                 files[name] = collectedRules = merge(collectedRules, ((standalone && bundle != self.startingApp ) ? standaloneRouting : routing), true);
+
                 // originalRule is used to facilitate cross bundles (hypertext)linking
                 for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
                     files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
@@ -1008,7 +1016,10 @@ function Config(opt) {
             loaderSrcPath = files['views'].default.pluginLoader.replace(/(\{src\:|\})/g, '');
             try {
                 // will get a buffer
-                files['views'].default.pluginLoader = fs.readFileSync(loaderSrcPath)
+                if (cacheless) {
+                    delete require.cache[_(loaderSrcPath, true)]
+                }
+                files['views'].default.pluginLoader = fs.readFileSync( _(loaderSrcPath, true))
             } catch (err) {
                 callback(err)
             }
@@ -1038,7 +1049,7 @@ function Config(opt) {
     }
 
     var loadForms = function(formsDir) {
-        var forms = {}, cacheless = self.isCacheless(), root = '';
+        var forms = { rules: {}}, cacheless = self.isCacheless(), root = '';
 
         if ( fs.existsSync(formsDir) ) {
             root = ''+formsDir;

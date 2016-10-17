@@ -9,8 +9,7 @@
       "content-type": "text/html"
     },
     "stylesheets": [
-      "/js/vendor/gina/toolbar/toolbar.css",
-      "/js/vendor/gina/popin/css/gina-popin.css"
+      "/js/vendor/gina/gina.min.css"
     ],
     "javascripts": [],
     "_pluginLoader": "{src:{gina}/core/asset/js/plugin/src/loader/main.js}",

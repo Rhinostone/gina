@@ -386,11 +386,12 @@ function SuperController(options) {
                             return hostname + wroot +'/'+ route;
                         }
 
-                        if ( isStandalone && !isMaster ) {
-                            rule = config.bundle +'-'+ route
-                        } else {
-                            rule = route
-                        }
+                        // deprecated: rules are now unique per bundle : rule@bundle
+                        //if ( isStandalone && !isMaster ) {
+                        //    rule = config.bundle +'-'+ route
+                        //} else {
+                            rule = route + '@' + config.bundle
+                        //}
 
                         if ( typeof(routing[rule]) != 'undefined' ) { //found
                             url = routing[rule].url;

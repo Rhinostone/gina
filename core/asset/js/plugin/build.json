@@ -2,20 +2,31 @@
   "baseUrl": "./src",
   "paths": {
     "requireLib": "../../../../../node_modules/requirejs/require",
-    "uuid"      : "../../../../../node_modules/node-uuid/uuid",
+    "vendor/uuid"      : "../../../../../node_modules/node-uuid/uuid",
+    "jquery" : "vendor/jquery/1.12.4.min",
     "engine.io" : "../../../../../node_modules/engine.io-client/engine.io",
 
-    "core"      : "core",
-    "utils/merge" : "../../../../utils/lib/merge/index",
-    "utils/inherits": "../../../../utils/lib/inherits/index",
-    "utils/collection": "../../../../utils/lib/collection/src/index",
-    "utils/helpers/dateFormat": "../../../../utils/lib/helpers/dateFormat"
+    "core"              : "core",
+    "gina/validator"    : "../../../../utils/plugin/validator/src/index",
+    "gina/storage"      : "../../../../utils/plugin/storage/src/index",
+    "gina/toolbar"      : "core/toolbar/main",
+    "gina/popin"        : "core/popin/main",
+    "utils/merge"       : "../../../../utils/lib/merge/index",
+    "utils/inherits"    : "../../../../utils/lib/inherits/index",
+    "utils/collection"  : "../../../../utils/lib/collection/src/index",
+    "helpers/dateFormat": "../../../../utils/helpers/dateFormat"
   },
   "include": [
     "requireLib",
-    "uuid",
-    "engine.io",
-    "utils/collection"
+    "gina/validator",
+    "gina/storage",
+    "gina/toolbar",
+    "gina/popin",
+    "utils/merge",
+    "utils/inherits",
+    "utils/collection",
+    "vendor/uuid",
+    "jquery"
   ],
   "name": "gina",
   "out": "./dist/gina.min.js",

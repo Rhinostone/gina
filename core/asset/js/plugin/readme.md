@@ -2,12 +2,24 @@
 
 Last updated October 16th, 2016
 
-## Dependencies
-To be able to compile the GFF (Gina Frontend Framework), you need to install `requirejs` node module.
+## Requirments
+
+- [Requirejs](http://requirejs.org/)
+- [csso](https://github.com/css/csso)
+- Java & [Google Closure Compiler](https://developers.google.com/closure/compiler/)
+
+
+## Installing Dependencies
+To be able to compile the GFF (Gina Frontend Framework), you need to install the following node modules.
 
 ```tty
 $ npm install -g requirejs
 ```
+
+```tty
+$ npm install -g csso
+```
+
 
 ## Compiling & minification
 
@@ -35,8 +47,26 @@ $ cd ${project}/node_modules/gina/core/asset/js/plugin
 ```
 
 ```tty
-$ java -jar /usr/local/lib/compiler.jar --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/loader/main.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
+$ java -jar /usr/local/lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/loader/main.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
 ```
+
+### Building CSS assets
+
+```tty
+$ cd ${project}/node_modules/gina/core/asset/js/plugin
+```
+
+Without GZIP
+
+```tty
+$ cat ./src/core/toolbar/css/toolbar.css ./src/core/popin/css/popin.css | csso > ./dist/gina.min.css | csso ./dist/gina.min.css --map ./dist/gina.min.css.map
+```
+With GZIP
+```tty
+$ cat ./src/core/toolbar/css/toolbar.css ./src/core/popin/css/popin.css | csso | gzip -9 -c > ./dist/gina.min.css | csso ./dist/gina.min.css --map ./dist/gina.min.css.map
+```
+
+
 
 ## Using GFF
 
