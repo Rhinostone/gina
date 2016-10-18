@@ -50,7 +50,12 @@ $ cd ${project}/node_modules/gina/core/asset/js/plugin
 $ java -jar /usr/local/lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/loader/main.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
 ```
 
+
 ### Building CSS assets
+
+> ** N.B.: ** The <LINK> `/js/vendor/gina/gina.min.css` will be added through the 
+ `gina.onload` <event>.
+ For more this topic, checkout `gina/core/asset/js/plugin/src/loader/main.js`
 
 ```tty
 $ cd ${project}/node_modules/gina/core/asset/js/plugin
