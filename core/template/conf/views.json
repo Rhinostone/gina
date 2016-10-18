@@ -8,9 +8,7 @@
     "http-metas": {
       "content-type": "text/html"
     },
-    "stylesheets": [
-      "/js/vendor/gina/gina.min.css"
-    ],
+    "stylesheets": [],
     "javascripts": [],
     "_pluginLoader": "{src:{gina}/core/asset/js/plugin/src/loader/main.js}",
     "pluginLoader": "{src:{gina}/core/asset/js/plugin/dist/gina.onload.min.js}"

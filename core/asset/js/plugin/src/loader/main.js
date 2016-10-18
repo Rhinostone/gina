@@ -30,6 +30,15 @@ function onGinaLoaded(gina) {
     ginaFormValidator               = new Validator(ginaPageForms.rules);
     window['ginaFormValidator']     = ginaFormValidator;
 
+    // making adding css to the head
+    var link    = null;
+    link        = document.createElement('link');
+    link.href   = "/js/vendor/gina/gina.min.css";
+    link.media  = "screen";
+    link.rel    = "stylesheet";
+    link.type   = "text/css";
+    document.getElementsByTagName('head')[0].appendChild(link);
+
     if (options.env == 'dev') {
         var Toolbar     = require('gina/toolbar');
         ginaToolbar     = new Toolbar();

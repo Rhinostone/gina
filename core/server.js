@@ -1029,10 +1029,10 @@ function Server(options) {
 
         if (!matched) {
 
-            if ( typeof(self.isNotStatic) != 'undefined' && !res.headersSent) {
-                delete self.isNotStatic;
-                throwError(res, 404, 'Page not found: \n' + pathname, next)
-            }
+            //if ( typeof(self.isNotStatic) != 'undefined' && !res.headersSent) {
+            //    delete self.isNotStatic;
+            //    throwError(res, 404, 'Page not found: \n' + pathname, next)
+            //}
             // find targeted bundle
             var allowed     = null
                 , conf      = null
@@ -1123,7 +1123,12 @@ function Server(options) {
                 if ( /\/$/.test(key) ) {
                     filename = _(path.join(conf.content.statics[key]), true)
                 } else {
-                    filename = _(path.join(conf.content.statics[key], uri.replace(key, '')), true)
+
+                    if ( /\//.test(key) ) {
+                        filename = _(path.join(conf.content.statics[key], uri.replace((new RegExp('(/'+key+'|'+key +')')), '')), true)
+                    } else {
+                        filename = _(path.join(conf.content.statics[key], uri.replace(key, '')), true)
+                    }
                 }
 
                 fs.exists(filename, function(exists) {
@@ -1150,6 +1155,72 @@ function Server(options) {
                                             res.setHeader("X-SourceMap", pathname +'.map')
                                         }
 
+                                        // serve without cache
+                                        res.writeHead(200, {
+                                            'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
+                                            'Pragma': 'no-cache',
+                                            'Expires': '0'
+                                        });
+
+                                    } else {
+                                        res.writeHead(200)
+                                    }
+
+                                    res.write(file, 'binary');
+                                    res.end()
+                                } catch(err) {
+                                    throwError(res, 500, err.stack)
+                                }
+                            }
+                        });
+                    } else {
+                        // else
+                        if (wroot.substr(wroot.length-1,1) == '/') {
+                            wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+                        }
+                        // web services case ... when you hit from a web browser
+                        if (pathname === wroot + '/favicon.ico' && !withViews && !res.headersSent ) {
+                            res.writeHead(200, {'Content-Type': 'image/x-icon'} );
+                            res.end()
+                        }
+
+                        if (!res.headersSent)
+                            throwError(res, 404, 'Page not found: \n' + pathname, next)
+
+                    }//EO exists
+                })//EO static filter
+
+            } else if ( // might be rendering an existing static html page
+                /\.html$/.test(key)
+                && req.url === wroot + req.url.replace(wroot, '')
+            ) {
+                uri = uri.join('/');
+                // publishing from views
+                if ( /\//.test(key) ) {
+                    filename = _(path.join(conf.content.statics['html'], uri.replace((new RegExp('(/'+key+'|'+key +')')), '')), true)
+                } else {
+                    filename = _(path.join(conf.content.statics['html'], uri.replace(key, '')), true)
+                }
+
+                fs.exists(filename, function(exists) {
+
+                    if(exists) {
+
+                        if (fs.statSync(filename).isDirectory()) filename += 'index.html';
+
+                        if (cacheless) {
+                            delete require.cache[filename]
+                        }
+
+                        fs.readFile(filename, "binary", function(err, file) {
+                            if (err) {
+                                throwError(res, 404, 'Page not found: \n' + filename, next);
+                                return
+                            }
+                            if (!res.headersSent) {
+                                try {
+                                    res.setHeader("Content-Type", getHead(filename));
+                                    if (cacheless) {
                                         // serve without cache
                                         res.writeHead(200, {
                                             'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
