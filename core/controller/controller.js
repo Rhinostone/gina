@@ -141,7 +141,7 @@ function SuperController(options) {
             var  action     = local.options.action
                 , rule      = local.options.rule
                 , ext       = 'html'
-                , namespace = local.options.namespace || rule;
+                , namespace = local.options.namespace || '';
 
 
             if ( typeof(local.options.views.default) != 'undefined' ) {
@@ -157,10 +157,11 @@ function SuperController(options) {
             set('page.environment.version', getContext('gina').version);
             set('page.environment.env', options.conf.env);
             set('page.environment.webroot', options.conf.server.webroot);
+            set('page.environment.bundle', options.conf.bundle);
             set('page.ext', ext);
             set('page.content', content);
             set('page.namespace', namespace);
-            set('page.title', rule);
+            set('page.title', rule.replace(new RegExp('@'+options.conf.bundle), ''));
             set('page.forms', options.conf.content.forms);
             
             var acceptLanguage = 'en-US'; // by default
