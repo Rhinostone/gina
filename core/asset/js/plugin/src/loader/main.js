@@ -33,7 +33,7 @@ function onGinaLoaded(gina) {
     // making adding css to the head
     var link    = null;
     link        = document.createElement('link');
-    link.href   = "/js/vendor/gina/gina.min.css";
+    link.href   = options.webroot + "js/vendor/gina/gina.min.css";
     link.media  = "screen";
     link.rel    = "stylesheet";
     link.type   = "text/css";
