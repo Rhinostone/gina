@@ -2,7 +2,7 @@
  * Merging 2 litteral objects
  * */
 'use strict';
-var merge = require('../index');// Not needed if the framework installed
+var merge = require('../src/main');// Not needed if the framework installed
 
 var aNO = {
     name: 'Julia Roberts',

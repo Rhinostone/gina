@@ -1418,24 +1418,38 @@ function SuperController(options) {
      * Get config
      *
      * @param {string} [name] - Conf name without extension.
-     * @return {object} result
+     * @return {object} config
      *
      * TODO - Protect result
      * */
     this.getConfig = function(name) {
-        var tmp = null;
+        var config = null;
 
         if ( typeof(name) != 'undefined' ) {
             try {
                 // needs to be read only
-                tmp = JSON.stringify(local.options.conf.content[name]);
-                return JSON.parse(tmp)
+                config = JSON.stringify(local.options.conf.content[name]);
+                return JSON.parse(config)
             } catch (err) {
                 return undefined
             }
         } else {
-            tmp = JSON.stringify(local.options.conf);
-            return JSON.parse(tmp)
+            config = JSON.stringify(local.options.conf);
+            return JSON.parse(config)
+        }
+    }
+
+    /**
+     * Get forms rules
+     *
+     * @return {object} rules
+     *
+     * */
+    this.getFormsRules = function () {
+        try {
+            return JSON.parse(JSON.stringify(local.options.conf.content.forms)).rules
+        } catch (err) {
+            self.throwError(local.res, 500, err.stack||err.message)
         }
     }
 

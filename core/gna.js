@@ -20,16 +20,19 @@ var Config  = require('./config');
 var config  = null;
 var tmp     = null;
 var utils   = require('./utils');
+var plugins = require('./plugins');
 
 var console = utils.logger;
 var Proc    = utils.Proc;
 var modelUtil = new utils.Model();
 var EventEmitter = require('events').EventEmitter;
 var e = new EventEmitter();
+
 gna.initialized = process.initialized = false;
 gna.routed = process.routed = false;
 gna.utils = utils;
-setContext('gina.utils', utils);
+gna.plugins = plugins;
+
 var Server  = require('./server');//TODO require('./server').http
 
 
@@ -135,8 +138,10 @@ if (!root) {
 }
 gna.executionPath = root;
 
-setContext('gina.utils', utils);
+
 setContext('gina.Config', Config);
+setContext('gina.utils', utils);
+setContext('gina.plugins', plugins);
 
 var envs = ['dev', 'debug', 'stage', 'prod'];
 var protocols = ['http', 'https']; // will support https for the 0.0.10

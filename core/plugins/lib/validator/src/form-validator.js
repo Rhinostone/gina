@@ -3,18 +3,19 @@
  *
  * Dependencies:
  *  - utils/merge
+ *  - utils/helpers
+ *  - utils/helpers/dateFormat
  *
  * @param {object} data
- * @param {object} [ $fields ]
- * @param {object} [ $form ]
+ * @param {object} [ $fields ] - isGFFCtx only
  * */
 function FormValidator(data, $fields) {
 
-    console.log('validating ', data, $fields);
+    var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
 
-    var merge       = merge || require('utils/merge');
-    var helpers     = helpers || {};
-    var dateFormat  = helpers.dateFormat || require('helpers/dateFormat');
+    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../utils/lib/merge');
+    var helpers         = (isGFFCtx) ? {} : require('../../../../utils/helpers');
+    var dateFormat      = (isGFFCtx) ? require('helpers/dateFormat') : helpers.dateFormat;
 
     var local = {
         'errors': {},
@@ -75,13 +76,13 @@ function FormValidator(data, $fields) {
         }
 
         label = '';
-        if ( typeof($fields) != 'undefined' ) { // frontend only
+        if ( isGFFCtx && typeof($fields) != 'undefined' ) { // frontend only
             label = $fields[el].getAttribute('data-label') || '';
         }
 
         // keys are stringyfied because of the compiler !!!
         self[el] = {
-            'target': $fields[el],
+            'target': (isGFFCtx) ? $fields[el] : null,
             'name': el,
             'value': val,
             'valid': false,
@@ -672,12 +673,8 @@ function FormValidator(data, $fields) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var merge       = require('./../lib/merge');
-    var helpers     = require('./../helpers');
-    var dateFormat  = helpers.dateFormat;
-
     module.exports  = FormValidator
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('gina/validator', function() { return FormValidator })
+    define('utils/form-validator', function() { return FormValidator })
 }

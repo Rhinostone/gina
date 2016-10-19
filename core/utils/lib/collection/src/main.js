@@ -473,7 +473,7 @@ function Collection(content, option) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var merge   = require('../merge');
+    var merge   = require('../../merge');
     var uuid    = require('uuid');
 
     module.exports = Collection
