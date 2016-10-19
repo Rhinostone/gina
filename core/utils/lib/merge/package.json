@@ -1,14 +1,10 @@
 {
-  "name": "validator",
+  "name": "merge",
   "version": "1.0.0",
-  "description": "Form validator plugin",
+  "description": "Merge util",
   "authors": [
     {
       "name": "Maritn-Luther ETOUMAN",
-      "email": "gina@rhinosotne.com"
-    },
-    {
-      "name": "Fabrice Delaneau",
       "email": "gina@rhinosotne.com"
     }
   ],
@@ -16,7 +12,7 @@
   "engines": {
     "node": ">=0.10.22"
   },
-  "main": "src/index",
+  "main": "src/main",
   "scripts": {
     "test": "nodeunit test"
   },

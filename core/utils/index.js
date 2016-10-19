@@ -13,10 +13,6 @@
  * @author     Rhinostone <gina@rhinostone.com>
  */
 
-
-var merge = require('./lib/merge');
-
-
 function Utils() {
 
     var _require = function(path) {
@@ -26,7 +22,7 @@ function Utils() {
                 delete require.cache[require.resolve(path)];
                 return require(path)
             } catch (err) {
-                return {}
+                throw err
             }
 
         } else {
@@ -50,9 +46,7 @@ function Utils() {
         logger      : _require('./lib/logger'),
         math        : _require('./lib/math'),
         url         : _require('./lib/url'),
-        cmd         : _require('./lib/cmd'),
-        //multiparty  : _require('multiparty'),
-        Validator   : _require('./plugin/validator')
+        cmd         : _require('./lib/cmd')
     };
 
     /**

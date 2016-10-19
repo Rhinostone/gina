@@ -131,7 +131,7 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
 }
 
 
-define('gina', [ 'require', 'core/main', 'gina/toolbar', 'gina/validator', 'utils/merge', 'utils/events' ], function onCoreInit(require) {
+define('gina', [ 'require', 'core/main', 'gina/toolbar', 'gina/validator', 'utils/merge', 'utils/events', 'utils/dom', 'utils/form-validator' ], function onCoreInit(require) {
 
     var core    = require('./core/main');
     var merge   = require('utils/merge');
@@ -197,7 +197,8 @@ requirejs([
     "utils/collection",
     "utils/merge",
     "utils/inherits",
-    "vendor/uuid"
+    "vendor/uuid",
+    "vendor/engine.io"
 ]);
 
 

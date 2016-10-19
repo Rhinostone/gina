@@ -300,6 +300,11 @@ function Router(env) {
         require.cache[_(corePath +'/utils/index.js', true)] = require( _(corePath +'/utils/index.js', true) );
         require.cache[_(corePath + '/gna.js', true)].exports.utils = require.cache[_(corePath +'/utils/index.js', true)];
 
+        //update plugins
+        delete require.cache[_(corePath +'/plugins/index.js', true)];
+        require.cache[_(corePath +'/plugins/index.js', true)] = require( _(corePath +'/plugins/index.js', true) );
+        require.cache[_(corePath + '/gna.js', true)].exports.plugins = require.cache[_(corePath +'/plugins/index.js', true)];
+
         // Super controller
         delete require.cache[_(corePath +'/controller/index.js', true)];
         require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
@@ -459,6 +464,7 @@ function Router(env) {
                             // exporting config & common methods
                             Setup.engine                = controller.engine;
                             Setup.getConfig             = controller.getConfig;
+                            Setup.getFormsRules         = controller.getFormsRules;
                             Setup.throwError            = controller.throwError;
                             Setup.redirect              = controller.redirect;
                             Setup.render                = controller.render;
@@ -544,14 +550,15 @@ function Router(env) {
 
                         // exporting config & common methods
                         //Middleware.engine             = controller.engine;
-                        Middleware.prototype.getConfig            = controller.getConfig;
-                        Middleware.prototype.throwError           = controller.throwError;
-                        Middleware.prototype.redirect             = controller.redirect;
-                        Middleware.prototype.render               = controller.render;
-                        Middleware.prototype.renderJSON           = controller.renderJSON;
-                        Middleware.prototype.renderWithoutLayout  = controller.renderWithoutLayout
-                        Middleware.prototype.isXMLRequest         = controller.isXMLRequest;
-                        Middleware.prototype.isCacheless          = controller.isCacheless;
+                        Middleware.prototype.getConfig              = controller.getConfig;
+                        Middleware.prototype.getFormsRules           = controller.getFormsRules;
+                        Middleware.prototype.throwError             = controller.throwError;
+                        Middleware.prototype.redirect               = controller.redirect;
+                        Middleware.prototype.render                 = controller.render;
+                        Middleware.prototype.renderJSON             = controller.renderJSON;
+                        Middleware.prototype.renderWithoutLayout    = controller.renderWithoutLayout
+                        Middleware.prototype.isXMLRequest           = controller.isXMLRequest;
+                        Middleware.prototype.isCacheless            = controller.isCacheless;
 
                         return Middleware;
                     }()

@@ -83,7 +83,7 @@ var AppCommand = {
      * */
     run : function(options, message, longCMD){
 
-        //inherited from utils/index.
+        //inherited from utils.
         var root = getPath('root');
         //Setting log paths.
 //        console.getLogger({

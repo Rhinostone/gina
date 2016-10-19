@@ -1,4 +1,4 @@
-var inherits = require('../index.js');// Not needed if the framework installed
+var inherits = require('../src/main.js');// Not needed if the framework installed
 
 var A = function() {
     this.name = "A";

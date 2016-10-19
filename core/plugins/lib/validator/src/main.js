@@ -2,26 +2,34 @@
  * Validator
  *
  * Dependencies:
+ *  - utils/form-validator
  *  - utils/merge
- *  - helpers/dateFormat
+ *  - utils/events
+ *  - vendor/uuid
  *
- * @param {object} [ rule ]
+ * @param {object} rule
+ * @param {object} [ data ] // from request
+ * @param {string} [ formId ]
  * */
-function Validator(rules) {
+function Validator(rules, data, formId) {
 
-    var events      = require('utils/events');
-    var uuid        = uuid || require('vendor/uuid');
-    var merge       = merge || require('utils/merge');
-    var helpers     = helpers || {};
-    var dateFormat  = helpers.dateFormat || require('helpers/dateFormat');
+    var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+    if (isGFFCtx) {
+        require('utils/events');
+        require('utils/dom');
 
-    console.log('validating with gina ', gina);
+    } else {
+        var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
+        if (cacheless) {
+            delete require.cache[require.resolve('./form-validator')]
+        }
+    }
 
-    // var events = require('');
-    //var addListener     = gina.addListener;
-    // var removeListener  = gina.removeListener;
-    // var cancelEvent     = gina.cancelEvent;
-    // var triggerEvent    = gina.triggerEvent;
+    var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
+    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../utils/lib/merge');
+    var FormValidator   = (isGFFCtx) ? require('utils/form-validator') : require('./form-validator');
+
+
 
     //console.log('rules -> ', rules);
     var self = {
@@ -37,6 +45,9 @@ function Validator(rules) {
      * */
     var events      = ['ready', 'error', 'progress', 'submit', 'success', 'change'];
     var $validator  = null;
+
+    // add input type=hidden to the <body> for form events handling
+    var evtHandler  = null;
 
     /**
      * XML Request
@@ -62,18 +73,27 @@ function Validator(rules) {
             cb(new Error('Event `'+ event +'` not handled by ginaValidatorEventHandler'))
         } else {
 
-            var $target = this.target || $validator;
+            if ( !$validator ) {
+                evtHandler      = document.createElement('input');
+                evtHandler.type = 'hidden';
+                evtHandler.id   = uuid.v1();
+                document.getElementsByTagName('body')[0].appendChild(evtHandler);
+
+                $validator = evtHandler;
+            }
+
+            var $target = ( typeof(this.tagName) != 'undefined' && this.tagName === 'FORM' ) ? this : $validator;
             var id      = $target.getAttribute('id');
 
             event += '.' + id;
 
-            var procced = function () {
+            var procced = function (event, $target) {
                 //register event
                 self.events[event] = event;
                 self.currentTarget = $target;
 
                 // bind
-                addListener(gina, $validator, event, function(e) {
+                addListener(gina, $target, event, function(e) {
                     cancelEvent(e);
 
                     var data = null;
@@ -93,18 +113,22 @@ function Validator(rules) {
                         delete self.events[e.type];
                         cb(e, data);
                     }
-                })
+                });
+
+                init(rules);
             }
 
             if ( typeof(self.events[event]) != 'undefined' && self.events[event] == id ) {
                 // unbind existing
-                removeListener(instance, $validator, event, procced)
+                removeListener(gina, $validator, event, function () {
+                    procced(event, $target)
+                })
             } else {
-                procced()
+                procced(event, $target)
             }
         }
 
-        return this
+        return proto
     };
 
 
@@ -145,7 +169,7 @@ function Validator(rules) {
             formId = formId.replace(/\#/, '')
         } else if ( typeof(formId) == 'object' ) { // weird exception
             var $target = formId.form;
-            var _id = $target.getAttribute('id') || 'form.'+makeId();
+            var _id = $target.getAttribute('id') || 'form.'+uuid.v1();
 
             $target.setAttribute('id', _id);// just in case
             self.$forms[_id] = merge({}, formProto);
@@ -255,7 +279,7 @@ function Validator(rules) {
         } else if ( typeof(formId) == 'object' ) { // weird exception
 
             var $target = formId.form;
-            var _id = $target.getAttribute('id') || 'form.'+makeId();
+            var _id = $target.getAttribute('id') || 'form.'+uuid.v1();
 
             $target.setAttribute('id', _id);// just in case
             self.$forms[_id] = merge({}, formProto);
@@ -325,6 +349,85 @@ function Validator(rules) {
         $form['resetErrorsDisplay'] = resetErrorsDisplay;
 
         return $form || null;
+    }
+
+    var handleErrorsDisplay = function($form, errors) {
+
+        var name = null, errAttr = null;
+        var $err = null, $msg = null;
+        var $el = null, $parent = null, $target = null;
+
+        for (var i = 0, len = $form.length; i<len; ++i) {
+            $el     = $form[i];
+            if ( /form\-item\-wrapper$/.test($el.parentNode.className) ) {
+                $parent = $el.parentNode.parentNode;
+                $target = $el.parentNode;
+            } else {
+                $parent = $el.parentNode;
+                $target = $el;
+            }
+
+            name    = $el.getAttribute('name');
+            errAttr = $el.getAttribute('data-errors');
+
+            if (!name) continue;
+
+            if ( typeof(errors[name]) != 'undefined' && !/form\-item\-error/.test($parent.className) ) {
+
+                $parent.className += ($parent.className == '' ) ? 'form-item-error' : ' form-item-error';
+
+                $err = document.createElement('div');
+                $err.setAttribute('class', 'form-item-error-message');
+
+                // injecting error messages
+                for (var e in errors[name]) {
+                    $msg = document.createElement('p');
+                    //console.log('txt => ', errors[name][e], e);
+                    $msg.appendChild( document.createTextNode(errors[name][e]) );
+                    $err.appendChild($msg)
+                }
+
+                if ($target.type != 'hidden')
+                    insertAfter($target, $err);
+
+            } else if ( typeof(errors[name]) == 'undefined' && /form\-item\-error/.test($parent.className) ) {
+                // reset when not in error
+                // remove child elements
+                var $children = $parent.getElementsByTagName('div');
+                for (var c = 0, cLen = $children.length; c<cLen; ++c) {
+                    if ( /form\-item\-error\-message/.test($children[c].className) ) {
+                        $parent.removeChild($children[c]);
+                        break
+                    }
+                }
+
+                $parent.className = $parent.className.replace(/(\s+form\-item\-error|form\-item\-error)/, '');
+
+            } else if ( typeof(errors[name]) != 'undefined' && errAttr) {
+                // refreshing already displayed error on msg update
+                var $divs = $parent.getElementsByTagName('div');
+                for (var d = 0, dLen = $divs.length; d<dLen; ++d) {
+                    if ($divs[d].className == 'form-item-error-message') {
+
+                        $parent.removeChild($divs[d]);
+                        $err = document.createElement('div');
+                        $err.setAttribute('class', 'form-item-error-message');
+
+                        // injecting error messages
+                        for (var e in errors[name]) {
+                            $msg = document.createElement('p');
+                            $msg.appendChild( document.createTextNode(errors[name][e]) );
+                            $err.appendChild($msg)
+                        }
+
+                        break;
+                    }
+                }
+
+                if ($target.type != 'hidden')
+                    insertAfter($target, $err);
+            }
+        }
     }
 
 
@@ -397,6 +500,10 @@ function Validator(rules) {
         //     });
         //
         // }
+    }
+    
+    var refreshErrorsDisplay = function ($form) {
+        
     }
 
     var submit = function () {
@@ -653,7 +760,17 @@ function Validator(rules) {
     }
 
 
+    var setCustomRules = function (customRules) {
+        // parsing rules
+        if ( typeof(customRule) != 'undefined' ) {
+            parseRules(customRule, '');
+            checkForRulesImports(customRule);
+        }
+    }
 
+    var backendProto = {
+        'setCustomRules': setCustomRules
+    };
 
     var proto = {
         'on'                : on,
@@ -661,7 +778,8 @@ function Validator(rules) {
         'resetErrorsDisplay': resetErrorsDisplay,
         'rules'             : self.rules,
         'setOptions'        : setOptions,
-        'validateFormById'  : validateFormById
+        'validateFormById'  : validateFormById,
+        'handleErrorsDisplay': handleErrorsDisplay
     };
 
     var formProto = {
@@ -671,52 +789,35 @@ function Validator(rules) {
         'submit'    : submit
     };
 
+    /**
+     * Backend init
+     *
+     * @param {object} rules
+     * @param {object} [customRule]
+     * */
+    var backendInit = function (rules, data, formId) {
+        // parsing rules
+        if ( typeof(rules) != 'undefined' ) {
+            parseRules(rules, '');
+            checkForRulesImports(rules);
+        }
+
+        var $form = ( typeof(formId) != 'undefined' ) ? { 'id': formId } : null;
+        var fields = {};
+
+        for (var field in data) {
+            fields[field] = data[field]
+        }
+
+        return validate($form, fields, null, self.rules)
+    }
+
     var init = function (rules) {
-
-        // add input type=hidden to the <body> for form events handling
-        var evtHandler  = null;
-        evtHandler      = document.createElement('input');
-        evtHandler.type = 'hidden';
-        evtHandler.id   = uuid.v1();
-        document.getElementsByTagName('body')[0].appendChild(evtHandler);
-
-        $validator = evtHandler;
 
         // parsing rules
         if ( typeof(rules) != 'undefined' ) {
             parseRules(rules, '');
-
-            // check if rules has imports & replace
-            var rulesStr = JSON.stringify(rules, null, 4);
-            var importedRules = rulesStr.match(/(\"@import\s+[a-z A-Z 0-9/.]+\")/g);
-            if (importedRules.length > 0) {
-                var ruleArr = [], rule = {}, tmpRule = null;
-                for (var r = 0, len = importedRules.length; r<len; ++r) {
-                    ruleArr = importedRules[r].replace(/(@import\s+|\"|\')/g, '').split(/\s/g);
-                    // [""@import client/form", ""@import project26/edit demo/edit"]
-                    //console.log('ruleArr -> ', ruleArr, importedRules[r]);
-                    for (var i = 0, iLen = ruleArr.length; i<iLen; ++i) {
-                        tmpRule = ruleArr[i].replace(/\//g, '.');
-                        //console.log('-> ', ruleArr[i], self.rules[ ruleArr[i] ], self.rules);
-                        if ( typeof(self.rules[ tmpRule ]) != 'undefined' ) {
-                            rule = merge(rule, self.rules[ tmpRule ])
-                        } else {
-                            console.warn('[formValidator:rules] <@import error> on `'+importedRules[r]+'`: rule `'+ruleArr[i]+'` not found. Ignoring.')
-                        }
-                    }
-                    //console.log('replacing ', importedRules[r]);
-                    rulesStr = rulesStr.replace(importedRules[r], JSON.stringify(rule));
-                    //console.log('str ', rulesStr);
-                    rule = {}
-
-                }
-                self.rules = {}, rules = JSON.parse(rulesStr);
-                parseRules(rules, '');
-                proto.rules = self.rules;
-
-                //self.rules = JSON.parse(rulesStr);
-                //console.log('->\n'+ JSON.stringify(rules.project.edit, null, 4));
-            }
+            checkForRulesImports(rules);
         }
 
         var id          = null
@@ -763,7 +864,7 @@ function Validator(rules) {
                     if ( typeof($allForms[f].id) == 'object' ) {
                         delete self.$forms[$allForms[f].id];
 
-                        var _id = $allForms[f].attributes.getNamedItem('id').nodeValue || 'form.'+makeId();
+                        var _id = $allForms[f].attributes.getNamedItem('id').nodeValue || 'form.'+uuid.v1();
 
                         $allForms[f].setAttribute('id', _id);
                         $allForms[f]['id'] = _id;
@@ -822,11 +923,50 @@ function Validator(rules) {
         }
     }
 
+    var checkForRulesImports = function (rules) {
+        // check if rules has imports & replace
+        var rulesStr = JSON.stringify(rules, null, 4);
+        var importedRules = rulesStr.match(/(\"@import\s+[a-z A-Z 0-9/.]+\")/g);
+        if (importedRules.length > 0) {
+            var ruleArr = [], rule = {}, tmpRule = null;
+            for (var r = 0, len = importedRules.length; r<len; ++r) {
+                ruleArr = importedRules[r].replace(/(@import\s+|\"|\')/g, '').split(/\s/g);
+                // [""@import client/form", ""@import project26/edit demo/edit"]
+                //console.log('ruleArr -> ', ruleArr, importedRules[r]);
+                for (var i = 0, iLen = ruleArr.length; i<iLen; ++i) {
+                    tmpRule = ruleArr[i].replace(/\//g, '.');
+                    //console.log('-> ', ruleArr[i], self.rules[ ruleArr[i] ], self.rules);
+                    if ( typeof(self.rules[ tmpRule ]) != 'undefined' ) {
+                        rule = merge(rule, self.rules[ tmpRule ])
+                    } else {
+                        console.warn('[formValidator:rules] <@import error> on `'+importedRules[r]+'`: rule `'+ruleArr[i]+'` not found. Ignoring.')
+                    }
+                }
+                //console.log('replacing ', importedRules[r]);
+                rulesStr = rulesStr.replace(importedRules[r], JSON.stringify(rule));
+                //console.log('str ', rulesStr);
+                rule = {}
+
+            }
+            self.rules = {}, rules = JSON.parse(rulesStr);
+            parseRules(rules, '');
+
+            if (isGFFCtx) {
+                proto.rules = self.rules
+            } else {
+                backendProto.rules = self.rules
+            }
+
+            //self.rules = JSON.parse(rulesStr);
+            //console.log('->\n'+ JSON.stringify(rules.project.edit, null, 4));
+        }
+    }
+
     var bindForm = function($form, customRule) {
         var _id = $form.getAttribute('id');
         if ( typeof(_id) != 'string' ) {
             try {
-                _id = $form.getAttribute('id') || 'form.'+makeId();
+                _id = $form.getAttribute('id') || 'form.'+uuid.v1();
                 $form.setAttribute('id', _id);
                 $form.id = _id; // won't override :( ...
             } catch(err) {
@@ -922,7 +1062,7 @@ function Validator(rules) {
                 // if (isBinded) cancelEvent(event);
 
                 if ( typeof(event.target.id) == 'undefined' ) {
-                    event.target.setAttribute('id', 'click.' + makeId() );
+                    event.target.setAttribute('id', 'click.' + uuid.v1() );
                     event.target.id = event.target.getAttribute('id')
                 }
 
@@ -956,7 +1096,7 @@ function Validator(rules) {
             type    = $inputs[i].getAttribute('type');
 
             if ( typeof($inputs[i].id) == 'undefined' || $inputs[i].id == '' ) {
-                $inputs[i]['id'] = type +'-'+ makeId();
+                $inputs[i]['id'] = type +'-'+ uuid.v1();
                 $inputs[i].setAttribute('id', $inputs[i]['id'])
             }
 
@@ -1102,7 +1242,7 @@ function Validator(rules) {
 
                 if (!$submit['id']) {
 
-                    evt = 'click.'+ makeId();
+                    evt = 'click.'+ uuid.v1();
                     $submit['id'] = evt;
                     $submit.setAttribute( 'id', evt);
 
@@ -1279,16 +1419,15 @@ function Validator(rules) {
                     }
 
                     for (var c = 0, cLen = conditions.length; c<cLen; ++c) {
-                        //caseType = $fields[field].getAttribute('type');
-
-                        //caseValue = $fields[field].value;
 
                         caseValue = fields[field];
 
-                        if ($fields[field].value == "true")
-                            caseValue = true;
-                        else if ($fields[field].value == "false")
-                            caseValue = false;
+                        if (isGFFCtx) {
+                            if ($fields[field].value == "true")
+                                caseValue = true;
+                            else if ($fields[field].value == "false")
+                                caseValue = false;
+                        }
 
                         //console.log(caseValue +' VS '+ conditions[c]['case'], "->", (caseValue == conditions[c]['case'] || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1) );
                         if ( conditions[c]['case'] === caseValue || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1 ) {
@@ -1311,12 +1450,12 @@ function Validator(rules) {
                                     }
 
                                 } else {
-                                    localRules[f]       = conditions[c]['rules'][f]
+                                    localRules[f] = conditions[c]['rules'][f]
                                 }
                             }
                             //console.log('parsing ', localRules, fields);
 
-                            forEachField($form, fields, $fields, localRules, cb, i+1)
+                            return forEachField($form, fields, $fields, localRules, cb, i+1)
                         }
                     }
 
@@ -1367,115 +1506,42 @@ function Validator(rules) {
                             fieldErrorsAttributes[field] += rule +' ';
                     }
 
-                    $fields[field].setAttribute('data-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
+                    if (isGFFCtx)
+                        $fields[field].setAttribute('data-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
                 }
 
                 //console.log('data => ',  d['toData']());
 
                 //calling back
-                cb({
-                    'isValid'   : d['isValid'],
-                    'errors'    : errors,
-                    'data'      : d['toData']()
-                })
+                if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
+                    cb({
+                        'isValid'   : d['isValid'],
+                        'errors'    : errors,
+                        'data'      : d['toData']()
+                    })
+                } else {
+                    return {
+                        'isValid'   : d['isValid'],
+                        'errors'    : errors,
+                        'data'      : d['toData']()
+                    }
+                }
             }
         }
 
-        forEachField($form, fields, $fields, rules, cb, 0)
+        return forEachField($form, fields, $fields, rules, cb, 0)
     }
 
-
-    var handleErrorsDisplay = function($form, errors) {
-
-        var name = null, errAttr = null;
-        var $err = null, $msg = null;
-        var $el = null, $parent = null, $target = null;
-
-        for (var i = 0, len = $form.length; i<len; ++i) {
-            $el     = $form[i];
-            if ( /form\-item\-wrapper$/.test($el.parentNode.className) ) {
-                $parent = $el.parentNode.parentNode;
-                $target = $el.parentNode;
-            } else {
-                $parent = $el.parentNode;
-                $target = $el;
-            }
-
-            name    = $el.getAttribute('name');
-            errAttr = $el.getAttribute('data-errors');
-
-            if (!name) continue;
-
-            if ( typeof(errors[name]) != 'undefined' && !/form\-item\-error/.test($parent.className) ) {
-
-                $parent.className += ($parent.className == '' ) ? 'form-item-error' : ' form-item-error';
-
-                $err = document.createElement('div');
-                $err.setAttribute('class', 'form-item-error-message');
-
-                // injecting error messages
-                for (var e in errors[name]) {
-                    $msg = document.createElement('p');
-                    //console.log('txt => ', errors[name][e], e);
-                    $msg.appendChild( document.createTextNode(errors[name][e]) );
-                    $err.appendChild($msg)
-                }
-
-                if ($target.type != 'hidden')
-                    insertAfter($target, $err);
-
-            } else if ( typeof(errors[name]) == 'undefined' && /form\-item\-error/.test($parent.className) ) {
-                // reset when not in error
-                // remove child elements
-                var $children = $parent.getElementsByTagName('div');
-                for (var c = 0, cLen = $children.length; c<cLen; ++c) {
-                    if ( /form\-item\-error\-message/.test($children[c].className) ) {
-                        $parent.removeChild($children[c]);
-                        break
-                    }
-                }
-
-                $parent.className = $parent.className.replace(/(\s+form\-item\-error|form\-item\-error)/, '');
-
-            } else if ( typeof(errors[name]) != 'undefined' && errAttr) {
-                // refreshing already displayed error on msg update
-                var $divs = $parent.getElementsByTagName('div');
-                for (var d = 0, dLen = $divs.length; d<dLen; ++d) {
-                    if ($divs[d].className == 'form-item-error-message') {
-
-                        $parent.removeChild($divs[d]);
-                        $err = document.createElement('div');
-                        $err.setAttribute('class', 'form-item-error-message');
-
-                        // injecting error messages
-                        for (var e in errors[name]) {
-                            $msg = document.createElement('p');
-                            $msg.appendChild( document.createTextNode(errors[name][e]) );
-                            $err.appendChild($msg)
-                        }
-
-                        break;
-                    }
-                }
-
-                if ($target.type != 'hidden')
-                    insertAfter($target, $err);
-            }
-        }
+    if (isGFFCtx) {
+        return proto
+    } else {
+        return backendInit(rules, data, formId)
     }
 
-    init(rules);
-
-    return proto
 };
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var uuid        = require('uuid');
-    var merge       = require('./../lib/merge');
-    var helpers     = require('./../helpers');
-    var dateFormat  = helpers.dateFormat;
-
     module.exports  = Validator
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module

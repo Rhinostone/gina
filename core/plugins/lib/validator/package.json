@@ -1,12 +1,17 @@
 {
-  "name": "collection",
+  "name": "validator",
   "version": "1.0.0",
-  "description": "Collections hanlder",
-
-  "author": {
-    "name": "Maritn-Luther ETOUMAN",
-    "email": "gina@rhinosotne.com"
-  },
+  "description": "Form validator plugin",
+  "authors": [
+    {
+      "name": "Maritn-Luther ETOUMAN",
+      "email": "gina@rhinosotne.com"
+    },
+    {
+      "name": "Fabrice Delaneau",
+      "email": "gina@rhinosotne.com"
+    }
+  ],
   "copyright": "Copyright (c) 2009-2016 Rhinostone <gina@rhinostone.com>",
   "engines": {
     "node": ">=0.10.22"

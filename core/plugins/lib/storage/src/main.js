@@ -410,8 +410,8 @@ function Storage(options) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var merge       = require('../lib/merge');
-    var Collection  = require('../lib/collection');
+    var merge       = require('../../../../utils/lib/merge');
+    var Collection  = require('../../../../utils/collection');
     var uuid        = require('uuid');
 
     module.exports = Storage
