@@ -219,34 +219,12 @@ for (var t = 0, len = tags.length; t < len; ++t) {
             } else {
                 function onGinaLoaded(gina) {
 
-
-
-                    // var options = gina.options = {
-                    //     /**@js_externs env*/
-                    //     //env     : '{{ page.environment.env }}',
-                    //     /**@js_externs version*/
-                    //     //version : '{{ page.environment.version }}',
-                    //     /**@js_externs webroot*/
-                    //     webroot : '/'
-                    // };
-                    //
-                    // gina["setOptions"](options);
-                    // gina["isFrameworkLoaded"]       = true;
-                    //
-                    // //console.log('gina onGinaLoaded');
-                    //
-                    // // making adding css to the head
-                    // var link    = null;
-                    // link        = document.createElement('link');
-                    // link.href   = options.webroot + "js/vendor/gina/gina.min.css";
-                    // link.media  = "screen";
-                    // link.rel    = "stylesheet";
-                    // link.type   = "text/css";
-                    // document.getElementsByTagName('head')[0].appendChild(link);
-
                     if (!gina) {
                         return false
                     } else {
+                        if ( gina["isFrameworkLoaded"] ) {
+                            return true
+                        }
                         var options = gina.options = {
                             /**@js_externs env*/
                             //env     : '{{ page.environment.env }}',

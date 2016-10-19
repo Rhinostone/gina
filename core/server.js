@@ -1071,7 +1071,7 @@ function Server(options) {
                 }
 
                 uri = pathname.split('/');
-                /**
+                /** TODO - remove this
                 uri = (pathname.replace(wroot, '')).split('/');
                 var len = uri.length;
 
@@ -1133,7 +1133,7 @@ function Server(options) {
 
                 fs.exists(filename, function(exists) {
 
-                    if(exists) {
+                    if (exists) {
 
                         if (fs.statSync(filename).isDirectory()) filename += 'index.html';
 
@@ -1149,6 +1149,12 @@ function Server(options) {
                             if (!res.headersSent) {
                                 try {
                                     res.setHeader("Content-Type", getHead(filename));
+                                    // adding handler `gina.ready(...)` wrapper
+                                    var conf = getContext('gina').config, hanlersPath = self.conf[conf.bundle][conf.env].content.statics.handlers;
+                                    if ( new RegExp('^'+ hanlersPath).test(filename) ) {
+                                        file = 'gina.ready(function($){\n'+ file + '\n},window["originalContext"]);'
+                                    }
+
                                     if (cacheless) {
                                         // source maps integration for javascript & css
                                         if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') ) {
