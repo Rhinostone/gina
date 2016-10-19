@@ -491,19 +491,23 @@ function SuperController(options) {
 
                             layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
                         } else {
+
+                            plugin = '\t'
+                                + '\n<script type="text/javascript">'
+                                + ' \n<!--'
+                                + '\n' + local.options.views.default.pluginLoader.toString()
+                                + '//-->'
+                                + '\n</script>'
+
+                                + '\n<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
+                            ;
+
                             if ( !/page\.scripts/.test(layout) ) {
-                                plugin = '\t'
-                                    + '\n<script type="text/javascript">'
-                                    + ' \n<!--'
-                                    + '\n' + local.options.views.default.pluginLoader.toString()
-                                    + '//-->'
-                                    + '\n</script>'
-
-                                    + '\n<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
-                                ;
-
                                 layout = layout.replace(/<\/body>/i, plugin + '\t{{ page.scripts }}\n\t</body>');
+                            } else {
+                                layout = layout.replace(/{{ page.scripts }}/i, plugin + '\t{{ page.scripts }}');
                             }
+
                         }
 
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
@@ -704,6 +708,10 @@ function SuperController(options) {
      * @param {string} localRessouces - rule name
      * */
     var setResources = function(viewConf, localRessource) {
+        if (!viewConf) {
+            self.throwError(500, 'No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: ./gina.sh -av '+options.conf.bundle)
+        }
+
         var res = '',
             tmpRes = {},
             css = {

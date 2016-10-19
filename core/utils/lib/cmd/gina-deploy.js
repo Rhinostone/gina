@@ -2,7 +2,7 @@
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
 var spawn           = require('child_process').spawn;
-var helpers         = require('../helpers');
+var helpers         = require('../../helpers');
 var inherits        = require('../inherits');
 var console         = require('../logger');
 

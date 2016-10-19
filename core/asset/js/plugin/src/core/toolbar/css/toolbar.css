@@ -112,6 +112,10 @@
     outline: none;
     border-color: #fff; }
 
+.gina-toolbar-hidden {
+  display: none !important;
+  visibility: hidden;
+}
 .gina-toolbar-copy {
   position: absolute;
   top: -200%;

@@ -34,6 +34,7 @@ $code-hightlight: #323e41
 
 .gina-toolbar
   // all: initial
+  display: none
   color: $white
   font: 12px/18px "Lucida Grande", Lucida, Arial, Helvetica, sans-serif
   @extend %reset
@@ -173,6 +174,9 @@ $code-hightlight: #323e41
   top: -200%
   left: -200%
 
+.gina-toolbar-hidden
+  display: none !important
+  visibility: hidden
 
 // toolbar position
 .gina-toolbar-top-left

@@ -11,9 +11,9 @@
     "gina/storage"      : "../../../../utils/plugin/storage/src/index",
     "gina/toolbar"      : "core/toolbar/main",
     "gina/popin"        : "core/popin/main",
+    "utils/collection"  : "../../../../utils/lib/collection/src/index",
     "utils/merge"       : "../../../../utils/lib/merge/index",
     "utils/inherits"    : "../../../../utils/lib/inherits/index",
-    "utils/collection"  : "../../../../utils/lib/collection/src/index",
     "helpers/dateFormat": "../../../../utils/helpers/dateFormat"
   },
   "include": [
@@ -22,11 +22,10 @@
     "gina/storage",
     "gina/toolbar",
     "gina/popin",
+    "utils/collection",
     "utils/merge",
     "utils/inherits",
-    "utils/collection",
-    "vendor/uuid",
-    "jquery"
+    "vendor/uuid"
   ],
   "name": "gina",
   "out": "./dist/gina.min.js",
