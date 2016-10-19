@@ -11,6 +11,7 @@
     "gina/storage"      : "../../../../utils/plugin/storage/src/index",
     "gina/toolbar"      : "core/toolbar/main",
     "gina/popin"        : "core/popin/main",
+    "utils/events"      : "utils/events",
     "utils/collection"  : "../../../../utils/lib/collection/src/index",
     "utils/merge"       : "../../../../utils/lib/merge/index",
     "utils/inherits"    : "../../../../utils/lib/inherits/index",

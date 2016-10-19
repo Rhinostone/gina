@@ -10,7 +10,7 @@
     },
     "stylesheets": [],
     "javascripts": [],
-    "_pluginLoader": "{src:{gina}/core/asset/js/plugin/src/loader/main.js}",
+    "_pluginLoader": "{src:{gina}/core/asset/js/plugin/src/utils/loader.js}",
     "pluginLoader": "{src:{gina}/core/asset/js/plugin/dist/gina.onload.min.js}"
   }
 }

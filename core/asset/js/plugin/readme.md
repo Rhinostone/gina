@@ -47,7 +47,7 @@ $ cd ${project}/node_modules/gina/core/asset/js/plugin
 ```
 
 ```tty
-$ java -jar /usr/local/lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/loader/main.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
+$ java -jar /usr/local/lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/utils/loader.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
 ```
 
 
