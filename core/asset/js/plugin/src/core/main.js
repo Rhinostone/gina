@@ -1,5 +1,6 @@
-define('core/main', [ 'require', 'utils/merge', 'helpers/dateFormat' ], function (require) {
-    var merge           = require('utils/merge')
+define('core/main', [ 'require', 'vendor/uuid', 'utils/merge', 'helpers/dateFormat' ], function (require) {
+    var uuid            = require('vendor/uuid')
+        , merge         = require('utils/merge')
         , dateFormat    = require('helpers/dateFormat')()
 
         , proto         = { 'isFrameworkLoaded': false, 'hasPopinHandler': false, 'options': {} }
@@ -245,10 +246,16 @@ define('core/main', [ 'require', 'utils/merge', 'helpers/dateFormat' ], function
             return false
         }
 
+        if (!$gina['id']) {
+            var id = 'gina.'+ uuid.v1();
+            $gina['id'] = id;
+        }
+
         var _proto = {
             'on': on,
             'options': options,
             'setOptions': setOptions
+
         };
 
         proto = merge(proto, _proto);

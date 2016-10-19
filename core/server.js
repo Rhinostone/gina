@@ -1070,6 +1070,8 @@ function Server(options) {
                     conf.content.statics[key] = conf.content.views.default.html +'/'+ uri.join('/') // normal case
                 }
 
+
+
                 uri = pathname.split('/');
                 /** TODO - remove this
                 uri = (pathname.replace(wroot, '')).split('/');

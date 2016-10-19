@@ -131,7 +131,7 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
 }
 
 
-define('gina', [ 'require', 'core/main', 'gina/toolbar', 'gina/validator', 'utils/merge' ], function onCoreInit(require) {
+define('gina', [ 'require', 'core/main', 'gina/toolbar', 'gina/validator', 'utils/merge', 'utils/events' ], function onCoreInit(require) {
 
     var core    = require('./core/main');
     var merge   = require('utils/merge');
@@ -242,7 +242,7 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                         // making adding css to the head
                         var link    = null;
                         link        = document.createElement('link');
-                        link.href   = options.webroot + "js/vendor/gina/gina.min.css";
+                        link.href   = ((options.webroot !== '/') ? options.webroot + '/' : options.webroot) + "js/vendor/gina/gina.min.css";
                         link.media  = "screen";
                         link.rel    = "stylesheet";
                         link.type   = "text/css";

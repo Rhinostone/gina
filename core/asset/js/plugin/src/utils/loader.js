@@ -130,27 +130,27 @@ window['onGinaLoaded'] = function(gina) {
 
         gina["isFrameworkLoaded"]       = true;
         gina["setOptions"](options);
-        var ginaPageForms               = JSON.parse('{{ JSON.stringify(page.forms) }}');
+        gina["forms"]                   = JSON.parse('{{ JSON.stringify(page.forms) }}');
 
         // making adding css to the head
         var link        = null;
         link            = document.createElement('link');
-        link.href       = options.webroot + "js/vendor/gina/gina.min.css";
+        link.href       = ((options.webroot !== '/') ? options.webroot + '/' : options.webroot) + "js/vendor/gina/gina.min.css";
         link.media      = "screen";
         link.rel        = "stylesheet";
         link.type       = "text/css";
         document.getElementsByTagName('head')[0].appendChild(link);
 
         // all required must be listed in `src/gina.js` defined modules list
-        // load Form Validator
-        var Validator   = require('gina/validator');
-        ginaFormValidator               = new Validator(ginaPageForms.rules);
-        window['ginaFormValidator']     = ginaFormValidator;
-
         if (options.env == 'dev') {
             var Toolbar     = require('gina/toolbar');
             ginaToolbar     = new Toolbar();
         }
+
+        // load Form Validator
+        // var Validator   = require('gina/validator');
+        // ginaFormValidator               = new Validator(ginaPageForms.rules);
+        // window['ginaFormValidator']     = ginaFormValidator;
 
         return true
     }
