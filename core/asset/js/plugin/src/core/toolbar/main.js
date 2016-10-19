@@ -5,10 +5,9 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
     var Storage     = require('gina/storage');
 
     function Toolbar($) {
-        var $ = $ || require('jquery');
+        var $ = require('jquery');
 
-        $.noConflict();
-        //console.log('jquery is ', $.fn.jquery);
+        //console.log('Toolbar jquery is ', $.fn.jquery);
 
         var self = {
             version         : '1.0.1',
@@ -114,6 +113,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
             // console.log('codeFolding', settings.isUnfolded);
 
+            $toolbar.removeClass('gina-toolbar-hidden');
             handle() // Bind behaviors
         };
 

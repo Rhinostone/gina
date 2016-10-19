@@ -7,9 +7,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
      * */
     function Popin(options) {
 
-        var $ = $ || require('jquery');
+        var $ = require('jquery');
 
-        console.log('jquery ', $.fn.jquery);
+        //console.log('jquery ', $.fn.jquery);
 
         var popinInstance   = { 'id': uuid.v1() };
         var $popin          = null; // is on main `gina-popins` container (first level)

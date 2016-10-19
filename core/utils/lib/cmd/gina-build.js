@@ -1,6 +1,6 @@
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
-var helpers         = require('../helpers');
+var helpers         = require('../../helpers');
 var inherits        = require('../inherits');
 var console         = require('../logger');
 var GINA_PATH      = _( getPath('gina').core );

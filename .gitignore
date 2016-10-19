@@ -1,7 +1,19 @@
 # IDE
 .jshintrc
-.idea
+*.idea
 nbproject
+.metadata
+
+# codekit, sublimetext, vscode
+*.codekit
+.codekit-cache
+.sublime-workspace
+.sublime-project
+*sublime-project
+*sublime-workspace
+.editorconfig
+config.codekit
+.vscode
 
 # Gina
 /logs
@@ -25,3 +37,5 @@ desktop.ini
 /cgi-bin
 ._.DS_Store
 npm-debug.log
+
+*.sassc
