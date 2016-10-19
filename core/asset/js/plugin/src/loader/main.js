@@ -112,10 +112,13 @@ var ginaToolbar = null;
 window['onGinaLoaded'] = function(gina) {
 
     if (!gina) {
-        console.log('gina not ready yet');
+        //console.log('gina not ready yet');
         return false
-    } else if ( !gina["isFrameworkLoaded"] ) {
 
+    } else {
+        if ( gina["isFrameworkLoaded"] ) {
+            return true
+        }
         var options = gina.options = {
             /**@js_externs env*/
             env     : '{{ page.environment.env }}',

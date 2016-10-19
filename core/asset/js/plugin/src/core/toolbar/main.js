@@ -396,7 +396,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
         var toggleCodeFolding = function ($el) {
 
             // console.log('$el', $el);
-            if ($el != undefined && $el.length) {
+            if ($el != undefined && $el.length && $el != 'all') {
 
                 $el.next('ul').slideToggle('fast');
                 $el.toggleClass('gina-toolbar-unfolded');
