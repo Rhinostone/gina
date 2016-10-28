@@ -410,14 +410,22 @@ function ValidatorPlugin(rules, data, formId) {
 
     var submit = function () {
 
-        var $form = null, _id = this.getAttribute('id') || null;
+        var $form = null, _id = null, $target = null;
+
+        if ( this.getAttribute ) {
+            _id = this.getAttribute('id');
+            $target = this;
+        } else if ( typeof(this.target) && this.target.getAttribute ) {
+            _id = this.target.getAttribute('id');
+            $target = this.target
+        }
 
         if ( typeof(instance.$forms[_id]) == 'undefined') {
             throw new Error('[ FormValidator::submit() ] not `$form` binded. Use `FormValidator::getFormById(id)` or `FormValidator::validateFormById(id)` first ')
         }
 
         var $form = instance.$forms[_id];
-        var rule = $form.rule || instance.rules[id.replace(/\-/g, '.')] || null;
+        var rule = $form.rule || instance.rules[_id.replace(/\-/g, '.')] || null;
 
         // getting fields & values
         var $fields     = {}
@@ -425,20 +433,20 @@ function ValidatorPlugin(rules, data, formId) {
             , name      = null;
 
 
-        for (var i = 0, len = $form.length; i<len; ++i) {
-            name = $form[i].getAttribute('name');
+        for (var i = 0, len = $target.length; i<len; ++i) {
+            name = $target[i].getAttribute('name');
             if (!name) continue;
 
-            if ( typeof($form[i].type) != 'undefined' && $form[i].type == 'radio' ) {
-                if ( $form[i].checked == true ) {
-                    fields[name] = $form[i].value;
+            if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' ) {
+                if ( $target[i].checked == true ) {
+                    fields[name] = $target[i].value;
                 }
 
 
             } else {
-                fields[name] = $form[i].value;
+                fields[name] = $target[i].value;
             }
-            $fields[name]   = $form[i];
+            $fields[name]   = $target[i];
             // reset filed error data attributes
             $fields[name].setAttribute('data-errors', '');
 
@@ -454,11 +462,11 @@ function ValidatorPlugin(rules, data, formId) {
                 'data'      : fields
             };
 
-            triggerEvent(gina, $form, 'validate.' + id, result)
+            triggerEvent(gina, $target, 'validate.' + _id, result)
 
         } else {
-            validate($form, fields, $fields, rule, function onValidation(result){
-                triggerEvent(gina, $form, 'validate.' + id, result)
+            validate($target, fields, $fields, rule, function onValidation(result){
+                triggerEvent(gina, $target, 'validate.' + _id, result)
             })
         }
 
