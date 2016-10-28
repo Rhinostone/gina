@@ -1,3 +1,7 @@
+function registerEvents(plugin, events) {
+    gina.registeredEvents[plugin] = events
+}
+
 function addListener(target, element, name, callback) {
 
     if ( typeof(target.event) != 'undefined' && target.event.isTouchSupported && /^(click|mouseout|mouseover)/.test(name) && target.event[name].indexOf(element) == -1) {
@@ -13,6 +17,8 @@ function addListener(target, element, name, callback) {
     } else {
         target.customEvent.addListener(name, callback)
     }
+
+    gina.events[name] = ( typeof(element.id) != 'undefined' && typeof(element.id) != 'object' ) ? element.id : element.getAttribute('id')
 }
 
 function triggerEvent (target, element, name, args) {
@@ -107,5 +113,67 @@ function removeListener(target, element, name, callback) {
         }
     } else {
         target.customEvent.removeListener(name, callback)
+    }
+
+    if ( typeof(gina.events[name]) != 'undefined' )
+        delete gina.events[name]
+}
+
+function on(event, cb) {
+
+    if (!this.plugin) throw new Error('No `plugin` reference found for this event: `'+ event);
+
+    var events = gina.registeredEvents[this.plugin];
+
+    if ( events.indexOf(event) < 0 && !/^init$/.test(event) ) {
+        cb(new Error('Event `'+ event +'` not handled by ginaEventHandler'))
+    } else {
+        var $target = null, id = null;
+        if ( typeof(this.id) != 'undefined' && typeof(this.id) != 'object' ) {
+            $target = this.target || this;
+            id      = this.id;
+        } else if ( typeof(this.target) != 'undefined'  ) {
+            $target = this.target;
+            if (!$target) {
+                $target = this;
+            }
+            id      = ( typeof($target.getAttribute) != 'undefined' ) ? $target.getAttribute('id') : this.id;
+        } else {
+            $target = this.target;
+            id      = instance.id;
+        }
+
+        if ( this.eventData && !$target.eventData)
+            $target.eventData = this.eventData
+
+        event += '.' + id;
+
+
+        if (!gina.events[event]) {
+
+            addListener(gina, $target, event, function(e) {
+
+                cancelEvent(e);
+
+                var data = null;
+                if (e['detail']) {
+                    data = e['detail'];
+                } else if ( typeof(this.eventData.submit) != 'undefined' ) {
+                    data = this.eventData.submit
+                } else if ( typeof(this.eventData.error) != 'undefined' ) {
+                    data = this.eventData.error
+                } else if ( typeof(this.eventData.success) != 'undefined' ) {
+                    data = this.eventData.success;
+                }
+
+                cb(e, data)
+            });
+
+            if (this.initialized && !this.isReady)
+                triggerEvent(gina, $target, 'init.' + id);
+
+        }
+
+        return this
     }
 }

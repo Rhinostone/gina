@@ -1,11 +1,11 @@
 define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/collection', 'gina/storage' ], function (require) {
 
+    var $           = require('jquery');
     var merge       = require('utils/merge');
     var Collection  = require('utils/collection');
     var Storage     = require('gina/storage');
 
-    function Toolbar($) {
-        var $ = require('jquery');
+    function Toolbar() {
 
         //console.log('Toolbar jquery is ', $.fn.jquery);
 

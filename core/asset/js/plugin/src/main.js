@@ -35,7 +35,7 @@ function ready() {
         var result = null;
         var i = i || 0;
 
-        var procceed = function (i, readyList) {
+        var handleEvent = function (i, readyList) {
 
             if ( readyList[i] ) {
 
@@ -51,7 +51,7 @@ function ready() {
                             if (result) {
                                 window.clearInterval(scheduler);
                                 ++i;
-                                procceed(i, readyList)
+                                handleEvent(i, readyList)
                             }
                         } catch (err) {
                             window.clearInterval(scheduler);
@@ -64,7 +64,7 @@ function ready() {
                 } else {
                     readyList[i].fn.call(window, readyList[i].ctx);
                     ++i;
-                    procceed(i, readyList)
+                    handleEvent(i, readyList)
                 }
 
             } else { // end
@@ -73,7 +73,7 @@ function ready() {
             }
         }
 
-        procceed(i, readyList)
+        handleEvent(i, readyList)
     }
 }
 
@@ -87,10 +87,16 @@ function readyStateChange() {
 if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
 
     var gina = {
-        // This is the one public interface use to wrap `handlers`
-        // ready(fn, context);
-        // the context argument is optional - if present, it will be passed
-        // as an argument to the callback
+        /**
+         * ready
+         * This is the one public interface use to wrap `handlers`
+         * It is an equivalent of jQuery(document).ready(cb)
+         *
+         * No need to use it for `handlers`, it is automatically applied for each `handler`
+         *
+         * @callback {callback} callback
+         * @param {object} [context] - if present, it will be passed
+         * */
         /**@js_externs ready*/
         ready: function(callback, context) {
 
@@ -131,72 +137,60 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
 }
 
 
-define('gina', [ 'require', 'core/main', 'gina/toolbar', 'gina/validator', 'utils/merge', 'utils/events', 'utils/dom', 'utils/form-validator' ], function onCoreInit(require) {
-
-    var core    = require('./core/main');
-    var merge   = require('utils/merge');
-
-    function construct(core) {
-
-        var element = document
-            , evt   = null
-            , name  = 'ginaloaded'
-            // returning core instance
-            , args = merge( (window['gina'] || {}), core)
-        ;
-
-        if (window.CustomEvent || document.createEvent) {
-
-            if (window.CustomEvent) { // new method from ie9
-                evt = new CustomEvent(name, {
-                    'detail'    : args,
-                    'bubbles'   : true,
-                    'cancelable': true,
-                    'target'    : element
-                });
-
-            } else { // before ie9
-
-                evt = document.createEvent('HTMLEvents');
-
-                evt['detail'] = args;
-                evt['target'] = element;
-                evt.initEvent(name, true, true);
-
-                evt['eventName'] = name;
-
-            }
-            // trigger event
-            element.dispatchEvent(evt);
-
-
-
-        } else if (document.createEventObject) { // non standard
-            evt = document.createEventObject();
-            evt.srcElement.id = element.id;
-            evt.detail = args;
-            evt.target = element;
-            element.fireEvent('on' + name, evt)
-        }
-
-        return args
-    }
-
-
-    return construct( core() )
-
-});
+// require.config({
+//     "packages": [
+//         "gina",
+//         "gina/validator",
+//         "gina/storage",
+//         "gina/toolbar",
+//         "gina/popin",
+//         "utils/collection",
+//         "utils/merge",
+//         "utils/inherits",
+//         "vendor/uuid",
+//         "vendor/engine.io"
+//     ]
+// });
 
 // exposing packages
-requirejs([
-    "gina",
+// requirejs([
+//     "gina",
+//     "gina/validator",
+//     "gina/storage",
+//     "gina/toolbar",
+//     "gina/popin",
+//     "utils/collection",
+//     "utils/merge",
+//     "utils/inherits",
+//     "vendor/uuid",
+//     "vendor/engine.io"
+// ]);
+
+
+define('core', ['require', 'gina'], function (require) {
+    require('gina')(window['gina']);
+});
+
+
+require.config({
+    "packages": ["gina"]
+});
+
+require([
+    "core",
+
+    // plugins
     "gina/validator",
-    "gina/storage",
-    "gina/toolbar",
     "gina/popin",
+    "gina/storage",
+
+    // utils
+    "utils/dom",
+    "utils/events",
+    "utils/form-validator",
     "utils/collection",
-    "utils/merge",
-    "utils/inherits",
+
+    //vendors
     "vendor/uuid",
     "vendor/engine.io"
 ]);
@@ -237,8 +231,6 @@ for (var t = 0, len = tags.length; t < len; ++t) {
 
                         gina["setOptions"](options);
                         gina["isFrameworkLoaded"]       = true;
-
-                        //console.log('gina onGinaLoaded');
 
                         // making adding css to the head
                         var link    = null;

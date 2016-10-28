@@ -1,14 +1,12 @@
 # Gina
-
 <strong>Gina I/O</strong> - Node.js MVC and Event Driven framework
-
 
 
 Node.js(100%)
 
 __Gina is compatible with the following versions of Node.js:__
-- `v6.x.x` (npm install not supported for this version, see install via github),
-- `v5.x.x` (npm install not supported for this version, see install via github),
+- `v6.x.x` (Between Node.js 5.x and 6.3, NPM is broken, use manual installation: by cloning),
+- `v5.x.x` (Between Node.js 5.x and 6.3, NPM is broken, use manual installation: by cloning),
 - `v4.x.x`,
 - `v0.12.x`, 
 - `v0.11.x`,
@@ -39,7 +37,7 @@ You can now install the framework using npm:
 ```  tty
 $ npm install gina@latest
 ```
-**OR by cloning**
+**OR by cloning (manual installation)**
 ```tty
 $ mkdir node_modules
 $ mkdir node_modules/gina

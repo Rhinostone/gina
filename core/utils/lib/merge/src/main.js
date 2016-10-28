@@ -157,6 +157,7 @@ function Merge() {
                                 //[propose]Don't override existing if prop defined or override @ false
                                 if (
                                     typeof(src) != "undefined"
+                                    && src != null
                                     && src !== copy && !override
                                 ) {
                                     target[ name ] = src

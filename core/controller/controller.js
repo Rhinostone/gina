@@ -475,7 +475,7 @@ function SuperController(options) {
                                 + '{% set userDataInspector                = page %}'
                                 + '{% set userDataInspector.scripts        = "ignored-by-toolbar" %}'
                                 + '{% set userDataInspector.stylesheets    = "ignored-by-toolbar" %}'
-                                + '{% include "'+getPath('gina').core+'/asset/js/plugin/src/core/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector} %}'
+                                + '{% include "'+getPath('gina').core+'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector} %}'
                                 + '{# END Gina Toolbar #}'
 
                                 + '\n<script type="text/javascript">'
@@ -737,7 +737,8 @@ function SuperController(options) {
         //cascading merging
         if (localRessource !== 'default') {
             if ( typeof(viewConf[localRessource]) != 'undefined') {
-                viewConf[localRessource] = merge(viewConf[localRessource], viewConf.default)
+                //viewConf[localRessource] = merge(viewConf[localRessource], viewConf.default)
+                viewConf[localRessource] = merge(viewConf.default, viewConf[localRessource])
             } else {
                 viewConf[localRessource] = viewConf.default
             }

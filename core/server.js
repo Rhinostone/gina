@@ -1129,7 +1129,11 @@ function Server(options) {
                     if ( /\//.test(key) ) {
                         filename = _(path.join(conf.content.statics[key], uri.replace((new RegExp('(/'+key+'|'+key +')')), '')), true)
                     } else {
+                        // !!! this is adding a slash in the end .. not good !
                         filename = _(path.join(conf.content.statics[key], uri.replace(key, '')), true)
+                        if (filename.substr(filename.length-1, 1) == '/' ) {
+                            filename = filename.substr(0, filename.length-1)
+                        }
                     }
                 }
 
@@ -1154,7 +1158,7 @@ function Server(options) {
                                     // adding handler `gina.ready(...)` wrapper
                                     var conf = getContext('gina').config, hanlersPath = self.conf[conf.bundle][conf.env].content.statics.handlers;
                                     if ( new RegExp('^'+ hanlersPath).test(filename) ) {
-                                        file = 'gina.ready(function($){\n'+ file + '\n},window["originalContext"]);'
+                                        file = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));'
                                     }
 
                                     if (cacheless) {

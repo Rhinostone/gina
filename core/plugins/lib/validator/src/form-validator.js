@@ -1,5 +1,5 @@
 /**
- * FormValidator
+ * FormValidatorUtil
  *
  * Dependencies:
  *  - utils/merge
@@ -9,9 +9,12 @@
  * @param {object} data
  * @param {object} [ $fields ] - isGFFCtx only
  * */
-function FormValidator(data, $fields) {
+function FormValidatorUtil(data, $fields) {
 
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+
+    if (isGFFCtx && !$fields )
+        throw new Error('No `Validator` instance found.\nTry:\nvar FormValidator = require("gina/validator"):\nvar formValidator = new FormValidator(...);')
 
     var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../utils/lib/merge');
     var helpers         = (isGFFCtx) ? {} : require('../../../../utils/helpers');
@@ -673,8 +676,8 @@ function FormValidator(data, $fields) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    module.exports  = FormValidator
+    module.exports  = FormValidatorUtil
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('utils/form-validator', function() { return FormValidator })
+    define(function() { return FormValidatorUtil })
 }
