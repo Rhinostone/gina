@@ -125,7 +125,7 @@ define('gina', [ 'require', 'utils/merge', 'utils/events', 'helpers/dateFormat',
 
         registerEvents(this.plugin, events);
 
-        triggerEvent(gina, proto.target, 'ginaloaded.' + proto.id, $instance)
+        triggerEvent(gina, proto.target, 'ginaloaded', $instance)
     }
 
     return construct

@@ -137,36 +137,6 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
 }
 
 
-// require.config({
-//     "packages": [
-//         "gina",
-//         "gina/validator",
-//         "gina/storage",
-//         "gina/toolbar",
-//         "gina/popin",
-//         "utils/collection",
-//         "utils/merge",
-//         "utils/inherits",
-//         "vendor/uuid",
-//         "vendor/engine.io"
-//     ]
-// });
-
-// exposing packages
-// requirejs([
-//     "gina",
-//     "gina/validator",
-//     "gina/storage",
-//     "gina/toolbar",
-//     "gina/popin",
-//     "utils/collection",
-//     "utils/merge",
-//     "utils/inherits",
-//     "vendor/uuid",
-//     "vendor/engine.io"
-// ]);
-
-
 define('core', ['require', 'gina'], function (require) {
     require('gina')(window['gina']);
 });

@@ -5,10 +5,16 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-
+process.env.IS_SCRIPT_MODE = true;
 var fs      = require('fs');
 var os      = require('os');
-var utils   = require('./../core/utils');
+
+// var helpers = require('./../core/utils/helpers');
+// var utils   = {
+//     logger      : require('./../core/utils/lib/logger'),
+//     generator   : require('./../core/utils/lib/generator')
+// };
+var utils = require('./../core/utils');
 var console = utils.logger;
 
 /**
