@@ -5,7 +5,7 @@
  *  - https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API
  *  - https://www.npmjs.com/package/node-localstorage
  * */
-function Storage(options) {
+function StoragePlugin(options) {
 
     var merge       = merge || require('utils/merge');
     var Collection  = Collection || require('utils/collection');
@@ -414,8 +414,8 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     var Collection  = require('../../../../utils/collection');
     var uuid        = require('uuid');
 
-    module.exports = Storage
+    module.exports = StoragePlugin
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define(function() { return Storage })
+    define('gina/storage',function() { return StoragePlugin })
 }

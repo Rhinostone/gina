@@ -31,9 +31,11 @@
  * */
 function Collection(content, option) {
 
-    var instance    = this
-        , merge     = merge || require('utils/merge')
-        , uuid      = uuid || require('vendor/uuid');
+    var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+    var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
+    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../utils/lib/merge');
+
+    var instance        = this;
 
     var defaultOptions = {
         'useLocalStorage': false,
@@ -473,9 +475,6 @@ function Collection(content, option) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var merge   = require('../../merge');
-    var uuid    = require('uuid');
-
     module.exports = Collection
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module

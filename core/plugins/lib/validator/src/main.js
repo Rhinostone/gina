@@ -1,5 +1,5 @@
 /**
- * Validator
+ * ValidatorPlugin
  *
  * Dependencies:
  *  - utils/form-validator
@@ -11,11 +11,21 @@
  * @param {object} [ data ] // from request
  * @param {string} [ formId ]
  * */
-function Validator(rules, data, formId) {
+function ValidatorPlugin(rules, data, formId) {
 
+    this.plugin = 'validator';
+
+    /**
+     * validator event handler - isGFFCtx only
+     * */
+    var events      = ['ready', 'error', 'progress', 'submit', 'success', 'change'];
+
+    /** imports */
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
     if (isGFFCtx) {
         require('utils/events');
+        registerEvents(this.plugin, events);
+
         require('utils/dom');
 
     } else {
@@ -29,31 +39,49 @@ function Validator(rules, data, formId) {
     var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../utils/lib/merge');
     var FormValidator   = (isGFFCtx) ? require('utils/form-validator') : require('./form-validator');
 
+    /** definitions */
+    var instance    = { // isGFFCtx only
+        'id'                : 'validator-' + uuid.v1(),
 
+        'plugin'            : this.plugin,
+        'on'                : (isGFFCtx) ? on : null,
+        'eventData'         : {},
+        'target'            : (isGFFCtx) ? document : null, // by default
 
-    //console.log('rules -> ', rules);
-    var self = {
-        rules   : {},
-        $forms  : {},
-        eventData: {},
-        events: {},
-        currentTarget: null
+        'initialized'       : false,
+        'isReady'           : false,
+        'rules'             : {},
+        '$forms'            : {},
+        'getFormById'       : null,
+        'validateFormById'  : null,
+        'setOptions'        : null,
+        'resetErrorsDisplay': null
     };
 
-    /**
-     * validator event handler
-     * */
-    var events      = ['ready', 'error', 'progress', 'submit', 'success', 'change'];
-    var $validator  = null;
+    // validator proto
+    var $validator      = { // isGFFCtx only
+        'id'                    : null, // form id
 
-    // add input type=hidden to the <body> for form events handling
-    var evtHandler  = null;
+        'plugin'                : this.plugin,
+        'on'                    : (isGFFCtx) ? on : null,
+        'eventData'             : {},
+        'target'                : (isGFFCtx) ? document : null, // by default
+
+        'binded'                : false,
+        'rules'                 : {},
+        'setOptions'            : null,
+        'send'                  : null,
+        'submit'                : null,
+        'destroy'               : null,
+        'resetErrorsDisplay'    : null
+    };
+
 
     /**
-     * XML Request
+     * XML Request - isGFFCtx only
      * */
-    var xhr = null;
-    var xhrOptions = {
+    var xhr         = null;
+    var xhrOptions  = {
         'url'           : '',
         'method'        : 'GET',
         'isSynchrone'   : false,
@@ -67,189 +95,77 @@ function Validator(rules, data, formId) {
         }
     };
 
-    var on = function(event, cb) {
-
-        if ( events.indexOf(event) < 0 ) {
-            cb(new Error('Event `'+ event +'` not handled by ginaValidatorEventHandler'))
-        } else {
-
-            if ( !$validator ) {
-                evtHandler      = document.createElement('input');
-                evtHandler.type = 'hidden';
-                evtHandler.id   = uuid.v1();
-                document.getElementsByTagName('body')[0].appendChild(evtHandler);
-
-                $validator = evtHandler;
-            }
-
-            var $target = ( typeof(this.tagName) != 'undefined' && this.tagName === 'FORM' ) ? this : $validator;
-            var id      = $target.getAttribute('id');
-
-            event += '.' + id;
-
-            var procced = function (event, $target) {
-                //register event
-                self.events[event] = event;
-                self.currentTarget = $target;
-
-                // bind
-                addListener(gina, $target, event, function(e) {
-                    cancelEvent(e);
-
-                    var data = null;
-                    if (e['detail']) {
-                        data = e['detail'];
-                    } else if ( typeof(self.eventData.submit) != 'undefined' ) {
-                        data = self.eventData.submit
-                    } else if ( typeof(self.eventData.error) != 'undefined' ) {
-                        data = self.eventData.error
-                    } else if ( typeof(self.eventData.success) != 'undefined' ) {
-                        data = self.eventData.success;
-                    }
-
-                    // do it once
-                    if ( typeof(self.events[e.type]) != 'undefined' && cb) {
-                        //console.log('calling back from .on("'+e.type+'", cb) ', e);
-                        delete self.events[e.type];
-                        cb(e, data);
-                    }
-                });
-
-                init(rules);
-            }
-
-            if ( typeof(self.events[event]) != 'undefined' && self.events[event] == id ) {
-                // unbind existing
-                removeListener(gina, $validator, event, function () {
-                    procced(event, $target)
-                })
-            } else {
-                procced(event, $target)
-            }
+    /**
+     * backend definitions
+     * */
+    var setCustomRules = function (customRules) {
+        // parsing rules
+        if ( typeof(customRule) != 'undefined' ) {
+            parseRules(customRule, '');
+            checkForRulesImports(customRule);
         }
+    }
 
-        return proto
+    var backendProto = {
+        'setCustomRules': setCustomRules
     };
 
 
-    var getFormById = function(formId) {
+    /**
+     * Backend init
+     *
+     * @param {object} rules
+     * @param {object} [customRule]
+     * */
+    var backendInit = function (rules, data, formId) {
+        // parsing rules
+        if ( typeof(rules) != 'undefined' ) {
+            parseRules(rules, '');
+            checkForRulesImports(rules);
+        }
 
-        if ( !this['$forms'] )
+        var $form = ( typeof(formId) != 'undefined' ) ? { 'id': formId } : null;
+        var fields = {};
+
+        for (var field in data) {
+            fields[field] = data[field]
+        }
+
+        return validate($form, fields, null, instance.rules)
+    }
+
+
+    /**
+     * GFF definitions
+     * */
+
+    var setOptions = function (options) {
+        var options = merge(options, xhrOptions);
+        xhrOptions = options;
+    }
+
+
+    var getFormById = function(formId) {
+        var $form = null, _id = formId;
+
+        if ( !instance['$forms'] )
             throw new Error('`$forms` collection not found');
 
-        if ( typeof(formId) == 'undefined') {
+        if ( typeof(_id) == 'undefined') {
             throw new Error('[ FormValidator::getFormById(formId) ] `formId` is missing')
         }
 
-        formId = formId.replace(/\#/, '');
+        _id = _id.replace(/\#/, '');
 
-        if ( typeof(this['$forms'][formId]) != 'undefined' )
-            return this['$forms'][formId];
+        if ( typeof(instance['$forms'][_id]) != 'undefined' ) {
+            $form = this.$forms[_id] = instance['$forms'][_id];
+
+            return $form
+        }
 
         return null
     }
 
-    var destroy = function(formId) {
-        var $form = null;
-
-
-        if ( !self['$forms'] )
-            throw new Error('`$forms` collection not found');
-
-
-        if ( typeof(formId) == 'undefined') {
-            if ( typeof(this.id) != 'undefined' && this.id != '' && this.id != null ) {
-                var formId  = this.id
-            } else {
-                throw new Error('[ FormValidator::destroy(formId) ] `formId` is missing')
-            }
-        }
-
-        if ( typeof(formId) == 'string') {
-            formId = formId.replace(/\#/, '')
-        } else if ( typeof(formId) == 'object' ) { // weird exception
-            var $target = formId.form;
-            var _id = $target.getAttribute('id') || 'form.'+uuid.v1();
-
-            $target.setAttribute('id', _id);// just in case
-            self.$forms[_id] = merge({}, formProto);
-
-            self.$forms[_id]['target'] = $target;
-            self.$forms[_id]['target']['id'] = _id;
-            self.$forms[_id]['id'] = _id;
-            if (self.$forms[formId['id']])
-                delete self.$forms[formId['id']];
-
-
-            formId = _id;
-        } else {
-            throw new Error('[ FormValidator::destroy(formId) ] `formId` should be a `string`');
-        }
-
-        if ( typeof(self['$forms'][formId]) == 'undefined' || self['$forms'][formId]['id'] != formId ) {
-
-            var $el = document.getElementById(formId);
-
-            self.$forms[formId]             = merge({}, formProto);
-            self.$forms[formId]['id']       = formId;
-            self.$forms[formId]['target']   = $el;
-
-            $form = self.$forms[formId];
-
-        } else {
-            $form = self['$forms'][formId] || null;
-        }
-
-
-        if ($form) {
-            // remove existing listeners
-
-            // form events
-            removeListener(gina, $validator, 'success.' + formId);
-            removeListener(gina, $form, 'validate.' + formId);
-            removeListener(gina, $validator, 'error.' + formId);
-            delete self.events['validate.' + formId];
-            delete self.events['success.' + formId];
-            delete self.events['error.' + formId];
-
-            // submit
-            var $submit = null, evt = null, $buttons = [], $buttonsTMP = [];
-
-            $buttonsTMP = $form.target.getElementsByTagName('button');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ($buttonsTMP[b].type == 'submit')
-                        $buttons.push($buttonsTMP[b])
-                }
-            }
-
-            $buttonsTMP = $form.target.getElementsByTagName('a');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ($buttonsTMP[b].attributes.getNamedItem('data-submit'))
-                        $buttons.push($buttonsTMP[b])
-                }
-            }
-
-            for (var b=0, len=$buttons.length; b<len; ++b) {
-
-                $submit = $buttons[b];
-                //console.log( $submit['id'] );
-                if ( typeof(self.events[$submit['id']]) != 'undefined' ) {
-                    console.log('removing ', self.events[$submit['id']]);
-                    removeListener(gina, $submit, self.events[$submit['id']]);
-                    delete self.events[$submit['id']];
-                }
-
-            }
-
-            delete self['$forms'][formId];
-
-        } else {
-            throw new Error('[ FormValidator::destroy(formId) ] `'+formId+'` not found')
-        }
-
-    }
 
     /**
      * validateFormById
@@ -260,69 +176,55 @@ function Validator(rules, data, formId) {
      * @return {object} $form
      * */
     var validateFormById = function(formId, customRule) {
-        var $form = null;
+        var $form = null, _id = formId;
 
 
-        if ( !this['$forms'] )
-            throw new Error('`$forms` collection not found');
+        if ( !instance['$forms'] ) {
+            throw new Error('`$forms` collection not found')
+        }
 
-        if ( typeof(formId) == 'undefined') {
+
+        if ( typeof(_id) == 'undefined') {
             if ( typeof(this.id) != 'undefined' && this.id != '' && this.id != null ) {
-                var formId  = this.id
+                _id = this.id
             } else {
                 throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `formId` is missing')
             }
         }
 
-        if ( typeof(formId) == 'string') {
-            formId = formId.replace(/\#/, '')
-        } else if ( typeof(formId) == 'object' ) { // weird exception
+        if ( typeof(_id) == 'string') {
+            _id = _id.replace(/\#/, '')
+        } else if ( typeof(_id) == 'object' && !Array.isArray(_id) ) { // weird exception
 
-            var $target = formId.form;
-            var _id = $target.getAttribute('id') || 'form.'+uuid.v1();
+            var $target = _id.form;
+            _id = $target.getAttribute('id') || 'form.'+uuid.v1();
 
             $target.setAttribute('id', _id);// just in case
-            self.$forms[_id] = merge({}, formProto);
 
-            self.$forms[_id]['target'] = $target;
-            self.$forms[_id]['target']['id'] = _id;
-            self.$forms[_id]['id'] = _id;
-            if (self.$forms[formId['id']])
-                delete self.$forms[formId['id']];
-
-
-            formId = _id;
         } else {
             throw new Error('[ FormValidator::validateFormById(formId[, customRule]) ] `formId` should be a `string`');
         }
 
-        if ( typeof(this['$forms'][formId]) == 'undefined' || this['$forms'][formId]['id'] != formId ) {
+        if ( typeof(instance['$forms'][_id]) != 'undefined' ) {
+            $form   = this.$forms[_id] = instance['$forms'][_id]
+        } else { // binding a form out of context (outside of the main instance)
+            var $target             = document.getElementById(_id);
+            $validator.id           = _id;
+            $validator.target       = $target;
 
-            var $el = document.getElementById(formId);
+            $form = this.$forms[_id] = instance.$forms[_id] = merge({}, $validator);
 
-            self.$forms[formId]             = merge({}, formProto);
-            self.$forms[formId]['id']       = formId;
-            self.$forms[formId]['target']   = $el;
-
-            $form = self.$forms[formId];
-
-        } else {
-            $form = this['$forms'][formId] || null;
-        }
-
-
-        if ($form) {
-            var rule = null;
+            var rule    = null;
             if ( typeof(customRule) == 'undefined') {
-                rule = formId.replace(/\-/g, '.');
+                rule = _id.replace(/\-/g, '.');
 
-                if ( typeof(self.rules[rule]) != 'undefined' ) {
-                    $form['rule'] = customRule = self.rules[rule];
+                if ( typeof(instance.rules[rule]) != 'undefined' ) {
+                    $form['rule'] = customRule = instance.rules[rule];
                 } else if ( $form.target.getAttribute('data-gina-validator-rule') ) {
                     rule = $form.target.getAttribute('data-gina-validator-rule').replace(/\-/g, '.');
 
-                    if ( typeof(self.rules[rule]) != 'undefined' ) {
-                        $form['rule'] = self.rules[rule]
+                    if ( typeof(instance.rules[rule]) != 'undefined' ) {
+                        $form['rule'] = instance.rules[rule]
                     } else {
                         throw new Error('[ FormValidator::validateFormById(formId) ] using `data-gina-validator-rule` on form `'+$form.target+'`: no matching rule found')
                     }
@@ -332,23 +234,69 @@ function Validator(rules, data, formId) {
             } else {
                 rule = customRule.replace(/\-/g, '.');
 
-                if ( typeof(self.rules[rule]) != 'undefined' ) {
-                    $form['rule'] = self.rules[rule]
+                if ( typeof(instance.rules[rule]) != 'undefined' ) {
+                    $form['rule'] = instance.rules[rule]
                 } else {
                     throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+customRule+'` is not a valid rule')
                 }
             }
-            //console.log("events list ", self.events);
-            // binding form
-            bindForm($form.target, customRule);
 
-        } else {
-            throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+formId+'` not found')
+            if ($target)
+                bindForm($target, customRule);
         }
 
-        $form['resetErrorsDisplay'] = resetErrorsDisplay;
+        if (!$form) throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+_id+'` not found');
+
+        // if ($form) {
+        //     // $form.plugin                = $validator.plugin;
+        //     // $form.binded                = false;
+        //     // $form.on                    = on;
+        //     // $form.setOptions           = setOptions;
+        //     // $form.getFormById          = getFormById;
+        //     // $form.validateFormById     = validateFormById;
+        //     // $form.resetErrorsDisplay   = resetErrorsDisplay;
+        //     // $form.handleErrorsDisplay  = handleErrorsDisplay;
+        //     // $form.submit               = submit;
+        //     // $form.send                 = send;
+        //     // $form.destroy              = destroy;
+        //
+        //     var rule    = null;
+        //     if ( typeof(customRule) == 'undefined') {
+        //         rule = _id.replace(/\-/g, '.');
+        //
+        //         if ( typeof(instance.rules[rule]) != 'undefined' ) {
+        //             $form['rule'] = customRule = instance.rules[rule];
+        //         } else if ( $form.target.getAttribute('data-gina-validator-rule') ) {
+        //             rule = $form.target.getAttribute('data-gina-validator-rule').replace(/\-/g, '.');
+        //
+        //             if ( typeof(instance.rules[rule]) != 'undefined' ) {
+        //                 $form['rule'] = instance.rules[rule]
+        //             } else {
+        //                 throw new Error('[ FormValidator::validateFormById(formId) ] using `data-gina-validator-rule` on form `'+$form.target+'`: no matching rule found')
+        //             }
+        //         } else {
+        //             throw new Error('[ FormValidator::validateFormById(formId[, customRule]) ] `customRule` or `data-gina-validator-rule` attribute is missing')
+        //         }
+        //     } else {
+        //         rule = customRule.replace(/\-/g, '.');
+        //
+        //         if ( typeof(instance.rules[rule]) != 'undefined' ) {
+        //             $form['rule'] = instance.rules[rule]
+        //         } else {
+        //             throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+customRule+'` is not a valid rule')
+        //         }
+        //     }
+        //
+        //     // binding form
+        //     bindForm($form.target, customRule);
+        //
+        // } else {
+        //     throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+_id+'` not found')
+        // }
+
 
         return $form || null;
+
     }
 
     var handleErrorsDisplay = function($form, errors) {
@@ -382,7 +330,6 @@ function Validator(rules, data, formId) {
                 // injecting error messages
                 for (var e in errors[name]) {
                     $msg = document.createElement('p');
-                    //console.log('txt => ', errors[name][e], e);
                     $msg.appendChild( document.createTextNode(errors[name][e]) );
                     $err.appendChild($msg)
                 }
@@ -438,84 +385,39 @@ function Validator(rules, data, formId) {
      *
      * */
     var resetErrorsDisplay = function($form) {
-        var $form = $form;
+        var $form = $form, _id = null;
         if ( typeof($form) == 'undefined' ) {
-            $form = self.$forms[this.id]
+            _id = this.getAttribute('id');
+            $form = instance.$forms[_id]
         } else if ( typeof($form) == 'string' ) {
-            $form = $form.replace(/\#/, '');
+            _id = $form;
+            _id = _id.replace(/\#/, '');
 
-            if ( typeof(self.$forms[$form]) == 'undefined') {
+            if ( typeof(instance.$forms[_id]) == 'undefined') {
                 throw new Error('[ FormValidator::resetErrorsDisplay([formId]) ] `'+$form+'` not found')
             }
 
-            $form = self.$forms[$form]
+            $form = instance.$forms[_id]
         }
         //console.log('reseting error display ', $form.id, $form);
         handleErrorsDisplay($form['target'], [])
-        // getting fields & values
-        // var $fields     = {}
-        //     , fields    = { '_length': 0 }
-        //     , name      = null
-        //     , value     = 0
-        //     , type      = null;
-        //
-        // for (var i = 0, len = $form['target'].length; i<len; ++i) {
-        //     name = $form['target'][i].getAttribute('name');
-        //     if (!name) continue;
-        //
-        //     if ( typeof($form['target'][i].type) != 'undefined' && $form['target'][i].type == 'radio' ) {
-        //         //console.log('radio ', name, $form[i].checked, $form[i].value);
-        //         if ( $form['target'][i].checked == true ) {
-        //             fields[name] = $form['target'][i].value;
-        //         }
-        //
-        //
-        //     } else {
-        //         fields[name]    = $form['target'][i].value;
-        //     }
-        //     $fields[name]   = $form['target'][i];
-        //     // reset filed error data attributes
-        //     $fields[name].setAttribute('data-errors', '');
-        //
-        //     ++fields['_length']
-        // }
-
-        //console.log('$fields =>\n' + $fields);
-
-        // if ( fields['_length'] == 0 ) { // nothing to validate
-        //     delete fields['_length'];
-        //     var result = {
-        //         'errors'    : [],
-        //         'isValid'   : function() { return true },
-        //         'data'      : fields
-        //     };
-        //
-        //     handleErrorsDisplay($form['target'], result['errors'])
-        //
-        // } else {
-        //     // console.log('testing rule [ '+$form.id.replace(/\-/g, '.') +' ]\n'+ JSON.stringify(rule, null, 4));
-        //     //console.log('validating !! ', self.rules[$form.id.replace(/-/g, '.')]);
-        //     validate($form['target'], fields, $fields, self.rules[$form.id.replace(/-/g, '.')], function onValidation(result){
-        //         handleErrorsDisplay($form['target'], result['errors']);
-        //     });
-        //
-        // }
     }
-    
-    var refreshErrorsDisplay = function ($form) {
-        
-    }
+
+    // TODO - efreshErrorsDisplay
+    // var refreshErrorsDisplay = function ($form) {
+    //
+    // }
 
     var submit = function () {
 
-        var id   = this.id;
+        var $form = null, _id = this.getAttribute('id') || null;
 
-        if ( typeof(self.$forms[id]) == 'undefined') {
+        if ( typeof(instance.$forms[_id]) == 'undefined') {
             throw new Error('[ FormValidator::submit() ] not `$form` binded. Use `FormValidator::getFormById(id)` or `FormValidator::validateFormById(id)` first ')
         }
 
-        var $form = this.target;
-        var rule = this.rule || self.rules[id.replace(/\-/g, '.')] || null;
+        var $form = instance.$forms[_id];
+        var rule = $form.rule || instance.rules[id.replace(/\-/g, '.')] || null;
 
         // getting fields & values
         var $fields     = {}
@@ -563,10 +465,6 @@ function Validator(rules, data, formId) {
         return this;
     }
 
-    var setOptions = function (options) {
-        var options = merge(options, xhrOptions);
-        xhrOptions = options;
-    }
 
     /**
      * send
@@ -578,8 +476,8 @@ function Validator(rules, data, formId) {
      * */
     var send = function(data, options) {
 
-        var $form   = this.target;
-        var id      = $form.getAttribute('id');
+        var $target = this.target , id = $target.getAttribute('id');
+        var $form = instance.$forms[id];
 
         // forward callback to HTML attribute
         listenToXhrEvents($form);
@@ -590,14 +488,14 @@ function Validator(rules, data, formId) {
             var options = xhrOptions;
         }
 
-        var url         = $form.getAttribute('action') || options.url;
-        var method      = $form.getAttribute('method') || options.method;
+        var url         = $target.getAttribute('action') || options.url;
+        var method      = $target.getAttribute('method') || options.method;
         method          = method.toUpperCase();
         options.method  = method;
         options.url     = url;
 
         // to upload, use `multipart/form-data` for `enctype`
-        var enctype = $form.getAttribute('enctype');
+        var enctype = $target.getAttribute('enctype');
 
         //console.log('options ['+$form.id+'] -> ', options);
 
@@ -617,7 +515,7 @@ function Validator(rules, data, formId) {
                 // CORS not supported.
                 xhr = null;
                 var result = 'CORS not supported: the server is missing the header `"Access-Control-Allow-Credentials": true` ';
-                triggerEvent(gina, $form, 'error.' + id, result)
+                triggerEvent(gina, $target, 'error.' + id, result)
             }
         } else {
             if (options.isSynchrone) {
@@ -650,12 +548,12 @@ function Validator(rules, data, formId) {
                                 result = JSON.parse(xhr.responseText)
                             }
 
-                            self.eventData.success = result;
+                            $form.eventData.success = result;
                             //console.log('sending response ...');
                             //console.log('event is ', 'success.' + id);
                             //console.log('making response ' + JSON.stringify(result, null, 4));
 
-                            triggerEvent(gina, $form, 'success.' + id, result)
+                            triggerEvent(gina, $target, 'success.' + id, result)
 
                         } catch (err) {
                             var result = {
@@ -663,9 +561,9 @@ function Validator(rules, data, formId) {
                                 'error' : err.description
                             };
 
-                            self.eventData.error = result;
+                            $form.eventData.error = result;
 
-                            triggerEvent(gina, $form, 'error.' + id, result)
+                            triggerEvent(gina, $target, 'error.' + id, result)
                         }
 
                     } else {
@@ -675,9 +573,9 @@ function Validator(rules, data, formId) {
                             'error' : xhr.responseText
                         };
 
-                        self.eventData.error = result;
+                        $form.eventData.error = result;
 
-                        triggerEvent(gina, $form, 'error.' + id, result)
+                        triggerEvent(gina, $target, 'error.' + id, result)
                     }
                 }
             };
@@ -695,9 +593,9 @@ function Validator(rules, data, formId) {
                     'progress': percentComplete
                 };
 
-                self.eventData.onprogress = result;
+                $form.eventData.onprogress = result;
 
-                triggerEvent(gina, $form, 'progress.' + id, result)
+                triggerEvent(gina, $target, 'progress.' + id, result)
             };
 
             // catching timeout
@@ -707,9 +605,9 @@ function Validator(rules, data, formId) {
                     'error': 'Request Timeout'
                 };
 
-                self.eventData.ontimeout = result;
+                $form.eventData.ontimeout = result;
 
-                triggerEvent(gina, $form, 'error.' + id, result)
+                triggerEvent(gina, $target, 'error.' + id, result)
             };
 
 
@@ -720,14 +618,15 @@ function Validator(rules, data, formId) {
                         data = JSON.stringify(data)
                         //data = encodeURIComponent(JSON.stringify(data))
                     } catch (err) {
-                        triggerEvent(gina, $form, 'error.' + id, err)
+                        triggerEvent(gina, $target, 'error.' + id, err)
                     }
                 }
                 //console.log('sending -> ', data);
-                xhr.send(data)
+                xhr.send(data);
             } else {
                 xhr.send()
             }
+            $form.sent = true;
 
 
         }
@@ -735,10 +634,12 @@ function Validator(rules, data, formId) {
 
     var listenToXhrEvents = function($form) {
 
-        $form['on'] = formProto['on'];
+        //$form['plugin'] = $validator.plugin;
+        //$form['on']     = $validator.on;
+
 
         //data-on-submit-success
-        var htmlSuccesEventCallback =  $form.getAttribute('data-on-submit-success') || null;
+        var htmlSuccesEventCallback =  $form.target.getAttribute('data-on-submit-success') || null;
         if (htmlSuccesEventCallback != null) {
 
             if ( /\((.*)\)/.test(htmlSuccesEventCallback) ) {
@@ -749,7 +650,7 @@ function Validator(rules, data, formId) {
         }
 
         //data-on-submit-error
-        var htmlErrorEventCallback =  $form.getAttribute('data-on-submit-error') || null;
+        var htmlErrorEventCallback =  $form.target.getAttribute('data-on-submit-error') || null;
         if (htmlErrorEventCallback != null) {
             if ( /\((.*)\)/.test(htmlErrorEventCallback) ) {
                 eval(htmlErrorEventCallback)
@@ -759,168 +660,100 @@ function Validator(rules, data, formId) {
         }
     }
 
-
-    var setCustomRules = function (customRules) {
-        // parsing rules
-        if ( typeof(customRule) != 'undefined' ) {
-            parseRules(customRule, '');
-            checkForRulesImports(customRule);
-        }
-    }
-
-    var backendProto = {
-        'setCustomRules': setCustomRules
-    };
-
-    var proto = {
-        'on'                : on,
-        'getFormById'       : getFormById,
-        'resetErrorsDisplay': resetErrorsDisplay,
-        'rules'             : self.rules,
-        'setOptions'        : setOptions,
-        'validateFormById'  : validateFormById,
-        'handleErrorsDisplay': handleErrorsDisplay
-    };
-
-    var formProto = {
-        'destroy'   : destroy,
-        'on'        : on,
-        'send'      : send,
-        'submit'    : submit
-    };
-
-    /**
-     * Backend init
-     *
-     * @param {object} rules
-     * @param {object} [customRule]
-     * */
-    var backendInit = function (rules, data, formId) {
-        // parsing rules
-        if ( typeof(rules) != 'undefined' ) {
-            parseRules(rules, '');
-            checkForRulesImports(rules);
-        }
-
-        var $form = ( typeof(formId) != 'undefined' ) ? { 'id': formId } : null;
-        var fields = {};
-
-        for (var field in data) {
-            fields[field] = data[field]
-        }
-
-        return validate($form, fields, null, self.rules)
-    }
-
-    var init = function (rules) {
-
-        // parsing rules
-        if ( typeof(rules) != 'undefined' ) {
-            parseRules(rules, '');
-            checkForRulesImports(rules);
-        }
-
-        var id          = null
-            , i         = 0
-            , $forms    = []
-            , $allForms = document.getElementsByTagName('form');
+    var destroy = function(formId) {
+        var $form = null, _id = formId;
 
 
-        // has rule ?
-        for (var f=0, len = $allForms.length; f<len; ++f) {
-            // preparing prototype (need at least an ID for this)
+        if ( !instance['$forms'] )
+            throw new Error('`$forms` collection not found');
 
-            $allForms[f]['id'] = ($allForms[f].getAttribute) ? $allForms[f].getAttribute('id') : null;
-            if ( typeof($allForms[f].id) != 'undefined' && $allForms[f].id != 'null' && $allForms[f].id != '') {
 
-                self.$forms[$allForms[f].id] = merge({}, formProto);
-                self.$forms[$allForms[f].id]['id'] = $allForms[f].id;
-                self.$forms[$allForms[f].id]['target'] = $allForms[f];
-
-                var customRule = $allForms[f].getAttribute('data-gina-validator-rule');
-
-                if (customRule) {
-                    customRule = customRule.replace(/\-/g, '.');
-                    if ( typeof(self.rules[customRule]) == 'undefined' ) {
-                        throw new Error('['+$allForms[f].id+'] no rule found with key: `'+customRule+'`');
-                        customRule = null
-                    } else {
-                        customRule = self.rules[customRule]
-                    }
-                }
-
-                // finding forms handled by rules
-                if ( typeof($allForms[f].id) == 'string' && typeof(self.rules[$allForms[f].id.replace(/\-/g, '.')]) != 'undefined' ) {
-
-                    if (customRule) {
-                        bindForm($allForms[f], customRule)
-                    } else {
-                        bindForm($allForms[f])
-                    }
-
-                    ++i
-                } else {
-                    // weird exception when having in the form an element with name="id"
-                    if ( typeof($allForms[f].id) == 'object' ) {
-                        delete self.$forms[$allForms[f].id];
-
-                        var _id = $allForms[f].attributes.getNamedItem('id').nodeValue || 'form.'+uuid.v1();
-
-                        $allForms[f].setAttribute('id', _id);
-                        $allForms[f]['id'] = _id;
-
-                        self.$forms[_id] = merge({}, formProto);
-                        self.$forms[_id]['target'] = $allForms[f];
-                        self.$forms[_id]['id'] = _id;
-
-                        if (customRule) {
-                            bindForm($allForms[f], customRule)
-                        } else {
-                            bindForm($allForms[f])
-                        }
-                    } else {
-
-                        if (customRule) {
-                            bindForm($allForms[f], customRule)
-                        } else {
-                            bindForm($allForms[f])
-                        }
-                    }
-                }
-            }
-
-        }
-
-        //console.log('selected forms ', self.$forms);
-        proto['$forms'] = self.$forms;
-
-        // setting up AJAX
-        if (window.XMLHttpRequest) { // Mozilla, Safari, ...
-            xhr = new XMLHttpRequest();
-        } else if (window.ActiveXObject) { // IE
-            try {
-                xhr = new ActiveXObject("Msxml2.XMLHTTP");
-            } catch (e) {
-                try {
-                    xhr = new ActiveXObject("Microsoft.XMLHTTP");
-                }
-                catch (e) {}
+        if ( typeof(_id) == 'undefined') {
+            if ( typeof(this.id) != 'undefined' && this.id != '' && this.id != null ) {
+                _id  = this.id
+            } else {
+                throw new Error('[ FormValidator::destroy(formId) ] `formId` is missing')
             }
         }
 
-        // trigger validator ready event
-        triggerEvent(gina, $validator, 'ready.' + $validator.id, proto);
-    }
+        if ( typeof(_id) == 'string') {
+            _id = _id.replace(/\#/, '')
+        } else if ( typeof(_id) == 'object' && !Array.isArray(_id) ) { // weird exception
+            var $target = _id.form;
+            _id = $target.getAttribute('id') || 'form.'+uuid.v1();
 
-    var parseRules = function(rules, tmp) {
+            $target.setAttribute('id', _id);// just in case
 
-        for (var r in rules) {
-
-            if ( typeof(rules[r]) == 'object' && typeof(self.rules[tmp + r]) == 'undefined' ) {
-                self.rules[tmp + r] = rules[r];
-                parseRules(rules[r], tmp + r+'.');
-            }
+        } else {
+            throw new Error('[ FormValidator::destroy(formId) ] `formId` should be a `string`');
         }
+
+        // if ( typeof(instance['$forms'][_id]) == 'undefined' || instance['$forms'][_id]['id'] != _id ) {
+        //
+        //     var $el = document.getElementById(formId);
+        //
+        //     if (!$validator.$forms[_id])
+        //         $validator.$forms[_id] = {};
+        //
+        //     //$validator.$forms[_id]             = merge({}, $validator);
+        //     $validator.$forms[_id]['id']       = _id;
+        //     $validator.$forms[_id]['target']   = $el;
+        //
+        //     $form = $validator.$forms[_id];
+        //
+        // } else {
+        //     $form = self['$forms'][_id] || null;
+        // }
+
+        if ( typeof(instance['$forms'][_id]) != 'undefined' ) {
+            $form = instance['$forms'][_id]
+        }
+
+        if ($form) {
+            // remove existing listeners
+
+            // form events
+            removeListener(gina, $form, 'success.' + _id);
+            removeListener(gina, $form, 'validate.' + _id);
+            removeListener(gina, $form, 'submit.' + _id);
+            removeListener(gina, $form, 'error.' + _id);
+
+            // submit
+            var $submit = null, evt = null, $buttons = [], $buttonsTMP = [];
+
+            $buttonsTMP = $form.target.getElementsByTagName('button');
+            if ( $buttonsTMP.length > 0 ) {
+                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                    if ($buttonsTMP[b].type == 'submit')
+                        $buttons.push($buttonsTMP[b])
+                }
+            }
+
+            $buttonsTMP = $form.target.getElementsByTagName('a');
+            if ( $buttonsTMP.length > 0 ) {
+                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                    if ($buttonsTMP[b].attributes.getNamedItem('data-submit'))
+                        $buttons.push($buttonsTMP[b])
+                }
+            }
+
+            for (var b=0, len=$buttons.length; b<len; ++b) {
+
+                $submit = $buttons[b];
+                if ( typeof(gina.events[$submit['id']]) != 'undefined' ) {
+                    //console.log('removing ', gina.events[$submit['id']]);
+                    removeListener(gina, $submit, gina.events[$submit['id']]);
+                }
+
+            }
+
+            delete instance['$forms'][_id];
+
+
+        } else {
+            throw new Error('[ FormValidator::destroy(formId) ] `'+_id+'` not found')
+        }
+
     }
 
     var checkForRulesImports = function (rules) {
@@ -935,9 +768,8 @@ function Validator(rules, data, formId) {
                 //console.log('ruleArr -> ', ruleArr, importedRules[r]);
                 for (var i = 0, iLen = ruleArr.length; i<iLen; ++i) {
                     tmpRule = ruleArr[i].replace(/\//g, '.');
-                    //console.log('-> ', ruleArr[i], self.rules[ ruleArr[i] ], self.rules);
-                    if ( typeof(self.rules[ tmpRule ]) != 'undefined' ) {
-                        rule = merge(rule, self.rules[ tmpRule ])
+                    if ( typeof(instance.rules[ tmpRule ]) != 'undefined' ) {
+                        rule = merge(rule, instance.rules[ tmpRule ])
                     } else {
                         console.warn('[formValidator:rules] <@import error> on `'+importedRules[r]+'`: rule `'+ruleArr[i]+'` not found. Ignoring.')
                     }
@@ -948,445 +780,162 @@ function Validator(rules, data, formId) {
                 rule = {}
 
             }
-            self.rules = {}, rules = JSON.parse(rulesStr);
+            instance.rules = {}, rules = JSON.parse(rulesStr);
             parseRules(rules, '');
 
-            if (isGFFCtx) {
-                proto.rules = self.rules
-            } else {
-                backendProto.rules = self.rules
+            if (!isGFFCtx) {
+                backendProto.rules = instance.rules
             }
-
-            //self.rules = JSON.parse(rulesStr);
-            //console.log('->\n'+ JSON.stringify(rules.project.edit, null, 4));
         }
     }
 
-    var bindForm = function($form, customRule) {
-        var _id = $form.getAttribute('id');
-        if ( typeof(_id) != 'string' ) {
-            try {
-                _id = $form.getAttribute('id') || 'form.'+uuid.v1();
-                $form.setAttribute('id', _id);
-                $form.id = _id; // won't override :( ...
-            } catch(err) {
-                throw new Error('Validator::bindForm($form, customRule) could not bind form `'+ $form +'`\n'+err.stack )
-            }
-        }
+    var init = function (rules) {
 
-        if ( typeof(self.$forms[_id]) == 'undefined'){
-            self.$forms[_id] = $form;
-        }
-
-        if ( typeof(self.$forms[_id]) != 'undefined' && self.$forms[_id]['binded']) {
-            return false
-        }
-
-        var withRules = false, rule = null, evt = '', procced = null;
-
-        if ( typeof(customRule) != 'undefined' || typeof(_id) == 'string' && typeof(self.rules[_id.replace(/\-/g, '.')]) != 'undefined' ) {
-            withRules = true;
-
-            if ( customRule && typeof(customRule) == 'object' ) {
-                rule = customRule
-            } else if ( customRule && typeof(customRule) == 'string' && typeof(self.rules[customRule.replace(/\-/g, '.')]) != 'undefined') {
-                rule = self.rules[customRule.replace(/\-/g, '.')]
-            } else {
-                rule = self.rules[_id.replace(/\-/g, '.')]
-            }
-        }
-
-        // binding input: checkbox, radio
-        var $inputs = $form.getElementsByTagName('input'), type = null, id = null;
-
-        var updateCheckBox = function($el) {
-
-            var checked = $el.checked;
-
-            if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
-
-                $el.checked = false;
-                $el.removeAttribute('checked');
-                $el.value = 'false';
-
-            } else {
-
-                $el.setAttribute('checked', 'checked');
-                //boolean exception handling
-                $el.value = 'true';
-                $el.checked = true;
-
-            }
-        };
-
-        var updateRadio = function($el, isInit) {
-            var checked = $el.checked;
-
-            // loop if radio group
-            if (!isInit) {
-                var radioGroup = document.getElementsByName($el.name);
-                //console.log('found ', radioGroup.length, radioGroup)
-                for (var r = 0, rLen = radioGroup.length; r < rLen; ++r) {
-                    if (radioGroup[r].id !== $el.id) {
-                        radioGroup[r].checked = false;
-                        radioGroup[r].removeAttribute('checked')
-                    }
-                }
-            }
-
-            if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
-
-                $el.checked = false;
-                $el.removeAttribute('checked');
-
-            } else {
-
-                $el.setAttribute('checked', 'checked');
-                $el.checked = true;
-
-                //console.log('name -> ', $el.name, $el.value);
-            }
-        }
-
-        evt = 'click';
-
-        procced = function () {
-            // click proxy
-            addListener(gina, $form, 'click', function(event) {
-
-                // var isBinded = false, id = event.target.getAttribute('id');//self.events[event] = this.id;
-                // if ( typeof(self.events['click.'+id]) != 'undefined' && self.events['click.'+id] == id ) {
-                //     isBinded = true
-                // }
-                //
-                // if (isBinded) cancelEvent(event);
-
-                if ( typeof(event.target.id) == 'undefined' ) {
-                    event.target.setAttribute('id', 'click.' + uuid.v1() );
-                    event.target.id = event.target.getAttribute('id')
-                }
-
-
-                if (/^click\./.test(event.target.id) || withRules) {
-
-
-                    var _evt = event.target.id;
-                    if ( ! /^click\./.test(_evt)  ) {
-                        _evt = 'click.' + event.target.id
-                    }
-
-                    triggerEvent(gina, event.target, _evt, event.detail)
-
-                }
-
-
-
-
+        if (gina.hasValidator) {
+            instance = merge(instance, gina.validator);
+            instance.on('init', function(event) {
+                instance.isReady = true;
+                triggerEvent(gina, instance.target, 'ready.' + instance.id, instance)
             })
-        }
-
-        if ( typeof(self.events[evt]) != 'undefined' && self.events[evt] == _id ) {
-            //removeListener(gina, element, name, callback)
-            removeListener(gina, $form, evt, procced)
         } else {
-            procced()
-        }
+            setupInstanceProto();
+            instance.on('init', function(event) {
+                // parsing rules
+                if ( typeof(rules) != 'undefined' ) {
+                    parseRules(rules, '');
+                    checkForRulesImports(rules);
+                }
 
-        for (var i=0, len = $inputs.length; i<len; ++i) {
-            type    = $inputs[i].getAttribute('type');
+                $validator.setOptions           = setOptions;
+                $validator.getFormById          = getFormById;
+                $validator.validateFormById     = validateFormById;
+                $validator.resetErrorsDisplay   = resetErrorsDisplay;
+                $validator.handleErrorsDisplay  = handleErrorsDisplay;
+                $validator.submit               = submit;
+                $validator.send                 = send;
+                $validator.destroy              = destroy;
 
-            if ( typeof($inputs[i].id) == 'undefined' || $inputs[i].id == '' ) {
-                $inputs[i]['id'] = type +'-'+ uuid.v1();
-                $inputs[i].setAttribute('id', $inputs[i]['id'])
-            }
+                var id          = null
+                    , $target   = null
+                    , i         = 0
+                    , $forms    = []
+                    , $allForms = document.getElementsByTagName('form');
 
 
-            if ( typeof(type) != 'undefined' && type == 'checkbox' ) {
+                // has rule ?
+                for (var f=0, len = $allForms.length; f<len; ++f) {
+                    // preparing prototype (need at least an ID for this)
 
-                evt = 'click.' + $inputs[i].id;
-
-
-                procced = function ($el, evt) {
-
-                    // recover default state only on value === true || false
-                    addListener(gina, $el, evt, function(event) {
-
-                        //cancelEvent(event);
-
-                        if ( /(true|false)/.test(event.target.value) ) {
-                            updateCheckBox(event.target);
+                    if ($allForms[f].getAttribute) {
+                        id = $allForms[f].getAttribute('id') || 'form.' + uuid.v1();
+                        if ( id !== $allForms[f].getAttribute('id') ) {
+                            $allForms[f].setAttribute('id', id)
                         }
-                    });
-
-                    if ( /(true|false)/.test($el.value) )
-                        updateCheckBox($el);
-
-                }
-
-                if ( typeof(self.events[evt]) != 'undefined' && self.events[evt] == $inputs[i].id ) {
-                    removeListener(gina, $inputs[i], evt, function(event){
-                        procced(event.target, evt)
-                    })
-                } else {
-                    procced($inputs[i], evt)
-                }
-
-            } else if ( typeof(type) != 'undefined' && type == 'radio' ) {
-                evt = 'click.' + $inputs[i].id;
-
-                procced = function ($el, evt) {
-                    addListener(gina, $el, evt, function(event) {
-                        //cancelEvent(event);
-                        updateRadio(event.target);
-
-                    });
-
-                    updateRadio($el, true)
-                }
-
-                if ( typeof(self.events[evt]) != 'undefined' && self.events[evt] == $inputs[i].id ) {
-                    removeListener(gina, $inputs[i], evt, function(event){
-                        procced(event.target, evt)
-                    })
-                } else {
-                    procced($inputs[i], evt)
-                }
-            }
-        }
-
-
-        if (withRules) {
-            evt = 'validate.' + _id;
-            //console.log('[ bind() ] : before attaching `'+evt+'` ->  `withRules`: '+withRules, '\n'+self.events[evt]+' VS '+_id, '\nevents ', self.events);
-
-            procced = function () {
-                self.events[evt] = _id;
-                //console.log('attaching ', evt);
-
-                // attach form event
-                addListener(gina, $form, evt, function(event) {
-                    cancelEvent(event);
-
-                    var result = event['detail'] || self.eventData.validation;
-                    //console.log('$form[ '+_id+' ] validation done !!!\n isValid ? ', result['isValid'](), '\nErrors -> ', result['errors'], '\nData -> ', result['data']);
-
-                    handleErrorsDisplay(event['target'], result['errors']);
-
-                    if ( result['isValid']() ) { // send if valid
-                        // now sending to server
-                        formProto['target'] = event['target'];
-                        formProto['id']     = event['target'].getAttribute('id');
-
-                        self.$forms[event.target.id] = formProto;
-                        //console.log('sending ... ', result['data']);
-                        //console.log('just before sending ', self.$forms[event.target.id]);
-                        self.$forms[event.target.id].send(result['data']);
-
+                    } else {
+                        id = 'form.' + uuid.v1();
+                        $allForms[f].setAttribute('id', id)
                     }
 
-                });
-            }
+                    $allForms[f]['id'] = $validator.id = id;
 
-            if ( typeof(self.events[evt]) != 'undefined' && self.events[evt] == _id ) {
-                //removeListener(gina, element, name, callback)
-                removeListener(gina, $form, evt, procced)
-            } else {
-                procced()
-            }
+                    if ( typeof($allForms[f].id) != 'undefined' && $allForms[f].id != 'null' && $allForms[f].id != '') {
 
-            // if ( typeof(self.events[evt]) == 'undefined' || self.events[evt] != _id ) {
-            //     self.events[evt] = _id;
-            //     procced(evt, $form)
-            // }
+                        $validator.target = $allForms[f];
+                        instance.$forms[$allForms[f].id] = merge({}, $validator);
 
+                        var customRule = $allForms[f].getAttribute('data-gina-validator-rule');
 
-
-            // binding submit button
-            var $submit = null, $buttons = [], $buttonsTMP = [], buttonId = null;
-            $buttonsTMP = $form.getElementsByTagName('button');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ($buttonsTMP[b].type == 'submit')
-                        $buttons.push($buttonsTMP[b])
-                }
-            }
-
-            $buttonsTMP = $form.getElementsByTagName('a');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ( $buttonsTMP[b].attributes.getNamedItem('data-submit'))
-                        $buttons.push($buttonsTMP[b])
-                }
-            }
-
-
-            var onclickAttribute = null;
-            for (var b=0, len=$buttons.length; b<len; ++b) {
-
-                $submit = $buttons[b];
-
-                if ($submit.tagName == 'A') { // without this test, XHR callback is ignored
-                    //console.log('a#$buttons ', $buttonsTMP[b]);
-                    onclickAttribute = $submit.getAttribute('onclick');
-
-                    if ( !onclickAttribute ) {
-                        $submit.setAttribute('onclick', 'return false;')
-                    } else if ( !/return false/) {
-                        if ( /\;$/.test(onclickAttribute) ) {
-                            onclickAttribute += 'return false;'
-                        } else {
-                            onclickAttribute += '; return false;'
-                        }
-                    }
-                }
-
-                if (!$submit['id']) {
-
-                    evt = 'click.'+ uuid.v1();
-                    $submit['id'] = evt;
-                    $submit.setAttribute( 'id', evt);
-
-                } else {
-                    evt = $submit['id'];
-                }
-
-                procced = function (evt, $submit) {
-                    // attach submit events
-                    addListener(gina, $submit, evt, function(event) {
-                        //console.log('submiting ', evt, $submit);
-                        // start validation
-                        cancelEvent(event);
-                        // getting fields & values
-                        var $fields     = {}
-                            , fields    = { '_length': 0 }
-                            , name      = null
-                            , value     = 0
-                            , type      = null;
-
-                        for (var i = 0, len = $form.length; i<len; ++i) {
-                            name = $form[i].getAttribute('name');
-                            if (!name) continue;
-
-                            // TODO - add switch cases against tagName (checkbox/radio)
-
-                            if ( typeof($form[i].type) != 'undefined' && $form[i].type == 'radio' ) {
-                                //console.log('radio ', name, $form[i].checked, $form[i].value);
-                                if ( $form[i].checked == true ) {
-                                    fields[name] = $form[i].value;
-                                }
-
-
+                        if (customRule) {
+                            customRule = customRule.replace(/\-/g, '.');
+                            if ( typeof(instance.rules[customRule]) == 'undefined' ) {
+                                throw new Error('['+$allForms[f].id+'] no rule found with key: `'+customRule+'`');
+                                customRule = null
                             } else {
-                                fields[name]    = $form[i].value;
+                                customRule = instance.rules[customRule]
                             }
-                            $fields[name]   = $form[i];
-                            // reset filed error data attributes
-                            $fields[name].setAttribute('data-errors', '');
-
-                            ++fields['_length']
                         }
 
-                        //console.log('$fields =>\n' + $fields);
+                        // finding forms handled by rules
+                        if ( typeof($allForms[f].id) == 'string' && typeof(instance.rules[$allForms[f].id.replace(/\-/g, '.')]) != 'undefined' ) {
+                            $target = instance.$forms[$allForms[f].id].target;
+                            if (customRule) {
+                                bindForm($target, customRule)
+                            } else {
+                                bindForm($target)
+                            }
 
-                        if ( fields['_length'] == 0 ) { // nothing to validate
-                            delete fields['_length'];
-                            var result = {
-                                'errors'    : [],
-                                'isValid'   : function() { return true },
-                                'data'      : fields
-                            };
-
-                            triggerEvent(gina, $form, 'validate.' + _id, result)
-
+                            ++i
                         } else {
-                            //console.log('testing rule [ '+_id.replace(/\-/g, '.') +' ]\n'+ JSON.stringify(rule, null, 4));
-                            //console.log('validating ', $form, fields, rule);
-                            validate($form, fields, $fields, rule, function onValidation(result){
-                                //console.log('validation result ', 'validate.' + _id, JSON.stringify(result.data, null, 2));
-                                //console.log('events ', 'validate.' + _id, self.events )
-                                triggerEvent(gina, $form, 'validate.' + _id, result)
-                            })
+                            // weird exception when having in the form an element with name="id"
+                            if ( typeof($allForms[f].id) == 'object' ) {
+                                delete instance.$forms[$allForms[f].id];
+
+                                var _id = $allForms[f].attributes.getNamedItem('id').nodeValue || 'form.'+uuid.v1();
+
+                                $allForms[f].setAttribute('id', _id);
+                                $allForms[f]['id'] = _id;
+
+                                $validator.target = $allForms[f];
+                                instance.$forms[_id] = merge({}, $validator);
+
+                                $target = instance.$forms[_id].target;
+                                if (customRule) {
+                                    bindForm($target, customRule)
+                                } else {
+                                    bindForm($target)
+                                }
+                            } else {
+
+                                $target = instance.$forms[$allForms[f].id].target;
+                                if (customRule) {
+                                    bindForm($target, customRule)
+                                } else {
+                                    bindForm($target)
+                                }
+                            }
                         }
-
-                    });
-                }
-
-
-                if ( typeof(self.events[evt]) == 'undefined' || self.events[evt] != $submit.id ) {
-                    self.events[evt] = $submit.id;
-                    procced(evt, $submit)
-                }
-
-            }
-        }
-
-
-
-        evt = 'submit';
-
-        if ( typeof(self.events[evt]) != 'undefined' && self.events[evt] == _id ) {
-            removeListener(gina, $form, evt)
-        }
-
-        //console.log('adding submit event ', evt, _id, self.events);
-        // submit proxy
-        addListener(gina, $form, evt, function(e) {
-
-            //console.log('adding submit event ', evt, self.events['submit.'+_id]);
-            var isBinded = false, id = e.target.getAttribute('id');//self.events[event] = this.id;
-            if ( typeof(self.events['submit.'+id]) != 'undefined' && self.events['submit.'+id] == id ) {
-                isBinded = true
-            }
-
-            if (withRules || isBinded) cancelEvent(e);
-
-            var _id     = e.target.getAttribute('id');
-
-            // just collect data for over forms
-            // getting fields & values
-            var $fields     = {}
-                , fields    = { '_length': 0 }
-                , name      = null
-                , value     = 0
-                , type      = null;
-
-            for (var i = 0, len = $form.length; i<len; ++i) {
-                name = $form[i].getAttribute('name');
-                if (!name) continue;
-
-                // TODO - add switch cases against tagName (checkbox/radio)
-
-                if ( typeof($form[i].type) != 'undefined' && $form[i].type == 'radio' ) {
-                    //console.log('name : ', name, '\ntype ', $form[i].type, '\nchecked ? ', $form[i].checked, '\nvalue', $form[i].value);
-                    if ( $form[i].checked === true ) {
-                        $form[i].setAttribute('checked', 'checked');
-                        fields[name] = $form[i].value;
                     }
-                } else {
-                    fields[name]    = $form[i].value;
+
                 }
 
-                $fields[name]   = $form[i];
 
-                ++fields['_length']
-            }
-
-            if ( fields['_length'] > 0 ) { // nothing to validate
-                delete fields['_length'];
-                self.eventData.submit = {
-                    'data': fields,
-                    '$fields': $fields
+                // setting up AJAX
+                if (window.XMLHttpRequest) { // Mozilla, Safari, ...
+                    xhr = new XMLHttpRequest();
+                } else if (window.ActiveXObject) { // IE
+                    try {
+                        xhr = new ActiveXObject("Msxml2.XMLHTTP");
+                    } catch (e) {
+                        try {
+                            xhr = new ActiveXObject("Microsoft.XMLHTTP");
+                        }
+                        catch (e) {}
+                    }
                 }
-            }
 
-            var result = e['detail'] || self.eventData.submit;
+                instance.isReady = true;
+                gina.hasValidator = true;
+                gina.validator = instance;
+                triggerEvent(gina, instance.target, 'ready.' + instance.id, instance);
+            });
 
-            triggerEvent(gina, $form, 'submit.' + _id, result)
-        });
+        }
 
-        self.$forms[_id]['binded'] = true;
-
+        instance.initialized = true;
+        return instance
     }
+
+    var parseRules = function(rules, tmp) {
+
+        for (var r in rules) {
+
+            if ( typeof(rules[r]) == 'object' && typeof(instance.rules[tmp + r]) == 'undefined' ) {
+                instance.rules[tmp + r] = rules[r];
+                parseRules(rules[r], tmp + r+'.');
+            }
+        }
+    }
+
 
     var validate = function($form, fields, $fields, rules, cb) {
         delete fields['_length']; //cleaning
@@ -1430,7 +979,7 @@ function Validator(rules, data, formId) {
                         }
 
                         //console.log(caseValue +' VS '+ conditions[c]['case'], "->", (caseValue == conditions[c]['case'] || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1) );
-                        if ( conditions[c]['case'] === caseValue || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1 ) {
+                        if ( conditions[c]['case'] === caseValue || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1 || /^\//.test(conditions[c]['case']) ) {
 
                             //console.log('[fields ] ' + JSON.stringify(fields, null, 4));
                             localRules = {};
@@ -1445,17 +994,41 @@ function Validator(rules, data, formId) {
 
                                     for (var localFiled in $fields) {
                                         if ( re.test(localFiled) ) {
-                                            localRules[localFiled] = conditions[c]['rules'][f]
+                                            if ( /^\//.test(conditions[c]['case']) ) {
+                                                re      = conditions[c]['case'].match(/\/(.*)\//).pop();
+                                                flags   = conditions[c]['case'].replace('/'+ re +'/', '');
+                                                re      = new RegExp(re, flags);
+
+                                                if ( re.test(caseValue) ) {
+                                                    localRules[localFiled] = conditions[c]['rules'][f]
+                                                }
+
+                                            } else {
+                                                localRules[localFiled] = conditions[c]['rules'][f]
+                                            }
                                         }
                                     }
 
                                 } else {
-                                    localRules[f] = conditions[c]['rules'][f]
+                                    if ( /^\//.test(conditions[c]['case']) ) {
+                                        re      = conditions[c]['case'].match(/\/(.*)\//).pop();
+                                        flags   = conditions[c]['case'].replace('/'+ re +'/', '');
+                                        re      = new RegExp(re, flags);
+
+                                        if ( re.test(caseValue) ) {
+                                            localRules[f] = conditions[c]['rules'][f]
+                                        }
+
+                                    } else {
+                                        localRules[f] = conditions[c]['rules'][f]
+                                    }
                                 }
                             }
                             //console.log('parsing ', localRules, fields);
-
-                            return forEachField($form, fields, $fields, localRules, cb, i+1)
+                            if (isGFFCtx)
+                                forEachField($form, fields, $fields, localRules, cb, i+1)
+                            else
+                                return forEachField($form, fields, $fields, localRules, cb, i+1);
                         }
                     }
 
@@ -1529,11 +1102,455 @@ function Validator(rules, data, formId) {
             }
         }
 
-        return forEachField($form, fields, $fields, rules, cb, 0)
+        if (isGFFCtx)
+            forEachField($form, fields, $fields, rules, cb, 0);
+        else
+            return forEachField($form, fields, $fields, rules, cb, 0);
+    }
+
+    /**
+     * bindForm
+     *
+     * @param {object} target - DOM element
+     * @param {object} [customRule]
+     * */
+    var bindForm = function($target, customRule) {
+
+        var $form = null, _id = null;
+
+        try {
+            if ( $target.getAttribute && $target.getAttribute('id') ) {
+                _id = $target.getAttribute('id');
+                if ( typeof(instance.$forms[_id]) != 'undefined')
+                    $form = instance.$forms[_id];
+                else
+                    throw new Error('form instance `'+ _id +'` not found');
+
+            } else {
+                throw new Error('Validator::bindForm($target, customRule): `$target` must be a DOM element\n'+err.stack )
+            }
+        } catch(err) {
+            throw new Error('Validator::bindForm($target, customRule) could not bind form `'+ $target +'`\n'+err.stack )
+        }
+
+        if ( typeof($form) != 'undefined' && $form.binded) {
+            return false
+        }
+
+        var withRules = false, rule = null, evt = '', procced = null;
+
+        if ( typeof(customRule) != 'undefined' || typeof(_id) == 'string' && typeof(instance.rules[_id.replace(/\-/g, '.')]) != 'undefined' ) {
+            withRules = true;
+
+            if ( customRule && typeof(customRule) == 'object' ) {
+                rule = customRule
+            } else if ( customRule && typeof(customRule) == 'string' && typeof(instance.rules[customRule.replace(/\-/g, '.')]) != 'undefined') {
+                rule = instance.rules[customRule.replace(/\-/g, '.')]
+            } else {
+                rule = instance.rules[_id.replace(/\-/g, '.')]
+            }
+
+            $form.rules = rule
+        }
+
+        // binding input: checkbox, radio
+        var $inputs = $target.getElementsByTagName('input'), type = null, id = null;
+
+        var updateCheckBox = function($el) {
+
+            var checked = $el.checked;
+
+            if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
+
+                $el.checked = false;
+                $el.removeAttribute('checked');
+                $el.value = 'false';
+
+            } else {
+
+                $el.setAttribute('checked', 'checked');
+                //boolean exception handling
+                $el.value = 'true';
+                $el.checked = true;
+
+            }
+        };
+
+        var updateRadio = function($el, isInit) {
+            var checked = $el.checked;
+
+            // loop if radio group
+            if (!isInit) {
+                var radioGroup = document.getElementsByName($el.name);
+                //console.log('found ', radioGroup.length, radioGroup)
+                for (var r = 0, rLen = radioGroup.length; r < rLen; ++r) {
+                    if (radioGroup[r].id !== $el.id) {
+                        radioGroup[r].checked = false;
+                        radioGroup[r].removeAttribute('checked')
+                    }
+                }
+            }
+
+            if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
+
+                $el.checked = false;
+                $el.removeAttribute('checked');
+
+            } else {
+
+                $el.setAttribute('checked', 'checked');
+                $el.checked = true;
+            }
+        }
+
+        evt = 'click';
+
+        procced = function () {
+            // click proxy
+            addListener(gina, $target, 'click', function(event) {
+
+                if ( typeof(event.target.id) == 'undefined' ) {
+                    event.target.setAttribute('id', 'click.' + uuid.v1() );
+                    event.target.id = event.target.getAttribute('id')
+                }
+
+
+                if (/^click\./.test(event.target.id) || withRules) {
+
+                    var _evt = event.target.id;
+                    if ( ! /^click\./.test(_evt)  ) {
+                        _evt = 'click.' + event.target.id
+                    }
+
+                    triggerEvent(gina, event.target, _evt, event.detail);
+                }
+
+            })
+        }
+
+        //if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == _id ) {
+            //removeListener(gina, element, name, callback)
+        //    removeListener(gina, $form, evt, procced)
+        //} else {
+            procced()
+        //}
+
+        for (var i=0, len = $inputs.length; i<len; ++i) {
+            type    = $inputs[i].getAttribute('type');
+
+            if ( typeof($inputs[i].id) == 'undefined' || $inputs[i].id == '' ) {
+                $inputs[i]['id'] = type +'-'+ uuid.v1();
+                $inputs[i].setAttribute('id', $inputs[i]['id'])
+            }
+
+
+            if ( typeof(type) != 'undefined' && type == 'checkbox' ) {
+
+                evt = 'click.' + $inputs[i].id;
+
+
+                procced = function ($el, evt) {
+
+                    // recover default state only on value === true || false
+                    addListener(gina, $el, evt, function(event) {
+
+                        //cancelEvent(event);
+
+                        if ( /(true|false)/.test(event.target.value) ) {
+                            updateCheckBox(event.target);
+                        }
+                    });
+
+                    if ( /(true|false)/.test($el.value) )
+                        updateCheckBox($el);
+
+                }
+
+                if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
+                    removeListener(gina, $inputs[i], evt, function(event){
+                        procced(event.target, evt)
+                    })
+                } else {
+                    procced($inputs[i], evt)
+                }
+
+            } else if ( typeof(type) != 'undefined' && type == 'radio' ) {
+                evt = 'click.' + $inputs[i].id;
+
+                procced = function ($el, evt) {
+                    addListener(gina, $el, evt, function(event) {
+                        //cancelEvent(event);
+                        updateRadio(event.target);
+
+                    });
+
+                    updateRadio($el, true)
+                }
+
+                if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
+                    removeListener(gina, $inputs[i], evt, function(event){
+                        procced(event.target, evt)
+                    })
+                } else {
+                    procced($inputs[i], evt)
+                }
+            }
+        }
+
+
+        if (withRules) {
+            evt = 'validate.' + _id;
+            //console.log('[ bind() ] : before attaching `'+evt+'` ->  `withRules`: '+withRules, '\n'+self.events[evt]+' VS '+_id, '\nevents ', self.events);
+
+            procced = function () {
+                //self.events[evt] = _id;
+                //console.log('attaching ', evt);
+
+                // attach form event
+                addListener(gina, $target, evt, function(event) {
+                    cancelEvent(event);
+
+
+                    var result = event['detail'] || $form.eventData.validation;
+                    //console.log('$form[ '+_id+' ] validation done !!!\n isValid ? ', result['isValid'](), '\nErrors -> ', result['errors'], '\nData -> ', result['data']);
+
+                    handleErrorsDisplay(event['target'], result['errors']);
+
+                    if ( result['isValid']() ) { // send if valid
+                        //console.log('sending ... ', result['data']);
+                        //console.log('just before sending ', self.$forms[event.target.id]);
+                        // now sending to server
+                        //$validator['target'] = event['target'];
+                        //$validator['id']     = event['target'].getAttribute('id');
+
+                        //instance.$forms[event.target.id] = $validator;
+                        var _id = event.target.getAttribute('id');
+                        if (!gina.events['submit.'+ _id] /**&& !instance.$forms[_id].sent*/) {
+                            instance.$forms[_id].send(result['data']);
+                        }
+                    }
+                })
+            }
+
+            if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == _id ) {
+                removeListener(gina, $form, evt, procced)
+            } else {
+                procced()
+            }
+
+            // if ( typeof(self.events[evt]) == 'undefined' || self.events[evt] != _id ) {
+            //     self.events[evt] = _id;
+            //     procced(evt, $form)
+            // }
+
+
+
+            // binding submit button
+            var $submit = null, $buttons = [], $buttonsTMP = [], buttonId = null;
+            $buttonsTMP = $target.getElementsByTagName('button');
+            if ( $buttonsTMP.length > 0 ) {
+                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                    if ($buttonsTMP[b].type == 'submit')
+                        $buttons.push($buttonsTMP[b])
+                }
+            }
+
+            $buttonsTMP = $target.getElementsByTagName('a');
+            if ( $buttonsTMP.length > 0 ) {
+                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                    if ( $buttonsTMP[b].attributes.getNamedItem('data-submit'))
+                        $buttons.push($buttonsTMP[b])
+                }
+            }
+
+
+            var onclickAttribute = null;
+            for (var b=0, len=$buttons.length; b<len; ++b) {
+
+                $submit = $buttons[b];
+
+                if ($submit.tagName == 'A') { // without this test, XHR callback is ignored
+                    //console.log('a#$buttons ', $buttonsTMP[b]);
+                    onclickAttribute = $submit.getAttribute('onclick');
+
+                    if ( !onclickAttribute ) {
+                        $submit.setAttribute('onclick', 'return false;')
+                    } else if ( !/return false/) {
+                        if ( /\;$/.test(onclickAttribute) ) {
+                            onclickAttribute += 'return false;'
+                        } else {
+                            onclickAttribute += '; return false;'
+                        }
+                    }
+                }
+
+                if (!$submit['id']) {
+
+                    evt = 'click.'+ uuid.v1();
+                    $submit['id'] = evt;
+                    $submit.setAttribute( 'id', evt);
+
+                } else {
+                    evt = $submit['id'];
+                }
+
+                procced = function (evt, $submit) {
+                    // attach submit events
+                    addListener(gina, $submit, evt, function(event) {
+                        //console.log('submiting ', evt, $submit);
+                        // start validation
+                        cancelEvent(event);
+
+                        // getting fields & values
+                        var $fields     = {}
+                            , fields    = { '_length': 0 }
+                            , name      = null
+                            , value     = 0
+                            , type      = null;
+
+                        for (var i = 0, len = $target.length; i<len; ++i) {
+                            name = $target[i].getAttribute('name');
+                            if (!name) continue;
+
+                            // TODO - add switch cases against tagName (checkbox/radio)
+
+                            if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' ) {
+                                //console.log('radio ', name, $form[i].checked, $form[i].value);
+                                if ( $target[i].checked == true ) {
+                                    fields[name] = $target[i].value;
+                                }
+
+
+                            } else {
+                                fields[name]    = $target[i].value;
+                            }
+                            $fields[name]   = $target[i];
+                            // reset filed error data attributes
+                            $fields[name].setAttribute('data-errors', '');
+
+                            ++fields['_length']
+                        }
+
+                        //console.log('$fields =>\n' + $fields);
+
+                        //instance.$forms[ $target.getAttribute('id') ].sent = false;
+
+                        if ( fields['_length'] == 0 ) { // nothing to validate
+                            delete fields['_length'];
+                            var result = {
+                                'errors'    : [],
+                                'isValid'   : function() { return true },
+                                'data'      : fields
+                            };
+
+                            triggerEvent(gina, $target, 'validate.' + _id, result)
+
+                        } else {
+                            //console.log('testing rule [ '+_id.replace(/\-/g, '.') +' ]\n'+ JSON.stringify(rule, null, 4));
+                            //console.log('validating ', $form, fields, rule);
+                            validate($target, fields, $fields, rule, function onValidation(result){
+                                //console.log('validation result ', 'validate.' + _id, JSON.stringify(result.data, null, 2));
+                                //console.log('events ', 'validate.' + _id, self.events )
+                                triggerEvent(gina, $target, 'validate.' + _id, result)
+                            })
+                        }
+
+                    });
+                }
+
+
+                if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $submit.id ) {
+                    //self.events[evt] = $submit.id;
+                    procced(evt, $submit)
+                }
+
+            }
+        }
+
+
+
+        evt = 'submit';
+
+        // if ( typeof(self.events[evt]) != 'undefined' && self.events[evt] == _id ) {
+        //     removeListener(gina, $form, evt)
+        // }
+
+        //console.log('adding submit event ', evt, _id, self.events);
+        // submit proxy
+        addListener(gina, $target, evt, function(e) {
+            //console.log('adding submit event ', evt, self.events['submit.'+_id]);
+            var $target     = e.target
+                , id        = $target.getAttribute('id')
+                , isBinded  = instance.$forms[id].binded
+            ;
+            //if ( typeof(gina.events['submit.'+id]) != 'undefined' && gina.events['submit.'+id] == id ) {
+            //    isBinded = true;
+            //    instance.$forms[id].binded = isBinded;
+            //}
+
+            if (withRules || isBinded) cancelEvent(e);
+
+
+            // just collect data for over forms
+            // getting fields & values
+            var $fields     = {}
+                , fields    = { '_length': 0 }
+                , name      = null
+                , value     = 0
+                , type      = null;
+
+            for (var i = 0, len = $target.length; i<len; ++i) {
+                name = $target[i].getAttribute('name');
+                if (!name) continue;
+
+                // TODO - add switch cases against tagName (checkbox/radio)
+
+                if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' ) {
+                    //console.log('name : ', name, '\ntype ', $form[i].type, '\nchecked ? ', $form[i].checked, '\nvalue', $form[i].value);
+                    if ( $target[i].checked === true ) {
+                        $target[i].setAttribute('checked', 'checked');
+                        fields[name] = $target[i].value;
+                    }
+                } else {
+                    fields[name]    = $target[i].value;
+                }
+
+                $fields[name]       = $target[i];
+
+                ++fields['_length']
+            }
+
+            if ( fields['_length'] > 0 ) { // nothing to validate
+                delete fields['_length'];
+                instance.$forms[id].eventData.submit = {
+                    'data': fields,
+                    '$fields': $fields
+                }
+            }
+
+            var result = e['detail'] || instance.$forms[id].eventData.submit;
+
+            triggerEvent(gina, $target, 'submit.' + _id, result)
+        });
+
+
+        //self.$forms[_id]['rule']   = rules[_id] || {};
+        instance.$forms[_id]['binded']  = true;
+    }
+
+    var setupInstanceProto = function() {
+
+        instance.setOptions         = setOptions;
+        instance.getFormById        = getFormById;
+        instance.validateFormById   = validateFormById;
+        instance.target             = document;
+        instance.validateFormById   = validateFormById;
+        instance.resetErrorsDisplay = resetErrorsDisplay;
+        instance.send               = send;
     }
 
     if (isGFFCtx) {
-        return proto
+        return init(rules)
     } else {
         return backendInit(rules, data, formId)
     }
@@ -1542,8 +1559,8 @@ function Validator(rules, data, formId) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    module.exports  = Validator
+    module.exports  = ValidatorPlugin
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('gina/validator', function() { return Validator })
+    define('gina/validator', function(){ return ValidatorPlugin })
 }
