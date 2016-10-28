@@ -1141,7 +1141,7 @@ function Server(options) {
 
                     if (exists) {
 
-                        if (fs.statSync(filename).isDirectory()) filename += 'index.html';
+                        if (fs.statSync(filename).isDirectory()) filename += '/index.html';
 
                         if (cacheless) {
                             delete require.cache[filename]
