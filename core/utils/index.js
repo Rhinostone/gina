@@ -12,15 +12,20 @@
  * @package    Gina.Core
  * @author     Rhinostone <gina@rhinostone.com>
  */
+var fs = require('fs');
 
 function Utils() {
 
     var _require = function(path) {
-        var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
+        var cacheless       = ( typeof(process.env.IS_CACHELESS) != 'undefined' && process.env.IS_CACHELESS == 'true') ? true : false;
+        var isScriptMode    = ( typeof(process.env.IS_SCRIPT_MODE) != 'undefined' ) ? true : false;
+
         if (cacheless) {
             try {
+
                 delete require.cache[require.resolve(path)];
                 return require(path)
+
             } catch (err) {
                 throw err
             }
