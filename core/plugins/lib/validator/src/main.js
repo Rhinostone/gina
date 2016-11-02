@@ -118,11 +118,6 @@ function ValidatorPlugin(rules, data, formId) {
      * @param {object} [customRule]
      * */
     var backendInit = function (rules, data, formId) {
-        // parsing rules
-        if ( typeof(rules) != 'undefined' ) {
-            parseRules(rules, '');
-            checkForRulesImports(rules);
-        }
 
         var $form = ( typeof(formId) != 'undefined' ) ? { 'id': formId } : null;
         var fields = {};
@@ -131,7 +126,18 @@ function ValidatorPlugin(rules, data, formId) {
             fields[field] = data[field]
         }
 
-        return validate($form, fields, null, instance.rules)
+
+        // parsing rules
+        if ( typeof(rules) != 'undefined' && rules.count() > 0 ) {
+            parseRules(rules, '');
+            checkForRulesImports(rules);
+
+            return validate($form, fields, null, instance.rules)
+
+        } else {
+            // without rules - by hand
+            return new FormValidator(fields)
+        }
     }
 
 
@@ -809,7 +815,7 @@ function ValidatorPlugin(rules, data, formId) {
             setupInstanceProto();
             instance.on('init', function(event) {
                 // parsing rules
-                if ( typeof(rules) != 'undefined' ) {
+                if ( typeof(rules) != 'undefined' && rules.count() ) {
                     parseRules(rules, '');
                     checkForRulesImports(rules);
                 }
@@ -1340,7 +1346,7 @@ function ValidatorPlugin(rules, data, formId) {
                 })
             }
 
-            if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == _id ) {
+            if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == 'validate.' + _id ) {
                 removeListener(gina, $form, evt, procced)
             } else {
                 procced()

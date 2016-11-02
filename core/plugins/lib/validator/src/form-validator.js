@@ -97,7 +97,7 @@ function FormValidatorUtil(data, $fields) {
 
         /**
          *
-         * is(regex)       -> validate if value matches regex
+         * is(condition)       -> validate if value matches `condition`
          *
          *  When entered in a JSON rule, you must double the backslashes
          *
@@ -105,19 +105,21 @@ function FormValidatorUtil(data, $fields) {
          *       "/\\D+/"       -> like [^0-9]
          *       "/^[0-9]+$/"   -> only numbers
          *
-         * @param {object|string} regex - RegExp object or condition to eval
+         * @param {object|string} condition - RegExp object, or condition to eval, or eval result
          *
          * */
-        self[el]['is'] = function(regex, errorLabel) {
+        self[el]['is'] = function(condition, errorLabel) {
             var valid   = false;
             var errors  = {};
 
-            if ( regex instanceof RegExp ) {
-                valid = regex.test(this.value) ? true : false;
+            if ( condition instanceof RegExp ) {
+                valid = condition.test(this.value) ? true : false;
+            } else if( typeof(condition) == 'boolean') {
+                valid = (condition) ? true : false;
             } else {
                 try {
                     // TODO - motif /gi to pass to the second argument
-                    valid = new RegExp(regex.replace(/\//g, '')).test(this.value)
+                    valid = new RegExp(condition.replace(/\//g, '')).test(this.value)
                 } catch (err) {
                     throw new Error(err.stack||err.message)
                 }
