@@ -1464,9 +1464,9 @@ function SuperController(options) {
      * @return {void}
      * */
     this.throwError = function(res, code, msg) {
-        if (arguments.length == 1 && res instanceof Error) {
-            var code    = 500
-                , msg   = res.stack || res.message
+        if (arguments.length == 1 && typeof(res) == 'object' && typeof(res.error) != 'undefined' ) {
+            var code    = res.status || 500
+                , msg   = res.stack || res.message || res.error
                 , res   = local.res;
 
         } else if (arguments.length < 3) {
