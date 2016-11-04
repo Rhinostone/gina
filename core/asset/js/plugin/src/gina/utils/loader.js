@@ -13,8 +13,8 @@
 window['originalContext'] = window['jQuery'];
 
 
-var ginaToolbar = null;
-window['onGinaLoaded'] = function(gina) {
+window['ginaToolbar']   = null;
+window['onGinaLoaded']  = function(gina) {
 
     if (!gina) {
         //console.log('gina not ready yet');
@@ -26,11 +26,11 @@ window['onGinaLoaded'] = function(gina) {
         }
         var options = gina.options = {
             /**@js_externs env*/
-            env     : '{{ page.environment.env }}',
+            'env'     : '{{ page.environment.env }}',
             /**@js_externs version*/
             version : '{{ page.environment.version }}',
             /**@js_externs webroot*/
-            webroot : '{{ page.environment.webroot }}'
+            'webroot' : '{{ page.environment.webroot }}'
         };
 
         gina["isFrameworkLoaded"]       = true;
@@ -40,16 +40,16 @@ window['onGinaLoaded'] = function(gina) {
         // making adding css to the head
         var link        = null;
         link            = document.createElement('link');
-        link.href       = ((options.webroot !== '/') ? options.webroot + '/' : options.webroot) + "js/vendor/gina/gina.min.css";
+        link.href       = ((options['webroot'] !== '/') ? options['webroot'] + '/' : options['webroot']) + "js/vendor/gina/gina.min.css";
         link.media      = "screen";
         link.rel        = "stylesheet";
         link.type       = "text/css";
         document.getElementsByTagName('head')[0].appendChild(link);
 
         // all required must be listed in `src/gina.js` defined modules list
-        if (options.env == 'dev') {
-            var Toolbar     = require('gina/toolbar');
-            ginaToolbar     = new Toolbar();
+        if (options['env'] == 'dev') {
+            var Toolbar             = require('gina/toolbar');
+            window['ginaToolbar']   = new Toolbar();
         }
 
         return true
