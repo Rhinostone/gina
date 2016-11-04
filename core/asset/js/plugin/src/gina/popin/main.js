@@ -490,12 +490,85 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             if ( !/gina-popin-is-active/.test(instance.target.firstChild.className) )
                 instance.target.firstChild.className += ' gina-popin-is-active';
 
+            // binding popin close
+            var $close = [], $buttonsTMP = [];
+
+            $buttonsTMP = $el.getElementsByTagName('button');
+            if ( $buttonsTMP.length > 0 ) {
+                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                    if ( /gina-popin-close/.test($buttonsTMP[b].className) )
+                        $close.push($buttonsTMP[b])
+                }
+            }
+
+            $buttonsTMP = $el.getElementsByTagName('div');
+            if ( $buttonsTMP.length > 0 ) {
+                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                    if ( /gina-popin-close/.test($buttonsTMP[b].className) )
+                        $close.push($buttonsTMP[b])
+                }
+            }
+
+            $buttonsTMP = $el.getElementsByTagName('a');
+            if ( $buttonsTMP.length > 0 ) {
+                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                    if ( /gina-popin-close/.test($buttonsTMP[b].className) )
+                        $close.push($buttonsTMP[b])
+                }
+            }
+            var onclickAttribute = null, evt = null;
+            for (var b = 0, len = $close.length; b < len; ++b) {
+                if ($close[b].tagName == 'A') {
+                    onclickAttribute = $close[b].getAttribute('onclick');
+                }
+
+                if ( !onclickAttribute ) {
+                    $close[b].setAttribute('onclick', 'return false;')
+                } else if ( !/return false/) {
+                    if ( /\;$/.test(onclickAttribute) ) {
+                        onclickAttribute += 'return false;'
+                    } else {
+                        onclickAttribute += '; return false;'
+                    }
+                }
+
+                if (!$close[b]['id']) {
+
+                    evt = 'click.'+ uuid.v1();
+                    $close[b]['id'] = evt;
+                    $close[b].setAttribute( 'id', evt);
+
+                } else {
+                    evt = $close[b]['id'];
+                }
+
+                var register = function (evt, $close) {
+                    // attach submit events
+                    addListener(gina, $close, evt, function(event) {
+
+                        cancelEvent(event);
+
+                        popinClose(name);
+                        removeListener(gina, event.target, event.type)
+
+                    });
+                }
+
+
+                if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $close[b].id ) {
+                    register(evt, $close[b])
+                }
+            }
+
+
+            if ( /gina-popin-is-active/.test(event.target.className) ) {
+                removeListener(gina, event.target, 'click')
+            }
 
             $popin.isOpen = true;
             // so it can be forwarded to the handler who is listening
-
             $popin.target = $el;
-            //console.log('trigger for ', instance.id);
+
             triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
         }
 

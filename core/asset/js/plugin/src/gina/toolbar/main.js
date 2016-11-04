@@ -137,7 +137,15 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             settings.save(true);
         }
 
-        var loadData = function () {
+        /**
+         * loadData
+         *
+         * @param {object} [ginaJsonObject]
+         *
+         * */
+        var loadData = function (section, data) {
+
+
             try {
                 var txt = $json.text();
                 if (txt == '' || txt == 'null' ) {
@@ -151,9 +159,15 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             } catch (err) {
                 $json.text('Could not load data');
             }
+
+
             // console.log('parsing ', jsonObject);
 
             if (jsonObject) {
+
+                if (data) {
+                    jsonObject[section] = ginaJsonObject[section] = data;
+                }
 
                 // Make folding paths
                 makeFoldingPaths(jsonObject, '');
@@ -183,21 +197,21 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
 
             // Add folding behavior
-            $htmlData.on('click', 'a', function(event) {
+            $htmlData.off('click', 'a').on('click', 'a', function(event) {
                 event.preventDefault();
 
                 toggleCodeFolding($(this))
             });
 
             // Expand/collapse all code
-            $codeFoldingToggle.on('click', function(event) {
+            $codeFoldingToggle.off('click').on('click', function(event) {
                 event.preventDefault();
 
                 toggleCodeFolding('all')
             });
 
             // Add value to the clipboard
-            $htmlData.on('click', '.gina-toolbar-value', function(event) {
+            $htmlData.off('click', '.gina-toolbar-value').on('click', '.gina-toolbar-value', function(event) {
                 event.preventDefault();
                 try {
                     copyValue = $(this).text();
@@ -213,7 +227,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             });
 
             // display RAW
-            $jsonRAW.on('click', function(event){
+            $jsonRAW.off('click').on('click', function(event){
                 if (jsonObject) {
                     var jsonOut = window.open("", "JSON RAW", "width=400,height=100");
                     //jsonOut.document.write( '<pre>' + JSON.stringify(jsonObject, null, 2) + '</pre>' );
@@ -222,7 +236,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             });
 
             // Tabs
-            $tabs.on('click', function(event) {
+            $tabs.off('click').on('click', function(event) {
                 event.preventDefault();
 
                 // Hide all panels
@@ -242,7 +256,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             });
 
             // Show/hide Toolbar
-            $logo.on('click', function(event) {
+            $logo.off('click').on('click', function(event) {
                 event.preventDefault();
 
                 $toolbar.toggleClass('gina-toolbar-collapsed');
@@ -254,7 +268,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             });
 
             // Toolbar position
-            $toolbarPos.on('change', function(event) {
+            $toolbarPos.off('change').on('change', function(event) {
                 event.preventDefault();
 
                 // Get selected option value
@@ -269,7 +283,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             });
 
             // Toolbar width
-            $toolbarWidth.on('change', function(event) {
+            $toolbarWidth.off('change').on('change', function(event) {
                 event.preventDefault();
 
                 // Get selected option value
@@ -282,12 +296,12 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             });
 
             // Toolbar height
-            $(window).on('resize', function() {
+            $(window).off('resize').on('resize', function() {
                 changeToolbarHeight();
             });
 
             // Show/hide toolbar using gg shorcut
-            $('body').on('keypress', function(event) {
+            $('body').off('keypress').on('keypress', function(event) {
                 // console.log('event', event);
                 if(event.keyCode) {
                     // IE
@@ -569,7 +583,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             $htmlData.html(html);
             $json.text('');
 
-            $htmlData.find('input').on('change', function(e) {
+            $htmlData.find('input').off('change').on('change', function(e) {
                 // var file = $el.files[0]; //DOM way
                 var files   = $(this)[0].files;
                 var file    = null;
@@ -645,6 +659,10 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                 }
             }
             // console.log('self.foldingPaths', self.foldingPaths);
+        }
+
+        this.update = function (section, data) {
+            loadData(section, data);
         }
 
         init();
