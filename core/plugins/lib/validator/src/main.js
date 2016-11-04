@@ -309,6 +309,9 @@ function ValidatorPlugin(rules, data, formId) {
 
     var handleErrorsDisplay = function($form, errors) {
 
+        if ( gina.options.env == 'dev' )
+            gina.forms.errors = {};
+
         var name = null, errAttr = null;
         var $err = null, $msg = null;
         var $el = null, $parent = null, $target = null;
@@ -339,7 +342,14 @@ function ValidatorPlugin(rules, data, formId) {
                 for (var e in errors[name]) {
                     $msg = document.createElement('p');
                     $msg.appendChild( document.createTextNode(errors[name][e]) );
-                    $err.appendChild($msg)
+                    $err.appendChild($msg);
+
+                    if ( gina.options.env == 'dev' ) {
+                        if ( !gina.forms.errors[ name ] )
+                            gina.forms.errors[ name ] = {};
+
+                        gina.forms.errors[ name ][e] = errors[name][e]
+                    }
                 }
 
                 if ($target.type != 'hidden')
@@ -351,7 +361,8 @@ function ValidatorPlugin(rules, data, formId) {
                 var $children = $parent.getElementsByTagName('div');
                 for (var c = 0, cLen = $children.length; c<cLen; ++c) {
                     if ( /form\-item\-error\-message/.test($children[c].className) ) {
-                        $parent.removeChild($children[c]);
+                        //$parent.removeChild($children[c]);
+                        $children[c].parentElement.removeChild($children[c]);
                         break
                     }
                 }
@@ -364,7 +375,7 @@ function ValidatorPlugin(rules, data, formId) {
                 for (var d = 0, dLen = $divs.length; d<dLen; ++d) {
                     if ($divs[d].className == 'form-item-error-message') {
 
-                        $parent.removeChild($divs[d]);
+                        $divs[d].parentElement.removeChild($divs[d]);
                         $err = document.createElement('div');
                         $err.setAttribute('class', 'form-item-error-message');
 
@@ -372,7 +383,14 @@ function ValidatorPlugin(rules, data, formId) {
                         for (var e in errors[name]) {
                             $msg = document.createElement('p');
                             $msg.appendChild( document.createTextNode(errors[name][e]) );
-                            $err.appendChild($msg)
+                            $err.appendChild($msg);
+
+                            if ( gina.options.env == 'dev' ) {
+                                if ( !gina.forms.errors[ name ] )
+                                    gina.forms.errors[ name ] = {};
+
+                                gina.forms.errors[ name ][e] = errors[name][e]
+                            }
                         }
 
                         break;
@@ -381,7 +399,13 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ($target.type != 'hidden')
                     insertAfter($target, $err);
+
             }
+        }
+
+        if ( gina.forms.errors && typeof(window.ginaToolbar) == 'object' ) {
+            // update toolbar
+            window.ginaToolbar.update('forms', gina.forms);
         }
     }
 
