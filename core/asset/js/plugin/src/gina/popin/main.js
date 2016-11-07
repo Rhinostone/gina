@@ -594,9 +594,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                     if ( typeof(XHRData.value) != 'undefined' && XHRData.value ) {
                         XHRData = JSON.parse( decodeURIComponent( XHRData.value ) );
-                        ginaToolbar.update("data", XHRData);
                         // reset data-xhr
                         ginaToolbar.update("data-xhr", null);
+
+                        ginaToolbar.update("data", XHRData);
                     }
 
                 } catch (err) {

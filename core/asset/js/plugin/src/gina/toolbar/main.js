@@ -180,10 +180,10 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                         jsonObject[section] = {};
 
                     jsonObject[section] = ginaJsonObject[section] = data;
-                    // reset xhr
-                    if (section == 'data-xhr' && !data && jsonObject['data-xhr'])
-                        delete jsonObject['data-xhr'];
 
+                } else if ( section == 'data-xhr' && !data && jsonObject['data-xhr'] ) {
+                    // reset xhr
+                    delete jsonObject['data-xhr'];
                 } else if (ginaData) {
                     jsonObject      = data;
                     ginaJsonObject  = ginaData;
