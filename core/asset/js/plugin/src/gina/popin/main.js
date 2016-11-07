@@ -397,6 +397,24 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                             instance.eventData.error = result;
 
+                            // update toolbar
+                            var XHRData = result;
+                            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                                try {
+                                    if ( /^(\{|\[).test(XHRData.error) /)
+                                        XHRData.error = JSON.parse(XHRData.error);
+
+                                    // bad .. should not happen
+                                    if ( typeof(XHRData.error.error) != 'undefined' )
+                                        XHRData.error = XHRData.error.error;
+
+                                    ginaToolbar.update("data-xhr", XHRData )
+                                } catch (err) {
+                                    throw err
+                                }
+                            }
+
+
                             triggerEvent(gina, $el, 'error.' + id, result)
                         }
                     }
@@ -577,6 +595,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     if ( typeof(XHRData.value) != 'undefined' && XHRData.value ) {
                         XHRData = JSON.parse( decodeURIComponent( XHRData.value ) );
                         ginaToolbar.update("data", XHRData);
+                        // reset data-xhr
+                        ginaToolbar.update("data-xhr", null);
                     }
 
                 } catch (err) {

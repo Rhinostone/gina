@@ -55,46 +55,78 @@ if (tmp.length >= 4) {
         } catch (err) {}
 
     } else {
-        var matched = null, obj = {};
-        for (var p = 0, len = tmp.length; p < len; ++p ) {
-            if ( /\"paths\"/.test(tmp[p]) ) {
-                obj = JSON.parse(tmp[p]);
+        var matched         = null
+            , obj           = {}
+            , arg           = null
+            , filename      = null
+            , paramsContent = null;
+
+        var checkArgv = function (obj, arg) {
+
+            if ( /\"paths\"/.test(arg) ) {
+                obj = JSON.parse(arg);
                 setContext('paths', obj.paths);//And so on if you need to.
 
-                if ( /\"bundle\"/.test(tmp[p]) ) {
+                if ( /\"bundle\"/.test(arg) ) {
                     setContext('bundle', obj.bundle);//And so on if you need to.
                 }
 
-                if ( /\"bundles\"/.test(tmp[p]) ) {
+                if ( /\"bundles\"/.test(arg) ) {
                     setContext('bundles', obj.bundles);//And so on if you need to.
                 }
 
-                if ( /\"config\"/.test(tmp[p]) ) {
+                if ( /\"config\"/.test(arg) ) {
                     if ( typeof(obj.bundle) != 'undefined' )
                         obj.config.bundle = obj.bundle;
 
                     setContext('gina.config', obj.config);//And so on if you need to.
                 }
 
-                if ( /\"env\"/.test(tmp[p]) ) {
+                if ( /\"env\"/.test(arg) ) {
                     setContext('env', obj.env);//And so on if you need to.
                 }
 
-                if ( /\"process\"/.test(tmp[p]) ) {
+                if ( /\"process\"/.test(arg) ) {
                     setContext('gina.process', obj.process);//And so on if you need to.
                 }
 
-                if ( /\"processList\"/.test(tmp[p]) ) {
+                if ( /\"processList\"/.test(arg) ) {
                     setContext('processList', obj.processList);//And so on if you need to.
                 }
 
-                tmp.splice(3);
+                process.argv.splice(3);
 
-                break;
+                return true
+            }
+
+            return false
+        }
+
+        for (var p = 0, len = tmp.length; p < len; ++p ) {
+
+            if ( /--argv-filename/.test(tmp[p]) ) {
+                filename = _(tmp[p].replace(/--argv-filename=/, ''));
+                paramsContent = fs.readFileSync(filename).toString();
+
+                if ( checkArgv(obj, paramsContent) ) {
+
+                    fs.unlinkSync(filename);
+
+                    filename = null;
+                    paramsContent = null;
+                    break;
+                }
+
+            } else {
+
+                if ( checkArgv(obj, tmp[p]) ) {
+                    break;
+                }
             }
         }
     }
 }
+
 tmp = null;
 
 setPath( 'node', _(process.argv[0]) );

@@ -180,9 +180,10 @@ function Merge() {
 
     // Will not merge functions items: this is normal
     var mergeArray = function(options, target, override) {
+        newTarget = [];
+
         if (override) {
-            newTarget = options;
-            return newTarget
+            return options
         }
 
         if ( options.length == 0 &&  target.length > 0) {

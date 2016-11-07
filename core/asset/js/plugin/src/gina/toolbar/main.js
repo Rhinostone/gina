@@ -181,7 +181,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
                     jsonObject[section] = ginaJsonObject[section] = data;
                     // reset xhr
-                    if (section != 'data-xhr' && jsonObject['data-xhr'])
+                    if (section == 'data-xhr' && !data && jsonObject['data-xhr'])
                         delete jsonObject['data-xhr'];
 
                 } else if (ginaData) {
