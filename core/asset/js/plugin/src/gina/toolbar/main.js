@@ -43,6 +43,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             , $json              = null
             , $ginaJson          = null
             , $jsonRAW           = null
+            , originalData       = null
             , jsonObject         = null
             , ginaJsonObject     = null
             , $htmlData          = null
@@ -140,11 +141,12 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
         /**
          * loadData
          *
-         * @param {object} [ginaJsonObject]
+         * @param {object} [section]
+         * @param {object} [data]
+         * @param {object} [ginaData]
          *
          * */
-        var loadData = function (section, data) {
-
+        var loadData = function (section, data, ginaData) {
 
             try {
                 var txt = $json.text();
@@ -153,7 +155,15 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                 } else {
                     jsonObject = JSON.parse(txt);
                     ginaJsonObject = JSON.parse($ginaJson.text());
-                    $json.text('')
+                    $json.text('');
+
+                    // backing up document data
+                    if (!originalData) {
+                        originalData = {
+                            jsonObject      : JSON.parse(JSON.stringify(jsonObject)),
+                            ginaJsonObject  : JSON.parse(JSON.stringify(ginaJsonObject))
+                        }
+                    }
                 }
 
             } catch (err) {
@@ -165,8 +175,18 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
             if (jsonObject) {
 
-                if (data) {
+                if (data && !ginaData) {
+                    if ( !jsonObject[section] )
+                        jsonObject[section] = {};
+
                     jsonObject[section] = ginaJsonObject[section] = data;
+                    // reset xhr
+                    if (section != 'data-xhr' && jsonObject['data-xhr'])
+                        delete jsonObject['data-xhr'];
+
+                } else if (ginaData) {
+                    jsonObject      = data;
+                    ginaJsonObject  = ginaData;
                 }
 
                 // Make folding paths
@@ -663,6 +683,10 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
         this.update = function (section, data) {
             loadData(section, data);
+        }
+
+        this.restore = function () {
+            loadData('data', originalData.jsonObject, originalData.ginaJsonObject);
         }
 
         init();

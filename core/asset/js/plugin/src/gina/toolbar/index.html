@@ -63,7 +63,7 @@
                 margin: 0 0 6px;
             }
         </style>
-        <link rel="stylesheet" href="toolbar.css">
+        <link rel="stylesheet" href="./css/toolbar.css">
     </head>
     <body>
                 <header>
@@ -215,8 +215,71 @@
 	</div>
 
 </div>
-        <script src="jquery-3.1.0.min.js"></script>
-        <script src="../gina.js"></script>
-        <script src="toolbar.js"></script>
+        <script src="./jquery-3.1.0.min.js"></script>
+
+        <script>
+
+/**
+ * onGinaLoaded
+ *
+ * Used in the framework to load gina from the Super controller
+ *
+ * NB.: this file is built appart
+ *
+ * Must be placed before gina <script> tag
+ *
+ * */
+
+window['originalContext'] = window['jQuery'];
+
+
+window['ginaToolbar']   = null;
+window['onGinaLoaded']  = function(gina) {
+
+    if (!gina) {
+        //console.log('gina not ready yet');
+        return false
+
+    } else {
+        if ( gina["isFrameworkLoaded"] ) {
+            return true
+        }
+        var options = gina.options = {
+            /**@js_externs env*/
+            'env'     : 'dev',
+            /**@js_externs version*/
+            version : '0.0.9px',
+            /**@js_externs webroot*/
+            'webroot' : '../../../'
+        };
+
+        gina["isFrameworkLoaded"]       = true;
+        gina["setOptions"](options);
+        //gina["forms"]                   = JSON.parse('{{ JSON.stringify(page.forms) }}');
+
+        // making adding css to the head
+        var link        = null;
+        link            = document.createElement('link');
+        //link.href       = ((options['webroot'] !== '/') ? options['webroot'] + '/' : options['webroot']) + "js/vendor/gina/gina.min.css";
+        link.href       = ((options['webroot'] !== '/') ? options['webroot'] + '/' : options['webroot']) + "dist/gina.min.css";
+        link.media      = "screen";
+        link.rel        = "stylesheet";
+        link.type       = "text/css";
+        document.getElementsByTagName('head')[0].appendChild(link);
+
+        // all required must be listed in `src/gina.js` defined modules list
+        if (options['env'] == 'dev') {
+            var Toolbar             = require('gina/toolbar');
+            window['ginaToolbar']   = new Toolbar();
+        }
+
+        return true
+    }
+}
+
+        </script>
+
+        <script src="../../../dist/gina.min.js"></script>
+
     </body>
 </html>

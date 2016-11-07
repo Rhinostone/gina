@@ -310,7 +310,7 @@ function ValidatorPlugin(rules, data, formId) {
     var handleErrorsDisplay = function($form, errors) {
 
         if ( gina.options.env == 'dev' )
-            gina.forms.errors = {};
+            var formsErrors = null;
 
         var name = null, errAttr = null;
         var $err = null, $msg = null;
@@ -345,10 +345,11 @@ function ValidatorPlugin(rules, data, formId) {
                     $err.appendChild($msg);
 
                     if ( gina.options.env == 'dev' ) {
-                        if ( !gina.forms.errors[ name ] )
-                            gina.forms.errors[ name ] = {};
+                        if (!formsErrors) formsErrors = {};
+                        if ( !formsErrors[ name ] )
+                            formsErrors[ name ] = {};
 
-                        gina.forms.errors[ name ][e] = errors[name][e]
+                        formsErrors[ name ][e] = errors[name][e]
                     }
                 }
 
@@ -386,10 +387,11 @@ function ValidatorPlugin(rules, data, formId) {
                             $err.appendChild($msg);
 
                             if ( gina.options.env == 'dev' ) {
-                                if ( !gina.forms.errors[ name ] )
-                                    gina.forms.errors[ name ] = {};
+                                if (!formsErrors) formsErrors = {};
+                                if ( !formsErrors[ name ] )
+                                    formsErrors[ name ] = {};
 
-                                gina.forms.errors[ name ][e] = errors[name][e]
+                                formsErrors[ name ][e] = errors[name][e]
                             }
                         }
 
@@ -403,9 +405,9 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
 
-        if ( gina.forms.errors && typeof(window.ginaToolbar) == 'object' ) {
+        if ( formsErrors && typeof(window.ginaToolbar) == 'object' ) {
             // update toolbar
-            window.ginaToolbar.update('forms', gina.forms);
+            window.ginaToolbar.update('forms', formsErrors);
         }
     }
 
@@ -593,6 +595,19 @@ function ValidatorPlugin(rules, data, formId) {
                             //console.log('event is ', 'success.' + id);
                             //console.log('making response ' + JSON.stringify(result, null, 4));
 
+                            var XHRData = result;
+                            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                                try {
+
+                                    if ( typeof(XHRData) != 'undefined' ) {
+                                        ginaToolbar.update("data-xhr", XHRData);
+                                    }
+
+                                } catch (err) {
+                                    throw err
+                                }
+                            }
+
                             triggerEvent(gina, $target, 'success.' + id, result)
 
                         } catch (err) {
@@ -609,7 +624,7 @@ function ValidatorPlugin(rules, data, formId) {
                     } else {
                         //console.log('error event triggered ', event.target, $form);
                         var result = {
-                            'status':  xhr.status,
+                            'status': xhr.status,
                             'error' : xhr.responseText
                         };
 
