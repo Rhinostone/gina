@@ -372,8 +372,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                     result = JSON.parse(xhr.responseText)
                                 }
 
+
                                 instance.eventData.success = result;
-                                //console.log('making response ' + JSON.stringify(result, null, 4));
 
                                 triggerEvent(gina, $el, 'loaded.' + id, result)
 
@@ -569,6 +569,21 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             // so it can be forwarded to the handler who is listening
             $popin.target = $el;
 
+            // update toolbar
+            var XHRData = document.getElementById('gina-without-layout-xhr-data');
+            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                try {
+
+                    if ( typeof(XHRData.value) != 'undefined' && XHRData.value ) {
+                        XHRData = JSON.parse( decodeURIComponent( XHRData.value ) );
+                        ginaToolbar.update("data", XHRData);
+                    }
+
+                } catch (err) {
+                    throw err
+                }
+            }
+
             triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
         }
 
@@ -609,6 +624,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 removeListener(gina, $popin.target, 'loaded.' + $popin.id);
 
                 $popin.isOpen = false;
+
+                // restore toolbar
+                if ( gina && typeof(window.ginaToolbar) == "object" )
+                    ginaToolbar.restore();
+
                 triggerEvent(gina, $popin.target, 'close.'+ id, $popin);
             }
         }

@@ -490,7 +490,13 @@ function SuperController(options) {
                             ;
 
                             layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
-                        } else {
+                        } else if ( hasViews() && local.options.conf.env == 'dev' && self.isXMLRequest() ) {
+                            // means that we don't want GFF context or we already have it loaded
+                            var XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
+
+                            layout += XHRData;
+
+                        } else { // production env
 
                             plugin = '\t'
                                 + '\n<script type="text/javascript">'
@@ -1464,8 +1470,8 @@ function SuperController(options) {
      * @return {void}
      * */
     this.throwError = function(res, code, msg) {
-        if (arguments.length == 1 && typeof(res) == 'object' && typeof(res.error) != 'undefined' ) {
-            var code    = res.status || 500
+        if (arguments.length == 1 && typeof(res) == 'object' ) {
+            var code    = ( typeof(res.status) != 'undefined' ) ?  res.status : 500
                 , msg   = res.stack || res.message || res.error
                 , res   = local.res;
 
