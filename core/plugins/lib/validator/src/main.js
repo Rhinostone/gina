@@ -600,7 +600,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 try {
 
                                     if ( typeof(XHRData) != 'undefined' ) {
-                                        ginaToolbar.update("data-xhr", XHRData);
+                                        window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
                                 } catch (err) {
@@ -1602,13 +1602,14 @@ function ValidatorPlugin(rules, data, formId) {
 
     var setupInstanceProto = function() {
 
-        instance.setOptions         = setOptions;
-        instance.getFormById        = getFormById;
-        instance.validateFormById   = validateFormById;
-        instance.target             = document;
-        instance.validateFormById   = validateFormById;
-        instance.resetErrorsDisplay = resetErrorsDisplay;
-        instance.send               = send;
+        instance.setOptions             = setOptions;
+        instance.getFormById            = getFormById;
+        instance.validateFormById       = validateFormById;
+        instance.target                 = document;
+        instance.validateFormById       = validateFormById;
+        instance.resetErrorsDisplay     = resetErrorsDisplay;
+        instance.handleErrorsDisplay    = handleErrorsDisplay;
+        instance.send                   = send;
     }
 
     if (isGFFCtx) {
