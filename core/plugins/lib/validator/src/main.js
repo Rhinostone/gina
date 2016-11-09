@@ -214,7 +214,7 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
         if ( typeof(instance['$forms'][_id]) != 'undefined' ) {
-            $form   = this.$forms[_id] = instance['$forms'][_id]
+            $form   = this.$forms[_id] = instance['$forms'][_id];
         } else { // binding a form out of context (outside of the main instance)
             var $target             = document.getElementById(_id);
             $validator.id           = _id;
@@ -407,7 +407,11 @@ function ValidatorPlugin(rules, data, formId) {
 
         if ( formsErrors && typeof(window.ginaToolbar) == 'object' ) {
             // update toolbar
-            window.ginaToolbar.update('forms', formsErrors);
+            if (!gina.forms.errors)
+                gina.forms.errors = {};
+
+            gina.forms.errors = formsErrors;
+            window.ginaToolbar.update('forms', gina.forms);
         }
     }
 
@@ -618,6 +622,19 @@ function ValidatorPlugin(rules, data, formId) {
 
                             $form.eventData.error = result;
 
+                            var XHRData = result;
+                            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                                try {
+
+                                    if ( typeof(XHRData) != 'undefined' ) {
+                                        window.ginaToolbar.update("data-xhr", XHRData);
+                                    }
+
+                                } catch (err) {
+                                    throw err
+                                }
+                            }
+
                             triggerEvent(gina, $target, 'error.' + id, result)
                         }
 
@@ -629,6 +646,26 @@ function ValidatorPlugin(rules, data, formId) {
                         };
 
                         $form.eventData.error = result;
+
+                        // update toolbar
+                        var XHRData = result;
+                        if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                            try {
+                                if ( /^(\{|\[).test(XHRData.error) /)
+                                    XHRData.error = JSON.parse(XHRData.error);
+
+                                // bad .. should not happen
+                                if ( typeof(XHRData.error.error) != 'undefined' )
+                                    XHRData.error = XHRData.error.error;
+
+                                if ( typeof(XHRData.error.stack) != 'undefined' )
+                                    XHRData.error = XHRData.error.stack;
+
+                                ginaToolbar.update("data-xhr", XHRData )
+                            } catch (err) {
+                                throw err
+                            }
+                        }
 
                         triggerEvent(gina, $target, 'error.' + id, result)
                     }
@@ -677,7 +714,23 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                 }
                 //console.log('sending -> ', data);
-                xhr.send(data);
+                //try {
+                    xhr.send(data)
+                // } catch (err) {
+                //     var XHRData = result;
+                //     if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                //         try {
+                //
+                //             if ( typeof(XHRData) != 'undefined' ) {
+                //                 window.ginaToolbar.update("data-xhr", XHRData);
+                //             }
+                //
+                //         } catch (err) {
+                //             throw err
+                //         }
+                //     }
+                // }
+
             } else {
                 xhr.send()
             }
@@ -1361,6 +1414,7 @@ function ValidatorPlugin(rules, data, formId) {
 
 
         if (withRules) {
+
             evt = 'validate.' + _id;
             //console.log('[ bind() ] : before attaching `'+evt+'` ->  `withRules`: '+withRules, '\n'+self.events[evt]+' VS '+_id, '\nevents ', self.events);
 
@@ -1379,15 +1433,9 @@ function ValidatorPlugin(rules, data, formId) {
                     handleErrorsDisplay(event['target'], result['errors']);
 
                     if ( result['isValid']() ) { // send if valid
-                        //console.log('sending ... ', result['data']);
-                        //console.log('just before sending ', self.$forms[event.target.id]);
                         // now sending to server
-                        //$validator['target'] = event['target'];
-                        //$validator['id']     = event['target'].getAttribute('id');
-
-                        //instance.$forms[event.target.id] = $validator;
                         var _id = event.target.getAttribute('id');
-                        if (!gina.events['submit.'+ _id] /**&& !instance.$forms[_id].sent*/) {
+                        if ( !gina.events['submit.'+ _id] ) {
                             instance.$forms[_id].send(result['data']);
                         }
                     }
@@ -1400,11 +1448,70 @@ function ValidatorPlugin(rules, data, formId) {
                 procced()
             }
 
-            // if ( typeof(self.events[evt]) == 'undefined' || self.events[evt] != _id ) {
-            //     self.events[evt] = _id;
-            //     procced(evt, $form)
-            // }
 
+            var proccedToSubmit = function (evt, $submit) {
+                // console.log('placing submit ', evt, $submit);
+                // attach submit events
+                addListener(gina, $submit, evt, function(event) {
+                    // start validation
+                    cancelEvent(event);
+
+                    // getting fields & values
+                    var $fields     = {}
+                        , fields    = { '_length': 0 }
+                        , name      = null
+                        , value     = 0
+                        , type      = null;
+
+                    for (var i = 0, len = $target.length; i<len; ++i) {
+                        name = $target[i].getAttribute('name');
+                        if (!name) continue;
+
+                        // TODO - add switch cases against tagName (checkbox/radio)
+
+                        if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' ) {
+                            //console.log('radio ', name, $form[i].checked, $form[i].value);
+                            if ( $target[i].checked == true ) {
+                                fields[name] = $target[i].value;
+                            }
+
+
+                        } else {
+                            fields[name]    = $target[i].value;
+                        }
+                        $fields[name]   = $target[i];
+                        // reset filed error data attributes
+                        $fields[name].setAttribute('data-errors', '');
+
+                        ++fields['_length']
+                    }
+
+                    //console.log('$fields =>\n' + $fields);
+
+                    //instance.$forms[ $target.getAttribute('id') ].sent = false;
+
+                    if ( fields['_length'] == 0 ) { // nothing to validate
+                        delete fields['_length'];
+                        var result = {
+                            'errors'    : [],
+                            'isValid'   : function() { return true },
+                            'data'      : fields
+                        };
+
+                        triggerEvent(gina, $target, 'validate.' + _id, result)
+
+                    } else {
+                        //console.log('testing rule [ '+_id.replace(/\-/g, '.') +' ]\n'+ JSON.stringify(rule, null, 4));
+                        //console.log('validating ', $form, fields, rule);
+                        validate($target, fields, $fields, rule, function onValidation(result){
+                            //console.log('validation result ', 'validate.' + _id, JSON.stringify(result.data, null, 2));
+                            //console.log('events ', 'validate.' + _id, self.events )
+                            triggerEvent(gina, $target, 'validate.' + _id, result)
+                        })
+                    }
+
+                });
+            }
 
 
             // binding submit button
@@ -1456,74 +1563,9 @@ function ValidatorPlugin(rules, data, formId) {
                     evt = $submit['id'];
                 }
 
-                procced = function (evt, $submit) {
-                    // attach submit events
-                    addListener(gina, $submit, evt, function(event) {
-                        //console.log('submiting ', evt, $submit);
-                        // start validation
-                        cancelEvent(event);
-
-                        // getting fields & values
-                        var $fields     = {}
-                            , fields    = { '_length': 0 }
-                            , name      = null
-                            , value     = 0
-                            , type      = null;
-
-                        for (var i = 0, len = $target.length; i<len; ++i) {
-                            name = $target[i].getAttribute('name');
-                            if (!name) continue;
-
-                            // TODO - add switch cases against tagName (checkbox/radio)
-
-                            if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' ) {
-                                //console.log('radio ', name, $form[i].checked, $form[i].value);
-                                if ( $target[i].checked == true ) {
-                                    fields[name] = $target[i].value;
-                                }
-
-
-                            } else {
-                                fields[name]    = $target[i].value;
-                            }
-                            $fields[name]   = $target[i];
-                            // reset filed error data attributes
-                            $fields[name].setAttribute('data-errors', '');
-
-                            ++fields['_length']
-                        }
-
-                        //console.log('$fields =>\n' + $fields);
-
-                        //instance.$forms[ $target.getAttribute('id') ].sent = false;
-
-                        if ( fields['_length'] == 0 ) { // nothing to validate
-                            delete fields['_length'];
-                            var result = {
-                                'errors'    : [],
-                                'isValid'   : function() { return true },
-                                'data'      : fields
-                            };
-
-                            triggerEvent(gina, $target, 'validate.' + _id, result)
-
-                        } else {
-                            //console.log('testing rule [ '+_id.replace(/\-/g, '.') +' ]\n'+ JSON.stringify(rule, null, 4));
-                            //console.log('validating ', $form, fields, rule);
-                            validate($target, fields, $fields, rule, function onValidation(result){
-                                //console.log('validation result ', 'validate.' + _id, JSON.stringify(result.data, null, 2));
-                                //console.log('events ', 'validate.' + _id, self.events )
-                                triggerEvent(gina, $target, 'validate.' + _id, result)
-                            })
-                        }
-
-                    });
-                }
-
 
                 if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $submit.id ) {
-                    //self.events[evt] = $submit.id;
-                    procced(evt, $submit)
+                    proccedToSubmit(evt, $submit)
                 }
 
             }
@@ -1532,11 +1574,6 @@ function ValidatorPlugin(rules, data, formId) {
 
 
         evt = 'submit';
-
-        // if ( typeof(self.events[evt]) != 'undefined' && self.events[evt] == _id ) {
-        //     removeListener(gina, $form, evt)
-        // }
-
         //console.log('adding submit event ', evt, _id, self.events);
         // submit proxy
         addListener(gina, $target, evt, function(e) {

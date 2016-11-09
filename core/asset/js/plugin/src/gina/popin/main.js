@@ -704,6 +704,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 $popin.open         = popinOpen;
                 $popin.close        = popinClose;
 
+                if ( typeof($validator) != 'undefined' )
+                    $popin.validateFormById = $validator.validateFormById;
+
                 // setting up AJAX
                 if (window.XMLHttpRequest) { // Mozilla, Safari, ...
                     xhr = new XMLHttpRequest();
