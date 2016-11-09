@@ -401,7 +401,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             var XHRData = result;
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
-                                    if ( /^(\{|\[).test(XHRData.error) /)
+                                    if ( XHRData.error && /^(\{|\[).test(XHRData.error) /)
                                         XHRData.error = JSON.parse(XHRData.error);
 
                                     // bad .. should not happen
@@ -485,8 +485,43 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 // don't cancel here, it will corrupt child elements behaviors such as checkboxes and radio buttons
 
                 if ( /gina-popin-is-active/.test(event.target.className) ) {
+
+
+                    // remove listeners
+                    removeListener(gina, event.target, 'click');
+
+                    // binding popin close
+                    var $close = [], $buttonsTMP = [];
+
+                    $buttonsTMP = $el.getElementsByTagName('button');
+                    if ( $buttonsTMP.length > 0 ) {
+                        for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                            if ( /gina-popin-close/.test($buttonsTMP[b].className) )
+                                $close.push($buttonsTMP[b])
+                        }
+                    }
+
+                    $buttonsTMP = $el.getElementsByTagName('div');
+                    if ( $buttonsTMP.length > 0 ) {
+                        for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                            if ( /gina-popin-close/.test($buttonsTMP[b].className) )
+                                $close.push($buttonsTMP[b])
+                        }
+                    }
+
+                    $buttonsTMP = $el.getElementsByTagName('a');
+                    if ( $buttonsTMP.length > 0 ) {
+                        for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                            if ( /gina-popin-close/.test($buttonsTMP[b].className) )
+                                $close.push($buttonsTMP[b])
+                        }
+                    }
+
+                    for (var b = 0, len = $close.length; b < len; ++b) {
+                        removeListener(gina, $close[b], $close[b].getAttribute('id') )
+                    }
+
                     popinClose(name);
-                    removeListener(gina, event.target, 'click')
                 }
             });
 
@@ -568,7 +603,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                         popinClose(name);
                         removeListener(gina, event.target, event.type)
-
                     });
                 }
 
@@ -580,7 +614,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
 
             if ( /gina-popin-is-active/.test(event.target.className) ) {
-                removeListener(gina, event.target, 'click')
+                removeListener(gina, event.target, event.target.getAttribute('id'))
             }
 
             $popin.isOpen = true;
@@ -643,6 +677,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 }
                 // remove listeners
                 removeListener(gina, $popin.target, 'loaded.' + $popin.id);
+
+
+
 
                 $popin.isOpen = false;
 

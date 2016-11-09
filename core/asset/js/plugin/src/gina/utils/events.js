@@ -115,8 +115,12 @@ function removeListener(target, element, name, callback) {
         target.customEvent.removeListener(name, callback)
     }
 
-    if ( typeof(gina.events[name]) != 'undefined' )
+    //console.log('tying to removing ', name, element);// avoid event proxies
+    //if (! /^(click|submit)$/.test(name))
+    if ( /**! /^(click|submit)$/.test(name) &&*/ typeof(gina.events[name]) != 'undefined' ) {
+        //console.log('------> [removed] ' + name);
         delete gina.events[name]
+    }
 }
 
 function on(event, cb) {

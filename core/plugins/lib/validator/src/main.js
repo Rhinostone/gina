@@ -796,23 +796,6 @@ function ValidatorPlugin(rules, data, formId) {
             throw new Error('[ FormValidator::destroy(formId) ] `formId` should be a `string`');
         }
 
-        // if ( typeof(instance['$forms'][_id]) == 'undefined' || instance['$forms'][_id]['id'] != _id ) {
-        //
-        //     var $el = document.getElementById(formId);
-        //
-        //     if (!$validator.$forms[_id])
-        //         $validator.$forms[_id] = {};
-        //
-        //     //$validator.$forms[_id]             = merge({}, $validator);
-        //     $validator.$forms[_id]['id']       = _id;
-        //     $validator.$forms[_id]['target']   = $el;
-        //
-        //     $form = $validator.$forms[_id];
-        //
-        // } else {
-        //     $form = self['$forms'][_id] || null;
-        // }
-
         if ( typeof(instance['$forms'][_id]) != 'undefined' ) {
             $form = instance['$forms'][_id]
         }
@@ -824,39 +807,60 @@ function ValidatorPlugin(rules, data, formId) {
             removeListener(gina, $form, 'success.' + _id);
             removeListener(gina, $form, 'validate.' + _id);
             removeListener(gina, $form, 'submit.' + _id);
+            removeListener(gina, $form, 'submit.' + _id);
             removeListener(gina, $form, 'error.' + _id);
 
-            // submit
-            var $submit = null, evt = null, $buttons = [], $buttonsTMP = [];
+            // binded elements
+            var $el         = null
+                , evt       = null
+                , $els      = []
+                , $elTMP    = [];
 
-            $buttonsTMP = $form.target.getElementsByTagName('button');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ($buttonsTMP[b].type == 'submit')
-                        $buttons.push($buttonsTMP[b])
+            // submit buttons
+            $elTMP = $form.target.getElementsByTagName('button');
+            if ( $elTMP.length > 0 ) {
+                for(var i = 0, len = $elTMP.length; i < len; ++i) {
+                    if ($elTMP[i].type == 'submit')
+                        $els.push($elTMP[i])
                 }
             }
 
-            $buttonsTMP = $form.target.getElementsByTagName('a');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ($buttonsTMP[b].attributes.getNamedItem('data-submit'))
-                        $buttons.push($buttonsTMP[b])
+            // submit links
+            $elTMP = $form.target.getElementsByTagName('a');
+            if ( $elTMP.length > 0 ) {
+                for(var i = 0, len = $elTMP.length; i < len; ++i) {
+                    if ( $elTMP[i].attributes.getNamedItem('data-submit') || /^click\./.test( $elTMP[i].attributes.getNamedItem('id') ) )
+                        $els.push($elTMP[i])
                 }
             }
 
-            for (var b=0, len=$buttons.length; b<len; ++b) {
-
-                $submit = $buttons[b];
-                if ( typeof(gina.events[$submit['id']]) != 'undefined' ) {
-                    //console.log('removing ', gina.events[$submit['id']]);
-                    removeListener(gina, $submit, gina.events[$submit['id']]);
+            // checkbox & radio
+            $elTMP = $form.target.getElementsByTagName('input');
+            if ( $elTMP.length > 0 ) {
+                for(var i = 0, len = $elTMP.length; i < len; ++i) {
+                    if ($elTMP[i].type == 'checkbox' || $elTMP[i].type == 'radio' )
+                        $els.push( $elTMP[i] )
                 }
+            }
 
+            for (var i = 0, len = $els.length; i < len; ++i) {
+
+                $el = $els[i];
+                if ($el.type == 'submit') {
+
+                    evt = $el.getAttribute('id');
+                    if ( typeof(gina.events[ evt ]) != 'undefined' )
+                        removeListener(gina, $el, gina.events[ evt ]);
+
+                } else {
+
+                    evt ='click.' + $el.getAttribute('id');
+                    if ( typeof(gina.events[ evt ]) != 'undefined' )
+                        removeListener(gina, $el, evt);
+                }
             }
 
             delete instance['$forms'][_id];
-
 
         } else {
             throw new Error('[ FormValidator::destroy(formId) ] `'+_id+'` not found')
