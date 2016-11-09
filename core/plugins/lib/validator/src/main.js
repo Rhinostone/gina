@@ -1436,9 +1436,10 @@ function ValidatorPlugin(rules, data, formId) {
 
                     handleErrorsDisplay(event['target'], result['errors']);
 
+                    var _id = event.target.getAttribute('id');
+
                     if ( result['isValid']() ) { // send if valid
                         // now sending to server
-                        var _id = event.target.getAttribute('id');
                         if ( !gina.events['submit.'+ _id] ) {
                             instance.$forms[_id].send(result['data']);
                         }
@@ -1586,10 +1587,6 @@ function ValidatorPlugin(rules, data, formId) {
                 , id        = $target.getAttribute('id')
                 , isBinded  = instance.$forms[id].binded
             ;
-            //if ( typeof(gina.events['submit.'+id]) != 'undefined' && gina.events['submit.'+id] == id ) {
-            //    isBinded = true;
-            //    instance.$forms[id].binded = isBinded;
-            //}
 
             if (withRules || isBinded) cancelEvent(e);
 
@@ -1623,17 +1620,38 @@ function ValidatorPlugin(rules, data, formId) {
                 ++fields['_length']
             }
 
-            if ( fields['_length'] > 0 ) { // nothing to validate
+            // TODO - remove it
+            // if ( fields['_length'] > 0 ) { // nothing to validate
+            //     delete fields['_length'];
+            //     instance.$forms[id].eventData.submit = {
+            //         'data': fields,
+            //         '$fields': $fields
+            //     }
+            // }
+            //
+            // var result = e['detail'] || instance.$forms[id].eventData.submit;
+
+            //triggerEvent(gina, $target, 'submit.' + _id, result)
+
+
+
+            if ( fields['_length'] == 0 ) { // nothing to validate
+
                 delete fields['_length'];
-                instance.$forms[id].eventData.submit = {
-                    'data': fields,
-                    '$fields': $fields
-                }
+                var result = {
+                    'errors'    : [],
+                    'isValid'   : function() { return true },
+                    'data'      : fields
+                };
+
+                triggerEvent(gina, $target, 'submit.' + _id, result)
+
+            } else {
+                validate($target, fields, $fields, rule, function onValidation(result){
+                    triggerEvent(gina, $target, 'submit.' + _id, result)
+                })
             }
 
-            var result = e['detail'] || instance.$forms[id].eventData.submit;
-
-            triggerEvent(gina, $target, 'submit.' + _id, result)
         });
 
 
