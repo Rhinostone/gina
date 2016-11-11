@@ -18,7 +18,7 @@ function ValidatorPlugin(rules, data, formId) {
     /**
      * validator event handler - isGFFCtx only
      * */
-    var events      = ['ready', 'error', 'progress', 'submit', 'success', 'change'];
+    var events      = ['ready', 'error', 'progress', 'submit', 'success', 'change', "destroy"];
 
     /** imports */
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
@@ -807,7 +807,6 @@ function ValidatorPlugin(rules, data, formId) {
             removeListener(gina, $form, 'success.' + _id);
             removeListener(gina, $form, 'validate.' + _id);
             removeListener(gina, $form, 'submit.' + _id);
-            removeListener(gina, $form, 'submit.' + _id);
             removeListener(gina, $form, 'error.' + _id);
 
             // binded elements
@@ -860,10 +859,19 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
 
-            delete instance['$forms'][_id];
+            addListener(gina, instance['$forms'][_id].target, 'destroy.' + _id, function(event) {
+
+                cancelEvent(event);
+
+                delete instance['$forms'][_id];
+                removeListener(gina, event.currentTarget, event.type);
+                removeListener(gina, event.currentTarget,'destroy');
+            });
+
+            triggerEvent(gina, instance['$forms'][_id].target, 'destroy.' + _id);
 
         } else {
-            throw new Error('[ FormValidator::destroy(formId) ] `'+_id+'` not found')
+            throw new Error('[ FormValidator::destroy(formId) ] `'+_id+'` not found');
         }
 
     }
