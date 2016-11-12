@@ -468,20 +468,37 @@ function ValidatorPlugin(rules, data, formId) {
         // getting fields & values
         var $fields     = {}
             , fields    = { '_length': 0 }
-            , name      = null;
+            , name      = null
+            // e.g: name="item[cat][]" <- gina will add the index
+            , index     = { checkbox: 0, radio: 0 };
 
 
         for (var i = 0, len = $target.length; i<len; ++i) {
             name = $target[i].getAttribute('name');
-            if (!name) continue;
 
-            if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' ) {
+            if (!name) continue;
+            if ($target[i].disabled) continue;
+
+            if ( typeof($target[i].type) != 'undefined' && ($target[i].type == 'radio' || $target[i].type == 'checkbox') ) {
                 if ( $target[i].checked == true ) {
+                    $target[i].setAttribute('checked', 'checked');
+
+                    if ( /\[\]/.test(name) ) {
+                        name = name.replace(/\[\]/, '['+ index[ $target[i].type ] +']');
+                        ++index[ $target[i].type ]
+                    }
+
                     fields[name] = $target[i].value;
                 }
 
 
             } else {
+
+                if ( /\[\]/.test(name) ) {
+                    name = name.replace(/\[\]/, '['+ fields['_length'] +']');
+                    ++index
+                }
+
                 fields[name] = $target[i].value;
             }
             $fields[name]   = $target[i];
@@ -1285,7 +1302,7 @@ function ValidatorPlugin(rules, data, formId) {
 
         var updateCheckBox = function($el) {
 
-            var checked = $el.checked;
+            var checked     = $el.checked;
 
             if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
@@ -1474,22 +1491,41 @@ function ValidatorPlugin(rules, data, formId) {
                         , fields    = { '_length': 0 }
                         , name      = null
                         , value     = 0
-                        , type      = null;
+                        , type      = null
+                        // e.g: name="item[cat][]" <- gina will add the index
+                        , index     = { checkbox: 0, radio: 0 };
 
                     for (var i = 0, len = $target.length; i<len; ++i) {
                         name = $target[i].getAttribute('name');
+
                         if (!name) continue;
+
+                        if ($target[i].disabled) continue;
 
                         // TODO - add switch cases against tagName (checkbox/radio)
 
-                        if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' ) {
+                        if ( typeof($target[i].type) != 'undefined' && ($target[i].type == 'radio' || $target[i].type == 'checkbox') ) {
                             //console.log('radio ', name, $form[i].checked, $form[i].value);
                             if ( $target[i].checked == true ) {
+
+                                $target[i].setAttribute('checked', 'checked');
+
+                                if ( /\[\]/.test(name) ) {
+                                    name = name.replace(/\[\]/, '['+ index[ $target[i].type ] +']');
+                                    ++index[ $target[i].type ]
+                                }
+
                                 fields[name] = $target[i].value;
                             }
 
 
                         } else {
+
+                            if ( /\[\]/.test(name) ) {
+                                name = name.replace(/\[\]/, '['+ fields['_length'] +']');
+                                ++index
+                            }
+
                             fields[name]    = $target[i].value;
                         }
                         $fields[name]   = $target[i];
@@ -1605,21 +1641,37 @@ function ValidatorPlugin(rules, data, formId) {
                 , fields    = { '_length': 0 }
                 , name      = null
                 , value     = 0
-                , type      = null;
+                , type      = null
+                // e.g: name="item[cat][]" <- gina will add the index
+                , index     = { checkbox: 0, radio: 0 };
 
             for (var i = 0, len = $target.length; i<len; ++i) {
                 name = $target[i].getAttribute('name');
+
                 if (!name) continue;
+                if ($target[i].disabled) continue;
 
                 // TODO - add switch cases against tagName (checkbox/radio)
 
-                if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' ) {
+                if ( typeof($target[i].type) != 'undefined' && ($target[i].type == 'radio' || $target[i].type == 'checkbox') ) {
                     //console.log('name : ', name, '\ntype ', $form[i].type, '\nchecked ? ', $form[i].checked, '\nvalue', $form[i].value);
                     if ( $target[i].checked === true ) {
                         $target[i].setAttribute('checked', 'checked');
+
+                        if ( /\[\]/.test(name) ) {
+                            name = name.replace(/\[\]/, '['+ index[ $target[i].type ] +']');
+                            ++index[ $target[i].type ]
+                        }
+
                         fields[name] = $target[i].value;
                     }
                 } else {
+
+                    if ( /\[\]/.test(name) ) {
+                        name = name.replace(/\[\]/, '['+ fields['_length'] +']');
+                        ++index
+                    }
+
                     fields[name]    = $target[i].value;
                 }
 
@@ -1627,19 +1679,6 @@ function ValidatorPlugin(rules, data, formId) {
 
                 ++fields['_length']
             }
-
-            // TODO - remove it
-            // if ( fields['_length'] > 0 ) { // nothing to validate
-            //     delete fields['_length'];
-            //     instance.$forms[id].eventData.submit = {
-            //         'data': fields,
-            //         '$fields': $fields
-            //     }
-            // }
-            //
-            // var result = e['detail'] || instance.$forms[id].eventData.submit;
-
-            //triggerEvent(gina, $target, 'submit.' + _id, result)
 
 
 
