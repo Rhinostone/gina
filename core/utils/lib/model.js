@@ -250,7 +250,7 @@ function ModelUtil() {
                                 modelPath       = _(conf.modelsPath + '/' + name);
                                 entitiesPath    = _(modelPath + '/entities');
                                 //Getting Entities Manager thru connector.
-                                entitiesManager = new require( _(conf.modelsPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle});
+                                entitiesManager = new require( _(conf.modelsPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle, database: conf.content['connectors'][name].database });
 
                                 self.setConnection(bundle, name, conn);
 
@@ -392,7 +392,7 @@ function ModelUtil() {
                     //Getting Entities Manager thru connector.
                     delete require.cache[_(conf.modelsPath + '/index.js', true)];//child
                     try {
-                        entitiesManager = new require( _(conf.modelsPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle});
+                        entitiesManager = new require( _(conf.modelsPath + '/index.js', true) )(conn)[name](conn, { model: name, bundle: bundle, database: conf.content['connectors'][name].database });
                     } catch (err) {
                         cb(err)
                     }

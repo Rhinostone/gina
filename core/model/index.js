@@ -78,13 +78,14 @@ function Model(namespace) {
 
         console.debug("\nBundle: ", bundle);
         console.debug("Model: ", model);
-        self.name = _connector;
-        self.bundle = bundle;
-        self.model = model;
+        self.name       = _connector;
+        self.bundle     = bundle;
+        self.model      = model;
         self.modelDirName = model;
         var modelConnectors = getContext('modelConnectors');
         if (modelConnectors) {
             self.connectors = getContext('modelConnectors')[self.name];
+            self.database = self.connectors.database;
         } else {
             self.connectors = {};
         }
