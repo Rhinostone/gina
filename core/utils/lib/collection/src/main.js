@@ -15,6 +15,7 @@
  *  @param {object} filter
  *      eg.: { uid: "someUID" }
  *      eg.: { type: "not null" }
+ *      eg.: { "obj.prop": true }
  *
  *  @return {array} result
  *
@@ -48,8 +49,8 @@ function Collection(content, option) {
         ;
     ;
 
-    if ( content.length > 0 && typeof(content[0]._uid) == 'undefined' ) {
-        this['uuids'] = {};
+    this['uuids'] = {}; // uuids are generated for each new instance
+    if ( content.length > 0 ) {
         for (var i = 0, len = content.length; i<len; ++i) {
             if (!content[i])
                 throw new Error('field index `'+ i +'` cannot be left undefined or null !');
@@ -57,8 +58,6 @@ function Collection(content, option) {
             content[i]._uuid = uuid.v4();
             this['uuids'][ content[i]._uuid ] = content[i]
         }
-    } else {
-        this['uuids'] = []
     }
 
     //this.find = function(filter, withOrClause) {
@@ -75,7 +74,7 @@ function Collection(content, option) {
 
         if ( typeof(filters) != 'undefined' && typeof(filters) !== 'object' ) {
             throw new Error('filter must be an object');
-        } else if ( typeof(filters) != 'undefined' ) {
+        } else if ( typeof(filters) != 'undefined' && filters.count() > 0 ) {
 
             try {
 
@@ -195,8 +194,6 @@ function Collection(content, option) {
             }
         }
 
-
-
         // chaining
         result.notIn    = instance.notIn;
         result.find     = instance.find;
@@ -272,24 +269,38 @@ function Collection(content, option) {
 
     this['notIn'] =  function(collection){
 
+        // where `this` is the source & `collection` is the target to be compared with
+
         if ( typeof(collection) == 'undefined' )
             return Array.isArray(this) ? this : content;
 
+        if (!Array.isArray(this))
+            throw new Error('<source>.notIn(<target>): `<source>` must be a valid `CollectionResultSet` (Array)');
+
+        if (!Array.isArray(collection))
+            throw new Error('<source>.notIn(<target>): `<target>` must be a valid CollectionResultSet (Array)');
+
+        if (this.length == 0)
+            return collection;
+
         var result          = []
             , r             = 0
-            , tmpUuids      = JSON.parse(JSON.stringify(instance.uuids))
-            , tmpContent    = Array.isArray(this) ? this : content;
+            , source        = JSON.parse(JSON.stringify(this))
+            , target        = JSON.parse(JSON.stringify(collection));
 
-
-        for (var i = 0, len = collection.length; i < len; ++i) {
-            if ( typeof(tmpUuids[ collection[i]._uuid ]) != 'undefined' )  {
-                delete tmpUuids[ collection[i]._uuid ]
+        // removing those not in collection
+        for (var i = 0, len = target.length; i < len; ++i) {
+            for (var s = 0, sLen = source.length; s < sLen; ++s) {
+                if (target[i]._uuid == source[s]._uuid) {
+                    target.splice(i, 1);
+                    source.splice(s, 1);
+                    --i;
+                    break
+                }
             }
         }
-        for (var uuid in tmpUuids) {
-            result[r] = tmpUuids[uuid];
-            ++r;
-        }
+
+        result = target;
 
         result.limit    = instance.limit;
         result.find     = instance.find;

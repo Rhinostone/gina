@@ -462,6 +462,7 @@ function SuperController(options) {
                         layout = layout.toString();
                         // adding plugins
                         if ( hasViews() && local.options.conf.env == 'dev' && !local.options.isWithoutLayout ) {
+
                             layout = ''
                                 + '{% set ginaDataInspector                = JSON.parse(JSON.stringify(page)) %}'
                                 + '{% set ginaDataInspector.scripts        = "ignored-by-toolbar" %}'
@@ -519,7 +520,8 @@ function SuperController(options) {
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
 
                         try {
-                            layout = swig.compile(layout)(data)
+                            layout = swig.compile(layout)(data);
+
                         } catch (err) {
                             var filename = local.options.views[data.file].html;
                             filename += ( typeof(data.page.namespace) != 'undefined' && data.page.namespace != '' && new RegExp('^' + data.page.namespace +'-').test(data.file) ) ? '/' + data.page.namespace + data.file.split(data.page.namespace +'-').join('/') + ( (data.page.ext != '') ? data.page.ext: '' ) : '/' + data.file+ ( (data.page.ext != '') ? data.page.ext: '' );
