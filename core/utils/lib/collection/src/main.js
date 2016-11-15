@@ -74,6 +74,12 @@ function Collection(content, option) {
             throw new Error('filter must be an object');
         } else if ( typeof(filters) != 'undefined' ) {
 
+            try {
+
+            } catch (err) {
+
+            }
+
             var filter              = null
                 , condition         = null
                 , i                 = 0
@@ -104,7 +110,7 @@ function Collection(content, option) {
                             re = new RegExp('("'+ field +'":\\w+)' );
                             if ( !/undefined|function/.test( typeof(tmpContent[o]) ) ) {
                                 value = JSON.stringify(tmpContent[o]).match(re);
-                                if ( value.length > 0) {
+                                if ( value && value.length > 0) {
                                     value = value[1].split(/:/)[1];
                                     if ( /(<|>|=)/.test(filter[f]) ) {
                                         if ( eval( value + filter[f] ) ) {
@@ -190,6 +196,8 @@ function Collection(content, option) {
 
         // chaining
         result.notIn    = instance.notIn;
+        result.find     = instance.find;
+        result.or       = instance.or;
         result.findOne  = instance.findOne;
         result.limit    = instance.limit;
         result.orderBy  = instance.orderBy;
