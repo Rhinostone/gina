@@ -234,9 +234,10 @@ function Merge() {
             return false
         }
 
-        var hasOwn = {}.hasOwnProperty;
-        var hasOwnConstructor = hasOwn.call(obj, 'constructor');
-        var hasMethodPrototyped = hasOwn.call(obj.constructor.prototype, 'isPrototypeOf');
+        var hasOwn              = {}.hasOwnProperty;
+        var hasOwnConstructor   = hasOwn.call(obj, 'constructor');
+        // added test for node > v6
+        var hasMethodPrototyped = ( typeof(obj.constructor) != 'undefined' ) ? hasOwn.call(obj.constructor.prototype, 'isPrototypeOf') : false;
 
 
         if (

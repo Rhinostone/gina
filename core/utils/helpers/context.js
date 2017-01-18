@@ -260,12 +260,29 @@ function ContextHelper(contexts) {
 
                 // init with options
                 try {
-                    return require(libToLoad)({
+                    var LibClass = require(libToLoad);
+                    /**
+                     * getConfig
+                     *
+                     * @param {string} [name]
+                     *
+                     * @return {object} bundleConfiguration - By default config from the bundle where the lib is located
+                     * */
+                    LibClass.prototype.getConfig = function (name) {
+                        if ( typeof(name) != 'undefined' && typeof( conf.envConf[bundle][env].content[name] ) != 'undefined' ) {
+                            return conf.envConf[bundle][env].content[name]
+                        }
+
+                        return conf.envConf[bundle][env]
+                    };
+
+                    return new LibClass ({
                         bundle      : bundle,
                         env         : env,
                         cacheless   : cacheless,
                         libPath     : libPath
                     })
+
                 } catch(err) {
                     throwError(500, err)
                 }
