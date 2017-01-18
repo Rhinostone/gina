@@ -153,13 +153,23 @@ function SuperController(options) {
             }
 
             // new declaration && overrides
-            var content = action;
-            set('page.environment.version', getContext('gina').version);
+            var version = {
+                "number"        : getContext('gina').version,
+                "platform"      : process.platform,
+                "arch"          : process.arch,
+                "nodejs"        : process.versions.node,
+                "middleware"    : getContext('gina').middleware
+            };
+
+            set('page.environment.gina', version.number);
+            set('page.environment.nodejs', version.nodejs +' '+ version.platform +' '+ version.arch);
+            set('page.environment.middleware', version.middleware);
             set('page.environment.env', options.conf.env);
             set('page.environment.webroot', options.conf.server.webroot);
             set('page.environment.bundle', options.conf.bundle);
+
             set('page.ext', ext);
-            set('page.content', content);
+            set('page.content', action);
             set('page.namespace', namespace);
             set('page.title', rule.replace(new RegExp('@'+options.conf.bundle), ''));
             set('page.forms', options.conf.content.forms);
