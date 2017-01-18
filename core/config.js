@@ -452,11 +452,14 @@ function Config(opt) {
 
 
                 //Variables replace. Compare with gina/core/template/conf/env.json.
-                var version = undefined;
+                var version = undefined, middleware = undefined;
                 try {
-                    self.version = version = require(_(getPath('gina').root +'/package.json' )).version;
+                    self.version    = version = require(_(getPath('gina').root +'/package.json' )).version;
+                    self.middleware = middleware = fs.readFileSync(_(getPath('gina').root + '/MIDDLEWARE')).toString() || 'none';
 
-                    setContext('gina.version', version)
+                    setContext('gina.version', version);
+                    setContext('gina.middleware', middleware);
+
                 } catch (err) {
                     console.debug(err.stack)
                 }

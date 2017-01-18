@@ -5,6 +5,7 @@
 Node.js(100%)
 
 __Gina is compatible with the following versions of Node.js:__
+- `v7.x.x`,
 - `v6.x.x` (Between Node.js 5.x and 6.3, NPM is broken, use manual installation: by cloning),
 - `v5.x.x` (Between Node.js 5.x and 6.3, NPM is broken, use manual installation: by cloning),
 - `v4.x.x`,
