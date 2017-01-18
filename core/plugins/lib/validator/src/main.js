@@ -477,7 +477,6 @@ function ValidatorPlugin(rules, data, formId) {
             name = $target[i].getAttribute('name');
 
             if (!name) continue;
-            if ($target[i].disabled) continue;
 
             if ( typeof($target[i].type) != 'undefined' && ($target[i].type == 'radio' || $target[i].type == 'checkbox') ) {
                 if ( $target[i].checked == true ) {
@@ -1500,8 +1499,6 @@ function ValidatorPlugin(rules, data, formId) {
 
                         if (!name) continue;
 
-                        if ($target[i].disabled) continue;
-
                         // TODO - add switch cases against tagName (checkbox/radio)
 
                         if ( typeof($target[i].type) != 'undefined' && ($target[i].type == 'radio' || $target[i].type == 'checkbox') ) {
@@ -1649,7 +1646,6 @@ function ValidatorPlugin(rules, data, formId) {
                 name = $target[i].getAttribute('name');
 
                 if (!name) continue;
-                if ($target[i].disabled) continue;
 
                 // TODO - add switch cases against tagName (checkbox/radio)
 

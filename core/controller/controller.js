@@ -345,9 +345,11 @@ function SuperController(options) {
                         config          = local.options.conf;
                         hostname        = '';
                         wroot           = config.server.webroot;
+
                         isStandalone    = (config.bundles.length > 1) ? true : false;
                         isMaster        = (config.bundles[0] === config.bundle) ? true : false;
                         routing         = config.content.routing;
+                        isWithoutLayout = (local.options.isWithoutLayout) ? true : false;
 
                         if ( typeof(base) != 'undefined' ) {
 
