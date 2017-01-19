@@ -484,7 +484,7 @@ function Config(opt) {
         }//EO for.
 
 
-        console.debug('Env configuration loaded \n ' + newContent);
+        console.debug('Env configuration loaded \n');
 
         // TRUE means that all apps sharing the same process will merge into one.
         if (!isStandalone) self.Host.standaloneMode = isStandalone;
