@@ -1115,9 +1115,9 @@ function ValidatorPlugin(rules, data, formId) {
                         caseValue = fields[field];
 
                         if (isGFFCtx) {
-                            if ($fields[field].value == "true")
+                            if (fields[field] == "true")
                                 caseValue = true;
-                            else if ($fields[field].value == "false")
+                            else if (fields[field] == "false")
                                 caseValue = false;
                         }
 
