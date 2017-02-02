@@ -121,7 +121,7 @@ function Logger(opt) {
 
     var write = function(opt, parse, s, args) {
 
-        if ( new RegExp('^debugger listening on port').test(args[0])
+        if ( /^(debugger listening on port)/.test(args[0])
             && typeof(opt.levels.info) != 'undefined'
         ) {
             s = 'info'

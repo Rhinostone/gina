@@ -198,38 +198,39 @@ function ContextHelper(contexts) {
             //    '\n[ 6 ] = '+ __stack[6].getFileName()
             //);
             var lib         = (arguments.length == 1) ? bundle : lib
+                , bundle    = null
                 , libPath   = null
-                , file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
-                , a         = file.replace('.js', '').split('/')
+                , file      = null
+                , stackFileName = null;
+                //, file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
+            for (var i = 1, len = 10; i<len; ++i) {
+                stackFileName = __stack[i].getFileName();
+                if ( stackFileName && !/node_modules/.test(stackFileName) ) {
+                    file = stackFileName;
+                    break;
+                }
+            }
+            var a           = file.replace('.js', '').split('/')
                 , i         = a.length-1;
 
             if (bundle == lib) {
                 bundle = ctx.bundle
+            } else {
+
+                if (ctx.bundles) {
+                    for (; i >= 0; --i) {
+                        index = ctx.bundles.indexOf(a[i]);
+                        if ( index > -1 ) {
+                            ctx.bundle = bundle = ctx.bundles[index];
+
+                            break
+                        }
+                    }
+                } else if (ctx.bundle) {
+                    bundle = ctx.bundle
+                }
+
             }
-
-            // if (conf) {
-            //     var bundles   = conf.bundles
-            //         , env       = conf.env
-            //         , cacheless = conf.isCacheless()
-            //         , bundle    = null
-            //         , index     = 0;
-            //
-            //     for (; i >= 0; --i) {
-            //         index = bundles.indexOf(a[i]);
-            //         if ( index > -1 ) {
-            //             bundle = bundles[index];
-            //             break
-            //         }
-            //     }
-            // } else { // by default
-            //     conf            = getContext();
-            //     bundle          = conf.bundle;
-            //     libPath         = _( conf.bundlePath +'/lib', true); // TODO - to replace by the env.json variable
-            //     var env         = conf.env
-            //         , cacheless = conf.cacheless;
-            //
-            // }
-
         }
         // else {
         //     var libPath     = null
