@@ -158,6 +158,14 @@ function Router(env) {
 
         if (!_param.length) return false;
 
+        //  if custom path, path rewrite
+        if (request.routing.param.path) {
+            regex = new RegExp(urlVar, 'g')
+            if ( regex.test(request.routing.param.path) ) {
+                request.routing.param.path = request.routing.param.path.replace(regex, urlVal);
+            }
+        }
+
         if (_param.length == 1) {// fast one
             matched =  ( _param.indexOf(urlVar) > -1 ) ? _param.indexOf(urlVar) : false;
 
@@ -413,6 +421,7 @@ function Router(env) {
             isUsingTemplate : local.isUsingTemplate,
             cacheless       : cacheless,
             rule            : params.rule,
+            path            : params.param.path || null, // user custom path : namespace should be ignored | left blank
             isXMLRequest    : params.isXMLRequest
         };
 
