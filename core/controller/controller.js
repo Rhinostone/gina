@@ -215,8 +215,9 @@ function SuperController(options) {
 
 
 
-    this.renderWithoutLayout = function (data) {
+    this.renderWithoutLayout = function (data, displayToolbar) {
         local.options.isWithoutLayout = true;
+        local.options.debugMode = true; // only active for dev env
         self.render(data)
     }
 
@@ -248,9 +249,10 @@ function SuperController(options) {
             }
 
 
-            setResources(local.options.views, data.file);
-            var file = data.file;
+            data.view = local.options.rule.replace('\@'+ local.options.bundle, '');
+            setResources(local.options.views, data.view);
 
+            var file = data.file;
 
             // pre-compiling variables
             data = merge(data, getData()); // needed !!
@@ -263,15 +265,31 @@ function SuperController(options) {
                 self.throwError(data.page.data.status, data.page.data.error)
             }
 
+            // making path thru [namespace &] file
             if ( typeof(local.options.namespace) != 'undefined' ) {
                 file = ''+ file.replace(local.options.namespace+'-', '');
                 // means that rule name === namespace -> pointing to root namespace dir
                 if (!file || file === local.options.namespace) {
                     file = 'index'
                 }
-                path = _(local.options.views[data.file].html +'/'+ local.options.namespace + '/' + file)
+                path = _(local.options.views[data.view].html +'/'+ local.options.namespace + '/' + file)
             } else {
-                path = _(local.options.views[data.file].html +'/'+ file)
+                if (local.options.path) {
+                    path = _(local.options.path);
+                    var re = new RegExp( data.page.ext+'$');
+                    if ( data.page.ext && re.test(data.page.file) ) {
+                        data.page.path = path.replace('/'+ data.page.file, '');
+
+                        path            = path.replace(re, '');
+                        data.page.file  = data.page.file.replace(re, '');
+
+                    } else {
+                        data.page.path = path.replace('/'+ data.page.file, '');
+                    }
+
+                } else {
+                    path = _(local.options.views[data.view].html +'/'+ file)
+                }
             }
 
             if (data.page.ext) {
@@ -333,15 +351,16 @@ function SuperController(options) {
                      *
                      * @return {string} relativeUrl|absoluteUrl - /sample/url.html or http://domain.com/sample/url.html
                      * */
-                    var config          = null
-                        , hostname      = null
-                        , wroot         = null
-                        , isStandalone  = null
-                        , isMaster      = null
-                        , routing       = null
-                        , rule          = ''
-                        , url           = NaN
-                        , urlStr        = null
+                    var config              = null
+                        , hostname          = null
+                        , wroot             = null
+                        , isStandalone      = null
+                        , isMaster          = null
+                        , routing           = null
+                        , isWithoutLayout   = null
+                        , rule              = ''
+                        , url               = NaN
+                        , urlStr            = null
                     ;
 
 
@@ -403,7 +422,7 @@ function SuperController(options) {
                         //if ( isStandalone && !isMaster ) {
                         //    rule = config.bundle +'-'+ route
                         //} else {
-                            rule = route + '@' + config.bundle
+                            rule = route + '@' + config.bundle;
                         //}
 
                         if ( typeof(routing[rule]) != 'undefined' ) { //found
@@ -465,7 +484,7 @@ function SuperController(options) {
 
                 dic['page.content'] = content;
 
-                var layoutPath = (local.options.isWithoutLayout) ? local.options.views[data.file].noLayout : local.options.views[data.file].layout;
+                var layoutPath = (local.options.isWithoutLayout) ? local.options.views[data.view].noLayout : local.options.views[data.view].layout;
 
                 fs.readFile(layoutPath, function(err, layout) {
                     if (err) {
@@ -473,7 +492,7 @@ function SuperController(options) {
                     } else {
                         layout = layout.toString();
                         // adding plugins
-                        if ( hasViews() && local.options.conf.env == 'dev' && !local.options.isWithoutLayout ) {
+                        if ( hasViews() && local.options.conf.env == 'dev' && (!local.options.isWithoutLayout || local.options.isWithoutLayout && local.options.debugMode)  ) {
 
                             layout = ''
                                 + '{% set ginaDataInspector                = JSON.parse(JSON.stringify(page)) %}'
@@ -503,6 +522,7 @@ function SuperController(options) {
                             ;
 
                             layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
+
                         } else if ( hasViews() && local.options.conf.env == 'dev' && self.isXMLRequest() ) {
                             // means that we don't want GFF context or we already have it loaded
                             var XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
@@ -532,10 +552,17 @@ function SuperController(options) {
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
 
                         try {
+
                             layout = swig.compile(layout)(data);
+                            // special case for template without layout in debug mode - dev only
+                            if ( hasViews() && local.options.isWithoutLayout && local.options.debugMode ) {
+                                layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
+                                layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+                                layout = swig.compile(layout)(data);
+                            }
 
                         } catch (err) {
-                            var filename = local.options.views[data.file].html;
+                            var filename = local.options.views[data.view].html;
                             filename += ( typeof(data.page.namespace) != 'undefined' && data.page.namespace != '' && new RegExp('^' + data.page.namespace +'-').test(data.file) ) ? '/' + data.page.namespace + data.file.split(data.page.namespace +'-').join('/') + ( (data.page.ext != '') ? data.page.ext: '' ) : '/' + data.file+ ( (data.page.ext != '') ? data.page.ext: '' );
                             self.throwError(local.res, 500, 'Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message))
                         }
@@ -732,33 +759,67 @@ function SuperController(options) {
             self.throwError(500, 'No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: ./gina.sh -av '+options.conf.bundle)
         }
 
-        var res = '',
-            tmpRes = {},
-            css = {
+        var res     = '',
+            tmpRes  = {},
+            css     = {
                 media   : "screen",
                 rel     : "stylesheet",
                 type    : "text/css",
                 content : []
             },
-            cssStr = ' ',
-            js  = {
+            cssStr  = ' ',
+            js      = {
                 type    : "text/javascript",
                 content : []
             },
-            jsStr = ' ';
+            jsStr   = ' ',
+            exclude  = null;
 
         //intercept errors in case of malformed config
         if ( typeof(viewConf) != "object" ) {
-            cssStr = viewConf;
-            jsStr = viewConf
+            cssStr  = viewConf;
+            jsStr   = viewConf
         }
 
 
         //cascading merging
         if (localRessource !== 'default') {
             if ( typeof(viewConf[localRessource]) != 'undefined') {
-                //viewConf[localRessource] = merge(viewConf[localRessource], viewConf.default)
-                viewConf[localRessource] = merge(viewConf.default, viewConf[localRessource])
+
+                var noneDefaultJs   = (viewConf[localRessource]['javascripts']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['javascripts'])) : [] ;
+                var noneDefaultCss  = (viewConf[localRessource]['stylesheets']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['stylesheets'])) : [] ;
+
+                viewConf[localRessource] = merge(viewConf.default, viewConf[localRessource]);
+
+                if ( viewConf[localRessource]["javascriptsExclude"] ) {
+
+                    if ( Array.isArray(viewConf[localRessource]["javascriptsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["javascriptsExclude"][0]) || typeof(viewConf[localRessource]["javascriptsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["javascriptsExclude"]) ) {
+
+                        for (var i = 0, len = viewConf.default['javascripts'].length; i<len; ++i) {
+                            if ( viewConf.default['javascripts'] && viewConf[localRessource]['javascripts'].indexOf(viewConf.default['javascripts'][i]) ) {
+                                viewConf[localRessource]['javascripts'].splice(viewConf[localRessource]['javascripts'].indexOf(viewConf.default['javascripts'][i]), 1)
+                            }
+                        }
+                    } else {// else means that we exclude all default
+                        viewConf[localRessource]['javascripts'] = noneDefaultJs;
+                    }
+                }
+
+                if ( viewConf[localRessource]["stylesheetsExclude"] ) {
+
+                    if ( Array.isArray(viewConf[localRessource]["stylesheetsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"][0]) || typeof(viewConf[localRessource]["stylesheetsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"]) ) {
+
+                        for (var i = 0, len = viewConf.default['stylesheets'].length; i<len; ++i) {
+                            if ( viewConf.default['stylesheets'] && viewConf[localRessource]['stylesheets'].indexOf(viewConf.default['stylesheets'][i]) ) {
+                                viewConf[localRessource]['stylesheets'].splice(viewConf[localRessource]['stylesheets'].indexOf(viewConf.default['stylesheets'][i]), 1)
+                            }
+                        }
+                    } else {// else means that we exclude all default
+                        viewConf[localRessource]['stylesheets'] = noneDefaultJs;
+                    }
+                }
+
+
             } else {
                 viewConf[localRessource] = viewConf.default
             }
@@ -766,17 +827,19 @@ function SuperController(options) {
 
         //Get css
         if( viewConf[localRessource]["stylesheets"] ) {
-            tmpRes = getNodeRes('css', cssStr, viewConf[localRessource]["stylesheets"], css);
-            cssStr = tmpRes.cssStr;
-            css = tmpRes.css;
-            tmpRes = null
+            tmpRes  = getNodeRes('css', cssStr, viewConf[localRessource]["stylesheets"], css);
+
+            cssStr  = tmpRes.cssStr;
+            css     = tmpRes.css;
+            tmpRes  = null
         }
         //Get js
         if( viewConf[localRessource]["javascripts"] ) {
-            tmpRes = getNodeRes('js', jsStr, viewConf[localRessource]["javascripts"], js);
-            jsStr = tmpRes.jsStr;
-            js = tmpRes.js;
-            tmpRes = null
+            tmpRes  = getNodeRes('js', jsStr, viewConf[localRessource]["javascripts"], js);
+
+            jsStr   = tmpRes.jsStr;
+            js      = tmpRes.js;
+            tmpRes  = null
         }
 
         set('page.stylesheets', cssStr);
