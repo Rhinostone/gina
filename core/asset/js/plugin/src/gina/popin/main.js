@@ -63,54 +63,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         var registeredPopins = [];
 
 
-        // var on = function(event, cb) {
-        //
-        //     if ( events.indexOf(event) < 0 ) {
-        //         cb(new Error('Event `'+ event +'` not handled by ginaPopinEventHandler'))
-        //     } else {
-        //         var $target = null, id = null;
-        //         if ( typeof(this.id) != 'undefined' ) {
-        //
-        //             $target = instance.target;
-        //             id      = this.id;
-        //         } else if ( typeof(this.target) != 'undefined'  ) {
-        //             $target = this.target;
-        //             id      = ( typeof($target.getAttribute) != 'undefined' ) ? $target.getAttribute('id') : this.id;
-        //         } else {
-        //             $target = instance.target;
-        //             id      = instance.id;
-        //         }
-        //
-        //         event += '.' + id;
-        //
-        //
-        //         if (!gina.events[event]) {
-        //
-        //             addListener(gina, $target, event, function(e) {
-        //                 cancelEvent(e);
-        //
-        //                 var data = null;
-        //                 if (e['detail']) {
-        //                     data = e['detail'];
-        //                 } else if ( typeof(instance.eventData.submit) != 'undefined' ) {
-        //                     data = instance.eventData.submit
-        //                 } else if ( typeof(instance.eventData.error) != 'undefined' ) {
-        //                     data = instance.eventData.error
-        //                 } else if ( typeof(instance.eventData.success) != 'undefined' ) {
-        //                     data = instance.eventData.success;
-        //                 }
-        //
-        //                 cb(e, data)
-        //
-        //             });
-        //
-        //             if (!instance.isReady)
-        //                 init(options)
-        //         }
-        //     }
-        // };
-
-
         /**
          * popinCreateContainer
          *
@@ -235,8 +187,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                                     popinOpen($popin.name);
                                 }
-                            })
-
+                            });
 
                             // loading & binding popin
                             popinLoad($popin.name, e.target.url);
@@ -456,7 +407,45 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                 return {
                     'open': function () {
-                        popinOpen(name)
+                        var fired = false;
+                        $popin.on('loaded', function (e) {
+                            e.preventDefault();
+
+                            if (!fired) {
+                                fired = true;
+
+                                e.target.innerHTML = e.detail;
+
+
+                                // bind with formValidator if forms are found
+                                if ( /<form/i.test(e.target.innerHTML) && typeof($validator) != 'undefined' ) {
+                                    var _id = null;
+                                    var $forms = e.target.getElementsByTagName('form');
+                                    for (var i = 0, len = $forms.length; i < len; ++i) {
+
+                                        if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
+                                            _id = $forms[i].getAttribute('id') || 'form.' + uuid.v1();
+                                            $forms[i].setAttribute('id', _id);// just in case
+                                            $forms[i]['id'] = _id
+                                        } else {
+                                            _id = $forms[i]['id']
+                                        }
+
+                                        //console.log('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
+                                        if ($popin['$forms'].indexOf(_id) < 0)
+                                            $popin['$forms'].push(_id);
+
+                                        $forms[i].close = popinClose;
+                                        $validator.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
+
+                                        removeListener(gina, $popin.target, e.type);
+                                    }
+                                }
+
+                                popinOpen($popin.name);
+                            }
+                        });
+                        //popinOpen(name)
                     }
                 }
             }

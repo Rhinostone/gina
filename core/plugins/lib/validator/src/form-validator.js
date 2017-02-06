@@ -253,7 +253,8 @@ function FormValidatorUtil(data, $fields) {
                 return self[this.name]
             } else {
                 try {
-                    val = this.value = local.data[this.name] = ~~(val.match(/[0-9]+/g).join(''));
+                    //val = this.value = local.data[this.name] = ~~(val.match(/[0-9]+/g).join(''));
+                    val = this.value = local.data[this.name] = Math.round(val);
                 } catch (err) {
 
                     errors['toInteger'] = replace(this.error || local.errorLabels['toInteger'], this);

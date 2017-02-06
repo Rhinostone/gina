@@ -51,6 +51,7 @@ function Utils() {
         logger      : _require('./lib/logger'),
         math        : _require('./lib/math'),
         url         : _require('./lib/url'),
+        routing     : _require('./lib/routing'),
         cmd         : _require('./lib/cmd')
     };
 
