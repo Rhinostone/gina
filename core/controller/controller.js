@@ -810,8 +810,8 @@ function SuperController(options) {
                     if ( Array.isArray(viewConf[localRessource]["stylesheetsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"][0]) || typeof(viewConf[localRessource]["stylesheetsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"]) ) {
 
                         for (var i = 0, len = viewConf.default['stylesheets'].length; i<len; ++i) {
-                            if ( viewConf.default['stylesheets'] && viewConf[localRessource]['stylesheets'].indexOf(viewConf.default['stylesheets'][i]) ) {
-                                viewConf[localRessource]['stylesheets'].splice(viewConf[localRessource]['stylesheets'].indexOf(viewConf.default['stylesheets'][i]), 1)
+                            if ( viewConf.default['stylesheets'] && viewConf[localRessource]['javascripts'].indexOf(viewConf.default['javascripts'][i]) ) {
+                                viewConf[localRessource]['stylesheets'].splice(viewConf[localRessource]['javascripts'].indexOf(viewConf.default['javascripts'][i]), 1)
                             }
                         }
                     } else {// else means that we exclude all default

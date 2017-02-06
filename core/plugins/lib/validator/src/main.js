@@ -236,9 +236,7 @@ function ValidatorPlugin(rules, data, formId) {
                     } else {
                         throw new Error('[ FormValidator::validateFormById(formId) ] using `data-gina-validator-rule` on form `'+$form.target+'`: no matching rule found')
                     }
-                } else {
-                    throw new Error('[ FormValidator::validateFormById(formId[, customRule]) ] `customRule` or `data-gina-validator-rule` attribute is missing')
-                }
+                } // no else to allow form without any rule
             } else {
                 rule = customRule.replace(/\-/g, '.');
 

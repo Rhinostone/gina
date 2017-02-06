@@ -1179,12 +1179,12 @@ function Config(opt) {
             self.envConf[bundle][env].content = {};
 
         self.envConf[bundle][env].content.routing = routing;
-        //Config.instance.envConf[bundle][env].content = self.envConf[bundle][env].content;
     }
 
     this.getRouting = function(bundle, env) {
-        return self.envConf[bundle][env].content.routing;
-        //Config.instance.envConf[bundle][env].content = self.envConf[bundle][env].content;
+        var routing = self.envConf[bundle][env].content.routing;
+
+        return routing;
     }
 
     this.setReverseRouting = function(bundle, env, reverseRouting) {
