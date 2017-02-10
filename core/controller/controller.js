@@ -41,11 +41,11 @@ function SuperController(options) {
         query   : {},
         _data   : {}
     };
+
     var ports = {
         'http': 80,
         'https': 443
     };
-
 
 
     /**
@@ -602,17 +602,30 @@ function SuperController(options) {
     }
 
     this.isXMLRequest = function() {
-        return local.options.isXMLRequest
+        return local.options.isXMLRequest;
+    }
+
+    this.isWithCredentials = function() {
+        return local.options.isWithCredentials;
     }
 
     /**
      * Render JSON
      *
      * @param {object|string} jsonObj
+     * @param {object} [req]
+     * @param {object} [res]
      *
-     * @return {void}
+     * @callback {function} [next]
+     *
      * */
-    this.renderJSON = function(jsonObj) {
+    this.renderJSON = function(jsonObj, doNotEnd) {
+
+        var request     = local.req;
+        var response    = local.res;
+        var next        = local.next;
+
+
         if (!jsonObj) {
             var jsonObj = {}
         }
@@ -624,41 +637,57 @@ function SuperController(options) {
             }
 
             if( typeof(local.options) != "undefined" && typeof(local.options.charset) != "undefined" ){
-                local.res.setHeader("charset", local.options.charset);
+                response.setHeader("charset", local.options.charset);
             }
             
 
             //catching errors
             if (
-                typeof(jsonObj.errno) != 'undefined' && local.res.statusCode == 200
+                typeof(jsonObj.errno) != 'undefined' && response.statusCode == 200
                 || typeof(jsonObj.status) != 'undefined' && jsonObj.status != 200 && typeof(local.options.conf.server.coreConfiguration.statusCodes[jsonObj.status]) != 'undefined'
             ) {
 
                 try {
-                    local.res.statusCode    = jsonObj.status;
-                    local.res.statusMessage = local.options.conf.server.coreConfiguration.statusCodes[jsonObj.status];
+                    response.statusCode    = jsonObj.status;
+                    response.statusMessage = local.options.conf.server.coreConfiguration.statusCodes[jsonObj.status];
                 } catch (err){
-                    local.res.statusCode    = 500;
-                    local.res.statusMessage = err.stack;
+                    response.statusCode    = 500;
+                    response.statusMessage = err.stack;
                 }
             }
 
 
             // Internet Explorer override
-            if ( /msie/i.test(local.req.headers['user-agent']) ) {
-                local.res.setHeader("Content-Type", "text/plain")
+            if ( /msie/i.test(request.headers['user-agent']) ) {
+                response.setHeader("Content-Type", "text/plain")
             } else {
-                local.res.setHeader("Content-Type", local.options.conf.server.coreConfiguration.mime['json'])
+
+                response.setHeader("Content-Type", local.options.conf.server.coreConfiguration.mime['json'])
             }
 
-            if ( !local.res.headersSent ) {
-                console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
-                local.res.end(JSON.stringify(jsonObj));
-                local.res.headersSent = true
+            if ( !response.headersSent ) {
+                console.info(request.method +' ['+ response.statusCode +'] '+ request.url);
+
+                if ( typeof(doNotEnd) == 'undefined') {
+                    response.end(JSON.stringify(jsonObj));
+                    response.headersSent = true
+                } else {
+
+                    var data = JSON.stringify(jsonObj);
+
+                    response.setHeader("Content-Length", data.length);
+                    response.write(data);
+                    response.headersSent = true;
+                    // required to close connection
+                    setTimeout(function () {
+                        response.end()
+                    }, 200);
+
+                    return // force completion
+                }
             }
         } catch (err) {
-
-            self.throwError(local.res, 500, err.stack||err.message)
+            self.throwError(response, 500, err.stack||err.message)
         }
 
     }
@@ -1219,7 +1248,7 @@ function SuperController(options) {
         hostname  : undefined, // cname of the host e.g.: `www.google.com` or `localhost`
         path    : undefined, // e.g.: /test.html
         port    : 80, // #80 by default but can be 3000
-        method  : 'POST', // POST | GET | PUT | DELETE
+        method  : 'GET', // POST | GET | PUT | DELETE
         agent   : false,
         keepAlive: true,
         auth    : undefined, // use `"username:password"` for basic authentification
@@ -1227,17 +1256,14 @@ function SuperController(options) {
         headers : {
             'Content-Type': 'application/json',
             //'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+
+            // 'x-requested-with': 'XMLHttpRequest' // to convert into an XHR query
             'Content-Length': local.query.data.length
-        }
+        },
+        withCredentials: false // `TRUE` to pass cookie context
     };
 
     this.query = function(options, data, callback) {
-
-        local.query.options.method                  = options.method || local.req.method;
-
-        if ( typeof(local.req.headers['content-type']) != 'undefined' ) {
-            local.query.options.headers['Content-Type'] = local.req.headers['content-type']
-        }
 
         var queryData           = {}
             , defaultOptions    = local.query.options
@@ -1305,8 +1331,14 @@ function SuperController(options) {
             options.headers['Content-Type'] = local.options.conf.server.coreConfiguration.mime['json'];
         }
 
+        if ( options.withCredentials && typeof(local.req.headers.cookie) != 'undefined') { // useful for CORS
+            options.headers.cookie = local.req.headers.cookie;
+        }
+
         //you need this, even when empty.
         options.headers['Content-Length'] = queryData.length;
+
+
         browser = (options.port == 443) ? https : http;
 
         var req = browser.request(options, function(res) {
@@ -1389,7 +1421,7 @@ function SuperController(options) {
         }
 
         return {
-            onComplete: function(cb) {
+            onComplete  : function(cb) {
                 self.once('query#complete', function(err, data){
 
                     if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
@@ -1549,7 +1581,8 @@ function SuperController(options) {
     this.throwError = function(res, code, msg) {
         if (arguments.length == 1 && typeof(res) == 'object' ) {
             var code    = ( typeof(res.status) != 'undefined' ) ?  res.status : 500
-                , msg   = res.stack || res.message || res.error
+                //, msg   = res.stack || res.message || res.error
+                , msg   = JSON.parse(JSON.stringify(res))
                 , res   = local.res;
 
         } else if (arguments.length < 3) {
@@ -1557,6 +1590,9 @@ function SuperController(options) {
                 , code          = res || 500
                 , res           = local.res;
         }
+
+        var req     = local.req;
+        var next    = local.next;
 
         if (!res.headersSent) {
             if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate ) {
@@ -1567,24 +1603,31 @@ function SuperController(options) {
                 }
 
                 // Internet Explorer override
-                if ( /msie/i.test(local.req.headers['user-agent']) ) {
-                    res.writeHead(code, "Content-Type", "text/plain")
+                if ( typeof(req.headers['user-agent']) != 'undefined' ) {
+                    if ( /msie/i.test(req.headers['user-agent']) ) {
+                        res.writeHead(code, "Content-Type", "text/plain")
+                    } else {
+                        res.writeHead(code, { 'Content-Type': req.headers['content-type']} )
+                    }
+                } else if ( typeof(req.headers['content-type']) != 'undefined' ) {
+                    res.writeHead(code, { 'Content-Type': req.headers['content-type']} )
                 } else {
-                    res.writeHead(code, { 'Content-Type': 'application/json'} )
+                    res.writeHead(code, "Content-Type", "application/json")
                 }
 
-                console.error(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
+                console.error(req.method +' ['+res.statusCode +'] '+ req.url);
                 res.end(JSON.stringify({
                     status: code,
-                    error: msg.stack || msg.message || msg
+                    error: msg.error || msg,
+                    stack: msg.stack
                 }))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
-                console.error(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
+                console.error(req.method +' ['+ res.statusCode +'] '+ req.url);
                 res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>')
             }
         } else {
-            local.next()
+            next()
         }
     }
 

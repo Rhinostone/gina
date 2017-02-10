@@ -313,6 +313,7 @@ function ValidatorPlugin(rules, data, formId) {
         var name = null, errAttr = null;
         var $err = null, $msg = null;
         var $el = null, $parent = null, $target = null;
+        var id  = $form.getAttribute('id');
 
         for (var i = 0, len = $form.length; i<len; ++i) {
             $el     = $form[i];
@@ -338,9 +339,12 @@ function ValidatorPlugin(rules, data, formId) {
 
                 // injecting error messages
                 for (var e in errors[name]) {
-                    $msg = document.createElement('p');
-                    $msg.appendChild( document.createTextNode(errors[name][e]) );
-                    $err.appendChild($msg);
+
+                    if (e != 'stack') { // ignore stack for display
+                        $msg = document.createElement('p');
+                        $msg.appendChild( document.createTextNode(errors[name][e]) );
+                        $err.appendChild($msg);
+                    }
 
                     if ( gina.options.env == 'dev' ) {
                         if (!formsErrors) formsErrors = {};
@@ -403,13 +407,23 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
 
-        if ( formsErrors && typeof(window.ginaToolbar) == 'object' ) {
-            // update toolbar
-            if (!gina.forms.errors)
-                gina.forms.errors = {};
 
-            gina.forms.errors = formsErrors;
-            window.ginaToolbar.update('forms', gina.forms);
+        if ( formsErrors ) {
+
+            triggerEvent(gina, $form, 'error.' + id, errors)
+
+            if ( typeof(window.ginaToolbar) == 'object' ) {
+                // update toolbar
+                if (!gina.forms.errors)
+                    gina.forms.errors = {};
+
+                gina.forms.errors = formsErrors;
+
+                window.ginaToolbar.update('forms', gina.forms);
+            }
+
+        } else {
+            triggerEvent(gina, $form, 'success.' + id, errors)
         }
     }
 
@@ -560,6 +574,7 @@ function ValidatorPlugin(rules, data, formId) {
         //console.log('options ['+$form.id+'] -> ', options);
 
         if ( options.withCredentials ) {
+
             if ('withCredentials' in xhr) {
                 // XHR for Chrome/Firefox/Opera/Safari.
                 if (options.isSynchrone) {
@@ -575,8 +590,12 @@ function ValidatorPlugin(rules, data, formId) {
                 // CORS not supported.
                 xhr = null;
                 var result = 'CORS not supported: the server is missing the header `"Access-Control-Allow-Credentials": true` ';
-                triggerEvent(gina, $target, 'error.' + id, result)
+                triggerEvent(gina, $target, 'error.' + id, result);
+
+                return
             }
+
+            xhr.withCredentials = true;
         } else {
             if (options.isSynchrone) {
                 xhr.open(options.method, options.url, options.isSynchrone)
@@ -652,12 +671,30 @@ function ValidatorPlugin(rules, data, formId) {
                             triggerEvent(gina, $target, 'error.' + id, result)
                         }
 
-                    } else {
-                        //console.log('error event triggered ', event.target, $form);
-                        var result = {
-                            'status': xhr.status,
-                            'error' : xhr.responseText
-                        };
+                    } else if ( xhr.status != 0) {
+
+                        var result = { 'status': xhr.status };
+                        var responseObject = null;
+
+                        if ( /^(\{|\[).test( xhr.responseText ) /) {
+                            if ( typeof(xhr.responseText) == 'object') {
+
+                                responseObject = JSON.parse(xhr.responseText);
+
+                                if ( typeof(responseObject.stack) != 'undefined' )
+                                    result.stack = responseObject.stack;
+
+                                if ( typeof(responseObject.error) != 'undefined' )
+                                    result.error = responseObject.error;
+
+                                if ( typeof(responseObject.message) != 'undefined' )
+                                    result.message = responseObject.message;
+
+                            } else {
+                                result.message = xhr.responseText
+                            }
+
+                        }
 
                         $form.eventData.error = result;
 
@@ -665,17 +702,27 @@ function ValidatorPlugin(rules, data, formId) {
                         var XHRData = result;
                         if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                             try {
-                                if ( /^(\{|\[).test(XHRData.error) /)
-                                    XHRData.error = JSON.parse(XHRData.error);
 
-                                // bad .. should not happen
-                                if ( typeof(XHRData.error.error) != 'undefined' )
-                                    XHRData.error = XHRData.error.error;
+                                // forward backend appplication errors to forms.errors when available
+                                if ( XHRData.error && typeof(XHRData.error) == 'object' && $form.fields ) {
+                                    var formsErrors = {}, errCount = 0;
+                                    for (var e in XHRData.error) {
+                                        if ( typeof($form.fields[e]) != 'undefined' ) {
+                                            ++errCount;
+                                            formsErrors[e] = XHRData.error[e];
 
-                                if ( typeof(XHRData.error.stack) != 'undefined' )
-                                    XHRData.error = XHRData.error.stack;
+                                            if ( typeof(XHRData.stack) != 'undefined' )
+                                                formsErrors[e].stack = XHRData.stack;
+                                        }
+                                    }
 
-                                ginaToolbar.update("data-xhr", XHRData )
+                                    if (errCount > 0) {
+                                        handleErrorsDisplay($form.target, formsErrors);
+                                    }
+                                }
+                                // update toolbar
+                                ginaToolbar.update("data-xhr", XHRData );
+
                             } catch (err) {
                                 throw err
                             }
@@ -718,11 +765,11 @@ function ValidatorPlugin(rules, data, formId) {
 
 
             // sending
+            var data = event.detail.data;
             if (data) {
                 if ( typeof(data) == 'object' ) {
                     try {
                         data = JSON.stringify(data)
-                        //data = encodeURIComponent(JSON.stringify(data))
                     } catch (err) {
                         triggerEvent(gina, $target, 'error.' + id, err)
                     }
@@ -894,7 +941,7 @@ function ValidatorPlugin(rules, data, formId) {
         // check if rules has imports & replace
         var rulesStr = JSON.stringify(rules, null, 4);
         var importedRules = rulesStr.match(/(\"@import\s+[a-z A-Z 0-9/.]+\")/g);
-        if (importedRules.length > 0) {
+        if (importedRules && importedRules.length > 0) {
             var ruleArr = [], rule = {}, tmpRule = null;
             for (var r = 0, len = importedRules.length; r<len; ++r) {
                 ruleArr = importedRules[r].replace(/(@import\s+|\"|\')/g, '').split(/\s/g);
@@ -1081,6 +1128,11 @@ function ValidatorPlugin(rules, data, formId) {
     var validate = function($form, fields, $fields, rules, cb) {
         delete fields['_length']; //cleaning
 
+        var id = null;
+        if (isGFFCtx) {
+            id = $form.getAttribute('id') || $form.id;
+            instance.$forms[id].fields = fields;
+        }
         //console.log(fields, $fields);
 
         var d = new FormValidator(fields, $fields), args = null;

@@ -545,7 +545,8 @@ function Server(options) {
             //request.cookies = {}; // ???
 
             // be carfull, if you are using jQuery + cross domain, you have to set the header manually in your $.ajax query -> headers: {'X-Requested-With': 'XMLHttpRequest'}
-            self.conf[self.appName][self.env].server.request.isXMLRequest  = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
+            self.conf[self.appName][self.env].server.request.isXMLRequest       = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
+            self.conf[self.appName][self.env].server.request.isWithCredentials  = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
 
             // multipart wrapper for uploads
             // files are available from your controller or any middlewares:
@@ -896,13 +897,14 @@ function Server(options) {
     }
 
     var handle = function(req, res, next, bundle, pathname, config) {
-        var matched         = false
-            , isRoute       = {}
-            , withViews     = hasViews(bundle)
-            , router        = local.router
-            , cacheless     = config.isCacheless()
-            , wroot         = null
-            , isXMLRequest  = self.conf[bundle][self.env].server.request.isXMLRequest;
+        var matched             = false
+            , isRoute           = {}
+            , withViews         = hasViews(bundle)
+            , router            = local.router
+            , cacheless         = config.isCacheless()
+            , wroot             = null
+            , isXMLRequest      = self.conf[bundle][self.env].server.request.isXMLRequest
+            , isWithCredentials = self.conf[bundle][self.env].server.request.isWithCredentials;
 
         if (self.conf[bundle][self.env]['hostname'].replace(self.conf[bundle][self.env]['protocol'] + '://', '') != req.headers.host) {
             self.conf[bundle][self.env]['hostname'] = req.headers.host
@@ -934,15 +936,16 @@ function Server(options) {
 
                 //Preparing params to relay to the router.
                 params = {
-                    method          : routing[rule].method || req.method,
-                    requirements    : routing[rule].requirements,
-                    namespace       : routing[rule].namespace || undefined,
-                    url             : unescape(pathname), /// avoid %20
-                    rule            : routing[rule].originalRule || rule,
-                    param           : routing[rule].param,
-                    middleware      : routing[rule].middleware,
-                    bundle          : routing[rule].bundle,
-                    isXMLRequest    : isXMLRequest
+                    method              : routing[rule].method || req.method,
+                    requirements        : routing[rule].requirements,
+                    namespace           : routing[rule].namespace || undefined,
+                    url                 : unescape(pathname), /// avoid %20
+                    rule                : routing[rule].originalRule || rule,
+                    param               : routing[rule].param,
+                    middleware          : routing[rule].middleware,
+                    bundle              : routing[rule].bundle,
+                    isXMLRequest        : isXMLRequest,
+                    isWithCredentials   : isWithCredentials
                 };
                 //Parsing for the right url.
                 try {

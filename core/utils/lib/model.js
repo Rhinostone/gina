@@ -439,6 +439,8 @@ function ModelUtil() {
      * */
     getModel = function(bundle, model) {
 
+        var ctx       = getContext();
+
         if (arguments.length == 1 || !bundle) {
             //console.debug(
             //    '\n[ 0 ] = '+ __stack[0].getFileName(),
@@ -451,27 +453,65 @@ function ModelUtil() {
             //);
 
 
-            var model       = (arguments.length == 1) ? bundle : model
-                , file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
-                , a         = file.replace('.js', '').split('/')
-                , i         = a.length-1
-                , bundle    = null;
+            // var model       = (arguments.length == 1) ? bundle : model
+            //     , file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
+            //     , a         = file.replace('.js', '').split('/')
+            //     , i         = a.length-1
+            //     , bundle    = null;
+            //
+            // var conf        = getContext('gina').config || null;
+            // if (conf) {
+            //     var bundles     = conf.bundles
+            //         , index     = 0;
+            //
+            //     for (; i >= 0; --i) {
+            //         index = bundles.indexOf(a[i]);
+            //         if ( index > -1 ) {
+            //             bundle = bundles[index];
+            //             break
+            //         }
+            //     }
+            // } else {
+            //     conf    = getContext();
+            //     bundle  = conf.bundle;
+            // }
 
-            var conf        = getContext('gina').config || null;
-            if (conf) {
-                var bundles     = conf.bundles
-                    , index     = 0;
 
-                for (; i >= 0; --i) {
-                    index = bundles.indexOf(a[i]);
-                    if ( index > -1 ) {
-                        bundle = bundles[index];
-                        break
-                    }
+
+
+            var model         = (arguments.length == 1) ? bundle : model
+                , bundle    = null
+                , modelPath   = null
+                , file      = null
+                , stackFileName = null;
+            //, file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
+            for (var i = 1, len = 10; i<len; ++i) {
+                stackFileName = __stack[i].getFileName();
+                if ( stackFileName && !/node_modules/.test(stackFileName) ) {
+                    file = stackFileName;
+                    break;
                 }
+            }
+            var a           = file.replace('.js', '').split('/')
+                , i         = a.length-1;
+
+            if (bundle == model) {
+                bundle = ctx.bundle
             } else {
-                conf    = getContext();
-                bundle  = conf.bundle;
+
+                if (ctx.bundles) {
+                    for (; i >= 0; --i) {
+                        index = ctx.bundles.indexOf(a[i]);
+                        if ( index > -1 ) {
+                            ctx.bundle = bundle = ctx.bundles[index];
+
+                            break
+                        }
+                    }
+                } else if (ctx.bundle) {
+                    bundle = ctx.bundle
+                }
+
             }
         }
 
