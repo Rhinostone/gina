@@ -655,6 +655,36 @@ function ValidatorPlugin(rules, data, formId) {
 
                             $form.eventData.error = result;
 
+                            // // update toolbar
+                            // var XHRData = result;
+                            // if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                            //     try {
+                            //
+                            //         // forward backend appplication errors to forms.errors when available
+                            //         if ( XHRData.error && typeof(XHRData.error) == 'object' && $form.fields ) {
+                            //             var formsErrors = {}, errCount = 0;
+                            //             for (var e in XHRData.error) {
+                            //                 if ( typeof($form.fields[e]) != 'undefined' ) {
+                            //                     ++errCount;
+                            //                     formsErrors[e] = XHRData.error[e];
+                            //
+                            //                     if ( typeof(XHRData.stack) != 'undefined' )
+                            //                         formsErrors[e].stack = XHRData.stack;
+                            //                 }
+                            //             }
+                            //
+                            //             if (errCount > 0) {
+                            //                 handleErrorsDisplay($form.target, formsErrors);
+                            //             }
+                            //         }
+                            //         // update toolbar
+                            //         ginaToolbar.update("data-xhr", XHRData );
+                            //
+                            //     } catch (err) {
+                            //         throw err
+                            //     }
+                            // }
+
                             var XHRData = result;
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
@@ -674,26 +704,19 @@ function ValidatorPlugin(rules, data, formId) {
                     } else if ( xhr.status != 0) {
 
                         var result = { 'status': xhr.status };
-                        var responseObject = null;
 
                         if ( /^(\{|\[).test( xhr.responseText ) /) {
-                            if ( typeof(xhr.responseText) == 'object') {
 
-                                responseObject = JSON.parse(xhr.responseText);
-
-                                if ( typeof(responseObject.stack) != 'undefined' )
-                                    result.stack = responseObject.stack;
-
-                                if ( typeof(responseObject.error) != 'undefined' )
-                                    result.error = responseObject.error;
-
-                                if ( typeof(responseObject.message) != 'undefined' )
-                                    result.message = responseObject.message;
-
-                            } else {
-                                result.message = xhr.responseText
+                            try {
+                                result = JSON.parse(xhr.responseText);
+                            } catch (err) {
+                                result = merge(result, err)
                             }
 
+                        } else if ( typeof(xhr.responseText) == 'object' ) {
+                            result = xhr.responseText
+                        } else {
+                            result.message = xhr.responseText
                         }
 
                         $form.eventData.error = result;
