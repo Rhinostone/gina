@@ -106,9 +106,11 @@ function FormValidatorUtil(data, $fields) {
          *       "/^[0-9]+$/"   -> only numbers
          *
          * @param {object|string} condition - RegExp object, or condition to eval, or eval result
+         * @param {string} [errorMessage] - error message
+         * @param {string} [errorStack] - error stack
          *
          * */
-        self[el]['is'] = function(condition, errorLabel) {
+        self[el]['is'] = function(condition, errorMessage, errorStack) {
             var valid   = false;
             var errors  = {};
 
@@ -126,7 +128,9 @@ function FormValidatorUtil(data, $fields) {
             }
 
             if (!valid) {
-                errors['is'] = replace(this.error || errorLabel || local.errorLabels['is'], this)
+                errors['is'] = replace(this.error || errorMessage || local.errorLabels['is'], this);
+                if ( typeof(errorStack) != 'undefined' )
+                    errors['stack'] = errorStack;
             }
 
             this.valid = valid;
