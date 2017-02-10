@@ -410,20 +410,20 @@ function Router(env) {
 
         // default param setting
         var options = {
-            file                : actionFile,
-            namespace           : namespace,
-            bundle              : bundle,//module
-            bundlePath          : conf.bundlesPath +'/'+ bundle,
-            rootPath            : self.executionPath,
-            conf                : conf,
-            instance            : self.middlewareInstance,
-            views               : ( routeHasViews ) ? conf.content.views : undefined,
-            isUsingTemplate     : local.isUsingTemplate,
-            cacheless           : cacheless,
-            rule                : params.rule,
-            path                : params.param.path || null, // user custom path : namespace should be ignored | left blank
-            isXMLRequest        : params.isXMLRequest,
-            isWithCredentials   : params.isWithCredentials
+            file            : actionFile,
+            namespace       : namespace,
+            bundle          : bundle,//module
+            bundlePath      : conf.bundlesPath +'/'+ bundle,
+            rootPath        : self.executionPath,
+            conf            : conf,
+            instance        : self.middlewareInstance,
+            views           : ( routeHasViews ) ? conf.content.views : undefined,
+            isUsingTemplate : local.isUsingTemplate,
+            cacheless       : cacheless,
+            rule            : params.rule,
+            path            : params.param.path || null, // user custom path : namespace should be ignored | left blank
+            isXMLRequest    : params.isXMLRequest,
+            withCredentials : false
         };
 
         for (var p in params.param) {
@@ -481,7 +481,7 @@ function Router(env) {
                             Setup.renderJSON            = controller.renderJSON;
                             Setup.renderWithoutLayout   = controller.renderWithoutLayout
                             Setup.isXMLRequest          = controller.isXMLRequest;
-                            Setup.isWithCredentials     = controller.isWithCredentials;
+                            Setup.isWithCredentials     = controller.isWithCredentials,
                             Setup.isCacheless           = controller.isCacheless;
 
                             Setup.apply(Setup, arguments);

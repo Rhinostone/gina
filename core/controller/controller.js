@@ -606,7 +606,7 @@ function SuperController(options) {
     }
 
     this.isWithCredentials = function() {
-        return local.options.isWithCredentials;
+        return ( /true/.test(local.options.withCredentials) ) ? true : false;
     }
 
     /**
@@ -619,7 +619,7 @@ function SuperController(options) {
      * @callback {function} [next]
      *
      * */
-    this.renderJSON = function(jsonObj, doNotEnd) {
+    this.renderJSON = function(jsonObj) {
 
         var request     = local.req;
         var response    = local.res;
@@ -661,29 +661,31 @@ function SuperController(options) {
             if ( /msie/i.test(request.headers['user-agent']) ) {
                 response.setHeader("Content-Type", "text/plain")
             } else {
-
                 response.setHeader("Content-Type", local.options.conf.server.coreConfiguration.mime['json'])
             }
 
             if ( !response.headersSent ) {
                 console.info(request.method +' ['+ response.statusCode +'] '+ request.url);
 
-                if ( typeof(doNotEnd) == 'undefined') {
-                    response.end(JSON.stringify(jsonObj));
-                    response.headersSent = true
-                } else {
+                if ( local.options.isXMLRequest && self.isWithCredentials() )  {
 
                     var data = JSON.stringify(jsonObj);
 
                     response.setHeader("Content-Length", data.length);
+
                     response.write(data);
                     response.headersSent = true;
+
                     // required to close connection
                     setTimeout(function () {
                         response.end()
                     }, 200);
 
                     return // force completion
+
+                } else { // normal case
+                    response.end(JSON.stringify(jsonObj));
+                    response.headersSent = true
                 }
             }
         } catch (err) {
@@ -1255,12 +1257,11 @@ function SuperController(options) {
         rejectUnauthorized: undefined, // ignore verification when requesting on https (443)
         headers : {
             'Content-Type': 'application/json',
-            //'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            // 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
 
-            // 'x-requested-with': 'XMLHttpRequest' // to convert into an XHR query
+            // 'X-Requested-With': 'XMLHttpRequest' // to convert into an XHR query
             'Content-Length': local.query.data.length
-        },
-        withCredentials: false // `TRUE` to pass cookie context
+        }
     };
 
     this.query = function(options, data, callback) {
@@ -1331,19 +1332,23 @@ function SuperController(options) {
             options.headers['Content-Type'] = local.options.conf.server.coreConfiguration.mime['json'];
         }
 
-        if ( options.withCredentials && typeof(local.req.headers.cookie) != 'undefined') { // useful for CORS
+        if ( typeof(local.req.headers.cookie) != 'undefined' ) { // useful for CORS : forward cookies from the original request
             options.headers.cookie = local.req.headers.cookie;
         }
 
         //you need this, even when empty.
         options.headers['Content-Length'] = queryData.length;
 
-
         browser = (options.port == 443) ? https : http;
 
         var req = browser.request(options, function(res) {
 
             res.setEncoding('utf8');
+
+            // upgrade response headers to handler
+            if ( typeof(res.headers['access-control-allow-credentials']) != 'undefined' )
+                local.options.withCredentials = res.headers['access-control-allow-credentials'];
+
 
             var data = '';
 
@@ -1612,7 +1617,7 @@ function SuperController(options) {
                 } else if ( typeof(req.headers['content-type']) != 'undefined' ) {
                     res.writeHead(code, { 'Content-Type': req.headers['content-type']} )
                 } else {
-                    res.writeHead(code, "Content-Type", "application/json")
+                    res.writeHead(code, "Content-Type", local.options.conf.server.coreConfiguration.mime['json'])
                 }
 
                 console.error(req.method +' ['+res.statusCode +'] '+ req.url);

@@ -546,7 +546,19 @@ function Server(options) {
 
             // be carfull, if you are using jQuery + cross domain, you have to set the header manually in your $.ajax query -> headers: {'X-Requested-With': 'XMLHttpRequest'}
             self.conf[self.appName][self.env].server.request.isXMLRequest       = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
-            self.conf[self.appName][self.env].server.request.isWithCredentials  = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
+
+            // Passing credentials :
+            //      - if you are using jQuery + cross domain, you have to set the `xhrFields` in your $.ajax query -> xhrFields: { withCredentials: true }
+            //      - if you are using another solution or doing it by hand, make sure to properly set the header: headers: {'Access-Control-Allow-Credentials': true }
+            /**
+             * NB.: jQuery
+             * The `withCredentials` property will include any cookies from the remote domain in the request,
+             * and it will also set any cookies from the remote domain.
+             * Note that these cookies still honor same-origin policies, so your JavaScript code can’t access the cookies
+             * from document.cookie or the response headers.
+             * They can only be controlled by the remote domain.
+             * */
+            self.conf[self.appName][self.env].server.request.isWithCredentials  = ( request.headers['access-control-allow-credentials'] && request.headers['access-control-allow-credentials'] == true ) ? true : false;
 
             // multipart wrapper for uploads
             // files are available from your controller or any middlewares:
@@ -903,8 +915,7 @@ function Server(options) {
             , router            = local.router
             , cacheless         = config.isCacheless()
             , wroot             = null
-            , isXMLRequest      = self.conf[bundle][self.env].server.request.isXMLRequest
-            , isWithCredentials = self.conf[bundle][self.env].server.request.isWithCredentials;
+            , isXMLRequest      = self.conf[bundle][self.env].server.request.isXMLRequest;
 
         if (self.conf[bundle][self.env]['hostname'].replace(self.conf[bundle][self.env]['protocol'] + '://', '') != req.headers.host) {
             self.conf[bundle][self.env]['hostname'] = req.headers.host
@@ -944,8 +955,7 @@ function Server(options) {
                     param               : routing[rule].param,
                     middleware          : routing[rule].middleware,
                     bundle              : routing[rule].bundle,
-                    isXMLRequest        : isXMLRequest,
-                    isWithCredentials   : isWithCredentials
+                    isXMLRequest        : isXMLRequest
                 };
                 //Parsing for the right url.
                 try {
