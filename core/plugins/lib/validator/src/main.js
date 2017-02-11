@@ -55,7 +55,8 @@ function ValidatorPlugin(rules, data, formId) {
         'getFormById'       : null,
         'validateFormById'  : null,
         'setOptions'        : null,
-        'resetErrorsDisplay': null
+        'resetErrorsDisplay': null,
+        'resetFields'       : null
     };
 
     // validator proto
@@ -73,7 +74,8 @@ function ValidatorPlugin(rules, data, formId) {
         'send'                  : null,
         'submit'                : null,
         'destroy'               : null,
-        'resetErrorsDisplay'    : null
+        'resetErrorsDisplay'    : null,
+        'resetFields'           : null
     };
 
 
@@ -437,7 +439,12 @@ function ValidatorPlugin(rules, data, formId) {
     var resetErrorsDisplay = function($form) {
         var $form = $form, _id = null;
         if ( typeof($form) == 'undefined' ) {
-            _id = this.getAttribute('id');
+            if ( typeof(this.target) != 'undefined' ) {
+                _id = this.target.getAttribute('id');
+            } else {
+                _id = this.getAttribute('id');
+            }
+
             $form = instance.$forms[_id]
         } else if ( typeof($form) == 'string' ) {
             _id = $form;
@@ -450,7 +457,47 @@ function ValidatorPlugin(rules, data, formId) {
             $form = instance.$forms[_id]
         }
         //console.log('reseting error display ', $form.id, $form);
-        handleErrorsDisplay($form['target'], [])
+        handleErrorsDisplay($form['target'], []);
+
+        return $form
+    }
+
+    /**
+     * Reset fields
+     *
+     * @param {object|string} [$form|formId]
+     *
+     * */
+    var resetFields = function($form) {
+        var $form = $form, _id = null;
+        if ( typeof($form) == 'undefined' ) {
+            if ( typeof(this.target) != 'undefined' ) {
+                _id = this.target.getAttribute('id');
+            } else {
+                _id = this.getAttribute('id');
+            }
+
+            $form = instance.$forms[_id]
+        } else if ( typeof($form) == 'string' ) {
+            _id = $form;
+            _id = _id.replace(/\#/, '');
+
+            if ( typeof(instance.$forms[_id]) == 'undefined') {
+                throw new Error('[ FormValidator::resetErrorsDisplay([formId]) ] `'+$form+'` not found')
+            }
+
+            $form = instance.$forms[_id]
+        }
+
+        if ($form.defaultFields) {
+            var elId = null;
+            for (var f in $form.defaultFields) {
+                document.getElementById(f).value = $form.defaultFields[f];
+
+            }
+        }
+
+        return $form
     }
 
     // TODO - efreshErrorsDisplay
@@ -1020,6 +1067,7 @@ function ValidatorPlugin(rules, data, formId) {
                 $validator.getFormById          = getFormById;
                 $validator.validateFormById     = validateFormById;
                 $validator.resetErrorsDisplay   = resetErrorsDisplay;
+                $validator.resetFields          = resetFields;
                 $validator.handleErrorsDisplay  = handleErrorsDisplay;
                 $validator.submit               = submit;
                 $validator.send                 = send;
@@ -1369,8 +1417,24 @@ function ValidatorPlugin(rules, data, formId) {
             $form.rules = rule
         }
 
+        // form fields
+
+        if (!$form.defaultFields)
+            $form.defaultFields = {};
+
         // binding input: checkbox, radio
         var $inputs = $target.getElementsByTagName('input'), type = null, id = null;
+
+        var elId = null;
+        for (var i = 0, len = $inputs.length; i < len; ++i) {
+            elId = $inputs[i].getAttribute('id');
+            if (!elId) {
+                elId = 'input.' + uuid.v1();
+                $inputs[i].setAttribute('id', elId)
+            }
+            if (!$form.defaultFields[ elId ])
+                $form.defaultFields[ elId ] = $inputs[i].value;
+        }
 
         var updateCheckBox = function($el) {
 
@@ -1783,6 +1847,7 @@ function ValidatorPlugin(rules, data, formId) {
         instance.target                 = document;
         instance.validateFormById       = validateFormById;
         instance.resetErrorsDisplay     = resetErrorsDisplay;
+        instance.resetFields            = resetFields;
         instance.handleErrorsDisplay    = handleErrorsDisplay;
         instance.send                   = send;
     }
