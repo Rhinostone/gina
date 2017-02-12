@@ -69,6 +69,7 @@ function ValidatorPlugin(rules, data, formId) {
         'target'                : (isGFFCtx) ? document : null, // by default
 
         'binded'                : false,
+        'validated'             : false,
         'rules'                 : {},
         'setOptions'            : null,
         'send'                  : null,
@@ -249,7 +250,7 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
 
-            if ($target)
+            if ($target && !$form.binded)
                 bindForm($target, rule);
         }
 
@@ -1197,6 +1198,10 @@ function ValidatorPlugin(rules, data, formId) {
 
 
     var validate = function($form, fields, $fields, rules, cb) {
+
+        if ($form.validated)
+            return false;
+
         delete fields['_length']; //cleaning
 
         var id = null;
@@ -1330,6 +1335,8 @@ function ValidatorPlugin(rules, data, formId) {
             --i;
 
             if (i < 0) {
+
+                gina.validator.$forms[id].validated = true;
                 var errors = d['getErrors']();
 
                 // adding data attribute to handle display refresh
@@ -1349,13 +1356,14 @@ function ValidatorPlugin(rules, data, formId) {
 
                 //console.log('data => ',  d['toData']());
 
+
                 //calling back
                 if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
                     cb({
                         'isValid'   : d['isValid'],
                         'errors'    : errors,
                         'data'      : d['toData']()
-                    })
+                    });
                 } else {
                     return {
                         'isValid'   : d['isValid'],
@@ -1492,17 +1500,24 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( typeof(event.target.id) == 'undefined' ) {
                     event.target.setAttribute('id', 'click.' + uuid.v1() );
                     event.target.id = event.target.getAttribute('id')
+                } else if ( typeof(event.target.id) == 'undefined' ) {
+                    event.target.id = event.target.getAttribute('id')
                 }
 
 
                 if (/^click\./.test(event.target.id) || withRules) {
 
                     var _evt = event.target.id;
-                    if ( ! /^click\./.test(_evt)  ) {
-                        _evt = 'click.' + event.target.id
+
+                    if (!_evt) return false;
+
+                    if ( ! /^click\./.test(_evt) ) {
+                        //_evt = 'click.' + event.target.id
+                        _evt = event.target.id
                     }
 
-                    triggerEvent(gina, event.target, _evt, event.detail);
+                    if (!gina.events[_evt])
+                        triggerEvent(gina, event.target, _evt, event.detail);
                 }
 
             })
@@ -1605,6 +1620,7 @@ function ValidatorPlugin(rules, data, formId) {
                             instance.$forms[_id].send(result['data']);
                         }
                     }
+                    return false
                 })
             }
 
@@ -1684,6 +1700,10 @@ function ValidatorPlugin(rules, data, formId) {
                         triggerEvent(gina, $target, 'validate.' + _id, result)
 
                     } else {
+                        // update rule in case the current event is triggered outside the main sequence
+                        // e.g.: form `id` attribute rewritten on the fly
+                        _id     = $target.getAttribute('id');
+                        rule    = gina.validator.$forms[_id].rule || _id.replace(/-/g, '.');
                         //console.log('testing rule [ '+_id.replace(/\-/g, '.') +' ]\n'+ JSON.stringify(rule, null, 4));
                         //console.log('validating ', $form, fields, rule);
                         validate($target, fields, $fields, rule, function onValidation(result){
@@ -1768,6 +1788,8 @@ function ValidatorPlugin(rules, data, formId) {
 
             if (withRules || isBinded) cancelEvent(e);
 
+            // if (instance.$forms[id].validated)
+            //     return false;
 
             // just collect data for over forms
             // getting fields & values
@@ -1814,7 +1836,6 @@ function ValidatorPlugin(rules, data, formId) {
             }
 
 
-
             if ( fields['_length'] == 0 ) { // nothing to validate
 
                 delete fields['_length'];
@@ -1824,18 +1845,21 @@ function ValidatorPlugin(rules, data, formId) {
                     'data'      : fields
                 };
 
-                triggerEvent(gina, $target, 'submit.' + _id, result)
+                triggerEvent(gina, $target, 'validate.' + id, result)
 
             } else {
+                // update rule in case the current event is triggered outside the main sequence
+                // e.g.: form `id` attribute rewritten on the fly
+                ruleId = id.replace(/-/g, '.');
+                if ( typeof(instance.$forms[id].rules) != 'undefined' )
+                    rule = instance.$forms[id].rules;
+
                 validate($target, fields, $fields, rule, function onValidation(result){
-                    triggerEvent(gina, $target, 'submit.' + _id, result)
+                    triggerEvent(gina, $target, 'validate.' + id, result);
                 })
             }
-
         });
 
-
-        //self.$forms[_id]['rule']   = rules[_id] || {};
         instance.$forms[_id]['binded']  = true;
     }
 

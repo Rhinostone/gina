@@ -166,6 +166,14 @@ function Router(env) {
             }
         }
 
+        //  if custom file, file rewrite
+        if (request.routing.param.file) {
+            regex = new RegExp(urlVar, 'g')
+            if ( regex.test(request.routing.param.file) ) {
+                request.routing.param.file = request.routing.param.file.replace(regex, urlVal);
+            }
+        }
+
         if (_param.length == 1) {// fast one
             matched =  ( _param.indexOf(urlVar) > -1 ) ? _param.indexOf(urlVar) : false;
 
