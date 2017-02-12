@@ -1607,6 +1607,9 @@ function SuperController(options) {
                     code    = code.status || 500;
                 }
 
+                if ( !req.headers['content-type'] ) {
+                    req.headers['content-type'] = local.options.conf.server.coreConfiguration.mime['json']
+                }
                 // Internet Explorer override
                 if ( typeof(req.headers['user-agent']) != 'undefined' ) {
                     if ( /msie/i.test(req.headers['user-agent']) ) {
