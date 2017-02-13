@@ -1320,9 +1320,9 @@ function ValidatorPlugin(rules, data, formId) {
 
                     } catch (err) {
                         if (rule == 'conditions') {
-                            throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()` where `conditions` must be a `collection` (Array)')
+                            throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()` where `conditions` must be a `collection` (Array)\nStack:\n'+ (err.stack|err.message))
                         } else {
-                            throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()`')
+                            throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()`\nStack:\n'+ (err.stack|err.message))
                         }
                     }
 
