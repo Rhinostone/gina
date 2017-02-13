@@ -243,7 +243,7 @@ function FormValidatorUtil(data, $fields) {
             }
 
             this.valid = isValid;
-            val = this.value = local.data[this.name] = Number(val);
+            val = this.value = local.data[this.name] = ( val != '' ) ? Number(val) : val;
             if ( errors.count() > 0 )
                 this['errors'] = errors;
 
