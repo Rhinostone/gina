@@ -670,8 +670,15 @@ function SuperController(options) {
                 if ( local.options.isXMLRequest && self.isWithCredentials() )  {
 
                     var data = JSON.stringify(jsonObj);
+                    var len = 0;
+                    // content length must be the right size !
+                    if ( typeof(data) === 'string') {
+                        len = Buffer.byteLength(data, 'utf8')
+                    } else {
+                        len = data.length
+                    }
 
-                    response.setHeader("Content-Length", data.length);
+                    response.setHeader("Content-Length", len);
 
                     response.write(data);
                     response.headersSent = true;
