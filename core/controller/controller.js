@@ -1277,7 +1277,8 @@ function SuperController(options) {
             , defaultOptions    = local.query.options
             , path              = options.path
             , browser           = null
-            , options           = merge(options, defaultOptions);
+            , options           = merge(options, defaultOptions)
+        ;
 
         for (var o in options) {//cleaning
             if ( typeof(options[o]) == 'undefined' || options[o] == undefined) {
@@ -1570,12 +1571,25 @@ function SuperController(options) {
     /**
      * Get forms rules
      *
+     * @param {string} [formId]
+     *
      * @return {object} rules
      *
      * */
-    this.getFormsRules = function () {
+    this.getFormsRules = function (formId) {
         try {
-            return JSON.parse(JSON.stringify(local.options.conf.content.forms)).rules
+
+            if ( typeof(formId) != 'undefined' ) {
+                try {
+                    formId = formId.replace(/\-/g, '.');
+                    return JSON.parse(JSON.stringify(local.options.conf.content.forms)).rules[formId]
+                } catch (err) {
+                    self.throwError(err)
+                }
+            } else {
+                return JSON.parse(JSON.stringify(local.options.conf.content.forms)).rules
+            }
+
         } catch (err) {
             self.throwError(local.res, 500, err.stack||err.message)
         }
@@ -1639,7 +1653,8 @@ function SuperController(options) {
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
                 console.error(req.method +' ['+ res.statusCode +'] '+ req.url);
-                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>')
+                var msgString = msg.stack || msg.error || msg;
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ msgString + '</pre>')
             }
         } else {
             next()
