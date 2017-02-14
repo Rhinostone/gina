@@ -216,6 +216,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     event.target.id = event.target.getAttribute('id')
                 }
 
+                if ( /^popin\.close\./.test(event.target.id) ) {
+                    cancelEvent(event);
+
+                    var _evt = event.target.id;
+
+                    triggerEvent(gina, event.target, _evt, event.detail);
+                }
 
                 if ( /^popin\.click\./.test(event.target.id) ) {
                     cancelEvent(event);
@@ -576,7 +583,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                 if (!$close[b]['id']) {
 
-                    evt = 'click.'+ uuid.v1();
+                    evt = 'popin.close.'+ uuid.v1();
                     $close[b]['id'] = evt;
                     $close[b].setAttribute( 'id', evt);
 
