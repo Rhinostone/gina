@@ -460,6 +460,12 @@ function SuperController(options) {
                                     }
                                 }
                             }
+
+                            if ( /^\//.test(url) )
+                                url = hostname + url;
+                            else
+                                url = hostname +'/'+ url;
+
                         } else {
                             if ( typeof(routing['404']) != 'undefined' && typeof(routing['404'].url) != 'undefined' ) {
                                 if (routing["404"].url.substr(0,1) == '/')
@@ -1605,11 +1611,20 @@ function SuperController(options) {
      * @return {void}
      * */
     this.throwError = function(res, code, msg) {
+
         if (arguments.length == 1 && typeof(res) == 'object' ) {
-            var code    = ( typeof(res.status) != 'undefined' ) ?  res.status : 500
+            var code    = ( typeof(res.status) != 'undefined' ) ?  res.status : 500;
                 //, msg   = res.stack || res.message || res.error
-                , msg   = JSON.parse(JSON.stringify(res))
-                , res   = local.res;
+            var msg = {};
+
+            if ( res instanceof Error) {
+                msg.error   = res.message;
+                msg.stack   = res.stack;
+            } else {
+                msg = JSON.parse(JSON.stringify(res))
+            }
+
+            var res   = local.res;
 
         } else if (arguments.length < 3) {
             var msg             = code || null
@@ -1653,8 +1668,29 @@ function SuperController(options) {
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
                 console.error(req.method +' ['+ res.statusCode +'] '+ req.url);
-                var msgString = msg.stack || msg.error || msg;
-                res.end('<h1>Error '+ code +'.</h1><pre>'+ msgString + '</pre>')
+
+                //var msgString = msg.stack || msg.error || msg;
+                var msgString = '<h1>Error '+ code +'.</h1>';
+                if ( typeof(msg) == 'object' ) {
+
+                    if (msg.error) {
+                        msgString += '<pre class="50x message">'+ msg.error +'</pre>';
+                    }
+
+                    if (msg.message) {
+                        msgString += '<pre class="50x message">'+ msg.message +'</pre>';
+                    }
+
+                    if (msg.stack) {
+                        msgString += '<pre class="50x stack">'+ msg.stack +'</pre>';
+                    }
+
+                } else {
+                    msgString += '<pre class="50x message">'+ msg +'</pre>';
+                }
+
+                //res.end('<h1>Error '+ code +'.</h1><pre>'+ msgString + '</pre>')
+                res.end(msgString)
             }
         } else {
             next()

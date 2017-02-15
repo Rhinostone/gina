@@ -30,10 +30,17 @@ function Routing() {
      * */
     self.getRoute = function(rule, params) {
 
-        var config    = getContext('gina').config
-            , bundle    = config.bundle
-            , env       = config.env
-            , routing   = config.getRouting(bundle, env)
+        var config      = getContext('gina').config
+        var bundle      = null;
+
+        if ( /\@/.test(rule) ) {
+            bundle = rule.split(/\@/)[1];
+        } else {
+            bundle    = config.bundle
+        }
+
+        var env     = config.env
+        , routing   = config.getRouting(bundle, env);
 
         if ( typeof(routing[rule]) == 'undefined' ) {
             throw new Error('[ RoutingHelper::getRouting(rule, params) ] : `' +rule + '` not found !')
