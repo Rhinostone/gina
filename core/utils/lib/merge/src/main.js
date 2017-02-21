@@ -10,7 +10,7 @@ function Merge() {
      * */
     var browse = function (target, source) {
 
-        if ( typeof(target) == 'undefined' /**|| Array.isArray(target) && !target.length */) {
+        if ( typeof(target) == 'undefined' ) {
             target = ( typeof(source) != 'undefined' && Array.isArray(source)) ? [] : {}
         }
 
@@ -179,11 +179,44 @@ function Merge() {
     }
 
     // Will not merge functions items: this is normal
+    // Merging arrays is OK, but merging collections is still experimental
     var mergeArray = function(options, target, override) {
         newTarget = [];
 
         if (override) {
-            return options
+
+            // if collection, comparison will be done uppon the `id` attribute
+            if (
+                typeof(options[0]) == 'object' && typeof(options[0].id) != 'undefined'
+                && typeof(target[0]) == 'object' && typeof(target[0].id) != 'undefined'
+            ) {
+
+                newTarget       = JSON.parse(JSON.stringify(target));
+                var _options    = JSON.parse(JSON.stringify(options));
+                var next        = null;
+
+                for (var a = 0, aLen = target.length; a < aLen; ++a) {
+
+                    for (var n = next || 0, nLen = _options.length; n < nLen; ++n) {
+                        if ( typeof(_options[n].id) != 'undefined' && _options[n].id === target[a].id ) {
+                            newTarget[a] = _options[n];
+
+                            next = n+1;
+                            break
+                        } else {
+                            newTarget.push(_options[n]);
+
+                            next = n+1;
+                            break
+                        }
+                    }
+                }
+
+                return newTarget
+
+            } else { // normal case `arrays` or merging from a blank collection
+                return options
+            }
         }
 
         if ( options.length == 0 &&  target.length > 0) {
@@ -206,20 +239,59 @@ function Merge() {
 
         if ( target.length > 0 ) {
 
-            for (var a = 0; a < options.length; ++a ) {
-                if ( target.indexOf(options[a]) > -1 && override) {
-                    target.splice(target.indexOf(options[a]), 1, options[a])
-                } else {
-                    if (newTarget.indexOf(options[a]) == -1)
-                        newTarget.push(options[a]);
+            // if collection, comparison will be done uppon the `id` attribute
+            if (
+                typeof(options[0]) == 'object' && typeof(options[0].id) != 'undefined'
+                && typeof(target[0]) == 'object' && typeof(target[0].id) != 'undefined'
+            ) {
+
+                newTarget       = JSON.parse(JSON.stringify(target))
+                var _options    = JSON.parse(JSON.stringify(options));
+                var next        = null;
+
+                for (var a = 0, aLen = newTarget.length; a < aLen; ++a) {
+                    end:
+                        for (var n = next || 0, nLen = _options.length; n < nLen; ++n) {
+                            if (
+                                typeof(_options[n].id) != 'undefined' && _options[n].id !== newTarget[a].id
+
+                            ) {
+                                newTarget.push(_options[n]);
+
+                                next = n+1;
+                                break end;
+                            } else if( typeof(_options[n].id) != 'undefined' && _options[n].id === newTarget[a].id ) {
+
+                                next = n+1;
+                                break end;
+                            }
+                        }
+
+
+                }
+
+                return newTarget
+
+
+            } else { // normal case `arrays`
+                for (var a = 0; a < options.length; ++a ) {
+                    if ( target.indexOf(options[a]) > -1 && override) {
+                        target.splice(target.indexOf(options[a]), 1, options[a])
+                    } else {
+                        if (newTarget.indexOf(options[a]) == -1)
+                            newTarget.push(options[a]);
+                    }
                 }
             }
+
+
         }
 
         if (newTarget.length > 0 && target.length > 0 ) {
             return newTarget
         }
     }
+
 
     /**
      * Check if object before merging.

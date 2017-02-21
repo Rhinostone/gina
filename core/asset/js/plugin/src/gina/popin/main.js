@@ -265,6 +265,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         function popinLoad(name, url, options) {
 
             var id          = 'gina-popin-' + instance.id +'-'+ name;
+
             // popin element
             var $el         = document.getElementById(id) || null;
 
@@ -333,7 +334,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                                 instance.eventData.success = result;
 
-                                triggerEvent(gina, $el, 'loaded.' + id, result)
+                                triggerEvent(gina, $el, 'loaded.' + id, result);
+
 
                             } catch (err) {
                                 var result = {
@@ -415,7 +417,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 return {
                     'open': function () {
                         var fired = false;
-                        $popin.on('loaded', function (e) {
+                        addListener(gina, $el, 'loaded.' + id, function(e) {
+                        //$popin.on('loaded', function (e) {
                             e.preventDefault();
 
                             if (!fired) {
@@ -452,7 +455,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                 popinOpen($popin.name);
                             }
                         });
-                        //popinOpen(name)
                     }
                 }
             }

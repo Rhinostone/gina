@@ -69,6 +69,7 @@ function ValidatorPlugin(rules, data, formId) {
         'target'                : (isGFFCtx) ? document : null, // by default
 
         'binded'                : false,
+        'withUserBindings'      : false,
         'rules'                 : {},
         'setOptions'            : null,
         'send'                  : null,
@@ -168,6 +169,8 @@ function ValidatorPlugin(rules, data, formId) {
         _id = _id.replace(/\#/, '');
 
         if ( typeof(instance['$forms'][_id]) != 'undefined' ) {
+            instance['$forms'][_id].withUserBindings = true;
+
             $form = this.$forms[_id] = instance['$forms'][_id];
 
             return $form
@@ -307,7 +310,7 @@ function ValidatorPlugin(rules, data, formId) {
 
     }
 
-    var handleErrorsDisplay = function($form, errors) {
+    var handleErrorsDisplay = function($form, errors, data) {
 
         if ( gina.options.env == 'dev' )
             var formsErrors = null;
@@ -424,8 +427,6 @@ function ValidatorPlugin(rules, data, formId) {
                 window.ginaToolbar.update('forms', gina.forms);
             }
 
-        } else {
-            triggerEvent(gina, $form, 'success.' + id, errors)
         }
     }
 
@@ -598,7 +599,7 @@ function ValidatorPlugin(rules, data, formId) {
     var send = function(data, options) {
 
         var $target = this.target , id = $target.getAttribute('id');
-        var $form = instance.$forms[id];
+        var $form = instance.$forms[id] || this;
 
         // forward callback to HTML attribute
         listenToXhrEvents($form);
@@ -837,7 +838,9 @@ function ValidatorPlugin(rules, data, formId) {
 
 
             // sending
-            var data = event.detail.data;
+            if (!data)
+                data = event.detail.data;
+
             if (data) {
                 if ( typeof(data) == 'object' ) {
                     try {
@@ -931,6 +934,8 @@ function ValidatorPlugin(rules, data, formId) {
 
         if ( typeof(instance['$forms'][_id]) != 'undefined' ) {
             $form = instance['$forms'][_id]
+        } else if ( typeof(this.binded) != 'undefined' ) {
+            $form = this;
         }
 
         if ($form) {
@@ -992,7 +997,8 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
 
-            addListener(gina, instance['$forms'][_id].target, 'destroy.' + _id, function(event) {
+            //addListener(gina, instance['$forms'][_id].target, 'destroy.' + _id, function(event) {
+            addListener(gina, $form.target, 'destroy.' + _id, function(event) {
 
                 cancelEvent(event);
 
@@ -1001,7 +1007,8 @@ function ValidatorPlugin(rules, data, formId) {
                 removeListener(gina, event.currentTarget,'destroy');
             });
 
-            triggerEvent(gina, instance['$forms'][_id].target, 'destroy.' + _id);
+            //triggerEvent(gina, instance['$forms'][_id].target, 'destroy.' + _id);
+            triggerEvent(gina, $form.target, 'destroy.' + _id);
 
         } else {
             throw new Error('[ FormValidator::destroy(formId) ] `'+_id+'` not found');
@@ -1509,12 +1516,19 @@ function ValidatorPlugin(rules, data, formId) {
                     if (!_evt) return false;
 
                     if ( ! /^click\./.test(_evt) ) {
-                        //_evt = 'click.' + event.target.id
                         _evt = event.target.id
                     }
 
-                    if (!gina.events[_evt])
+                    // prevent event to be triggered twice
+                    if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+                        return false;
+
+                    if (gina.events[_evt]) {
+                        cancelEvent(event);
+
                         triggerEvent(gina, event.target, _evt, event.detail);
+                    }
+
                 }
 
             })
@@ -1607,17 +1621,26 @@ function ValidatorPlugin(rules, data, formId) {
                     var result = event['detail'] || $form.eventData.validation;
                     //console.log('$form[ '+_id+' ] validation done !!!\n isValid ? ', result['isValid'](), '\nErrors -> ', result['errors'], '\nData -> ', result['data']);
 
-                    handleErrorsDisplay(event['target'], result['errors']);
+                    handleErrorsDisplay(event['target'], result['errors'], result['data']);
 
                     var _id = event.target.getAttribute('id');
 
                     if ( result['isValid']() ) { // send if valid
                         // now sending to server
-                        if ( !gina.events['submit.'+ _id] ) {
-                            instance.$forms[_id].send(result['data']);
+                        if ( $form.withUserBindings && /validate\./.test(event.type) && typeof(gina.events[event.type]) != 'undefined' ) {
+                            triggerEvent(gina, event.target, 'submit', result)
+                        } else {
+
+                            if (instance.$forms[_id]) {
+                                instance.$forms[_id].send(result['data']);
+                            } else if ($form) { // just in case the form is being destroyed
+                                $form.send(result['data']);
+                            }
                         }
                     }
+
                     return false
+
                 })
             }
 
@@ -1778,19 +1801,20 @@ function ValidatorPlugin(rules, data, formId) {
         // submit proxy
         addListener(gina, $target, evt, function(e) {
             //console.log('adding submit event ', evt, self.events['submit.'+_id]);
-            // preventing event to be triggered twice in case of double binding
-            if ( typeof(e.isTriggered) == 'undefined' ) {
-                e.isTriggered = true
-            } else {
-                return false
-            }
 
             var $target     = e.target
                 , id        = $target.getAttribute('id')
                 , isBinded  = instance.$forms[id].binded
             ;
 
-            if (withRules || isBinded) cancelEvent(e);
+            // prevent event to be triggered twice
+            if ( typeof(e.defaultPrevented) != 'undefined' && e.defaultPrevented )
+                return false;
+
+            if (withRules || isBinded) {
+                cancelEvent(e);
+            }
+
 
             // just collect data for over forms
             // getting fields & values
@@ -1846,7 +1870,11 @@ function ValidatorPlugin(rules, data, formId) {
                     'data'      : fields
                 };
 
-                triggerEvent(gina, $target, 'validate.' + id, result)
+                if ( typeof(gina.events['submit.' + id]) != 'undefined' ) { // if `on('submit', cb)` is binded
+                    triggerEvent(gina, $target, 'submit.' + id, result);
+                } else {
+                    triggerEvent(gina, $target, 'validate.' + id, result);
+                }
 
             } else {
                 // update rule in case the current event is triggered outside the main sequence
@@ -1856,7 +1884,11 @@ function ValidatorPlugin(rules, data, formId) {
                     rule = instance.$forms[id].rules;
 
                 validate($target, fields, $fields, rule, function onValidation(result){
-                    triggerEvent(gina, $target, 'validate.' + id, result);
+                    if ( typeof(gina.events['submit.' + id]) != 'undefined' ) { // if `on('submit', cb)` is binded
+                        triggerEvent(gina, $target, 'submit.' + id, result);
+                    } else {
+                        triggerEvent(gina, $target, 'validate.' + id, result);
+                    }
                 })
             }
         });
