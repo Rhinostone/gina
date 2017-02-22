@@ -2,15 +2,13 @@
 
 >  Gina was designed to be accessible, flexible, scalable and maintainable. Our main purpose was to allow developpers to create easier and faster web applications.
 >  
-> Essential features are available at this moment, but most of the things we don't have yet can be replaced by some alternatives written in other languages like: Ruby, PHP, .net, Python or C++. You are free to use such alternatives until we implement similar features.
-
------
+> Essential features are available at this moment, but most of the things we don't have yet can be replaced by some alternatives written in other languages like: Ruby, PHP, .net, Python or C++. You are free to use such alternatives until we implement similar features.   
 
 
 
+## Compatibility
 
-
-__Gina is compatible with the following versions of Node.js:__
+__Gina works fine with the following versions of Node.js:__
 - `v7.x.x`,
 - `v6.x.x` (Between Node.js 5.x and 6.3, NPM is broken, use manual installation: by cloning),
 - `v5.x.x` (Between Node.js 5.x and 6.3, NPM is broken, use manual installation: by cloning),
