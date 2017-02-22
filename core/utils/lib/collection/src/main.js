@@ -310,6 +310,31 @@ function Collection(content, option) {
         return result
     }
 
+    this['insert'] = function (set) {
+
+        if ( typeof(set) !== 'object' ) {
+            throw new Error('filter must be an object');
+        } else {
+
+
+            content.push(set);
+
+            var index = content.length-1;
+            content[ index ]._uuid = uuid.v4();
+            instance['uuids'][ content[index]._uuid ] = content[index];
+
+            var result = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+        }
+
+        // chaining
+        result.find     = instance.find;
+        result.findOne  = instance.findOne;
+        result.orderBy  = instance.orderBy;
+        result.notIn    = instance.notIn;
+
+        return result
+    }
+
     this['update'] = function(filter, set) {
         if ( typeof(filter) !== 'object' ) {
             throw new Error('filter must be an object');
@@ -348,23 +373,24 @@ function Collection(content, option) {
         } else {
             var condition           = filter.count()
                 , localeLowerCase   = ''
-                , result            = Array.isArray(this) ? JSON.parse(JSON.stringify(this)) : JSON.parse(JSON.stringify(content));
+                , _content           = Array.isArray(this) ? JSON.parse(JSON.stringify(this)) : JSON.parse(JSON.stringify(content))
+                , result            = JSON.parse(JSON.stringify(_content));
 
-            for (var o in content) {
+            for (var o in _content) {
                 for (var f in filter) {
                     if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
                     localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
-                    if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
-                        //delete result[o][f];
+                    if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(_content[o][f]) != 'undefined' && typeof(_content[o][f]) !== 'object' && _content[o][f] != 'null' && _content[o][f] != 'undefined' ) {
                         result.splice(o, 1)
-                    } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
+                    } else if ( typeof(_content[o][f]) != 'undefined' && typeof(_content[o][f]) !== 'object' && _content[o][f] === filter[f] ) {
                         result.splice(o, 1)
                     }
                 }
             }
         }
 
+        content = result;
         return result
     }
 

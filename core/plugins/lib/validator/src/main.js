@@ -1723,7 +1723,9 @@ function ValidatorPlugin(rules, data, formId) {
                         // update rule in case the current event is triggered outside the main sequence
                         // e.g.: form `id` attribute rewritten on the fly
                         _id     = $target.getAttribute('id');
-                        rule    = gina.validator.$forms[_id].rule || _id.replace(/-/g, '.');
+                        //rule    = gina.validator.$forms[_id].rule || _id.replace(/-/g, '.');
+                        rule    = gina.forms.rules[ _id.replace(/-/g, '.') ];
+
                         //console.log('testing rule [ '+_id.replace(/\-/g, '.') +' ]\n'+ JSON.stringify(rule, null, 4));
                         //console.log('validating ', $form, fields, rule);
                         validate($target, fields, $fields, rule, function onValidation(result){
@@ -1823,8 +1825,38 @@ function ValidatorPlugin(rules, data, formId) {
                 , name      = null
                 , value     = 0
                 , type      = null
+                , args      = null
+                , obj       = {}
                 // e.g: name="item[cat][]" <- gina will add the index
                 , index     = { checkbox: 0, radio: 0 };
+            
+            var makeObject = function (obj, value, args, len, i) {
+
+                if (i == len) {
+                    return false
+                }
+
+                var key = args[i].replace(/^\[|\]$/g, '');
+
+                if ( typeof(obj[key]) == 'undefined' ) {
+                    obj[key] = {}
+                }
+
+                for (var o in obj) {
+
+                    if ( typeof(obj[o]) == 'object' ) {
+
+                        ++i;
+                        if (i == len) {
+                            obj[o] = value
+                        }
+
+                        makeObject(obj[o], value, args, len, i)
+                    }
+                }
+
+
+            }
 
             for (var i = 0, len = $target.length; i<len; ++i) {
                 name = $target[i].getAttribute('name');
@@ -1840,19 +1872,41 @@ function ValidatorPlugin(rules, data, formId) {
 
                         if ( /\[\]/.test(name) ) {
                             name = name.replace(/\[\]/, '['+ index[ $target[i].type ] +']');
-                            ++index[ $target[i].type ]
-                        }
+                            ++index[ $target[i].type ];
 
-                        fields[name] = $target[i].value;
+                            fields[name] = $target[i].value;
+                        } else if ( /\[(.*)\]/.test(name) ) {
+                            // properties
+                            args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
+                            // root
+                            name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
+
+                            makeObject(obj, $target[i].value, args, args.length, 0)
+
+                            fields[name] = obj;
+
+                        } else {
+                            fields[name] = $target[i].value;
+                        }
                     }
                 } else {
 
                     if ( /\[\]/.test(name) ) {
                         name = name.replace(/\[\]/, '['+ fields['_length'] +']');
                         ++index
-                    }
+                    } else if ( /\[(.*)\]/.test(name) ) {
+                        // properties
+                        args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
+                        // root
+                        name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
 
-                    fields[name]    = $target[i].value;
+                        makeObject(obj, $target[i].value, args, args.length, 0)
+
+                        fields[name] = obj;
+
+                    } else {
+                        fields[name]    = $target[i].value;
+                    }
                 }
 
                 $fields[name]       = $target[i];
