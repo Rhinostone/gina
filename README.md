@@ -1,13 +1,11 @@
-<div style="display:table; margin: 0; padding: 0">
-	<span style="display:table-cell;">
-    	<img src="https://raw.githubusercontent.com/Rhinostone/gina/master/core/asset/img/apple-touch-icon.png" alt="Gina I/O"/>
-    </span>
-    <span style="display:table-cell; padding: 0 10px;">
-    	Gina was designed to be accessible, flexible, scalable and maintainable. Our main purpose was to allow developpers to create easier and faster web applications.
+ Gina![Gina I/O](https://raw.githubusercontent.com/Rhinostone/gina/master/core/asset/img/favicon-16x16.png)   
 
-Gina comes with essential features at this moment, but most of the things we don't have yet can be replaced by some alternatives written in other languages like: Ruby, PHP, .net, Python or C++. You are free to use such alternatives until we implement similar features.
-    </span>
-</div>
+>  Gina was designed to be accessible, flexible, scalable and maintainable. Our main purpose was to allow developpers to create easier and faster web applications.
+>  
+> Essential features are available at this moment, but most of the things we don't have yet can be replaced by some alternatives written in other languages like: Ruby, PHP, .net, Python or C++. You are free to use such alternatives until we implement similar features.
+
+-----
+
 
 
 
