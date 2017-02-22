@@ -1,6 +1,7 @@
 <div style="display:table; margin: 0; padding: 0">
 	<span style="display:table-cell;">
-    	![gina](https://raw.githubusercontent.com/Rhinostone/gina/master/core/asset/img/apple-touch-icon.png)</span>
+    	<img src="https://raw.githubusercontent.com/Rhinostone/gina/master/core/asset/img/apple-touch-icon.png" alt="Gina I/O"/>
+    </span>
     <span style="display:table-cell; padding: 0 10px; line-height:1.3em; font-style: italic;">
     	Gina was designed to be accessible, flexible, scalable and maintainable. Our main purpose was to allow developpers to create easier and faster web applications.
 
