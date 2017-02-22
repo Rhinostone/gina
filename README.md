@@ -1,8 +1,15 @@
-# Gina
-<strong>Gina I/O</strong> - Node.js MVC and Event Driven framework
+<div style="display:table; margin: 0; padding: 0">
+	<span style="display:table-cell;">
+    	![gina](https://raw.githubusercontent.com/Rhinostone/gina/master/core/asset/img/apple-touch-icon.png)</span>
+    <span style="display:table-cell; padding: 0 10px; line-height:1.3em; font-style: italic;">
+    	Gina was designed to be accessible, flexible, scalable and maintainable. Our main purpose was to allow developpers to create easier and faster web applications.
+
+Gina comes with essential features at this moment, but most of the things we don't have yet can be replaced by some alternatives written in other languages like: Ruby, PHP, .net, Python or C++. You are free to use such alternatives until we implement similar features.
+    </span>
+</div>
 
 
-Node.js(100%)
+
 
 __Gina is compatible with the following versions of Node.js:__
 - `v7.x.x`,
@@ -13,11 +20,6 @@ __Gina is compatible with the following versions of Node.js:__
 - `v0.11.x`,
 - `v0.10.x`
 
-## Philosophy behind
-
-Gina was designed to be accessible, flexible, scalable and maintainable. Our main purpose was to allow developpers to create easier and faster web applications.
-
-Gina comes with essential features at this moment, but most of the things we don't have yet can be replaced by some alternatives written in other languages like: Ruby, PHP, .net, Python or C++. You are free to use such alternatives until we implement similar features.
 
 ## Getting started with Gina I/O
 
