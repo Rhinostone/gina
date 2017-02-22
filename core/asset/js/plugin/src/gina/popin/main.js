@@ -336,7 +336,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                                 triggerEvent(gina, $el, 'loaded.' + id, result);
 
-
                             } catch (err) {
                                 var result = {
                                     'status':  422,
@@ -629,7 +628,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         // reset data-xhr
                         ginaToolbar.update("data-xhr", null);
 
-                        ginaToolbar.update("data", XHRData);
+                        ginaToolbar.update("data-xhr", XHRData);
                     }
 
                 } catch (err) {

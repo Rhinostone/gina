@@ -418,12 +418,8 @@ function SuperController(options) {
                             return hostname + wroot +'/'+ route;
                         }
 
-                        // deprecated: rules are now unique per bundle : rule@bundle
-                        //if ( isStandalone && !isMaster ) {
-                        //    rule = config.bundle +'-'+ route
-                        //} else {
-                            rule = route + '@' + config.bundle;
-                        //}
+                        // rules are now unique per bundle : rule@bundle
+                        rule = route + '@' + config.bundle;
 
                         if ( typeof(routing[rule]) != 'undefined' ) { //found
                             url = routing[rule].url;
@@ -501,19 +497,18 @@ function SuperController(options) {
                         if ( hasViews() && local.options.conf.env == 'dev' && (!local.options.isWithoutLayout || local.options.isWithoutLayout && local.options.debugMode)  ) {
 
                             layout = ''
-                                + '{% set ginaDataInspector                = JSON.parse(JSON.stringify(page)) %}'
-                                + '{% set ginaDataInspector.scripts        = "ignored-by-toolbar" %}'
-                                + '{% set ginaDataInspector.stylesheets    = "ignored-by-toolbar" %}'
+                                + '{%- set ginaDataInspector                = JSON.parse(JSON.stringify(page)) -%}'
+                                + '{%- set ginaDataInspector.scripts        = "ignored-by-toolbar" -%}'
+                                + '{%- set ginaDataInspector.stylesheets    = "ignored-by-toolbar" -%}'
                                 + layout.replace('{{ page.scripts }}', '')
-
                                 ;
 
                             plugin = '\t'
                                 + '{# Gina Toolbar #}'
-                                + '{% set userDataInspector                = page %}'
-                                + '{% set userDataInspector.scripts        = "ignored-by-toolbar" %}'
-                                + '{% set userDataInspector.stylesheets    = "ignored-by-toolbar" %}'
-                                + '{% include "'+getPath('gina').core+'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector} %}'
+                                + '{%- set userDataInspector                = page -%}'
+                                + '{%- set userDataInspector.scripts        = "ignored-by-toolbar" -%}'
+                                + '{%- set userDataInspector.stylesheets    = "ignored-by-toolbar" -%}'
+                                + '{%- include "'+getPath('gina').core+'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector} -%}'
                                 + '{# END Gina Toolbar #}'
 
                                 + '\n<script type="text/javascript">'
@@ -526,6 +521,11 @@ function SuperController(options) {
 
                                 + '{{ page.scripts }}'
                             ;
+
+                            if (local.options.isWithoutLayout && local.options.debugMode) {
+                                var XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
+                                layout = XHRData + layout;
+                            }
 
                             layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
 

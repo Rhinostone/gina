@@ -1,7 +1,7 @@
 {
   "name": "gina",
-  "version": "0.0.9p89o",
-  "description": "MVC Framework for Node.",
+  "version": "0.0.9p90",
+  "description": "MVC and Event Driven framework 100% Javascript",
   "keywords": [
     "framework",
     "mvc",
