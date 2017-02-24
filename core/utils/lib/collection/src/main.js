@@ -43,7 +43,7 @@ function Collection(content, option) {
         'locale': 'en' // get settigs.region, or user.region
     };
 
-    var content     = JSON.parse(JSON.stringify(content)) || [] // original content -> not to be touched
+    var content     = (content) ? JSON.parse(JSON.stringify(content)) : [] // original content -> not to be touched
     //var content     = (Array.isArray(content)) ? content : [] // original content -> not to be touched
         , options   = (typeof(options) == 'object') ? merge(options, defaultOptions) : defaultOptions
         , keywords  = ['not null'] // TODO - null, exists (`true` if property is defined)

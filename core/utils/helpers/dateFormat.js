@@ -30,7 +30,7 @@ function DateFormatHelper() {
         shortTime:      "h:MM TT",
         mediumTime:     "h:MM:ss TT",
         longTime:       "h:MM:ss TT Z",
-        contactedDate:  "yyyymmdd",
+        concatenatedDate:  "yyyymmdd",
         isoDate:        "yyyy-mm-dd",
         isoTime:        "HH:MM:ss",
         isoDateTime:    "yyyy-mm-dd'T'HH:MM:ss",
