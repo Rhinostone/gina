@@ -547,7 +547,7 @@ function ValidatorPlugin(rules, data, formId) {
                         ++index[ $target[i].type ]
                     }
 
-                    fields[name] = $target[i].value;
+                    fields[name] = true;
                 }
 
 
@@ -1685,7 +1685,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     ++index[ $target[i].type ]
                                 }
 
-                                fields[name] = $target[i].value;
+                                fields[name] = true;
                             }
 
 
