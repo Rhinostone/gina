@@ -252,19 +252,24 @@ function Merge() {
                 for (var a = 0, aLen = newTarget.length; a < aLen; ++a) {
                     end:
                         for (var n = next || 0, nLen = _options.length; n < nLen; ++n) {
+
                             if (
-                                typeof(_options[n].id) != 'undefined' && _options[n].id !== newTarget[a].id
+                                _options[n] != null && typeof(_options[n].id) != 'undefined' && _options[n].id !== newTarget[a].id
 
                             ) {
                                 newTarget.push(_options[n]);
 
                                 next = n+1;
                                 break end;
-                            } else if( typeof(_options[n].id) != 'undefined' && _options[n].id === newTarget[a].id ) {
+                            } else if( _options[n] != null && typeof(_options[n].id) != 'undefined' && _options[n].id === newTarget[a].id ) {
 
                                 next = n+1;
                                 break end;
+
+                            } else {
+                                break end;
                             }
+
                         }
 
 

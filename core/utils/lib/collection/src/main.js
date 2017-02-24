@@ -44,6 +44,7 @@ function Collection(content, option) {
     };
 
     var content     = JSON.parse(JSON.stringify(content)) || [] // original content -> not to be touched
+    //var content     = (Array.isArray(content)) ? content : [] // original content -> not to be touched
         , options   = (typeof(options) == 'object') ? merge(options, defaultOptions) : defaultOptions
         , keywords  = ['not null'] // TODO - null, exists (`true` if property is defined)
         ;
@@ -52,8 +53,11 @@ function Collection(content, option) {
     this['uuids'] = {}; // uuids are generated for each new instance
     if ( content.length > 0 ) {
         for (var i = 0, len = content.length; i<len; ++i) {
-            if (!content[i])
-                throw new Error('field index `'+ i +'` cannot be left undefined or null !');
+            if (!content[i]) {
+                //    throw new Error('field index `'+ i +'` cannot be left undefined or null !');
+                //content.splice(i, 1);
+                content[i] = { id: uuid.v4(), noEntryFound: true };
+            }
 
             content[i]._uuid = uuid.v4();
             this['uuids'][ content[i]._uuid ] = content[i]
@@ -95,6 +99,7 @@ function Collection(content, option) {
                 ;
 
             for (var o in tmpContent) {
+
                 tmpContent[o].matched = {};
                 for (var l = 0, lLen = filters.count(); l<lLen; ++l) {
                     filter = filters[l];
