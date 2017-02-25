@@ -185,7 +185,8 @@ function on(event, cb) {
                     data = this.eventData.success;
                 }
 
-                cb(e, data)
+                if (cb)
+                    cb(e, data);
             });
 
             if (this.initialized && !this.isReady)

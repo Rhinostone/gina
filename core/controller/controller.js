@@ -970,6 +970,9 @@ function SuperController(options) {
     /**
      * redirect
      *
+     * TODO - improve redirect based on `utils.routing`
+     * e.g.: self.redirect('project-get', { companyId: companyId, clientId: clientId, id: projectId }, true)
+     *
      * You have to ways of using this method
      *
      * 1) Through routing.json
@@ -1613,7 +1616,7 @@ function SuperController(options) {
     this.throwError = function(res, code, msg) {
 
         if (arguments.length == 1 && typeof(res) == 'object' ) {
-            var code    = ( typeof(res.status) != 'undefined' ) ?  res.status : 500;
+            var code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
                 //, msg   = res.stack || res.message || res.error
             var msg = {};
 
