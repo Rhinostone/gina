@@ -573,6 +573,9 @@ function EntitySuper(conn, caller) {
                 } else if ( typeof(EntitySuper[callerName].instance) != 'undefined' && EntitySuper[callerName].instance._relations[entityName] ) {
                     return EntitySuper[callerName].instance._relations[entityName]
                 } else {
+                    if ( typeof(modelUtil.entities[self.bundle][self.model][entity]) != 'function' ) {
+                        throw new Error('Model entity not found: `'+ entity + '` while trying to call '+ callerName +'Entity.getEntity('+ entity +')');
+                    }
                     new modelUtil.entities[self.bundle][self.model][entity](self.getConnection(), callerName);
                     return EntitySuper[callerName].instance._relations[entityName]
                 }
