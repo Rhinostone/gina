@@ -1068,6 +1068,7 @@ function ValidatorPlugin(rules, data, formId) {
             instance.on('init', function(event) {
                 // parsing rules
                 if ( typeof(rules) != 'undefined' && rules.count() ) {
+                    gina.forms.rules = JSON.parse(JSON.stringify(rules));// making copy
                     parseRules(rules, '');
                     checkForRulesImports(rules);
                 }
@@ -1183,7 +1184,7 @@ function ValidatorPlugin(rules, data, formId) {
                 instance.isReady = true;
                 gina.hasValidator = true;
                 gina.validator = instance;
-                gina.forms.rules = instance.rules;
+                //gina.forms.rules = instance.rules;
                 triggerEvent(gina, instance.target, 'ready.' + instance.id, instance);
             });
 
@@ -1725,10 +1726,11 @@ function ValidatorPlugin(rules, data, formId) {
                         _id = $target.getAttribute('id');
                         var customRule = $target.getAttribute('data-gina-validator-rule');
                         if ( customRule ) { // 'data-gina-validator-rule'
-                            rule = gina.forms.rules[ customRule.replace(/-/g, '.') ];
+                            //rule = gina.forms.rules[ customRule.replace(/-/g, '.') ];
+                            rule = gina.validator.$forms[customRule].rules;
                         } else {
-                            //rule    = gina.validator.$forms[_id].rule || _id.replace(/-/g, '.');
-                            rule    = gina.forms.rules[ _id.replace(/-/g, '.') ];
+                            rule    = gina.validator.$forms[_id].rules;
+                            //rule    = gina.forms.rules[ _id.replace(/-/g, '.') ];
                         }
 
 
