@@ -1662,6 +1662,8 @@ function ValidatorPlugin(rules, data, formId) {
                     // getting fields & values
                     var $fields     = {}
                         , fields    = { '_length': 0 }
+                        , id        = $target.getAttribute('id')
+                        , rules     = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
                         , name      = null
                         , value     = 0
                         , type      = null
@@ -1669,7 +1671,8 @@ function ValidatorPlugin(rules, data, formId) {
                         , index     = { checkbox: 0, radio: 0 };
 
                     for (var i = 0, len = $target.length; i<len; ++i) {
-                        name = $target[i].getAttribute('name');
+
+                        name    = $target[i].getAttribute('name');
 
                         if (!name) continue;
 
@@ -1687,6 +1690,13 @@ function ValidatorPlugin(rules, data, formId) {
                                 }
 
                                 fields[name] = true;
+                            } else if ( // force validator to pass `false` if boolean is required explicitly
+                                rules
+                                && typeof(rules[name]) != 'undefined'
+                                && typeof(rules[name].isBoolean)
+                                && typeof(rules[name].isRequired)
+                            ) {
+                                fields[name] = false;
                             }
 
 

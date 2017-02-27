@@ -197,9 +197,19 @@ function FormValidatorUtil(data, $fields) {
 
         /**
          * Check if boolean and convert to `true/false` booloean if value is a string or a number
+         * Will include `false` value if isRequired
          * */
         self[el]['isBoolean'] = function() {
-            var val = null, errors = {};
+            var val     = null
+                , errors = self[this['name']]['errors'] || {}
+            ;
+
+            if ( errors['isRequired'] && this.value == false ) {
+                isValid = true;
+                delete errors['isRequired'];
+                this['errors'] = errors;
+            }
+
             switch(this.value) {
                 case 'true':
                 case true:
@@ -657,8 +667,6 @@ function FormValidatorUtil(data, $fields) {
                     delete local.data[d]
                 }
             }
-            //console.log('deleting ', this.name, local.data);
-            //delete local.data[this.name];
 
             return self[this.name]
         }
@@ -677,7 +685,6 @@ function FormValidatorUtil(data, $fields) {
 
         if (i > 0) {
             valid = false;
-            //console.log('('+i+')ERROR'+( (i>1) ? 's': '')+' :\n'+ self['getErrors']() );
         }
 
         return valid
@@ -688,7 +695,8 @@ function FormValidatorUtil(data, $fields) {
 
         for (var field in self) {
             if ( typeof(self[field]) != 'function' && typeof(self[field]['errors']) != 'undefined' ) {
-                errors[field] = self[field]['errors']
+                if ( self[field]['errors'].count() > 0)
+                    errors[field] = self[field]['errors'];
             }
         }
 
