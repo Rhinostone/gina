@@ -101,9 +101,6 @@ function triggerEvent (target, element, name, args) {
 
 function cancelEvent(event) {
     if (typeof(event) != 'undefined' && event != null) {
-        if (event.stopPropagation) {
-            event.stopPropagation()
-        }
 
         event.cancelBubble = true;
 
@@ -111,7 +108,12 @@ function cancelEvent(event) {
             event.preventDefault()
         }
 
-        event.returnValue = false
+        if (event.stopPropagation) {
+            event.stopPropagation()
+        }
+
+
+        event.returnValue = false;
     }
 }
 
