@@ -1602,12 +1602,8 @@ function ValidatorPlugin(rules, data, formId) {
                 procced = function ($el, evt) {
                     addListener(gina, $el, evt, function(event) {
 
-                        if ( /(true|false)/.test(event.target.value) ) {
-                            cancelEvent(event);
-                            updateRadio(event.target);
-                        }
-
-
+                        cancelEvent(event);
+                        updateRadio(event.target);
                     });
 
                     if ( /(true|false)/.test($el.value) )
@@ -1723,7 +1719,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                         // TODO - add switch cases against tagName (checkbox/radio)
 
-                        if ( typeof($target[i].type) != 'undefined' && ($target[i].type == 'radio' || $target[i].type == 'checkbox') ) {
+                        if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
                             //console.log('radio ', name, $form[i].checked, $form[i].value);
                             if ( $target[i].checked == true ) {
 
@@ -1738,15 +1734,6 @@ function ValidatorPlugin(rules, data, formId) {
                                     // root
                                     name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
 
-                                    if ( // force validator to pass `false` if boolean is required explicitly
-                                        rules
-                                        && typeof(rules[name]) != 'undefined'
-                                        && typeof(rules[name].isBoolean)
-                                        && typeof(rules[name].isRequired)
-                                    ) {
-                                        fields[name] = false;
-                                    }
-
                                     makeObject(obj, $target[i].value, args, args.length, 0)
 
                                     fields[name] = obj;
@@ -1760,7 +1747,16 @@ function ValidatorPlugin(rules, data, formId) {
                                 && typeof(rules[name].isBoolean)
                                 && typeof(rules[name].isRequired)
                             ) {
-                                fields[name] = false;
+                                // properties
+                                args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
+                                // root
+                                name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
+
+                                $target[i].value = false;
+
+                                makeObject(obj, $target[i].value, args, args.length, 0);
+
+                                fields[name] = obj;
                             }
 
 
@@ -1959,7 +1955,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 // TODO - add switch cases against tagName (checkbox/radio)
 
-                if ( typeof($target[i].type) != 'undefined' && ($target[i].type == 'radio' || $target[i].type == 'checkbox') ) {
+                if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
                     //console.log('name : ', name, '\ntype ', $form[i].type, '\nchecked ? ', $form[i].checked, '\nvalue', $form[i].value);
                     if ( $target[i].checked === true ) {
                         $target[i].setAttribute('checked', 'checked');
@@ -1988,7 +1984,16 @@ function ValidatorPlugin(rules, data, formId) {
                         && typeof(rules[name].isBoolean)
                         && typeof(rules[name].isRequired)
                     ) {
-                        fields[name] = false;
+                        // properties
+                        args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
+                        // root
+                        name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
+
+                        $target[i].value = false;
+
+                        makeObject(obj, $target[i].value, args, args.length, 0);
+
+                        fields[name] = obj;
                     }
                 } else {
 
