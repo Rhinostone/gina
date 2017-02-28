@@ -1753,10 +1753,13 @@ function ValidatorPlugin(rules, data, formId) {
                                 name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
 
                                 $target[i].value = false;
+                                if (args) {
+                                    makeObject(obj, $target[i].value, args, args.length, 0);
+                                    fields[name] = obj;
+                                } else {
+                                    fields[name] = $target[i].value;
+                                }
 
-                                makeObject(obj, $target[i].value, args, args.length, 0);
-
-                                fields[name] = obj;
                             }
 
 
@@ -1990,10 +1993,13 @@ function ValidatorPlugin(rules, data, formId) {
                         name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
 
                         $target[i].value = false;
-
-                        makeObject(obj, $target[i].value, args, args.length, 0);
-
-                        fields[name] = obj;
+                        
+                        if (args) {
+                            makeObject(obj, $target[i].value, args, args.length, 0);
+                            fields[name] = obj;
+                        } else {
+                            fields[name] = $target[i].value;
+                        }
                     }
                 } else {
 
