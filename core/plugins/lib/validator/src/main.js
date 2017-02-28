@@ -1431,7 +1431,6 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
         // form fields
-
         if (!$form.defaultFields)
             $form.defaultFields = {};
 
@@ -1445,6 +1444,7 @@ function ValidatorPlugin(rules, data, formId) {
                 elId = 'input.' + uuid.v1();
                 $inputs[i].setAttribute('id', elId)
             }
+
             if (!$form.defaultFields[ elId ])
                 $form.defaultFields[ elId ] = $inputs[i].value;
         }
@@ -1455,16 +1455,25 @@ function ValidatorPlugin(rules, data, formId) {
 
             if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
-                $el.checked = false;
+                // prevents ticking behavior
+                setTimeout(function () {
+                    $el.checked = false;
+                }, 0);
+
                 $el.removeAttribute('checked');
                 $el.value = 'false';
 
+
             } else {
+
+                // prevents ticking behavior
+                setTimeout(function () {
+                    $el.checked = true;
+                }, 0);
 
                 $el.setAttribute('checked', 'checked');
                 //boolean exception handling
                 $el.value = 'true';
-                $el.checked = true;
 
             }
         };
@@ -1486,13 +1495,21 @@ function ValidatorPlugin(rules, data, formId) {
 
             if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
-                $el.checked = false;
+                // prevents ticking behavior
+                setTimeout(function () {
+                    $el.checked = false;
+                }, 0)
+
                 $el.removeAttribute('checked');
 
             } else {
 
+                // prevents ticking behavior
+                setTimeout(function () {
+                    $el.checked = true;
+                }, 0)
+
                 $el.setAttribute('checked', 'checked');
-                $el.checked = true;
             }
         }
 
@@ -1502,10 +1519,13 @@ function ValidatorPlugin(rules, data, formId) {
             // click proxy
             addListener(gina, $target, 'click', function(event) {
 
+                if ( /(label)/i.test(event.target.tagName) )
+                    return false;
+
                 if ( typeof(event.target.id) == 'undefined' ) {
                     event.target.setAttribute('id', 'click.' + uuid.v1() );
                     event.target.id = event.target.getAttribute('id')
-                } else if ( typeof(event.target.id) == 'undefined' ) {
+                } else {
                     event.target.id = event.target.getAttribute('id')
                 }
 
@@ -1535,12 +1555,8 @@ function ValidatorPlugin(rules, data, formId) {
             })
         }
 
-        //if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == _id ) {
-            //removeListener(gina, element, name, callback)
-        //    removeListener(gina, $form, evt, procced)
-        //} else {
-            procced()
-        //}
+
+        procced()
 
         for (var i=0, len = $inputs.length; i<len; ++i) {
             type    = $inputs[i].getAttribute('type');
@@ -1553,22 +1569,20 @@ function ValidatorPlugin(rules, data, formId) {
 
             if ( typeof(type) != 'undefined' && type == 'checkbox' ) {
 
-                evt = 'click.' + $inputs[i].id;
-
+                evt = $inputs[i].id;
 
                 procced = function ($el, evt) {
 
                     // recover default state only on value === true || false
                     addListener(gina, $el, evt, function(event) {
 
-                        //cancelEvent(event);
-
-                        if ( /(true|false)/.test(event.target.value) ) {
+                        if ( /(true|false|on)/.test(event.target.value) ) {
+                            cancelEvent(event);
                             updateCheckBox(event.target);
                         }
                     });
 
-                    if ( /(true|false)/.test($el.value) )
+                    if ( /(true|false|on)/.test($el.value) )
                         updateCheckBox($el);
 
                 }
@@ -1582,16 +1596,22 @@ function ValidatorPlugin(rules, data, formId) {
                 }
 
             } else if ( typeof(type) != 'undefined' && type == 'radio' ) {
-                evt = 'click.' + $inputs[i].id;
+
+                evt = $inputs[i].id;
 
                 procced = function ($el, evt) {
                     addListener(gina, $el, evt, function(event) {
-                        //cancelEvent(event);
-                        updateRadio(event.target);
+
+                        if ( /(true|false)/.test(event.target.value) ) {
+                            cancelEvent(event);
+                            updateRadio(event.target);
+                        }
+
 
                     });
 
-                    updateRadio($el, true)
+                    if ( /(true|false)/.test($el.value) )
+                        updateRadio($el, true);
                 }
 
                 if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
@@ -1608,11 +1628,7 @@ function ValidatorPlugin(rules, data, formId) {
         if (withRules) {
 
             evt = 'validate.' + _id;
-            //console.log('[ bind() ] : before attaching `'+evt+'` ->  `withRules`: '+withRules, '\n'+self.events[evt]+' VS '+_id, '\nevents ', self.events);
-
             procced = function () {
-                //self.events[evt] = _id;
-                //console.log('attaching ', evt);
 
                 // attach form event
                 addListener(gina, $target, evt, function(event) {
@@ -1667,8 +1683,37 @@ function ValidatorPlugin(rules, data, formId) {
                         , name      = null
                         , value     = 0
                         , type      = null
-                        // e.g: name="item[cat][]" <- gina will add the index
+                        , args      = null
+                        , obj       = {} // e.g: name="item[cat][]" <- gina will add the index
                         , index     = { checkbox: 0, radio: 0 };
+
+                    var makeObject = function (obj, value, args, len, i) {
+
+                        if (i == len) {
+                            return false
+                        }
+
+                        var key = args[i].replace(/^\[|\]$/g, '');
+
+                        if ( typeof(obj[key]) == 'undefined' ) {
+                            obj[key] = {}
+                        }
+
+                        for (var o in obj) {
+
+                            if ( typeof(obj[o]) == 'object' ) {
+
+                                ++i;
+                                if (i == len) {
+                                    obj[o] = value
+                                }
+
+                                makeObject(obj[o], value, args, len, i)
+                            }
+                        }
+
+
+                    }
 
                     for (var i = 0, len = $target.length; i<len; ++i) {
 
@@ -1687,9 +1732,28 @@ function ValidatorPlugin(rules, data, formId) {
                                 if ( /\[\]/.test(name) ) {
                                     name = name.replace(/\[\]/, '['+ index[ $target[i].type ] +']');
                                     ++index[ $target[i].type ]
-                                }
+                                } else if ( /\[(.*)\]/.test(name) ) {
+                                    // properties
+                                    args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
+                                    // root
+                                    name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
 
-                                fields[name] = true;
+                                    if ( // force validator to pass `false` if boolean is required explicitly
+                                        rules
+                                        && typeof(rules[name]) != 'undefined'
+                                        && typeof(rules[name].isBoolean)
+                                        && typeof(rules[name].isRequired)
+                                    ) {
+                                        fields[name] = false;
+                                    }
+
+                                    makeObject(obj, $target[i].value, args, args.length, 0)
+
+                                    fields[name] = obj;
+
+                                } else {
+                                    fields[name] = $target[i].value;
+                                }
                             } else if ( // force validator to pass `false` if boolean is required explicitly
                                 rules
                                 && typeof(rules[name]) != 'undefined'
@@ -1705,10 +1769,21 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( /\[\]/.test(name) ) {
                                 name = name.replace(/\[\]/, '['+ fields['_length'] +']');
                                 ++index
-                            }
+                            } else if ( /\[(.*)\]/.test(name) ) {
+                                // properties
+                                args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
+                                // root
+                                name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
 
-                            fields[name]    = $target[i].value;
+                                makeObject(obj, $target[i].value, args, args.length, 0)
+
+                                fields[name] = obj;
+
+                            } else {
+                                fields[name]    = $target[i].value;
+                            }
                         }
+
                         $fields[name]   = $target[i];
                         // reset filed error data attributes
                         $fields[name].setAttribute('data-errors', '');
@@ -1840,12 +1915,13 @@ function ValidatorPlugin(rules, data, formId) {
             // getting fields & values
             var $fields     = {}
                 , fields    = { '_length': 0 }
+                , id        = $target.getAttribute('id')
+                , rules     = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
                 , name      = null
                 , value     = 0
                 , type      = null
                 , args      = null
-                , obj       = {}
-                // e.g: name="item[cat][]" <- gina will add the index
+                , obj       = {} // e.g: name="item[cat][]" <- gina will add the index
                 , index     = { checkbox: 0, radio: 0 };
             
             var makeObject = function (obj, value, args, len, i) {
@@ -1906,6 +1982,13 @@ function ValidatorPlugin(rules, data, formId) {
                         } else {
                             fields[name] = $target[i].value;
                         }
+                    } else if ( // force validator to pass `false` if boolean is required explicitly
+                        rules
+                        && typeof(rules[name]) != 'undefined'
+                        && typeof(rules[name].isBoolean)
+                        && typeof(rules[name].isRequired)
+                    ) {
+                        fields[name] = false;
                     }
                 } else {
 
