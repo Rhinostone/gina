@@ -36,7 +36,7 @@ function FormValidatorUtil(data, $fields) {
         'isEmail': 'A valid email is required',
         'isRequired': 'Cannot be left empty',
         'isBoolean': 'Must be a valid boolean',
-        'isNumber': 'Must be a number',
+        'isNumber': 'Must be a number: allowed values are integers or floats',
         'isNumberLength': 'Must contain %s characters',
         'isNumberMinLength': 'Should be at least %s characters',
         'isNumberMaxLength': 'Should not be more than %s characters',
@@ -253,11 +253,24 @@ function FormValidatorUtil(data, $fields) {
                 , isMaxLength   = true
                 , errors        = {}
                 ;
-            // if val is a string replaces comas by points
-            if (typeof(val) == 'string' && /,/g.test(val)) {
-                val = this.value = val.replace(/,/g, '.').replace(/\s+/g, '');
-            }
+
+
             // test if val is a number
+            try {
+                // if val is a string replaces comas by points
+                if ( typeof(val) == 'string' && /,/g.test(val) ) {
+                    val = this.value = parseFloat( val.replace(/,/g, '.').replace(/\s+/g, '') );
+                } else if ( typeof(val) == 'string' ) {
+                    val = this.value = parseInt( val );
+                }
+
+            } catch (err) {
+                errors['isNumber'] = replace(this.error || local.errorLabels['isNumber'], this);
+                this.valid = false;
+                if ( errors.count() > 0 )
+                    this['errors'] = errors;
+            }
+
             if ( +val === +val ) {
                 isValid = true;
                 if ( !errors['isRequired'] && val != '' ) {
@@ -348,15 +361,24 @@ function FormValidatorUtil(data, $fields) {
 
                 if ( !isValid )
                     errors['isInteger'] = replace(this.error || local.errorLabels['isInteger'], this);
+
                 if ( !isMinLength || !isMaxLength ) {
-                    if ( !isMinLength )
+
+                    if ( !isMinLength ) {
                         errors['isIntegerLength'] = replace(this.error || local.errorLabels['isIntegerMinLength'], this);
-                    if ( !isMaxLength )
+                        isValid = false;
+                    }
+
+                    if ( !isMaxLength ) {
                         errors['isIntegerLength'] = replace(this.error || local.errorLabels['isIntegerMaxLength'], this);
-                    if ( minLength === maxLength )
+                        isValid = false;
+                    }
+
+                    if ( minLength === maxLength ) {
                         errors['isIntegerLength'] = replace(this.error || local.errorLabels['isIntegerLength'], this);
+                        isValid = false;
+                    }
                 }
-                isValid = false;
             }
 
             this.valid = isValid;
@@ -387,7 +409,11 @@ function FormValidatorUtil(data, $fields) {
             } else {
                 if ( this['isNumber']().valid ) {
                     try {
-                        val = this.value = local.data[this.name] = new Number(parseFloat(val.match(/[0-9.,]+/g).join('').replace(/,/, '.')));// Number <> number
+
+                        if ( !Number.isFinite(val) ) {
+                            val = this.value = local.data[this.name] = new Number(parseFloat(val.match(/[0-9.,]+/g).join('').replace(/,/, '.')));// Number <> number
+                        }
+
                         this.target.setAttribute('value', val);
                     } catch(err) {
                         isValid = false;
@@ -403,7 +429,7 @@ function FormValidatorUtil(data, $fields) {
             }
 
             if (this['decimals'] && val && !errors['toFloat']) {
-                this.value = local.data[this.name] = this.value.toFixed(this['decimals']);
+                this.value = local.data[this.name] = parseFloat(this.value.toFixed(this['decimals']));
             }
 
             this.valid = isValid;
