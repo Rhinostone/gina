@@ -258,54 +258,6 @@ function ValidatorPlugin(rules, data, formId) {
 
         if (!$form) throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+_id+'` not found');
 
-        // if ($form) {
-        //     // $form.plugin                = $validator.plugin;
-        //     // $form.binded                = false;
-        //     // $form.on                    = on;
-        //     // $form.setOptions           = setOptions;
-        //     // $form.getFormById          = getFormById;
-        //     // $form.validateFormById     = validateFormById;
-        //     // $form.resetErrorsDisplay   = resetErrorsDisplay;
-        //     // $form.handleErrorsDisplay  = handleErrorsDisplay;
-        //     // $form.submit               = submit;
-        //     // $form.send                 = send;
-        //     // $form.destroy              = destroy;
-        //
-        //     var rule    = null;
-        //     if ( typeof(customRule) == 'undefined') {
-        //         rule = _id.replace(/\-/g, '.');
-        //
-        //         if ( typeof(instance.rules[rule]) != 'undefined' ) {
-        //             $form['rule'] = customRule = instance.rules[rule];
-        //         } else if ( $form.target.getAttribute('data-gina-validator-rule') ) {
-        //             rule = $form.target.getAttribute('data-gina-validator-rule').replace(/\-/g, '.');
-        //
-        //             if ( typeof(instance.rules[rule]) != 'undefined' ) {
-        //                 $form['rule'] = instance.rules[rule]
-        //             } else {
-        //                 throw new Error('[ FormValidator::validateFormById(formId) ] using `data-gina-validator-rule` on form `'+$form.target+'`: no matching rule found')
-        //             }
-        //         } else {
-        //             throw new Error('[ FormValidator::validateFormById(formId[, customRule]) ] `customRule` or `data-gina-validator-rule` attribute is missing')
-        //         }
-        //     } else {
-        //         rule = customRule.replace(/\-/g, '.');
-        //
-        //         if ( typeof(instance.rules[rule]) != 'undefined' ) {
-        //             $form['rule'] = instance.rules[rule]
-        //         } else {
-        //             throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+customRule+'` is not a valid rule')
-        //         }
-        //     }
-        //
-        //     // binding form
-        //     bindForm($form.target, customRule);
-        //
-        // } else {
-        //     throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+_id+'` not found')
-        // }
-
-
         return $form || null;
 
     }
@@ -522,67 +474,7 @@ function ValidatorPlugin(rules, data, formId) {
             throw new Error('[ FormValidator::submit() ] not `$form` binded. Use `FormValidator::getFormById(id)` or `FormValidator::validateFormById(id)` first ')
         }
 
-        var $form = instance.$forms[_id];
-        var rule = $form.rule || instance.rules[_id.replace(/\-/g, '.')] || null;
-
-        // getting fields & values
-        var $fields     = {}
-            , fields    = { '_length': 0 }
-            , name      = null
-            // e.g: name="item[cat][]" <- gina will add the index
-            , index     = { checkbox: 0, radio: 0 };
-
-
-        for (var i = 0, len = $target.length; i<len; ++i) {
-            name = $target[i].getAttribute('name');
-
-            if (!name) continue;
-
-            if ( typeof($target[i].type) != 'undefined' && ($target[i].type == 'radio' || $target[i].type == 'checkbox') ) {
-                if ( $target[i].checked == true ) {
-                    $target[i].setAttribute('checked', 'checked');
-
-                    if ( /\[\]/.test(name) ) {
-                        name = name.replace(/\[\]/, '['+ index[ $target[i].type ] +']');
-                        ++index[ $target[i].type ]
-                    }
-
-                    fields[name] = true;
-                }
-
-
-            } else {
-
-                if ( /\[\]/.test(name) ) {
-                    name = name.replace(/\[\]/, '['+ fields['_length'] +']');
-                    ++index
-                }
-
-                fields[name] = $target[i].value;
-            }
-            $fields[name]   = $target[i];
-            // reset filed error data attributes
-            $fields[name].setAttribute('data-errors', '');
-
-            ++fields['_length']
-        }
-
-
-        if ( fields['_length'] == 0 ) { // nothing to validate
-            delete fields['_length'];
-            var result = {
-                'errors'    : [],
-                'isValid'   : function() { return true },
-                'data'      : fields
-            };
-
-            triggerEvent(gina, $target, 'validate.' + _id, result)
-
-        } else {
-            validate($target, fields, $fields, rule, function onValidation(result){
-                triggerEvent(gina, $target, 'validate.' + _id, result)
-            })
-        }
+        triggerEvent(gina, $target, 'submit');
 
         return this;
     }
@@ -794,7 +686,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     }
                                 }
                                 // update toolbar
-                                ginaToolbar.update("data-xhr", XHRData );
+                                ginaToolbar.update('data-xhr', XHRData );
 
                             } catch (err) {
                                 throw err
@@ -1184,7 +1076,6 @@ function ValidatorPlugin(rules, data, formId) {
                 instance.isReady = true;
                 gina.hasValidator = true;
                 gina.validator = instance;
-                //gina.forms.rules = instance.rules;
                 triggerEvent(gina, instance.target, 'ready.' + instance.id, instance);
             });
 
@@ -1194,15 +1085,93 @@ function ValidatorPlugin(rules, data, formId) {
         return instance
     }
 
+    /**
+     * parseRules - Preparing rules paths
+     *
+     * @param {object} rules
+     * @param {string} tmp - path
+     * */
     var parseRules = function(rules, tmp) {
-
+        var _r = null;
         for (var r in rules) {
 
             if ( typeof(rules[r]) == 'object' && typeof(instance.rules[tmp + r]) == 'undefined' ) {
-                instance.rules[tmp + r] = rules[r];
-                parseRules(rules[r], tmp + r+'.');
+
+                _r = r;
+                if (/\[|\]/.test(r) ) { // must be a real path
+                    _r = r.replace(/\[/g, '.').replace(/\]/g, '');
+                }
+
+                instance.rules[tmp + _r] = rules[r];
+                //delete instance.rules[r];
+                parseRules(rules[r], tmp + _r +'.');
             }
         }
+    }
+
+    /**
+     * makeObject - Preparing form data
+     *
+     * @param {object} obj - data
+     * @param {string\number\boolean} value
+     * @param {array} string
+     * @param {number} len
+     * @param {number} i
+     *
+     * */
+    var makeObject = function (obj, value, args, len, i) {
+
+        if (i == len) {
+            return false
+        }
+
+        var key = args[i].replace(/^\[|\]$/g, '');
+
+        if ( typeof(obj[key]) == 'undefined' ) {
+            obj[key] = {}
+        }
+
+        for (var o in obj) {
+
+            if ( typeof(obj[o]) == 'object' ) {
+
+                ++i;
+                if (i == len) {
+                    obj[o] = value
+                }
+
+                makeObject(obj[o], value, args, len, i)
+            }
+        }
+    }
+
+    var formatData = function (data) {
+
+        var args        = null
+            , obj       = {}
+            , key       = null
+            , fields    = {};
+
+        for (name in data) {
+
+            if ( /\[(.*)\]/.test(name) ) {
+                // backup name key
+                key = name;
+                // properties
+                args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
+                // root
+                name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
+
+                makeObject(obj, data[key], args, args.length, 0)
+
+                fields[name] = obj;
+
+            } else {
+                fields[name] = data[name];
+            }
+        }
+
+        return fields
     }
 
 
@@ -1210,7 +1179,7 @@ function ValidatorPlugin(rules, data, formId) {
 
         delete fields['_length']; //cleaning
 
-        var id = null;
+        var id = null, data = null;
         if (isGFFCtx) {
             id = $form.getAttribute('id') || $form.id;
             instance.$forms[id].fields = fields;
@@ -1220,7 +1189,6 @@ function ValidatorPlugin(rules, data, formId) {
         var d = new FormValidator(fields, $fields), args = null;
         var fieldErrorsAttributes = {};
         var re = null, flags = null;
-
 
         var forEachField = function($form, fields, $fields, rules, cb, i) {
             var hasCase = false, conditions = null;
@@ -1301,7 +1269,7 @@ function ValidatorPlugin(rules, data, formId) {
                             }
                             //console.log('parsing ', localRules, fields);
                             if (isGFFCtx)
-                                forEachField($form, fields, $fields, localRules, cb, i+1)
+                                forEachField($form, fields, $fields, localRules, cb, i+1);
                             else
                                 return forEachField($form, fields, $fields, localRules, cb, i+1);
                         }
@@ -1359,21 +1327,24 @@ function ValidatorPlugin(rules, data, formId) {
                         $fields[field].setAttribute('data-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
                 }
 
-                //console.log('data => ',  d['toData']());
-
-
                 //calling back
                 if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
+
+                    data = d['toData']();
+
                     cb({
                         'isValid'   : d['isValid'],
                         'errors'    : errors,
-                        'data'      : d['toData']()
+                        'data'      : formatData(data)
                     });
                 } else {
+
+                    data = d['toData']();
+
                     return {
                         'isValid'   : d['isValid'],
                         'errors'    : errors,
-                        'data'      : d['toData']()
+                        'data'      : formatData(data)
                     }
                 }
             }
@@ -1480,6 +1451,7 @@ function ValidatorPlugin(rules, data, formId) {
 
         var updateRadio = function($el, isInit) {
             var checked = $el.checked;
+            var isBoolean = /^(true|false)$/i.test($el.value);
 
             // loop if radio group
             if (!isInit) {
@@ -1488,7 +1460,7 @@ function ValidatorPlugin(rules, data, formId) {
                 for (var r = 0, rLen = radioGroup.length; r < rLen; ++r) {
                     if (radioGroup[r].id !== $el.id) {
                         radioGroup[r].checked = false;
-                        radioGroup[r].removeAttribute('checked')
+                        radioGroup[r].removeAttribute('checked');
                     }
                 }
             }
@@ -1502,6 +1474,10 @@ function ValidatorPlugin(rules, data, formId) {
 
                 $el.removeAttribute('checked');
 
+                if (isBoolean) {
+                    $el.value = false;
+                }
+
             } else {
 
                 // prevents ticking behavior
@@ -1510,6 +1486,21 @@ function ValidatorPlugin(rules, data, formId) {
                 }, 0)
 
                 $el.setAttribute('checked', 'checked');
+
+                if (isBoolean) { // no multiple choice supported
+                    $el.value = true;
+
+                    var radioGroup = document.getElementsByName($el.name);
+                    //console.log('found ', radioGroup.length, radioGroup)
+                    for (var r = 0, rLen = radioGroup.length; r < rLen; ++r) {
+                        if (radioGroup[r].id !== $el.id) {
+                            radioGroup[r].checked = false;
+                            radioGroup[r].removeAttribute('checked');
+                            radioGroup[r].value = false;
+                        }
+                    }
+                }
+
             }
         }
 
@@ -1576,13 +1567,13 @@ function ValidatorPlugin(rules, data, formId) {
                     // recover default state only on value === true || false
                     addListener(gina, $el, evt, function(event) {
 
-                        if ( /(true|false|on)/.test(event.target.value) ) {
+                        if ( /^(true|false|on)$/i.test(event.target.value) ) {
                             cancelEvent(event);
                             updateCheckBox(event.target);
                         }
                     });
 
-                    if ( /(true|false|on)/.test($el.value) )
+                    if ( /^(true|false|on)$/i.test($el.value) )
                         updateCheckBox($el);
 
                 }
@@ -1606,7 +1597,7 @@ function ValidatorPlugin(rules, data, formId) {
                         updateRadio(event.target);
                     });
 
-                    if ( /(true|false)/.test($el.value) )
+                    if ( /^(true|false)$/i.test($el.value) )
                         updateRadio($el, true);
                 }
 
@@ -1640,16 +1631,17 @@ function ValidatorPlugin(rules, data, formId) {
 
                     if ( result['isValid']() ) { // send if valid
                         // now sending to server
-                        if ( $form.withUserBindings && /validate\./.test(event.type) && typeof(gina.events[event.type]) != 'undefined' ) {
-                            triggerEvent(gina, event.target, 'submit', result)
-                        } else {
+                        // TODO - remove comments, or replace 'submit' by 'submit.' + _id
+                        //if ( $form.withUserBindings && /validate\./.test(event.type) && typeof(gina.events[event.type]) != 'undefined' ) {
+                        //    triggerEvent(gina, event.target, 'submit', result)
+                        //} else {
 
                             if (instance.$forms[_id]) {
                                 instance.$forms[_id].send(result['data']);
                             } else if ($form) { // just in case the form is being destroyed
                                 $form.send(result['data']);
                             }
-                        }
+                        //}
                     }
 
                     return false
@@ -1662,6 +1654,7 @@ function ValidatorPlugin(rules, data, formId) {
             } else {
                 procced()
             }
+
 
 
             var proccedToSubmit = function (evt, $submit) {
@@ -1679,37 +1672,8 @@ function ValidatorPlugin(rules, data, formId) {
                         , name      = null
                         , value     = 0
                         , type      = null
-                        , args      = null
-                        , obj       = {} // e.g: name="item[cat][]" <- gina will add the index
                         , index     = { checkbox: 0, radio: 0 };
 
-                    var makeObject = function (obj, value, args, len, i) {
-
-                        if (i == len) {
-                            return false
-                        }
-
-                        var key = args[i].replace(/^\[|\]$/g, '');
-
-                        if ( typeof(obj[key]) == 'undefined' ) {
-                            obj[key] = {}
-                        }
-
-                        for (var o in obj) {
-
-                            if ( typeof(obj[o]) == 'object' ) {
-
-                                ++i;
-                                if (i == len) {
-                                    obj[o] = value
-                                }
-
-                                makeObject(obj[o], value, args, len, i)
-                            }
-                        }
-
-
-                    }
 
                     for (var i = 0, len = $target.length; i<len; ++i) {
 
@@ -1718,70 +1682,23 @@ function ValidatorPlugin(rules, data, formId) {
                         if (!name) continue;
 
                         // TODO - add switch cases against tagName (checkbox/radio)
-
                         if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
-                            //console.log('radio ', name, $form[i].checked, $form[i].value);
-                            if ( $target[i].checked == true ) {
 
-                                $target[i].setAttribute('checked', 'checked');
-
-                                if ( /\[\]/.test(name) ) {
-                                    name = name.replace(/\[\]/, '['+ index[ $target[i].type ] +']');
-                                    ++index[ $target[i].type ]
-                                } else if ( /\[(.*)\]/.test(name) ) {
-                                    // properties
-                                    args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
-                                    // root
-                                    name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
-
-                                    makeObject(obj, $target[i].value, args, args.length, 0)
-
-                                    fields[name] = obj;
-
-                                } else {
-                                    fields[name] = $target[i].value;
-                                }
-                            } else if ( // force validator to pass `false` if boolean is required explicitly
-                                rules
-                                && typeof(rules[name]) != 'undefined'
-                                && typeof(rules[name].isBoolean)
-                                && typeof(rules[name].isRequired)
+                            if ( $target[i].checked ) {
+                                fields[name] = $target[i].value
+                            }  else if ( // force validator to pass `false` if boolean is required explicitly
+                            rules
+                            && typeof(rules[name]) != 'undefined'
+                            && typeof(rules[name].isBoolean)
+                            && typeof(rules[name].isRequired)
                             ) {
-                                // properties
-                                args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
-                                // root
-                                name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
-
-                                $target[i].value = false;
-                                if (args) {
-                                    makeObject(obj, $target[i].value, args, args.length, 0);
-                                    fields[name] = obj;
-                                } else {
-                                    fields[name] = $target[i].value;
-                                }
-
+                                fields[name] = false;
                             }
-
 
                         } else {
-
-                            if ( /\[\]/.test(name) ) {
-                                name = name.replace(/\[\]/, '['+ fields['_length'] +']');
-                                ++index
-                            } else if ( /\[(.*)\]/.test(name) ) {
-                                // properties
-                                args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
-                                // root
-                                name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
-
-                                makeObject(obj, $target[i].value, args, args.length, 0)
-
-                                fields[name] = obj;
-
-                            } else {
-                                fields[name]    = $target[i].value;
-                            }
+                            fields[name]    = $target[i].value;
                         }
+
 
                         $fields[name]   = $target[i];
                         // reset filed error data attributes
@@ -1799,7 +1716,7 @@ function ValidatorPlugin(rules, data, formId) {
                         var result = {
                             'errors'    : [],
                             'isValid'   : function() { return true },
-                            'data'      : fields
+                            'data'      : formatData(fields)
                         };
 
                         triggerEvent(gina, $target, 'validate.' + _id, result)
@@ -1809,14 +1726,12 @@ function ValidatorPlugin(rules, data, formId) {
                         // e.g.: form `id` attribute rewritten on the fly
                         _id = $target.getAttribute('id');
                         var customRule = $target.getAttribute('data-gina-validator-rule');
-                        if ( customRule ) { // 'data-gina-validator-rule'
-                            //rule = gina.forms.rules[ customRule.replace(/-/g, '.') ];
-                            rule = gina.validator.$forms[customRule].rules;
-                        } else {
-                            rule    = gina.validator.$forms[_id].rules;
-                            //rule    = gina.forms.rules[ _id.replace(/-/g, '.') ];
-                        }
 
+                        if ( customRule ) { // 'data-gina-validator-rule'
+                            rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
+                        } else {
+                            rule = gina.validator.$forms[ _id ].rules;
+                        }
 
                         //console.log('testing rule [ '+_id.replace(/\-/g, '.') +' ]\n'+ JSON.stringify(rule, null, 4));
                         //console.log('validating ', $form, fields, rule);
@@ -1919,109 +1834,37 @@ function ValidatorPlugin(rules, data, formId) {
                 , name      = null
                 , value     = 0
                 , type      = null
-                , args      = null
-                , obj       = {} // e.g: name="item[cat][]" <- gina will add the index
                 , index     = { checkbox: 0, radio: 0 };
-            
-            var makeObject = function (obj, value, args, len, i) {
 
-                if (i == len) {
-                    return false
-                }
-
-                var key = args[i].replace(/^\[|\]$/g, '');
-
-                if ( typeof(obj[key]) == 'undefined' ) {
-                    obj[key] = {}
-                }
-
-                for (var o in obj) {
-
-                    if ( typeof(obj[o]) == 'object' ) {
-
-                        ++i;
-                        if (i == len) {
-                            obj[o] = value
-                        }
-
-                        makeObject(obj[o], value, args, len, i)
-                    }
-                }
-
-
-            }
 
             for (var i = 0, len = $target.length; i<len; ++i) {
                 name = $target[i].getAttribute('name');
 
                 if (!name) continue;
 
-                // TODO - add switch cases against tagName (checkbox/radio)
-
+                // checkbox/radio
                 if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
-                    //console.log('name : ', name, '\ntype ', $form[i].type, '\nchecked ? ', $form[i].checked, '\nvalue', $form[i].value);
-                    if ( $target[i].checked === true ) {
-                        $target[i].setAttribute('checked', 'checked');
 
-                        if ( /\[\]/.test(name) ) {
-                            name = name.replace(/\[\]/, '['+ index[ $target[i].type ] +']');
-                            ++index[ $target[i].type ];
-
-                            fields[name] = $target[i].value;
-                        } else if ( /\[(.*)\]/.test(name) ) {
-                            // properties
-                            args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
-                            // root
-                            name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
-
-                            makeObject(obj, $target[i].value, args, args.length, 0)
-
-                            fields[name] = obj;
-
-                        } else {
-                            fields[name] = $target[i].value;
-                        }
-                    } else if ( // force validator to pass `false` if boolean is required explicitly
-                        rules
-                        && typeof(rules[name]) != 'undefined'
-                        && typeof(rules[name].isBoolean)
-                        && typeof(rules[name].isRequired)
+                    if ( $target[i].checked ) {
+                        fields[name] = $target[i].value
+                    }  else if ( // force validator to pass `false` if boolean is required explicitly
+                    rules
+                    && typeof(rules[name]) != 'undefined'
+                    && typeof(rules[name].isBoolean)
+                    && typeof(rules[name].isRequired)
                     ) {
-                        // properties
-                        args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
-                        // root
-                        name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
-
-                        $target[i].value = false;
-                        
-                        if (args) {
-                            makeObject(obj, $target[i].value, args, args.length, 0);
-                            fields[name] = obj;
-                        } else {
-                            fields[name] = $target[i].value;
-                        }
+                        fields[name] = false;
                     }
+
                 } else {
-
-                    if ( /\[\]/.test(name) ) {
-                        name = name.replace(/\[\]/, '['+ fields['_length'] +']');
-                        ++index
-                    } else if ( /\[(.*)\]/.test(name) ) {
-                        // properties
-                        args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
-                        // root
-                        name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
-
-                        makeObject(obj, $target[i].value, args, args.length, 0)
-
-                        fields[name] = obj;
-
-                    } else {
-                        fields[name]    = $target[i].value;
-                    }
+                    fields[name]    = $target[i].value;
                 }
 
-                $fields[name]       = $target[i];
+
+
+                $fields[name] = $target[i];
+                // reset filed error data attributes
+                $fields[name].setAttribute('data-errors', '');
 
                 ++fields['_length']
             }
@@ -2033,7 +1876,7 @@ function ValidatorPlugin(rules, data, formId) {
                 var result = {
                     'errors'    : [],
                     'isValid'   : function() { return true },
-                    'data'      : fields
+                    'data'      : formatData(fields)
                 };
 
                 if ( typeof(gina.events['submit.' + id]) != 'undefined' ) { // if `on('submit', cb)` is binded
@@ -2045,9 +1888,17 @@ function ValidatorPlugin(rules, data, formId) {
             } else {
                 // update rule in case the current event is triggered outside the main sequence
                 // e.g.: form `id` attribute rewritten on the fly
-                ruleId = id.replace(/-/g, '.');
-                if ( typeof(instance.$forms[id].rules) != 'undefined' )
-                    rule = instance.$forms[id].rules;
+                //ruleId = id.replace(/-/g, '.');
+                //if ( typeof(instance.$forms[id].rules) != 'undefined' )
+                //    rule = instance.$forms[id].rules;
+
+                var customRule = $target.getAttribute('data-gina-validator-rule');
+
+                if ( customRule ) { // 'data-gina-validator-rule'
+                    rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
+                } else {
+                    rule = gina.validator.$forms[ id ].rules;
+                }
 
                 validate($target, fields, $fields, rule, function onValidation(result){
                     if ( typeof(gina.events['submit.' + id]) != 'undefined' ) { // if `on('submit', cb)` is binded
