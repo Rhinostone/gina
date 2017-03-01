@@ -202,6 +202,7 @@ function Collection(content, option) {
         // chaining
         result.notIn    = instance.notIn;
         result.find     = instance.find;
+        result.update   = instance.update;
         result.or       = instance.or;
         result.findOne  = instance.findOne;
         result.limit    = instance.limit;
@@ -354,10 +355,13 @@ function Collection(content, option) {
 
                     localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
                     if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
-                        result[o][f] = set;
+
+                        result[o][f] = merge(result[o][f], set, true);
 
                     } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
-                        result[o] = set;
+
+                        result[o] = merge(result[o], set, true);
+                        // result[o] =set;
                     }
                 }
             }

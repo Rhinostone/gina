@@ -62,7 +62,11 @@ function Merge() {
                         // Merge the base object
                         for (var name in options) {
 
-                            src     = target[ name ];
+                            if ( !target && override ) { // useful for `Collection::update()` when target key does not exits
+                                target = { name: null }
+                            }
+
+                            src     = target[ name ] ;
                             copy    = options[ name ];
 
 
@@ -162,7 +166,7 @@ function Merge() {
                                 ) {
                                     target[ name ] = src
                                 } else {
-                                    target[ name ] = copy
+                                    target[ name ] = copy;
                                 }
 
                             }
