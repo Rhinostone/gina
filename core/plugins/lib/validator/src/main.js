@@ -1513,7 +1513,7 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( /(label)/i.test(event.target.tagName) )
                     return false;
 
-                if ( typeof(event.target.id) == 'undefined' ) {
+                if ( typeof(event.target.id) == 'undefined' || !event.target.getAttribute('id') ) {
                     event.target.setAttribute('id', 'click.' + uuid.v1() );
                     event.target.id = event.target.getAttribute('id')
                 } else {
