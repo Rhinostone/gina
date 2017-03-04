@@ -1489,17 +1489,19 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if (isBoolean) { // no multiple choice supported
                     $el.value = true;
-
-                    var radioGroup = document.getElementsByName($el.name);
+                }
+                var radioGroup = document.getElementsByName($el.name);
                     //console.log('found ', radioGroup.length, radioGroup)
                     for (var r = 0, rLen = radioGroup.length; r < rLen; ++r) {
                         if (radioGroup[r].id !== $el.id) {
                             radioGroup[r].checked = false;
                             radioGroup[r].removeAttribute('checked');
-                            radioGroup[r].value = false;
+                            if (isBoolean) {
+                                radioGroup[r].value = false;
+                            }
                         }
                     }
-                }
+
 
             }
         }
@@ -1558,7 +1560,8 @@ function ValidatorPlugin(rules, data, formId) {
             }
 
 
-            if ( typeof(type) != 'undefined' && type == 'checkbox' ) {
+            // recover default state only on value === true || false || on
+            if ( typeof(type) != 'undefined' && type == 'checkbox' && /^(true|false|on)$/i.test($inputs[i].value ) ) {
 
                 evt = $inputs[i].id;
 
@@ -1597,8 +1600,8 @@ function ValidatorPlugin(rules, data, formId) {
                         updateRadio(event.target);
                     });
 
-                    if ( /^(true|false)$/i.test($el.value) )
-                        updateRadio($el, true);
+
+                    updateRadio($el, true);
                 }
 
                 if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {

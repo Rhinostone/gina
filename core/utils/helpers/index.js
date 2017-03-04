@@ -134,6 +134,32 @@ Object.defineProperty( Array.prototype, 'inArray', {
     value: function(o){ return this.indexOf(o)!=-1 }
 });
 
+if ( typeof(Array.from) == 'undefined' ) { // if not under ES6
+
+    Object.defineProperty( Array.prototype, 'from', {
+        writable:   false,
+        enumerable: false,
+        //If loaded several times, it can lead to an exception. That's why I put this.
+        configurable: true,
+        value: function(a){
+            var seen    = {}
+                , out   = []
+                , len   = a.length
+                , j     = 0;
+
+            for(var i = 0; i < len; i++) {
+                var item = a[i];
+                if(seen[item] !== 1) {
+                    seen[item] = 1;
+                    out[j++] = item
+                }
+            }
+
+            return out
+        }
+    });
+}
+
 Object.defineProperty( Object.prototype, 'count', {
     writable:   true,
     enumerable: false,

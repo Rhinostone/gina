@@ -100,6 +100,9 @@ function Collection(content, option) {
 
             for (var o in tmpContent) {
 
+                if (!tmpContent[o]) {
+                    tmpContent[o] = {}
+                }
                 tmpContent[o].matched = {};
                 for (var l = 0, lLen = filters.count(); l<lLen; ++l) {
                     filter = filters[l];
@@ -349,19 +352,18 @@ function Collection(content, option) {
                 , localeLowerCase   = ''
                 , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
 
-            for (var o in content) {
+            for (var o in result) {
                 for (var f in filter) {
                     if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
                     localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
-                    if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] != 'null' && content[o][f] != 'undefined' ) {
+                    if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] != 'null' && result[o][f] != 'undefined' ) {
 
                         result[o][f] = merge(result[o][f], set, true);
 
-                    } else if ( typeof(content[o][f]) != 'undefined' && typeof(content[o][f]) !== 'object' && content[o][f] === filter[f] ) {
+                    } else if ( typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] === filter[f]) {
 
                         result[o] = merge(result[o], set, true);
-                        // result[o] =set;
                     }
                 }
             }

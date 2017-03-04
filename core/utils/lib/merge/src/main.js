@@ -61,8 +61,7 @@ function Merge() {
                     } else {
                         // Merge the base object
                         for (var name in options) {
-
-                            if ( !target && override ) { // useful for `Collection::update()` when target key does not exits
+                            if (!target) {
                                 target = { name: null }
                             }
 
