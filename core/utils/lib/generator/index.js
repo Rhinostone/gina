@@ -27,7 +27,12 @@ var Generator = {
             if(fs.existsSync(target)){
                 //Just in case.
                 fs.chmodSync(target, 0755);
-                fs.unlink(target);
+
+                if ( fs.unlinkSync ) {
+                    fs.unlinkSync(target)
+                } else {
+                    fs.unlink(target);
+                }
             }
             fs.writeFile(target, data, function(err, data){
                 setTimeout( function onChmod(){
@@ -51,7 +56,12 @@ var Generator = {
             if(fs.existsSync(target)){
                 //Just in case.
                 fs.chmodSync(target, 0755);
-                fs.unlink(target);
+
+                if ( fs.unlinkSync ) {
+                    fs.unlinkSync(target)
+                } else {
+                    fs.unlink(target);
+                }
             }
 
             fs.writeFileSync(target, data);

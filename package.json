@@ -1,6 +1,6 @@
 {
   "name": "gina",
-  "version": "0.0.9p90g",
+  "version": "0.0.9p90i",
   "description": "MVC and Event Driven framework 100% Javascript",
   "keywords": [
     "framework",
@@ -25,7 +25,7 @@
     "express": "4.x",
     "multiparty": "",
     "requirejs": "",
-    "node-uuid": "",
+    "uuid": "",
     "swig": ""
   },
   "engines": {

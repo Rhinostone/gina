@@ -82,9 +82,16 @@ function PostInstall() {
         }
 
         //Will override.
-        if (callback) {
-            utils.generator.createFileFromTemplateSync(source, target);
-            setTimeout(callback, 1000)
+        if ( typeof(callback) != 'undefined') {
+
+            try {
+                utils.generator.createFileFromTemplateSync(source, target);
+                setTimeout(function () {
+                    callback(false)
+                }, 1000)
+            } catch (err) {
+                callback(err)
+            }
         } else {
             utils.generator.createFileFromTemplateSync(source, target)
         }
@@ -101,7 +108,12 @@ function PostInstall() {
 
 
 
-            createGinaFile(filename, function(){
+            createGinaFile(filename, function onGinaFileCreated(err){
+
+                if (err) {
+                    throw err;
+                    return false
+                }
                 // this is done to allow multiple calls of post_install.js
                 var filename = _(self.path + '/SUCCESS');
                 var installed = fs.existsSync( filename );

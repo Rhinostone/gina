@@ -104,7 +104,7 @@ Now edit the `init` action in `src/frontend/controllers/controller.js` so that y
 
 Once it's done, you just need to refresh your browser.
 
-Gina is shipped with [Swig](http://node-swig.github.io/swig-templates/) as the default template engine. If you are more comfortable with another template engine, you can use your own.
+Gina is shipped with [Swig](http://node-swig.github.io/swig-templates/docs/) as the default template engine. If you are more comfortable with another template engine, you can use your own.
 
 ## Debugging in Gina
 

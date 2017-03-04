@@ -500,6 +500,22 @@ function FormValidatorUtil(data, $fields) {
                 return self[this.name]
             }
 
+            // radio group case
+            if ( isGFFCtx && this.target.tagName == 'INPUT' && typeof(this.target.type) != 'undefined' && this.target.type == 'radio' ) {
+                var radios = document.getElementsByName(this.name);
+                for (var i = 0, len = radios.length; i < len; ++i) {
+                    if (radios[i].checked) {
+                        if ( /true|false/.test(radios[i].value) ) {
+                            this.value = local.data[this.name] = ( /true/.test(radios[i].value) ) ? true : false
+                        } else {
+                            this.value = local.data[this.name] = radios[i].value;
+                        }
+
+                        this.valid = true;
+                        break;
+                    }
+                }
+            }
 
 
             var isValid = ( typeof(this.value) != 'undefined' && this.value != null && this.value != '') ? true : false;
