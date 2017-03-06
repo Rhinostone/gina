@@ -80,12 +80,6 @@ function Collection(content, option) {
             throw new Error('filter must be an object');
         } else if ( typeof(filters) != 'undefined' && filters.count() > 0 ) {
 
-            try {
-
-            } catch (err) {
-
-            }
-
             var filter              = null
                 , condition         = null
                 , i                 = 0
@@ -271,7 +265,7 @@ function Collection(content, option) {
         }
 
 
-        return result
+        return ( Array.isArray(result) && !result.length ) ? null : result
     }
 
 

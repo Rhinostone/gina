@@ -457,10 +457,12 @@ function FormValidatorUtil(data, $fields) {
                 this.value = this.value.replace(/\s+/g, '');
             }
 
-            var val = this.value, isValid = false, errors = {};
+            var val         = this.value
+                , isValid   = false
+                , errors    = {};
 
 
-            if ( typeof(val) == 'string' && /\./.test(val) && Number(val) ) {
+            if ( typeof(val) == 'string' && /\./.test(val) && Number.isFinite( Number(val) ) ) {
                 isValid = true
             }
 
@@ -468,8 +470,9 @@ function FormValidatorUtil(data, $fields) {
             if (typeof(val) == 'string' && /,/g.test(val)) {
                 val =  this.value = local.data[this.name] = Number(val.replace(/,/g, '.'))
             }
-            // test if val can be a number and if it is a float
-            if ( val && val % 1 !== 0 || val == 0) {
+
+            // test if val is strictly a float
+            if ( Number(val) === val && val % 1 !== 0 ) {
                 this.value = local.data[this.name] = Number(val);
                 isValid = true
             } else {
