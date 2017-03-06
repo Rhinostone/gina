@@ -409,7 +409,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             $form = instance.$forms[_id]
         }
-        //console.log('reseting error display ', $form.id, $form);
+        //reseting error display
         handleErrorsDisplay($form['target'], []);
 
         return $form
@@ -511,8 +511,6 @@ function ValidatorPlugin(rules, data, formId) {
         // to upload, use `multipart/form-data` for `enctype`
         var enctype = $target.getAttribute('enctype');
 
-        //console.log('options ['+$form.id+'] -> ', options);
-
         if ( options.withCredentials ) {
 
             if ('withCredentials' in xhr) {
@@ -568,9 +566,6 @@ function ValidatorPlugin(rules, data, formId) {
                             }
 
                             $form.eventData.success = result;
-                            //console.log('sending response ...');
-                            //console.log('event is ', 'success.' + id);
-                            //console.log('making response ' + JSON.stringify(result, null, 4));
 
                             var XHRData = result;
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
@@ -1121,28 +1116,55 @@ function ValidatorPlugin(rules, data, formId) {
      * */
     var makeObject = function (obj, value, args, len, i) {
 
-        if (i == len) {
+        if (i >= len) {
             return false
         }
 
-        var key = args[i].replace(/^\[|\]$/g, '');
+        var key     = args[i].replace(/^\[|\]$/g, '');
+        var nextKey = ( i < len-1 && typeof(args[i+1]) != 'undefined' ) ?  args[i+1].replace(/^\[|\]$/g, '') : null
 
         if ( typeof(obj[key]) == 'undefined' ) {
-            obj[key] = {}
+            if (nextKey && /^\d+$/.test(nextKey)) {
+                nextKey = parseInt(nextKey);
+                obj[key] = []
+            } else {
+                obj[key] = {}
+            }
         }
 
         for (var o in obj) {
 
             if ( typeof(obj[o]) == 'object' ) {
 
-                ++i;
-                if (i == len) {
-                    obj[o] = value
-                }
+                if ( Array.isArray(obj[o]) ) {
 
-                makeObject(obj[o], value, args, len, i)
+
+                    if (o === key) {
+
+                        var _args = JSON.parse(JSON.stringify(args));
+                        _args.splice(0, 1);
+
+                        for (var a = i, aLen = _args.length; a < aLen; ++a) {
+                            key = parseInt(_args[a].replace(/^\[|\]$/g, ''))
+                            obj[o][key] = {};
+
+                            if (a == aLen-1) {
+                                obj[o][key] = value;
+                            }
+                        }
+                    }
+
+                } else if ( o === key ) {
+
+                    if (i == len-1) {
+                        obj[o] = value;
+                    } else {
+                        makeObject(obj[o], value, args, len, i+1)
+                    }
+                }
             }
         }
+
     }
 
     var formatData = function (data) {
@@ -1157,14 +1179,18 @@ function ValidatorPlugin(rules, data, formId) {
             if ( /\[(.*)\]/.test(name) ) {
                 // backup name key
                 key = name;
+
                 // properties
                 args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
+
                 // root
                 name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
 
-                makeObject(obj, data[key], args, args.length, 0)
+                // building object tree
+                makeObject(obj, data[key], args, args.length, 0);
 
-                fields[name] = obj;
+                fields[name] = merge( fields[name], obj );
+                obj = {}
 
             } else {
                 fields[name] = data[name];
@@ -1203,8 +1229,6 @@ function ValidatorPlugin(rules, data, formId) {
                 if (hasCase) {
 
                     conditions = rules['_case_' + field]['conditions'];
-                    //console.log('found case on `'+field +'`');
-                    //console.log('conditions ', conditions);
 
                     if ( !conditions ) {
                         throw new Error('[ ginaFormValidator ] case `_case_'+field+'` found without `condition(s)` !');
@@ -1328,23 +1352,37 @@ function ValidatorPlugin(rules, data, formId) {
                 }
 
                 //calling back
-                if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
+                try {
+                    data = formatData( d['toData']() );
 
-                    data = d['toData']();
+                    if ( typeof(window.ginaToolbar) == 'object' ) {
+                        // update toolbar
+                        if (!gina.forms.sent)
+                            gina.forms.sent = {};
+
+                        gina.forms.sent = data;
+
+                        window.ginaToolbar.update('forms', gina.forms);
+                    }
+                } catch (err) {
+                    throw err
+                }
+
+
+                if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
 
                     cb({
                         'isValid'   : d['isValid'],
                         'errors'    : errors,
-                        'data'      : formatData(data)
-                    });
-                } else {
+                        'data'      : data
+                    })
 
-                    data = d['toData']();
+                } else {
 
                     return {
                         'isValid'   : d['isValid'],
                         'errors'    : errors,
-                        'data'      : formatData(data)
+                        'data'      : data
                     }
                 }
             }
@@ -1809,10 +1847,9 @@ function ValidatorPlugin(rules, data, formId) {
 
 
         evt = 'submit';
-        //console.log('adding submit event ', evt, _id, self.events);
+
         // submit proxy
         addListener(gina, $target, evt, function(e) {
-            //console.log('adding submit event ', evt, self.events['submit.'+_id]);
 
             var $target     = e.target
                 , id        = $target.getAttribute('id')
