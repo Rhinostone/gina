@@ -355,6 +355,8 @@
     background: #5ba1cf; }
 .gina-toolbar .gina-toolbar-value-type-is-number {
   color: #f78c6a; }
+.gina-toolbar .gina-toolbar-value-type-is-null {
+  color: #f78c6a; }
 .gina-toolbar .gina-toolbar-value-type-is-boolean {
   color: #ffaa3e; }
 .gina-toolbar .gina-toolbar-is-overridden > .gina-toolbar-key, .gina-toolbar .gina-toolbar-is-overridden > .gina-toolbar-value {

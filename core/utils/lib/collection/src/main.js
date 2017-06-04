@@ -16,6 +16,8 @@
  *      eg.: { uid: "someUID" }
  *      eg.: { type: "not null" }
  *      eg.: { "obj.prop": true }
+ *      eg.: { "lastUpdate": ">= 2016-12-01T00:00:00" }
+ *      eg.: { "activity": null }
  *
  *  @return {array} result
  *
@@ -83,7 +85,7 @@ function Collection(content, option) {
             var filter              = null
                 , condition         = null
                 , i                 = 0
-                , tmpContent        = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content))
+                , tmpContent        = ( Array.isArray(this) && !withOrClause) ? this : JSON.parse(JSON.stringify(content))
                 , resultObj         = {}
                 , result            = []
                 , localeLowerCase   = ''
@@ -105,7 +107,7 @@ function Collection(content, option) {
                     for (var f in filter) {
                         if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
-                        localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
+                        localeLowerCase = ( typeof(filter[f]) != 'boolean' && filter[f] !== null ) ? filter[f].toLocaleLowerCase() : filter[f];
                         // cases with tmpContent.prop
                         if ( /\./.test(f) ) {
                             //JSON.stringify(tmpContent[o]).match(/("gross":\w+)/)[1].split(/:/)[1]
@@ -117,16 +119,26 @@ function Collection(content, option) {
                                 if ( value && value.length > 0) {
                                     value = value[1].split(/:/)[1];
                                     if ( /(<|>|=)/.test(filter[f]) ) {
-                                        if ( eval( value + filter[f] ) ) {
-                                            //result[i] = tmpContent[o];
-                                            //++i
+
+                                        // looking for a datetime ?
+                                        if (
+                                            /(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/.test( value )
+                                            && /(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/.test( filter[f] )
+                                        ) {
+
+                                            if ( eval( value.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') + filter[f].replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') ) ) {
+                                                tmpContent[o].matched[f] = true;
+                                                resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
+                                            }
+
+                                        } else if ( eval( value + filter[f] ) ) {
+
                                             tmpContent[o].matched[f] = true;
                                             resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
                                         }
                                     } else {
                                         if (value == filter[f]) {
-                                            //result[i] = tmpContent[o];
-                                            //++i
+
                                             tmpContent[o].matched[f] = true;
                                             resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
                                         }
@@ -137,35 +149,45 @@ function Collection(content, option) {
                             }
 
 
-                        } else {
-                            // normal case
-                            if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] != 'null' && tmpContent[o][f] != 'undefined' ) {
-                                if (result.indexOf(tmpContent[o][f]) < 0 ) {
-                                    //result[i] = tmpContent[o][f];
-                                    //++i
-                                    tmpContent[o].matched[f] = true;
-                                    if (typeof(tmpContent[o][f]) == 'object' ) {
-                                        resultObj[ tmpContent[o][f]._uuid ] = tmpContent[o][f]
-                                    } else {
-                                        if ( !resultObj[o] ) {
-                                            resultObj[o] = {}
-                                        }
+                        } else { // normal case
 
-                                        resultObj[tmpContent[o]._uuid] = tmpContent[o];
+                            if ( filter[f] === null && tmpContent[o][f] === null ) { // null case
+
+                                tmpContent[o].matched[f] = true;
+                                resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
+
+                            } else if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] != 'null' && tmpContent[o][f] != 'undefined' ) {
+                                if (result.indexOf(tmpContent[o][f]) < 0 ) {
+                                    tmpContent[o].matched[f] = true;
+                                    //if (typeof(tmpContent[o][f]) == 'object' ) {
+                                    //    resultObj[ tmpContent[o][f]._uuid ] = tmpContent[o][f]
+                                    //} else {
+                                    if ( !resultObj[o] ) {
+                                        resultObj[o] = {}
                                     }
+
+                                    resultObj[tmpContent[o]._uuid] = tmpContent[o];
+                                    //}
                                 }
 
                             } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && /(<|>|=)/.test(filter[f]) && !/undefined|function/.test( typeof(tmpContent[o][f]) ) ) { // with operations
-                                if ( eval( tmpContent[o][f] + filter[f] ) ) {
-                                    //result[i] = tmpContent[o];
-                                    //++i
+                                // looking for a datetime ?
+                                if (
+                                    /(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/.test( tmpContent[o][f] )
+                                    && /(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/.test( filter[f] )
+                                ) {
+
+                                    if ( eval( tmpContent[o][f].replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') + filter[f].replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') ) ) {
+                                        tmpContent[o].matched[f] = true;
+                                        resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
+                                    }
+
+                                } else if ( eval( tmpContent[o][f] + filter[f] ) ) {
                                     tmpContent[o].matched[f] = true;
                                     resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
                                 }
                             } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] === filter[f] ) {
 
-                                //result[i] = tmpContent[o];
-                                //++i
                                 tmpContent[o].matched[f] = true;
                                 resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
                             }
@@ -181,10 +203,15 @@ function Collection(content, option) {
 
         if (withOrClause) {
             for (var obj in resultObj) {
-                delete resultObj[obj].matched;
-                result[i] = resultObj[obj];
-                ++i
+                if ( typeof(resultObj[obj].matched) != 'undefined' && resultObj[obj].matched.count() == condition ) {
+                    delete resultObj[obj].matched;
+                    result[i] = resultObj[obj];
+                    ++i
+                }
             }
+
+            // merging with previous result (this)
+            result  = merge(this, result, true)
         } else {
             var matched = 0;
             for (var obj in resultObj) {
@@ -226,6 +253,7 @@ function Collection(content, option) {
         result = result.splice(0, resultLimit);
 
         // chaining
+        result.update   = instance.update;
         result.notIn    = instance.notIn;
         result.findOne  = instance.findOne;
         result.orderBy  = instance.orderBy;
@@ -257,6 +285,9 @@ function Collection(content, option) {
                         }
 
                     } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] === filter[f] ) {
+                        ++i;
+                        if (i === condition) result = tmpContent[o]
+                    } else if ( filter[f] === null && tmpContent[o][f] === null ) { // null case
                         ++i;
                         if (i === condition) result = tmpContent[o]
                     }
@@ -343,6 +374,7 @@ function Collection(content, option) {
             throw new Error('filter must be an object');
         } else {
             var condition           = filter.count()
+                , i                 = 0
                 , localeLowerCase   = ''
                 , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
 
@@ -353,8 +385,11 @@ function Collection(content, option) {
                     localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
                     if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] != 'null' && result[o][f] != 'undefined' ) {
 
-                        result[o][f] = merge(result[o][f], set, true);
+                        result[o] = merge(result[o], set, true);
 
+                    } else if ( typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] === filter[f] ) {
+                        ++i;
+                        if (i === condition) result[o] = merge(result[o], set, true);
                     } else if ( typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] === filter[f]) {
 
                         result[o] = merge(result[o], set, true);
@@ -388,6 +423,8 @@ function Collection(content, option) {
                     localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
                     if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(_content[o][f]) != 'undefined' && typeof(_content[o][f]) !== 'object' && _content[o][f] != 'null' && _content[o][f] != 'undefined' ) {
                         result.splice(o, 1)
+                    } else if ( typeof(_content[o][f]) != 'undefined' && typeof(_content[o][f]) !== 'object' && _content[o][f] === filter[f] ) {
+                        if (i === condition) result.splice(o, 1);
                     } else if ( typeof(_content[o][f]) != 'undefined' && typeof(_content[o][f]) !== 'object' && _content[o][f] === filter[f] ) {
                         result.splice(o, 1)
                     }
@@ -490,7 +527,14 @@ function Collection(content, option) {
 
                 } else if ( typeof(a) == 'object' ) {
                     try {
-                        return a[prop].localeCompare(b[prop])
+                        if ( typeof(a[prop]) == 'number' ) {
+
+                            a[prop] = '' + a[prop];
+                            b[prop] = '' + b[prop];
+                        }
+
+                        return a[prop].localeCompare(b[prop], { numeric: true})
+
                     } catch (err) {
                         return -1
                     }
@@ -547,6 +591,7 @@ function Collection(content, option) {
         result.findOne  = instance.findOne;
         result.limit    = instance.limit;
         result.notIn    = instance.notIn;
+        result.update   = instance.update;
 
         return result
     };

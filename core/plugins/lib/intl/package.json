@@ -1,7 +1,7 @@
 {
-  "name": "validator",
+  "name": "intl",
   "version": "1.0.0",
-  "description": "Form validator plugin",
+  "description": "International Language & Country Codes plugin based on ISO 3166",
   "authors": [
     {
       "name": "Maritn-Luther ETOUMAN",

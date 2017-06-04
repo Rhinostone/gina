@@ -31,8 +31,27 @@ Capital cities, languages, continents, TLDs, and geonameid are from [geonames.or
 
 EDGAR codes are from [sec.gov](https://www.sec.gov/edgar/searchedgar/edgarstatecodes.htm)
 
-## building resources
+## Building `dist` from resources
 
+### Region
 1) Download `country-codes.csv` from the repository
-2) Open it with `Numbers` or `Excel`, then export it as `*.csv` using `;` separator
-3) Open a terminal to the current location and hit: `node make --region=en`: a `en.json` file will be created.
+2) Open it with `Numbers` or `Excel`, then export it as `resources/region.csv` using `;` separator
+3) Open a terminal to the current location and hit: 
+``` tty
+node src/make --target=region --region=en
+```
+A `dist/region/en.json` file will be created.
+
+### Currency
+1) Download [`codes-all.csv`](https://raw.githubusercontent.com/datasets/currency-codes/master/data/codes-all.csv)
+2) Open it with `Numbers` or `Excel`, then export it as `resources/currency.csv` using `;` separator
+3) Open a terminal to the current location and hit:
+``` tty
+node src/make --target=currency
+```    
+A `dist/currency.json` file will be created.
+
+### Languages
+1) Download [`iso-languagecodes.txt`](http://download.geonames.org/export/dump/iso-languagecodes.txt) from http://geonames.org
+2) Import it to `Numbers` or `Excel`, then export it as `resources/language.csv` using `;` separator
+3) Open a terminal to the current location and hit: `node src/make --target=language`: a `dist/language.json` file will be created.

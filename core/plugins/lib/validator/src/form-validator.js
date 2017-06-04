@@ -248,6 +248,7 @@ function FormValidatorUtil(data, $fields) {
          * */
         self[el]['isNumber'] = function(minLength, maxLength) {
             var val             = this.value
+                , len           = 0
                 , isValid       = false
                 , isMinLength   = true
                 , isMaxLength   = true
@@ -260,7 +261,7 @@ function FormValidatorUtil(data, $fields) {
                 // if val is a string replaces comas by points
                 if ( typeof(val) == 'string' && /,/g.test(val) ) {
                     val = this.value = parseFloat( val.replace(/,/g, '.').replace(/\s+/g, '') );
-                } else if ( typeof(val) == 'string' ) {
+                } else if ( typeof(val) == 'string' && val != '') {
                     val = this.value = parseInt( val );
                 }
 
@@ -274,12 +275,13 @@ function FormValidatorUtil(data, $fields) {
             if ( +val === +val ) {
                 isValid = true;
                 if ( !errors['isRequired'] && val != '' ) {
+                    len = val.toString().length;
                     // if so also test max and min length if defined
-                    if (minLength && typeof(minLength) == 'number' && val.length < minLength) {
+                    if (minLength && typeof(minLength) == 'number' && len < minLength) {
                         isMinLength = false;
                         this['size'] = minLength;
                     }
-                    if (maxLength && typeof(maxLength) == 'number' && val.length > maxLength) {
+                    if (maxLength && typeof(maxLength) == 'number' && len > maxLength) {
                         isMaxLength = false;
                         this['size'] = maxLength;
                     }

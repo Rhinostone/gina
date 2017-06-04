@@ -24,18 +24,25 @@ function DateFormatHelper() {
     self.masks = {
         "default":      "ddd mmm dd yyyy HH:MM:ss",
         shortDate:      "m/d/yy",
+        shortDate2:      "mm/dd/yyyy",
         mediumDate:     "mmm d, yyyy",
         longDate:       "mmmm d, yyyy",
         fullDate:       "dddd, mmmm d, yyyy",
         shortTime:      "h:MM TT",
+        shortTime2:      "h:MM",
         mediumTime:     "h:MM:ss TT",
+        mediumTime2:     "h:MM:ss",
         longTime:       "h:MM:ss TT Z",
+        longTime2:       "h:MM:ss TT",
         concatenatedDate:  "yyyymmdd",
         isoDate:        "yyyy-mm-dd",
         isoTime:        "HH:MM:ss",
+        shortIsoTime:        "HH:MM",
+        longIsoTime:        "HH:MM:ss TT",
         isoDateTime:    "yyyy-mm-dd'T'HH:MM:ss",
         isoUtcDateTime: "UTC:yyyy-mm-dd'T'HH:MM:ss'Z'"
     };
+
 
     self.i18n = {
         dayNames: [
@@ -124,6 +131,25 @@ function DateFormatHelper() {
         return mask.replace(token, function ($0) {
             return $0 in flags ? flags[$0] : $0.slice(1, $0.length - 1);
         });
+    }
+
+    /**
+     * Get mask name from a given format
+     *
+     * @param {string} format
+     *
+     * @return {string} maskName
+     * */
+    var getMaskNameFromFormat = function (format) {
+
+        var name = "default";
+
+        for (var f in self.masks) {
+            if ( self.masks[f] === format )
+                return f
+        }
+
+        return name
     }
 
 
