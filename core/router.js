@@ -482,6 +482,7 @@ function Router(env) {
                             // exporting config & common methods
                             Setup.engine                = controller.engine;
                             Setup.getConfig             = controller.getConfig;
+                            Setup.getLocales            = controller.getLocales;
                             Setup.getFormsRules         = controller.getFormsRules;
                             Setup.throwError            = controller.throwError;
                             Setup.redirect              = controller.redirect;
@@ -570,7 +571,8 @@ function Router(env) {
                         // exporting config & common methods
                         //Middleware.engine             = controller.engine;
                         Middleware.prototype.getConfig              = controller.getConfig;
-                        Middleware.prototype.getFormsRules           = controller.getFormsRules;
+                        Middleware.prototype.getLocales             = controller.getLocales;
+                        Middleware.prototype.getFormsRules          = controller.getFormsRules;
                         Middleware.prototype.throwError             = controller.throwError;
                         Middleware.prototype.redirect               = controller.redirect;
                         Middleware.prototype.render                 = controller.render;
