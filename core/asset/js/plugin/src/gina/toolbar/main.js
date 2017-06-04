@@ -518,7 +518,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
             for (var i in obj) {
                 //console.log('i', i);
-                if ( typeof(obj[i]) == 'object' && !Array.isArray(obj[i]) ) { // parse
+                if ( typeof(obj[i]) == 'object' && !Array.isArray(obj[i]) && obj[i] !== null ) { // parse
                     id += i + '-';
                     html += '<li class="gina-toolbar-object">';
                     html +=  '<a href="#" class="gina-toolbar-key gina-toolbar-folding-state-'+ id.substr(0, id.length - 1) +'">'+ i +' <span>{ }</span></a>';
@@ -535,7 +535,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     // clear one level
                     id = id.substr(0, id.length - i.length - 1);
                 } else {
-                    objType = typeof(ginaObj[i]);
+                    objType = (ginaObj[i] === null) ? 'null' : typeof(ginaObj[i]);
                     if ( objType == 'undefined' ) { // new key  declaration added by user
                         html += '<li class="gina-toolbar-key-value">';
                         html +=     '<span class="gina-toolbar-key gina-toolbar-key-added">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</span>';

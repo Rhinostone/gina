@@ -16,7 +16,13 @@ function Make() {
     
     var setup = function () {
 
-        var opt = {}, tmp = null;
+
+        var opt         = {}
+            , filename  = null
+            , targets   = [ 'currency', 'region' ]
+            , tmp       = null
+            , dir       = __dirname
+            ;
 
         for (var i = 1, len = process.argv.length; i < len; ++i) {
             if ( /^\-\-[-_0-9a-z]+\=/i.test( process.argv[i] ) ) {
@@ -26,15 +32,21 @@ function Make() {
             }
         }
 
+        if ( !opt.target )
+            throw new Error('`--target=<target>` option is missing.');
 
-        var filename    = (opt.filename) ? opt.filename : _('./country-codes.csv', true);
+        if ( targets.indexOf(opt.target) < 0 )
+            throw new Error('`--target=`'+ opt.target +' option is not allowed.');
+
+        filename = (opt.filename) ? opt.filename : _(dir +'/resources/'+ opt.target +'.csv', true);
+
         var region      = (opt.region) ? opt.region : 'en';
+        var mappingFile = _(dir+ '/resources/'+ opt.target +'.mapping.json', true);
         var content     = null;
 
         rec.mapping = {
             "name"                              : "full",
             "official_name_en"                  : "officialName.short",
-            //"official_name_fr"                  : "officialName.short",
             "ISO3166-1-Alpha-2"                 : "short",
             "ISO3166-1-Alpha-3"                 : "long",
             "M49"                               : "m49",
@@ -57,12 +69,11 @@ function Make() {
             "Continent"                         : "continent",
             "TLD"                               : "tld",
             "Languages"                         : "languages",
-            "Geoname ID"                        : "geoNameId",
+            "Geoname ID"                        : "geonameId",
             "EDGAR"                             : "edgar"
         };
 
         if ( opt.region != 'en' ) {
-            rec.mapping = {};
             rec.mapping[ 'official_name_' + opt.region ] = "officialName.short"
         }
 
@@ -74,7 +85,14 @@ function Make() {
 
             csvToCollection(content.toString());
 
-            save( _('./'+region + '.json', true), JSON.stringify(self.body, null, 2) )
+            var target = _(dir + '/../dist/'+ opt.target, true);
+            if ( opt.target == 'region') {
+                target += '/'+ region +'.json'
+            } else {
+                target += '/'+ opt.target +'.json'
+            }
+
+            save( target, JSON.stringify(self.body, null, 2) )
 
         } catch (err) {
             throw err

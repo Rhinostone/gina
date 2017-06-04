@@ -20,6 +20,7 @@ var Config  = require('./config');
 var config  = null;
 var tmp     = null;
 var utils   = require('./utils');
+var locales = require('./locales');
 var plugins = require('./plugins');
 
 var console = utils.logger;
@@ -29,9 +30,10 @@ var EventEmitter = require('events').EventEmitter;
 var e = new EventEmitter();
 
 gna.initialized = process.initialized = false;
-gna.routed = process.routed = false;
-gna.utils = utils;
-gna.plugins = plugins;
+gna.routed      = process.routed = false;
+gna.utils       = utils;
+gna.locales     = locales;
+gna.plugins     = plugins;
 
 var Server  = require('./server');//TODO require('./server').http
 
@@ -173,6 +175,7 @@ gna.executionPath = root;
 
 setContext('gina.Config', Config);
 setContext('gina.utils', utils);
+setContext('gina.locales', locales);
 setContext('gina.plugins', plugins);
 
 var envs = ['dev', 'debug', 'stage', 'prod'];

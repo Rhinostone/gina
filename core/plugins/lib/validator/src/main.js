@@ -1121,7 +1121,7 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
         var key     = args[i].replace(/^\[|\]$/g, '');
-        var nextKey = ( i < len-1 && typeof(args[i+1]) != 'undefined' ) ?  args[i+1].replace(/^\[|\]$/g, '') : null
+        var nextKey = ( i < len-1 && typeof(args[i+1]) != 'undefined' ) ?  args[i+1].replace(/^\[|\]$/g, '') : null;
 
         if ( typeof(obj[key]) == 'undefined' ) {
             if (nextKey && /^\d+$/.test(nextKey)) {

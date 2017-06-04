@@ -15,6 +15,7 @@ var utils           = require('./../utils') || require.cache[require.resolve('.
 var merge           = utils.merge;
 var inherits        = utils.inherits;
 var console         = utils.logger;
+var Collection      = utils.Collection;
 var swig            = require('swig');
 
 
@@ -181,7 +182,26 @@ function SuperController(options) {
                 acceptLanguage = local.options.conf.server.response.header['accept-language']
             }
 
-            set('page.lang', acceptLanguage.split(',')[0]);
+            // set user locale
+            var userCulture     = acceptLanguage.split(',')[0];
+            var userCultureCode = userCulture.split(/\-/);
+            var userLangCode    = userCultureCode[0];
+            var userCountryCode = userCultureCode[1];
+
+            var locales         = new Collection( getContext('gina').locales );
+            var userLocales     = null;
+
+            try {
+                userLocales = locales.findOne({ lang: userLangCode }).content
+            } catch (err) {
+                console.warn('language code `'+ userLangCode +'` not handled to setup locales: replacing by `en`');
+                userLocales = locales.findOne({ lang: 'en' }).content // by default
+            }
+
+            options.conf.locale = new Collection(userLocales).findOne({ short: userCountryCode });
+
+            set('page.locale', options.conf.locale);
+            set('page.lang', userCulture);
         }
 
         if ( hasViews() ) {
@@ -224,6 +244,8 @@ function SuperController(options) {
     /**
      * Render HTML templates : Swig is the default template engine
      *
+     *  Extend default filters
+     *  - length
      *
      * Avilable filters:
      *  - getWebroot()
@@ -321,6 +343,17 @@ function SuperController(options) {
                 }
 
                 try {
+                    // Extends default `length` filter
+                    swig.setFilter('length', function (input, obj) {
+
+                        if ( typeof(input.count) != 'undefined' ) {
+                            return input.count()
+                        } else {
+                            return input.length
+                        }
+                    });
+
+
                     // Allows you to get a bundle web root
                     swig.setFilter('getWebroot', function (input, obj) {
                         var prop = options.envObj.getConf(obj, options.conf.env),

@@ -64,11 +64,11 @@ $ cd ${project}/node_modules/gina/core/asset/js/plugin
 Without GZIP
 
 ```tty
-$ cat ./src/core/toolbar/css/toolbar.css ./src/core/popin/css/popin.css | csso > ./dist/gina.min.css | csso ./dist/gina.min.css --map ./dist/gina.min.css.map
+$ cat ./src/gina/toolbar/css/toolbar.css ./src/gina/popin/css/popin.css | csso > ./dist/gina.min.css | csso ./dist/gina.min.css --map ./dist/gina.min.css.map
 ```
 With GZIP
 ```tty
-$ cat ./src/core/toolbar/css/toolbar.css ./src/core/popin/css/popin.css | csso | gzip -9 -c > ./dist/gina.min.css | csso ./dist/gina.min.css --map ./dist/gina.min.css.map
+$ cat ./src/gina/toolbar/css/toolbar.css ./src/gina/popin/css/popin.css | csso | gzip -9 -c > ./dist/gina.min.css | csso ./dist/gina.min.css --map ./dist/gina.min.css.map
 ```
 
 
