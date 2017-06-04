@@ -198,6 +198,10 @@ function SuperController(options) {
                 userLocales = locales.findOne({ lang: 'en' }).content // by default
             }
 
+            // user locales list
+            local.options.conf.locales = userLocales;
+
+            // user locale
             options.conf.locale = new Collection(userLocales).findOne({ short: userCountryCode });
 
             set('page.locale', options.conf.locale);
@@ -1607,6 +1611,65 @@ function SuperController(options) {
         } else {
             config = JSON.stringify(local.options.conf);
             return JSON.parse(config)
+        }
+    }
+
+    /**
+     * Get locales
+     *
+     * @param {string} [shortCountryCode] - e.g. EN
+     *
+     * @return {object} locales
+     * */
+    this.getLocales = function (shortCountryCode) {
+
+        var userLocales = local.options.conf.locales;
+
+        if ( typeof(shortCountryCode) != 'undefined' ) {
+
+            var locales         = new Collection( getContext('gina').locales );
+
+            try {
+                userLocales = locales.findOne({ lang: userLangCode }).content
+            } catch (err) {
+                console.warn('language code `'+ userLangCode +'` not handled to setup locales: replacing by `en`');
+                userLocales = locales.findOne({ lang: 'en' }).content // by default
+            }
+        }
+
+
+        /**
+         * Get countries list
+         *
+         * @param {string} [code] - e.g.: short, long, fifa, m49
+         *
+         * @return {object} countries - countries code & value list
+         * */
+        var getCountries = function (code) {
+            var list = {}, cde = 'short', name = null;
+
+            if ( typeof(code) != 'undefined' && typeof(userLocales[0][code]) == 'string' ) {
+                cde = code
+            } else if ( typeof(code) != 'undefined' ) (
+                console.warn('`'+ code +'` not supported : sticking with `short` code')
+            )
+
+            for ( var i = 0, len = userLocales.length; i< len; ++i ) {
+
+                if (userLocales[i][cde]) {
+
+                    name = userLocales[i].full || userLocales[i].officialName.short;
+
+                    if ( name )
+                        list[ userLocales[i][cde] ] = name;
+                }
+            }
+
+            return list
+        }
+
+        return {
+            'getCountries': getCountries
         }
     }
 
