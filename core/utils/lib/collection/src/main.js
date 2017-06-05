@@ -412,8 +412,9 @@ function Collection(content, option) {
             throw new Error('filter must be an object');
         } else {
             var condition           = filter.count()
+                , i                 = 0
                 , localeLowerCase   = ''
-                , _content           = Array.isArray(this) ? JSON.parse(JSON.stringify(this)) : JSON.parse(JSON.stringify(content))
+                , _content          = Array.isArray(this) ? JSON.parse(JSON.stringify(this)) : JSON.parse(JSON.stringify(content))
                 , result            = JSON.parse(JSON.stringify(_content));
 
             for (var o in _content) {
@@ -424,6 +425,7 @@ function Collection(content, option) {
                     if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(_content[o][f]) != 'undefined' && typeof(_content[o][f]) !== 'object' && _content[o][f] != 'null' && _content[o][f] != 'undefined' ) {
                         result.splice(o, 1)
                     } else if ( typeof(_content[o][f]) != 'undefined' && typeof(_content[o][f]) !== 'object' && _content[o][f] === filter[f] ) {
+                        ++i;
                         if (i === condition) result.splice(o, 1);
                     } else if ( typeof(_content[o][f]) != 'undefined' && typeof(_content[o][f]) !== 'object' && _content[o][f] === filter[f] ) {
                         result.splice(o, 1)
@@ -592,6 +594,7 @@ function Collection(content, option) {
         result.limit    = instance.limit;
         result.notIn    = instance.notIn;
         result.update   = instance.update;
+        result.delete   = instance.delete;
 
         return result
     };
