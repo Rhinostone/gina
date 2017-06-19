@@ -254,6 +254,7 @@ function Collection(content, option) {
 
         // chaining
         result.update   = instance.update;
+        result.replace  = instance.replace;
         result.notIn    = instance.notIn;
         result.findOne  = instance.findOne;
         result.orderBy  = instance.orderBy;
@@ -393,6 +394,44 @@ function Collection(content, option) {
                     } else if ( typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] === filter[f]) {
 
                         result[o] = merge(result[o], set, true);
+                    }
+                }
+            }
+        }
+
+        // chaining
+        result.find     = instance.find;
+        result.findOne  = instance.findOne;
+        result.orderBy  = instance.orderBy;
+        result.notIn    = instance.notIn;
+
+        return result
+    }
+
+    this['replace'] = function(filter, set) {
+        if ( typeof(filter) !== 'object' ) {
+            throw new Error('filter must be an object');
+        } else {
+            var condition           = filter.count()
+                , i                 = 0
+                , localeLowerCase   = ''
+                , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+
+            for (var o in result) {
+                for (var f in filter) {
+                    if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
+
+                    localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
+                    if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] != 'null' && result[o][f] != 'undefined' ) {
+
+                        result[o] = set;
+
+                    } else if ( typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] === filter[f] ) {
+                        ++i;
+                        if (i === condition) result[o] = set;
+                    } else if ( typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] === filter[f]) {
+
+                        result[o] = set;
                     }
                 }
             }
@@ -594,6 +633,7 @@ function Collection(content, option) {
         result.limit    = instance.limit;
         result.notIn    = instance.notIn;
         result.update   = instance.update;
+        result.replace  = instance.replace;
         result.delete   = instance.delete;
 
         return result
