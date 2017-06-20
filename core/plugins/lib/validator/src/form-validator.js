@@ -28,7 +28,8 @@ function FormValidatorUtil(data, $fields) {
             '%s': 'size' // %s => length
         },
         'errorLabels': {},
-        'data': {} // output to send
+        'data': {}, // output to send
+        'excluded': []
     };
 
     local.errorLabels = {
@@ -708,14 +709,8 @@ function FormValidatorUtil(data, $fields) {
                 return self[this.name]
             }
 
-            //clonning
-            for (var d in local.data) {
-                if (d === this.name) { //cleaning
-                    delete local.data[d]
-                }
-            }
-
-            return self[this.name]
+            // list field to be purged
+            local.excluded.push(this.name);
         }
 
     } // EO for (var el in self)
@@ -751,6 +746,16 @@ function FormValidatorUtil(data, $fields) {
     }
 
     self['toData'] = function() {
+
+        // cleaning data
+        if (local.excluded.length > 0) {
+            for (var i = 0, len = local.excluded.length; i < len; ++i) {
+                if ( typeof(local.data[ local.excluded[i] ]) != 'undefined' ) {
+                    delete local.data[ local.excluded[i] ]
+                }
+            }
+        }
+
         return local.data
     }
 
