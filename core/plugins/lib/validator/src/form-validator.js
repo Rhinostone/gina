@@ -23,7 +23,7 @@ function FormValidatorUtil(data, $fields) {
     var local = {
         'errors': {},
         'keys': {
-            '%l': 'label', // %l => label: needs `data-label` attribute (frontend only)
+            '%l': 'label', // %l => label: needs `data-gina-form-field-label` attribute (frontend only)
             '%n': 'name', // %n => field name
             '%s': 'size' // %s => length
         },
@@ -81,7 +81,7 @@ function FormValidatorUtil(data, $fields) {
 
         label = '';
         if ( isGFFCtx && typeof($fields) != 'undefined' ) { // frontend only
-            label = $fields[el].getAttribute('data-label') || '';
+            label = $fields[el].getAttribute('data-gina-form-field-label') || '';
         }
 
         // keys are stringyfied because of the compiler !!!

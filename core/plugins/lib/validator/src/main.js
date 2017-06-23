@@ -233,13 +233,13 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ( typeof(instance.rules[rule]) != 'undefined' ) {
                     $form['rule'] = customRule = instance.rules[rule];
-                } else if ( $form.target.getAttribute('data-gina-validator-rule') ) {
-                    rule = $form.target.getAttribute('data-gina-validator-rule').replace(/\-/g, '.');
+                } else if ( $form.target.getAttribute('data-gina-form-rule') ) {
+                    rule = $form.target.getAttribute('data-gina-form-rule').replace(/\-/g, '.');
 
                     if ( typeof(instance.rules[rule]) != 'undefined' ) {
                         $form['rule'] = instance.rules[rule]
                     } else {
-                        throw new Error('[ FormValidator::validateFormById(formId) ] using `data-gina-validator-rule` on form `'+$form.target+'`: no matching rule found')
+                        throw new Error('[ FormValidator::validateFormById(formId) ] using `data-gina-form-rule` on form `'+$form.target+'`: no matching rule found')
                     }
                 } // no else to allow form without any rule
             } else {
@@ -283,7 +283,7 @@ function ValidatorPlugin(rules, data, formId) {
             }
 
             name    = $el.getAttribute('name');
-            errAttr = $el.getAttribute('data-errors');
+            errAttr = $el.getAttribute('data-gina-form-errors');
 
             if (!name) continue;
 
@@ -769,8 +769,8 @@ function ValidatorPlugin(rules, data, formId) {
         //$form['on']     = $validator.on;
 
 
-        //data-on-submit-success
-        var htmlSuccesEventCallback =  $form.target.getAttribute('data-on-submit-success') || null;
+        //data-gina-form-event-on-submit-success
+        var htmlSuccesEventCallback =  $form.target.getAttribute('data-gina-form-event-on-submit-success') || null;
         if (htmlSuccesEventCallback != null) {
 
             if ( /\((.*)\)/.test(htmlSuccesEventCallback) ) {
@@ -780,8 +780,8 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
 
-        //data-on-submit-error
-        var htmlErrorEventCallback =  $form.target.getAttribute('data-on-submit-error') || null;
+        //data-gina-form-event-on-submit-error
+        var htmlErrorEventCallback =  $form.target.getAttribute('data-gina-form-event-on-submit-error') || null;
         if (htmlErrorEventCallback != null) {
             if ( /\((.*)\)/.test(htmlErrorEventCallback) ) {
                 eval(htmlErrorEventCallback)
@@ -853,7 +853,7 @@ function ValidatorPlugin(rules, data, formId) {
             $elTMP = $form.target.getElementsByTagName('a');
             if ( $elTMP.length > 0 ) {
                 for(var i = 0, len = $elTMP.length; i < len; ++i) {
-                    if ( $elTMP[i].attributes.getNamedItem('data-submit') || /^click\./.test( $elTMP[i].attributes.getNamedItem('id') ) )
+                    if ( $elTMP[i].attributes.getNamedItem('data-gina-form-submit') || /^click\./.test( $elTMP[i].attributes.getNamedItem('id') ) )
                         $els.push($elTMP[i])
                 }
             }
@@ -998,7 +998,7 @@ function ValidatorPlugin(rules, data, formId) {
                         $validator.target = $allForms[f];
                         instance.$forms[$allForms[f].id] = merge({}, $validator);
 
-                        var customRule = $allForms[f].getAttribute('data-gina-validator-rule');
+                        var customRule = $allForms[f].getAttribute('data-gina-form-rule');
 
                         if (customRule) {
                             customRule = customRule.replace(/\-/g, '.');
@@ -1348,7 +1348,7 @@ function ValidatorPlugin(rules, data, formId) {
                     }
 
                     if (isGFFCtx)
-                        $fields[field].setAttribute('data-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
+                        $fields[field].setAttribute('data-gina-form-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
                 }
 
                 //calling back
@@ -1743,7 +1743,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                         $fields[name]   = $target[i];
                         // reset filed error data attributes
-                        $fields[name].setAttribute('data-errors', '');
+                        $fields[name].setAttribute('data-gina-form-errors', '');
 
                         ++fields['_length']
                     }
@@ -1766,9 +1766,9 @@ function ValidatorPlugin(rules, data, formId) {
                         // update rule in case the current event is triggered outside the main sequence
                         // e.g.: form `id` attribute rewritten on the fly
                         _id = $target.getAttribute('id');
-                        var customRule = $target.getAttribute('data-gina-validator-rule');
+                        var customRule = $target.getAttribute('data-gina-form-rule');
 
-                        if ( customRule ) { // 'data-gina-validator-rule'
+                        if ( customRule ) { // 'data-gina-form-rule'
                             rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
                         } else {
                             rule = gina.validator.$forms[ _id ].rules;
@@ -1800,7 +1800,7 @@ function ValidatorPlugin(rules, data, formId) {
             $buttonsTMP = $target.getElementsByTagName('a');
             if ( $buttonsTMP.length > 0 ) {
                 for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ( $buttonsTMP[b].attributes.getNamedItem('data-submit'))
+                    if ( $buttonsTMP[b].attributes.getNamedItem('data-gina-form-submit'))
                         $buttons.push($buttonsTMP[b])
                 }
             }
@@ -1814,7 +1814,7 @@ function ValidatorPlugin(rules, data, formId) {
                 if ($submit.tagName == 'A') { // without this test, XHR callback is ignored
                     //console.log('a#$buttons ', $buttonsTMP[b]);
                     onclickAttribute    = $submit.getAttribute('onclick');
-                    isSubmitType        = $submit.getAttribute('data-submit');
+                    isSubmitType        = $submit.getAttribute('data-gina-form-submit');
 
                     if ( !onclickAttribute && !isSubmitType) {
                         $submit.setAttribute('onclick', 'return false;')
@@ -1905,7 +1905,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 $fields[name] = $target[i];
                 // reset filed error data attributes
-                $fields[name].setAttribute('data-errors', '');
+                $fields[name].setAttribute('data-gina-form-errors', '');
 
                 ++fields['_length']
             }
@@ -1933,9 +1933,9 @@ function ValidatorPlugin(rules, data, formId) {
                 //if ( typeof(instance.$forms[id].rules) != 'undefined' )
                 //    rule = instance.$forms[id].rules;
 
-                var customRule = $target.getAttribute('data-gina-validator-rule');
+                var customRule = $target.getAttribute('data-gina-form-rule');
 
-                if ( customRule ) { // 'data-gina-validator-rule'
+                if ( customRule ) { // 'data-gina-form-rule'
                     rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
                 } else {
                     rule = gina.validator.$forms[ id ].rules;
