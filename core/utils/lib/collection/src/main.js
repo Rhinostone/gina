@@ -473,7 +473,7 @@ function Collection(content, option) {
             }
         }
 
-        content = result;
+        //content = result;
         return result
     }
 
