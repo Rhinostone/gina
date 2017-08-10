@@ -884,6 +884,8 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
 
+            $form.binded = false;
+
             //addListener(gina, instance['$forms'][_id].target, 'destroy.' + _id, function(event) {
             addListener(gina, $form.target, 'destroy.' + _id, function(event) {
 
@@ -1368,7 +1370,6 @@ function ValidatorPlugin(rules, data, formId) {
                     throw err
                 }
 
-
                 if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
 
                     cb({
@@ -1470,8 +1471,8 @@ function ValidatorPlugin(rules, data, formId) {
                 }, 0);
 
                 $el.removeAttribute('checked');
-                $el.value = 'false';
-
+                $el.value = false;
+                $el.setAttribute('value', 'false');
 
             } else {
 
@@ -1482,7 +1483,8 @@ function ValidatorPlugin(rules, data, formId) {
 
                 $el.setAttribute('checked', 'checked');
                 //boolean exception handling
-                $el.value = 'true';
+                $el.value = true;
+                $el.setAttribute('value', 'true');
 
             }
         };
@@ -1599,7 +1601,19 @@ function ValidatorPlugin(rules, data, formId) {
 
 
             // recover default state only on value === true || false || on
-            if ( typeof(type) != 'undefined' && type == 'checkbox' && /^(true|false|on)$/i.test($inputs[i].value ) ) {
+            if ( typeof(type) != 'undefined' && type == 'checkbox' && /^(true|false|on)$/i.test($inputs[i].value) || typeof(type) != 'undefined' && type == 'checkbox' && !$inputs[i].getAttribute('value') ) {
+
+                if ( !/^(true|false|on)$/i.test($inputs[i].value)  ) {
+
+                    if ( !$inputs[i].checked || $inputs[i].checked == 'null' || $inputs[i].checked == 'false' || $inputs[i].checked == '' ) {
+                        $inputs[i].value = false;
+                        $inputs[i].setAttribute('value', false)
+                    } else {
+                        $inputs[i].value = true;
+                        $inputs[i].setAttribute('value', true)
+                    }
+                }
+
 
                 evt = $inputs[i].id;
 
@@ -1620,9 +1634,9 @@ function ValidatorPlugin(rules, data, formId) {
                 }
 
                 if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
-                    removeListener(gina, $inputs[i], evt, function(event){
-                        procced(event.target, evt)
-                    })
+                    removeListener(gina, $inputs[i], evt);
+                    procced($inputs[i], evt)
+
                 } else {
                     procced($inputs[i], evt)
                 }
@@ -1643,9 +1657,9 @@ function ValidatorPlugin(rules, data, formId) {
                 }
 
                 if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
-                    removeListener(gina, $inputs[i], evt, function(event){
-                        procced(event.target, evt)
-                    })
+                    removeListener(gina, $inputs[i], evt);
+                    procced(event.target, evt)
+
                 } else {
                     procced($inputs[i], evt)
                 }
