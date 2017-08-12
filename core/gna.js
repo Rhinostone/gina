@@ -17,6 +17,7 @@ var gna     = {core:{}};
 var fs      = require('fs');
 var child   = require('child_process');
 var Config  = require('./config');
+var Router  = require('./router');
 var config  = null;
 var tmp     = null;
 var utils   = require('./utils');
@@ -174,6 +175,7 @@ gna.executionPath = root;
 
 
 setContext('gina.Config', Config);
+setContext('gina.Router', Router);
 setContext('gina.utils', utils);
 setContext('gina.locales', locales);
 setContext('gina.plugins', plugins);

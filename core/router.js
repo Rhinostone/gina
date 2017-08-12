@@ -353,7 +353,8 @@ function Router(env) {
             response        : response,
             next            : next,
             hasViews        : ( typeof(conf.content.views) != 'undefined' ) ? true : false,
-            isUsingTemplate : conf.template
+            isUsingTemplate : conf.template,
+            isProcessingXMLRequest : params.isXMLRequest
         };
 
         setContext('router', routerObj);

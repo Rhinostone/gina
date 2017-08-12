@@ -138,7 +138,7 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
 
 
 define('core', ['require', 'gina'], function (require) {
-    require('gina')(window['gina']);
+    require('gina')(window['gina']); // passing core required lib through parameters
 });
 
 
@@ -147,6 +147,10 @@ require.config({
 });
 
 require([
+    //vendors
+    "vendor/uuid",
+    "vendor/engine.io",
+
     "core",
 
     // plugins
@@ -158,11 +162,7 @@ require([
     "utils/dom",
     "utils/events",
     "utils/form-validator",
-    "utils/collection",
-
-    //vendors
-    "vendor/uuid",
-    "vendor/engine.io"
+    "utils/collection"
 ]);
 
 

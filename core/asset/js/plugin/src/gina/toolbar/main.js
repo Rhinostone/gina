@@ -541,6 +541,9 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                         html +=     '<span class="gina-toolbar-key gina-toolbar-key-added">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</span>';
                         html += '</li>';
                     } else {
+
+                        if (/^_comment/.test(i) ) continue;
+
                         if (obj[i] !== ginaObj[i] ) {
                             html += '<li class="gina-toolbar-key-value gina-toolbar-is-overridden">';
                             html +=     '<span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value">'+ ginaObj[i] +'</span>';
