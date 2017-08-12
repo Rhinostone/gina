@@ -945,6 +945,8 @@ function Server(options) {
                 if (typeof(routing[rule]['param']) == 'undefined')
                     break;
 
+                if (routing[rule].bundle != bundle) continue;
+
                 //Preparing params to relay to the router.
                 params = {
                     method              : routing[rule].method || req.method,
@@ -959,10 +961,6 @@ function Server(options) {
                 };
                 //Parsing for the right url.
                 try {
-                    if (routing[rule].bundle != bundle) {
-                        continue
-                    }
-                    
                     isRoute = router.compareUrls(req, params, routing[rule].url);
                 } catch (err) {
                     throwError(res, 500, 'Rule [ '+rule+' ] needs your attention.\n'+err.stack);

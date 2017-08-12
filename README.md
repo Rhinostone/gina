@@ -9,6 +9,7 @@
 ## Compatibility
 
 __Gina works fine with the following versions of Node.js:__
+- `v8.x.x`,
 - `v7.x.x`,
 - `v6.x.x` (Between Node.js 5.x and 6.3, NPM is broken, use manual installation: by cloning),
 - `v5.x.x` (Between Node.js 5.x and 6.3, NPM is broken, use manual installation: by cloning),
@@ -125,8 +126,13 @@ You can attach a remote debuger like [Visual Studio Code](https://code.visualstu
 ![New conf](./documentation/img/debug-conf6.png)   
 
 6. Save, and go back to your terminal to start your bundle with the debug argument:
+Before Node.js `v8.x.x`
 ```tty 
 $ ./gina.sh -s frontend dev --debug-brk=5959
+```
+After Node.js `v8.x.x`
+```tty 
+$ ./gina.sh -s frontend dev --inspect-brk=5959
 ```
 > Gina will be waiting for you to launch the remote debugger.
 

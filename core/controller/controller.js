@@ -1034,7 +1034,7 @@ function SuperController(options) {
      *  - a Middleware instance
      *
      * Where `rule` is either a string defining
-     *  - the rule/route name => home
+     *  - the rule/route name => home or home@dashboard
      *  - an URI => /home
      *  - a URL => http://www.google.com/
      *
