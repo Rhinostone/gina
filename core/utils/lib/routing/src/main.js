@@ -97,6 +97,15 @@ function Routing() {
 
         pathname = url.replace( new RegExp('^'+ hostname), '');
 
+        var request = {
+            routing: {
+                path: unescape(pathname)
+            },
+            method: 'GET',
+            params: {}
+
+        };
+
         out:
             for (var rule in routing) {
                 if (typeof(routing[rule]['param']) == 'undefined')
@@ -109,7 +118,7 @@ function Routing() {
 
                 //Preparing params to relay to the router.
                 params = {
-                    method              : routing[rule].method || req.method,
+                    method              : routing[rule].method || 'GET',
                     requirements        : routing[rule].requirements,
                     namespace           : routing[rule].namespace || undefined,
                     url                 : unescape(pathname), /// avoid %20
@@ -122,7 +131,7 @@ function Routing() {
 
                 //Parsing for the right url.
                 try {
-                    isRoute = router.compareUrls({}, params, routing[rule].url);
+                    isRoute = router.compareUrls(request, params, routing[rule].url);
                 } catch (err) {
                     throw new Error('Rule [ '+rule+' ] needs your attention.\n' + err.stack);
                     break;
