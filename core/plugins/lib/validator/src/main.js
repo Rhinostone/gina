@@ -1485,7 +1485,7 @@ function ValidatorPlugin(rules, data, formId) {
                 $select[s].setAttribute('id', elId)
             }
 
-            if (!$form.defaultFields[ elId ]) {
+            if ($select[s].options && !$form.defaultFields[ elId ]) {
                 selectedIndex = 0;
                 selectedValue = $select[s].getAttribute('data-value');
 
