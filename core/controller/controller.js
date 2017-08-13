@@ -1034,7 +1034,7 @@ function SuperController(options) {
      *  - a Middleware instance
      *
      * Where `rule` is either a string defining
-     *  - the rule/route name => home or home@dashboard
+     *  - the rule/route name => home
      *  - an URI => /home
      *  - a URL => http://www.google.com/
      *
@@ -1045,6 +1045,7 @@ function SuperController(options) {
      *
      * @param {object|string} req|rule - Request Object or Rule/Route name
      * @param {object|boolean} res|ignoreWebRoot - Response Object or Ignore WebRoot & start from domain root: /
+     * @param {object} [params] TODO
      *
      * @callback [ next ]
      * */
