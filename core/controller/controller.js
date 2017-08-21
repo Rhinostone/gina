@@ -1770,26 +1770,41 @@ function SuperController(options) {
                 console.error(req.method +' ['+ res.statusCode +'] '+ req.url);
 
                 //var msgString = msg.stack || msg.error || msg;
-                var msgString = '<h1>Error '+ code +'.</h1>';
+                var msgString = '<h1 class="status">Error '+ code +'.</h1>';
+                var eCode = code.toString().substr(0,1);
+
                 if ( typeof(msg) == 'object' ) {
 
+                    if (msg.title) {
+                        msgString += '<pre class="'+ eCode +'xx title">'+ msg.title +'</pre>';
+                    }
+
                     if (msg.error) {
-                        msgString += '<pre class="50x message">'+ msg.error +'</pre>';
+                        msgString += '<pre class="'+ eCode +'xx message">'+ msg.error +'</pre>';
                     }
 
                     if (msg.message) {
-                        msgString += '<pre class="50x message">'+ msg.message +'</pre>';
+                        msgString += '<pre class="'+ eCode +'xx message">'+ msg.message +'</pre>';
                     }
 
                     if (msg.stack) {
-                        msgString += '<pre class="50x stack">'+ msg.stack +'</pre>';
+
+                        if (msg.error) {
+                            msg.stack = msg.stack.replace(msg.error, '')
+                        }
+
+                        if (msg.message) {
+                            msg.stack = msg.stack.replace(msg.message, '')
+                        }
+
+                        msg.stack = msg.stack.replace('Error:', '').replace(' ', '');
+                        msgString += '<pre class="'+ eCode +'xx stack">'+ msg.stack +'</pre>';
                     }
 
                 } else {
-                    msgString += '<pre class="50x message">'+ msg +'</pre>';
+                    msgString += '<pre class="'+ eCode +'xx message">'+ msg +'</pre>';
                 }
 
-                //res.end('<h1>Error '+ code +'.</h1><pre>'+ msgString + '</pre>')
                 res.end(msgString)
             }
         } else {
