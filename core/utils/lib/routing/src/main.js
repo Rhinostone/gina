@@ -61,6 +61,10 @@ function Routing() {
             }
         }
 
+        if ( Array.isArray(route.url) ) {
+            route.url = route.url[0]
+        }
+
         return route
 
     };
