@@ -502,6 +502,58 @@ function Router(env) {
                 }
             }
 
+            // allowing another controller (public methods) to be required inside the current controller
+            /**
+             * requireController
+             * Allowing another controller (public methods) to be required inside the current controller
+             *
+             * @param {string} namespace - Controller namespace
+             * @param {object} [options] - Controller options
+             *
+             * @return {object} controllerInstance
+             * */
+            controller.requireController = function (namespace, options) {
+
+                var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
+                var corePath    = getPath('gina').core;
+                var config      = getContext('gina').Config.instance;
+                var bundle      = config.bundle;
+                var env         = config.env;
+                var bundleConf  = config.Env.getConf(bundle, env);
+
+                var filename    = _(bundleConf.bundlesPath +'/'+ bundle + '/controllers/' + namespace + '.js', true);
+
+                try {
+
+                    if (cacheless) {
+                        // Super controller
+                        delete require.cache[_(corePath +'/controller/index.js', true)];
+                        require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
+
+                        delete require.cache[filename];
+                    }
+
+                    var SuperController     = require.cache[_(corePath +'/controller/index.js', true)];
+                    var RequiredController  = require(filename);
+
+                    var RequiredController = inherits(RequiredController, SuperController)
+
+                    if ( typeof(options) != 'undefined' ) {
+
+                        var controller = new RequiredController( options );
+                        controller.setOptions(request, response, next, options);
+
+                        return controller
+
+                    } else {
+                        return new RequiredController();
+                    }
+
+                } catch (err) {
+                    throwError(response, 500, err );
+                }
+            }
+
             if (middleware.length > 0) {
                 processMiddlewares(middleware, controller, action, request, response, next,
                     function onDone(action, request, response, next){
@@ -636,11 +688,19 @@ function Router(env) {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
 
-                console.error(res.req.method +' [ '+code+' ] '+ res.req.url);
-                res.end(JSON.stringify({
+                console.error(res.req.method +' [ '+code+' ] '+ res.req.url)
+
+                var e = {
                     status: code,
                     error: msg
-                }))
+                };
+
+                if ( typeof(msg) == 'object' && typeof(msg.stack) != 'undefined' ) {
+                    e.error.stack   = msg.stack;
+                    e.error.message = msg.message;
+                }
+
+                res.end(JSON.stringify(err))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
                 console.error(res.req.method +' [ '+code+' ] '+ res.req.url);
