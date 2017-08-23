@@ -1677,8 +1677,17 @@ function ValidatorPlugin(rules, data, formId) {
                         }
                     });
 
-                    if ( /^(true|false|on)$/i.test($el.value) )
+                    // default state recovery
+                    var value = $el.value || $el.getAttribute('value') || $el.getAttribute('data-value');
+                    if ( /^(true|false|on)$/i.test(value)  ) {
+
+                        if ( typeof(value) != 'undefined' && /^(true|on|false)$/.test(value) ) {
+                            $el.checked = /true|on/.test(value) ? true : false;
+                        }
+
                         updateCheckBox($el);
+                    }
+
 
                 }
 
