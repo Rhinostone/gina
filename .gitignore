@@ -27,6 +27,7 @@ VERSION
 .git
 test/workspace
 SUCCESS
+package-lock.json
 
 # Desktop
 .DS_Store
