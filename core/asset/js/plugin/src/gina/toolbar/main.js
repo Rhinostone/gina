@@ -78,7 +78,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
             // Get toolbar settings
             settings = plugins.findOne({_name: 'toolbar'});
-            // console.log('settings', settings);
+
             if ( !settings ) {
                 // default settings
                 settings = {
@@ -94,7 +94,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     width           : '30',
                     panelId         : '#gina-toolbar-data',
                     isCollapsed     : true,
-                    isUnfolded      : {}
+                    isUnfolded      : []
                 };
                 // saving default settings
                 plugins.insert(settings);
@@ -110,9 +110,6 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             width       = settings.width;
             panelId     = settings.panelId;
             isCollapsed = settings.isCollapsed;
-            // codeFolding = settings.codeFolding;
-
-            // console.log('codeFolding', settings.isUnfolded);
 
             $toolbar.removeClass('gina-toolbar-hidden');
             handle() // Bind behaviors
@@ -124,7 +121,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
             if (settings._version < '1.0.1') {
                 if (!settings.isUnfolded) {
-                    settings.isUnfolded = {};
+                    settings.isUnfolded = [];
                 }
                 if (settings.codeFolding != undefined) {
                     delete settings.codeFolding;
@@ -170,9 +167,6 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                 $json.text('Could not load data');
             }
 
-
-            // console.log('parsing ', jsonObject);
-
             if (jsonObject) {
 
                 if (data && !ginaData) {
@@ -191,7 +185,6 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
                 // Make folding paths
                 makeFoldingPaths(jsonObject, '');
-                //console.log('user: ', jsonObject);
                 // Create DOM from JSON
                 $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject, ginaJsonObject) +'</ul>');
 
@@ -201,15 +194,31 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     // Init currentFile if none exists
                     settings.currentFile = jsonObject.file;
                 } else if (jsonObject.file == settings.currentFile) {
-                    // If current page is the same as the previous page, unfold code as needed
-
-                    for (var key in settings.isUnfolded) {
-                        if ( typeof( self.foldingPaths[key] ) != 'undefined' ) {
-                            toggleCodeFolding( $('.gina-toolbar-folding-state-'+ key) );
-                        }
-                    }
-
+                    // If current page is the same as the previous page, unfold code as neede
+                    $toolbar.ready(function () {
+                        if ( settings.isUnfolded.length > 0)
+                            initFoldingState(settings.isUnfolded, settings.isUnfolded.length, 0);
+                    })
                 }
+            }
+        }
+        
+        var initFoldingState = function (unfolded, len, i) {
+
+            if (i == len) return false;
+
+            var key = unfolded[i];
+
+            if ( unfolded.indexOf(key) > -1 ) {
+
+                toggleCodeFolding( $('.gina-toolbar-folding-state-'+ key), function onCodeToggled() {
+                    i += 1;
+                    initFoldingState(unfolded, len, i)
+                });
+
+            } else {
+                i += 1;
+                initFoldingState(unfolded, len, i)
             }
         }
 
@@ -407,7 +416,6 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
         var changeToolbarHeight = function () {
             // Use window height - 32px for the header
             toolbarHeight = window.innerHeight - 32;
-            // console.log('toolbarHeight', toolbarHeight);
             $toolbar
                 .find('.gina-toolbar-main')
                 .css('max-height', toolbarHeight +'px');
@@ -427,56 +435,40 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             }
         }
 
-        var toggleCodeFolding = function ($el) {
+        var toggleCodeFolding = function ($el, cb) {
 
-            // console.log('$el', $el);
             if ($el != undefined && $el.length && $el != 'all') {
 
                 $el.next('ul').slideToggle('fast');
                 $el.toggleClass('gina-toolbar-unfolded');
 
                 // Check container height after animation
-                if (timeoutId != null) {
-                    window.clearTimeout(timeoutId)
-                }
-                timeoutId = window.setTimeout(checkContentHeight, 300);
+                // if (timeoutId != null) {
+                //     window.clearTimeout(timeoutId)
+                // }
+                // timeoutId = window.setTimeout(checkContentHeight, 300);
 
                 // Save element folding state
                 self.foldingClass = $el.attr('class');
                 self.foldingClass = self.foldingClass.match(/gina-toolbar-folding-state-([-a-z]+)/)[1]
-                // console.log('foldingClass', self.foldingClass);
 
                 if ($el.hasClass('gina-toolbar-unfolded')) {
-                    settings.isUnfolded[self.foldingClass] = true;
+                    if ( settings.isUnfolded.indexOf(self.foldingClass) < 0 )
+                        settings.isUnfolded.push(self.foldingClass);
+
+                    //settings.isUnfolded[self.foldingClass] = true;
                     settings.save()
                 } else {
-                    delete settings.isUnfolded[self.foldingClass];
+                    //delete settings.isUnfolded[self.foldingClass];
+                    if ( settings.isUnfolded.indexOf(self.foldingClass) > -1 )
+                        settings.isUnfolded.splice( settings.isUnfolded.indexOf(self.foldingClass) );
+
                     settings.save(true)
                 }
-                // console.log('codeFolding', settings.isUnfolded);
 
-                // if (settings.isUnfolded.length) {
-                //     $codeFoldingToggle.text('Fold all');
-                // }
-                // console.log('settings.isUnfolded', settings.isUnfolded);
-                // console.log('settings.isUnfolded.length', settings.isUnfolded != '');
+                if ( typeof(cb) != 'undefined' )
+                    cb()
             }
-            // else if ($el == 'all') {
-            //     console.log('settings.isUnfolded.length', settings.isUnfolded.length);
-            //     if (settings.isUnfolded.length) {
-            //         // Close everything
-            // //         $htmlData.find('.gina-toolbar-unfolded')
-            // //             .trigger('click')
-            // //         ;
-            //         $codeFoldingToggle.text('Unfold all');
-            //     } else {
-            //         // Open everything
-            // //         $htmlData.find('a').not('.gina-toolbar-unfolded')
-            // //             .trigger('click')
-            // //         ;
-            //         $codeFoldingToggle.text('Fold all');
-            //     }
-            // }
         }
 
         var orderKeys = function(obj) {
@@ -511,7 +503,6 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             var id = id || '';
             var count = '';
             var objType = '';
-            //console.log('id ', id);
 
             obj     = orderKeys(obj);
             ginaObj = orderKeys(ginaObj);
@@ -607,7 +598,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             $json.text('');
 
             $htmlData.find('input').off('change').on('change', function(e) {
-                // var file = $el.files[0]; //DOM way
+
                 var files   = $(this)[0].files;
                 var file    = null;
 
@@ -638,10 +629,10 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                         file = files[i];
                         switch (true) {
                             case /user/.test(file.name):
-                                //console.log(file);
+
                                 reader[i]  = new FileReader();
                                 reader[i].addEventListener('load', function(e){
-                                    //console.log('result ', e);
+
                                     // user
                                     $json.text(e.currentTarget.result);
                                     ++done;
@@ -681,7 +672,6 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     makeFoldingPaths(obj[r], tmp + r+'-');
                 }
             }
-            // console.log('self.foldingPaths', self.foldingPaths);
         }
 
         this.update = function (section, data) {
