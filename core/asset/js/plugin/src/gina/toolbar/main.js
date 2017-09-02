@@ -10,7 +10,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
         //console.log('Toolbar jquery is ', $.fn.jquery);
 
         var self = {
-            version         : '1.0.1',
+            version         : '1.0.2',
             foldingPaths    : {},
             foldingClass    : null,
             isUnfolded      : null
@@ -120,12 +120,16 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             // Run every update from your current version up to the head
 
             if (settings._version < '1.0.1') {
-                if (!settings.isUnfolded) {
+                if (!settings.isUnfolded ) {
                     settings.isUnfolded = [];
                 }
                 if (settings.codeFolding != undefined) {
                     delete settings.codeFolding;
                 }
+            }
+
+            if ( typeof(settings.isUnfolded) != 'undefined' && !Array.isArray(settings.isUnfolded) ) {
+                settings.isUnfolded = [];
             }
 
             // update version number
@@ -195,7 +199,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     settings.currentFile = jsonObject.file;
                 } else if (jsonObject.file == settings.currentFile) {
                     // If current page is the same as the previous page, unfold code as neede
-                    $toolbar.ready(function () {
+                    $(document).ready(function () {
                         if ( settings.isUnfolded.length > 0)
                             initFoldingState(settings.isUnfolded, settings.isUnfolded.length, 0);
                     })
