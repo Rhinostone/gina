@@ -104,6 +104,7 @@ function FormValidatorUtil(data, $fields) {
          *
          *  e.g.:
          *       "/\\D+/"       -> like [^0-9]
+         *       "!/^\\\\s+/"   -> not starting by white space allow
          *       "/^[0-9]+$/"   -> only numbers
          *       "$field === $fieldOther"   -> will be evaluated
          *
@@ -116,13 +117,13 @@ function FormValidatorUtil(data, $fields) {
             var valid   = false;
             var errors  = {};
 
-            if ( /\$[-_\[\]a-z 0-9]+/i.test(condition) ) {
+            if ( /\$[-_\[\]a-z 0-9]+|^!\//i.test(condition) ) {
 
                 var variables = condition.match(/\${0}[-_\[\]a-z0-9]+/ig); // without space(s)
                 var compiledCondition = condition;
                 var re = null
                 for (var i = 0, len = variables.length; i < len; ++i) {
-                    if (variables[i]) {
+                    if ( typeof(self[ variables[i] ]) != 'undefined' && variables[i]) {
                         re = new RegExp("\\$"+ variables[i] +"(?!\\S+)", "g");
                         if ( self[ variables[i] ].value == "" ) {
                             compiledCondition = compiledCondition.replace(re, '"');
@@ -137,7 +138,7 @@ function FormValidatorUtil(data, $fields) {
                 try {
                     // security checks
                     compiledCondition = compiledCondition.replace(/(\(|\)|return)/g, '');
-                    valid = eval(compiledCondition)
+                    valid = eval(compiledCondition+'.test("'+ this.value +'")')
                 } catch (err) {
                     throw new Error(err.stack||err.message)
                 }
@@ -524,7 +525,7 @@ function FormValidatorUtil(data, $fields) {
             }
 
 
-            var isValid = ( typeof(this.value) != 'undefined' && this.value != null && this.value != '') ? true : false;
+            var isValid = ( typeof(this.value) != 'undefined' && this.value != null && this.value != '' && !/^\s+/.test(this.value) ) ? true : false;
             var errors  = {};
 
 
