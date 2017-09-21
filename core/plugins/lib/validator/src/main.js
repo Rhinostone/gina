@@ -1215,198 +1215,6 @@ function ValidatorPlugin(rules, data, formId) {
     }
 
 
-    var validate = function($form, fields, $fields, rules, cb) {
-
-        delete fields['_length']; //cleaning
-
-        var id = null, data = null;
-        if (isGFFCtx) {
-            id = $form.getAttribute('id') || $form.id;
-            instance.$forms[id].fields = fields;
-        }
-        //console.log(fields, $fields);
-
-        var d = new FormValidator(fields, $fields), args = null;
-        var fieldErrorsAttributes = {};
-        var re = null, flags = null;
-
-        var forEachField = function($form, fields, $fields, rules, cb, i) {
-            var hasCase = false, conditions = null;
-            var caseValue = null, caseType = null;
-            var localRules = null;
-
-            //console.log('parsing ', fields, $fields, rules);
-
-            for (var field in fields) {
-
-                hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
-                if (hasCase) {
-
-                    conditions = rules['_case_' + field]['conditions'];
-
-                    if ( !conditions ) {
-                        throw new Error('[ ginaFormValidator ] case `_case_'+field+'` found without `condition(s)` !');
-                    }
-
-                    for (var c = 0, cLen = conditions.length; c<cLen; ++c) {
-
-                        caseValue = fields[field];
-
-                        if (isGFFCtx) {
-                            if (fields[field] == "true")
-                                caseValue = true;
-                            else if (fields[field] == "false")
-                                caseValue = false;
-                        }
-
-                        //console.log(caseValue +' VS '+ conditions[c]['case'], "->", (caseValue == conditions[c]['case'] || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1) );
-                        if ( conditions[c]['case'] === caseValue || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1 || /^\//.test(conditions[c]['case']) ) {
-
-                            //console.log('[fields ] ' + JSON.stringify(fields, null, 4));
-                            localRules = {};
-
-                            for (var f in conditions[c]['rules']) {
-                                //console.log('F: ', f, '\nrule: '+ JSON.stringify(conditions[c]['rules'][f], null, 2));
-                                if ( /^\//.test(f) ) { // RegExp found
-
-                                    re      = f.match(/\/(.*)\//).pop();
-                                    flags   = f.replace('/'+ re +'/', '');
-                                    re      = new RegExp(re, flags);
-
-                                    for (var localField in $fields) {
-                                        if ( re.test(localField) ) {
-                                            if ( /^\//.test(conditions[c]['case']) ) {
-                                                re      = conditions[c]['case'].match(/\/(.*)\//).pop();
-                                                flags   = conditions[c]['case'].replace('/'+ re +'/', '');
-                                                re      = new RegExp(re, flags);
-
-                                                if ( re.test(caseValue) ) {
-                                                    localRules[localField] = conditions[c]['rules'][f]
-                                                }
-
-                                            } else {
-                                                localRules[localField] = conditions[c]['rules'][f]
-                                            }
-                                        }
-                                    }
-
-                                } else {
-                                    if ( /^\//.test(conditions[c]['case']) ) {
-                                        re      = conditions[c]['case'].match(/\/(.*)\//).pop();
-                                        flags   = conditions[c]['case'].replace('/'+ re +'/', '');
-                                        re      = new RegExp(re, flags);
-
-                                        if ( re.test(caseValue) ) {
-                                            localRules[f] = conditions[c]['rules'][f]
-                                        }
-
-                                    } else {
-                                        localRules[f] = conditions[c]['rules'][f]
-                                    }
-                                }
-                            }
-                            //console.log('parsing ', localRules, fields);
-                            if (isGFFCtx)
-                                forEachField($form, fields, $fields, localRules, cb, i+1);
-                            else
-                                return forEachField($form, fields, $fields, localRules, cb, i+1);
-                        }
-                    }
-
-                }
-
-
-                if ( typeof(rules[field]) == 'undefined' ) continue;
-
-
-                // check against rule
-                for (var rule in rules[field]) {
-                    // check for rule params
-                    try {
-
-                        if ( Array.isArray(rules[field][rule]) ) { // has args
-                            //convert array to arguments
-                            args = rules[field][rule];
-                            d[field][rule].apply(d[field], args);
-                        } else {
-                            d[field][rule](rules[field][rule]);
-                        }
-
-                    } catch (err) {
-                        if (rule == 'conditions') {
-                            throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()` where `conditions` must be a `collection` (Array)\nStack:\n'+ (err.stack|err.message))
-                        } else {
-                            throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()`\nStack:\n'+ (err.stack|err.message))
-                        }
-                    }
-
-                }
-            }
-
-
-            --i;
-
-            if (i < 0) {
-
-                var errors = d['getErrors']();
-
-                // adding data attribute to handle display refresh
-                for (var field in errors) {
-                    for (rule in errors[field]) {
-                        if (!fieldErrorsAttributes[field]) {
-                            fieldErrorsAttributes[field] = ''
-                        }
-
-                        if (fieldErrorsAttributes[field].indexOf(rule) < 0)
-                            fieldErrorsAttributes[field] += rule +' ';
-                    }
-
-                    if (isGFFCtx)
-                        $fields[field].setAttribute('data-gina-form-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
-                }
-
-                //calling back
-                try {
-                    data = formatData( d['toData']() );
-
-                    if ( typeof(window.ginaToolbar) == 'object' ) {
-                        // update toolbar
-                        if (!gina.forms.sent)
-                            gina.forms.sent = {};
-
-                        gina.forms.sent = data;
-
-                        window.ginaToolbar.update('forms', gina.forms);
-                    }
-                } catch (err) {
-                    throw err
-                }
-
-                if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
-
-                    cb({
-                        'isValid'   : d['isValid'],
-                        'errors'    : errors,
-                        'data'      : data
-                    })
-
-                } else {
-
-                    return {
-                        'isValid'   : d['isValid'],
-                        'errors'    : errors,
-                        'data'      : data
-                    }
-                }
-            }
-        }
-
-        if (isGFFCtx)
-            forEachField($form, fields, $fields, rules, cb, 0);
-        else
-            return forEachField($form, fields, $fields, rules, cb, 0);
-    }
-
     /**
      * bindForm
      *
@@ -2024,6 +1832,203 @@ function ValidatorPlugin(rules, data, formId) {
         });
 
         instance.$forms[_id]['binded']  = true;
+    }
+
+    var validate = function($form, fields, $fields, rules, cb) {
+
+        delete fields['_length']; //cleaning
+
+        var id = null, data = null;
+        if (isGFFCtx) {
+            id = $form.getAttribute('id') || $form.id;
+            instance.$forms[id].fields = fields;
+        }
+        //console.log(fields, $fields);
+
+        var d = new FormValidator(fields, $fields), args = null;
+        var fieldErrorsAttributes = {};
+        var re = null, flags = null;
+
+        var forEachField = function($form, fields, $fields, rules, cb, i) {
+            var hasCase = false, conditions = null;
+            var caseValue = null, caseType = null;
+            var localRules = null;
+
+            //console.log('parsing ', fields, $fields, rules);
+
+            for (var field in fields) {
+
+                // $fields[field].tagName getAttribute('type')
+                if ( $fields[field].tagName.toLowerCase() == 'input' && $fields[field].getAttribute('type') && !$fields[field].checked ) {
+                    continue;
+                }
+
+                hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
+                if (hasCase) {
+
+                    conditions = rules['_case_' + field]['conditions'];
+
+                    if ( !conditions ) {
+                        throw new Error('[ ginaFormValidator ] case `_case_'+field+'` found without `condition(s)` !');
+                    }
+
+                    for (var c = 0, cLen = conditions.length; c<cLen; ++c) {
+
+                        caseValue = fields[field];
+
+                        if (isGFFCtx) {
+                            if (fields[field] == "true")
+                                caseValue = true;
+                            else if (fields[field] == "false")
+                                caseValue = false;
+                        }
+
+                        //console.log(caseValue +' VS '+ conditions[c]['case'], "->", (caseValue == conditions[c]['case'] || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1) );
+                        if ( conditions[c]['case'] === caseValue || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1 || /^\//.test(conditions[c]['case']) ) {
+
+                            //console.log('[fields ] ' + JSON.stringify(fields, null, 4));
+                            localRules = {};
+
+                            for (var f in conditions[c]['rules']) {
+                                //console.log('F: ', f, '\nrule: '+ JSON.stringify(conditions[c]['rules'][f], null, 2));
+                                if ( /^\//.test(f) ) { // RegExp found
+
+                                    re      = f.match(/\/(.*)\//).pop();
+                                    flags   = f.replace('/'+ re +'/', '');
+                                    re      = new RegExp(re, flags);
+
+                                    for (var localField in $fields) {
+                                        if ( re.test(localField) ) {
+                                            if ( /^\//.test(conditions[c]['case']) ) {
+                                                re      = conditions[c]['case'].match(/\/(.*)\//).pop();
+                                                flags   = conditions[c]['case'].replace('/'+ re +'/', '');
+                                                re      = new RegExp(re, flags);
+
+                                                if ( re.test(caseValue) ) {
+                                                    localRules[localField] = conditions[c]['rules'][f]
+                                                }
+
+                                            } else {
+                                                localRules[localField] = conditions[c]['rules'][f]
+                                            }
+                                        }
+                                    }
+
+                                } else {
+                                    if ( /^\//.test(conditions[c]['case']) ) {
+                                        re      = conditions[c]['case'].match(/\/(.*)\//).pop();
+                                        flags   = conditions[c]['case'].replace('/'+ re +'/', '');
+                                        re      = new RegExp(re, flags);
+
+                                        if ( re.test(caseValue) ) {
+                                            localRules[f] = conditions[c]['rules'][f]
+                                        }
+
+                                    } else {
+                                        localRules[f] = conditions[c]['rules'][f]
+                                    }
+                                }
+                            }
+                            //console.log('parsing ', localRules, fields);
+                            if (isGFFCtx)
+                                forEachField($form, fields, $fields, localRules, cb, i+1);
+                            else
+                                return forEachField($form, fields, $fields, localRules, cb, i+1);
+                        }
+                    }
+
+                }
+
+
+                if ( typeof(rules[field]) == 'undefined' ) continue;
+
+
+                // check against rule
+                for (var rule in rules[field]) {
+                    // check for rule params
+                    try {
+
+                        if ( Array.isArray(rules[field][rule]) ) { // has args
+                            //convert array to arguments
+                            args = rules[field][rule];
+                            d[field][rule].apply(d[field], args);
+                        } else {
+                            d[field][rule](rules[field][rule]);
+                        }
+
+                    } catch (err) {
+                        if (rule == 'conditions') {
+                            throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()` where `conditions` must be a `collection` (Array)\nStack:\n'+ (err.stack|err.message))
+                        } else {
+                            throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()`\nStack:\n'+ (err.stack|err.message))
+                        }
+                    }
+
+                }
+            }
+
+
+            --i;
+
+            if (i < 0) {
+
+                var errors = d['getErrors']();
+
+                // adding data attribute to handle display refresh
+                for (var field in errors) {
+                    for (rule in errors[field]) {
+                        if (!fieldErrorsAttributes[field]) {
+                            fieldErrorsAttributes[field] = ''
+                        }
+
+                        if (fieldErrorsAttributes[field].indexOf(rule) < 0)
+                            fieldErrorsAttributes[field] += rule +' ';
+                    }
+
+                    if (isGFFCtx)
+                        $fields[field].setAttribute('data-gina-form-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
+                }
+
+                //calling back
+                try {
+                    data = formatData( d['toData']() );
+
+                    if ( typeof(window.ginaToolbar) == 'object' ) {
+                        // update toolbar
+                        if (!gina.forms.sent)
+                            gina.forms.sent = {};
+
+                        gina.forms.sent = data;
+
+                        window.ginaToolbar.update('forms', gina.forms);
+                    }
+                } catch (err) {
+                    throw err
+                }
+
+                if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
+
+                    cb({
+                        'isValid'   : d['isValid'],
+                        'errors'    : errors,
+                        'data'      : data
+                    })
+
+                } else {
+
+                    return {
+                        'isValid'   : d['isValid'],
+                        'errors'    : errors,
+                        'data'      : data
+                    }
+                }
+            }
+        }
+
+        if (isGFFCtx)
+            forEachField($form, fields, $fields, rules, cb, 0);
+        else
+            return forEachField($form, fields, $fields, rules, cb, 0);
     }
 
     var setupInstanceProto = function() {
