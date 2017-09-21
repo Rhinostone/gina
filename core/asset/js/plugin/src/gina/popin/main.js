@@ -668,7 +668,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 var i = 0, formsLength = $popin['$forms'].length;
                 if ($validator['$forms'] && formsLength > 0) {
                     for (; i < formsLength; ++i) {
-                        $validator['$forms'][ $popin['$forms'][i] ].destroy();
+                        if ( typeof($validator['$forms'][ $popin['$forms'][i] ]) != 'undefined' )
+                            $validator['$forms'][ $popin['$forms'][i] ].destroy();
+
                         $popin['$forms'].splice( i, 1);
                     }
                 }

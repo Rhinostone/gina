@@ -69,6 +69,7 @@ AddViews = function(bundle, env) {
         }
 
     }
+    
     var createFile = function(file, target) {
         file.cp(target, function(err) {
             if (err) {
