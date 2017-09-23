@@ -1,0 +1,8 @@
+[
+  "--env",
+  "--path",
+  "--force",
+  "--more",
+  "--with-bundles",
+  "--with-envs"
+]

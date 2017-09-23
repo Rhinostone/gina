@@ -1,4 +1,4 @@
-var merge = require('../index');// Not needed if the framework installed
+var merge = require('../src/main');// Not needed if the framework installed
 
 var a = null;
 var b = null;
@@ -8,7 +8,8 @@ var setVariable = function () {
         msg: 'hello world !',
         page: {
             content: 'index.html',
-            list: ['apple', 'orange', 'mango']
+            list: ['apple', 'orange', 'mango'],
+            javascripts: [ '/entreprise/handlers/client/main.js' ]
         }
     };
     b = {
@@ -17,15 +18,19 @@ var setVariable = function () {
         "page": {
             "action": "home",
             "ext": ".html",
-            "content": "home.html"
+            "content": "home.html",
+            "javascripts": [
+                "/entreprise/handlers/client/edit.js",
+                "/js/lib/jquery.min.js"
+            ]
         }
     }
 };
 
 setVariable();
-var AtoBwithOverride    = merge(true, a, b);
+var AtoBwithOverride    = merge(a, b, true);
 setVariable();
-var BtoAwithOverride    = merge(true, b, a);
+var BtoAwithOverride    = merge(b, a, true);
 setVariable();
 var AtoBwithoutOverride = merge(a, b);
 setVariable();
@@ -41,6 +46,10 @@ exports['Merge : A<-B with override'] = function(test) {
                 "apple",
                 "orange",
                 "mango"
+            ],
+            "javascripts": [
+                "/entreprise/handlers/client/edit.js",
+                "/js/lib/jquery.min.js"
             ],
             "action": "home",
             "ext": ".html"
@@ -62,6 +71,7 @@ exports['Merge : B<-A with override'] = function(test) {
                 "orange",
                 "mango"
             ],
+            "javascripts": [ "/entreprise/handlers/client/main.js" ],
             "action": "home",
             "ext": ".html"
         }
@@ -81,6 +91,11 @@ exports['Merge : A<-B without override'] = function(test) {
                 "apple",
                 "orange",
                 "mango"
+            ],
+            "javascripts": [
+                "/entreprise/handlers/client/main.js",
+                "/entreprise/handlers/client/edit.js",
+                "/js/lib/jquery.min.js"
             ],
             "action": "home",
             "ext": ".html"
@@ -102,6 +117,11 @@ exports['Merge : B<-A without override'] = function(test) {
                 "orange",
                 "mango"
             ],
+            "javascripts": [
+                "/entreprise/handlers/client/edit.js",
+                "/js/lib/jquery.min.js",
+                "/entreprise/handlers/client/main.js"
+            ],
             "action": "home",
             "ext": ".html"
         }
@@ -113,12 +133,12 @@ exports['Merge : B<-A without override'] = function(test) {
 }
 
 exports['Compare : A<-B with override & B<-A without override'] = function(test) {
-    test.deepEqual(AtoBwithOverride, BtoAwithoutOverride);
+    test.notDeepEqual(AtoBwithOverride, BtoAwithoutOverride);
 
     test.done()
 }
 exports['Compare : B<-A with override & A<-B without override'] = function(test) {
-    test.deepEqual(AtoBwithoutOverride, BtoAwithOverride);
+    test.notDeepEqual(AtoBwithoutOverride, BtoAwithOverride);
 
     test.done()
 }

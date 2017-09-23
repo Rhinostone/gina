@@ -1,13 +1,13 @@
 /*
  * This file is part of the gina package.
- * Copyright (c) 2009-2014 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2017 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
 
 var fs          = require('fs');
-//var console     = require('../logger');
+var console     = require('../logger');
 var crypto      = require('crypto');
 
 /**
@@ -22,20 +22,20 @@ function Math() {
 
     var self = this;
 
-    /**
-     * init
-     * @constructor
-     * */
-    var init = function() {
-        if ( typeof(Math.instance) != "undefined" ) {
-            return Math.instance
-        } else {
-            Math.instance = self
-        }
-    }
+    // /**
+    //  * init
+    //  * @constructor
+    //  * */
+    // var init = function() {
+    //     if ( typeof(Math.instance) != "undefined" ) {
+    //         return Math.instance
+    //     } else {
+    //         Math.instance = self
+    //     }
+    // }
 
     /**
-     * operate from a string value
+     * Operate from a string value
      *
      * e.g.:
      *
@@ -52,30 +52,91 @@ function Math() {
         return new Function('return ' + calculation)()
     }
 
+    /**
+     * Checksum
+     * e.g: checksum(data, 'sha1')
+     *
+     * @param {string} str - Data to analyse
+     * @param {string} algorithm
+     * @param {string} [ encoding ] - e.g.: hex
+     *
+     * @return {string} checksum
+     * */
     var checkSum = function (str, algorithm, encoding) {
-        return crypto
-            .createHash(algorithm || 'md5')
-            .update(str, 'utf8')
-            .digest(encoding || 'hex')
-    }
-
-    this.checkSum = function(filename, algorithm, encoding, cb) {
-        if (arguments.length < 4) {
-            var cb = arguments[arguments.length-1]
-        }
-
-        fs.readFile(filename, function (err, data) {
-            checkSum(data);         // e53815e8c095e270c6560be1bb76a65d
-            //checkSum(data, 'sha1'); // cd5855be428295a3cc1793d6e80ce47562d23def
-        })
-    }
-
-    this.checkSumSync = function(filename, algorithm, encoding) {
         try {
-            return checkSum( fs.readFileSync(filename), algorithm, encoding )
+            return crypto
+                .createHash(algorithm || 'md5')
+                .update(str, 'utf8')
+                .digest(encoding || 'hex')
         } catch (err) {
-            console.error(err.stack||err.message);
-            return undefined
+            return err
+        }
+    }
+
+    /**
+     * Checksum
+     *
+     * @param {string} filename|data
+     * @param {string} algorithm
+     * @param {string} encoding
+     *
+     * @callback cb
+     *  @param {object|string} err
+     *  @param {string} checksum
+     * */
+    this.checkSum = function(filename, algorithm, encoding, cb) {
+        var err = false, sum = null;
+
+        if ( /\./.test(filename) ) {
+            fs.readFile(filename, function (err, data) {
+                sum = checkSum(data, algorithm, encoding);
+                if( sum instanceof Error) {
+                    err = sum;
+                    sum = undefined
+                }
+
+                cb(err, sum)
+            })
+        } else {
+            sum = checkSum(filename, algorithm, encoding);
+            if( sum instanceof Error) {
+                err = sum;
+                sum = undefined
+            }
+
+            cb(err, sum)
+        }
+    }
+
+    /**
+     * Check sum from file or form data
+     *
+     * @param {string} filename|data
+     * @param {string} algorithm
+     * @param {string} encoding
+     *
+     * @return {string} checksum
+     * */
+    this.checkSumSync = function(filename, algorithm, encoding) {
+        var sum = null;
+        try {
+            if ( /(\.[a-z]{3})$/.test(filename) ) { // must be a string
+                // from filename
+                sum = checkSum( fs.readFileSync(filename), algorithm, encoding )
+            } else {
+                // from data
+                sum = checkSum( filename, algorithm, encoding )
+            }
+
+            if (sum instanceof Error)
+                throw sum;
+            else
+                return sum
+
+        } catch (err) {
+            //console.error(err.stack||err.message);
+            //return undefined
+            throw err
         }
     }
 
@@ -94,7 +155,7 @@ function Math() {
     //    })
     //}
 
-    init();
+    //init();
     return this
 }
 module.exports = Math()

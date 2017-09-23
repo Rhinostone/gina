@@ -59,7 +59,7 @@ function Dot(){
                 open(GINA_DIR + '/services')
                 break;
             case 'lib':
-                open(getPath('gina.lib'))
+                open(getPath('gina').lib)
                 break;
         }
     }

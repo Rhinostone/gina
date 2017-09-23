@@ -1,4 +1,4 @@
-//var inherits = require('../index');
+//var inherits = require('../src/main');
 //
 //var A = function() {
 //    var self = this;

@@ -30,7 +30,7 @@ InitProject = function(conf, exports) {
         var out = fs.openSync(outFile, 'a');
         var err = fs.openSync(errFile, 'a');
 
-        var cmd = (isWin32()) ? '.gina' : './gina';
+        var cmd = (isWin32()) ? '.gina' : './gina.sh';
         var init = spawn('node', [ cmd, '--init', self.projectName ], {stdio: [ 'ignore', out, err ]});
 
         //init.stdout.setEncoding('utf8');

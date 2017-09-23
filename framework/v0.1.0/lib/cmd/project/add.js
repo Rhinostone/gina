@@ -1,70 +1,49 @@
-var fs = require('fs');
-var console = lib.logger;
+var fs          = require('fs');
+
+var CmdHelper   = require('./../helper');
+var Shell       = lib.Shell;
+var console     = lib.logger;
 
 /**
  * Add new project or register old one to `~/.gina/projects.json`.
  * NB.: If project exists, it won't be replaced. You'll only get warnings.
  * */
 function Add() {
-    var self = {};
+
+    var self    = {}
+        , local = {}
+    ;
 
     var init = function() {
-        var err = false, folder = {};
-        self.projects = require(_(GINA_HOMEDIR + '/projects.json') );
 
-        if (!process.argv[3]) {
-            console.error('Missing argument <project_name>');
-            process.exit(1)
-        }
-        self.name = process.argv[3];
+        // import CMD helpers
+        new CmdHelper(self);
 
-        if ( typeof(process.argv[4]) != 'undefined' && /^\-\-path\=/.test(process.argv[4]) ) {
-            var p = process.argv[4].split(/=/);
-            isDefined(self.name);
-            folder = new _(p[1] +'/'+ self.name)
-        } else if (typeof(process.argv[4]) != 'undefined') {
-            console.error('Argument not available for this command: ' + process.argv[4])
-        } else {
-            folder = new _(process.argv[3]);
-            if ( folder.isValidPath() )
-                self.name = folder.toArray().last()
-        }
+        // configure
+        configure();
 
+        checkImportMode();
 
-        if ( folder.isValidPath() && isValidName() ) {
-            try {
+        var err         = false
+            , folder    = null
+        ;
 
-                err = folder.mkdirSync();
-                if (err instanceof Error) {
-                    console.error(err.stack);
-                    process.exit(1)
-                }
-                self.root = folder.toString()
-            } catch (err) {
-                console.error(err.stack || err.message);
+        folder = new _(self.projectLocation);
+
+        if ( folder.isValidPath() && isValidName(self.projectName) ) {
+
+            err = folder.mkdirSync();
+
+            if (err instanceof Error) {
+                console.error(err.stack);
                 process.exit(1)
             }
-        } else {
-            // must be a valid project name then
-            if ( !isValidName() ) {
-                console.error('[ '+self.name+' ] is not a valid project name. Please, try something else: [a-Z0-9].');
-                process.exit(1)
-            } else {
 
-                self.root = process.cwd();
-                self.root = _(self.root +'/'+ self.name);
-                isDefined(self.name);
-                folder = new _(self.root).mkdirSync();
-                if (folder instanceof Error) {
-                    console.error(err.stack || err.message);
-                    process.exit(1)
-                }
-            }
         }
 
 
         // creating project file
-        var file = new _(self.root + '/project.json');
+        var file = new _(self.projectLocation + '/project.json', true);
         if ( !file.existsSync() ) {
             createProjectFile( file.toString() )
         } else {
@@ -72,7 +51,7 @@ function Add() {
         }
 
         // creating env file
-        var file = new _(self.root + '/env.json');
+        var file = new _(self.projectLocation + '/env.json', true);
         if ( !file.existsSync() ) {
             createEnvFile( file.toString() )
         } else {
@@ -80,7 +59,7 @@ function Add() {
         }
 
         // creating package file
-        file = new _(self.root + '/package.json');
+        file = new _(self.projectLocation + '/package.json', true);
         if ( !file.existsSync() ) {
             createPackageFile( file.toString() )
         } else {
@@ -90,50 +69,59 @@ function Add() {
         }
     }
 
-    var isDefined = function(name) {
-        if ( typeof(self.projects[name]) != 'undefined' ) {
+    var checkImportMode = function() {
+        if ( typeof(self.projects[self.projectName ]) != 'undefined' ) {
             // import if exists but path just changed
-            if ( typeof(self.projects[name].path) != 'undefined') {
-                var old = new _(self.projects[name].path).toArray().last();
-                var current = new _(process.cwd()).toArray().last();
-                if (current == old) {
-                    self.root = process.cwd()
-                }
+            if ( typeof(self.projects[self.projectName ].path) != 'undefined') {
+                var old = new _(self.projects[self.projectName ].path, true).toArray().last();
+                var current = new _(self.projectLocation, true).toArray().last();
 
-                if (old === self.name) {
-                    self.projects[name].path = self.root;
+                if (old === self.projectName) {
+                    self.projects[self.projectName ].path = self.projectLocation;
 
                     var target = _(GINA_HOMEDIR + '/projects.json')
                         , projects = self.projects;
+
                     lib.generator.createFileFromDataSync(
                         projects,
                         target
                     );
-                    console.log('project [ '+ self.name +' ] imported');
-                    process.exit(0)
+
+
+                    var ginaModule = _( self.projectLocation +'/node_modules/gina',true );
+
+                    if ( !fs.existsSync(ginaModule) ) {
+                        linkGina(
+                            function onError(err) {
+                                console.error(err.stack);
+                                process.exit(1)
+                            },
+                            function onSuccess() {
+                                console.log('project [ '+ self.projectName +' ] imported');
+                            })
+
+                    } else {
+                        console.log('project [ '+ self.projectName +' ] imported');
+                    }
                 }
+            } else {
+                console.error('[ '+ self.projectLocation  +' ] is an existing project. Please choose another name for your project or remove this one.');
+                process.exit(1)
             }
-            console.error('[ '+ name +' ] is an existing project. Please choose another name or remove it first.');
-            process.exit(1)
         }
     }
 
-    var isValidName = function() {
-        if (self.name == undefined) return false;
-
-        self.name = self.name.replace(/\@/, '');
-        var patt = /^[a-z0-9_.]/;
-        return patt.test(self.name)
-    }
-
     var createProjectFile = function(target) {
-        var conf = _(getPath('gina.core') +'/template/conf/project.json');
+
+        loadAssets();
+
+        var conf        = _(getPath('gina').core +'/template/conf/project.json', true);
         var contentFile = require(conf);
         var dic = {
-            "project" : self.name
+            "project" : self.projectName
         };
 
-        contentFile = whisper(dic, contentFile);//data
+        contentFile = whisper(dic, contentFile); //data
         lib.generator.createFileFromDataSync(
             contentFile,
             target
@@ -149,10 +137,14 @@ function Add() {
 
 
     var createPackageFile = function(target) {
-        var conf = _(getPath('gina.core') +'/template/conf/package.json');
+
+        loadAssets();
+
+        var conf = _(getPath('gina').core +'/template/conf/package.json', true);
         var contentFile = require(conf);
         var dic = {
-            "project" : self.name
+            'project' : self.projectName,
+            'node_version' : GINA_NODE_VERSION.match(/\d+/g).join('.')
         };
 
         contentFile = whisper(dic, contentFile);//data
@@ -165,29 +157,77 @@ function Add() {
     }
 
     var end = function(created) {
+
+
         var target = _(GINA_HOMEDIR + '/projects.json')
-            , projects = self.projects;
+            , projects = self.projects
+            , error = false;
 
 
-        projects[self.name] = {
-            "path": self.root,
+        projects[self.projectName] = {
+            "path": self.projectLocation,
             "framework": "v" + GINA_VERSION,
-            "envs": [ "dev" ],
-            "def_env": "dev",
-            "dev_env": "dev"
+            "envs": self.envs,
+            "def_env": self.defaultEnv,
+            "dev_env": self.devEnv,
+            "def_protocol": self.defaultProtocol
         };
+
         // writing file
         lib.generator.createFileFromDataSync(
             projects,
             target
         );
 
-        if ( !fs.existsSync(self.projectPath) )
+        var onSuccess = function () {
+            console.log('project [ '+ self.projectName +' ] is ready');
+            process.exit(0)
+        }
 
-        if (created)
-            console.log('project [ '+ self.name +' ] ready');
+        var onError = function (err) {
+            console.error('could not finalize [ '+ self.projectName +' ] install\n'+ err.stack);
+            process.exit(1)
+        }
 
-        process.exit(0)
+
+        var ginaModule = new _( self.projectLocation +'/node_modules/gina',true );
+
+        if ( !ginaModule.existsSync() ) {
+            linkGina(onError, onSuccess)
+        } else {
+
+            error = ginaModule.rmSync();
+
+            if (error instanceof Error) {
+                console.error(err.stack);
+                process.exit(1);
+            } else {
+                linkGina(onError, onSuccess)
+            }
+
+        }
+    }
+
+    var linkGina = function ( onError, onSuccess ) {
+
+        var npm = new Shell();
+
+        npm.setOptions({ chdir: self.projectLocation });
+        npm
+            .run('npm link gina', true)
+            .onComplete(function (err, data) {
+                if (err) {
+                    if ( typeof(onSuccess) != 'undefined' ) {
+                        onSuccess(err);
+                    } else {
+                        console.error(err.stack);
+                    }
+
+                } else {
+                    if ( typeof(onSuccess) != 'undefined' )
+                        onSuccess()
+                }
+            })
     }
 
     init()

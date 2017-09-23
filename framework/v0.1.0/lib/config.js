@@ -1,7 +1,7 @@
 /* Gina.Utils.Config
  *
  * This file is part of the gina package.
- * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2017 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -9,9 +9,10 @@
 
 
 //Imports.
-var fs      = require('fs');
-var console = require('./logger');
-
+var fs          = require('fs');
+var console     = require('./logger');
+var math        = require('./math');
+var generator   = require('./generator');
 
 
 /**
@@ -30,7 +31,7 @@ function ConfigUtil() {
 
         if ( !ConfigUtil.instance ) {
             try {
-                self.paths = getContext("paths")
+                self.paths = getContext('paths')
             } catch (err) {
                 self.paths = {}
             }
@@ -46,31 +47,6 @@ function ConfigUtil() {
         }
     }
 
-
-    ///**
-    // * Init Utils config
-    // *
-    // * @private
-    // * */
-    //var init = function(){
-    //
-    //    //getting context path thru path helper.
-    //    console.log("asking for dirname ", __dirname);
-    //    var path = new _(__dirname).toUnixStyle();
-    //    self.__dirname =  _( path.substring(0, (path.length - 4)) );
-    //
-    //    if ( self.paths.utils == undefined) {
-    //        self.paths.utils = self.__dirname
-    //    }
-    //
-    //    self.get('gina', 'locals.json', function(err, obj){
-    //        if( !err ) {
-    //            mainConfig = require(obj.paths.gina + '/config')()
-    //        } else {
-    //            console.log(err.stack)
-    //        }
-    //    })
-    //}
 
     /**
      * Set config file if !exists
@@ -119,20 +95,22 @@ function ConfigUtil() {
 
                     } else {
                         //Getting paths.
-                        if ( typeof(self.paths.root) != "undefined" ) {
+                        if ( typeof(self.paths.root) != 'undefined' ) {
                             //console.error("requiring :=> ",  self.paths.root + '/.gna/locals.json');
                             try {
                                 config = require(self.paths.root  + '/.gna/' + file);
                                 self.value = config;
-                                self.paths = config["paths"];
+                                self.paths = config['paths'];
 
                             } catch (err) {
                                 //Means that the file was not found..
-                                err = self.__dirname  + '/.gna/locals.json: project configuration file not found. \n' + err;
+                                console.error(err.stack || err.message);
+                                err = new Error(self.__dirname  + '/.gna/locals.json: project configuration file not found.');
+                                process.exit(1)
                             }
                         }
                     }
-                    callback(false, config)
+                    callback(err, config)
 
                 } catch (err) {
                     var err = new Error('.gna/locals.json: project configuration file not found. \n' + (err.stack||err.message));
@@ -154,7 +132,11 @@ function ConfigUtil() {
      *
      * @private
      * */
-    this.getSync = function(project, file){
+    this.getSync = function(project, file, i){
+        var maxRetry    = 7
+            , delay     = 300
+            , i         = i || 0;
+
         if (typeof(file) == 'undefined') {
             var file = 'locals.json'
         }
@@ -163,18 +145,39 @@ function ConfigUtil() {
             return self.value;
         } else {
             var filename = self.paths.root +'/.gna/'+ file;
+            if (i > 0) {
+                console.debug('retrying [ '+i+' ] to load: ' + filename)
+            }
+
             try {
                 if ( fs.existsSync(filename) ) {
                     return require(filename)
                 } else {
-                    var err = new Error(filename+ ' not found');
-                    console.emerg(err.stack||err.message);
-                    return undefined
+                    // you might just be experimenting some latencies
+                    if (i < maxRetry) {
+                        console.debug('retrying to load config after timeout');
+                        setTimeout(function(){
+                            console.debug('It is time re reload config');
+                            self.getSync(project, file, i+1)
+                        }, delay);
+                        //return
+                    } else {
+                        var err = new Error(filename+ ' not found');
+                        console.emerg(err.stack||err.message);
+                        process.exit(1);
+                    }
                 }
             } catch (err) {
-                console.error(err.stack);
-                throw new Error(err.message);
-
+                if (i < maxRetry) {
+                    console.debug('(catched) retrying to load config after timeout');
+                    setTimeout(function(){
+                        console.debug('It is time re reload config');
+                        self.getSync(project, file, i+1)
+                    }, delay);
+                } else {
+                    console.error(err.stack);
+                    throw new Error(err.message);
+                }
             }
         }
     }
@@ -190,13 +193,13 @@ function ConfigUtil() {
      * TOTO - Avoid systematics file override.
      * @private
      * */
+
     var setFile = function(app, file, content, callback) {
 
         var paths = {
             root : content.paths.root,
             utils : content.paths.utils
         };
-        console.error("blabla conf..", file, content);
         var gnaFolder = content.paths.root + '/.gna';
 
         self.project = content.project;
@@ -204,84 +207,99 @@ function ConfigUtil() {
         self.paths = paths;
 
         //Create path.
-        try {
-
-            var createFolder = function(){
-                if ( fs.existsSync(gnaFolder) ) {
-                    callback(false);
-                } else {
-                    fs.mkdir(gnaFolder, 0777, function(err){
-                        if (err) {
-                            console.error(err.stack);
+        var createFolder = function(){
+            if ( fs.existsSync(gnaFolder) ) {
+                if ( !fs.existsSync(gnaFolder +'/'+ file) ) {
+                    createContent(gnaFolder +'/'+ file, gnaFolder, content, function(err){
+                        setTimeout(function(){
                             callback(err)
-                        } else {
-                            //Creating content.
-                            createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
+                        }, 500)
+                    })
+                } else { // already existing ... won't overwrite
+                    callback(false)
+                }
+
+            } else {
+                fs.mkdir(gnaFolder, 0777, function(err){
+                    if (err) {
+                        console.error(err.stack);
+                        callback(err)
+                    } else {
+                        //Creating content.
+                        createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
+                            setTimeout(function(){
                                 callback(err)
-                            })
-                        }
-                    })
+                            }, 500)
+                        })
+                    }
+                })
+            }
+
+        };
+
+        fs.exists(gnaFolder, function(exists){
+            if (!exists) {
+                createFolder()
+            } else {
+                // test if decalred path matches real path and overwrite if not the same
+                // in case you move your project
+                var filename        = _(gnaFolder +'/'+ file, true);
+
+                if ( !fs.existsSync(filename) ) {
+                    generator.createFileFromDataSync(
+                        JSON.stringify(content),
+                        filename
+                    )
                 }
 
-            };
+                var checksumFileOld = null;
+                try {
+                    checksumFileOld = _(gnaFolder +'/'+ math.checkSumSync( JSON.stringify( require(filename) ), 'sha1'), true) + '.txt';
+                } catch (err) {
+                    // must be empty
+                }
 
-            fs.exists(gnaFolder, function(exists){
-                //console.log("file exists ? ", gnaFolder, exists);
-                if (exists) {
-                    var folder = new _(gnaFolder).rm( function(err){
-                        if (!err) {
-                            createFolder()
-                        } else {
+                var checksumFile    = _(gnaFolder +'/'+ math.checkSumSync( JSON.stringify(content), 'sha1'), true) + '.txt';
+
+                var verified        = (checksumFileOld == checksumFile) ? true : false;
+
+
+                if ( !fs.existsSync(checksumFile) && fs.existsSync(filename) || !fs.existsSync(filename) || !verified) {
+                    if ( fs.existsSync(filename) ) fs.unlinkSync(filename);
+                    if ( fs.existsSync(checksumFile) ) fs.unlinkSync(checksumFile);
+
+                    createContent(filename, gnaFolder, content, function(err){
+                        fs.openSync(checksumFile, 'w');
+                        setTimeout(function(){
                             callback(err)
-                        }
+                        }, 500)
                     })
+                } else if ( fs.existsSync(filename) ) {
+
+                    var locals = require(gnaFolder +'/'+ file);
+
+                    if (paths.utils != locals.paths.utils) {
+
+                        new _(gnaFolder).rm( function(err){
+                            if (err) {
+                                console.warn('found error while trying to remove `.gna`\n' + err.stack)
+                            }
+
+                            //setTimeout(function(){
+                                //console.debug('Done removing `gnaFolder` : '+ gnaFolder);
+                            createFolder();
+                            //}, 200);
+                        })
+                    } else {
+                        callback(false)// nothing to do
+                    }
                 } else {
-                    createFolder()
+                    callback(false)// nothing to do
                 }
-            //logger.error('gina', 'UTILS:CONFIG:ERR:1', err, __stack);
-//                    console.warn("waah ", gnaFolder+ '/' +file, gnaFolder, content);
-//                    fs.mkdir(gnaFolder, 0777, function(err){
-//                        if (err) logger.error('gina', 'UTILS:CONFIG:ERR:1', err, __stack);
-//
-//                        //Creating content.
-//                        createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
-//                            callback(err);
-//                        });
-//                    });
-
-//                } else {
-//                    //Means that folder was found.
-//                    if ( typeof(callback) != 'undefined') {
-//                        callback(false);
-//                    }
-//                }
-
-//                    //Means that folder was found.
-//                    /************************************************************
-//                    * Will remove this row once the project generator is ready. *
-//                    ************************************************************/
-//                    //Remove all: start with symlink. in order to replace it.
-//                    var path = self.paths.utils + '/.gna';
-//
-//                    removeSymlink(path, function(err){
-//                        if (err) logger.error('gina', 'UTILS:CONFIG:ERR:10', err, __stack);
-//
-//                        Fs.mkdir(gnaFolder, 0777, function(err){
-//                            if (err) logger.error('gina', 'UTILS:CONFIG:ERR:1', err, __stack);
-//
-//                            //Creating content.
-//                            createContent(gnaFolder+ '/' +file, gnaFolder, content, function(err){
-//                                callback(err);
-//                            });
-//                        });
-//                    });
-//                }//EO if (!exists) {
-            })
-        } catch (err) {
-            //log it.
-            console.error(err)
-        }
+            }
+        })
     }
+
 
     /**
      * Remove symbolic link
@@ -370,7 +388,9 @@ function ConfigUtil() {
      * @private
      * */
     var createContent = function(filename, gnaFolder, content, callback){
-
+        if ( fs.existsSync(filename) ) {
+            fs.unlinkSync(filename)
+        }
         fs.appendFile(
             filename,
             JSON.stringify(content, null, '\t'),
@@ -378,36 +398,13 @@ function ConfigUtil() {
             function(err){
                 if (err) {
                     //logger.error('gina', 'UTILS:CONFIG:ERR:2', err, __stack);
-                    console.error(err.stack||err.message);
+                    console.error('`Error on while calling createContent()`: ' + err.stack||err.message);
                     callback(err)
                 } else {
-                    callback(false)
+                    setTimeout(function(){
+                        callback(err)
+                    }, 1000)
                 }
-//                } else {
-//                    /** doesn't work on windows */
-//                    var target = content.paths.utils + '/.gna';
-//                    //You never know.. could be a manual delete on one side..
-//                    fs.exists(target, function(exists){
-//                        if (exists) {
-//                            fs.unlink(target, function(err){
-//                                if (!err) Fs.symlinkSync(gnaFolder, target);
-//
-//                                callback(err);
-//                            });
-//                        } else {
-//                            //Need administrator credentials on Windows. Like try to start webstorm as Administrator.
-//                            try {
-//                                fs.symlinkSync(gnaFolder, target);
-//
-//                            } catch (err) {
-//                                logger.error('gina', 'UTILS:CONFIG:ERR:12', err, __stack);
-//                            }
-//
-//                            callback(err);
-//                            //process.exit(42);
-//                        }
-//                    });
-//                }
             }//EO function
         )//EO fs.appendFile
     }

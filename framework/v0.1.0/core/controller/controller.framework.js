@@ -1,4 +1,4 @@
-var lib         = require('../../lib') || require.cache[require.resolve('../../lib')];
+var lib         = require('./../../lib') || require.cache[require.resolve('./../../lib')];
 var inherits    = lib.inherits;
 var Controller  = require('./controller');
 
@@ -7,10 +7,11 @@ var Controller  = require('./controller');
  * FrameworkController
  * */
 function FrameworkController(options) {
+    this.name = "FrameworkController";
     var self = this;
 
     /**
-     * Init default control
+     * Init default action
      *
      * @param {object} req
      * @param {object} res
@@ -19,7 +20,7 @@ function FrameworkController(options) {
     this.init = function(req, res) {}
 
     this.doc = function(req, res) {
-        console.log('got doc control');
+        console.log('got doc action');
         var status = req.get.status || 'ok';
         var data = {
             status: status,
@@ -31,7 +32,7 @@ function FrameworkController(options) {
 
     var render = function(data) {
         //var views = self.getConfig('views');// ????
-        var dir = getPath('gina.documentation');
+        var dir = getPath('gina').documentation;
         self.setViewsLocation(dir);
         //by default for all pages
         data['page']['lang'] = 'en';

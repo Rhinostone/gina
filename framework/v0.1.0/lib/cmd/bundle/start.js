@@ -1,6 +1,8 @@
-var fs      = require('fs');
-var spawn   = require('child_process').spawn;
-var console = lib.logger;
+var fs          = require('fs');
+var spawn       = require('child_process').spawn;
+
+var CmdHelper   = require('./../helper');
+var console     = lib.logger;
 /**
  * Start a given bundle or start all bundles at once
  *
@@ -10,100 +12,139 @@ var console = lib.logger;
  *
  * */
 function Start(opt, cmd) {
-    var self = {};
+    var self    = {}
+    , local     = {
+        bundle : null
+    };
 
     var init = function(opt, cmd) {
-        self.projects = require( _(GINA_HOMEDIR + '/projects.json') );
 
-        if ( /^\@[a-z0-9_.]/.test(process.argv[4]) ) {
+        // import CMD helpers
+        new CmdHelper(self);
 
-            if ( !isValidName(process.argv[4]) ) {
-                console.error('[ '+process.argv[4]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].');
-                process.exit(1);
-            }
+        // configure
+        configure();
+        
 
-        }
+        var bundle = self.bundles[0];
 
-        if ( typeof(self.name) == 'undefined') {
-            var folder = new _(process.cwd()).toArray().last();
-            if ( isDefined(folder) ) {
-                self.name = folder
-            }
-        }
-        var bundle = process.argv[3];
-        isRealApp(bundle, function(err, appPath){
+        var msg = null;
+        if ( !isDefined('bundle', bundle) ) {
+            var msg = 'Bundle [ '+ bundle +' ] is not registered inside `@'+ self.projectName +'`';
+            console.error(msg);
+            opt.client.write(msg);
+            // CMD exit
+            opt.client.emit('end');
 
-            if (err) {
-                console.error(err.stack||err.message)
-            } else {
+        } else {
 
-            }
+            isRealApp(bundle, function(err, appPath){
 
-            console.log('starting bundle [ ' + bundle +' ]');
-            process.list = (process.list == undefined) ? [] : process.list;
-            setContext('processList', process.list);
-            setContext('ginaProcess', process.pid);
+                if (err) {
+                    console.error(err.stack||err.message)
+                } else {
 
-            var params = [
-                '--debug-brk=5656',
-                appPath,
-                JSON.stringify( getContext() )//Passing context to child.
-            ];
-
-            for (var i=0; i<params.length; ++i) {
-                if (params[i] == '') {
-                    params.splice(i,1);
                 }
-            }
 
-            var child = spawn(opt.argv[0], params,
-                {
-                    detached : true
+                console.info('starting bundle [ ' + bundle +'@'+ self.projectName +' ]');
+                process.list = (process.list == undefined) ? [] : process.list;
+                setContext('processList', process.list);
+                setContext('ginaProcess', process.pid);
+
+                var params = [
+                    // node arguments will be passed by gina
+                    appPath,
+                    JSON.stringify( getContext() ), //Passing context to child.
+                    self.projectName, // project name
+                    bundle // bundle name
+                ];
+
+                // injecting node arguments
+                var index = 0;
+                if (self.nodeParams.length > 0) {
+                    for (var p = 0, pLen = self.nodeParams.length; p < pLen; ++p) {
+                        params.splice(index, 0, self.nodeParams[p]);
+                        ++index
+                    }
                 }
-            );
 
-            cmd.proc.register(bundle, child.pid);
-            //opt.client.write('bundle [ ' + bundle +' ] started !!!');
 
-            child.stdout.setEncoding('utf8');//Set encoding.
-            child.stdout.on('data', function(data){
-                opt.client.write( '[ data ]' + data.toString() )
-            });
 
-            //when an exception is thrown, it is sent to the client
-            child.stderr.setEncoding('utf8');
-            child.stderr.on('data', function(err){
-                opt.client.write( err.toString() );
-                //opt.client.write('[ quit ]')
-            });
-        })//EO isRealApp
-    }
+                for (var i=0; i<params.length; ++i) {
+                    if (params[i] == '') {
+                        params.splice(i,1);
+                    }
+                }
 
-    var isDefined = function(name) {
-        if ( typeof(self.projects[name]) != 'undefined' ) {
-            return true
+                var child = spawn(opt.argv[0], params,
+                    {
+                        detached : true
+                    }
+                );
+
+
+                var hasGreeted = false;
+                child.stdout.setEncoding('utf8');//Set encoding.
+                child.stdout.on('data', function(data) {
+
+                    console.log( data );
+
+                    if ( !opt.client.destroyed && !hasGreeted ) {
+                        opt.client.write('bundle [ ' + bundle +'@'+ self.projectName +' ] started !');
+                        hasGreeted = true
+                    }
+                });
+
+                //when an exception is thrown, it is sent to the client
+                child.stderr.setEncoding('utf8');
+                var error = null;
+                child.stderr.on('data', function(err) {
+
+                    error = err.toString();
+                    if ( /Debugger listening|Warning/.test(error) ) {
+                        console.warn(error);
+
+                        if (!opt.client.destroyed) {
+                            opt.client.write(error);
+                        }
+
+                    } else {
+                        console.error(error);
+                    }
+                });
+
+                child.on('exit', function (code, signal) {
+                    // handles only signals that cannot be cannot be caught or ignored
+                    // ref.: `framework/<version>/lib/proc.js`
+                    if ( /(SIGKILL|SIGSTOP)/i.test(signal) ) {
+                        console.emerg('['+ this.pid +'] exiting with signal: ', signal);
+                        cmd.proc.dismiss(this.pid, signal);
+                    }
+
+                });
+
+                // CMD exit
+                setTimeout(function () {
+                    opt.client.emit('end');
+                }, 500)
+
+
+            })//EO isRealApp
         }
-        return false
     }
 
-    var isValidName = function(name) {
-        if (name == undefined) return false;
 
-        self.name = name.replace(/\@/, '');
-        var patt = /^[a-z0-9_.]/;
-        return patt.test(self.name)
-    }
 
     var isRealApp = function(bundle, callback) {
 
-        var p
-            , d
-            , env = self.projects[self.name]['dev_env']
-            , isDev = (self.projects[self.name]['dev_env'] === self.projects[self.name]['def_env']) ? true: false
-            , root = self.projects[self.name].path
-            , bundleDir = null
-            , bundlesPath = null
-            , bundleInit = null;
+        var p               = null
+            , d             = null
+            , env           = self.projects[self.projectName]['def_env']
+            , isDev         = GINA_ENV_IS_DEV
+            , root          = self.projects[self.projectName].path
+            , bundleDir     = null
+            , bundlesPath   = null
+            , bundleInit    = null;
 
 
 
@@ -121,28 +162,29 @@ function Start(opt, cmd) {
 
                 p = _( root +'/'+ path );//path.replace('/' + bundle, '')
                 d = _( root +'/'+ path + '/index.js' );
-                bundleDir = path.replace('/' + bundle, '');
+
+                bundleDir   = path.replace('/' + bundle, '');
                 setContext('bundle_dir', bundleDir);
                 bundlesPath =  _( root +'/'+ bundleDir );
-                bundleInit = d;
+                bundleInit  = d;
 
             } else {
                 //Others releases.
-                var path = 'releases/'+ bundle +'/' + env +'/'+ pkg[bundle].release.version;
+                var path    = 'releases/'+ bundle +'/' + env +'/'+ pkg[bundle].release.version;
                 var version = pkg[bundle].release.version;
                 p = _( root +'/'+ path );//path.replace('/' + bundle, '')
                 d = _( root +'/'+ path + '/index.js' );
 
-                bundleDir = path;
+                bundleDir   = path;
                 bundlesPath = _(root + '/'+ bundleDir);
-                bundleInit = d;
+                bundleInit  = d;
             }
 
         } catch (err) {
             // default bundlesPath.
             // TODO - log warn ?
             console.warn(err.stack||err.message);
-            bundleDir = 'bundles';
+            bundleDir   = 'bundles';
             bundlesPath = _(root +'/'+ bundleDir);
             p = _(root +'/'+ bundleDir +'/'+ bundle);
             d = _(root + '/'+ bundleDir +'/'+ bundle + '/index.js');
@@ -150,10 +192,6 @@ function Start(opt, cmd) {
         }
 
 
-
-        //p = _(this.options.root + '/' + this.bundle + '.js'),
-        console.debug("checking... ", p, " && ", d, " => ", bundleDir);
-        //process.exit(42);
         //Checking root.
         fs.exists(d, function(exists) {
             if (exists) {
@@ -177,9 +215,7 @@ function Start(opt, cmd) {
         })
     }
 
-    var run = function() {
 
-    };
 
     init(opt, cmd)
 };

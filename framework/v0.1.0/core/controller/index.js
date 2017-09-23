@@ -1,7 +1,7 @@
 var lib = require('../../lib') || require.cache[require.resolve('../../lib')];
 var inherits = lib.inherits;
 var helpers = lib.helpers;
-var context = helpers.context;
+var context = lib.context;
 try {
     //first load only
     //if (process.argv[3]) {

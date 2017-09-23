@@ -1,6 +1,6 @@
 /**
  * This file is part of the gina package.
- * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2017 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -26,12 +26,13 @@ function PostInstall() {
 
     //Initialize post installation scripts.
     var init = function() {
-        self.isWin32 = getEnvVar('GINA_IS_WIN32');
-        self.path = getEnvVar('GINA_FRAMEWORK');
-        self.gina = getEnvVar('GINA_DIR');
+        self.isWin32 = GINA_IS_WIN32;
+        self.path = GINA_FRAMEWORK;
+        self.gina = GINA_DIR;
         var path = new _(process.env.PATH.split(':')[1]).toUnixStyle();
         path = path.split('/');
-        var root = ''
+
+        var root = null;
         for (var p = 0; p < path.length; ++p) {
             if (path[p] == 'node_modules') {
                 root = root.substr(0, root.length-1);
@@ -44,7 +45,7 @@ function PostInstall() {
 
         console.log('project ',  self.root, ' VS ', process.cwd());
 
-        console.debug('framework path: ' + getEnvVar('GINA_FRAMEWORK'));
+        console.debug('framework path: ' + GINA_FRAMEWORK);
 
         if ( self.root === process.cwd() ) { //local install
             createVersionFile(function onFileCreated(err) {
@@ -230,8 +231,6 @@ function PostInstall() {
             })
         }
     }
-
-    //var createGinaHome = function() { };
 
     init()
 };

@@ -1,6 +1,6 @@
 /**
  * This file is part of the gina package.
- * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2017 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -8,8 +8,11 @@
 //'use strict';
 
 // Imports
-var util = require('util');
-var merge = require('../merge');
+var util            = require('util');
+var EventEmitter    = require('events').EventEmitter;
+var e = new EventEmitter();
+var merge           = require('../merge');
+
 
 /**
  * @class Logger
@@ -21,62 +24,65 @@ var merge = require('../merge');
  * @api Public
  * */
 function Logger(opt) {
-    var self = this;
+
+    var self = {};
+
     var defaultOptions = {
-        name: 'gina', // by default
+        name: 'gina', // group name by default: it is usually the bundle or the service name
         template: '%d [ %s ] %m',
+        flow: 'default', // event where the flow will be display - e.g.: event.on('logger#default', function(code, level, message){ ... })
         //containers: [],
+        //'format' : '',
+        //'pipe' : [],
         levels : { // based on Sylog Severity Levels
             emerg: {
                 code: 0,
                 label: 'Emergency',
-                desciption: 'System is unusable.',
+                description: 'System is unusable.',
                 color: 'magenta'
             },
             alert: {
                 code: 1,
                 label: 'Alert',
-                desciption: 'Action must be taken immediately.',
+                description: 'Action must be taken immediately.',
                 color:'red'
             },
 
             crit: {
                 code: 2,
                 label: 'Critical',
-                desciption: 'Critical conditions.',
+                description: 'Critical conditions.',
                 color: 'magenta'
             },
             error : {
                 code: 3,
                 label: 'Error',
-                desciption: 'Error conditions.',
+                description: 'Error conditions.',
                 color : 'orange'
             },
             warn : {
                 code: 4,
                 label: 'Warning',
-                desciption: 'Warning conditions.',
+                description: 'Warning conditions.',
                 color: 'yellow'
             },
             notice: {
                 code: 5,
                 label: 'Notice',
-                desciption: 'Normal but significant condition.',
+                description: 'Normal but significant condition.',
                 color: 'black'
             },
             info : {
                 code: 6,
                 label: 'Informational',
-                desciption: 'Informational messages.',
+                description: 'Informational messages.',
                 color: 'blue'
             },
             debug : {
                 code: 7,
                 label: 'Debug',
-                desciption: 'Debug-level messages.',
+                description: 'Debug-level messages.',
                 color: 'cyan'
-                //'format' : '',
-                //'pipe' : []
             }
 
         }
@@ -85,41 +91,62 @@ function Logger(opt) {
     if (opt) {
         opt = merge(true, defaultOptions, opt)
     } else {
-        opt = defaultOptions
+        opt = ( typeof(Logger.instance) != 'undefined' && typeof(Logger.instance._options) != 'undefined' ) ? Logger.instance._options : defaultOptions;
     }
+
 
     /**
      * init
      * @constructor
      * */
     var init = function(opt) {
-        if ( typeof(Logger.initialized) != "undefined" ) {
+
+        if ( typeof(Logger.initialized) != 'undefined' ) {
             console.debug("Logger instance already exists. Loading it.");
-            return getInstance(opt)
+
+            self = getInstance();
+
+            return self
+
         } else {
-            Logger.initialized = true;
-            Logger.instance = self;
-            setDefaultLevels();
+            Logger.initialized              = true;
+            Logger.instance                 = self;
+            Logger.instance._options        = self._options = opt;
+            Logger.instance._eventHandler   = e;
+
+            setDefaultLevels(opt);
+
+            return Logger.instance
         }
     }
 
-    var getInstance = function(opt) {
+    var getInstance = function() {
         return Logger.instance
     }
 
-    var setDefaultLevels = function() {
 
-        for (var l in opt.levels) {
-            if ( typeof(self[l]) != 'undefined' )
-                delete self[l];
 
-            self[l] = new Function('return '+write+'('+JSON.stringify(opt)+', '+parse+', "'+l+'", arguments);');
+    var setDefaultLevels = function(options) {
+
+        var opt = options || self._options;
+
+        try {
+            for (var l in opt.levels) {
+                if ( typeof(self[l]) != 'undefined' )
+                    delete self[l];
+
+                self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ parse +', "'+ l +'", arguments);');
+            }
+        } catch (err) {
+            process.stdout.write(err.stack + '\n')
         }
+
     }
 
-    var write = function(opt, parse, s, args) {
-        var content = '';
-        //To handle logs with coma speparated arguments.
+    var write = function(opt, parse, s, args, e) {
+
+        var content = '', payload = null;
+        //To handle logs with coma separated arguments.
         for (var i=0; i<args.length; ++i) {
             if (args[i] instanceof Function) {
                 content += args[i].toString() + ""
@@ -146,7 +173,14 @@ function Logger(opt) {
                 content = content.replace(new RegExp(patt[p], 'g'), repl[patt[p]])
             }
 
-            return process.stdout.write(content + '\n')
+
+            //process.stdout.write('FLOW: '+ opt.flow + '\n');
+
+            if (opt.flow == 'default') {
+                return process.stdout.write(content + '\n')
+            } else {
+                process.emit('message', opt.flow, opt.levels[s].code, s, '[LOGGER]' + content);
+            }
         }
     }
 
@@ -158,7 +192,7 @@ function Logger(opt) {
             ++l;
             if (obj[attr] instanceof Function) {
                 str += attr +': [Function]';
-                // if you want ot have it all replace by the fllowing line
+                // if you want ot have it all replace by the following line
                 //str += attr +':'+ obj[attr].toString();
                 str += (l<len) ? ', ' : ''
             } else if (obj[attr] instanceof Object && !isArray) {
@@ -193,8 +227,35 @@ function Logger(opt) {
 //        }
 //    }
 
-    this.setLevels = function(levels) {
+    self.switchFlow = function (name) {
+        opt.flow = name;
+        Logger.instance._options = self._options = opt;
+
+        e.on('logger#' + name, function (flow, code, level, message) {
+
+            if ( typeof(message) != 'undefined' && message != '' ) {
+
+                console.log('logger['+ flow +'] -> ', code, level + '\n');
+                console.log(message);
+            }
+
+        });
+
+        process.on('message', function (flow, code, level, message) {
+            // filter logger by flow
+            if ( /^\[LOGGER\]/.test(message) ) {
+                e.emit( 'logger#' + flow, flow, code, level, message.replace('[LOGGER]', '') )
+            }
+        });
+
+        // updating functions options
+        setDefaultLevels(opt)
+    }
+
+    self.setLevels = function(levels) {
         try {
+            var opt = self._options;
+
             //remove default.
             for (var l in opt.levels) {
                 delete self[l]
@@ -202,22 +263,22 @@ function Logger(opt) {
 
 
             for (var l in levels) {
-                self[l] = new Function('return '+write+'('+JSON.stringify(opt)+', '+parse+', "'+l+'", arguments);');
+                self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ parse +', "'+ l +'", arguments);');
             }
         } catch(e) {
-            setDefaultLevels();
+            setDefaultLevels(opt);
             self.error('Cannot set type: ', e.stack|| e.message)
         }
     }
 
-    this.getLogger = function(details) {
+    self.getLogger = function(details) {
         console.debug('getting logger')
     }
 
-    this.log = function() {
+    self.log = function() {
         var args = arguments, content = '';
         //console.log("arg: ", args);
-        //To handle logs with coma speparated arguments.
+        //To handle logs with coma separated arguments.
         for (var i=0; i<args.length; ++i) {
 
             if (args[i] instanceof Object) {
@@ -233,9 +294,7 @@ function Logger(opt) {
     }
 
 
-    init(opt);
-    return this
+    return init(opt);
 };
-
 
 module.exports = Logger()

@@ -156,40 +156,43 @@ Object.defineProperty(global, '__column', {
     }
 });
 
-Object.defineProperty( Object.prototype, 'toArray', {
-    writable:   true,
-    enumerable: false,
-    //If loaded several times, it can lead to an exception. That's why I put this.
-    configurable: true,
-    value: function(force) {
-        var arr = [],i = 0;
-        for (var prop in this) {
-            if ( this.hasOwnProperty(prop) ) {
-                if (force) {
-                    arr[i] = this[prop]
-                } else {
-                    arr[prop] = this[prop]
-                }
-                ++i
-            }
-        }
-        return arr
-    }
-});
 
-/**
- * String.toArray() Convert string path to array
- * @param {String} delimiter Delimiter caracter for implode
- * @return {Array} array Imploded Array
- * */
-String.prototype.toArray = function(delimiter) {
-    if (typeof(delimiter) != "undefined") {
-        var str = this.toString(), reg = new RegExp(delimiter, "g");
-        //Removing delimiter at the begining & at the end.
-        if (str.substring(str.length-1) == delimiter)
-            str = str.substring(0, str.length-1);
-        if (str.substring(0,1) == delimiter) str = str.substring(1);
 
-        return str.split(reg);
-    }
-};
+// remove this ... in conflict with lodash
+//Object.defineProperty( Object.prototype, 'toArray', {
+//    writable:   true,
+//    enumerable: false,
+//    //If loaded several times, it can lead to an exception. That's why I put this.
+//    configurable: true,
+//    value: function(force) {
+//        var arr = [],i = 0;
+//        for (var prop in this) {
+//            if ( this.hasOwnProperty(prop) ) {
+//                if (force) {
+//                    arr[i] = this[prop]
+//                } else {
+//                    arr[prop] = this[prop]
+//                }
+//                ++i
+//            }
+//        }
+//        return arr
+//    }
+//});
+// remove this ... in conflict with lodash
+///**
+// * String.toArray() Convert string path to array
+// * @param {String} delimiter Delimiter caracter for implode
+// * @return {Array} array Imploded Array
+// * */
+//String.prototype.toArray = function(delimiter) {
+//    if (typeof(delimiter) != "undefined") {
+//        var str = this.toString(), reg = new RegExp(delimiter, "g");
+//        //Removing delimiter at the begining & at the end.
+//        if (str.substring(str.length-1) == delimiter)
+//            str = str.substring(0, str.length-1);
+//        if (str.substring(0,1) == delimiter) str = str.substring(1);
+//
+//        return str.split(reg);
+//    }
+//};

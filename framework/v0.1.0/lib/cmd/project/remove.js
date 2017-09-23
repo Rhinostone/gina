@@ -1,6 +1,7 @@
-var fs = require('fs');
-var readline = require('readline');
-var rl = readline.createInterface(process.stdin, process.stdout);
+var fs          = require('fs');
+var CmdHelper   = require('./../helper');
+var readline    = require('readline');
+var rl          = readline.createInterface(process.stdin, process.stdout);
 
 var console = lib.logger;
 
@@ -11,51 +12,39 @@ function Remove() {
     var self = {};
 
     var init = function() {
-        var err = false
-            , folder = {}
-            , projecPath = ''
-            , force = false;
 
-        self.projects = require( _(GINA_HOMEDIR + '/projects.json') );
-        self.name = process.argv[3];
-        isValidName();
+        // import CMD helpers
+        new CmdHelper(self);
 
-        self.portsPath = _(GINA_HOMEDIR + '/ports.json');
-        self.portsData = require( self.portsPath );
-        self.portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json');
-        self.portsReverseData = require( self.portsReversePath );
+        // configure
+        configure();
 
-        if ( typeof(self.projects[self.name]) == 'undefined' ) {
-            console.error('[ '+ self.name + ' ] is not a registered project');
+        var err         = false
+            , folder    = new _(self.projectLocation)
+            , force     = ( typeof(self.params['force']) != 'undefined' ) ? self.params['force'] : false;
+
+
+        if ( !folder.existsSync() ) {
+            console.error('project [ '+ self.projectName+' ] was not found at this location: ' + folder.toString() );
             process.exit(1)
         }
 
-        if ( typeof(process.argv[4]) != 'undefined'
-            && /^\-f$/.test(process.argv[4])
-        ) {
-            force = true
-        } else if ( typeof(process.argv[4]) != 'undefined' ) {
-            console.error('argument error, expecting -f to disable prompt')
+        if ( typeof(self.projects[self.projectName].path) == 'undefined' ) {
+            console.error('project path not defined in ~/.gina/projects.json for [ '+ self.projectName + ' ]');
             process.exit(1)
         }
 
-
-
-        if ( typeof(self.projects[self.name].path) == 'undefined' ) {
-            console.error('project path not defined in ~/.gina/projects.json for [ '+ self.name + ' ]');
-            process.exit(1)
-        }
-
-        projecPath = self.projects[self.name].path;
 
         prompt(force, function(force){
 
-            if ( new _(projecPath).isValidPath() && force ) {
-                folder = new _(projecPath);
+
+            if ( folder.isValidPath() && force ) {
+
                 if ( !folder.existsSync() ) {
                     console.warn('project path not found at: ', folder.toString() );
                     end()
                 }
+
                 folder = folder.rmSync();
                 if (folder instanceof Error) {
                     console.error(folder.stack);
@@ -63,30 +52,24 @@ function Remove() {
                 }
 
                 // removing ports
-                var ports = JSON.parse(JSON.stringify(self.portsData, null, 4))
-                    , portsReverse = JSON.parse(JSON.stringify(self.portsReverseData, null, 4))
-                    , t = null // protocols
-                    , p = null
-                    , re = {}
-                    , start = 0
-                    , bundle = null
-                    , bundles = [];
+                var ports               = JSON.parse(JSON.stringify(self.portsData))
+                    , portsReverse      = JSON.parse(JSON.stringify(self.portsReverseData))
+                    , reversePortValue  = null
+                    , re                = null
+                ;
 
-                for(p in ports) {
-                    re = new RegExp("\@"+self.name+"\/");
-                    if ( re.test(ports[p]) ) {
-                        start = ports[p].indexOf(':')+1;
-                        bundle = ports[p].substr(start, ports[p].indexOf('/')-start);
-                        bundles.push(bundle);
-                        delete ports[p]
-                    }
-                }
+                for(var protocol in ports) {
 
-                for(t in portsReverse) {
+                    for (var port in ports[protocol]) {
 
-                    for(p in portsReverse[t]) {
-                        if ( bundles.indexOf(p) > -1 ) {
-                            delete portsReverse[t][p]
+                        re = new RegExp("\@"+ self.projectName +"\/");
+
+                        if ( re.test(ports[protocol][port]) ) {
+
+                            reversePortValue = ports[protocol][port].split('/')[0];
+
+                            delete portsReverse[reversePortValue];
+                            delete ports[protocol][port];
                         }
                     }
                 }
@@ -94,22 +77,12 @@ function Remove() {
                 // now writing
                 lib.generator.createFileFromDataSync(ports, self.portsPath);
                 lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
-
-                self.root = folder.toString()
-
             }
 
             end(true)
         })
     }
-
-    var isValidName = function() {
-        if (self.name == undefined) return false;
-
-        self.name = self.name.replace(/\@/, '');
-        var patt = /^[a-z0-9_.]/;
-        return patt.test(self.name)
-    }
+    
 
     var prompt = function(force, cb) {
         if (!force) {
@@ -135,7 +108,7 @@ function Remove() {
                     break;
             }
         }).on('close', function() {
-            console.log('\nAction cancelled !');
+            console.log('\nCommand cancelled !');
             process.exit(0)
         })
     }
@@ -145,8 +118,8 @@ function Remove() {
         var target = _(GINA_HOMEDIR + '/projects.json');
 
 
-        if ( typeof(self.projects[self.name]) != 'undefined' ) {
-            delete self.projects[self.name];
+        if ( typeof(self.projects[self.projectName]) != 'undefined' ) {
+            delete self.projects[self.projectName];
 
             lib.generator.createFileFromDataSync(
                 self.projects,
@@ -155,7 +128,7 @@ function Remove() {
         }
 
         if (removed)
-            console.log('project [ '+ self.name +' ] removed');
+            console.log('project [ '+ self.projectName +' ] removed');
 
         process.exit(0)
     };

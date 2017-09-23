@@ -10,7 +10,7 @@
 Merges the contents of two or more objects together into the first object.
 `merge` is a function from gina.utils, but can be require without having to install the [framework](https://github.com/rhinostone/gina).
 
-**usage:** merge([override], object1, [objectN])
+**usage:** merge(object1, [objectN], [override])
 
 
 **N.B.:** The function allows you to merge json and literal objects.
