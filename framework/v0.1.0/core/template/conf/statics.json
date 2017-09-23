@@ -1,6 +1,6 @@
 {
-    "css": "{views}/css",
-    "images": "{views}/images",
-    "js" : "{views}/js",
-    "favicon.ico": "{views}/html/favicon.ico"
+  "favicon.ico": "{views}/favicon.ico",
+  "html": "{views}/html",
+  "common": "{root}/common",
+  "js/vendor/gina": "{gina}/framework/v{version}/core/asset/js/plugin/dist"
 }

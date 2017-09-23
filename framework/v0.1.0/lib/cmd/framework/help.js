@@ -1,4 +1,5 @@
 var console = lib.logger;
+var open    = require('./open');
 
 function Help(opt) {
     var init = function() {
@@ -26,7 +27,7 @@ function Help(opt) {
                 open(GINA_DIR + '/services')
                 break;
             case 'lib':
-                open(getPath('gina.lib'))
+                open(getPath('gina').lib)
                 break;
             default:
                 console.debug('running default');

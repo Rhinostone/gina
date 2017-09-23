@@ -1,4 +1,4 @@
-var inherits = require('../index');
+var inherits = require('../src/main');
 var EventEmitter  = require('events').EventEmitter;
 
 var A = function() {

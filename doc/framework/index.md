@@ -1,7 +1,7 @@
-### Introducing Geena
+### Introducing Gina
 # Getting started
 
-## What is Geena ?
+## What is Gina ?
 
 PLease, note that the document is still in progress.
 
@@ -13,7 +13,7 @@ Node.js(85%), git(10%), ruby(5%)
 
 Accessibility, flexibility, scalability, maintainability.
 
-We will try to have the best from
+We aim to have the best devkiv inspired by features we think that will improve productivity and maintanability of yyour applications.
 
 Infact, most of the things we don’t have yet can be replaced by some alternatives written in
 

@@ -1,26 +1,33 @@
-var inherits = require('../index');
+var inherits = require('../src/main');
 
 var A = function() {
-    var self = this;
-    this.gender = 'female';
-    this.name = 'Julia Roberts';
+    this.name = 'A';
+
+    var self = this, local = {};
+
+    this.gender     = 'female';
+    local.name      = 'Julia Roberts';
+
     this.getName = function () {
-        return self.name;
+        return local.name;
     };
 };
 
 var B = function(gender) {//Super Class
-    var self = this;
-    this.gender = gender;
-    this.name = 'Michael Jackson';
-    this.age = 46;
+    this.name = 'B';
+
+    var self = this, local = {};
+    
+    this.gender     = gender;
+    local.name      = 'Michael Jackson';
+    local.age       = 46;
 
     this.getAge = function () {
-        return self.age;
+        return local.age;
     };
 
     this.getGender = function() {
-        return this.gender
+        return self.gender
     }
 };
 
@@ -37,9 +44,14 @@ exports['Has both instances'] = function(test) {
     test.done()
 }
 
-exports['Super overrides'] = function(test) {
-    test.equal(a.name, 'Julia Roberts');
-    test.equal(a.getName(), 'Julia Roberts');
+exports['Instances is named after the source class'] = function(test) {
+    test.equal(a.name, 'A');
+    test.done()
+}
+
+exports['Super is overrided'] = function(test) {
+    test.equal(a.gender, 'female');
+    test.equal(a.getGender(), 'female');
     test.done()
 }
 

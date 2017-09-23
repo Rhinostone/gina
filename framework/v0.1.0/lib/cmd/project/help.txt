@@ -3,37 +3,70 @@
 ******************************
 
 
-[ Adding a new project ]
+[ Add a new project ]
 
-You have 2 ways of creating your project
+    You have 2 ways of creating your project
 
-1st method
-----------
-$ gina project:add <project_name> [ —-path=/var/www ] (if no path given, will take the current)
+    1st method
+    ----------
+    $ gina project:add @<project_name> [ —-path=/var/www/<project_name> ] (if no path given, will take the current)
 
-where `/var/www` is the destination path
+    where `/var/www/<project_name>` is the destination path
 
-2nd method
-----------
-$ gina project:add /Workflow/www/<project_name>
-
-
-
-$ gina project:list [ [ —-more ] | [-b | —-with-bundles] | [-e | -—with-envs] ]
-
-[ Removing an existing project ]
-
-$ gina project:remove <project_name> [ -f (remove all related sources without prompting) ]
+    2nd method
+    ----------
+    From current project path : project name will be by default the current project folder
+    $ gina project:add
 
 
-$ gina project:rename vitrinedemo dressing-board [ —-path=/new/path ]
-$ gina project:start aikos [ —-env=staging ]
-$ gina project:restart aikos ( !!! must take in consideration the arguments given inline for startup. eg.: —-env=staging )
-$ gina project:stop aikos
+[ List projects ]
+
+    $ gina project:list [ [ —-more ] | [-b | —-with-bundles] | [-e | -—with-envs] ]
 
 
-//Commercial offers with the cloud ??
-$ gina project:backup aikos —-path=/var/dump —-with-password
-$ gina project:restore /var/dump/myproject.gna (will restore in current path)
-	or $ gina project:restore myproject.gna (will restore from current path to current path: myproject.gna must be under the PWD)
-	or $ gina project:restore /var/dump/myproject.gna  —-path=/other/path
+[ Start project ]
+
+    $ gina project:start <project_name> [ —-env=staging, --inspect-brk=5000 ]
+
+
+[ Restart project ]
+
+    Will restart project with the last known environment
+
+    $ gina project:restart <project_name>
+
+
+[ Stop project ]
+
+    Will restart project with the last known environment
+
+    $ gina project:stop <project_name>
+
+
+
+[ Remove an existing project ]
+
+    $ gina project:remove <project_name> [ -f (remove all related sources without prompting) ]
+
+
+[ Rename project ]
+
+    $ gina project:rename <project_name> <new_project_name>
+
+
+[ Backup project ]
+
+    N.B.: Only available when ordering for supoort
+
+    $ gina project:backup aikos —-path=/var/dump —-with-password
+
+
+[ Restore project ]
+
+    N.B.: Only available when ordering for support
+
+    $ gina project:restore /var/dump/myproject.tar.gz (will restore in current path)
+    or
+    $ gina project:restore myproject.tar.gz  (will restore from current path to current path: myproject.gna must be under the PWD)
+    or
+    $ gina project:restore /var/dump/myproject.tar.gz —-path=/other/path

@@ -1,78 +1,59 @@
-var fs = require('fs');
-var console = lib.logger;
+var fs          = require('fs');
+
+var CmdHelper   = require('./../helper');
+var console     = lib.logger;
 
 /**
  * Rename existing project.
  * */
 function Rename() {
-    var self = {};
+
+    var self    = {}
+        , local = {
+            source: null,
+            target: null
+        }
+    ;
 
     var init = function() {
 
-        self.projects = require(_(GINA_HOMEDIR + '/projects.json') );
-        self.portsPath = _(GINA_HOMEDIR + '/ports.json');
-        self.portsData = require( self.portsPath );
-        self.portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json');
-        self.portsReverseData = require( self.portsReversePath );
+        // import CMD helpers
+        new CmdHelper(self);
 
-        if (!process.argv[3]) {
-            console.error('Missing argument <source_name>');
-            process.exit(1)
-        } else if ( !isValidName(process.argv[3], 'source') ) {
-            console.error('Invalid <source_name>');
+        // configure
+        configure();
+
+        if ( self.projectArgvList.length != 2 ) {
+            console.error('This command line is expecting 2 arguments: @<old_project> and @<new_project>');
             process.exit(1)
         }
 
-        if (!process.argv[4]) {
-            console.error('Missing argument <target_name>');
-            process.exit(1)
-        } else if (!isValidName(process.argv[4], 'target')) {
-            console.error('Invalid <target_name>');
-            process.exit(1)
-        }
+        local.source = self.projectName;
+        local.target = self.projectArgvList[1];
 
 
-
-        if ( !isDefined(self.target) ) {
+        if ( !isDefined('project', local.target) ) {
             rename()
         } else {
-            console.error('Target project name [ '+self.target+' ] is already taken !');
+            console.error('New project name [ '+local.target+' ] is already taken !');
             process.exit(1)
         }
-
-
     }
 
-    var isDefined = function(name) {
-        if ( typeof(self.projects[name]) != 'undefined' ) {
-            console.error('[ '+ name +' ] is an existing project. Please choose another name or remove it first.');
-            process.exit(1)
-        }
-        return false
-    }
-
-    var isValidName = function(value, name) {
-        self[name] = value;
-        if (self[name] == undefined) return false;
-
-        self[name] = self[name].replace(/\@/, '');
-        var patt = /^[a-z0-9_.]/;
-        return patt.test(self[name])
-    }
 
     var rename = function() {
 
-        self.projects[self.target] = self.projects[self.source];
+        self.projects[local.target] = self.projects[local.source];
 
         // renaming folder !
-        if (!self.projects[self.source].path || self.projects[self.source].path == '') {
-            console.error('It seems like this project does not have a path :(');
+        if (!self.projects[local.source].path || self.projects[local.source].path == '') {
+            console.error("It seems like this project does not have a path :'(");
             process.exit(1)
         }
 
-        var folder = new _(self.projects[self.source].path)
+        var folder = new _(self.projects[local.source].path)
             , re = new RegExp("\/"+folder.toArray().last()+"$")
-            , target = folder.toUnixStyle().replace(re, '/'+ self.target)
+            , target = folder.toUnixStyle().replace(re, '/'+ local.target)
             , project = {}// local project.json
             , pack = {};// local pakage.json
 
@@ -84,11 +65,11 @@ function Rename() {
             }
 
             // renaming project in config files
-            self.projects[self.target].path = target;
+            self.projects[local.target].path = target;
 
             if ( fs.existsSync( _(target +'/project.json') )) {
                 project = require(_(target +'/project.json'));
-                project['name'] = self.target;
+                project['name'] = local.target;
                 lib.generator.createFileFromDataSync(
                     project,
                     _(target +'/project.json')
@@ -98,7 +79,7 @@ function Rename() {
             if ( fs.existsSync( _(target +'/package.json') )) {
                 pack = require(_(target +'/package.json'));
                 if ( typeof(pack['name']) != 'undefined' ) {
-                    pack.name = self.target;
+                    pack.name = local.target;
                     lib.generator.createFileFromDataSync(
                         pack,
                         _(target +'/package.json')
@@ -106,38 +87,38 @@ function Rename() {
                 }
             }
 
-            delete self.projects[self.source];
+            // updating projects
+            delete self.projects[local.source];
 
-            // update ports
-            var ports = JSON.parse(JSON.stringify(self.portsData, null, 4))
-                , portsReverse = JSON.parse(JSON.stringify(self.portsReverseData, null, 4))
-                , t = null // protocols
-                , p = null
-                , re = {}
-                , start = 0
-                , bundle = null
-                , newBundle = null
-                , bundles = [];
+            // renaming & update ports
+            var ports               = JSON.parse(JSON.stringify(self.portsData))
+                , portsReverse      = JSON.parse(JSON.stringify(self.portsReverseData))
+                , re                = null
+                , projectValue      = null
+                , portsReverseStr   = null
+            ;
 
-            for(p in ports) {
-                re = new RegExp("\@"+self.source+"\/");
-                if ( re.test(ports[p]) ) {
-                    start = ports[p].indexOf(':')+1;
-                    bundle = ports[p].substr(start, ports[p].indexOf('/')-start);
-                    newBundle = bundle.substr(0, bundle.indexOf('@')) +'@'+ self.target;
-                    ports[p] = ports[p].replace(bundle, newBundle);
-                }
-            }
+            portsReverseStr = JSON.stringify(portsReverse);
+            for(var protocol in ports) {
 
-            var re = new RegExp('\@'+self.source+'$');
-            for(t in portsReverse) {
-                for(p in portsReverse[t]) {
-                    if ( re.test(p) ) {
-                        portsReverse[t][p.replace(self.source, self.target)] = JSON.parse(JSON.stringify(portsReverse[t][p], null, 4));
-                        delete portsReverse[t][p]
+                for (var port in ports[protocol]) {
+
+                    re = new RegExp("\@"+ local.source +"\/");
+
+                    if ( re.test(ports[protocol][port]) ) {
+
+                        projectValue = ( ports[protocol][port].split('/')[0] ).split('@')[1];
+
+                        ports[protocol][port] = ports[protocol][port].replace(re, "@"+ local.target +"/");
+
+
+                        portsReverseStr = portsReverseStr.replace( new RegExp('\@'+ projectValue, 'g'), '@'+ local.target );
+
                     }
                 }
             }
+            portsReverse = JSON.parse(portsReverseStr);
+
 
             // now writing
             lib.generator.createFileFromDataSync(ports, self.portsPath);
@@ -159,7 +140,7 @@ function Rename() {
         )
 
         if (renamed)
-            console.log('project [ '+ self.source +' ] renamed to [ ' + self.target + ' ]');
+            console.log('project [ '+ local.source +' ] renamed to [ ' + local.target + ' ]');
 
         process.exit(0)
     }

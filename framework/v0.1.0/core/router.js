@@ -1,6 +1,6 @@
 /*
  * This file is part of the gina package.
- * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2016 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -14,9 +14,10 @@ var url                 = require('url')
     , lib               = require('./../lib')
     , console           = lib.logger
     , inherits          = lib.inherits
+    , merge             = lib.merge
     , SuperController   = require('./controller')
     , Config            = require('./config')
-    //init
+    //get config instance
     , config            = new Config();
 
 /**
@@ -49,19 +50,6 @@ function Router(env) {
         }
     }
 
-    /**
-     * Check if rule has params
-     *
-     * @param {string} pathname
-     * @return {boolean} found
-     *
-     * @private
-     * */
-    var hasParams = function(pathname) {
-        var patt = /:/;
-        return ( patt.test(pathname) ) ? true : false
-    }
-
     this.setMiddlewareInstance = function(instance) {
         self.middlewareInstance = instance
     }
@@ -70,31 +58,7 @@ function Router(env) {
         return self
     }
 
-    var parseRouting = function(request, params, route) {
-        var uRe     = params.url.split(/\//)
-            , uRo   = route.split(/\//)
-            , score = 0
-            , r     = {}
-            , i     = 0;
 
-        //attaching routing description for this request
-        request.routing = params; // can be retried in controller with: req.routing
-
-        if (uRe.length === uRo.length) {
-            var maxLen = uRo.length;
-            //console.info("-----------------FOUND MATCHING SCORE", uRe.length, uRo.length);
-            //console.info(uRe, uRo);
-            for (; i<maxLen; ++i) {
-                if (uRe[i] === uRo[i])
-                    ++score
-                else if (hasParams(uRo[i]) && fitsWithRequirements(request, uRo[i], uRe[i], params))
-                    ++score
-            }
-        }
-        r.past = (score === maxLen) ? true : false;
-        r.request = request;
-        return r
-    }
     /**
      * Compare urls
      *
@@ -106,20 +70,71 @@ function Router(env) {
      * */
     this.compareUrls = function(request, params, urlRouting) {
 
-        if ( typeof(urlRouting) == 'object' ) {
-            var i = 0
-                , res = {
-                    past : false,
+        if ( Array.isArray(urlRouting) ) {
+            var i       = 0
+                , res   = {
+                    past    : false,
                     request : request
                 };
-            while (i < urlRouting.count() && !res.past) {
+
+            while (i < urlRouting.length && !res.past) {
                 res = parseRouting(request, params, urlRouting[i]);
                 ++i
             }
+
             return res
         } else {
             return parseRouting(request, params, urlRouting)
         }
+    }
+
+    /**
+     * Check if rule has params
+     *
+     * @param {string} pathname
+     * @return {boolean} found
+     *
+     * @private
+     * */
+    var hasParams = function(pathname) {
+        return ( /:/.test(pathname) ) ? true : false
+    }
+
+    /**
+     * Parse routing for mathcing url
+     *
+     * @param {object} request
+     * @param {object} params
+     * @param {string} route
+     *
+     * @return
+     *
+     * */
+    var parseRouting = function(request, params, route) {
+        var uRe         = params.url.split(/\//)
+            , uRo       = route.split(/\//)
+            , maxLen    = uRo.length
+            , score     = 0
+            , r         = {}
+            , i         = 0;
+
+        //attaching routing description for this request
+        request.routing = params; // can be retried in controller with: req.routing
+
+        if (uRe.length === uRo.length) {
+            for (; i<maxLen; ++i) {
+                if (uRe[i] === uRo[i]) {
+                    ++score
+                } else if (score == i && hasParams(uRo[i]) && fitsWithRequirements(request, uRo[i], uRe[i], params)) {
+                    ++score
+                }
+            }
+        }
+
+        r.past = (score === maxLen) ? true : false;
+        r.request = request;
+
+        return r
     }
 
     /**
@@ -136,30 +151,159 @@ function Router(env) {
      * */
     var fitsWithRequirements = function(request, urlVar, urlVal, params) {
 
-        urlVar = urlVar.replace(/:/, '');
-        var v = null;
+        var matched     = -1
+            , _param    = urlVar.match(/\:\w+/g)
+            , regex     = null
+            , tested    = false;
 
-        //console.info("ROUTE !!! ", urlVar, params.requirements);
-        if (
-            typeof(params.requirements) != 'undefined' &&
-            typeof(params.requirements[urlVar]) != 'undefined'
-            ) {
-            v = urlVal.match(params.requirements[urlVar]);
-            //console.info('does it match ?', v);
-            //works with regex like "([0-9]*)"
-            //console.log("PARAMMMMM !!! ", urlVar, params.requireclearments[urlVar], params.requirements);
-            if (v != null && v[0] !== '') {
-                request.params[urlVar] = v[0]
+        if (!_param.length) return false;
+
+        //  if custom path, path rewrite
+        if (request.routing.param.path) {
+            regex = new RegExp(urlVar, 'g')
+            if ( regex.test(request.routing.param.path) ) {
+                request.routing.param.path = request.routing.param.path.replace(regex, urlVal);
             }
         }
-        return (v != null && v[0] == urlVal && v[0] != '') ? true : false
+
+        //  if custom file, file rewrite
+        if (request.routing.param.file) {
+            regex = new RegExp(urlVar, 'g')
+            if ( regex.test(request.routing.param.file) ) {
+                request.routing.param.file = request.routing.param.file.replace(regex, urlVal);
+            }
+        }
+
+        if (_param.length == 1) {// fast one
+            matched =  ( _param.indexOf(urlVar) > -1 ) ? _param.indexOf(urlVar) : false;
+
+            if (matched === false) return matched;
+            // filter on method
+            if (params.method !== request.method) return false;
+
+            var key = _param[matched].substr(1);
+            regex   = params.requirements[key];
+
+            if ( /^\//.test(regex) ) {
+                var re      = regex.match(/\/(.*)\//).pop()
+                    , flags = regex.replace('/'+ re +'/', '');
+
+                tested = new RegExp(re, flags).test( urlVal )
+
+            } else {
+                tested = new RegExp(params.requirements[key]).test( urlVal )
+            }
+
+            if (
+                typeof(params.param[key]) != 'undefined' &&
+                typeof(params.requirements) != 'undefined' &&
+                typeof(params.requirements[key]) != 'undefined' &&
+                tested
+            ) {
+                request.params[key] = urlVal;
+                return true
+            }
+
+        } else { // slow one
+
+            // In order to support rules defined like :
+            //      { params.url }  => `/section/:name/page:number`
+            //      { request.url } => `/section/plante/page4`
+            //
+            //      with keys = [ ":name", ":number" ]
+
+            var keys        = _param
+                , tplUrl    = params.url
+                , url       = request.url
+                , values    = {}
+                , strVal    = ''
+                , started   = false
+                , i         = 0;
+
+            for (var c = 0, posLen = url.length; c < posLen; ++c) {
+                if (url.charAt(c) == tplUrl.charAt(i) && !started) {
+                    ++i
+                    continue
+                } else if (strVal == '') { // start
+
+                    started = true;
+                    strVal += url.charAt(c);
+                } else if ( c > (tplUrl.indexOf(keys[0]) + keys[0].length) ) {
+
+                    regex   = params.requirements[keys[0]];
+                    urlVal  = strVal.substr(0, strVal.length);
+
+                    if ( /^\//.test(regex) ) {
+                        var re      = regex.match(/\/(.*)\//).pop()
+                            , flags = regex.replace('/'+ re +'/', '');
+
+                        tested = new RegExp(re, flags).test( urlVal )
+
+                    } else {
+                        tested = new RegExp(params.requirements[key]).test( urlVal )
+                    }
+
+                    if (tested) {
+                        values[ keys[0].substr(1) ] = urlVal
+                    } else {
+                        return false
+                    }
+
+                    strVal =  '';
+                    started = false;
+                    i = (tplUrl.indexOf(keys[0]) + keys[0].length);
+                    c -= 1;
+
+                    keys.splice(0,1)
+                } else {
+                    strVal += url.charAt(c);
+                    ++i
+                }
+
+                if (c == posLen - 1 ) {
+
+                    regex   = params.requirements[keys[0]];
+                    urlVal  = strVal.substr(0, strVal.length);
+
+                    if ( /^\//.test(regex) ) {
+                        var re      = regex.match(/\/(.*)\//).pop()
+                            , flags = regex.replace('/'+ re +'/', '');
+
+                        tested = new RegExp(re, flags).test( urlVal )
+
+                    } else {
+                        tested = new RegExp(params.requirements[key]).test( urlVal )
+                    }
+
+                    if (tested) {
+                        values[ keys[0].substr(1) ] = urlVal
+                    } else {
+                        return false
+                    }
+
+                }
+
+            }
+
+            if (values.count() == keys.length) {
+                for (var key in values) {
+                    request.params[key] = values[key];
+                }
+                return true
+            }
+
+        }
+
+        return false
     }
 
     var refreshCore = function() {
-        var core = new RegExp( getPath('gina.core') );
-        //var lib =  new RegExp( getPath('local.conf[local.bundle][local.env].libPath') );
+        //var corePath = getPath('gina.core');
+        var corePath = getPath('gina').core;
+        var libPath = getPath('gina').lib;
+        var core = new RegExp( corePath );
         var excluded = [
-            _(getPath('gina.core') + '/gna.js', true)
+            _(corePath + '/gna.js', true)
         ];
 
         for (var c in require.cache) {
@@ -169,20 +313,20 @@ function Router(env) {
         }
 
         //update utils
-        delete require.cache[_(getPath('gina.core') +'/utils/index.js', true)];
-        require.cache[_(getPath('gina.core') +'/utils/index.js', true)] = require( _(getPath('gina.core') +'/utils/index.js', true) );
-        require.cache[_(getPath('gina.core') + '/gna.js', true)].exports.utils = require.cache[_(getPath('gina.core') +'/utils/index.js', true)];
+        delete require.cache[_(libPath +'/index.js', true)];
+        require.cache[_(libPath +'/index.js', true)] = require( _(libPath +'/index.js', true) );
+        require.cache[_(corePath + '/gna.js', true)].exports.utils = require.cache[_(libPath +'/index.js', true)];
+
+        //update plugins
+        delete require.cache[_(corePath +'/plugins/index.js', true)];
+        require.cache[_(corePath +'/plugins/index.js', true)] = require( _(corePath +'/plugins/index.js', true) );
+        require.cache[_(corePath + '/gna.js', true)].exports.plugins = require.cache[_(corePath +'/plugins/index.js', true)];
 
         // Super controller
-        delete require.cache[_(getPath('gina.core') +'/controller/index.js', true)];
-        require.cache[_(getPath('gina.core') +'/controller/index.js', true)] = require( _(getPath('gina.core') +'/controller/index.js', true) );
-        SuperController = require.cache[_(getPath('gina.core') +'/controller/index.js', true)];
+        delete require.cache[_(corePath +'/controller/index.js', true)];
+        require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
+        SuperController = require.cache[_(corePath +'/controller/index.js', true)];
 
-
-        //update server
-
-
-        //TODO - do the same with lib
     }
 
     /**
@@ -200,100 +344,259 @@ function Router(env) {
         var pathname        = url.parse(request.url).pathname;
         var bundle          = local.bundle = params.bundle;
         var conf            = config.Env.getConf( bundle, env );
-        local.conf = conf;
-        var action          = request.action = params.param.action;
+        var bundles         = conf.bundles;
+        local.request       = request;
+        local.conf          = conf;
+        local.isStandalone  = config.Host.isStandalone();
+
+        // for libs/context etc..
+        var routerObj = {
+            response        : response,
+            next            : next,
+            hasViews        : ( typeof(conf.content.views) != 'undefined' ) ? true : false,
+            isUsingTemplate : conf.template,
+            isProcessingXMLRequest : params.isXMLRequest
+        };
+
+        setContext('router', routerObj);
+
+        var action          = request.control = params.param.control;
+        // more can be added ... but it will always start by `on`Something.
+        var reservedActions = [
+            "onReady",
+            "setup"
+        ];
+        if (reservedActions.indexOf(action) > -1) throwError(response, 500, '[ '+action+' ] is reserved for the framework');
         var middleware      = params.middleware || [];
-        var actionFile      = params.param.file;
-        var namespace       = params.param.namespace;
+        var actionFile      = params.param.file; // matches rule name
+        var namespace       = params.namespace;
         var routeHasViews   = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
-        local.routeHasViews = routeHasViews;
+        var isUsingTemplate = conf.template;
+        var hasSetup        = false;
+        var hasNamespace    = false;
+
+        local.routeHasViews     = routeHasViews;
+        local.isUsingTemplate   = isUsingTemplate;
+        local.next              = next;
+        local.isXMLRequest      = params.isXMLRequest;
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
         local.cacheless = cacheless;
 
         if (cacheless) refreshCore();
 
-
-        console.debug("routing content : \n", bundle, env,  JSON.stringify( conf, null, 4) );
-
         //Middleware Filters when declared.
         var resHeaders = conf.server.response.header;
         //TODO - to test
         if ( resHeaders.count() > 0 ) {
             for (var h in resHeaders) {
-                response.setHeader(h, resHeaders[h])
+                if (!response.headersSent)
+                    response.setHeader(h, resHeaders[h])
             }
         }
 
-        //logger.debug('gina', 'ROUTER:DEBUG:1', 'ACTION ON  ROUTING IS : ' + action, __stack);
-        console.debug('ACTION ON  ROUTING IS : ' + action);
+        //console.debug('ACTION ON  ROUTING IS : ' + action);
 
         //Getting superCleasses & extending it with super Models.
-        var controllerFile = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
+        var controllerFile         = {}
+            , setupFile            = {}
+            , Controller           = {};
 
+        // TODO -  ?? merge all controllers into a single file while building for other env than `dev`
+
+        setupFile     = conf.bundlesPath +'/'+ bundle + '/controllers/setup.js';
+        var filename = '';
+        if (namespace) {
+            filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.'+ namespace +'.js';
+            if ( !fs.existsSync(filename) ) {
+                filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
+                console.warn('namespace found, but no `'+filename+'` to load: just ignore this message if this is ok with you')
+            }
+        } else {
+            filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
+        }
+        controllerFile = filename
+
+
+        // default param setting
         var options = {
-            action          : action,
             file            : actionFile,
+            namespace       : namespace,
             bundle          : bundle,//module
             bundlePath      : conf.bundlesPath +'/'+ bundle,
             rootPath        : self.executionPath,
             conf            : conf,
             instance        : self.middlewareInstance,
             views           : ( routeHasViews ) ? conf.content.views : undefined,
-            cacheless       : cacheless
+            isUsingTemplate : local.isUsingTemplate,
+            cacheless       : cacheless,
+            rule            : params.rule,
+            path            : params.param.path || null, // user custom path : namespace should be ignored | left blank
+            isXMLRequest    : params.isXMLRequest,
+            withCredentials : false
         };
 
-
+        for (var p in params.param) {
+            options[p] = params.param[p]
+        }
 
         try {
-            // TODO - namespace handling
-            //if ( typeof(namespace) != 'undefined' ) {
 
-            if (cacheless) delete require.cache[_(controllerFile, true)];
-            var Controller  = require(_(controllerFile, true))
+            if ( fs.existsSync(_(setupFile, true)) )
+                hasSetup = true;
+
+            if (cacheless) {
+
+                delete require.cache[_(controllerFile, true)];
+
+                if ( hasSetup )
+                    delete require.cache[_(setupFile, true)];
+            }
+
+            Controller = require(_(controllerFile, true));
+
         } catch (err) {
-            var superController = new SuperController(options);
-            superController.setOptions(request, response, next, options);
-            console.log(err.stack);
-            superController.throwError(response, 500, err.stack);
-            process.exit(1)
+            // means that you have a syntax errors in you controller file
+            // TODO - increase `stack-trace` from 10 (default value) to 500 or more to get the exact error --stack-trace-limit=1000
+            // TODO - also check `stack-size` why not set it to at the same time => --stack-size=1024
+            throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (err.stack || err.message) );
         }
 
         // about to contact Controller ...
-        // namespaces should be supported for every bundles
-        if ( typeof(namespace) != 'undefined' && namespace == 'framework' ) {
-            Controller = SuperController.prototype[namespace];
-        }
-
-        Controller = inherits(Controller, SuperController);
         try {
-            var controller = new Controller(options);
+
+            Controller      = inherits(Controller, SuperController);
+
+            var controller  = new Controller(options);
+
             controller.setOptions(request, response, next, options);
 
+            if (hasSetup) { // adding setup
+                controller.setup = function(request, response, next) {
+                    if (!this._setupDone) {
+                        this._setupDone = true;
+                        return function (request, response, next) { // getting rid of the controller context
+                            var Setup = require(_(setupFile, true));
+
+                            // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
+                            // inheriting SuperController functions & objects
+
+                            // exporting config & common methods
+                            Setup.engine                = controller.engine;
+                            Setup.getConfig             = controller.getConfig;
+                            Setup.getLocales            = controller.getLocales;
+                            Setup.getFormsRules         = controller.getFormsRules;
+                            Setup.throwError            = controller.throwError;
+                            Setup.redirect              = controller.redirect;
+                            Setup.render                = controller.render;
+                            Setup.renderJSON            = controller.renderJSON;
+                            Setup.renderWithoutLayout   = controller.renderWithoutLayout
+                            Setup.isXMLRequest          = controller.isXMLRequest;
+                            Setup.isWithCredentials     = controller.isWithCredentials,
+                            Setup.isCacheless           = controller.isCacheless;
+
+                            Setup.apply(Setup, arguments);
+
+                            return Setup;
+                        }(request, response, next)
+                    }
+                }
+            }
+
+            // allowing another controller (public methods) to be required inside the current controller
+            /**
+             * requireController
+             * Allowing another controller (public methods) to be required inside the current controller
+             *
+             * @param {string} namespace - Controller namespace
+             * @param {object} [options] - Controller options
+             *
+             * @return {object} controllerInstance
+             * */
+            controller.requireController = function (namespace, options) {
+
+                var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
+                var corePath    = getPath('gina').core;
+                var config      = getContext('gina').Config.instance;
+                var bundle      = config.bundle;
+                var env         = config.env;
+                var bundleConf  = config.Env.getConf(bundle, env);
+
+                var filename    = _(bundleConf.bundlesPath +'/'+ bundle + '/controllers/' + namespace + '.js', true);
+
+                try {
+
+                    if (cacheless) {
+                        // Super controller
+                        delete require.cache[_(corePath +'/controller/index.js', true)];
+                        require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
+
+                        delete require.cache[filename];
+                    }
+
+                    var SuperController     = require.cache[_(corePath +'/controller/index.js', true)];
+                    var RequiredController  = require(filename);
+
+                    var RequiredController = inherits(RequiredController, SuperController)
+
+                    if ( typeof(options) != 'undefined' ) {
+
+                        var controller = new RequiredController( options );
+                        controller.setOptions(request, response, next, options);
+
+                        return controller
+
+                    } else {
+                        return new RequiredController();
+                    }
+
+                } catch (err) {
+                    throwError(response, 500, err );
+                }
+            }
+
             if (middleware.length > 0) {
-                processMiddlewares(middleware, action, request, response, next,
+                processMiddlewares(middleware, controller, action, request, response, next,
                     function onDone(action, request, response, next){
+                        // handle superController events
+                        for (var e=0; e<reservedActions.length; ++e) {
+                            if ( typeof(controller[reservedActions[e]]) == 'function' ) {
+                                controller[reservedActions[e]](request, response, next)
+                            }
+                        }
                         controller[action](request, response, next)
                     })
             } else {
+                // handle superController events
+                // e.g.: inside your controller, you can defined: `this.onReady = function(){...}` which will always be called before the main action
+                for (var e=0; e<reservedActions.length; ++e) {
+                    if ( typeof(controller[reservedActions[e]]) == 'function' ) {
+                        controller[reservedActions[e]](request, response, next)
+                    }
+                }
+
                 controller[action](request, response, next)
             }
 
         } catch (err) {
             var superController = new SuperController(options);
             superController.setOptions(request, response, next, options);
-            superController.throwError(response, 500, err.stack);
+            if ( typeof(controller) != 'undefined' && typeof(controller[action]) == 'undefined') {
+                superController.throwError(response, 500, (new Error('action not found: `'+ action+'`. Please, check your routing.json or the related control in your `'+controllerFile+'`.')).stack);
+            } else {
+                superController.throwError(response, 500, err.stack);
+            }
         }
 
         action = null
     };//EO route()
 
-    var processMiddlewares = function(middlewares, action, req, res, next, cb){
+    var processMiddlewares = function(middlewares, controller, action, req, res, next, cb){
 
-        var filename = _(local.conf.bundlePath)
-            , middleware = {}
-            , constructor = null
-            , re = new RegExp('^'+filename);
+        var filename        = _(local.conf.bundlePath)
+            , middleware    = null
+            , constructor   = null
+            , re            = new RegExp('^'+filename);
 
         if ( middlewares.length > 0 ) {
             for (var m=0; m<middlewares.length; ++m) {
@@ -310,49 +613,54 @@ function Router(env) {
                     throwError(res, 501, new Error('middleware not found '+ middleware).stack);
                 }
 
-                //if (local.cacheless) {
-                //    // because of the /index.js and sub files
-                //    for (var p in require.cache) {
-                //        if ( re.test(p) ) {
-                //            delete require.cache[p]
-                //        }
-                //    }
-                //}
+                if (local.cacheless) delete require.cache[_(filename, true)];
 
-                delete require.cache[_(filename, true)];
+                var MiddlewareClass = function() {
 
-                middleware = require(_(filename, true));
+                    return function () { // getting rid of the middleware context
+
+                        var Middleware = require(_(filename, true));
+                        // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
+
+
+                        // exporting config & common methods
+                        //Middleware.engine             = controller.engine;
+                        Middleware.prototype.getConfig              = controller.getConfig;
+                        Middleware.prototype.getLocales             = controller.getLocales;
+                        Middleware.prototype.getFormsRules          = controller.getFormsRules;
+                        Middleware.prototype.throwError             = controller.throwError;
+                        Middleware.prototype.redirect               = controller.redirect;
+                        Middleware.prototype.render                 = controller.render;
+                        Middleware.prototype.renderJSON             = controller.renderJSON;
+                        Middleware.prototype.renderWithoutLayout    = controller.renderWithoutLayout
+                        Middleware.prototype.isXMLRequest           = controller.isXMLRequest;
+                        Middleware.prototype.isWithCredentials      = controller.isWithCredentials;
+                        Middleware.prototype.isCacheless            = controller.isCacheless;
+
+                        return Middleware;
+                    }()
+                }();
+
+                middleware = new MiddlewareClass();
+
+
                 if ( !middleware[constructor] ) {
                     throwError(res, 501, new Error('contructor [ '+constructor+' ] not found @'+ middlewares[m]).stack);
                 }
 
                 if ( typeof(middleware[constructor]) != 'undefined') {
 
-                    // exporting config
-                    middleware.getConfig = function(name){
-                        var tmp = null;
-                        if ( typeof(name) != 'undefined' ) {
-                            try {
-                                //Protect it.
-                                tmp = JSON.stringify(local.conf.content[name]);
-                                return JSON.parse(tmp)
-                            } catch (err) {
-                                console.error(err.stack);
-                                return undefined
-                            }
-                        } else {
-                            tmp = JSON.stringify(local.conf);
-                            return JSON.parse(tmp)
-                        }
-                    };
-                    middleware.throwError = throwError;
-
                     middleware[constructor](req, res, next,
                         function onMiddlewareProcessed(req, res, next){
                             middlewares.splice(m, 1);
-                            processMiddlewares(middlewares, action,  req, res, next, cb)
+                            if (middlewares.length > 0) {
+                                processMiddlewares(middlewares, controller, action,  req, res, next, cb)
+                            } else {
+                                cb(action, req, res, next)
+                            }
                         }
                     );
+
                     break
                 }
             }
@@ -368,25 +676,37 @@ function Router(env) {
 
     var throwError = function(res, code, msg) {
         if (arguments.length < 3) {
-            var res = local.res;
-            var code = res || 500;
-            var msg = code || null;
-            if ( typeof(msg) != 'string' ) {
-                msg = JSON.stringify(msg)
-            }
+            var msg     = code || null
+                , code  = res || 500
+                , res   = local.res;
         }
 
-        if ( !res.headersSent ) {
-            if ( !hasViews() ) {
-                res.writeHead(code, { 'Content-Type': 'application/json'} );
-                res.end(JSON.stringify({
+        if (!res.headersSent) {
+            if (local.isXMLRequest || !hasViews() || !local.isUsingTemplate) {
+                // Internet Explorer override
+                if ( /msie/i.test(local.request.headers['user-agent']) ) {
+                    res.writeHead(code, "Content-Type", "text/plain")
+                } else {
+                    res.writeHead(code, { 'Content-Type': 'application/json'} )
+                }
+
+                console.error(res.req.method +' [ '+code+' ] '+ res.req.url)
+
+                var e = {
                     status: code,
-                    error: 'Error '+ code +'. '+ msg
-                }))
+                    error: msg
+                };
+
+                if ( typeof(msg) == 'object' && typeof(msg.stack) != 'undefined' ) {
+                    e.error.stack   = msg.stack;
+                    e.error.message = msg.message;
+                }
+
+                res.end(JSON.stringify(err))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
-                res.end('Error '+ code +'. '+ msg);
-                local.res.headersSent = true;
+                console.error(res.req.method +' [ '+code+' ] '+ res.req.url);
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
             }
         } else {
             local.next()

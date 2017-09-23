@@ -1,4 +1,4 @@
-var inherits = require('../index');
+var inherits = require('../src/main');
 
 var A = function() {
     this.age = 32;// Overriding Super (46)

@@ -1,25 +1,25 @@
 {
     "default": {
         "url": "/",
-        "param": { "action": "zero" }
+        "param": { "control": "zero" }
     },
     "test1": {
         "url": ["/one", "/one/"],
-        "param": { "action": "one" }
+        "param": { "control": "one" }
     },
     "test2": {
         "requirements": {
             "pone": ".*"
         },
         "url": "/:pone/two",
-        "param": { "action": "two", "pone" : ":pone" }
+        "param": { "control": "two", "pone" : ":pone" }
     },
     "test3": {
         "requirements": {
             "pone": ".*"
         },
         "url": "/three",
-        "param": { "action": "three" }
+        "param": { "control": "three" }
     },
     "test4": {
         "requirements": {
@@ -27,7 +27,7 @@
             "ptwo": ".*"
         },
         "url": "/:pone/four/:ptwo",
-        "param": { "action": "four", "pone" : ":pone", "ptwo" : ":ptwo" }
+        "param": { "control": "four", "pone" : ":pone", "ptwo" : ":ptwo" }
     },
     "test5": {
         "requirements": {
@@ -35,7 +35,7 @@
             "ptwo": ".*"
         },
         "url": ["/:pone/five/:ptwo", "/five/:pone/:ptwoRi"],
-        "param": { "action": "five", "pone" : ":pone", "ptwo" : ":ptwo" }
+        "param": { "control": "five", "pone" : ":pone", "ptwo" : ":ptwo" }
     },
     "test6": {
         "requirements": {
@@ -43,7 +43,7 @@
             "ptwo": "^[0-9]+$"
         },
         "url": "/six/:pone/:ptwo",
-        "param": { "action": "six", "pone" : ":pone", "ptwo" : ":ptwo" }
+        "param": { "control": "six", "pone" : ":pone", "ptwo" : ":ptwo" }
     },
     "test7": {
         "requirements": {
@@ -51,13 +51,13 @@
             "ptwo": ".*"
         },
         "url": "/:pone/seven/:ptwo",
-        "param": { "action": "seven" }
+        "param": { "control": "seven" }
     },
     "test8": {
         "requirements": {
             "pone": ".*"
         },
         "url": ["/eight/", "/eight/:pone"],
-        "param": { "action": "six" }
+        "param": { "control": "six" }
     }
 }

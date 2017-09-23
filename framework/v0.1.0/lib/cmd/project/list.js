@@ -1,6 +1,7 @@
 var fs = require('fs');
 
-var console = lib.logger;
+var CmdHelper   = require('./../helper');
+var console     = lib.logger;
 /**
  * List all registerd projects
  * Available options:
@@ -12,8 +13,17 @@ var console = lib.logger;
  * */
 function List(){
 
+    var self = {};
+
     var init = function(){
-        var projects = require(_(GINA_HOMEDIR + '/projects.json'))
+
+        // import CMD helpers
+        new CmdHelper(self);
+
+        // configure
+        configure();
+
+        var projects = self.projects
             , list = []
             , str = ''
             , more = (process.argv[3] && /^(?:\-\-more$)/.test(process.argv[3])) ? true : false ;

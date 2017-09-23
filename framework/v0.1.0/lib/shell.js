@@ -1,9 +1,9 @@
 var fs = require('fs');
 var EventEmitter = require('events').EventEmitter;
 var spawn = require('child_process').spawn;
-var inherits = require('./inherits');
-var helpers = require('./helpers');
-//var console = require('./logger');
+var inherits = require(require.resolve('./inherits'));
+var helpers = require('./../helpers');
+var console = require('./logger');
 
 
 function Shell () {
@@ -14,9 +14,11 @@ function Shell () {
     };
 
     this.setOptions = function(opt) {
+
         local = {
             chdir : opt.chdir
-        }
+        };
+
     }
 
     var getOptions = function () {
@@ -30,24 +32,31 @@ function Shell () {
      * @param {boolean} runLocal
      * */
     this.run = function(cmdline, runLocal) {
-        var opt = getOptions();
-        var outFile = _(getPath('globalTmpPath') + '/out.log');
-        var errFile = _(getPath('globalTmpPath') + '/err.log');
-        var out = fs.openSync(outFile, 'a');
-        var err = fs.openSync(errFile, 'a');
 
-        var root = opt.chdir || getPath('root');
+        var opt         = getOptions()
+            , outFile   = _(GINA_TMPDIR + '/out.log')
+            , errFile   = _(GINA_TMPDIR + '/err.log')
+            , out       = fs.openSync(outFile, 'a')
+            , err       = fs.openSync(errFile, 'a')
+        ;
 
-        var result, error = false;
-        var hasCalledBack = false;
+        //var root = opt.chdir || getPath('root');
+        var root = opt.chdir;
+
+        var result          = null
+            , error         = false
+            , hasCalledBack = false
+        ;
 
         var e = new EventEmitter();
 
-        var cmd;
+        var cmd = null;
+
         if ( isWin32() ) {
             throw new Error('Windows platform not supported yet for command line forward');
             process.exit(1)
         }
+
         if ( typeof(runLocal) != 'undefined' && runLocal == true ) {
 
             // cmdline must be an array !!
@@ -58,13 +67,15 @@ function Shell () {
             cmd = spawn(cmdline.splice(0,1).toString(), cmdline, { cwd: root, stdio: [ 'ignore', out, err ] })
 
         } else {
-            console.info('running: ssh ', cmdline);
+            console.debug('running: ssh ', cmdline);
             cmd = spawn('ssh', [ self.host, cmdline ], { stdio: [ 'ignore', out, err ] })
         }
 
         cmd.on('stdout', function(data) {
-            var str = data.toString();
-            var lines = str.split(/(\r?\n)/g);
+
+            var str     = data.toString();
+            var lines   = str.split(/(\r?\n)/g);
+
             result = lines.join('');
 
             e.emit('run#data', result)
@@ -72,10 +83,10 @@ function Shell () {
 
         // Errors are readable in the onComplete callback
         cmd.on('stderr', function (err) {
-            var err = err.toString();
-            //error = new Error(err).stack || false;
-            error = err || false;
 
+            if (err) {
+                error = err.toString();
+            }
 
             e.emit('run#err', error)
         });
@@ -105,7 +116,7 @@ function Shell () {
                 }
 
 
-                if (error == '') {
+                if ( error == '' || typeof(error) == 'undefined' || error == undefined  || error == null) {
                     error = false
                 }
 
@@ -129,18 +140,13 @@ function Shell () {
 
             e.once('run#err', function(err, data) {
                 callback(err, data)
-            });
-
-            //return e
-
+            })
         };
 
         e.onComplete = function(callback) {
             e.once('run#complete', function(err, data) {
                 callback(err, data)
-            });
-
-            //return e
+            })
         };
 
         return e

@@ -1,9 +1,9 @@
 {
     "project": "framework",
     "paths": {
-        "geena": "{geena.core}",
-        "utils": "{geena.utils}",
-        "root": "{geena}",
+        "gina": "{gina.core}",
+        "utils": "{gina.utils}",
+        "root": "{gina}",
         "env": "{homedir}/{release}/framework/env.json",
         "tmp": "{tmpdir}"
     },

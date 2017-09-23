@@ -20,7 +20,8 @@
     "name": "Rhinostone",
     "email": "gina@rhinosotne.com"
   },
-  "copyright" : "Copyright (c) 2014 Rhinostone <gina@rhinostone.com>",
+  "copyright" : "Copyright (c) 2017 Rhinostone <gina@rhinostone.com>",
+  "main": "src/main",
   "scripts": {
     "test": "nodeunit test"
   },

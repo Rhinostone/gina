@@ -1,6 +1,6 @@
 /*
- * This file is part of the geena package.
- * Copyright (c) 2014 Rhinostone <geena@rhinostone.com>
+ * This file is part of the gina package.
+ * Copyright (c) 2017 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -11,7 +11,7 @@
  *
  * @package    gina.framework
  * @namespace  lib
- * @author     Rhinostone <geena@rhinostone.com>
+ * @author     Rhinostone <gina@rhinostone.com>
  */
 
 var merge = require('./merge');
@@ -34,9 +34,10 @@ function Lib() {
         Config      : _require('./config'),
         //dev     : require('./lib/dev'),//must be at the same level than gina.utils => gina.dev
         inherits    : _require('./inherits'),
-        helpers     : _require('./helpers'),
+        helpers     : _require('./../helpers'),
         //this one must move to Dev since it's dev related
         Model       : _require('./model'),
+        Collection  : _require('./collection'),
         merge       : _require('./merge'),
         generator   : _require('./generator'),//move to gina.dev
         Proc        : _require('./proc'),
@@ -44,8 +45,8 @@ function Lib() {
         logger      : _require('./logger'),
         math        : _require('./math'),
         url         : _require('./url'),
-        cmd         : _require('./cmd'),
-        Validator   : _require('./validator')
+        routing     : _require('./routing'),
+        cmd         : _require('./cmd')
     };
 
     /**
@@ -62,20 +63,24 @@ function Lib() {
         return files;
     };
 
+
+
     return self
 };
 // Making it global
 lib = new Lib();
+
+// Needed for by the daemon
 lib.cmd.load = function(opt){
-    //ginaPath, pack, argv, client
 
     process.argv = opt.argv;
 
     //Set gina paths.
-    setPath('gina', _(opt.ginaPath));
+    setPath('gina.root', _(opt.ginaPath));
     setPath('framework', _(opt.frameworkPath));
     setPath('gina.core', _(opt.frameworkPath +'/core'));
     setPath('gina.lib', _(opt.frameworkPath +'/lib'));
+    setPath('gina.helpers', _(opt.frameworkPath +'/helpers'));
 
     //Getting package.
     var p = opt.pack;

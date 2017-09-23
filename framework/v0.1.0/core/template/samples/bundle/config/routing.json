@@ -1,6 +1,9 @@
 {
-    "default": {
-        "url": "/",
-        "param": { "control": "init" }
+  "default": {
+    "url": "/",
+    "method": "GET",
+    "param": {
+      "control": "init"
     }
+  }
 }

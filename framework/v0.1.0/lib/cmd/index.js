@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Gina.Utils.cmd
- * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2017 Rhinostone <gina@rhinostone.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -72,7 +72,7 @@ cmd.getOptions = function() {
 cmd.onExec = function(client, isFromFramework, opt) {
     cmd.option = opt;
     var console = lib.logger;
-    var Proc = require( getPath('gina.lib') + '/proc');
+    var Proc = require( getPath('gina').lib + '/proc');
     var self = {};
 
     cmd.msg = require( _(__dirname + '/framework/msg.json') );
@@ -99,9 +99,17 @@ cmd.onExec = function(client, isFromFramework, opt) {
                 cmd.proc = new Proc('gina', process);
                 cmd.proc.setMaster(process.pid);
 
-                cmd.proc.onReady( function(){ //starting others
-                    opt.pid = process.pid;
-                    run(opt)
+                cmd.proc.onReady( function(err, pid){ //starting others
+
+                    if (!err) {
+                        console.debug('[ '+ pid +' ] registered');
+
+                        opt.pid = process.pid;
+                        run(opt)
+                    } else {
+                        console.error(err.stack)
+                    }
+
                 })
             })
         } else { // Offline CMD

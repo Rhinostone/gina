@@ -3,3 +3,7 @@ test
 examples
 *.sock
 ./test/workspace
+./framework/0.1.0_old
+*.old
+gina.com
+

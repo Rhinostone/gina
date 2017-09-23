@@ -1,10 +1,7 @@
-'use strict';
-
-/**
- * Proc
+/* Gina.utils.Proc
  *
  * This file is part of the gina package.
- * Copyright (c) 2014 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2016 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -41,109 +38,73 @@
  * { name: 'SIGXCPU', action: 'A', desc: 'CPU time limit exceeded.' },
  * { name: 'SIGXFSZ', action: 'A', desc: 'File size limit exceeded. ' }
  * */
-var Proc;
+
 
 //Imports
-var fs      = require('fs');
-var spawn   = require('child_process').spawn;
-var EventEmitter = require('events').EventEmitter;
-var e = new EventEmitter();
+var fs          = require('fs');
+var Emitter     = require('events').EventEmitter;
+var spawn       = require('child_process').spawn;
+var UtilsConfig = require( _(__dirname + '/config') );
+var inherits    = require( _(__dirname + '/inherits') );
+var console     = require( _(__dirname + '/logger') );
+//var helpers     = require( _(__dirname + '/helpers') );
 
-var console = require('./logger');
+//console.log('path ? ', getPaths());
 
 /**
  * @constructor
  *
  * @param {string} bundle
- * @param {object} process
- * @param {boolean} [usePidFile]
  *
  * */
-Proc = function(bundle, proc, usePidFile){
+function Proc(bundle, proc, usePidFile){
 
-    var self   = {};
+    var e       = new Emitter();
 
+    if ( typeof(usePidFile) == 'undefined') {
+        var usePidFile = true
+    }
 
+    //default path to store pid files.
+    var pathObj = new _( GINA_RUNDIR + '/gina' );
 
+    var self    = {
+        usePidFile  : usePidFile || false,
+        PID         : null,
+        path        : null,
+        master      : false, //used only by master.
+        bundle      : bundle,
+        bundles     : [],
+        proc        : proc
+
+    };
 
     /**
-     * Check target path
-     * @param {string} path
-     * @param {integer} PID Id of the PID to save
+     * Init process handler
      * */
-
-    var init = function(bundle, proc, usePidFile) {
-
-        var projects = require(GINA_HOMEDIR + '/projects.json');
-
-        self.PID    = null;
-        self.path   = null;
-        self.master = false;//used only by master.
-        self.bundles = [];
-        self.bundle = bundle;
-        self.proc   = proc;
-
-        //Init.
-        if ( typeof(self.bundle) == "undefined" ) {
-            throw new Error('Invalid or undefined proc name . Proc naming Aborted');
-            process.exit(1)
-        }
-
-        for (var p in projects) {
-            self.bundles.push(p)
-        }
-
-        if ( typeof(usePidFile) == 'undefined') {
-            var usePidFile = true;
-        }
-
-        //Look for framework path if root is empty.
-        if ( !getPath('root') ) {
-            setPath('root', GINA_DIR)
-        }
-
-
-        //PID | run path. - user running node & gina must have permissions
-        var pathObj = new _(GINA_RUNDIR + '/gina');// e.g. /var/run
-        var path = pathObj.toString();
-
-        //Create dir if needed.
-        console.debug("MKDIR  pathObj (pid:"+self.proc.pid+") - ", self.bundle);
+    var init = function() {
 
         process.list = (process.list == undefined) ? [] : process.list;
         process.pids = (process.pids == undefined) ? {} : process.pids;
 
-        if (self.bundles.count() > 0) {
-            self.register(self.bundle, self.proc.pid);
-        }
-        console.debug('registring ', self.proc.pid);
-        if (usePidFile) {
-            pathObj.mkdir( function(err, path){
-                console.debug('path created ('+path+') now saving PID ' +  bundle);
-                //console.info('gina', 'PROC:INFO:1', 'path created ('+path+') now saving PID ' +  bundle, __stack);
-                //Save file.
-                if (!err) {
-                    self.PID = self.proc.pid;
-                    self.path = path + pathObj.sep;
-                    //Add PID file.
-                    setPID(self.bundle, self.PID, self.proc);
-                    save(self.bundle, self.PID, self.proc);
-                    e.emit('proc#ready')
-                } else {
-                    console.debug('gina: ' + err.stack);
-                    process.exit(1)
-                }
-            });
-        } else {
-            setPID(self.bundle, self.PID, self.proc);
-            e.emit('proc#ready')
-        }
+        self.register(self.bundle, self.proc.pid);
     };
 
-    var isMaster = function(){
+    var isMaster = function() {
         return (self.master) ? true : false;
     };
 
+    // var getShutdownConnectorSync = function(bundle) {
+    //     var bundlesPath = getPath('bundlesPath');
+    //     var connPath = _(bundlesPath +'/'+ bundle + '/config/connector.json');
+    //     try {
+    //         console.log('reading connPath: ', connPath);
+    //         var content = fs.readFileSync(connPath);
+    //         return JSON.parse(content).httpClient.shutdown
+    //     } catch (err) {
+    //         return undefined
+    //     }
+    // }
     /**
      * Going to force restart by third party (kill 9).
      *
@@ -154,53 +115,59 @@ Proc = function(bundle, proc, usePidFile){
      * @callback callback
      * @param {boolean|string} err
      * */
-    var respawn = function(bundle, env, pid, callback){
-        console.debug("Exiting and re spawning : ", bundle, env);
-        if (env == 'prod') {//won't loop forever for others env.
-            // TODO - Count the restarts and prevent unilimited loop
-            // TODO - Send notification to admin or/and root to the Fatal Error Page.
+    var respawn = function(bundle, env, pid, callback) {
+        //var loggerInstance = getContext('logger');
+        //loggerInstance["trace"]('Fatal error !');
+        //console.debug("Exiting and re spawning : ", bundle, env);
+        // TODO - Count the restarts and prevent unilimited loop
+        // TODO - Send notification to admin or/and root to the Fatal Error Page.
 
-            var root = getPath('root');
-            try {
-                var version = process.getVersion(bundle);
-            } catch (err) {
-                var bundle = process.argv[3];
-                console.debug("Bundle ", bundle," already running...");
-                dismiss(process.pid);
-            }
-
-
-            var outPath = _(root + '/out.'+bundle+'.'+version+'.log');
-            var errPath = _(root + '/out.'+bundle+'.'+version+'.log');
-            var nodePath = getPath('node');
-            var ginaPath = _(root + '/gina');
-
-
-            var opt = process.getShutdownConnectorSync();
-            //Should kill existing one..
-            opt.path = '/'+bundle + '/restart/'+ pid +'/' + env;
-
-            var HttpClient = require('gina.com').Http;
-            var httpClient = new HttpClient();
-
-            if (httpClient) {
-                //httpClient.query(opt);
-                //We are not waiting for anything particular...do we ?
-                httpClient.query(opt, function(err, msg){
-                    //Now start new bundle.
-                    callback(err);
-                });
-            } else {
-                var err = new Error('No shutdown connector found.');
-                console.error(err);
-                callback(err);
-            }
-        } else {
-            callback(false);
+        try {
+            var version = process.getVersion(bundle);
+        } catch (err) {
+            var bundle = process.argv[3];
+            //var port = self.getBundlePortByBundleName(bundle);
+            //console.log("Bundle ", bundle," already running or port[ "+port+" ] is taken by another process...");
+            //loggerInstance["trace"]("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
+            console.debug("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
+            dismiss(process.pid);
         }
+
+
+        var outPath = _(GINA_LOGDIR + '/gina/out.'+bundle+'.'+version+'.log');
+        var errPath = _(GINA_LOGDIR + '/gina/out.'+bundle+'.'+version+'.log');
+        //var nodePath = getPath('node');
+        //var ginaPath = _(root + '/gina');
+
+        // if (env == 'prod') { //won't loop forever for others env.
+        //
+        //     //var opt = process.getShutdownConnectorSync();
+        //     var opt = getShutdownConnectorSync(bundle);
+        //     //Should kill existing one..
+        //     opt.path = '/' + bundle + '/restart/' + pid + '/' + env;
+        //
+        //     var HttpClient = require('gina.com').Http;
+        //     var httpClient = new HttpClient();
+        //
+        //     if (httpClient) {
+        //         //httpClient.query(opt);
+        //         //We are not waiting for anything particular...do we ?
+        //         httpClient.query(opt, function (err, msg) {
+        //             //Now start new bundle.
+        //             callback(err);
+        //         });
+        //     } else {
+        //         var err = new Error('No shutdown connector found.');
+        //         console.error(err);
+        //         callback(err);
+        //     }
+        //
+        // } else {
+            callback(false);
+        //}
     };
 
-    var setPID = function(bundle, PID, proc){
+    var setPID = function(bundle, PID, proc) {
 
         if (bundle != 'gina') {
             proc.title = 'gina: '+ bundle;
@@ -212,7 +179,7 @@ Proc = function(bundle, proc, usePidFile){
         setDefaultEvents(bundle, PID, proc);
     };
 
-    var setDefaultEvents = function(bundle, PID, proc){
+    var setDefaultEvents = function(bundle, PID, proc) {
 
 
         if ( typeof(PID) != "undefined" && typeof(PID) == "number" ) {
@@ -223,33 +190,41 @@ Proc = function(bundle, proc, usePidFile){
 
 
             proc.on('SIGTERM', function(code){
+
+                if ( typeof(code) == 'undefined')
+                    var code = 0;
+
                 proc.exit(code);
             });
 
             proc.on('SIGINT', function(code){
 
-                if (code == undefined) var code = 0;
-                console.info("got exit code ", code, process.list);
+                if (code == undefined)
+                    var code = 0;
+
+                console.info("\nGot exit code. Now killing: ", code);
                 proc.exit(code);//tigger exit event.
             });
 
             //Will prevent the server from stopping.
-            proc.on('uncaughtException', function(err){
+            proc.on('uncaughtException', function(err) {
 
+                console.emerg(err.stack);
 
-                //TODO - Send an email to the administrator/dev
-                //TODO - Have a delegate handler to allow the dev to do its stuff. Maybe it's already there if any dev can override.
-                console.info('Fix your shit...');
-                console.emerg(err.stack||err.message||err);
-                var bundle = process.argv[3];
+                //console.log("@=>", self.args);
+                //var env =  process.env.NODE_ENV || 'prod';
+                var bundle = self.bundle;
                 var pid = self.getPidByBundleName(bundle);
 
-                var env =  process.env.NODE_ENV || 'prod';
-                //Wake up buddy !.
-                respawn(bundle, env, pid, function(err){
-                    proc.exit(1);
-                });
+                dismiss(pid, 'SIGKILL');
 
+
+                // TODO - Wake up buddy !.
+                //respawn(bundle, env, pid, function(err) {
+                    //TODO - Send an email to the administrator/dev
+                    //TODO - Have a delegate handler to allow the dev to do its stuff. Maybe it's already there if any dev can override.
+                    //proc.exit(1) // don't kill !!! It will stop the server
+                //})
             });
 
             proc.on('exit', function(code){
@@ -258,71 +233,79 @@ Proc = function(bundle, proc, usePidFile){
                     code = 0;
                 }
 
-                var bundle = process.argv[3];
-                console.debug("@=>", self.args);
-                var pid = self.getPidByBundleName(bundle);
+                var bundle = self.bundle;
                 var env =  process.env.NODE_ENV || 'prod';
-                console.debug('bundle ', bundle, ' vs ', pid, " => ", process.pid);
+                var pid = self.getPidByBundleName(bundle);
 
-                //console.log("got exit code ", "("+code+")", pid, " VS ", pid, " <=> gina: ", process.pid);
-                //code = code || 0;
-                //var obj = console.emerg('gina', 'UTILS:EMERG1', 'process exit code ' + code);
-                //if (code == 0) {
-                    // First child.
-                    dismiss(pid);
-                    // Then master.
-                    dismiss(process.pid);
-                //}
+
+                dismiss(process.list[process.list.count()-1].pid, "SIGKILL")
             });
 
             proc.on('SIGHUP', function(code){
-                console.info("Hanging up !", process.argv);
+                console.debug("Hanging up ! Code: "+ code+"\n"+ process.argv);
 
-                var bundle = process.argv[3];
+                var bundle = self.bundle;
                 var env =  process.env.NODE_ENV || 'prod';
                 var pid = self.getPidByBundleName(bundle);
 
-                dismiss(pid);
-                dismiss(process.pid);
-            });
-
-//            proc.stderr.resume();
-//            proc.stderr.setEncoding('utf8');//Set encoding.
-//            proc.stderr.on('data', function(err){
-//                console.error("found err ", err);
-//            });
+                dismiss(process.pid, "SIGINT");
+                dismiss(pid, "SIGINT");
+            })
         }
     };
 
 
-
-
-    var dismiss = function(pid){
+    var dismiss = function(pid, signal){
         if (pid == undefined) {
             var pid = self.PID;
         }
-        var bundleName = self.getBundleNameByPid(pid);
-        var path = _(self.path + pid);
-        try {
-            if ( fs.existsSync(path) )
-                fs.unlinkSync(path);
-        } catch (err) {
-            console.debug('Final : ', err.stack)
-            //Means that it does not exists anymore.
-        }
 
         try {
-            var mountPath = _(getPath('mountPath') + '/' + bundleName);
-            if (bundleName != undefined && fs.existsSync(mountPath) )
-                fs.unlinkSync(mountPath);
+            //console.debug('\n=> '+ JSON.stringify(process.list, null, 4));
+            var index       = null
+                , mountPath = null
+                , pidPath   = null
+            ;
 
-            //Means that it does not exists anymore.
+            for (var p in process.list) {
+                if ( process.list[p].pid == pid && process.list[p].name != 'gina' ) {
+                    index       = p;
+                    pidPath     = _(GINA_RUNDIR + '/gina/' + process.list[p].pid);
+                    mountPath   =  _(getPath('mountPath') + '/' + process.list[p].name);
+
+                    if ( fs.existsSync(pidPath) )
+                        fs.unlinkSync( pidPath );
+
+                    if ( fs.existsSync(mountPath) )
+                        fs.unlinkSync( mountPath );
+
+                    // soft kill..
+                    process.kill(pid, signal);
+                } else if ( process.list[p].pid == pid && process.list[p].name == 'gina' ) {
+                    index       = p;
+                    pidPath     = _(GINA_RUNDIR + '/gina/' + process.list[p].pid);
+
+                    if ( fs.existsSync(pidPath) )
+                        fs.unlinkSync( pidPath );
+                }
+            }
         } catch (err) {
-            //Catchall
-            console.debug('Final : ', err.stack)
+            //Means that it does not exists anymore.
+            console.debug(err.stack)
         }
 
-        process.kill(pid, "SIGKILL");
+        if (index != null)
+            delete process.list[index];
+
+        // handles only signals that cannot be cannot be caught or ignored
+        if ( /(SIGKILL|SIGSTOP)/i.test(signal) ) {
+            pidPath     = _(GINA_RUNDIR + '/gina/' + pid);
+
+            if ( fs.existsSync(pidPath) )
+                fs.unlinkSync( pidPath );
+        }
+
+        console.debug('received '+ signal +' signal to end process [ '+ pid +' ]\n');
     };
 
     /**
@@ -333,21 +316,31 @@ Proc = function(bundle, proc, usePidFile){
      * @private
      * */
     var save = function(){
-        var bundle = self.bundle;
-        var PID = self.PID;
-        var proc = self.proc;
-        var path = self.path
+        var bundle  = self.bundle
+            , PID   = self.PID
+            , proc  = self.proc
+            , path  = self.path
+        ;
+
         //Get PID path.
         if (
-            typeof(bundle) != "undefined" && bundle != ""
-            && typeof(PID) != "undefined" && PID != "" && PID != null
-            && typeof(proc) != "undefined" && proc != "" && proc != null
+            typeof(bundle) != "undefined" && bundle != ''
+            && typeof(PID) != "undefined" && PID != '' && PID != null
+            && typeof(proc) != "undefined" && proc != '' && proc != null
         ) {
-            var fileStream = fs.createWriteStream(path + PID);
-            fileStream.once('open', function(fd) {
-                fileStream.write(bundle);
-                fileStream.end();
-            });
+            try {
+                var fileStream = fs.createWriteStream(path + PID);
+                fileStream.once('open', function(fd) {
+                    fileStream.write(bundle);
+                    fileStream.end();
+                    e.emit('proc#complete', false, PID)
+                });
+            } catch (err) {
+                e.emit('proc#complete', err)
+            }
+
+        } else {
+            e.emit('proc#complete', new Error('encountered troubles while trying to save Process [ '+ PID +' ] file'))
         }
     };
 
@@ -362,32 +355,35 @@ Proc = function(bundle, proc, usePidFile){
         try{
             return self.PID;
         } catch (err) {
-            console.error('Could not get PID for bundle: '+ self.bundle);
+            console.error('Could not get PID for bundle: '+ self.bundle + (err.stack||err.message));
             return null;
         }
     };
 
     self.getBundleNameByPid = function(pid){
+
         var list = process.list;
 
         for (var i=0; i<list.length; ++i) {
-            console.debug("list ", list, ':',  list[i][pid]);
-            if ( typeof(list[i][pid]) != "undefined")
+            if ( typeof(list[i][pid]) != 'undefined' )
                 return list[i][pid]
         }
         return undefined
     };
 
+
     self.getPidByBundleName = function(bundle){
+
         var list = process.pids;
-        console.debug("list ", list, ':',  list[bundle]);
-        if ( typeof(list[bundle]) != "undefined")
+
+        if ( typeof(list[bundle]) != 'undefined')
             return list[bundle]
         else
             return undefined
     };
 
     self.setMaster = function(bool){
+
         if ( typeof(bool) == 'undefined' || bool == true) {
             self.master = true;
         } else {
@@ -396,33 +392,71 @@ Proc = function(bundle, proc, usePidFile){
     };
 
     self.register = function(bundle, pid) {
+
         if ( bundle == 'gina' || bundle != 'gina' && self.bundles.indexOf(bundle) == -1 ) {
-            if (bundle != 'gina') {
-                self.bundles.push(bundle);
-            }
 
             var list = {};
-            list[pid] = bundle;
-            process.list.push(list);//Running bundles.
-            process.pids[bundle] = pid;
 
-            list = null;
+            var processRegistration = function () {
+
+                if (bundle != 'gina') {
+                    self.bundles.push(bundle);
+                }
+
+
+                list['pid']     = pid;
+                list['name']    = bundle;
+
+                process.list.push(list);//Running bundles.
+                setContext('process.list', process.list);
+                process.pids[bundle] = pid;
+
+                list = null;
+            };
+
+            if (self.usePidFile) {
+                //var path    = pathObj.toString();
+
+                pathObj.mkdir( function(err, path){
+                    console.debug('path created ('+ path +') now saving PID ' + bundle);
+                    //save file
+                    if (err)
+                        console.debug('Found '+ path +': not replacing');
+
+                    if (!err) {
+                        self.PID    = self.proc.pid;
+                        self.path   = path + pathObj.sep;
+
+                        //Add PID file.
+                        setPID(bundle, self.PID, self.proc);
+                        save(bundle, self.PID, self.proc);
+
+                        processRegistration()
+                    }
+                })
+            } else {
+                processRegistration()
+            }
         }
     };
 
+    self.dismiss = dismiss;
 
-
-    return {
-        onReady: function(callback){
-            e.on('proc#ready', function(){
-                callback()
-            });
-            init(bundle, proc, usePidFile)
-        },
-        setMaster: self.setMaster,
-        register: self.register
+    self.onReady = function(cb) {
+        e.once('proc#complete', function(err, pid){
+            cb(err, pid)
+        })
     }
 
+    //init
+    if ( typeof(self.bundle) == "undefined" ) {
+        console.error('Invalid or undefined proc name . Proc naming Aborted');
+        process.exit(1)
+    } else {
+        init()
+    }
+
+    return self
 };
 
 module.exports = Proc;

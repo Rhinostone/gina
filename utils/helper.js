@@ -58,6 +58,7 @@ function MainHelper(opt) {
         return ( os.platform() == 'win32' ) ? true : false;
     }
 
+
     /**
      *
      * @param {boolean} deep - Deep copy
@@ -367,6 +368,10 @@ function MainHelper(opt) {
         return undefined
     }
 
+    getEnvVars = function() {
+        return process.gina
+    }
+
     /**
      * Get log path - %SystemRoot%\system32\winevt\logs or /
      *
@@ -399,11 +404,11 @@ function MainHelper(opt) {
      * */
     getRunDir = function() {
         if ( isWin32() ) {
-            console.debug('check helper.. on RunDir')
+            console.debug('check /gina/utils/helper.js around on getRunDir()')
         } else {
             // Means /var/run or /var/lock by default.
-            var runDir = '/var/run';
-            return ( fs.existsSync(runDir) ) ? runDir : '/var/lock'//by default.
+            var runDir = '/usr/local/var/run';
+            return ( fs.existsSync(runDir) ) ? runDir : '/usr/local/var/lock'//by default.
         }
     }
 

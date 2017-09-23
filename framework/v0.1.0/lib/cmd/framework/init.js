@@ -1,11 +1,12 @@
-var fs = require('fs');
-var EventEmitter = require('events').EventEmitter;
-var e = new EventEmitter();
-var ginaPath = getPath('gina');
-var help = require(ginaPath + '/utils/helper');
+var fs              = require('fs');
+var EventEmitter    = require('events').EventEmitter;
+var e               = new EventEmitter();
+var console         = lib.logger;
+var ginaPath        = getPath('gina').root;
+var help            = require(ginaPath + '/utils/helper');
 
-var console = lib.logger;
-var aliases = require( getPath('gina.lib') + '/cmd/aliases.json' );
+
+var aliases = require( getPath('gina').lib + '/cmd/aliases.json' );
 
 function Initialize(opt) {
 
@@ -55,14 +56,14 @@ function Initialize(opt) {
     var run = function(opt, cmd) {
         opt.task = checkForAliases(opt.task);
         var filename ='/cmd/' + opt.task.topic + '/' + opt.task.action + '.js'
-        var path = getPath('gina.lib') + filename;
+        var path = getPath('gina').lib + filename;
 
         try {
             if ( GINA_ENV_IS_DEV )
                 delete require.cache[path];
             require(path)(opt, cmd)
         } catch(err) {
-            console.crit('Gina has some troubles with command [ ', process.argv.toArray().join(' ') + ' ]\n' + err.stack)
+            console.crit('Gina has some troubles with command [ ', process.argv.join(' ') + ' ]\n' + err.stack)
         }
     }
 
@@ -114,7 +115,7 @@ function Initialize(opt) {
 
     self.checkIfMain = function() {
         console.debug('checking main...');
-        var source = getPath('gina') + '/resources/home/main.json';
+        var source = getPath('gina').root + '/resources/home/main.json';
         var target = self.opt.homedir + '/main.json';
 
         if ( !fs.existsSync(target) ) {
@@ -146,7 +147,7 @@ function Initialize(opt) {
 
         if ( !fs.existsSync(target) ) {
             lib.generator.createFileFromDataSync(
-                {},
+                { "http": {} },
                 target
             )
         }
@@ -156,7 +157,7 @@ function Initialize(opt) {
      * Checking ports.reverse
      *
      **/
-    self.checkIfPorts = function() {
+    self.checkIfPortsReverse = function() {
         console.debug('checking ports.reverse...');
         var target = _(self.opt.homedir +'/ports.reverse.json');
 
@@ -232,55 +233,55 @@ function Initialize(opt) {
 
     self.checkIfSettings = function() {
         console.debug('checking settings...');
-        var main = require( self.opt.homedir + '/main.json' )
-            ,version = getEnvVar('GINA_VERSION')
-            ,env = getEnvVar('GINA_ENV') || main['dev_env'][self.release]
-            ,source = getPath('gina') + '/resources/home/settings.json'
-            ,target = self.opt.homedir +'/'+ self.release +'/settings.json';
+        var main            = require( _(self.opt.homedir + '/main.json', true) )
+            , version       = _( getEnvVar('GINA_VERSION'), true)
+            , env           = process.env.NODE_ENV = _( getEnvVar('GINA_ENV') || main['dev_env'][self.release], true)
+            , settings      = require( _( getPath('gina').root + '/resources/home/settings.json', true ) )
+            , userSettings  = {}
+            , target        = _(self.opt.homedir +'/'+ self.release +'/settings.json', true)
+        ;
 
-        if ( !fs.existsSync(target) ) {
-            try {
-                var data = require(source);
-                data.version = version;
-                data.env = env;
-                data.tmpdir = _( getTmpDir() );
-                data.rundir = _( getRunDir() );
-                data.logdir = _( getLogDir() );
-                //data.node_version = nodeVersion;
+        // updated on framework start : you never know which user is going to start gina (root ? sudo ? regular user)
+        // TODO - user settings override is passed through argv : —-logdir=value  —-tmpdir=value —-rundir=value —-homedir=value
 
-                var env = require(self.opt.homedir + '/main.json').dev_env;
-                var dic = {
-                    'version' : getEnvVar('GINA_VERSION'),
-                    'dev_env' : env
-                };
-                data = whisper(dic, data);
-                self.settings = data;
+        var uid     = process.getuid()
+            , gid   = process.getgid();
 
-                lib.generator.createFileFromDataSync(
-                    data,
-                    target
-                )
-            } catch (err) {
-                console.error(err.stack);
-                process.exit(1)
-            }
+        try {
 
-        } else {
-            //Loading settings.
-            try {
-                self.settings = require(target);
+            var dic = {
+                'version' : _( getEnvVar('GINA_VERSION'), true),
+                'dev_env' : env,
+                'node_version': process.version,
+                'debug_port' : process.debugPort,
+                'user' : process.env.USER,
+                'uid' : uid,
+                'gid' : gid,
+                'dir': getPath('gina').root,
+                'home_dir' : _( getUserHome(), true ),
+                'run_dir' : _( getRunDir(), true ),
+                'tmp_dir' : _( getTmpDir(), true ),
+                'log_dir' : _( getLogDir(), true )
+            };
 
-            } catch (err) {
-                console.error(err.stack);
-                process.exit(1)
-            }
+            settings = whisper(dic, settings);
+            settings = merge(userSettings, settings);
+            self.settings = settings;
+
+            lib.generator.createFileFromDataSync(
+                settings,
+                target
+            )
+        } catch (err) {
+            console.error(err.stack);
+            process.exit(1)
         }
     }
 
     self.readSettings = function() {
         var name = '';
         for (var s in self.settings) {
-            if ( !getEnvVar('GINA_' + s.toUpperCase()) ) {
+            if (!/^\_/.test(s) && !getEnvVar('GINA_' + s.toUpperCase()) ) {
                 setEnvVar('GINA_' + s.toUpperCase(), self.settings[s])
             }
         }

@@ -17,5 +17,12 @@
     },
     "dev_env": {
         "{release}": "dev"
+    },
+    "protocols": {
+        "{release}": [ "http" ]
+    },
+    "def_protocol": {
+        "_comment": "e.g.:  http, https, ftp, ssh, tftp, tls, udp",
+        "{release}": "http"
     }
 }
