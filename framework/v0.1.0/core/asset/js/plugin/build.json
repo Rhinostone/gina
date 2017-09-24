@@ -3,6 +3,7 @@
   "paths": {
     "requireLib"            : "../../../../../node_modules/requirejs/require",
     "jquery"                : "vendor/jquery/1.12.4.min",
+
     "vendor/uuid"           : "../../../../../node_modules/node-uuid/uuid",
     "vendor/engine.io"      : "../../../../../node_modules/engine.io-client/engine.io",
 

@@ -16,7 +16,7 @@ var console = lib.logger;
  *  $ gina env:set --log-level=debug
  *
  * */
-function Get(){
+function Get(opt, cmd){
     var self = {};
 
     var init = function(){

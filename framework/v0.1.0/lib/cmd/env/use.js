@@ -2,7 +2,7 @@ var console = lib.logger;
 /**
  * Select the default environment
  * */
-function Use() {
+function Use(opt, cmd) {
     var self = {};
 
     var init = function() {

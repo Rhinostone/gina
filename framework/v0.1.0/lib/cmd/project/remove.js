@@ -8,16 +8,16 @@ var console = lib.logger;
 /**
  * Remove project or unregister existing one from `~/.gina/projects.json`.
  * */
-function Remove() {
+function Remove(opt, cmd) {
     var self = {};
 
     var init = function() {
 
         // import CMD helpers
-        new CmdHelper(self);
+        new CmdHelper(self, opt.client);
 
-        // configure
-        configure();
+        // check CMD configuration
+        if ( !isCmdConfigured() ) return false;
 
         var err         = false
             , folder    = new _(self.projectLocation)

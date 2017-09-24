@@ -4,7 +4,7 @@ var console = lib.logger;
  * Remove existing environment
  * TODO - Prompt for confirmation: "This will remove [ environment ] for the whole project. Proceed ? Y/n: "
  * */
-function Remove() {
+function Remove(opt, cmd) {
     var self = {};
 
     var init = function() {

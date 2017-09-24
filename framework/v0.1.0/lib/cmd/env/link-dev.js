@@ -2,7 +2,7 @@ var console = lib.logger;
 /**
  * Link environment to development - A way of renaming dev
  * */
-function LinkDev() {
+function LinkDev(opt, cmd) {
     var self = {};
 
     var init = function() {

@@ -9,7 +9,7 @@ var merge       = lib.merge;
  * @author      Rhinostone <gina@rhinostone.com>
  * @api public
  * */
-function CmdHelper(cmd) {
+function CmdHelper(cmd, client) {
 
     // cmd properties list
     var self = {
@@ -102,19 +102,20 @@ function CmdHelper(cmd) {
     }
 
     /**
-     * configure
+     * isCmdConfigured
      * filter argv & merge cmd properties
      * Used once at init to filter argv inputs and set some assets variables
      *
-     * @param {object} usercmd
      *
-     * @return {object} cmd
+     * @return {boolean} isConfigured
      * */
-    configure = function() {
+    isCmdConfigured = function() {
 
         cmd.configured = ( typeof(cmd.configured) != 'undefined' ) ? cmd.configured : false;
 
         if (cmd.configured) return; // can only be called once !!
+
+        var errMsg = null;
 
         try {
 
@@ -156,8 +157,10 @@ function CmdHelper(cmd) {
                 if ( /^\@[a-z0-9_.]/.test(argv[i]) ) {
 
                     if ( !isValidName(argv[i]) ) {
-                        console.error('[ '+ argv[i] +' ] is not a valid project name. Please, try something else: @[a-z0-9_.]');
-                        process.exit(1);
+                        errMsg = '[ '+ argv[i] +' ] is not a valid project name. Please, try something else: @[a-z0-9_.]';
+                        console.error(errMsg);
+                        exit(errMsg);
+                        return false;
                     } else {
                         // only take the first one
                         if ( !cmd.projectArgvList.length )
@@ -186,8 +189,10 @@ function CmdHelper(cmd) {
                             }
 
                         } else {
-                            console.error('Argument `--path=`' +cmd.params.path + ' is not valid');
-                            process.exit(1)
+                            errMsg = 'Argument `--path=`' +cmd.params.path + ' is not valid';
+                            console.error(errMsg);
+                            exit(errMsg);
+                            return false;
                         }
                     }
 
@@ -206,12 +211,17 @@ function CmdHelper(cmd) {
                     return;
 
                 var folder = new _(process.cwd()).toArray().last();
+
                 if ( isDefined('project', folder) ) {
+
                     cmd.projectName = folder;
                     cmd.projectLocation = _( process.cwd(), true );
                 } else if ( !/\:help$/.test(cmd.task) ) {
-                    console.error('No project name found: make sure it starts with `@` as `@<project_name>`');
-                    process.exit(1)
+
+                    errMsg = 'No project name found: make sure it starts with `@` as `@<project_name>`';
+                    console.error(errMsg);
+                    exit(errMsg);
+                    return false;
                 }
             }
 
@@ -232,9 +242,13 @@ function CmdHelper(cmd) {
 
             loadAssets();
 
+            return true; // completed configuration
+
         } catch (err) {
+
             console.emerg(err.stack);
-            process.exit(1)
+            exit(err.stack);
+            return false; // configuration failed
         }
     }
 
@@ -371,8 +385,10 @@ function CmdHelper(cmd) {
 
         console.log('file ', file);
         if ( !fs.existsSync(file) ) {
+
             console.error(errMsg);
-            process.exit(0)
+            exit(errMsg);
+            return false;
         }
 
         try {
@@ -380,6 +396,19 @@ function CmdHelper(cmd) {
         } catch(err) {
             console.error( err.stack )
         }
+    }
+
+
+    exit = function(errorMessage) {
+
+        if ( typeof(errorMessage) != 'undefined' ) {
+
+            client.write(errorMessage);
+        }
+
+        // CMD exit
+        client.emit('end');
+
     }
 };
 

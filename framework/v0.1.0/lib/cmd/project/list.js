@@ -11,17 +11,17 @@ var console     = lib.logger;
  * TODO : --help
  * TODO : switch options for `$ gina project:list [ [ —-more ] | [-b | —-with-bundles] | [-e | -—with-envs] ]`
  * */
-function List(){
+function List(opt, cmd){
 
     var self = {};
 
     var init = function(){
 
         // import CMD helpers
-        new CmdHelper(self);
+        new CmdHelper(self, opt.client);
 
-        // configure
-        configure();
+        // check CMD configuration
+        if ( !isCmdConfigured() ) return false;
 
         var projects = self.projects
             , list = []

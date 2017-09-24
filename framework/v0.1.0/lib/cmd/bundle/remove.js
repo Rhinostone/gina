@@ -11,7 +11,7 @@ var console     = lib.logger;
  *
  * TODO - Remove multiple bundles at once - ref. bundle/add
  * */
-function Remove(opt) {
+function Remove(opt, cmd) {
 
     var self    = {}
         , local = {
@@ -24,10 +24,10 @@ function Remove(opt) {
     var init = function(opt) {
 
         // import CMD helpers
-        new CmdHelper(self);
+        new CmdHelper(self, opt.client);
 
-        // configure
-        configure();
+        // check CMD configuration
+        if ( !isCmdConfigured() ) return false;
 
 
         if ( typeof(self.projects[self.projectName].path) == 'undefined' ) {

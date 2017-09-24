@@ -17,7 +17,7 @@ var console = lib.logger;
  *  console.log(GINA_MY_CONTSTANT)
  *
  * */
-function Set(){
+function Set(opt, cmd){
     var self = {};
 
     var init = function(){

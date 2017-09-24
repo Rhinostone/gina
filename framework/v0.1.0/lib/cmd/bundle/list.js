@@ -8,7 +8,7 @@ var console = lib.logger;
  *  gina bundle:list --all
  *
  * */
-function List() {
+function List(opt, cmd) {
     var self = {};
 
     var init = function() {
