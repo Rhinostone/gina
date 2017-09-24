@@ -4,7 +4,7 @@ var console = lib.logger;
  * List all environments
  * TODO - add selected icon (green check) for selected env
  * */
-function List(){
+function List(opt, cmd){
     var self = {};
 
     var init = function(){

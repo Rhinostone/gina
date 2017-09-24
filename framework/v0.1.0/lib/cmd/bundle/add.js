@@ -14,7 +14,7 @@ var scan        = require('../port/inc/scan');
  * Usage:
  * $ gina bundle:add <bundle_name> @<project_name>
  * */
-function Add() {
+function Add(opt, cmd) {
 
     var self    = {}
     , local     = {
@@ -29,10 +29,10 @@ function Add() {
     var init = function() {
 
         // import CMD helpers
-        new CmdHelper(self);
+        new CmdHelper(self, opt.client);
 
-        // configure
-        configure();
+        // check CMD configuration
+        if ( !isCmdConfigured() ) return false;
 
 
         if ( isDefined('project', self.projectName) && self.bundles.length > 0) {

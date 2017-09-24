@@ -7,8 +7,8 @@
  * */
 function StoragePlugin(options) {
 
-    var merge       = merge || require('../../../../../lib/merge');
-    var Collection  = Collection || require('../../../../../lib/collection');
+    var merge       = merge || require('utils/merge');;
+    var Collection  = Collection || require('utils/collection');
     var uuid        = uuid || require('vendor/uuid');
 
 
@@ -414,11 +414,12 @@ function StoragePlugin(options) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var merge       = require('../../../../utils/lib/merge');
-    var Collection  = require('../../../../utils/collection');
+    var merge       = require('utils/merge');//require('../../../../../lib/merge');
+    var Collection  = require('utils/collection');//require('../../../../../lib/collection');
     var uuid        = require('uuid');
 
     module.exports = StoragePlugin
+
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
     define('gina/storage',function() { return StoragePlugin })

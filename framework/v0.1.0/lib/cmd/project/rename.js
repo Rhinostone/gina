@@ -6,7 +6,7 @@ var console     = lib.logger;
 /**
  * Rename existing project.
  * */
-function Rename() {
+function Rename(opt, cmd) {
 
     var self    = {}
         , local = {
@@ -18,10 +18,10 @@ function Rename() {
     var init = function() {
 
         // import CMD helpers
-        new CmdHelper(self);
+        new CmdHelper(self, opt.client);
 
-        // configure
-        configure();
+        // check CMD configuration
+        if ( !isCmdConfigured() ) return false;
 
         if ( self.projectArgvList.length != 2 ) {
             console.error('This command line is expecting 2 arguments: @<old_project> and @<new_project>');

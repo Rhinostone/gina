@@ -7,7 +7,7 @@ var scan    = require('../port/inc/scan.js');
  *
  *
  * */
-function Add() {
+function Add(opt, cmd) {
     var self = {}, local = {};
 
     var init = function() {

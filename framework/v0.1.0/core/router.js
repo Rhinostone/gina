@@ -702,7 +702,7 @@ function Router(env) {
                     e.error.message = msg.message;
                 }
 
-                res.end(JSON.stringify(err))
+                res.end(JSON.stringify(e))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
                 console.error(res.req.method +' [ '+code+' ] '+ res.req.url);

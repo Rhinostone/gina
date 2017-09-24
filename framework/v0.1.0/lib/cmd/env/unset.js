@@ -2,7 +2,7 @@ var console = lib.logger;
 /**
  * Remove from framework settings
  * */
-function Unset(){
+function Unset(opt, cmd){
     var self = {};
 
     var init = function() {

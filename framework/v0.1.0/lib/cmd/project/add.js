@@ -8,7 +8,7 @@ var console     = lib.logger;
  * Add new project or register old one to `~/.gina/projects.json`.
  * NB.: If project exists, it won't be replaced. You'll only get warnings.
  * */
-function Add() {
+function Add(opt, cmd) {
 
     var self    = {}
         , local = {}
@@ -17,10 +17,10 @@ function Add() {
     var init = function() {
 
         // import CMD helpers
-        new CmdHelper(self);
+        new CmdHelper(self, opt.client);
 
-        // configure
-        configure();
+        // check CMD configuration
+        if ( !isCmdConfigured() ) return false;
 
         checkImportMode();
 

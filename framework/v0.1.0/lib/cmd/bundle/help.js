@@ -7,16 +7,16 @@ var console     = lib.logger;
  * Help
  *
  * */
-function Help() {
+function Help(opt, cmd) {
     var self = {};
 
     var init = function() {
 
         // import CMD helpers
-        new CmdHelper(self);
+        new CmdHelper(self, opt.client);
 
-        // configure
-        configure();
+        // check CMD configuration
+        if ( !isCmdConfigured() ) return false;
 
 
         getHelp()

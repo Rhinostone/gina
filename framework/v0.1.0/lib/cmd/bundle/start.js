@@ -20,10 +20,10 @@ function Start(opt, cmd) {
     var init = function(opt, cmd) {
 
         // import CMD helpers
-        new CmdHelper(self);
+        new CmdHelper(self, opt.client);
 
-        // configure
-        configure();
+        // check CMD configuration
+        if ( !isCmdConfigured() ) return false;
         
 
         var bundle = self.bundles[0];

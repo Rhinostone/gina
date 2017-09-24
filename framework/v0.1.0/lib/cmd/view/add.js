@@ -12,7 +12,7 @@ var console = lib.logger;
  * Usage:
  * $ gina bundle:add <bundle_name> @<project_name>
  * */
-function Add() {
+function Add(opt, cmd) {
     var self = { task: 'add-views' }
         , local = {}
         , config = null
