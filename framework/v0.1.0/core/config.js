@@ -393,6 +393,12 @@ function Config(opt) {
 
             if ( typeof(content[app][env]) != "undefined" ) {
 
+                // setting port
+                if ( typeof(ports[app+'@'+self.project]) == 'undefined' )
+                    continue;
+
+                appPort = ports[app+'@'+self.project][env].http;
+
                 if (
                     pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && GINA_ENV_IS_DEV
                 ) {
@@ -427,8 +433,7 @@ function Config(opt) {
                     new _(appsPath).mkdirSync()
                 }
 
-                // setting port
-                appPort = ports[app+'@'+self.project][env].http;
+                
                 if ( typeof (content[app][env].port) == 'undefined' ) {
                     newContent[app][env].port = {}
                 }
