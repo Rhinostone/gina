@@ -1384,6 +1384,7 @@ function ValidatorPlugin(rules, data, formId) {
                 }, 0)
 
                 $el.setAttribute('checked', 'checked');
+                //$el.value = $el.getAttribute('value');
 
                 if (isBoolean) { // no multiple choice supported
                     $el.value = true;
@@ -1609,10 +1610,10 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( $target[i].checked ) {
                                 fields[name] = $target[i].value
                             }  else if ( // force validator to pass `false` if boolean is required explicitly
-                            rules
-                            && typeof(rules[name]) != 'undefined'
-                            && typeof(rules[name].isBoolean)
-                            && typeof(rules[name].isRequired)
+                                rules
+                                && typeof(rules[name]) != 'undefined'
+                                && typeof(rules[name].isBoolean) != 'undefined'
+                                && typeof(rules[name].isRequired) != 'undefined'
                             ) {
                                 fields[name] = false;
                             }
@@ -1747,7 +1748,7 @@ function ValidatorPlugin(rules, data, formId) {
             }
 
 
-            // just collect data for over forms
+            // just collect data over forms
             // getting fields & values
             var $fields     = {}
                 , fields    = { '_length': 0 }
@@ -1764,7 +1765,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if (!name) continue;
 
-                // checkbox/radio
+                // checkbox or radio
                 if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
 
                     if ( $target[i].checked ) {
@@ -1772,8 +1773,8 @@ function ValidatorPlugin(rules, data, formId) {
                     }  else if ( // force validator to pass `false` if boolean is required explicitly
                     rules
                     && typeof(rules[name]) != 'undefined'
-                    && typeof(rules[name].isBoolean)
-                    && typeof(rules[name].isRequired)
+                    && typeof(rules[name].isBoolean) != 'undefined'
+                    && typeof(rules[name].isRequired) != 'undefined'
                     ) {
                         fields[name] = false;
                     }
@@ -1810,9 +1811,6 @@ function ValidatorPlugin(rules, data, formId) {
             } else {
                 // update rule in case the current event is triggered outside the main sequence
                 // e.g.: form `id` attribute rewritten on the fly
-                //ruleId = id.replace(/-/g, '.');
-                //if ( typeof(instance.$forms[id].rules) != 'undefined' )
-                //    rule = instance.$forms[id].rules;
 
                 var customRule = $target.getAttribute('data-gina-form-rule');
 

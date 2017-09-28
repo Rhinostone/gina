@@ -292,8 +292,8 @@ function ModelUtil() {
                             .onReady(
                             function onModelReady( err, bundle, connector, conn) {
                                 if (err) {
-                                    console.error('found error ...');
                                     console.error(err.stack||err.message||err);
+                                    process.exit(1);
                                 } else {
 
                                     if (!modelConnectors[bundle]) {
@@ -322,9 +322,11 @@ function ModelUtil() {
                                             return self.models[bundle][connector]['_connection']
                                         }
                                     }
+
+                                    done(connector, modelConnectors)
                                 }
 
-                                done(connector, modelConnectors)
+
                             })
                    }
 
