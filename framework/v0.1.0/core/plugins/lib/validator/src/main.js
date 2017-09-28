@@ -1858,7 +1858,7 @@ function ValidatorPlugin(rules, data, formId) {
             for (var field in fields) {
 
                 // $fields[field].tagName getAttribute('type')
-                if ( $fields[field].tagName.toLowerCase() == 'input' && $fields[field].getAttribute('type') && !$fields[field].checked ) {
+                if ( $fields[field].tagName.toLowerCase() == 'input' && /(radio|checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
                     continue;
                 }
 
@@ -1929,10 +1929,11 @@ function ValidatorPlugin(rules, data, formId) {
                                 }
                             }
                             //console.log('parsing ', localRules, fields);
+                            ++i; // add sub level
                             if (isGFFCtx)
-                                forEachField($form, fields, $fields, localRules, cb, i+1);
+                                forEachField($form, fields, $fields, localRules, cb, i);
                             else
-                                return forEachField($form, fields, $fields, localRules, cb, i+1);
+                                return forEachField($form, fields, $fields, localRules, cb, i);
                         }
                     }
 
@@ -2024,10 +2025,11 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
 
+        var i = 0; // starting level
         if (isGFFCtx)
-            forEachField($form, fields, $fields, rules, cb, 0);
+            forEachField($form, fields, $fields, rules, cb, i);
         else
-            return forEachField($form, fields, $fields, rules, cb, 0);
+            return forEachField($form, fields, $fields, rules, cb, i);
     }
 
     var setupInstanceProto = function() {
