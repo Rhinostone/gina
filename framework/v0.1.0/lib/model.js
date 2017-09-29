@@ -415,7 +415,7 @@ function ModelUtil() {
                         new entitiesManager[nttClass](conn);
                     }
 
-                    console.log('loaded model ', bundle+'/'+name);
+                    console.debug('loaded model ', bundle+'/'+name);
                 }
             }
 

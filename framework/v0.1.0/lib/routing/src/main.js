@@ -7,6 +7,8 @@
  */
 
 //var ContextHelper = require('./context');
+var utils       = require('../../index');
+var console     = utils.logger;
 
 /**
  * Routing
