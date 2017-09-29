@@ -1970,7 +1970,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             --i;
 
-            if (i < 0) {
+            if (i <= 0) {
 
                 var errors = d['getErrors']();
 

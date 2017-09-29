@@ -101,7 +101,7 @@ function Start(opt, cmd) {
                 child.stderr.on('data', function(err) {
 
                     error = err.toString();
-                    if ( /Debugger listening|Warning/.test(error) ) {
+                    if ( /Debugger listening|Debugger attached|Warning/.test(error) ) {
                         console.warn(error);
 
                         if (!opt.client.destroyed) {

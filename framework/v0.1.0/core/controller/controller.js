@@ -1164,7 +1164,7 @@ function SuperController(options) {
             }
 
 
-            console.warn(local.req.method +' ['+local.res.statusCode +'] '+ path);
+            console.info(local.req.method +' ['+local.res.statusCode +'] '+ path);
             res.end();
             local.res.headersSent = true;// done for the render() method
         }

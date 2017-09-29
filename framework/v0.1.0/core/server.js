@@ -597,11 +597,21 @@ function Server(options) {
 
                     if ( request.method.toLowerCase() === 'post') {
                         for (i in fields) {
+
+                            // false & true case
+                            if ( /(false|true|on)/.test( fields[i][0] ) )
+                                fields[i][0] = ( /(true|on)/.test( fields[i][0] ) ) ? true : false;
+
                             // should be: request.post[i] = fields[i];
                             request.post[i] = fields[i][0]; // <-- to fixe on multiparty
                         }
                     } else if ( request.method.toLowerCase() === 'get') {
                         for (i in fields) {
+
+                            // false & true case
+                            if ( /(false|true|on)/.test( fields[i][0] ) )
+                                fields[i][0] = ( /(true|on)/.test( fields[i][0] ) ) ? true : false;
+
                             // should be: request.get[i] = fields[i];
                             request.get[i] = fields[i][0]; // <-- to fixe on multiparty
                         }
@@ -780,6 +790,7 @@ function Server(options) {
                             case 'delete':
                                 if ( request.query.count() > 0 ) {
                                     request.delete = request.query;
+
                                 }
                                 // else, matching route params against url context instead once route is identified
 
@@ -1003,14 +1014,22 @@ function Server(options) {
                             var p = 0;
                             for (var parameter in req.params) {
                                 if (p > 0) {
+                                    // false & true case
+                                    if ( /(false|true|on)/.test( req.params[parameter] ) )
+                                        req.params[parameter] = ( /(true|on)/.test( req.params[parameter] ) ) ? true : false;
+
                                     req[method][parameter] = req.params[parameter]
                                 }
                                 ++p
                             }
-                        } else if (method == 'put') {
+                        } else if ( method == 'put' && !req[method].count() ) {
                             var p = 0;
                             for (var parameter in req.params) {
                                 if (p > 0) {
+                                    // false & true case
+                                    if ( /(false|true|on)/.test( req.params[parameter] ) )
+                                        req.params[parameter] = ( /(true|on)/.test( req.params[parameter] ) ) ? true : false;
+
                                     req[method][parameter] = req.params[parameter]
                                 }
                                 ++p
