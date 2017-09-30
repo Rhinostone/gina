@@ -1503,8 +1503,10 @@ function SuperController(options) {
             // you can get here if :
             //  - you are trying to query using: `enctype="multipart/form-data"`
             //  -
-            if ( typeof(callback) != "undefined") {
+            if ( typeof(callback) != 'undefined' ) {
+
                 callback(err)
+
             } else {
                 var data = {
                     status    : 500,

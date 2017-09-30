@@ -599,7 +599,7 @@ function Server(options) {
                         for (i in fields) {
 
                             // false & true case
-                            if ( /(false|true|on)/.test( fields[i][0] ) )
+                            if ( /(false|true|on)/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
                                 fields[i][0] = ( /(true|on)/.test( fields[i][0] ) ) ? true : false;
 
                             // should be: request.post[i] = fields[i];
@@ -609,7 +609,7 @@ function Server(options) {
                         for (i in fields) {
 
                             // false & true case
-                            if ( /(false|true|on)/.test( fields[i][0] ) )
+                            if ( /(false|true|on)/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
                                 fields[i][0] = ( /(true|on)/.test( fields[i][0] ) ) ? true : false;
 
                             // should be: request.get[i] = fields[i];
@@ -1015,7 +1015,7 @@ function Server(options) {
                             for (var parameter in req.params) {
                                 if (p > 0) {
                                     // false & true case
-                                    if ( /(false|true|on)/.test( req.params[parameter] ) )
+                                    if ( /(false|true|on)/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
                                         req.params[parameter] = ( /(true|on)/.test( req.params[parameter] ) ) ? true : false;
 
                                     req[method][parameter] = req.params[parameter]
@@ -1027,7 +1027,7 @@ function Server(options) {
                             for (var parameter in req.params) {
                                 if (p > 0) {
                                     // false & true case
-                                    if ( /(false|true|on)/.test( req.params[parameter] ) )
+                                    if ( /(false|true|on)/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
                                         req.params[parameter] = ( /(true|on)/.test( req.params[parameter] ) ) ? true : false;
 
                                     req[method][parameter] = req.params[parameter]

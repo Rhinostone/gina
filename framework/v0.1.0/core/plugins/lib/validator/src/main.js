@@ -1567,8 +1567,6 @@ function ValidatorPlugin(rules, data, formId) {
                         //}
                     }
 
-                    return false
-
                 })
             }
 
@@ -1837,7 +1835,11 @@ function ValidatorPlugin(rules, data, formId) {
 
         delete fields['_length']; //cleaning
 
-        var id = null, data = null;
+        var id                  = null
+            , data              = null
+            , hasBeenValidated  = false
+        ;
+
         if (isGFFCtx) {
             id = $form.getAttribute('id') || $form.id;
             instance.$forms[id].fields = fields;
@@ -2006,30 +2008,35 @@ function ValidatorPlugin(rules, data, formId) {
                     throw err
                 }
 
-                if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
+                if (!hasBeenValidated) {
 
-                    cb({
-                        'isValid'   : d['isValid'],
-                        'errors'    : errors,
-                        'data'      : data
-                    })
+                    hasBeenValidated = true;
 
-                } else {
+                    if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
 
-                    return {
-                        'isValid'   : d['isValid'],
-                        'errors'    : errors,
-                        'data'      : data
+                        cb({
+                            'isValid'   : d['isValid'],
+                            'errors'    : errors,
+                            'data'      : data
+                        })
+
+                    } else {
+
+                        return {
+                            'isValid'   : d['isValid'],
+                            'errors'    : errors,
+                            'data'      : data
+                        }
                     }
                 }
             }
         }
 
-        var i = 0; // starting level
+        // 0 is the starting level
         if (isGFFCtx)
-            forEachField($form, fields, $fields, rules, cb, i);
+            forEachField($form, fields, $fields, rules, cb, 0);
         else
-            return forEachField($form, fields, $fields, rules, cb, i);
+            return forEachField($form, fields, $fields, rules, cb, 0);
     }
 
     var setupInstanceProto = function() {
