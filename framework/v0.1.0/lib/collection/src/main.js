@@ -52,6 +52,9 @@ function Collection(content, option) {
         ;
     ;
 
+    if ( !Array.isArray(content) )
+        throw new Error('`new Collection([content] [, option] )`: `content` argument must me an Array !');
+
     this['uuids'] = {}; // uuids are generated for each new instance
     if ( content.length > 0 ) {
         for (var i = 0, len = content.length; i<len; ++i) {
@@ -263,6 +266,7 @@ function Collection(content, option) {
     }
 
     this['findOne'] = function(filter) {
+
         if ( typeof(filter) !== 'object' ) {
             throw new Error('filter must be an object');
         } else {
