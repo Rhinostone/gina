@@ -1022,7 +1022,7 @@ function Server(options) {
                                 }
                                 ++p
                             }
-                        } else if ( method == 'put' && !req[method].count() ) {
+                        } else if ( method == 'put' ) { // merging req.params with req.put (passed through URI)
                             var p = 0;
                             for (var parameter in req.params) {
                                 if (p > 0) {
