@@ -420,8 +420,10 @@ function Router(env) {
 
         // default param setting
         var options = {
-            file            : actionFile,
             namespace       : namespace,
+            control         : params.param.control,
+            method          : params.method,
+            file            : actionFile,
             bundle          : bundle,//module
             bundlePath      : conf.bundlesPath +'/'+ bundle,
             rootPath        : self.executionPath,
@@ -436,9 +438,11 @@ function Router(env) {
             withCredentials : false
         };
 
-        for (var p in params.param) {
-            options[p] = params.param[p]
-        }
+        // clean options.params
+        // for (var p in options.params) {
+        //     if ( /^(file|control)$/.test( p ) )
+        //         delete options.params[p]
+        // }
 
         try {
 

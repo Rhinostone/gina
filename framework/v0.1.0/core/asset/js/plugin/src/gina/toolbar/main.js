@@ -46,7 +46,10 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             , originalData       = null
             , jsonObject         = null
             , ginaJsonObject     = null
+            , $htmlConfigurationEnvironment = null
             , $htmlData          = null
+            , $htmlView          = null
+            , $htmlForms         = null
             , $codeFoldingToggle = null
             , codeFolding        = true
             , timeoutId          = null
@@ -70,6 +73,9 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             $ginaJson          = $('#gina-toolbar-gina-json');
             $jsonRAW           = $('#gina-toolbar-toggle-code-raw');
             $htmlData          = $('#gina-toolbar-data-html');
+            $htmlView          = $('#gina-toolbar-view-html');
+            $htmlForms         = $('#gina-toolbar-forms-html');
+            $htmlConfigurationEnvironment = $('#gina-toolbar-configuration-environment-html')
             $codeFoldingToggle = $('#gina-toolbar-code-toggle');
 
             // Append textarea for copy/paste then select it
@@ -190,8 +196,22 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
                 // Make folding paths
                 makeFoldingPaths(jsonObject, '');
+
                 // Create DOM from JSON
-                $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject, ginaJsonObject) +'</ul>');
+                // -> Configuration::environment
+                $htmlConfigurationEnvironment.html(parseObject(jsonObject.environment, ginaJsonObject.environment));
+
+                // -> Data
+                $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject.data, ginaJsonObject.data) +'</ul>');
+
+                // -> View
+                $htmlView.html( parseView(jsonObject.view, ginaJsonObject.view, null, $htmlView) );
+
+                // -> Forms
+                $htmlForms.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject.forms, ginaJsonObject.forms) +'</ul>');
+                //$htmlForms.html( parseView(jsonObject.forms, ginaJsonObject.forms, null, $htmlForms) );
+
+
 
                 // Manage folding state
                 settings.currentFile = jsonObject.file;
@@ -269,7 +289,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                 if (jsonObject) {
                     var jsonOut = window.open("", "JSON RAW", "width=400,height=100");
                     //jsonOut.document.write( '<pre>' + JSON.stringify(jsonObject, null, 2) + '</pre>' );
-                    jsonOut.document.write( JSON.stringify(jsonObject) );
+                    jsonOut.document.write( JSON.stringify(jsonObject.data) );
                 }
             });
 
@@ -508,6 +528,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
         }
 
         var parseObject = function(obj, ginaObj, id) {
+
             var html = '';
             var id = id || '';
             var count = '';
@@ -518,6 +539,8 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
             for (var i in obj) {
                 //console.log('i', i);
+                //if ( /^(_uuid)$/.test(i) ) continue;
+
                 if ( typeof(obj[i]) == 'object' && !Array.isArray(obj[i]) && obj[i] !== null ) { // parse
                     id += i + '-';
                     html += '<li class="gina-toolbar-object">';
@@ -591,18 +614,164 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             return html
         }
 
+        var parseView = function (obj, ginaObj, id, $html, $root) {
+
+            var id          = (id != null) ? id : '';
+            var count       = '';
+            var objType     = '';
+            var hasParent   = false;
+            var $parent     = null;
+            var parentId    = null;
+
+            obj     = orderKeys(obj);
+            ginaObj = orderKeys(ginaObj);
+
+            if (!$root)
+                $root = $html;
+
+            for (var i in obj) {
+
+                if ( typeof(obj[i]) == 'object' && !Array.isArray(obj[i]) && obj[i] !== null ) { // parse
+
+                    $parent = $('#gina-toolbar-view-' + id.substr(0, id.length - 1));
+                    hasParent = ( $parent.length ) ? true : false;
+
+                    if (!hasParent) {
+                        id += i + '-';
+
+                        if (i == 'params') { // force to top
+                            $('#gina-toolbar-view-html-properties')
+                                .before('<table id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'"><thead><tr><td colspan="2">'+ id.substr(0, id.length - 1) +'</td></tr></thead><tbody class="'+ id.substr(0, id.length - 1) +'"></tbody></table>');
+                        } else {
+                            $html
+                                .append('<table id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'"><thead><tr><td colspan="2">'+ id.substr(0, id.length - 1) +'</td></tr></thead><tbody class="'+ id.substr(0, id.length - 1) +'"></tbody></table>');
+                        }
+
+                        parseView(obj[i], ginaObj[i], id, $html.find('tbody.'+ id.substr(0, id.length - 1)), $root );
+
+
+                    } else {
+
+                        parentId = id + i + '-';
+
+                        $parent
+                            .find('tbody.'+ id.substr(0, id.length - 1))
+                            .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +' <span>{ }</span></td><td><table id="gina-toolbar-view-'+ parentId.substr(0, parentId.length - 1) +'"><tbody class="'+ parentId.substr(0, parentId.length - 1) +'"></tbody></table></td></tr>');
+
+                        parseView(obj[i], ginaObj[i], parentId, $parent.find('tbody.'+ id.substr(0, id.length - 1)), $root );
+
+                        id += i + '-';
+                    }
+
+
+                    // clear one level
+                    id = id.substr(0, id.length - i.length - 1);
+
+
+                } else if ( Array.isArray(obj[i]) ) {
+
+                    $parent = $('#gina-toolbar-view-' + id.substr(0, id.length - 1));
+                    hasParent = ( $parent.length ) ? true : false;
+
+                    if (!hasParent) {
+
+                        id += i + '-';
+
+                        $html
+                            .append('<table id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'"><thead><tr><td colspan="2">'+ id.substr(0, id.length - 1) +'</td></tr></thead><tbody class="'+ id.substr(0, id.length - 1) +'"><ul>'+ parseCollection(obj[i], ginaObj[i], id.substr(0, id.length - 1), $html.find('tbody.'+ id.substr(0, id.length - 1)) ) +'</ul></tbody></table>');
+
+                    } else {
+
+                        parentId = id + i + '-';
+
+                        $parent
+                            .find('tbody.'+ id.substr(0, id.length - 1))
+                            .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +' <span>['+ obj[i].length +']</span></td><td><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $parent.find('tbody.'+ id.substr(0, id.length - 1)) ) +'</ul></td></tr>');
+
+                        id += i + '-';
+                    }
+
+
+                    // html += '<li class="gina-toolbar-collection">';
+                    // html +=  '<a href="#" class="gina-toolbar-key gina-toolbar-folding-state-'+ id.substr(0, id.length - 1) +'">'+ i +' <span>['+ obj[i].length +']</span></a>';
+                    // html +=  '<ul class="gina-toolbar-collection">'+ parseCollection(obj[i], ginaObj[i], id)  +'</ul>';
+                    // html += '</li>';
+
+
+                    // $html
+                    //     .find('tbody.' + id)
+                    //     .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +'</td><td class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</td></tr>')
+
+                    //parseView(obj[i], ginaObj[i], i, $html.find('tbody.'+ i), $html );
+                    // clear one level
+                    id = id.substr(0, id.length - i.length - 1);
+                } else {
+                    objType = (ginaObj[i] === null) ? 'null' : typeof(ginaObj[i]);
+                    if ( objType == 'undefined' ) { // new key  declaration added by user
+                        // html += '<li class="gina-toolbar-key-value">';
+                        // html +=     '<span class="gina-toolbar-key gina-toolbar-key-added">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</span>';
+                        // html += '</li>';
+
+                        $html
+                            .find('tbody.' + id)
+                            .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key gina-toolbar-key-added">'+ i +'</td><td class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i]+'</td></tr>');
+
+                    } else {
+
+                        if (/^_comment/.test(i) ) continue;
+
+                        if (obj[i] !== ginaObj[i] ) {
+                            // html += '<li class="gina-toolbar-key-value gina-toolbar-is-overridden">';
+                            // html +=     '<span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value">'+ ginaObj[i] +'</span>';
+                            // html += '</li>';
+                            //
+                            // html += '<li class="gina-toolbar-key-value">';
+                            // html +=     '<span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</span>';
+                            // html += '</li>';
+
+                            $html
+                                .find('tbody.' + id)
+                                .append('<tr class="gina-toolbar-key-value gina-toolbar-is-overridden"><td class="gina-toolbar-key">'+ i +'</td><td class="gina-toolbar-value">'+ ginaObj[i] +'</td></tr>');
+
+                            $html
+                                .find('tbody.' + id)
+                                .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +'</td><td class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</td></tr>')
+
+                        } else {
+
+                            if (!id) {
+                                $root
+                                    .find('tbody.properties')
+                                    .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +'</td><td class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</td></tr>')
+                            } else {
+                                $root
+                                    .find('tbody.' + id.substr(0, id.length - 1))
+                                    .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +'</td><td class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</td></tr>')
+                            }
+                        }
+                    }
+                }
+            }
+
+            return $root.html()
+        }
+
         var createInputFile = function(id, label) {
-            var html = '';
-            html  = '<label class="gina-toolbar-input-file">',
-                html += '<input type="file" multiple id="' + id +'">'
-            html += label
-            html += '</label>'
+
+            var html = null;
+
+            html  = '<label class="gina-toolbar-input-file">';
+            html += '<input type="file" multiple id="' + id +'">';
+            html += label;
+            html += '</label>';
+
             return html
         }
 
         var loadJSON = function(txt, cb) {
 
             var html = createInputFile('mock', 'Select your JSON file');
+
             $htmlData.html(html);
             $json.text('');
 

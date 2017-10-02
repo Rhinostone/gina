@@ -30,6 +30,7 @@ var swig            = require('swig');
  * @api         Public
  */
 function SuperController(options) {
+
     this.name = 'SuperController';
 
     //private
@@ -88,7 +89,7 @@ function SuperController(options) {
         // N.B.: Avoid setting `page` properties as much as possible from the routing.json
         // It will be easier for the framework if set from the controller.
         //
-        // Here is a sample if you choose to set  `page.title` from the rule
+        // Here is a sample if you choose to set  `page.view.title` from the rule
         // ------rouging rule sample -----
         // {
         //    "default": {
@@ -100,16 +101,16 @@ function SuperController(options) {
         // }
         //
         // ------controller action sample -----
-        // Here is a sample if you decide to set `page.title` from your controller
+        // Here is a sample if you decide to set `page.view.title` from your controller
         //
         // this.home = function(req, res, next) {
-        //      var data = { page: { title: "My Title"}};
+        //      var data = { page: { view: { title: "My Title"}}};
         //      self.render(data)
         // }
         if ( typeof(options.conf.content.routing[options.rule].param) !=  'undefined' ) {
             var str = 'page.', p = options.conf.content.routing[options.rule].param;
             for (var key in p) {
-                if (p.hasOwnProperty(key)) {
+                if ( p.hasOwnProperty(key) && !/(control|file)/.test(key) ) {
                     str += key + '.';
                     var obj = p[key], value = '';
                     for (var prop in obj) {
@@ -118,6 +119,7 @@ function SuperController(options) {
                         } else {
 
                             if ( /^:/.test(value) ) {
+                                str = 'page.view.params.'+ key + '.';
                                 set(str.substr(0, str.length-1), req.params[value.substr(1)])
                             } else {
                                 set(str.substr(0, str.length-1), value)
@@ -169,11 +171,15 @@ function SuperController(options) {
             set('page.environment.envIsDev', GINA_ENV_IS_DEV);
             set('page.environment.webroot', options.conf.server.webroot);
             set('page.environment.bundle', options.conf.bundle);
+            set('page.environment.project', options.conf.project);
 
-            set('page.ext', ext);
-            set('page.content', action);
-            set('page.namespace', namespace);
-            set('page.title', rule.replace(new RegExp('@'+options.conf.bundle), ''));
+            set('page.view.ext', ext);
+            set('page.view.control', action);
+            set('page.view.method', local.options.method);
+            set('page.view.namespace', namespace); // by default
+            set('page.view.title', rule.replace(new RegExp('@'+options.conf.bundle), ''));
+            set('page.view.params', options.params); // view parameters passed through URI
+
             set('page.forms', options.conf.content.forms);
             
             var acceptLanguage = 'en-US'; // by default
@@ -205,8 +211,8 @@ function SuperController(options) {
             // user locale
             options.conf.locale = new Collection(userLocales).findOne({ short: userCountryCode });
 
-            set('page.locale', options.conf.locale);
-            set('page.lang', userCulture);
+            set('page.view.locale', options.conf.locale);
+            set('page.view.lang', userCulture);
         }
 
         if ( hasViews() ) {
@@ -222,9 +228,10 @@ function SuperController(options) {
             var rule        = local.options.rule
                 , namespace = local.options.namespace || rule;
 
-            set('file', local.options.file);
-            set('page.title', local.options.file);
-            set('page.namespace', namespace);
+
+            set('page.view.file', local.options.file);
+            set('page.view.title', local.options.file);
+            set('page.view.namespace', namespace);
 
             //TODO - detect when to use swig
             var dir = self.views || local.options.views.default.views;
@@ -264,9 +271,15 @@ function SuperController(options) {
     this.render = function(_data) {
 
         try {
-            var data = getData(), path = '', plugin = null;
+            var data        = getData()
+                , template  = null
+                , file      = null
+                , path      = null
+                , plugin    = null
+            ;
+
             if (!_data) {
-                _data = { page: {}}
+                _data = { page: { view: {}}}
             } else if ( _data && !_data['page']) {
                 data['page'] = {
                     data: _data
@@ -275,11 +288,10 @@ function SuperController(options) {
                 data = merge(_data, data)
             }
 
+            template = local.options.rule.replace('\@'+ local.options.bundle, '');
+            setResources(local.options.views, template);
 
-            data.view = local.options.rule.replace('\@'+ local.options.bundle, '');
-            setResources(local.options.views, data.view);
-
-            var file = data.file;
+            var file = template;
 
             // pre-compiling variables
             data = merge(data, getData()); // needed !!
@@ -299,28 +311,28 @@ function SuperController(options) {
                 if (!file || file === local.options.namespace) {
                     file = 'index'
                 }
-                path = _(local.options.views[data.view].html +'/'+ local.options.namespace + '/' + file)
+                path = _(local.options.views[template].html +'/'+ local.options.namespace + '/' + file)
             } else {
                 if (local.options.path) {
                     path = _(local.options.path);
-                    var re = new RegExp( data.page.ext+'$');
-                    if ( data.page.ext && re.test(data.page.file) ) {
-                        data.page.path = path.replace('/'+ data.page.file, '');
+                    var re = new RegExp( data.page.view.ext+'$');
+                    if ( data.page.view.ext && re.test(data.page.view.file) ) {
+                        data.page.view.path = path.replace('/'+ data.page.view.file, '');
 
                         path            = path.replace(re, '');
-                        data.page.file  = data.page.file.replace(re, '');
+                        data.page.view.file  = data.page.view.file.replace(re, '');
 
                     } else {
-                        data.page.path = path.replace('/'+ data.page.file, '');
+                        data.page.view.path = path.replace('/'+ data.page.view.file, '');
                     }
 
                 } else {
-                    path = _(local.options.views[data.view].html +'/'+ file)
+                    path = _(local.options.views[template].html +'/'+ file)
                 }
             }
 
-            if (data.page.ext) {
-                path += data.page.ext
+            if (data.page.view.ext) {
+                path += data.page.view.ext
             }
 
             var dic = {}, msg = '';
@@ -522,9 +534,9 @@ function SuperController(options) {
                     self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\n'+(err.stack||err.message));
                 }
 
-                dic['page.content'] = content;
+                dic['page.view.content'] = content;
 
-                var layoutPath = (local.options.isWithoutLayout) ? local.options.views[data.view].noLayout : local.options.views[data.view].layout;
+                var layoutPath = (local.options.isWithoutLayout) ? local.options.views[template].noLayout : local.options.views[template].layout;
 
                 fs.readFile(layoutPath, function(err, layout) {
                     if (err) {
@@ -536,16 +548,16 @@ function SuperController(options) {
 
                             layout = ''
                                 + '{%- set ginaDataInspector                = JSON.parse(JSON.stringify(page)) -%}'
-                                + '{%- set ginaDataInspector.scripts        = "ignored-by-toolbar" -%}'
-                                + '{%- set ginaDataInspector.stylesheets    = "ignored-by-toolbar" -%}'
-                                + layout.replace('{{ page.scripts }}', '')
+                                + '{%- set ginaDataInspector.view.scripts        = "ignored-by-toolbar" -%}'
+                                + '{%- set ginaDataInspector.view.stylesheets    = "ignored-by-toolbar" -%}'
+                                + layout.replace('{{ page.view.scripts }}', '')
                                 ;
 
                             plugin = '\t'
                                 + '{# Gina Toolbar #}'
                                 + '{%- set userDataInspector                = page -%}'
-                                + '{%- set userDataInspector.scripts        = "ignored-by-toolbar" -%}'
-                                + '{%- set userDataInspector.stylesheets    = "ignored-by-toolbar" -%}'
+                                + '{%- set userDataInspector.view.scripts        = "ignored-by-toolbar" -%}'
+                                + '{%- set userDataInspector.view.stylesheets    = "ignored-by-toolbar" -%}'
                                 + '{%- include "'+ getPath('gina').core +'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector } -%}'
                                 + '{# END Gina Toolbar #}'
 
@@ -606,8 +618,8 @@ function SuperController(options) {
                             }
 
                         } catch (err) {
-                            var filename = local.options.views[data.view].html;
-                            filename += ( typeof(data.page.namespace) != 'undefined' && data.page.namespace != '' && new RegExp('^' + data.page.namespace +'-').test(data.file) ) ? '/' + data.page.namespace + data.file.split(data.page.namespace +'-').join('/') + ( (data.page.ext != '') ? data.page.ext: '' ) : '/' + data.file+ ( (data.page.ext != '') ? data.page.ext: '' );
+                            var filename = local.options.views[template].html;
+                            filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.file) ) ? '/' + data.page.view.namespace + data.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
                             self.throwError(local.res, 500, 'Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message))
                         }
 
@@ -924,8 +936,8 @@ function SuperController(options) {
             tmpRes  = null
         }
 
-        set('page.stylesheets', cssStr);
-        set('page.scripts', jsStr)
+        set('page.view.stylesheets', cssStr);
+        set('page.view.scripts', jsStr)
     }
 
     /**
