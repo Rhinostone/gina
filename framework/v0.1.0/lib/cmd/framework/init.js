@@ -88,7 +88,9 @@ function Initialize(opt) {
     }
 
     self.checkIfVersionDir = function() {
+
         var version = require(self.opt.pack).version;
+
         if ( !getEnvVar('GINA_VERSION') ) {
             setEnvVar('GINA_VERSION', version)
         } else {

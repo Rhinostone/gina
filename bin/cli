@@ -55,6 +55,9 @@ var home = getUserHome();
 if (!home) {
     console.error('No ' + ((isWin32) ? 'USERPROFILE' : 'HOME') + ' path found.')
 } else {
+
+    setEnvVar('GINA_VERSION', version);
+
     var shortVersion = version.split('.');
     shortVersion.splice(2,1);
     shortVersion = shortVersion.join('.');

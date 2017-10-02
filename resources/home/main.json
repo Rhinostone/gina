@@ -2,8 +2,9 @@
     "frameworks": {
         "{release}": [ "{version}" ]
     },
+    "def_framework": "{version}",
     "envs": {
-        "{release}": ["dev"]
+        "{release}": [ "dev" ]
     },
     "def_env": {
       "{release}": "dev"
@@ -12,10 +13,10 @@
         "{release}": "dev"
     },
     "protocols": {
+        "_comment": "e.g.:  http, https, ftp, ssh, tftp, tls, udp",
         "{release}": [ "http" ]
     },
     "def_protocol": {
-        "_comment": "e.g.:  http, https, ftp, ssh, tftp, tls, udp",
         "{release}": "http"
     }
 }
