@@ -131,7 +131,34 @@ function Cmd(opt, runOffine) {
 
     var checkIfSettings = function() {
 
-        var main            = require( getEnvVar('GINA_HOMEDIR') + '/main.json' )
+        var mainFile = getEnvVar('GINA_HOMEDIR') + '/main.json';
+
+        if ( !fs.existsSync(mainFile) ) {
+
+            var mainSrc = getEnvVar('GINA_DIR') + '/resources/home/main.json';
+            var version = getEnvVar('GINA_VERSION');
+
+            var release = getEnvVar('GINA_SHORT_VERSION');//version.split('.').splice(0,2).join(".");
+
+            try {
+
+                var data = require(mainSrc);
+                var dic = {
+                    'release' : release,
+                    'version' : version
+                };
+
+                data = whisper(dic, data);
+
+                lib.generator.createFileFromDataSync(data, mainFile)
+
+            } catch (err) {
+                console.error(err.stack);
+                process.exit(1)
+            }
+        }
+
+        var main            = require( mainFile )
             , version       = getEnvVar('GINA_VERSION')
             , home          = getEnvVar('GINA_HOMEDIR')
             , shortVersion  = getEnvVar('GINA_SHORT_VERSION')
