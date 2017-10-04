@@ -559,10 +559,31 @@ function SuperController(options) {
                         // adding plugins
                         if ( hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout ) {
 
-                            var scripts = layout.toString().match(/<script.*?<\/script>/g);
-                            var userScripts = data.page.view.scripts;
+                            var scripts         = layout.toString().match(/<script.*?<\/script>/g)
+                                , stylesheets   = layout.toString().match(/<link rel="stylesheet".*?<\/link>|<link rel="stylesheet".*?(.*)/g)
+                            ;
+
+                            var userScripts         = data.page.view.scripts
+                                , usersStylesheets  = data.page.view.stylesheets
+                            ;
+
                             if ( typeof(scripts.length) != 'undefined' )
                                 userScripts += scripts.join('');
+
+
+                            if ( typeof(stylesheets.length) != 'undefined' ) {
+
+                                usersStylesheets += stylesheets.join('');
+                                var stylesArr = usersStylesheets.match(/href=".*?"/g);
+                                if ( stylesArr != null || typeof(stylesArr.length) != 'undefined' )
+                                    usersStylesheets = stylesArr.join(',').replace(/href=/g, '');
+                                else
+                                    usersStylesheets = '';
+
+                            } else {
+                                usersStylesheets = '';
+                            }
+
 
 
                             layout = ''
@@ -577,7 +598,8 @@ function SuperController(options) {
                                 + '{%- set userDataInspector                = JSON.parse(JSON.stringify(page)) -%}'
                                 //+ '{%- set userDataInspector.view.scripts        = "ignored-by-toolbar" -%}'
                                 + '{%- set userDataInspector.view.scripts        = ['+ userScripts.match(/src=".*?"/g).join(',').replace(/src=/g, '')  +'] -%}'
-                                + '{%- set userDataInspector.view.stylesheets    = "ignored-by-toolbar" -%}'
+                                //+ '{%- set userDataInspector.view.stylesheets    = "ignored-by-toolbar" -%}'
+                                + '{%- set userDataInspector.view.stylesheets    = ['+ usersStylesheets +'] -%}'
                                 + '{%- include "'+ getPath('gina').core +'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector } -%}'
                                 + '{# END Gina Toolbar #}'
 

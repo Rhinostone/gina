@@ -162,45 +162,7 @@ function Cmd(opt, runOffine) {
                 process.exit(1)
             }
         }
-        /**
-        var main            = require( mainFile )
-            , version       = getEnvVar('GINA_VERSION')
-            , shortVersion  = getEnvVar('GINA_SHORT_VERSION')
-            , env           = getEnvVar('GINA_ENV') || main['dev_env'][shortVersion]
-            //, source        = getEnvVar('GINA_DIR') + '/resources/home/settings.json'
-            //, target        = home +'/'+ shortVersion +'/settings.json'
-            //, settings = {}
-            , data          = {}
-        ;
 
-
-        if ( !fs.existsSync(target) ) {
-            try {
-                var data = require(source);
-                data.version = version;
-                data.env = env;
-                data.tmpdir = _( getTmpDir() );
-                data.rundir = _( getRunDir() );
-                data.logdir = _( getLogDir() );
-
-                var env = require(home + '/main.json').dev_env;
-                var dic = {
-                    'version'       : getEnvVar('GINA_VERSION'),
-                    'dev_env'       : env,
-                    'node_version'  : process.versions.node
-                };
-                data = whisper(dic, data);
-                //settings = data;
-
-                lib.generator.createFileFromDataSync(
-                    data,
-                    target
-                )
-            } catch (err) {
-                console.error(err.stack);
-                process.exit(1)
-            }
-        }*/
     }
 
     init(opt, runOffine)
