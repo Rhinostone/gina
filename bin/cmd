@@ -131,7 +131,8 @@ function Cmd(opt, runOffine) {
 
     var checkIfSettings = function() {
 
-        var mainFile = getEnvVar('GINA_HOMEDIR') + '/main.json';
+        var home        = getEnvVar('GINA_HOMEDIR')
+        var mainFile    = home + '/main.json';
 
         if ( !fs.existsSync(mainFile) ) {
 
@@ -141,6 +142,10 @@ function Cmd(opt, runOffine) {
             var release = getEnvVar('GINA_SHORT_VERSION');//version.split('.').splice(0,2).join(".");
 
             try {
+
+                if ( !fs.existsSync(home) ) {
+                    fs.mkdirSync(home, 0775)
+                }
 
                 var data = require(mainSrc);
                 var dic = {
@@ -160,7 +165,6 @@ function Cmd(opt, runOffine) {
 
         var main            = require( mainFile )
             , version       = getEnvVar('GINA_VERSION')
-            , home          = getEnvVar('GINA_HOMEDIR')
             , shortVersion  = getEnvVar('GINA_SHORT_VERSION')
             , env           = getEnvVar('GINA_ENV') || main['dev_env'][shortVersion]
             , source        = getEnvVar('GINA_DIR') + '/resources/home/settings.json'
