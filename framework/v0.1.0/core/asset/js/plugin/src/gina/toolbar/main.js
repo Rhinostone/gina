@@ -194,6 +194,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     ginaJsonObject  = ginaData;
                 }
 
+
                 // Make folding paths
                 makeFoldingPaths(jsonObject, '');
 
@@ -201,16 +202,33 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                 // -> Configuration::environment
                 $htmlConfigurationEnvironment.html(parseObject(jsonObject.environment, ginaJsonObject.environment));
 
-                // -> Data
-                $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject.data, ginaJsonObject.data) +'</ul>');
 
-                // -> View
-                $htmlView.html( parseView(jsonObject.view, ginaJsonObject.view, null, $htmlView) );
 
-                // -> Forms
-                $htmlForms.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject.forms, ginaJsonObject.forms) +'</ul>');
-                //$htmlForms.html( parseView(jsonObject.forms, ginaJsonObject.forms, null, $htmlForms) );
+                if ( !section || /^(data)$/.test(section) ) {
+                    // -> Data
+                    $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject.data, ginaJsonObject.data) +'</ul>');
 
+                    // -> View
+                    // init
+                    var htmlProp = '<table id="gina-toolbar-view-html-properties">\n' +
+                        '                        <thead>\n' +
+                        '                            <tr>\n' +
+                        '                                <td colspan="2">properties</td>\n' +
+                        '                            </tr>\n' +
+                        '                        </thead>\n' +
+                        '                        <tbody class="properties"></tbody>\n' +
+                        '                    </table>';
+
+                    $htmlView.html(htmlProp);
+                    $htmlView.html( parseView(jsonObject.view, ginaJsonObject.view, null, $htmlView) );
+
+                    // -> Forms
+                    $htmlForms.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject.forms, ginaJsonObject.forms) +'</ul>');
+                    //$htmlForms.html( parseView(jsonObject.forms, ginaJsonObject.forms, null, $htmlForms) );
+                } else if ( /^(data-xhr)$/.test(section) ) {
+                    // -> Data
+                    $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject['data-xhr'], ginaJsonObject['data-xhr']) +'</ul>');
+                }
 
 
                 // Manage folding state
@@ -675,10 +693,10 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
                     if (!hasParent) {
 
-                        id += i + '-';
+                        $root
+                            .find('tbody.properties')
+                            .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +' <span>['+ obj[i].length +']</span></td><td><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $root.find('tbody.properties')) +'</ul></td></tr>');
 
-                        $html
-                            .append('<table id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'"><thead><tr><td colspan="2">'+ id.substr(0, id.length - 1) +'</td></tr></thead><tbody class="'+ id.substr(0, id.length - 1) +'"><ul>'+ parseCollection(obj[i], ginaObj[i], id.substr(0, id.length - 1), $html.find('tbody.'+ id.substr(0, id.length - 1)) ) +'</ul></tbody></table>');
 
                     } else {
 

@@ -1190,7 +1190,10 @@ function Server(options) {
                                 try {
                                     res.setHeader("Content-Type", getHead(filename));
                                     // adding handler `gina.ready(...)` wrapper
-                                    var conf = getContext('gina').config, hanlersPath = self.conf[conf.bundle][conf.env].content.statics.handlers;
+                                    var conf            = getContext('gina').config
+                                        , hanlersPath   = self.conf[conf.bundle][conf.env].content.statics.handlers
+                                    ;
+
                                     if ( new RegExp('^'+ hanlersPath).test(filename) ) {
                                         file = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));'
                                     }
