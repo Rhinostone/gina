@@ -110,7 +110,7 @@ function SuperController(options) {
         if ( typeof(options.conf.content.routing[options.rule].param) !=  'undefined' ) {
             var str = 'page.', p = options.conf.content.routing[options.rule].param;
             for (var key in p) {
-                if ( p.hasOwnProperty(key) && !/(control|file)/.test(key) ) {
+                if ( p.hasOwnProperty(key) && !/^(control)$/.test(key) ) {
                     str += key + '.';
                     var obj = p[key], value = '';
                     for (var prop in obj) {
@@ -120,7 +120,10 @@ function SuperController(options) {
 
                             if ( /^:/.test(value) ) {
                                 str = 'page.view.params.'+ key + '.';
-                                set(str.substr(0, str.length-1), req.params[value.substr(1)])
+                                set(str.substr(0, str.length-1), req.params[value.substr(1)]);
+                            } else if (/^(file)$/.test(key)) {
+                                str = 'page.view.'+ key + '.';
+                                set(str.substr(0, str.length-1), value);
                             } else {
                                 set(str.substr(0, str.length-1), value)
                             }
@@ -179,6 +182,7 @@ function SuperController(options) {
             set('page.view.namespace', namespace); // by default
             set('page.view.title', rule.replace(new RegExp('@'+options.conf.bundle), ''));
             set('page.view.params', options.params); // view parameters passed through URI
+            set('page.view.route', rule);
 
             set('page.forms', options.conf.content.forms);
             
@@ -263,12 +267,14 @@ function SuperController(options) {
      *  - getWebroot()
      *  - getUrl()
      *
+     *  N.B.: Filters can be extended through your `<project>/src/<bundle>/controllers/setup.js`
      *
-     * @param {object} _data
+     *
+     * @param {object} userData
      *
      * @return {void}
      * */
-    this.render = function(_data) {
+    this.render = function(userData) {
 
         try {
             var data        = getData()
@@ -278,20 +284,23 @@ function SuperController(options) {
                 , plugin    = null
             ;
 
-            if (!_data) {
-                _data = { page: { view: {}}}
-            } else if ( _data && !_data['page']) {
-                data['page'] = {
-                    data: _data
-                }
+            if (!userData) {
+                userData = { page: { view: {}}}
+            } else if ( userData && !userData['page']) {
+
+                if ( typeof(data['page']['data']) == 'undefined' )
+                    data['page']['data'] = userData;
+                else
+                    data['page']['data'] = merge( userData, data['page']['data'] );
             } else {
-                data = merge(_data, data)
+                data = merge(userData, data)
             }
 
             template = local.options.rule.replace('\@'+ local.options.bundle, '');
             setResources(local.options.views, template);
 
-            var file = template;
+            //var file = local.options.file;
+            var file = data.page.view.file;
 
             // pre-compiling variables
             data = merge(data, getData()); // needed !!
@@ -335,6 +344,8 @@ function SuperController(options) {
                 path += data.page.view.ext
             }
 
+            data.page.view.path = path;
+
             var dic = {}, msg = '';
             for (var d in data.page) {
                 dic['page.'+d] = data.page[d]
@@ -347,6 +358,7 @@ function SuperController(options) {
             //      html/inc/_partial.html (GOOD)
             //      ./html/namespace/page.html (GOOD)
             fs.readFile(path, function (err, content) {
+
                 if (err) {
                     msg = 'could not open "'+ path +'"' +
                             '\n1) The requested file does not exists in your views/html (check your template directory). Can you find: '+path +
@@ -534,11 +546,12 @@ function SuperController(options) {
                     self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\n'+(err.stack||err.message));
                 }
 
-                dic['page.view.content'] = content;
+                dic['page.content'] = content;
 
                 var layoutPath = (local.options.isWithoutLayout) ? local.options.views[template].noLayout : local.options.views[template].layout;
 
                 fs.readFile(layoutPath, function(err, layout) {
+
                     if (err) {
                         self.throwError(local.res, 500, err.stack);
                     } else {
@@ -546,17 +559,24 @@ function SuperController(options) {
                         // adding plugins
                         if ( hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout ) {
 
+                            var scripts = layout.toString().match(/<script.*?<\/script>/g);
+                            var userScripts = data.page.view.scripts;
+                            if ( typeof(scripts.length) != 'undefined' )
+                                userScripts += scripts.join('');
+
+
                             layout = ''
                                 + '{%- set ginaDataInspector                = JSON.parse(JSON.stringify(page)) -%}'
-                                + '{%- set ginaDataInspector.view.scripts        = "ignored-by-toolbar" -%}'
+                                + '{%- set ginaDataInspector.view.scripts    = "ignored-by-toolbar" -%}'
                                 + '{%- set ginaDataInspector.view.stylesheets    = "ignored-by-toolbar" -%}'
                                 + layout.replace('{{ page.view.scripts }}', '')
                                 ;
 
                             plugin = '\t'
                                 + '{# Gina Toolbar #}'
-                                + '{%- set userDataInspector                = page -%}'
-                                + '{%- set userDataInspector.view.scripts        = "ignored-by-toolbar" -%}'
+                                + '{%- set userDataInspector                = JSON.parse(JSON.stringify(page)) -%}'
+                                //+ '{%- set userDataInspector.view.scripts        = "ignored-by-toolbar" -%}'
+                                + '{%- set userDataInspector.view.scripts        = ['+ userScripts.match(/src=".*?"/g).join(',').replace(/src=/g, '')  +'] -%}'
                                 + '{%- set userDataInspector.view.stylesheets    = "ignored-by-toolbar" -%}'
                                 + '{%- include "'+ getPath('gina').core +'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector } -%}'
                                 + '{# END Gina Toolbar #}'
@@ -569,7 +589,7 @@ function SuperController(options) {
 
                                 + '\n<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
 
-                                + '{{ page.scripts }}'
+                                + '{{ page.view.scripts }}'
                             ;
 
                             if (local.options.isWithoutLayout && GINA_ENV_IS_DEV) {
@@ -597,10 +617,10 @@ function SuperController(options) {
                                 + '\n<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
                             ;
 
-                            if ( !/page\.scripts/.test(layout) ) {
-                                layout = layout.replace(/<\/body>/i, plugin + '\t{{ page.scripts }}\n\t</body>');
+                            if ( !/page\.view\.scripts/.test(layout) ) {
+                                layout = layout.replace(/<\/body>/i, plugin + '\t{{ page.view.scripts }}\n\t</body>');
                             } else {
-                                layout = layout.replace(/{{ page.scripts }}/i, plugin + '\t{{ page.scripts }}');
+                                layout = layout.replace(/{{ page.view.scripts }}/i, plugin + '\t{{ page.view.scripts }}');
                             }
 
                         }
@@ -619,7 +639,7 @@ function SuperController(options) {
 
                         } catch (err) {
                             var filename = local.options.views[template].html;
-                            filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.file) ) ? '/' + data.page.view.namespace + data.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
+                            filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
                             self.throwError(local.res, 500, 'Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message))
                         }
 
@@ -825,10 +845,10 @@ function SuperController(options) {
             }
 
             newObj = parseDataObject(JSON.parse(str), value);
-            local._data = merge(local._data, newObj);
+            local.userData = merge(local.userData, newObj);
 
-        } else if ( typeof(local._data[name]) == 'undefined' ) {
-            local._data[name] = value
+        } else if ( typeof(local.userData[name]) == 'undefined' ) {
+            local.userData[name] = value
         }
     }
 
@@ -839,7 +859,7 @@ function SuperController(options) {
      * @return {Object | String} data Data object or String
      * */
     var get = function(variable) {
-        return local._data[variable]
+        return local.userData[variable]
     }
 
     /**
@@ -1009,7 +1029,7 @@ function SuperController(options) {
     // }
 
     var getData = function() {
-        return refToObj( local._data )
+        return refToObj( local.userData )
     }
 
     var isValidURL = function(url){

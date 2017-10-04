@@ -1,5 +1,7 @@
 function Merge() {
-    var newTarget = [];
+
+    var newTarget = []/**, nextTickCalled = false*/;
+
     /**
      *
      * @param {object} target - Target object
@@ -44,7 +46,7 @@ function Merge() {
 
         } else {
 
-            for (; i < length; i++) {
+            for (; i < length; ++i) {
                 // Only deal with non-null/undefined values
                 if ( typeof(arguments[i]) != 'boolean' && ( options = arguments[i]) != null) {
                     if ( typeof(options) != 'object') {
@@ -127,12 +129,21 @@ function Merge() {
 
 
 
+
                                     // Never move original objects, clone them
-                                    if (typeof(src) != "boolean" && !createMode ) {//if property is not boolean
-                                        //target[ name ] = browse(clone, copy, override)
-                                        process.nextTick(function onBrowse() {
-                                            target[ name ] = browse(clone, copy, override)
-                                        });
+                                    if (typeof(src) != 'boolean' && !createMode ) {//if property is not boolean
+
+                                        // Attention: might lead to a `Maximum call stack size exceeded` Error message
+                                        target[ name ] = browse(clone, copy, override);
+
+                                        // this does not work ... target is returned before the end of process.nextTick !!!
+                                        // nextTickCalled = true;
+                                        // process.nextTick(function onBrowse() {
+                                        //     nextTickCalled = false;
+                                        //     //target[ name ] = browse(clone, copy, override);
+                                        //     return browse(clone, copy, override);
+                                        // });
+
 
                                     } else if (createMode) {
                                         target[ name ] = clone;
@@ -159,7 +170,7 @@ function Merge() {
                             } else if (copy !== undefined) {
                                 //[propose]Don't override existing if prop defined or override @ false
                                 if (
-                                    typeof(src) != "undefined"
+                                    typeof(src) != 'undefined'
                                     && src != null
                                     && src !== copy && !override
                                 ) {
@@ -178,8 +189,14 @@ function Merge() {
         }
 
         newTarget = [];
-        return target
+
+        return target;
+
     }
+
+
+
+
 
     // Will not merge functions items: this is normal
     // Merging arrays is OK, but merging collections is still experimental
@@ -331,6 +348,7 @@ function Merge() {
         var key;
         return key === undefined || hasOwn.call(obj, key)
     }
+
 
     return browse
 }
