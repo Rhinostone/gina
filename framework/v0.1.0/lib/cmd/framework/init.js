@@ -87,6 +87,7 @@ function Initialize(opt) {
         }
     }
 
+
     self.checkIfVersionDir = function() {
 
         var version = require(self.opt.pack).version;
