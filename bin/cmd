@@ -144,7 +144,7 @@ function Cmd(opt, runOffine) {
             try {
 
                 if ( !fs.existsSync(home) ) {
-                    fs.mkdirSync(home, 0775)
+                    fs.mkdirSync(home, '0775')
                 }
 
                 var data = require(mainSrc);
