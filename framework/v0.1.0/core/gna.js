@@ -132,7 +132,7 @@ gna.env.isWin32 = process.env.isWin32 = isWin32;
 process.env.IS_CACHELESS = isDev;
 
 var bundlesPath = (GINA_ENV_IS_DEV) ? projects[projectName]['path'] + '/src' : projects[projectName]['path'] + '/bundles';
-setPath('bundles', _(bundlesPath));
+setPath('bundles', _(bundlesPath, true));
 
 
 var Router      = require('./router');
@@ -235,9 +235,7 @@ gna.getProjectConfiguration = function (callback){
             }
 
             setContext('env', env);
-            setContext('bundlesPath',  _(bundlesPath, true));
-            setPath('bundles', bundles);
-            setContext('bundlePath', _(bundlePath, true));
+            setContext('bundles', bundles);
             setPath('bundle', _(bundlePath, true));
 
             callback(false, project);
