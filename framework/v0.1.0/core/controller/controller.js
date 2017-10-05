@@ -253,7 +253,7 @@ function SuperController(options) {
 
     this.renderWithoutLayout = function (data, displayToolbar) {
         local.options.isWithoutLayout = true;
-        local.options.debugMode = true; // only active for dev env
+        local.options.debugMode = GINA_ENV_IS_DEV; // only active for dev env
         self.render(data)
     }
 
@@ -571,7 +571,7 @@ function SuperController(options) {
                                 userScripts += scripts.join('');
 
 
-                            if ( typeof(stylesheets.length) != 'undefined' ) {
+                            if ( stylesheets && typeof(stylesheets.length) != 'undefined' ) {
 
                                 usersStylesheets += stylesheets.join('');
                                 var stylesArr = usersStylesheets.match(/href=".*?"/g);
@@ -1552,6 +1552,14 @@ function SuperController(options) {
 
         //starting from from >0.10.15
         req.on('error', function onError(err) {
+
+            if ( err.address == '127.0.0.1') {
+
+                var port = getContext('gina').ports.http[ err.port ];
+                if ( typeof(port) != 'undefined' )
+                    err.accessPoint = getContext('gina').ports.http[ err.port ];
+            }
+
 
             console.error(err.stack||err.message);
             // you can get here if :
