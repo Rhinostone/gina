@@ -636,6 +636,23 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 }
             }
 
+            var XHRView = document.getElementById('gina-without-layout-xhr-view');
+            if ( gina && typeof(window.ginaToolbar) == "object" && XHRView ) {
+                try {
+
+                    if ( typeof(XHRView.value) != 'undefined' && XHRView.value ) {
+                        XHRView = JSON.parse( decodeURIComponent( XHRView.value ) );
+                        // reset data-xhr
+                        ginaToolbar.update("view-xhr", null);
+
+                        ginaToolbar.update("view-xhr", XHRView);
+                    }
+
+                } catch (err) {
+                    throw err
+                }
+            }
+
             triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
         }
 
