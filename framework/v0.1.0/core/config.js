@@ -935,7 +935,7 @@ function Config(opt) {
                 _wroot = ( wroot.substr(0,1) == '/' ) ?  wroot.substr(1) : wroot;
             }
 
-            var k;
+            var k = null;
             for (var i in files['statics']) {
                 k = i;
                 if ( !(new RegExp(wroot)).test(i) ) {
