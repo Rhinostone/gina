@@ -567,8 +567,19 @@ function SuperController(options) {
                                 , usersStylesheets  = data.page.view.stylesheets
                             ;
 
-                            if ( typeof(scripts.length) != 'undefined' )
+                            if ( scripts && typeof(scripts.length) != 'undefined' ) {
+
                                 userScripts += scripts.join('');
+                                var scriptsArr = userScripts.match(/src=".*?"/g);
+                                if ( scriptsArr != null || typeof(scriptsArr.length) != 'undefined' )
+                                    userScripts = scriptsArr.join(',').replace(/src=/g, '');
+                                else
+                                    userScripts = '';
+
+                            } else {
+                                userScripts = '';
+                            }
+
 
 
                             if ( stylesheets && typeof(stylesheets.length) != 'undefined' ) {
@@ -597,7 +608,7 @@ function SuperController(options) {
                                 + '{# Gina Toolbar #}'
                                 + '{%- set userDataInspector                = JSON.parse(JSON.stringify(page)) -%}'
                                 //+ '{%- set userDataInspector.view.scripts        = "ignored-by-toolbar" -%}'
-                                + '{%- set userDataInspector.view.scripts        = ['+ userScripts.match(/src=".*?"/g).join(',').replace(/src=/g, '')  +'] -%}'
+                                + '{%- set userDataInspector.view.scripts        = ['+ userScripts +'] -%}'
                                 //+ '{%- set userDataInspector.view.stylesheets    = "ignored-by-toolbar" -%}'
                                 + '{%- set userDataInspector.view.stylesheets    = ['+ usersStylesheets +'] -%}'
                                 + '{%- include "'+ getPath('gina').core +'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector } -%}'
@@ -615,8 +626,11 @@ function SuperController(options) {
                             ;
 
                             if (local.options.isWithoutLayout && GINA_ENV_IS_DEV) {
+
                                 var XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
-                                layout = XHRData + layout;
+                                var XHRView = '\t<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(data.page.view)) +'">\n\r';
+
+                                layout = XHRData + XHRView + layout;
                             }
 
                             layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
@@ -624,8 +638,10 @@ function SuperController(options) {
                         } else if ( hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() ) {
                             // means that we don't want GFF context or we already have it loaded
                             var XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
+                            var XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(data.page.view)) +'">';
 
-                            layout += XHRData;
+
+                            layout += XHRData + XHRView;
 
                         } else { // production env
 

@@ -204,9 +204,22 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
 
 
-                if ( !section || /^(data)$/.test(section) ) {
-                    // -> Data
-                    $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject.data, ginaJsonObject.data) +'</ul>');
+                if ( !section || /^(data)$/.test(section) || /^(view-xhr)$/.test(section) ) {
+
+                    if ( /^(data)$/.test(section) ) {
+                        // -> Data
+                        $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject[section], ginaJsonObject[section]) +'</ul>');
+                    }
+
+                    var userObject   = { view: jsonObject.view, forms: jsonObject.forms }
+                        , ginaObject  = { view: ginaJsonObject.view, forms: ginaJsonObject.forms } ;
+
+                    if ( /^(view-xhr)$/.test(section) ) {
+                        userObject.view    = jsonObject[section];
+                        ginaObject.view  = ginaJsonObject[section];
+                    }
+
+
 
                     // -> View
                     // init
@@ -220,14 +233,14 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                         '                    </table>';
 
                     $htmlView.html(htmlProp);
-                    $htmlView.html( parseView(jsonObject.view, ginaJsonObject.view, null, $htmlView) );
+                    $htmlView.html( parseView(userObject.view, ginaObject.view, null, $htmlView) );
 
                     // -> Forms
-                    $htmlForms.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject.forms, ginaJsonObject.forms) +'</ul>');
+                    $htmlForms.html('<ul class="gina-toolbar-code">' + parseObject(userObject.forms, ginaObject.forms) +'</ul>');
                     //$htmlForms.html( parseView(jsonObject.forms, ginaJsonObject.forms, null, $htmlForms) );
                 } else if ( /^(data-xhr)$/.test(section) ) {
                     // -> Data
-                    $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject['data-xhr'], ginaJsonObject['data-xhr']) +'</ul>');
+                    $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject[section], ginaJsonObject[section]) +'</ul>');
                 }
 
 
