@@ -206,23 +206,25 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
                 if ( !section || /^(data)$/.test(section) || /^(view-xhr)$/.test(section) ) {
 
-                    if ( /^(data)$/.test(section) ) {
-                        // -> Data
-                        $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject[section], ginaJsonObject[section]) +'</ul>');
-                    }
 
-                    var userObject   = { view: jsonObject.view, forms: jsonObject.forms }
-                        , ginaObject  = { view: ginaJsonObject.view, forms: ginaJsonObject.forms } ;
+                    var userObject   = { data: jsonObject.data, view: jsonObject.view, forms: jsonObject.forms }
+                        , ginaObject  = { data: ginaJsonObject.data, view: ginaJsonObject.view, forms: ginaJsonObject.forms } ;
 
+
+                    // xhr text
                     if ( /^(view-xhr)$/.test(section) ) {
-                        userObject.view    = jsonObject[section];
-                        ginaObject.view  = ginaJsonObject[section];
+                        userObject.view = jsonObject[section];
+                        ginaObject.view = ginaJsonObject[section];
+
+                        userObject.data = jsonObject['data-xhr'];
+                        ginaObject.data = ginaJsonObject['data-xhr']
                     }
 
-
+                    // -> Data
+                    $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(userObject.data, ginaObject.data) +'</ul>');
 
                     // -> View
-                    // init
+                    // init view
                     var htmlProp = '<table id="gina-toolbar-view-html-properties">\n' +
                         '                        <thead>\n' +
                         '                            <tr>\n' +
