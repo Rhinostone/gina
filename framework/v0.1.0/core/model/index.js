@@ -115,11 +115,11 @@ function Model(namespace) {
             _configuration = conf.connectors;
             self.connector = _configuration[self.name].connector;
 
-            console.debug('About to scan: '+ conf.path, JSON.stringify(conf, null, 4));
+            console.debug('About to scan: '+ conf.path);
             //TODO - More controls...
 
             //For now, I just need the F..ing entity name.
-            var connectorPath   = local.connectorPath = _(GINA_FRAMEWORK_DIR +'/connectors/'+ self.connector);
+            var connectorPath   = local.connectorPath = _(GINA_FRAMEWORK_DIR +'/core/connectors/'+ self.connector);
             var modelPath       = local.modelPath = _(conf.path + '/' + modelDirName);
             var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
             console.debug( 'Scanning model entities: ', entitiesPath +' (existing path ? '+ fs.existsSync(entitiesPath) );

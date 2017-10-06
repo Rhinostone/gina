@@ -1,6 +1,6 @@
 // Imports.
 var fs              = require('fs');
-var lib             = require('./../../lib') || require.cache[require.resolve('./../../lib')];
+var lib             = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var inherits        = lib.inherits;
 var merge           = lib.merge;
 //var modelUtil       = new utils.Model();

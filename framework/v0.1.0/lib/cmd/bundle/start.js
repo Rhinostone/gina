@@ -126,7 +126,7 @@ function Start(opt, cmd) {
                 // CMD exit
                 setTimeout(function () {
                     opt.client.emit('end');
-                }, 500)
+                }, 1000)
 
 
             })//EO isRealApp
