@@ -115,7 +115,6 @@ if ( typeof(ginaPath) == 'undefined') {
 
 setContext('gina.utils', lib);
 setContext('gina.Config', Config);
-setContext('gina.Router', Router);
 setContext('gina.locales', locales);
 setContext('gina.plugins', plugins);
 
@@ -136,6 +135,7 @@ setPath('bundles', _(bundlesPath, true));
 
 
 var Router      = require('./router');
+setContext('gina.Router', Router);
 //TODO require('./server').http
 //TODO  - HTTP vs HTTPS
 var Server  = require('./server');

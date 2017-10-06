@@ -38,6 +38,7 @@ function Model(namespace) {
     var self = this;
     this.i = 0;
     var local = {
+        connectorPath: null,
         modelPath: null,
         entitiesPath: null,
         connection: null,
@@ -75,16 +76,18 @@ function Model(namespace) {
         }
 
 
-        console.debug("\nBundle: ", bundle);
-        console.debug("Model: ", model);
+        console.debug('Bundle: '+ bundle);
+        console.debug('Model: '+ model);
         self.name       = _connector;
         self.bundle     = bundle;
         self.model      = model;
+
         self.modelDirName = model;
         var modelConnectors = getContext('modelConnectors');
         if (modelConnectors) {
             self.connectors = getContext('modelConnectors')[self.name];
-            self.database = self.connectors.database;
+            self.database   = self.connectors.database;
+            self.connector  = self.connectors.connector;
         } else {
             self.connectors = {};
         }
@@ -110,19 +113,22 @@ function Model(namespace) {
 
         if (conf) {
             _configuration = conf.connectors;
+            self.connector = _configuration[self.name].connector;
 
-            console.debug("CONF READY ", model, conf.path);
+            console.debug('About to scan: '+ conf.path, JSON.stringify(conf, null, 4));
             //TODO - More controls...
 
             //For now, I just need the F..ing entity name.
+            var connectorPath   = local.connectorPath = _(GINA_FRAMEWORK_DIR +'/connectors/'+ self.connector);
             var modelPath       = local.modelPath = _(conf.path + '/' + modelDirName);
             var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
-            console.debug('models scaning... ', entitiesPath, fs.existsSync(entitiesPath));
+            console.debug( 'Scanning model entities: ', entitiesPath +' (existing path ? '+ fs.existsSync(entitiesPath) );
             if (!fs.existsSync(entitiesPath)) {
                 fs.mkdirSync(entitiesPath) // creating empty path
             }
 
-            var connectorPath   = _(modelPath + '/lib/connector.js');
+            var connectorPath   = _(connectorPath + '/lib/connector.js');
+            console.debug('Loading connector: ' + connectorPath);
             //Getting Entities Manager.
             var exists = fs.existsSync(connectorPath);
             if (exists) {
