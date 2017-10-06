@@ -610,11 +610,11 @@ function SuperController(options) {
                             var toolbarInfos        = getToolbarInfos(layout, data)
                                 , userScripts       = toolbarInfos.scripts
                                 , userStylesheets   = toolbarInfos.stylesheets
-                                , viewInfos     = JSON.parse(JSON.stringify(data.page.view))
+                                , viewInfos         = JSON.parse(JSON.stringify(data.page.view))
                             ;
 
-                            viewInfos.scripts       = userScripts;
-                            viewInfos.stylesheets   = userStylesheets;
+                            viewInfos.scripts       = userScripts.split(/,/g);
+                            viewInfos.stylesheets   = userStylesheets.split(/,/g);
 
                             var XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
                             var XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(viewInfos)) +'">';
@@ -1062,33 +1062,21 @@ function SuperController(options) {
         //userScripts = merge(scripts, userScripts);
         //usersStylesheets = merge(stylesheets, usersStylesheets);
 
-        if ( scripts && typeof(scripts.length) != 'undefined' ) {
+        userScripts += scripts.join('');
+        var scriptsArr = userScripts.match(/src=".*?"/g);
 
-            userScripts += scripts.join('');
-            var scriptsArr = userScripts.match(/src=".*?"/g);
-
-            if ( scriptsArr != null || typeof(scriptsArr.length) != 'undefined' )
-                userScripts = scriptsArr.join(',').replace(/src=/g, '');
-            else
-                userScripts = '';
-
-        } else {
+        if ( scriptsArr != null || typeof(scriptsArr.length) != 'undefined' )
+            userScripts = scriptsArr.join(',').replace(/src=/g, '');
+        else
             userScripts = '';
-        }
 
-        if ( stylesheets && typeof(stylesheets.length) != 'undefined' ) {
+        usersStylesheets += stylesheets.join('');
+        var stylesArr = usersStylesheets.match(/href=".*?"/g);
 
-            usersStylesheets += stylesheets.join('');
-            var stylesArr = usersStylesheets.match(/href=".*?"/g);
-
-            if ( stylesArr != null || typeof(stylesArr.length) != 'undefined' )
-                usersStylesheets = stylesArr.join(',').replace(/href=/g, '');
-            else
-                usersStylesheets = '';
-
-        } else {
-            usersStylesheets = ''
-        }
+        if ( stylesArr != null || typeof(stylesArr.length) != 'undefined' )
+            usersStylesheets = stylesArr.join(',').replace(/href=/g, '');
+        else
+            usersStylesheets = '';
 
         return {
             scripts     : userScripts,
