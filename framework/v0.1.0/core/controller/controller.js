@@ -559,41 +559,10 @@ function SuperController(options) {
                         // adding plugins
                         if ( hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout ) {
 
-                            var scripts         = layout.toString().match(/<script.*?<\/script>/g)
-                                , stylesheets   = layout.toString().match(/<link rel="stylesheet".*?<\/link>|<link rel="stylesheet".*?(.*)/g)
+                            var toolbarInfos        = getToolbarInfos(layout, data)
+                                , userScripts       = toolbarInfos.scripts
+                                , usersStylesheets  = toolbarInfos.stylesheets
                             ;
-
-                            var userScripts         = data.page.view.scripts
-                                , usersStylesheets  = data.page.view.stylesheets
-                            ;
-
-                            if ( scripts && typeof(scripts.length) != 'undefined' ) {
-
-                                userScripts += scripts.join('');
-                                var scriptsArr = userScripts.match(/src=".*?"/g);
-                                if ( scriptsArr != null || typeof(scriptsArr.length) != 'undefined' )
-                                    userScripts = scriptsArr.join(',').replace(/src=/g, '');
-                                else
-                                    userScripts = '';
-
-                            } else {
-                                userScripts = '';
-                            }
-
-
-
-                            if ( stylesheets && typeof(stylesheets.length) != 'undefined' ) {
-
-                                usersStylesheets += stylesheets.join('');
-                                var stylesArr = usersStylesheets.match(/href=".*?"/g);
-                                if ( stylesArr != null || typeof(stylesArr.length) != 'undefined' )
-                                    usersStylesheets = stylesArr.join(',').replace(/href=/g, '');
-                                else
-                                    usersStylesheets = '';
-
-                            } else {
-                                usersStylesheets = '';
-                            }
 
 
 
@@ -636,9 +605,19 @@ function SuperController(options) {
                             layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
 
                         } else if ( hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() ) {
+
                             // means that we don't want GFF context or we already have it loaded
+                            var toolbarInfos        = getToolbarInfos(layout, data)
+                                , userScripts       = toolbarInfos.scripts
+                                , userStylesheets   = toolbarInfos.stylesheets
+                                , viewInfos     = JSON.parse(JSON.stringify(data.page.view))
+                            ;
+
+                            viewInfos.scripts       = userScripts;
+                            viewInfos.stylesheets   = userStylesheets;
+
                             var XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
-                            var XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(data.page.view)) +'">';
+                            var XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(viewInfos)) +'">';
 
 
                             layout += XHRData + XHRView;
@@ -1068,6 +1047,50 @@ function SuperController(options) {
 
     var getData = function() {
         return refToObj( local.userData )
+    }
+
+    var getToolbarInfos = function (layout, data) {
+
+        var scripts         = layout.toString().match(/<script.*?<\/script>/g)
+            , stylesheets   = layout.toString().match(/<link rel="stylesheet".*?<\/link>|<link rel="stylesheet".*?(.*)/g)
+        ;
+
+        var userScripts         = data.page.view.scripts
+            , usersStylesheets  = data.page.view.stylesheets
+        ;
+
+        if ( scripts && typeof(scripts.length) != 'undefined' ) {
+
+            userScripts += scripts.join('');
+            var scriptsArr = userScripts.match(/src=".*?"/g);
+
+            if ( scriptsArr != null || typeof(scriptsArr.length) != 'undefined' )
+                userScripts = scriptsArr.join(',').replace(/src=/g, '');
+            else
+                userScripts = '';
+
+        } else {
+            userScripts = '';
+        }
+
+        if ( stylesheets && typeof(stylesheets.length) != 'undefined' ) {
+
+            usersStylesheets += stylesheets.join('');
+            var stylesArr = usersStylesheets.match(/href=".*?"/g);
+
+            if ( stylesArr != null || typeof(stylesArr.length) != 'undefined' )
+                usersStylesheets = stylesArr.join(',').replace(/href=/g, '');
+            else
+                usersStylesheets = '';
+
+        } else {
+            usersStylesheets = ''
+        }
+
+        return {
+            scripts     : userScripts,
+            stylesheets : usersStylesheets
+        }
     }
 
     var isValidURL = function(url){

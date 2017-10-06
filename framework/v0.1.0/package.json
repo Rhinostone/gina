@@ -1,6 +1,8 @@
 {
   "dependencies": {
     "colors": "^1.1.2",
+    "couchbase": "",
+
     "engine.io": "^3.1.0",
     "engine.io-client": "^3.1.1",
     "express": "^4.15.4",

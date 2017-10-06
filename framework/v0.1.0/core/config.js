@@ -470,6 +470,7 @@ function Config(opt) {
                 }
 
                 var reps = {
+                    "frameworkDir"  : GINA_FRAMEWORK_DIR,
                     "executionPath" : root,
                     "bundlesPath" : appsPath,
                     "modelsPath" : modelsPath,
@@ -819,8 +820,10 @@ function Config(opt) {
         //Constants to be exposed in configuration files.
         var reps = {
             "gina"          : getPath('gina').root,
+            "frameworkDir"  : GINA_FRAMEWORK_DIR,
             "root"          : conf[bundle][env].executionPath,
             "env"           : env,
+            "project"       : getPath('project'),
             "executionPath" : conf[bundle][env].executionPath,
             "bundlesPath"   : conf[bundle][env].bundlesPath,
             "mountPath"     : conf[bundle][env].mountPath,
