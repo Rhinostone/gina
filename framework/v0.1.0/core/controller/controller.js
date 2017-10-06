@@ -1051,13 +1051,16 @@ function SuperController(options) {
 
     var getToolbarInfos = function (layout, data) {
 
-        var scripts         = layout.toString().match(/<script.*?<\/script>/g)
-            , stylesheets   = layout.toString().match(/<link rel="stylesheet".*?<\/link>|<link rel="stylesheet".*?(.*)/g)
+        var scripts         = layout.toString().match(/<script.*?<\/script>/g) || []
+            , stylesheets   = layout.toString().match(/<link .*?<\/link>|<link .*?(.*)/g) || []
         ;
 
         var userScripts         = data.page.view.scripts
             , usersStylesheets  = data.page.view.stylesheets
         ;
+
+        //userScripts = merge(scripts, userScripts);
+        //usersStylesheets = merge(stylesheets, usersStylesheets);
 
         if ( scripts && typeof(scripts.length) != 'undefined' ) {
 
