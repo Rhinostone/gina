@@ -24,3 +24,7 @@ desktop.ini
 /data
 /cgi-bin
 ._.DS_Store
+
+framework/v0.1.0/package-lock.json
+
+framework/v0.1.0/package.json
