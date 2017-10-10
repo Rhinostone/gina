@@ -92,8 +92,12 @@ function Connector(dbString) {
                             self.instance.disconnect();
                             next(err)
                         } else {
+
                             if (err) {
-                                console.error('gina fatal error: ' + err.message + '\nstack:\n'+ err.stack)
+                                console.error('gina fatal error: ' + err.message + '\nstack: '+ err.stack);
+
+                                res.end(err);
+                                res.headersSent = true
                             }
                             next(err)
                         }

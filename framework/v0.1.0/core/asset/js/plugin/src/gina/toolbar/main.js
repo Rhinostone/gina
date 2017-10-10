@@ -46,6 +46,8 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             , originalData       = null
             , jsonObject         = null
             , ginaJsonObject     = null
+            , forms              = null
+            , formsIgnored       = '.gina-toolbar-options, .gina-toolbar-content'
             , $htmlConfigurationEnvironment = null
             , $htmlData          = null
             , $htmlView          = null
@@ -72,6 +74,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             $json              = $('#gina-toolbar-json');
             $ginaJson          = $('#gina-toolbar-gina-json');
             $jsonRAW           = $('#gina-toolbar-toggle-code-raw');
+            $forms             = $('form:not('+ formsIgnored +')');
             $htmlData          = $('#gina-toolbar-data-html');
             $htmlView          = $('#gina-toolbar-view-html');
             $htmlForms         = $('#gina-toolbar-forms-html');
@@ -156,6 +159,8 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
          * */
         var loadData = function (section, data, ginaData) {
 
+            var $currentForms = null;
+
             try {
                 var txt = $json.text();
                 if (txt == '' || txt == 'null' ) {
@@ -203,22 +208,22 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                 $htmlConfigurationEnvironment.html(parseObject(jsonObject.environment, ginaJsonObject.environment));
 
 
+                var userObject   = { data: jsonObject.data, view: jsonObject.view, forms: jsonObject.forms }
+                    , ginaObject  = { data: ginaJsonObject.data, view: ginaJsonObject.view, forms: ginaJsonObject.forms } ;
+
+
+                // xhr mode
+                if ( /^(view-xhr)$/.test(section) ) {
+                    userObject.view = jsonObject[section];
+                    ginaObject.view = ginaJsonObject[section];
+
+                    userObject.data = jsonObject['data-xhr'];
+                    ginaObject.data = ginaJsonObject['data-xhr'];
+                }
+
 
                 if ( !section || /^(data)$/.test(section) || /^(view-xhr)$/.test(section) ) {
 
-
-                    var userObject   = { data: jsonObject.data, view: jsonObject.view, forms: jsonObject.forms }
-                        , ginaObject  = { data: ginaJsonObject.data, view: ginaJsonObject.view, forms: ginaJsonObject.forms } ;
-
-
-                    // xhr text
-                    if ( /^(view-xhr)$/.test(section) ) {
-                        userObject.view = jsonObject[section];
-                        ginaObject.view = ginaJsonObject[section];
-
-                        userObject.data = jsonObject['data-xhr'];
-                        ginaObject.data = ginaJsonObject['data-xhr']
-                    }
 
                     // -> Data
                     $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(userObject.data, ginaObject.data) +'</ul>');
@@ -238,11 +243,19 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     $htmlView.html( parseView(userObject.view, ginaObject.view, null, $htmlView) );
 
                     // -> Forms
-                    $htmlForms.html('<ul class="gina-toolbar-code">' + parseObject(userObject.forms, ginaObject.forms) +'</ul>');
+                    $currentForms = $forms;
+                    $htmlForms.html('');
+                    $htmlForms.html( parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length) );
+
                     //$htmlForms.html( parseView(jsonObject.forms, ginaJsonObject.forms, null, $htmlForms) );
                 } else if ( /^(data-xhr)$/.test(section) ) {
-                    // -> Data
+                    // -> XHR Data
                     $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject[section], ginaJsonObject[section]) +'</ul>');
+                } else if ( /^(el-xhr)$/.test(section) ) {
+                    // -> XHR Forms
+                    $currentForms = $('#' + jsonObject[section]).find('form:not('+ formsIgnored +')');
+                    $htmlForms.html('');
+                    $htmlForms.html( parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length) );
                 }
 
 
@@ -264,6 +277,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                 }
             }
         }
+
         
         var initFoldingState = function (unfolded, len, i) {
 
@@ -787,6 +801,124 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             }
 
             return $root.html()
+        }
+
+        var parseRules = function (rules, id) {
+
+            return parseObject(rules, rules, id)
+        }
+
+        var parseForms = function (obj, ginaObj, $html, i, $forms, len) {
+
+            var attributes  = $forms[i].attributes;
+            var attrClass   = 'gina-toolbar-form-attributes';
+            var id          = $forms[i].getAttribute('id');
+
+            var $form = $('<table id="gina-toolbar-form-html-properties">\n' +
+                '                        <thead>\n' +
+                '                            <tr>\n' +
+                '                                <td colspan="2">'+ id +'</td>\n' +
+                '                            </tr>\n' +
+                '                        </thead>\n' +
+                '                        <tbody class="'+ attrClass +'"></tbody>\n' +
+                '                    </table>');
+
+            var key         = null
+                , val       = null
+                , content   = null
+                , hasEvents = false
+            ;
+
+            // adding for attributes
+            for ( var a = 0, aLen = attributes.length; a < aLen; ++a ) {
+
+                key     = attributes[a].name;
+                val     = attributes[a].nodeValue;
+
+                // filters
+                if ( /^method$/.test(key) )
+                    val = val.toUpperCase();
+
+                if ( /^class$/.test(key) && /\s+/.test(val) )
+                    val = '<ul><li>'+ val.replace(/\s+/g, '</li><li>') +'</li></ul>';
+
+                content = val;
+
+
+                if ( /^data-gina-form-event/.test(key) ) {
+
+                    hasEvents = ( $form
+                                    .find('.'+ attrClass)
+                                    .find('td.gina-toolbar-key-events').length ) ? true : false;
+
+
+
+
+
+                    if (!hasEvents) {
+
+                        $form
+                            .find('.'+ attrClass)
+                            .append('<tr>' +
+                                '       <td class="gina-toolbar-key gina-toolbar-key-events">events</td>' +
+                                '       <td class="gina-toolbar-value-events"><table><tbody></tbody></table></td>' +
+                                '</tr>');
+
+                    }
+
+                    key = key.replace(/^data-gina-form-event-/, '');
+                    content = '<tr>' +
+                        '           <td class="gina-toolbar-key-event">'+ key +'</td>' +
+                        '           <td class="gina-toolbar-value gina-toolbar-value-event">'+ val +'</td>' +
+                        '</tr>';
+
+
+                    $form
+                        .find('.'+ attrClass)
+                        .find('.gina-toolbar-value-events > table > tbody')
+                        .append(content)
+
+
+                } else { // normal case
+                    $form
+                        .find('.'+ attrClass)
+                        .append('<tr>' +
+                            '       <td class="gina-toolbar-key">'+ key +'</td>' +
+                            '       <td class="gina-toolbar-value">'+ content +'</td>' +
+                            '</tr>')
+                }
+
+
+            }
+
+            // adding form rules
+
+            var rules = null;
+
+            try {
+                rules = eval('gina.forms.rules.' + id.replace(/-/g, '.'))
+            } catch (err) {}
+
+            if ( rules ) {
+
+                $form
+                    .find('.'+ attrClass)
+                    .append('<tr>' +
+                        '       <td class="gina-toolbar-key gina-toolbar-key-rules">rule</td>' +
+                        '       <td class="gina-toolbar-value-rules"><ul class="gina-toolbar-code">'+ parseRules( rules, id ) +'</ul></td>' +
+                '</tr>');
+
+            }
+
+
+
+            $html.append($form);
+
+            ++i;
+
+            if (i < len) {
+                parseForms(obj, ginaObj, $html, i, $forms, len)
+            }
         }
 
         var createInputFile = function(id, label) {

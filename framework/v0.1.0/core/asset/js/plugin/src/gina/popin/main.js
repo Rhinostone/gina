@@ -648,6 +648,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         ginaToolbar.update("view-xhr", XHRView);
                     }
 
+                    // popin content
+                    ginaToolbar.update("el-xhr", id);
+
                 } catch (err) {
                     throw err
                 }
