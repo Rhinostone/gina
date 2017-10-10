@@ -597,9 +597,8 @@ function SuperController(options) {
                             if (local.options.isWithoutLayout && GINA_ENV_IS_DEV) {
 
                                 var XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
-                                var XHRView = '\t<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(data.page.view)) +'">\n\r';
 
-                                layout = XHRData + XHRView + layout;
+                                layout = XHRData + layout;
                             }
 
                             layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
