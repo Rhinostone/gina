@@ -230,14 +230,14 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
                     // -> View
                     // init view
-                    var htmlProp = '<table id="gina-toolbar-view-html-properties">\n' +
-                        '                        <thead>\n' +
-                        '                            <tr>\n' +
-                        '                                <td colspan="2">properties</td>\n' +
-                        '                            </tr>\n' +
-                        '                        </thead>\n' +
-                        '                        <tbody class="properties"></tbody>\n' +
-                        '                    </table>';
+                    var htmlProp = '<ul id="gina-toolbar-view-html-properties">\n' +
+                        '                        <li>\n' +
+                        //'                            <tr>\n' +
+                        '                                <span colspan="2">properties</span>\n' +
+                        //'                            </tr>\n' +
+                        '                        </li>\n' +
+                        '                        <li class="properties"><ul></ul></li>\n' +
+                        '                    </ul>';
 
                     $htmlView.html(htmlProp);
                     $htmlView.html( parseView(userObject.view, ginaObject.view, null, $htmlView) );
@@ -688,13 +688,13 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
                         if (i == 'params') { // force to top
                             $('#gina-toolbar-view-html-properties')
-                                .before('<table id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'"><thead><tr><td colspan="2">'+ id.substr(0, id.length - 1) +'</td></tr></thead><tbody class="'+ id.substr(0, id.length - 1) +'"></tbody></table>');
+                                .before('<ul id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'"><li><span>'+ id.substr(0, id.length - 1) +'</span></li><li class="'+ id.substr(0, id.length - 1) +'"><ul></ul></li></ul>');
                         } else {
                             $html
-                                .append('<table id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'"><thead><tr><td colspan="2">'+ id.substr(0, id.length - 1) +'</td></tr></thead><tbody class="'+ id.substr(0, id.length - 1) +'"></tbody></table>');
+                                .append('<ul id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'"><li><span>'+ id.substr(0, id.length - 1) +'</span></li><li class="'+ id.substr(0, id.length - 1) +'"><ul></ul></li></ul>');
                         }
 
-                        parseView(obj[i], ginaObj[i], id, $html.find('tbody.'+ id.substr(0, id.length - 1)), $root );
+                        parseView(obj[i], ginaObj[i], id, $html.find('li.'+ id.substr(0, id.length - 1) + ' ul'), $root );
 
 
                     } else {
@@ -702,10 +702,10 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                         parentId = id + i + '-';
 
                         $parent
-                            .find('tbody.'+ id.substr(0, id.length - 1))
-                            .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +' <span>{ }</span></td><td><table id="gina-toolbar-view-'+ parentId.substr(0, parentId.length - 1) +'"><tbody class="'+ parentId.substr(0, parentId.length - 1) +'"></tbody></table></td></tr>');
+                            .find('li.'+ id.substr(0, id.length - 1) +' ul')
+                            .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +' { }</span></li><li><ul id="gina-toolbar-view-'+ parentId.substr(0, parentId.length - 1) +'"><li class="'+ parentId.substr(0, parentId.length - 1) +'"></li></ul></li>');
 
-                        parseView(obj[i], ginaObj[i], parentId, $parent.find('tbody.'+ id.substr(0, id.length - 1)), $root );
+                        parseView(obj[i], ginaObj[i], parentId, $parent.find('li.'+ id.substr(0, id.length - 1)), $root );
 
                         id += i + '-';
                     }
@@ -723,8 +723,8 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     if (!hasParent) {
 
                         $root
-                            .find('tbody.properties')
-                            .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +' <span>['+ obj[i].length +']</span></td><td><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $root.find('tbody.properties')) +'</ul></td></tr>');
+                            .find('li.properties ul')
+                            .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +' ['+ obj[i].length +']</span></li><li><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $root.find('li ul.properties')) +'</ul></li>');
 
 
                     } else {
@@ -732,8 +732,8 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                         parentId = id + i + '-';
 
                         $parent
-                            .find('tbody.'+ id.substr(0, id.length - 1))
-                            .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +' <span>['+ obj[i].length +']</span></td><td><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $parent.find('tbody.'+ id.substr(0, id.length - 1)) ) +'</ul></td></tr>');
+                            .find('li.'+ id.substr(0, id.length - 1) +' ul')
+                            .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +' ['+ obj[i].length +']</span></li><li><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $parent.find('li ul.'+ id.substr(0, id.length - 1)) ) +'</ul></li>');
 
                         id += i + '-';
                     }
@@ -760,40 +760,33 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                         // html += '</li>';
 
                         $html
-                            .find('tbody.' + id)
-                            .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key gina-toolbar-key-added">'+ i +'</td><td class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i]+'</td></tr>');
+                            .find('li.' + id + ' ul')
+                            .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key gina-toolbar-key-added">'+ i +'</span></li><li class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i]+'</li>');
 
                     } else {
 
                         if (/^_comment/.test(i) ) continue;
 
                         if (obj[i] !== ginaObj[i] ) {
-                            // html += '<li class="gina-toolbar-key-value gina-toolbar-is-overridden">';
-                            // html +=     '<span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value">'+ ginaObj[i] +'</span>';
-                            // html += '</li>';
-                            //
-                            // html += '<li class="gina-toolbar-key-value">';
-                            // html +=     '<span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</span>';
-                            // html += '</li>';
 
                             $html
-                                .find('tbody.' + id)
-                                .append('<tr class="gina-toolbar-key-value gina-toolbar-is-overridden"><td class="gina-toolbar-key">'+ i +'</td><td class="gina-toolbar-value">'+ ginaObj[i] +'</td></tr>');
+                                .find('li.' + id +' ul')
+                                .append('<li class="gina-toolbar-key-value gina-toolbar-is-overridden"><span class="gina-toolbar-key">'+ i +'</span></li><li class="gina-toolbar-value">'+ ginaObj[i] +'</li>');
 
                             $html
-                                .find('tbody.' + id)
-                                .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +'</td><td class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</td></tr>')
+                                .find('li.' + id +' ul')
+                                .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +'</span></li><li class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</li>')
 
                         } else {
 
                             if (!id) {
                                 $root
-                                    .find('tbody.properties')
-                                    .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +'</td><td class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</td></tr>')
+                                    .find('li.properties ul')
+                                    .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +'</span></li><li class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</li>')
                             } else {
                                 $root
-                                    .find('tbody.' + id.substr(0, id.length - 1))
-                                    .append('<tr class="gina-toolbar-key-value"><td class="gina-toolbar-key">'+ i +'</td><td class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</td></tr>')
+                                    .find('li.' + id.substr(0, id.length - 1) +' ul')
+                                    .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +'</span></li><li class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</li>')
                             }
                         }
                     }

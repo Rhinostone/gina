@@ -30,7 +30,7 @@ Locate `/node_modules/gina/core/asset/js/plugin/gina`.
 N.B.: replace ${project} by your project path.
 
 ```tty
-$ cd ${project}/node_modules/gina/core/asset/js/plugin
+$ cd /usr/local/node_modules/gina/node_modules/gina/core/asset/js/plugin
 ```
 
 You should see at this point a file named `build.json`.
@@ -43,7 +43,7 @@ $ r.js -o build.json
 ### Building loader
 
 ```tty
-$ cd ${project}/node_modules/gina/core/asset/js/plugin
+$ cd ${project}/node_modules/gina/framework/v.0.1.0/core/asset/js/plugin
 ```
 
 ```tty
