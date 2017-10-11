@@ -1033,3 +1033,4 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
     return Toolbar
 })
+
