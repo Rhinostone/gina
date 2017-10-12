@@ -384,60 +384,56 @@ $code-hightlight: #323e41
 
 // DATA
 
+  .gina-toolbar-code
+
+    &.gina-toolbar-code-end:after
+      content: ''
+      display: block
+      padding: 3px 0
+      margin: 12px 0 0
+      text-align: center
+      color: $white
+      background: $dark-grey
+      background: repeating-linear-gradient( -45deg, $yellow, $yellow 10px, $black 10px, $black 20px)
+      border-radius: 10px
+
+    ul
+      display: none
+
+      li
+        margin: 0 0 3px
+        padding-left: 20px
+
+.gina-toolbar-object, .gina-toolbar-collection
+  > a:first-child
+    display: block
+    text-decoration: none
+
+    span
+      color: $grey
+
+    &:before
+      content: ''
+      position: relative
+      top: 1px
+      display: inline-block
+      width: 0
+      height: 0
+      margin-right: 5px
+
+      border-top: 5px solid transparent
+      border-bottom: 5px solid transparent
+      border-left: 8px solid $grey
+
+      transition: border-left-color 0.5s
+
+    &:hover:before
+      border-left-color: $code-white
+
+.gina-toolbar-unfolded:before
+  transform: rotate(90deg)
+
 .gina-toolbar
-  .gina-toolbar-data
-    .gina-toolbar-code
-
-      // &:after,
-      &.gina-toolbar-code-end:after
-        content: ''
-        display: block
-        padding: 3px 0
-        margin: 12px 0 0
-        text-align: center
-        color: $white
-        background: $dark-grey
-        background: repeating-linear-gradient( -45deg, $yellow, $yellow 10px, $black 10px, $black 20px)
-        // border-top: 1px solid $black
-        border-radius: 10px
-
-
-      ul
-        display: none
-
-        li
-          margin: 0 0 3px
-          padding-left: 20px
-
-      .gina-toolbar-object, .gina-toolbar-collection
-        > a:first-child
-          display: block
-          text-decoration: none
-
-          span
-            color: $grey
-
-          &:before
-            content: ''
-            position: relative
-            top: 1px
-            display: inline-block
-            width: 0
-            height: 0
-            margin-right: 5px
-
-            border-top: 5px solid transparent
-            border-bottom: 5px solid transparent
-            border-left: 8px solid $grey
-
-            transition: border-left-color 0.5s
-
-          &:hover:before
-            border-left-color: $code-white
-
-
-      .gina-toolbar-unfolded:before
-        transform: rotate(90deg)
 
   .gina-toolbar-key
     color: $white
