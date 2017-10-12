@@ -30,7 +30,7 @@ function Logger(opt) {
     var defaultOptions = {
         name: 'gina', // group name by default: it is usually the bundle or the service name
         template: '%d [ %s ] %m',
-        flow: 'default', // event where the flow will be display - e.g.: event.on('logger#default', function(code, level, message){ ... })
+        flow: 'default', // event where the flow will be dispatched - e.g.: event.on('logger#default', function(code, level, message){ ... })
         //containers: [],
         //'format' : '',
         //'pipe' : [],
@@ -101,14 +101,14 @@ function Logger(opt) {
      * */
     var init = function(opt) {
 
-        if ( typeof(Logger.initialized) != 'undefined' ) {
-            console.debug("Logger instance already exists. Loading it.");
-
-            self = getInstance();
-
-            return self
-
-        } else {
+        // if ( typeof(Logger.initialized) != 'undefined' ) {
+        //     console.debug("Logger instance already exists. Loading it.");
+        //
+        //     self = getInstance();
+        //
+        //     return self
+        //
+        // } else {
             Logger.initialized              = true;
             Logger.instance                 = self;
             Logger.instance._options        = self._options = opt;
@@ -117,7 +117,7 @@ function Logger(opt) {
             setDefaultLevels(opt);
 
             return Logger.instance
-        }
+        //}
     }
 
     var getInstance = function() {

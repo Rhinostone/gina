@@ -3,6 +3,8 @@ var fs              = require('fs');
 var lib             = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var inherits        = lib.inherits;
 var merge           = lib.merge;
+var console         = lib.logger;
+//var helpers         = require('./../../../helpers') || require.cache[require.resolve('./../../../helpers')];
 //var modelUtil       = new utils.Model();
 // var bundle      = getContext().bundle;
 // var config      = getContext('gina').config;
@@ -225,6 +227,10 @@ function Couchbase(conn, infos) {
                     // prepared statement
                     var query = N1qlQuery.fromString(queryString);
 
+                    if ( GINA_ENV_IS_DEV ) {
+                        console.debug(queryString)
+                    }
+
                     // query options
                     // @param {object} options
                     // @param {string} options.sample
@@ -262,6 +268,7 @@ function Couchbase(conn, infos) {
                     var trigger = 'N1QL:'+entityName.toLowerCase()+ '#'+ name;
 
                     var self = this;
+
 
                     conn.query(query, queryParams, function(err, data, meta) {
                         if (!data || data.length == 0) {
