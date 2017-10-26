@@ -34,7 +34,7 @@ $code-hightlight: #323e41
 
 .gina-toolbar
   // all: initial
-  display: none
+  display: block
   color: $white
   font: 12px/18px "Lucida Grande", Lucida, Arial, Helvetica, sans-serif
   @extend %reset
@@ -261,8 +261,7 @@ $code-hightlight: #323e41
 .gina-toolbar
   .gina-toolbar-header
 
-    .gina-toolbar-logo,
-    .gina-toolbar-tab-settings
+    .gina-toolbar-logo, .gina-toolbar-tab-settings
       a
         height: auto
         margin: 0
@@ -273,8 +272,7 @@ $code-hightlight: #323e41
             fill: $black
 
       .gina-toolbar-active
-        svg,
-        &:hover svg
+        svg, &:hover svg
           fill: $gold
 
     .gina-toolbar-logo
@@ -306,8 +304,7 @@ $code-hightlight: #323e41
 
 
 // Settings & logo position
-.gina-toolbar-top-left,
-.gina-toolbar-bottom-left
+.gina-toolbar-top-left, .gina-toolbar-bottom-left
 
   .gina-toolbar-header
 
@@ -321,8 +318,7 @@ $code-hightlight: #323e41
       float: right
 
 
-.gina-toolbar-top-right,
-.gina-toolbar-bottom-right
+.gina-toolbar-top-right, .gina-toolbar-bottom-right
 
   .gina-toolbar-header
 
@@ -373,8 +369,7 @@ $code-hightlight: #323e41
     svg
       fill: $gold
 
-  .gina-toolbar-tab,
-  .gina-toolbar-panels
+  .gina-toolbar-tab, .gina-toolbar-panels
     display: none
 
 
@@ -508,10 +503,7 @@ $code-hightlight: #323e41
       @extend %logs-notification
       background-color: $orange
 
-    &.gina-toolbar-error > a:after,
-    &.gina-toolbar-crit > a:after,
-    &.gina-toolbar-alert > a:after,
-    &.gina-toolbar-emerg > a:after
+    &.gina-toolbar-error > a:after, &.gina-toolbar-crit > a:after, &.gina-toolbar-alert > a:after, &.gina-toolbar-emerg > a:after
       @extend %logs-notification
       background-color: $red
 

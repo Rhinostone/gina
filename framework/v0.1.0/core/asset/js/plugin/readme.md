@@ -5,6 +5,8 @@ Last updated October 16th, 2016
 ## Requirments
 
 - [Requirejs](http://requirejs.org/)
+- [sass](http://sass-lang.com/install)
+- [sass-lint](https://www.npmjs.com/package/sass-lint)
 - [csso](https://github.com/css/csso)
 - Java & [Google Closure Compiler](https://developers.google.com/closure/compiler/)
 
@@ -14,6 +16,12 @@ To be able to compile the GFF (Gina Frontend Framework), you need to install the
 
 ```tty
 $ npm install -g requirejs
+```
+```tty
+$ sudo gem install sass
+```
+```tty
+$ npm install -g sass-lint
 ```
 
 ```tty
@@ -50,6 +58,10 @@ $ cd ${project}/node_modules/gina/framework/v.0.1.0/core/asset/js/plugin
 $ java -jar /usr/local/lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/gina/utils/loader.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
 ```
 
+### Building SASS assets into CSS
+```tty
+sass --no-cache --update sass/toolbar.sass:css/toolbar.css css/toolbar.css;css/toolbar.map.css
+```
 
 ### Building CSS assets
 
