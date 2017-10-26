@@ -203,18 +203,25 @@ $code-hightlight: #323e41
 // toolbar width
 .gina-toolbar-auto
   width: auto
+
 .gina-toolbar-30
   width: 30%
+
 .gina-toolbar-40
   width: 40%
+
 .gina-toolbar-50
   width: 50%
+
 .gina-toolbar-60
   width: 60%
+
 .gina-toolbar-80
   width: 80%
+
 .gina-toolbar-100
   width: 100%
+
   &:not(.gina-toolbar-collapsed)
     border-radius: 0
 
@@ -347,7 +354,7 @@ $code-hightlight: #323e41
   .gina-toolbar-content
     padding: 12px 15px
 
-    &.gina-toolbar-content-end:after
+    &.gina-toolbar-content-end::after
       content: ''
       display: block
       padding: 3px 0
@@ -422,10 +429,13 @@ $code-hightlight: #323e41
 
       transition: border-left-color 0.5s
 
-    &:hover:before
+    &:hover::before
       border-left-color: $code-white
+    
+  > ul
+    margin-left: 15px
 
-.gina-toolbar-unfolded:before
+.gina-toolbar-unfolded::before
   transform: rotate(90deg)
 
 .gina-toolbar
@@ -487,23 +497,26 @@ $code-hightlight: #323e41
 .gina-toolbar
   .gina-toolbar-tab-logs
 
-    &.gina-toolbar-debug > a:after
+    &.gina-toolbar-debug > a::after
       @extend %logs-notification
       background-color: $grey
 
-    &.gina-toolbar-info > a:after
+    &.gina-toolbar-info > a::after
       @extend %logs-notification
       background-color: $blue
 
-    &.gina-toolbar-notice > a:after
+    &.gina-toolbar-notice > a::after
       @extend %logs-notification
       background-color: $yellow
 
-    &.gina-toolbar-warning > a:after
+    &.gina-toolbar-warning > a::after
       @extend %logs-notification
       background-color: $orange
 
-    &.gina-toolbar-error > a:after, &.gina-toolbar-crit > a:after, &.gina-toolbar-alert > a:after, &.gina-toolbar-emerg > a:after
+    &.gina-toolbar-error > a::after,
+    &.gina-toolbar-crit > a::after,
+    &.gina-toolbar-alert > a::after,
+    &.gina-toolbar-emerg > a::after
       @extend %logs-notification
       background-color: $red
 
