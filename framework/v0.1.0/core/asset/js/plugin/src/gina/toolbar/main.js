@@ -523,7 +523,11 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
                 // Save element folding state
                 self.foldingClass = $el.attr('class');
-                self.foldingClass = self.foldingClass.match(/gina-toolbar-folding-state-([-a-z]+)/)[1]
+                
+                if ( /gina-toolbar-folding-state-([-a-z]+)/.test(self.foldingClass) ) {
+                    self.foldingClass = self.foldingClass.match(/gina-toolbar-folding-state-([-a-z]+)/)[1]
+                }
+            
 
                 if ($el.hasClass('gina-toolbar-unfolded')) {
                     if ( settings.isUnfolded.indexOf(self.foldingClass) < 0 )
