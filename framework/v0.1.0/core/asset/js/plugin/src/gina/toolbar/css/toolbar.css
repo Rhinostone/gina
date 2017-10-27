@@ -30,7 +30,7 @@
   overflow: hidden;
   background-color: rgba(0, 0, 0, 0.8);
   z-index: 2147483647; }
-  @supports (-webkit-backdrop-filter: none) or (backdrop-filter: none) {
+  @supports ((-webkit-backdrop-filter: none) or (backdrop-filter: none)) {
     .gina-toolbar {
       -webkit-backdrop-filter: blur(6px);
       backdrop-filter: blur(6px); } }
@@ -65,7 +65,9 @@
   font-weight: normal; }
 
 .gina-toolbar input {
-  appearance: none;
+  -webkit-appearance: none;
+     -moz-appearance: none;
+          appearance: none;
   color: #fff;
   font-size: 12px;
   font-weight: normal;
@@ -81,7 +83,9 @@
   display: none; }
 
 .gina-toolbar select {
-  appearance: none;
+  -webkit-appearance: none;
+     -moz-appearance: none;
+          appearance: none;
   height: 24px;
   width: auto;
   padding: 0 10px;
@@ -209,26 +213,56 @@
   fill: #f2af0d; }
 
 .gina-toolbar .gina-toolbar-header .gina-toolbar-logo a:hover svg {
-  animation: gina-toolbar-shake 0.5s both; }
+  -webkit-animation: gina-toolbar-shake 0.5s both;
+          animation: gina-toolbar-shake 0.5s both; }
 
 .gina-toolbar .gina-toolbar-header .gina-toolbar-tab-settings a:hover svg {
-  animation: gina-toolbar-rotate 2s both; }
+  -webkit-animation: gina-toolbar-rotate 2s both;
+          animation: gina-toolbar-rotate 2s both; }
+
+@-webkit-keyframes gina-toolbar-shake {
+  10%, 90% {
+    -webkit-transform: rotate3d(0, 0, 1, -6deg);
+            transform: rotate3d(0, 0, 1, -6deg); }
+  20%, 80% {
+    -webkit-transform: rotate3d(0, 0, 1, 5deg);
+            transform: rotate3d(0, 0, 1, 5deg); }
+  30%, 50%, 70% {
+    -webkit-transform: rotate3d(0, 0, 1, -5deg);
+            transform: rotate3d(0, 0, 1, -5deg); }
+  40%, 60% {
+    -webkit-transform: rotate3d(0, 0, 1, 6deg);
+            transform: rotate3d(0, 0, 1, 6deg); } }
 
 @keyframes gina-toolbar-shake {
   10%, 90% {
-    transform: rotate3d(0, 0, 1, -6deg); }
+    -webkit-transform: rotate3d(0, 0, 1, -6deg);
+            transform: rotate3d(0, 0, 1, -6deg); }
   20%, 80% {
-    transform: rotate3d(0, 0, 1, 5deg); }
+    -webkit-transform: rotate3d(0, 0, 1, 5deg);
+            transform: rotate3d(0, 0, 1, 5deg); }
   30%, 50%, 70% {
-    transform: rotate3d(0, 0, 1, -5deg); }
+    -webkit-transform: rotate3d(0, 0, 1, -5deg);
+            transform: rotate3d(0, 0, 1, -5deg); }
   40%, 60% {
-    transform: rotate3d(0, 0, 1, 6deg); } }
+    -webkit-transform: rotate3d(0, 0, 1, 6deg);
+            transform: rotate3d(0, 0, 1, 6deg); } }
+
+@-webkit-keyframes gina-toolbar-rotate {
+  from {
+    -webkit-transform: rotate3d(0, 0, 1, 0deg);
+            transform: rotate3d(0, 0, 1, 0deg); }
+  to {
+    -webkit-transform: rotate3d(0, 0, 1, 180deg);
+            transform: rotate3d(0, 0, 1, 180deg); } }
 
 @keyframes gina-toolbar-rotate {
   from {
-    transform: rotate3d(0, 0, 1, 0deg); }
+    -webkit-transform: rotate3d(0, 0, 1, 0deg);
+            transform: rotate3d(0, 0, 1, 0deg); }
   to {
-    transform: rotate3d(0, 0, 1, 180deg); } }
+    -webkit-transform: rotate3d(0, 0, 1, 180deg);
+            transform: rotate3d(0, 0, 1, 180deg); } }
 
 .gina-toolbar-top-left .gina-toolbar-header .gina-toolbar-logo, .gina-toolbar-bottom-left .gina-toolbar-header .gina-toolbar-logo {
   float: left; }
@@ -282,9 +316,10 @@
   margin: 12px 0 0;
   padding: 12px 0 0;
   border-top: 1px solid #444;
-  font-size: 12px;
-  line-height: 1.5;
-  font-weight: normal; }
+  font-size: 9px;
+  line-height: 2;
+  font-weight: normal;
+  text-transform: uppercase; }
 
 .gina-toolbar-content > .gina-toolbar-section:first-child > .gina-toolbar-section-title {
   margin: 0;
@@ -307,15 +342,17 @@
     border-top: 5px solid transparent;
     border-bottom: 5px solid transparent;
     border-left: 8px solid #888;
+    -webkit-transition: border-left-color 0.5s;
     transition: border-left-color 0.5s; }
   .gina-toolbar-object > a:first-child:hover::before, .gina-toolbar-collection > a:first-child:hover::before {
     border-left-color: #eeffff; }
 
 .gina-toolbar-object > ul, .gina-toolbar-collection > ul {
-  margin-left: 15px; }
+  margin-left: 20px; }
 
 .gina-toolbar-unfolded::before {
-  transform: rotate(90deg); }
+  -webkit-transform: rotate(90deg);
+          transform: rotate(90deg); }
 
 .gina-toolbar .gina-toolbar-key {
   color: #fff; }
@@ -364,7 +401,8 @@
   background-repeat: no-repeat;
   background-size: 12px 12px;
   border-radius: 100%;
-  animation: gina-toolbar-heart-beats 3.5s infinite; }
+  -webkit-animation: gina-toolbar-heart-beats 3.5s infinite;
+          animation: gina-toolbar-heart-beats 3.5s infinite; }
 
 .gina-toolbar .gina-toolbar-tab-logs.gina-toolbar-debug > a::after {
   background-color: #888; }
@@ -385,7 +423,8 @@
   background-color: #f63625; }
 
 .gina-toolbar .gina-toolbar-logs-report > li {
-  box-sizing: border-box;
+  -webkit-box-sizing: border-box;
+          box-sizing: border-box;
   display: inline-block;
   padding-left: 18px;
   margin: 0 5% 0 0;
@@ -406,12 +445,25 @@
 .gina-toolbar .gina-toolbar-logs-errors {
   background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 11 11"><path d="M11 3.04l0 4.95 -3.04 3.01 -4.92 0 -3.04-3.01 0-4.95 3.04-3.04 4.92 0 3.04 3.04ZM3.45 1l-2.45 2.45 0 4.12 2.45 2.43 4.1 0 2.45-2.43 0-4.12 -2.45-2.45 -4.09 0ZM6 7.99l0 1.01 -1 0 0-1.01 1 0ZM6 2l0 4.99 -1 0 0-4.99 1 0Z" fill="#fff"/></svg>'); }
 
+@-webkit-keyframes gina-toolbar-heart-beats {
+  0% {
+    -webkit-transform: scale(1);
+            transform: scale(1); }
+  50% {
+    -webkit-transform: scale(0.5);
+            transform: scale(0.5); }
+  100% {
+    -webkit-transform: scale(1);
+            transform: scale(1); } }
+
 @keyframes gina-toolbar-heart-beats {
   0% {
-    transform: scale(1); }
+    -webkit-transform: scale(1);
+            transform: scale(1); }
   50% {
-    transform: scale(0.5); }
+    -webkit-transform: scale(0.5);
+            transform: scale(0.5); }
   100% {
-    transform: scale(1); } }
-
+    -webkit-transform: scale(1);
+            transform: scale(1); } }
 /*# sourceMappingURL=toolbar.css.map */
