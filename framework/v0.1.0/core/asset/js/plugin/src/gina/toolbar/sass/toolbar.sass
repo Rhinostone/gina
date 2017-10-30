@@ -410,9 +410,10 @@ $code-hightlight: #323e41
   margin: 12px 0 0
   padding: 12px 0 0
   border-top: 1px solid $dark-grey
-  font-size: 12px
-  line-height: 1.5
+  font-size: 9px
+  line-height: 2
   font-weight: normal
+  text-transform: uppercase
 
 .gina-toolbar-content > .gina-toolbar-section:first-child > .gina-toolbar-section-title
     margin: 0
@@ -445,12 +446,14 @@ $code-hightlight: #323e41
 
     &:hover::before
       border-left-color: $code-white
-    
-  > ul
-    margin-left: 15px
 
-.gina-toolbar-unfolded::before
-  transform: rotate(90deg)
+  > ul
+    margin-left: 20px
+    display: none
+
+.gina-toolbar-unfolded
+  &::before
+    transform: rotate(90deg)
 
 .gina-toolbar
 
