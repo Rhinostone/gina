@@ -312,7 +312,8 @@
     border-left-color: #eeffff; }
 
 .gina-toolbar-object > ul, .gina-toolbar-collection > ul {
-  margin-left: 15px; }
+  margin-left: 15px; 
+  display: none;}
 
 .gina-toolbar-unfolded::before {
   transform: rotate(90deg); }
