@@ -177,12 +177,13 @@ function on(event, cb) {
                 cancelEvent(e);
 
                 var data = null;
+
                 if (e['detail']) {
                     data = e['detail'];
                 } else if ( typeof(this.eventData.submit) != 'undefined' ) {
                     data = this.eventData.submit
                 } else if ( typeof(this.eventData.error) != 'undefined' ) {
-                    data = this.eventData.error
+                    data = this.eventData.error;
                 } else if ( typeof(this.eventData.success) != 'undefined' ) {
                     data = this.eventData.success;
                 }

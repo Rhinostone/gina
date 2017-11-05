@@ -375,9 +375,14 @@ function ValidatorPlugin(rules, data, formId) {
                 if (!gina.forms.errors)
                     gina.forms.errors = {};
 
-                gina.forms.errors = formsErrors;
+                //gina.forms.errors   = formsErrors;
+                //gina.forms.id       = id;
+                var objCallback = {
+                    id      : id,
+                    errors  : formsErrors
+                };
 
-                window.ginaToolbar.update('forms', gina.forms);
+                window.ginaToolbar.update('forms', objCallback);
             }
 
         }
@@ -1620,11 +1625,12 @@ function ValidatorPlugin(rules, data, formId) {
                             fields[name]    = $target[i].value;
                         }
 
-
-                        $fields[name]   = $target[i];
-                        // reset filed error data attributes
-                        $fields[name].setAttribute('data-gina-form-errors', '');
-
+                        if ( typeof($fields[name]) == 'undefined' ) {
+                            $fields[name] = $target[i];
+                            // reset filed error data attributes
+                            $fields[name].setAttribute('data-gina-form-errors', '');
+                        }
+                        
                         ++fields['_length']
                     }
 
@@ -1838,6 +1844,7 @@ function ValidatorPlugin(rules, data, formId) {
         var id                  = null
             , data              = null
             , hasBeenValidated  = false
+            , subLevelRules     = 0
         ;
 
         if (isGFFCtx) {
@@ -1931,6 +1938,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 }
                             }
                             //console.log('parsing ', localRules, fields);
+                            subLevelRules++;
                             ++i; // add sub level
                             if (isGFFCtx)
                                 forEachField($form, fields, $fields, localRules, cb, i);
@@ -1945,7 +1953,7 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( typeof(rules[field]) == 'undefined' ) continue;
 
 
-                // check against rule
+                // check each field against rule
                 for (var rule in rules[field]) {
                     // check for rule params
                     try {
@@ -1967,12 +1975,20 @@ function ValidatorPlugin(rules, data, formId) {
                     }
 
                 }
+
+                // check required rule against sent fields
+                // for (var r in rules) {
+                //     if ( typeof(rules[r].isRequired) != 'undefined' && typeof(fields[r]) == 'undefined' ) {
+                //         console.log('did not find field ' + r +' in field list '+ fields);
+                //     }
+                // }
+
             }
 
-
+            --subLevelRules;
             --i;
 
-            if (i <= 0) {
+            if (i <= 0 && subLevelRules < 0) {
 
                 var errors = d['getErrors']();
 
@@ -2000,9 +2016,15 @@ function ValidatorPlugin(rules, data, formId) {
                         if (!gina.forms.sent)
                             gina.forms.sent = {};
 
-                        gina.forms.sent = data;
+                        //gina.forms.sent = data;
+                        //gina.forms.id   = id;
 
-                        window.ginaToolbar.update('forms', gina.forms);
+                        var objCallback = {
+                            id      : id,
+                            sent    : data
+                        };
+
+                        window.ginaToolbar.update('forms', objCallback);
                     }
                 } catch (err) {
                     throw err

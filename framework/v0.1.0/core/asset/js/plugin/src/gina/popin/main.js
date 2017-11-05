@@ -349,10 +349,16 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                         } else {
                             //console.log('error event triggered ', event.target, $form);
+                            var resultIsObject = false;
                             var result = {
                                 'status':  xhr.status,
                                 'error' : xhr.responseText
                             };
+
+                            if ( /json$/.test( xhr.getResponseHeader("Content-Type") ) ) {
+                                result.error = JSON.parse(xhr.responseText);
+                                resultIsObject = true
+                            }
 
                             instance.eventData.error = result;
 
@@ -360,12 +366,25 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             var XHRData = result;
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
-                                    if ( XHRData.error && /^(\{|\[).test(XHRData.error) /)
+                                    if ( !resultIsObject && XHRData.error && /^(\{|\[).test(XHRData.error) /)
                                         XHRData.error = JSON.parse(XHRData.error);
 
                                     // bad .. should not happen
-                                    if ( typeof(XHRData.error.error) != 'undefined' )
-                                        XHRData.error = XHRData.error.error;
+                                    if ( typeof(XHRData.error) != 'undefined' && typeof(XHRData.error) == 'object' && typeof(XHRData.error) == 'object' ) {
+                                        // by default
+                                        var XHRDataNew = { 'status' : XHRData.status };
+                                        // existing will be overriden by user
+                                        for (xErr in XHRData.error) {
+                                            if ( !/^error$/.test(xErr ) ) {
+                                                XHRDataNew[xErr] = XHRData.error[xErr];
+                                            }
+                                        }
+
+                                        XHRDataNew.error = XHRData.error.error;
+
+                                        XHRData = result = XHRDataNew
+                                    }
+                                        
 
                                     ginaToolbar.update("data-xhr", XHRData )
                                 } catch (err) {
@@ -417,7 +436,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     'open': function () {
                         var fired = false;
                         addListener(gina, $el, 'loaded.' + id, function(e) {
-                        //$popin.on('loaded', function (e) {
+                        
                             e.preventDefault();
 
                             if (!fired) {
@@ -454,6 +473,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                 popinOpen($popin.name);
                             }
                         });
+
                     }
                 }
             }

@@ -68,7 +68,7 @@ function Routing() {
         for (var p in route.param) {
             if ( /^:/.test(route.param[p]) ) {
                 variable = route.param[p].substr(1);
-                if ( typeof(params[variable]) != 'undefined') {
+                if ( typeof(params) != 'undefined' && typeof(params[variable]) != 'undefined' ) {
                     route.url = route.url.replace( new RegExp('(/:'+variable+'|/:'+variable+'$)', 'g'), '/'+ params[variable] );
 
                     if ( typeof(route.param.path) != 'undefined' && /:/.test(route.param.path) ) {
