@@ -1873,7 +1873,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
                 if (hasCase) {
-
+                    ++i; // add sub level
                     conditions = rules['_case_' + field]['conditions'];
 
                     if ( !conditions ) {
@@ -1896,7 +1896,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                             //console.log('[fields ] ' + JSON.stringify(fields, null, 4));
                             localRules = {};
-
+                             
                             for (var f in conditions[c]['rules']) {
                                 //console.log('F: ', f, '\nrule: '+ JSON.stringify(conditions[c]['rules'][f], null, 2));
                                 if ( /^\//.test(f) ) { // RegExp found
@@ -1924,6 +1924,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                                 } else {
                                     if ( /^\//.test(conditions[c]['case']) ) {
+                                        
                                         re      = conditions[c]['case'].match(/\/(.*)\//).pop();
                                         flags   = conditions[c]['case'].replace('/'+ re +'/', '');
                                         re      = new RegExp(re, flags);
@@ -1937,14 +1938,14 @@ function ValidatorPlugin(rules, data, formId) {
                                     }
                                 }
                             }
-                            //console.log('parsing ', localRules, fields);
-                            subLevelRules++;
-                            ++i; // add sub level
+                            
+                            ++subLevelRules; // add sub level
                             if (isGFFCtx)
                                 forEachField($form, fields, $fields, localRules, cb, i);
                             else
                                 return forEachField($form, fields, $fields, localRules, cb, i);
                         }
+                        
                     }
 
                 }
