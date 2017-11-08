@@ -1947,7 +1947,7 @@ function ValidatorPlugin(rules, data, formId) {
                         }
                         
                     }
-
+                    --i;
                 }
 
 
@@ -1979,7 +1979,7 @@ function ValidatorPlugin(rules, data, formId) {
             }
 
             --subLevelRules;
-            --i;
+            //--i;
 
             if (i <= 0 && subLevelRules < 0) {
 
