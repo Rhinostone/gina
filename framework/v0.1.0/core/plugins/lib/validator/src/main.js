@@ -1975,14 +1975,6 @@ function ValidatorPlugin(rules, data, formId) {
                     }
 
                 }
-
-                // check required rule against sent fields
-                // for (var r in rules) {
-                //     if ( typeof(rules[r].isRequired) != 'undefined' && typeof(fields[r]) == 'undefined' ) {
-                //         console.log('did not find field ' + r +' in field list '+ fields);
-                //     }
-                // }
-
             }
 
             --subLevelRules;
