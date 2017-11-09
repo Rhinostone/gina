@@ -154,6 +154,7 @@ function Couchbase(conn, infos) {
             params          = comments[0].match(/\$\w+/g); // param list from comments
             queryString     = queryString.replace(comments[0], '');
             inlineParams    = queryString.match(/\$\w+/g);
+            
             // getting rid of duplicated
             if ( typeof(Set) == 'function' ) { // ES6
                 inlineParams = Array.from(new Set(inlineParams))
@@ -192,7 +193,8 @@ function Couchbase(conn, infos) {
                             , inl               = inlineParams
                             , re                = null
                             , foundSpecialCase  = /\w+\.(\$|\%)/.test(queryString);
-
+                            
+                        
                         if (foundSpecialCase) {
                             for (var i = 0, len = args.length; i < len; ++i) {
                                 key = inl.indexOf(params[i]);
@@ -226,10 +228,6 @@ function Couchbase(conn, infos) {
 
                     // prepared statement
                     var query = N1qlQuery.fromString(queryString);
-
-                    if ( GINA_ENV_IS_DEV ) {
-                        console.debug(queryString)
-                    }
 
                     // query options
                     // @param {object} options
@@ -269,8 +267,12 @@ function Couchbase(conn, infos) {
 
                     var self = this;
 
-
+                    if (GINA_ENV_IS_DEV) {
+                        console.debug(query.options.statement);
+                    }
+                    
                     conn.query(query, queryParams, function(err, data, meta) {
+                        
                         if (!data || data.length == 0) {
                             data = null
                         }

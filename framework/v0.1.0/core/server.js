@@ -733,7 +733,7 @@ function Server(options) {
                                     // get rid of encoding issues
                                     try {
                                         if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
+                                            if ( !/application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
                                                 request.body = request.body.replace(/\+/g, ' ');
                                             }
 
