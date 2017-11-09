@@ -1979,7 +1979,6 @@ function ValidatorPlugin(rules, data, formId) {
             }
 
             --subLevelRules;
-            //--i;
 
             if (i <= 0 && subLevelRules < 0) {
 
