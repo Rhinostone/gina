@@ -153,7 +153,11 @@ function FormValidatorUtil(data, $fields) {
             } else {
                 try {
                     // TODO - motif /gi to pass to the second argument
-                    valid = new RegExp(condition.replace(/\//g, '')).test(this.value)
+                    var re = condition.match(/\/(.*)\//).pop()
+                        , flags = condition.replace('/' + re + '/', '');
+
+                    valid = new RegExp(re, flags).test(this.value)
+                    //valid = new RegExp(condition.replace(/\//g, '')).test(this.value)
                 } catch (err) {
                     throw new Error(err.stack||err.message)
                 }
