@@ -533,7 +533,7 @@ function Collection(content, option) {
         // asc
         sortOp['asc'] = function (prop, content) {
             return content.sort(function onAscSort(a, b) {
-
+                
                 if ( typeof(a) == 'string' && a != '') {
                     // var fieldA = a.toUpperCase(); // ignore upper and lowercase
                     // var fieldB = b.toUpperCase(); // ignore upper and lowercase
@@ -572,14 +572,18 @@ function Collection(content, option) {
 
                 } else if ( typeof(a) == 'object' ) {
                     try {
-                        if ( typeof(a[prop]) == 'number' ) {
+                        
+                        // ?? check if instance of Date ? right now, it seems to be working without ...
+                        //if ( /\[object Date\]/.test(Object.prototype.toString.call(a[prop])) ) {
+                            
+                        if (typeof (a[prop]) == 'number') {
 
                             a[prop] = '' + a[prop];
                             b[prop] = '' + b[prop];
                         }
 
-                        return a[prop].localeCompare(b[prop], { numeric: true})
-
+                        return a[prop].localeCompare(b[prop], { numeric: true })
+                        
                     } catch (err) {
                         return -1
                     }
@@ -607,19 +611,20 @@ function Collection(content, option) {
             for (var f = 0, len = filter.length; f < len; ++f) {
 
                 prop    = Object.keys(filter[f])[0];
-                key     = filter[f][prop];
+                key     = filter[prop];
 
                 result  = sortOp[key](prop, content);
             }
         } else {
 
             if (filter.count() > 1) {
-
+                
                 for (var f in filter) {
-                    prop    = Object.keys(filter)[0];
+                    prop    = f;
                     key     = filter[prop];
 
                     result  = sortOp[key](prop, content);
+
                 }
 
             } else {

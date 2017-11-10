@@ -420,7 +420,8 @@ function Router(env) {
 
         // default param setting
         var options = {
-            namespace       : namespace,
+            // view namespace
+            namespace       : params.param.namespace || namespace,
             control         : params.param.control,
             method          : params.method,
             file            : actionFile,
@@ -541,7 +542,7 @@ function Router(env) {
                     var SuperController     = require.cache[_(corePath +'/controller/index.js', true)];
                     var RequiredController  = require(filename);
 
-                    var RequiredController = inherits(RequiredController, SuperController)
+                    RequiredController      = inherits(RequiredController, SuperController)
 
                     if ( typeof(options) != 'undefined' ) {
 
@@ -568,7 +569,19 @@ function Router(env) {
                                 controller[reservedActions[e]](request, response, next)
                             }
                         }
-                        controller[action](request, response, next)
+
+                        try {
+                            controller[action](request, response, next)
+                        } catch (err) {
+                            var superController = new SuperController(options);
+                            superController.setOptions(request, response, next, options);
+                            if (typeof (controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
+                                superController.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);
+                            } else {
+                                superController.throwError(response, 500, err.stack);
+                            }
+                        }
+                        
                     })
             } else {
                 // handle superController events
@@ -586,7 +599,7 @@ function Router(env) {
             var superController = new SuperController(options);
             superController.setOptions(request, response, next, options);
             if ( typeof(controller) != 'undefined' && typeof(controller[action]) == 'undefined') {
-                superController.throwError(response, 500, (new Error('action not found: `'+ action+'`. Please, check your routing.json or the related control in your `'+controllerFile+'`.')).stack);
+                superController.throwError(response, 500, (new Error('control not found: `'+ action+'`. Please, check your routing.json or the related control in your `'+controllerFile+'`.')).stack);
             } else {
                 superController.throwError(response, 500, err.stack);
             }
