@@ -79,12 +79,13 @@ function Collection(content, option) {
             arguments.length -= 1;
         }
 
-        var filters = JSON.parse(JSON.stringify(arguments));
+        var filtersStr  = JSON.stringify(arguments);
+        var filters     = JSON.parse(filtersStr);
 
         if ( typeof(filters) != 'undefined' && typeof(filters) !== 'object' ) {
             throw new Error('filter must be an object');
         } else if ( typeof(filters) != 'undefined' && filters.count() > 0 ) {
-
+            
             var filter              = null
                 , condition         = null
                 , i                 = 0
@@ -97,20 +98,29 @@ function Collection(content, option) {
                 , value             = null
                 ;
 
+            var matched = null;
+
             for (var o in tmpContent) {
 
                 if (!tmpContent[o]) {
                     tmpContent[o] = {}
                 }
-                tmpContent[o].matched = {};
+                //tmpContent[o].matched = {};
+
+                // if (!resultObj[ tmpContent[o]._uuid ]) {
+                //     resultObj[ tmpContent[o]._uuid ] = {}
+                // }
+                
                 for (var l = 0, lLen = filters.count(); l<lLen; ++l) {
                     filter = filters[l];
                     condition = filter.count();
 
+                    matched = 0;
                     for (var f in filter) {
                         if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
                         localeLowerCase = ( typeof(filter[f]) != 'boolean' && filter[f] !== null ) ? filter[f].toLocaleLowerCase() : filter[f];
+                        
                         // cases with tmpContent.prop
                         if ( /\./.test(f) ) {
                             //JSON.stringify(tmpContent[o]).match(/("gross":\w+)/)[1].split(/:/)[1]
@@ -130,20 +140,23 @@ function Collection(content, option) {
                                         ) {
 
                                             if ( eval( value.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') + filter[f].replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') ) ) {
-                                                tmpContent[o].matched[f] = true;
-                                                resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
+                                                //tmpContent[o].matched[f] = filter[f];
+                                                //resultObj[ tmpContent[o]._uuid ] = tmpContent[o];
+                                                ++matched;
                                             }
 
                                         } else if ( eval( value + filter[f] ) ) {
 
-                                            tmpContent[o].matched[f] = true;
-                                            resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
+                                            //tmpContent[o].matched[f] = filter[f];
+                                            //resultObj[ tmpContent[o]._uuid ] = tmpContent[o];
+                                            ++matched;
                                         }
                                     } else {
                                         if (value == filter[f]) {
 
-                                            tmpContent[o].matched[f] = true;
-                                            resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
+                                            //tmpContent[o].matched[f] = value;
+                                            //resultObj[ tmpContent[o]._uuid ] = tmpContent[o];
+                                            ++matched;
                                         }
                                     }
                                 } else {
@@ -156,21 +169,16 @@ function Collection(content, option) {
 
                             if ( filter[f] === null && tmpContent[o][f] === null ) { // null case
 
-                                tmpContent[o].matched[f] = true;
-                                resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
+                                //tmpContent[o].matched[f] = filter[f];
+                                //resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
+                                ++matched;
 
                             } else if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] != 'null' && tmpContent[o][f] != 'undefined' ) {
                                 if (result.indexOf(tmpContent[o][f]) < 0 ) {
-                                    tmpContent[o].matched[f] = true;
-                                    //if (typeof(tmpContent[o][f]) == 'object' ) {
-                                    //    resultObj[ tmpContent[o][f]._uuid ] = tmpContent[o][f]
-                                    //} else {
-                                    if ( !resultObj[o] ) {
-                                        resultObj[o] = {}
-                                    }
-
-                                    resultObj[tmpContent[o]._uuid] = tmpContent[o];
-                                    //}
+                                    
+                                    //tmpContent[o].matched[f] = filter[f];
+                                    //resultObj[tmpContent[o]._uuid] = tmpContent[o];
+                                    ++matched;
                                 }
 
                             } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && /(<|>|=)/.test(filter[f]) && !/undefined|function/.test( typeof(tmpContent[o][f]) ) ) { // with operations
@@ -181,21 +189,33 @@ function Collection(content, option) {
                                 ) {
 
                                     if ( eval( tmpContent[o][f].replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') + filter[f].replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') ) ) {
-                                        tmpContent[o].matched[f] = true;
-                                        resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
+                                        //tmpContent[o].matched[f] = filter[f];
+                                        //resultObj[ tmpContent[o]._uuid ] = tmpContent[o];
+                                        ++matched;
                                     }
 
                                 } else if ( eval( tmpContent[o][f] + filter[f] ) ) {
-                                    tmpContent[o].matched[f] = true;
-                                    resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
+                                    
+                                    //tmpContent[o].matched[f] = filter[f];
+                                    //resultObj[tmpContent[o]._uuid] = tmpContent[o];
+                                    ++matched;
+                                    
+                                    
                                 }
                             } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] === filter[f] ) {
-
-                                tmpContent[o].matched[f] = true;
-                                resultObj[ tmpContent[o]._uuid ] = tmpContent[o]
+                                
+                                ++matched;
+                                
                             }
                         }
 
+                    }
+
+                    if (matched == condition) { // all conditions must be fulfilled to match                           
+
+                        //resultObj[tmpContent[o]._uuid] = tmpContent[o];
+                        result[i] = tmpContent[o];
+                        ++i;
                     }
 
                 }
@@ -204,26 +224,44 @@ function Collection(content, option) {
             result = content
         }
 
-        if (withOrClause) {
-            for (var obj in resultObj) {
-                if ( typeof(resultObj[obj].matched) != 'undefined' && resultObj[obj].matched.count() == condition ) {
-                    delete resultObj[obj].matched;
-                    result[i] = resultObj[obj];
-                    ++i
-                }
-            }
+        
+        // var matched = null
+        //     , m = null
+        //     , mCount = null 
+        // ;
+        // filters = JSON.stringify(filters);
 
+        // for (var obj in resultObj) {
+
+        //     if (typeof (resultObj[obj].matched) != 'undefined') {
+        //         matched = false;
+        //         mCount = resultObj[obj].matched.count();
+        //         if (mCount > 1) {
+        //             m = 0;
+        //             for (var r in resultObj[obj].matched) {
+        //                 if (new RegExp('"' + r + '":("' + resultObj[obj].matched[r] + '"|' + resultObj[obj].matched[r] + ')').test(filters)) {
+        //                     ++m;
+        //                 }
+        //             }
+
+        //             if (m == mCount)
+        //                 matched = true;
+
+        //         } else if (new RegExp(JSON.stringify(resultObj[obj].matched).replace(/{|}/g, '')).test(filters)) {
+        //             matched = true;
+        //         }
+
+        //         if (matched) {
+        //             delete resultObj[obj].matched;
+        //             result[i] = resultObj[obj];
+        //             ++i;
+        //         }
+        //     }
+        // }
+
+        if (withOrClause) {
             // merging with previous result (this)
             result  = merge(this, result, true)
-        } else {
-            var matched = 0;
-            for (var obj in resultObj) {
-                if ( typeof(resultObj[obj].matched) != 'undefined' && resultObj[obj].matched.count() == condition ) {
-                    delete resultObj[obj].matched;
-                    result[i] = resultObj[obj];
-                    ++i
-                }
-            }
         }
 
         // chaining

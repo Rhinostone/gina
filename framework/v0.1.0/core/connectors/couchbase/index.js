@@ -268,7 +268,7 @@ function Couchbase(conn, infos) {
                     var self = this;
 
                     if (GINA_ENV_IS_DEV) {
-                        console.debug(query.options.statement);
+                        console.debug('[ ' + trigger +' ] '+query.options.statement);
                     }
                     
                     conn.query(query, queryParams, function(err, data, meta) {
