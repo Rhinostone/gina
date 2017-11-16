@@ -299,7 +299,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                                 setTimeout(function () {
                                     if (settings.isUnfolded.length > 0)
                                         initFoldingState(settings.isUnfolded, settings.isUnfolded.length, 0);
-                                }, 150)
+                                }, 200)
                             }
                         } else {
                             if (!isXHR) {
@@ -307,7 +307,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                                 setTimeout(function () {
                                     if (settings.isUnfolded.length > 0)
                                         initFoldingState(settings.isUnfolded, settings.isUnfolded.length, 0);
-                                }, 150)
+                                }, 200)
                             } else {
                                 self.isXHR = true;
                                 if (settings.isUnfolded.length > 0 && !self.initiatedXhrFoldingState) {

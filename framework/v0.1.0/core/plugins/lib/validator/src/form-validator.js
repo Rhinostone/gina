@@ -126,7 +126,7 @@ function FormValidatorUtil(data, $fields) {
                     if ( typeof(self[ variables[i] ]) != 'undefined' && variables[i]) {
                         re = new RegExp("\\$"+ variables[i] +"(?!\\S+)", "g");
                         if ( self[ variables[i] ].value == "" ) {
-                            compiledCondition = compiledCondition.replace(re, '"');
+                            compiledCondition = compiledCondition.replace(re, '""');
                         } else if ( typeof(self[ variables[i] ].value) == 'string' ) {
                             compiledCondition = compiledCondition.replace(re, '"'+ self[ variables[i] ].value +'"');
                         } else {
@@ -138,7 +138,12 @@ function FormValidatorUtil(data, $fields) {
                 try {
                     // security checks
                     compiledCondition = compiledCondition.replace(/(\(|\)|return)/g, '');
-                    valid = eval(compiledCondition+'.test("'+ this.value +'")')
+                    if ( /^\//.test(compiledCondition) ) {
+                        valid = eval(compiledCondition + '.test("' + this.value + '")')
+                    } else {
+                        valid = eval(compiledCondition)
+                    }
+                    
                 } catch (err) {
                     throw new Error(err.stack||err.message)
                 }
