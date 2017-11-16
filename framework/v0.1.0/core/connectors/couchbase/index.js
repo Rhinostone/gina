@@ -181,7 +181,7 @@ function Couchbase(conn, infos) {
                         , args  = Array.prototype.slice.call(arguments);
 
                     if (params && params.length != args.length) {
-                        throw new Error('[ '+name+'() ] arguments must match parameters length. Please refer to: '+ source +'.\nFound in param list: ('+ params.join(', ') +') !')
+                        throw new Error('[ N1QL:' + entityName+'#'+name+'() ] arguments must match parameters length. Please refer to [ '+ source +' ]\nFound in param list: ('+ params.join(', ') +') !')
                     }
 
 
@@ -278,12 +278,12 @@ function Couchbase(conn, infos) {
                         }
 
                         if (!err && meta && typeof(meta.errors) != 'undefined' ) {
-                            var err = new Error('`'+source+'`\n'+meta.errors[0].msg);
+                            var err = new Error('[ '+source+' ]\n'+meta.errors[0].msg);
                             err.status = 403;
                         } else if (err) {
                             err.status  = 500;
-                            err.message = '`'+source+'`\n'+ err.message;
-                            err.stack   = '`'+source+'`\n'+ err.stack;
+                            err.message = '[ '+source+' ]\n'+ err.message;
+                            err.stack   = '[ '+source+' ]\n'+ err.stack;
                         }
 
                         if ( returnType && returnType == 'object' ) {
