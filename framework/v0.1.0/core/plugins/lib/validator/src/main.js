@@ -471,7 +471,7 @@ function ValidatorPlugin(rules, data, formId) {
         return $form
     }
 
-    // TODO - efreshErrorsDisplay
+    // TODO - refreshErrorsDisplay
     // var refreshErrorsDisplay = function ($form) {
     //
     // }
@@ -676,28 +676,25 @@ function ValidatorPlugin(rules, data, formId) {
 
                         $form.eventData.error = result;
 
+                        // forward backend appplication errors to forms.errors when available
+                        if ( typeof (result) != 'undefined' && result.error && typeof (result.error) == 'object' && $form.fields) {
+                            var formsErrors = {}, errCount = 0;
+                            for (var e in result.error) {
+                                if (typeof ($form.rules[e]) != 'undefined') {
+                                    ++errCount;
+                                    formsErrors[e] = result.error[e];
+                                }
+                            }
+
+                            if (errCount > 0) {
+                                handleErrorsDisplay($form.target, formsErrors);
+                            }
+                        }
+
                         // update toolbar
                         var XHRData = result;
                         if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                             try {
-
-                                // forward backend appplication errors to forms.errors when available
-                                if ( XHRData.error && typeof(XHRData.error) == 'object' && $form.fields ) {
-                                    var formsErrors = {}, errCount = 0;
-                                    for (var e in XHRData.error) {
-                                        if ( typeof($form.fields[e]) != 'undefined' ) {
-                                            ++errCount;
-                                            formsErrors[e] = XHRData.error[e];
-
-                                            if ( typeof(XHRData.stack) != 'undefined' )
-                                                formsErrors[e].stack = XHRData.stack;
-                                        }
-                                    }
-
-                                    if (errCount > 0) {
-                                        handleErrorsDisplay($form.target, formsErrors);
-                                    }
-                                }
                                 // update toolbar
                                 ginaToolbar.update('data-xhr', XHRData );
 
@@ -1355,6 +1352,7 @@ function ValidatorPlugin(rules, data, formId) {
         var updateRadio = function($el, isInit) {
             var checked = $el.checked;
             var isBoolean = /^(true|false)$/i.test($el.value);
+            
 
             // loop if radio group
             if (!isInit) {
@@ -1368,6 +1366,8 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
 
+            
+
             if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
                 // prevents ticking behavior
@@ -1377,9 +1377,14 @@ function ValidatorPlugin(rules, data, formId) {
 
                 $el.removeAttribute('checked');
 
-                if (isBoolean) {
-                    $el.value = false;
-                }
+                //if (isBoolean) {
+                //    $el.value = false;
+                //}
+
+                // if (isBoolean) { // force boolean value
+                //     $el.value = (/^true$/.test($el.value)) ? true : false
+                // }
+                
 
             } else {
 
@@ -1391,22 +1396,36 @@ function ValidatorPlugin(rules, data, formId) {
                 $el.setAttribute('checked', 'checked');
                 //$el.value = $el.getAttribute('value');
 
-                if (isBoolean) { // no multiple choice supported
-                    $el.value = true;
-                }
+                //if (isBoolean) { // no multiple choice supported
+                //    $el.value = true;
+                //}
+
+                
+
                 var radioGroup = document.getElementsByName($el.name);
-                    //console.log('found ', radioGroup.length, radioGroup)
-                    for (var r = 0, rLen = radioGroup.length; r < rLen; ++r) {
-                        if (radioGroup[r].id !== $el.id) {
-                            radioGroup[r].checked = false;
-                            radioGroup[r].removeAttribute('checked');
-                            if (isBoolean) {
-                                radioGroup[r].value = false;
-                            }
+                //console.log('found ', radioGroup.length, radioGroup)
+                for (var r = 0, rLen = radioGroup.length; r < rLen; ++r) {
+                    if (radioGroup[r].id !== $el.id) {
+                        radioGroup[r].checked = false;
+                        radioGroup[r].removeAttribute('checked');
+                        
+                        // if (isBoolean) {
+                        //     radioGroup[r].value = false;
+                        // }
+                        if ( /^(true|false)$/.test($el.value) ) {
+                            radioGroup[r].value = (/^true$/.test(radioGroup[r].value)) ? true : false
                         }
+                        
                     }
+                }
 
+                // if (isBoolean) { // force boolean value
+                //     $el.value = ( /^true$/.test($el.value) ) ? true : false
+                // }
+            }
 
+            if (isBoolean) { // force boolean value
+                $el.value = (/^true$/.test($el.value)) ? true : false
             }
         }
 
@@ -1611,18 +1630,24 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
 
                             if ( $target[i].checked ) {
-                                fields[name] = $target[i].value
+                                // if is boolean
+                                if ( /^(true|false)$/.test($target[i].value) ) {
+                                    fields[name] = $target[i].value = ( /^true$/.test($target[i].value) ) ? true : false
+                                } else {
+                                    fields[name] = $target[i].value
+                                }
                             }  else if ( // force validator to pass `false` if boolean is required explicitly
                                 rules
                                 && typeof(rules[name]) != 'undefined'
                                 && typeof(rules[name].isBoolean) != 'undefined'
                                 && typeof(rules[name].isRequired) != 'undefined'
+                                && !/^(true|false)$/.test($target[i].value)
                             ) {
                                 fields[name] = false;
                             }
 
                         } else {
-                            fields[name]    = $target[i].value;
+                            fields[name] = $target[i].value;
                         }
 
                         if ( typeof($fields[name]) == 'undefined' ) {
@@ -1773,12 +1798,19 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
 
                     if ( $target[i].checked ) {
-                        fields[name] = $target[i].value
+                        // if is boolean
+                        if ( /^(true|false)$/.test($target[i].value) ) {
+                            fields[name] = $target[i].value = (/^true$/.test($target[i].value)) ? true : false
+                        } else {
+                            fields[name] = $target[i].value
+                        }
+
                     }  else if ( // force validator to pass `false` if boolean is required explicitly
                     rules
                     && typeof(rules[name]) != 'undefined'
                     && typeof(rules[name].isBoolean) != 'undefined'
                     && typeof(rules[name].isRequired) != 'undefined'
+                    && !/^(true|false)$/.test($target[i].value)
                     ) {
                         fields[name] = false;
                     }
@@ -1845,6 +1877,7 @@ function ValidatorPlugin(rules, data, formId) {
             , data              = null
             , hasBeenValidated  = false
             , subLevelRules     = 0
+            , rootFieldsCount   = fields.count()
         ;
 
         if (isGFFCtx) {
@@ -1865,14 +1898,45 @@ function ValidatorPlugin(rules, data, formId) {
             //console.log('parsing ', fields, $fields, rules);
 
             for (var field in fields) {
-
+                
                 // $fields[field].tagName getAttribute('type')
-                if ( $fields[field].tagName.toLowerCase() == 'input' && /(radio|checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
+                if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
                     continue;
                 }
 
                 hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
-                if (hasCase) {
+
+
+
+                if (!hasCase) {
+                    if (typeof (rules[field]) == 'undefined') continue;
+
+
+                    // check each field against rule
+                    for (var rule in rules[field]) {
+                        // check for rule params
+                        try {
+
+                            if (Array.isArray(rules[field][rule])) { // has args
+                                //convert array to arguments
+                                args = rules[field][rule];
+                                d[field][rule].apply(d[field], args);
+                            } else {
+                                d[field][rule](rules[field][rule]);
+                            }
+
+                            delete fields[field];
+
+                        } catch (err) {
+                            if (rule == 'conditions') {
+                                throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
+                            } else {
+                                throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
+                            }
+                        }
+
+                    }
+                } else {
                     ++i; // add sub level
                     conditions = rules['_case_' + field]['conditions'];
 
@@ -1950,32 +2014,31 @@ function ValidatorPlugin(rules, data, formId) {
                     --i;
                 }
 
+                // if ( typeof(rules[field]) == 'undefined' ) continue;
 
-                if ( typeof(rules[field]) == 'undefined' ) continue;
 
+                // // check each field against rule
+                // for (var rule in rules[field]) {
+                //     // check for rule params
+                //     try {
 
-                // check each field against rule
-                for (var rule in rules[field]) {
-                    // check for rule params
-                    try {
+                //         if ( Array.isArray(rules[field][rule]) ) { // has args
+                //             //convert array to arguments
+                //             args = rules[field][rule];
+                //             d[field][rule].apply(d[field], args);
+                //         } else {
+                //             d[field][rule](rules[field][rule]);
+                //         }
 
-                        if ( Array.isArray(rules[field][rule]) ) { // has args
-                            //convert array to arguments
-                            args = rules[field][rule];
-                            d[field][rule].apply(d[field], args);
-                        } else {
-                            d[field][rule](rules[field][rule]);
-                        }
+                //     } catch (err) {
+                //         if (rule == 'conditions') {
+                //             throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()` where `conditions` must be a `collection` (Array)\nStack:\n'+ (err.stack|err.message))
+                //         } else {
+                //             throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()`\nStack:\n'+ (err.stack|err.message))
+                //         }
+                //     }
 
-                    } catch (err) {
-                        if (rule == 'conditions') {
-                            throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()` where `conditions` must be a `collection` (Array)\nStack:\n'+ (err.stack|err.message))
-                        } else {
-                            throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()`\nStack:\n'+ (err.stack|err.message))
-                        }
-                    }
-
-                }
+                // }
             }
 
             --subLevelRules;
