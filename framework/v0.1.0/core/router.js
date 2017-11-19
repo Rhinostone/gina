@@ -421,23 +421,28 @@ function Router(env) {
         // default param setting
         var options = {
             // view namespace
-            namespace       : params.param.namespace || namespace,
-            control         : params.param.control,
-            method          : params.method,
-            file            : actionFile,
-            bundle          : bundle,//module
-            bundlePath      : conf.bundlesPath +'/'+ bundle,
-            rootPath        : self.executionPath,
-            conf            : conf,
-            instance        : self.middlewareInstance,
-            views           : ( routeHasViews ) ? conf.content.views : undefined,
-            isUsingTemplate : local.isUsingTemplate,
-            cacheless       : cacheless,
-            rule            : params.rule,
-            path            : params.param.path || null, // user custom path : namespace should be ignored | left blank
-            isXMLRequest    : params.isXMLRequest,
-            withCredentials : false
+            //namespace       : params.param.namespace || namespace,
+            control: params.param.control,
+            //method          : params.method,
+            file: actionFile,
+            //bundle          : bundle,//module
+            bundlePath: conf.bundlesPath + '/' + bundle,
+            rootPath: self.executionPath,
+            conf: conf,
+            instance: self.middlewareInstance,
+            views: (routeHasViews) ? conf.content.views : undefined,
+            isUsingTemplate: local.isUsingTemplate,
+            cacheless: cacheless,
+            //rule            : params.rule,
+            path: params.param.path || null // user custom path : namespace should be ignored | left blank
+            //isXMLRequest    : params.isXMLRequest,
+            //withCredentials : false
         };
+        options = merge(options, JSON.parse(JSON.stringify(params)));
+        delete options.middleware;
+        delete options.param;
+        delete options.requirements;
+        
 
         // clean options.params
         // for (var p in options.params) {
@@ -446,7 +451,7 @@ function Router(env) {
         // }
 
         try {
-
+            
             if ( fs.existsSync(_(setupFile, true)) )
                 hasSetup = true;
 
@@ -473,7 +478,7 @@ function Router(env) {
             Controller      = inherits(Controller, SuperController);
 
             var controller  = new Controller(options);
-
+            controller.name = options.control;
             controller.setOptions(request, response, next, options);
 
             if (hasSetup) { // adding setup
@@ -508,7 +513,7 @@ function Router(env) {
                 }
             }
 
-            // allowing another controller (public methods) to be required inside the current controller
+            
             /**
              * requireController
              * Allowing another controller (public methods) to be required inside the current controller
@@ -518,6 +523,7 @@ function Router(env) {
              *
              * @return {object} controllerInstance
              * */
+            
             controller.requireController = function (namespace, options) {
 
                 var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
@@ -527,7 +533,15 @@ function Router(env) {
                 var env         = config.env;
                 var bundleConf  = config.Env.getConf(bundle, env);
 
-                var filename    = _(bundleConf.bundlesPath +'/'+ bundle + '/controllers/' + namespace + '.js', true);
+                var controllerFile  = ( typeof(namespace) != 'undefined' && namespace != '' && namespace != 'null' && namespace != null ) ? 'controller.'+ namespace : namespace;
+                var filename        = _(bundleConf.bundlesPath + '/' + bundle + '/controllers/' + controllerFile + '.js', true);
+
+                if (typeof (options.controlRequired) == 'undefined')
+                    options.controlRequired = [];
+
+                var ctrlInfo = {}; 
+                ctrlInfo[controllerFile] = filename;
+                options.controlRequired.push(ctrlInfo);
 
                 try {
 
@@ -547,6 +561,7 @@ function Router(env) {
                     if ( typeof(options) != 'undefined' ) {
 
                         var controller = new RequiredController( options );
+                        controller.name = namespace;
                         controller.setOptions(request, response, next, options);
 
                         return controller

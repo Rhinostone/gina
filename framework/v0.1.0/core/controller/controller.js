@@ -32,7 +32,7 @@ var swig            = require('swig');
 function SuperController(options) {
 
     this.name = 'SuperController';
-
+    
     //private
     var self = this;
     var local = {
@@ -59,10 +59,12 @@ function SuperController(options) {
         if ( typeof(SuperController.initialized) != 'undefined' ) {
             return getInstance()
         } else {
+            
             SuperController.initialized = true;
             SuperController.instance = self;
+            
             if (local.options) {
-                SuperController.instance._options = local.options
+                SuperController.instance._options = local.options;
             }
         }
     }
@@ -85,6 +87,7 @@ function SuperController(options) {
 
     this.setOptions = function(req, res, next, options) {
         local.options = SuperController.instance._options = options;
+        local.options.renderingStack = (local.options.renderingStack) ? local.options.renderingStack : [];
 
         // N.B.: Avoid setting `page` properties as much as possible from the routing.json
         // It will be easier for the framework if set from the controller.
@@ -96,7 +99,7 @@ function SuperController(options) {
         //        "url": ["", "/"],
         //            "param": {
         //            "control": "home",
-        //                "title": "My Title"
+        //            "title": "My Title"
         //        }
         // }
         //
@@ -121,7 +124,7 @@ function SuperController(options) {
                             if ( /^:/.test(value) ) {
                                 str = 'page.view.params.'+ key + '.';
                                 set(str.substr(0, str.length-1), req.params[value.substr(1)]);
-                            } else if (/^(file)$/.test(key)) {
+                            } else if (/^(file|title)$/.test(key)) {
                                 str = 'page.view.'+ key + '.';
                                 set(str.substr(0, str.length-1), value);
                             } else {
@@ -178,10 +181,14 @@ function SuperController(options) {
 
             set('page.view.ext', ext);
             set('page.view.control', action);
+            if (typeof (local.options.controlRequired) != 'undefined' ) {
+                set('page.view.controlRequired', local.options.controlRequired);
+            }
             set('page.view.method', local.options.method);
             set('page.view.namespace', namespace); // by default
-            set('page.view.title', rule.replace(new RegExp('@'+options.conf.bundle), ''));
+            
             set('page.view.params', options.params); // view parameters passed through URI
+            //set('page.view.title', rule.replace(new RegExp('@' + options.conf.bundle), ''));
             set('page.view.route', rule);
 
             set('page.forms', options.conf.content.forms);
@@ -234,7 +241,7 @@ function SuperController(options) {
 
 
             set('page.view.file', local.options.file);
-            set('page.view.title', local.options.file);
+            set('page.view.title', rule.replace(new RegExp('@' + options.conf.bundle), ''));
             set('page.view.namespace', namespace);
 
             //TODO - detect when to use swig
@@ -252,6 +259,12 @@ function SuperController(options) {
 
 
     this.renderWithoutLayout = function (data, displayToolbar) {
+
+        // preventing multiple call of self.renderWithoutLayout() when controller is rendering from another required controller
+        if (local.options.renderingStack.length > 1) {
+            return false
+        }
+
         local.options.isWithoutLayout = true;
         local.options.debugMode = GINA_ENV_IS_DEV; // only active for dev env
         self.render(data)
@@ -275,6 +288,12 @@ function SuperController(options) {
      * @return {void}
      * */
     this.render = function(userData) {
+
+        local.options.renderingStack.push( self.name );
+        // preventing multiple call of self.render() when controller is rendering from another required controller
+        if ( local.options.renderingStack.length > 1 ) {
+            return false
+        }
 
         try {
             var data        = getData()
@@ -713,6 +732,11 @@ function SuperController(options) {
      * */
     this.renderJSON = function(jsonObj) {
 
+        // preventing multiple call of self.renderJSON() when controller is rendering from another required controller
+        if (local.options.renderingStack.length > 1) {
+            return false
+        }
+
         var request     = local.req;
         var response    = local.res;
         var next        = local.next;
@@ -795,11 +819,17 @@ function SuperController(options) {
 
 
     this.renderTEXT = function(content) {
+
+        // preventing multiple call of self.renderTEXT() when controller is rendering from another required controller
+        if (local.options.renderingStack.length > 1) {
+            return false
+        }
+
         if ( typeof(content) != "string" ) {
             var content = content.toString();
         }
 
-        if(typeof(options) != "undefined" && typeof(options.charset) !="undefined") {
+        if (typeof(options) != "undefined" && typeof(options.charset) !="undefined") {
             local.res.setHeader("charset", options.charset);
         }
         if ( !local.res.get('Content-Type') ) {
@@ -1421,6 +1451,11 @@ function SuperController(options) {
 
     this.query = function(options, data, callback) {
 
+        // preventing multiple call of self.query() when controller is rendering from another required controller
+        if (local.options.renderingStack.length > 1) {
+            return false
+        }
+
         var queryData           = {}
             , defaultOptions    = local.query.options
             , path              = options.path
@@ -1845,6 +1880,11 @@ function SuperController(options) {
      * @return {void}
      * */
     this.throwError = function(res, code, msg) {
+
+        // preventing multiple call of self.throwError() when controller is rendering from another required controller
+        if (local.options.renderingStack.length > 1) {
+            return false
+        }
 
         if (arguments.length == 1 && typeof(res) == 'object' ) {
             var code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
