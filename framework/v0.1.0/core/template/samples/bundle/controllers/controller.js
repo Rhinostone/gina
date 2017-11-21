@@ -17,7 +17,10 @@ function {Bundle}Controller() {
      * */
     this.init = function(req, res) {
         console.log('got init action');
-        self.renderJSON({ status: '200', msg: 'hello world !' })
+        self.renderJSON({ status: '200', msg: 'hello world !' });
+
+        // use this to render errors
+        // self.throwError( new Error('This is a mistake !') );
     }
 
     // The onReady Event is called when the controller is loaded
