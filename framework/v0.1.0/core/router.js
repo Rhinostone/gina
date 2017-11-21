@@ -420,8 +420,8 @@ function Router(env) {
 
         // default param setting
         var options = {
-            // view namespace
-            //namespace       : params.param.namespace || namespace,
+            // view namespace first
+            namespace       : params.param.namespace || namespace,
             control: params.param.control,
             //method          : params.method,
             file: actionFile,
