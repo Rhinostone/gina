@@ -93,16 +93,27 @@ function Connector(dbString) {
                             next(err)
                         } else {
 
-                            if (err) {
+                            if (err && err instanceof Error) {
+
                                 console.error('gina fatal error: ' + err.message + '\nstack: '+ err.stack);
-
-                                res.end(err);
-                                res.headersSent = true
-                            }
-                            next(err)
+                                
+                                if ( typeof(err) == 'object' ) {
+                                    res.end(JSON.stringify({
+                                        status: 500,
+                                        error: err.message,
+                                        stack: err.stack
+                                    }))
+                                } else {
+                                    res.end(err)
+                                }
+                                
+                                res.headersSent = true;
+                            } else {
+                                // express js patch
+                                next(err) // might just be a "false" error: `err` is replaced with cb() caller `data`
+                            }                            
                         }
-
-                    });
+                    })
                 })
 
         } catch (err) {
