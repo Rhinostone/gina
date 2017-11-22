@@ -303,16 +303,48 @@ function Collection(content, option) {
         return result
     }
 
-    this['findOne'] = function(filter) {
-
+    /** 
+     * findOne
+     * 
+     * E.g.: 
+     *  - new Collection(projects).findOne({name: 'My Project'})
+     *  - new Collection(projects).findOne({name: 'my project'}, {name: { isCaseSensitive: false }})
+     * 
+     * 
+     * Available options :
+     *  isCaseSensitive: [true|false] - set to true by default
+     * 
+     * @param {object} filter
+     * @param {object} [options]
+     * 
+    */
+    this['findOne'] = function(filter, options) {
+        
         if ( typeof(filter) !== 'object' ) {
             throw new Error('filter must be an object');
         } else {
+            
             var condition = filter.count()
                 , i                 = 0
                 , tmpContent        = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content))
                 , result            = []
                 , localeLowerCase   = '';
+
+            var re          = null
+            , reValidCount  = null
+            , searchOptCount = null;
+
+            var optionsRules = {
+                isCaseSensitive: {
+                    false: {
+                        re: '^%s$',
+                        modifiers: 'i'
+                    },
+                    true: {
+                        re: '^%s$'
+                    }
+                }
+            }
 
             if (condition == 0) return null;
 
@@ -321,16 +353,43 @@ function Collection(content, option) {
                     if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
                     localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
+                    // NOT NULL case
                     if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] === filter[f] && tmpContent[o][f] != 'null' && tmpContent[o][f] != 'undefined' ) {
                         if (result.indexOf(tmpContent[o][f]) < 0 ) {
                             ++i;
                             if (i === condition) result = tmpContent[o]
                         }
 
-                    } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] === filter[f] ) {
-                        ++i;
-                        if (i === condition) result = tmpContent[o]
-                    } else if ( filter[f] === null && tmpContent[o][f] === null ) { // null case
+                    } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' ) {
+                        
+                        if ( typeof(options) != 'undefined' && typeof(options[f]) != 'undefined'  ) {
+                            reValidCount    = 0;
+                            searchOptCount  = options[f].count();
+                            
+                            for (var opt in options[f]) {
+                                optionsRules[opt][options[f][opt]].re = optionsRules[opt][options[f][opt]].re.replace(/\%s/, filter[f]);
+
+                                if (optionsRules[opt][options[f][opt]].modifiers) {
+                                    re = new RegExp(optionsRules[opt][options[f][opt]].re, optionsRules[opt][options[f][opt]].modifiers);   
+                                } else {
+                                    re = new RegExp(optionsRules[opt][options[f][opt]].re);
+                                }
+                                
+                                if ( re.test(tmpContent[o][f]) ) {
+                                    ++reValidCount
+                                }
+                            }
+
+                            if (reValidCount == searchOptCount) {
+                                ++i;
+                                if (i === condition) result = tmpContent[o]
+                            }
+                        } else if ( tmpContent[o][f] === filter[f] ) { // normal case
+                            ++i;
+                            if (i === condition) result = tmpContent[o]
+                        }
+                        
+                    } else if ( filter[f] === null && tmpContent[o][f] === null ) { // NULL case
                         ++i;
                         if (i === condition) result = tmpContent[o]
                     }
