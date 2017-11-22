@@ -1073,6 +1073,14 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
             if ( $section.length > 0) { // update
 
+                if ( obj.count() == 0 ) { // no errors remove section
+                    $form
+                        .find('ul.gina-toolbar-section-content')
+                        .find('li.gina-toolbar-form-' + section)
+                        .remove();
+                    return false
+                }
+
                 $section
                     .html( parseSection( obj, id, elIsXHR, section ) );
 

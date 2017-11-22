@@ -268,10 +268,11 @@ function ValidatorPlugin(rules, data, formId) {
         if ( GINA_ENV_IS_DEV )
             var formsErrors = null;
 
-        var name = null, errAttr = null;
-        var $err = null, $msg = null;
-        var $el = null, $parent = null, $target = null;
-        var id  = $form.getAttribute('id');
+        var name    = null, errAttr = null;
+        var $err    = null, $msg = null;
+        var $el     = null, $parent = null, $target = null;
+        var id      = $form.getAttribute('id');
+        var data    = ( typeof(data) != 'undefined' ) ? data : {};
 
         for (var i = 0, len = $form.length; i<len; ++i) {
             $el     = $form[i];
@@ -366,6 +367,7 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
 
+        var objCallback = null;
         if ( formsErrors ) {
 
             triggerEvent(gina, $form, 'error.' + id, errors)
@@ -375,17 +377,35 @@ function ValidatorPlugin(rules, data, formId) {
                 if (!gina.forms.errors)
                     gina.forms.errors = {};
 
-                //gina.forms.errors   = formsErrors;
-                //gina.forms.id       = id;
-                var objCallback = {
+                objCallback = {
                     id      : id,
                     errors  : formsErrors
                 };
 
                 window.ginaToolbar.update('forms', objCallback);
             }
+        } else if (typeof (window.ginaToolbar) == 'object') { // reset toolbar form errors
+            if (!gina.forms.errors)
+                gina.forms.errors = {};
 
+            objCallback = {
+                id: id,
+                errors: {}
+            };
+
+            window.ginaToolbar.update('forms', objCallback);
         }
+
+        if (gina && typeof (window.ginaToolbar) == "object" && data) {
+            try {
+                // update toolbar
+                ginaToolbar.update('data-xhr', data);
+
+            } catch (err) {
+                throw err
+            }
+        }
+
     }
 
 
@@ -509,16 +529,13 @@ function ValidatorPlugin(rules, data, formId) {
     var send = function(data, options) {
 
         var $target = this.target , id = $target.getAttribute('id');
-        var $form = instance.$forms[id] || this;
-
+        var $form   = instance.$forms[id] || this;
+        var options = (typeof (options) != 'undefined') ? merge(options, xhrOptions) : xhrOptions;
+        var result  = null;
+        var XHRData = null;
+        
         // forward callback to HTML attribute
         listenToXhrEvents($form);
-
-        if (options) {
-            var options = merge(options, xhrOptions);
-        } else {
-            var options = xhrOptions;
-        }
 
         var url         = $target.getAttribute('action') || options.url;
         var method      = $target.getAttribute('method') || options.method;
@@ -545,7 +562,7 @@ function ValidatorPlugin(rules, data, formId) {
             } else {
                 // CORS not supported.
                 xhr = null;
-                var result = 'CORS not supported: the server is missing the header `"Access-Control-Allow-Credentials": true` ';
+                result = 'CORS not supported: the server is missing the header `"Access-Control-Allow-Credentials": true` ';
                 triggerEvent(gina, $target, 'error.' + id, result);
 
                 return
@@ -578,14 +595,15 @@ function ValidatorPlugin(rules, data, formId) {
                     if( /^2/.test(xhr.status) ) {
 
                         try {
-                            var result = xhr.responseText;
+                            result = xhr.responseText;
                             if ( /json$/.test( xhr.getResponseHeader("Content-Type") ) ) {
                                 result = JSON.parse(xhr.responseText)
                             }
 
                             $form.eventData.success = result;
 
-                            var XHRData = result;
+                            XHRData = result;
+                            // update toolbar
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
 
@@ -601,7 +619,8 @@ function ValidatorPlugin(rules, data, formId) {
                             triggerEvent(gina, $target, 'success.' + id, result)
 
                         } catch (err) {
-                            var result = {
+
+                            result = {
                                 status:  422,
                                 error : err.message,
                                 stack : err.stack
@@ -609,38 +628,10 @@ function ValidatorPlugin(rules, data, formId) {
                             };
 
                             $form.eventData.error = result;
+                          
 
-                            // // update toolbar
-                            // var XHRData = result;
-                            // if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
-                            //     try {
-                            //
-                            //         // forward backend appplication errors to forms.errors when available
-                            //         if ( XHRData.error && typeof(XHRData.error) == 'object' && $form.fields ) {
-                            //             var formsErrors = {}, errCount = 0;
-                            //             for (var e in XHRData.error) {
-                            //                 if ( typeof($form.fields[e]) != 'undefined' ) {
-                            //                     ++errCount;
-                            //                     formsErrors[e] = XHRData.error[e];
-                            //
-                            //                     if ( typeof(XHRData.stack) != 'undefined' )
-                            //                         formsErrors[e].stack = XHRData.stack;
-                            //                 }
-                            //             }
-                            //
-                            //             if (errCount > 0) {
-                            //                 handleErrorsDisplay($form.target, formsErrors);
-                            //             }
-                            //         }
-                            //         // update toolbar
-                            //         ginaToolbar.update("data-xhr", XHRData );
-                            //
-                            //     } catch (err) {
-                            //         throw err
-                            //     }
-                            // }
-
-                            var XHRData = result;
+                            XHRData = result;                            
+                            // update toolbar
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
 
@@ -658,32 +649,30 @@ function ValidatorPlugin(rules, data, formId) {
 
                     } else if ( xhr.status != 0) {
 
-                        var result = { 'status': xhr.status };
+                        result = { 'status': xhr.status };
 
                         if ( /^(\{|\[).test( xhr.responseText ) /) {
 
                             try {
-                                result = JSON.parse(xhr.responseText);
+                                result = merge( result, JSON.parse(xhr.responseText) )
                             } catch (err) {
                                 result = merge(result, err)
                             }
 
                         } else if ( typeof(xhr.responseText) == 'object' ) {
-                            result = xhr.responseText
+                            result = merge(result, xhr.responseText)
                         } else {
                             result.message = xhr.responseText
                         }
 
                         $form.eventData.error = result;
 
-                        // forward backend appplication errors to forms.errors when available
-                        if ( typeof (result) != 'undefined' && result.error && typeof (result.error) == 'object' && $form.fields) {
+                        // forward appplication errors to forms.errors when available
+                        if (typeof (result) != 'undefined' && typeof (result.error) != 'undefined' &&  result.error.fields && typeof (result.error.fields) == 'object' /**&& $form.fields*/) {
                             var formsErrors = {}, errCount = 0;
-                            for (var e in result.error) {
-                                if (typeof ($form.rules[e]) != 'undefined') {
-                                    ++errCount;
-                                    formsErrors[e] = result.error[e];
-                                }
+                            for (var f in result.error.fields) {
+                                ++errCount;
+                                formsErrors[f] = { isApplicationValidationError: result.error.fields[f] };
                             }
 
                             if (errCount > 0) {
@@ -692,7 +681,7 @@ function ValidatorPlugin(rules, data, formId) {
                         }
 
                         // update toolbar
-                        var XHRData = result;
+                        XHRData = result;
                         if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                             try {
                                 // update toolbar
@@ -716,7 +705,7 @@ function ValidatorPlugin(rules, data, formId) {
                 // );
 
                 var percentComplete = (event.position / event.totalSize)*100;
-                var result = {
+                result = {
                     'status': 100,
                     'progress': percentComplete
                 };
@@ -728,7 +717,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             // catching timeout
             xhr.ontimeout = function (event) {
-                var result = {
+                result = {
                     'status': 408,
                     'error': 'Request Timeout'
                 };
@@ -755,7 +744,7 @@ function ValidatorPlugin(rules, data, formId) {
                 //try {
                     xhr.send(data)
                 // } catch (err) {
-                //     var XHRData = result;
+                //     XHRData = result;
                 //     if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                 //         try {
                 //

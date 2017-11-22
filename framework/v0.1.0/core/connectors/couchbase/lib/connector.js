@@ -78,14 +78,12 @@ function Connector(dbString) {
                         }
 
                         if (
-                            err instanceof couchbase.Error && err.code == 16 /**&& !self.reconnecting*/ && !self.reconnected
+                            err instanceof couchbase.Error && err.code == 16 && !self.reconnected
                             //|| err instanceof couchbase.Error && err.code == 23 && !self.reconnecting
                             || err.message == 'cannot perform operations on a shutdown bucket' && !self.reconnecting && !self.reconnected
                         ) {
                             // reconnecting
                             self.reconnecting = true;
-                            //delete self.cluster;
-                            //self.cluster = new couchbase.Cluster(dbString.protocol + dbString.host);
                             self.connect(dbString, next)
 
                         } else if (err instanceof couchbase.Error && err.code == 23 && !self.reconnecting) {
