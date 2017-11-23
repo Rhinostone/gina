@@ -38,29 +38,75 @@ gna.plugins     = plugins;
 
 
 // BO cooking..
-var startWithGina = false;
+
+var isLoadedThroughCLI      = false; // with gina
+var isLoadedThroughWorker   = false;
+
 //copy & backup for utils/cmd/app.js.
-var tmp         = process.argv;
+var tmp         = JSON.parse(JSON.stringify(process.argv)); // by default
 var projectName = null;
 
 // filter $ node.. o $ gina  with or without env
-if (process.argv.length >= 3) {
-    startWithGina = true;
+if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
+
+    var ctxObj = null;
+    if ( /child\.js$/.test(tmp[1]) ) { // required under a worker
+        
+        isLoadedThroughWorker = true;
+        var ctxFilename = null;
+        for (var a = 0, aLen = tmp.length; a < aLen; ++a) {
+            
+            if (/^--argv-filename=/.test(tmp[a])) {
+                ctxFilename = tmp[a].split(/=/)[1];
+                console.log('found context file `' + ctxFilename +'`' );
+                break;
+            }
+        }
+
+        if (ctxFilename) {
+
+            setContext('argvFilename', _(ctxFilename, true));
+            
+            var importedContext = JSON.parse( fs.readFileSync(_(ctxFilename, true)) );
+            
+            tmp[2] = {};
+            tmp[2].paths = importedContext.paths;
+            tmp[2].envVars = importedContext.envVars;
+            tmp[2].processList = importedContext.processList;
+            tmp[2].ginaProcess = importedContext.ginaProcess;
+
+            tmp[3] = importedContext.project;
+            tmp[4] = importedContext.bundle;
+
+            setContext('env', importedContext.env);
+            setContext('bundles', importedContext.bundles);
+            
+            ctxObj = tmp[2];
+
+        } else {
+            throw new Error('No *.ctx file found to import context !')
+        }
+    } else {
+        isLoadedThroughCLI = true;
+        ctxObj = JSON.parse(tmp[2]);
+    }
+
 
     try {
-
-        setContext('paths', JSON.parse(tmp[2]).paths);//And so on if you need to.
-        setContext('processList', JSON.parse(tmp[2]).processList);
-        setContext('ginaProcess', JSON.parse(tmp[2]).ginaProcess);
+        
+        require(ctxObj.paths.gina.root + '/utils/helper');
+        
+        setContext('paths', ctxObj.paths);//And so on if you need to.
+        
+        setContext('processList', ctxObj.processList);
+        setContext('ginaProcess', ctxObj.ginaProcess);
 
         projectName = tmp[3];
         setContext('project', projectName);
         setContext('bundle', tmp[4]);
 
-        var obj = JSON.parse(tmp[2]).envVars;
+        var obj = ctxObj.envVars;
         var evar = '';
-
-        require(getPath('gina').root +'/utils/helper');
 
         if ( typeof(obj) != 'undefined') {
 
@@ -91,27 +137,38 @@ if (process.argv.length >= 3) {
         }
 
         //Cleaning process argv.
-        process.argv.splice(2);
-    } catch (err) {}
-
-    //if (process.argv[1] == 'gina' || process.argv[1] == _( getPath('root') + '/gina') ) {
-    //}
+        if (isLoadedThroughCLI )
+            process.argv.splice(2);
+            
+    } catch (error) {
+        console.error('[ ginaConfigurationError ] ', error.stack | error.message | error)
+    }
 }
+
 tmp = null;
 
 setPath( 'node', _(process.argv[0]) );
 
+var ginaPath = null;
+try {
+    ginaPath = getPath('gina').core;
+} catch(err) {
+    ginaPath = _(__dirname);
+    setPath('gina.core', ginaPath);
+    ginaPath = getPath('gina').core;
+}
+
+if ( typeof(getEnvVar) == 'undefined') {
+    console.debug('==> PROCESS LENGTH ' + process.argv.length, projectName, getContext('bundle'));
+}
+//console.debug('GINA_HOMEDIR ' + getEnvVar('GINA_HOMEDIR') );
 var projects    = require( _(GINA_HOMEDIR + '/projects.json') );
 var root        = projects[projectName].path;
 
 gna.executionPath = root;
 setPath('project', root);
 
-var ginaPath = getPath('gina').core;
-if ( typeof(ginaPath) == 'undefined') {
-    ginaPath = _(__dirname);
-    setPath('gina.core', ginaPath);
-}
+
 
 setContext('gina.utils', lib);
 setContext('gina.Config', Config);
@@ -161,14 +218,14 @@ if (!isPath) {
 
 var abort = function(err) {
     if (
-        process.argv[2] == '-s' && startWithGina
-        || process.argv[2] == '--start' && startWithGina
+        process.argv[2] == '-s' && isLoadedThroughCLI
+        || process.argv[2] == '--start' && isLoadedThroughCLI
         //Avoid -h, -v  ....
-        || !startWithGina && isPath && process.argv.length > 3
+        || !isLoadedThroughCLI && isPath && process.argv.length > 3
 
     ) {
-        if (isPath && !startWithGina) {
-            console.log('You are trying to load gina by hand: just make sure that your env ['+env+'] matches the given path ['+ path +']');
+        if (isPath && !isLoadedThroughCLI) {
+            console.debug('You are trying to load gina by hand: just make sure that your env ['+env+'] matches the given path ['+ path +']\n'+ err);
         } else if ( typeof(err.stack) != 'undefined' ) {
             console.log('Gina could not determine which bundle to load: ' + err +' ['+env+']' + '\n' + err.stack);
         } else {
@@ -191,7 +248,8 @@ gna.getProjectConfiguration = function (callback){
     var modulesPackage = _(root + '/project.json');
     var project     = {}
         , bundles   = [];
-
+    
+    //console.debug('modulesPackage ', modulesPackage, fs.existsSync(modulesPackage));
     //Merging with existing;
     if ( fs.existsSync(modulesPackage) ) {
         try {
@@ -322,86 +380,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
     if (err) console.error(err.stack);
 
-    var appName = null, path = null;
-
-    var packs = project.bundles;
-    if (startWithGina) {
-        if (!isPath) {
-            appName = getContext('bundle');
-            if ( typeof(packs[appName].release.version) == 'undefined' && typeof(packs[appName].tag) != 'undefined') {
-                packs[appName].release.version = packs[appName].tag
-            }
-            packs[appName].release.target = 'releases/'+ appName +'/' + env +'/'+ packs[appName].release.version;
-            path = (isDev) ? packs[appName].src : packs[appName].release.target
-        } else {
-            path = _(process.argv[1])
-        }
-    } else {
-        path = _(process.argv[1])
-    }
-
-
-
-    path = path.replace(root + '/', '');
-    var search;
-    if ( (/index.js/).test(path) || p[p.length-1] == 'index') {
-        var self;
-        path = ( self = path.split('/') ).splice(0, self.length-1).join('/')
-    }
-
-    try {
-        //finding app.
-        var target, source, tmp;
-        for (var bundle in packs) {
-            //is bundle ?
-            tmp = "";
-            if (
-                typeof(packs[bundle].release) != 'undefined' && env == 'prod'
-                    || typeof(packs[bundle].release) != 'undefined' && env == 'stage'
-                ) {
-
-
-                if ( typeof(packs[bundle].release.version) == 'undefined' && typeof(packs[bundle].tag) != 'undefined') {
-                    packs[bundle].release.version = packs[bundle].tag
-                }
-                packs[bundle].release.target = 'releases/'+ bundle +'/' + env +'/'+ packs[bundle].release.version;
-                tmp = packs[bundle].release.target.replace(/\//g, '').replace(/\\/g, '');
-
-                if ( !appName && tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
-                    appName = bundle;
-                    break
-                }
-            } else if (
-                typeof(packs[bundle].src) != 'undefined' && isDev
-                ) {
-
-                tmp = packs[bundle].src.replace(/\//g, '').replace(/\\/g, '');
-                if ( tmp == path.replace(/\//g, '').replace(/\\/g, '') ) {
-                    appName = bundle;
-                    break
-                }
-            } else {
-                abort('Path mismatched with env: ' + path)
-            }
-            // else, not a bundle
-        }
-
-        if (appName == undefined) {
-            setContext('bundle', undefined);
-            abort('No bundle found for path: ' + path)
-        } else {
-            setContext('bundle', appName);
-            //to remove after merging gina processes into a single process.
-            var projectName = getContext('project');
-            var processList = getContext('processList');
-            process.list = processList;
-            var bundleProcess = new Proc(appName +'@'+ projectName, process);
-            bundleProcess.register(appName +'@'+ projectName, process.pid)
-        }
-
-    } catch (err) {
-        abort(err)
-    }
+    
 
     /**
      * On middleware initialization
@@ -424,7 +403,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
                     joinContext(conf.contexts);
                     gna.getConfig = function(name){
-                        var tmp = "";
+                        var tmp = '';
                         if ( typeof(name) != 'undefined' ) {
                             try {
                                 //Protect it.
@@ -785,6 +764,103 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
      * */
     gna.restart = process.restart = function() {
         console.log("starting server")
+    }
+
+
+
+    var appName = null, path = null;
+
+    var packs = project.bundles;
+    if (isLoadedThroughCLI) {
+        if (!isPath) {
+            appName = getContext('bundle');
+            if (typeof (packs[appName].release.version) == 'undefined' && typeof (packs[appName].tag) != 'undefined') {
+                packs[appName].release.version = packs[appName].tag
+            }
+            packs[appName].release.target = 'releases/' + appName + '/' + env + '/' + packs[appName].release.version;
+            path = (isDev) ? packs[appName].src : packs[appName].release.target
+        } else {
+            path = _(process.argv[1])
+        }
+    } else {
+        path = _(process.argv[1])
+    }
+
+    console.debug('track 0 ', path);
+    path = path.replace(root + '/', '');
+    console.debug('track 1 ', path);
+    var search;
+    if ((/index.js/).test(path) || p[p.length - 1] == 'index') {
+        var self;
+        path = (self = path.split('/')).splice(0, self.length - 1).join('/')
+    }
+
+    console.debug('track 2 ', path);
+
+    try {
+        //finding app.
+        if (!isLoadedThroughWorker) {
+            var target, source, tmp;
+            for (var bundle in packs) {
+                //is bundle ?
+                tmp = '';
+                if (
+                    typeof (packs[bundle].release) != 'undefined' && env == 'prod'
+                    || typeof (packs[bundle].release) != 'undefined' && env == 'stage'
+                ) {
+
+
+                    if (typeof (packs[bundle].release.version) == 'undefined' && typeof (packs[bundle].tag) != 'undefined') {
+                        packs[bundle].release.version = packs[bundle].tag
+                    }
+                    packs[bundle].release.target = 'releases/' + bundle + '/' + env + '/' + packs[bundle].release.version;
+                    tmp = packs[bundle].release.target.replace(/\//g, '').replace(/\\/g, '');
+
+                    if (!appName && tmp == path.replace(/\//g, '').replace(/\\/g, '')) {
+                        appName = bundle;
+                        break
+                    }
+                } else if (
+                    typeof (packs[bundle].src) != 'undefined' && isDev
+                ) {
+
+                    tmp = packs[bundle].src.replace(/\//g, '').replace(/\\/g, '');
+                    if (tmp == path.replace(/\//g, '').replace(/\\/g, '')) {
+                        appName = bundle;
+                        break
+                    }
+                } else {
+                    abort('Path mismatched with env: ' + path)
+                }
+                // else, not a bundle
+            }
+
+            if (appName == undefined) {
+                setContext('bundle', undefined);
+                abort('No bundle found for path: ' + path)
+            } else {
+                setContext('bundle', appName);
+                //to remove after merging gina processes into a single process.
+                var projectName = getContext('project');
+                var processList = getContext('processList');
+                process.list = processList;
+                var bundleProcess = new Proc(appName + '@' + projectName, process);
+                bundleProcess.register(appName + '@' + projectName, process.pid)
+            }
+
+        } else {
+            appName = getContext('bundle');
+            var projectName = getContext('project');
+            var processList = getContext('processList');
+            process.list = processList;
+            var bundleProcess = new Proc(appName + '@' + projectName, process);
+            bundleProcess.register(appName + '@' + projectName, process.pid)
+        }
+        
+        
+
+    } catch (err) {
+        abort(err)
     }
 
 

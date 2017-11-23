@@ -289,8 +289,8 @@ function ModelUtil() {
                     } else {
                         //e.g. var apiModel    = new Model(config.bundle + "/api");
                         // => var apiModel = getContext('apiModel')
-                        console.debug('....model ', conf.bundle + "/"+c + 'Model');
-                        mObj[c+'Model'] = new Model(conf.bundle + "/" + c);
+                        console.debug('[ MODEL ][ '+ c +' ]', conf.bundle + "/"+c + 'Model');
+                        mObj[c + 'Model'] = new Model(conf.bundle + "/" + c, conf);
                         mObj[c+'Model']
                             .onReady(
                             function onModelReady( err, bundle, connector, conn) {

@@ -137,6 +137,10 @@ function Merge() {
                                         target[ name ] = browse(clone, copy, override);
 
                                         // this does not work ... target is returned before the end of process.nextTick !!!
+                                        // process.nextTick(function onBrowse() {
+                                        //     target[name] = browse(clone, copy, override)
+                                        // });
+
                                         // nextTickCalled = true;
                                         // process.nextTick(function onBrowse() {
                                         //     nextTickCalled = false;
@@ -351,6 +355,7 @@ function Merge() {
 
 
     return browse
+
 }
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {

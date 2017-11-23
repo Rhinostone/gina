@@ -5,7 +5,7 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-
+var fs      = require('fs');
 var os      = require('os');
 var merge   = require('./../lib/merge');
 var console = require('./../lib/logger');
@@ -172,6 +172,113 @@ function ContextHelper(contexts) {
             }
         } else {
             throw err
+        }
+    }
+
+    /**
+     * getConfig
+     * 
+     * Get bundle JSON configuration
+     *
+     *
+     * @param {string} [ bundle ] - Bundle name
+     * @param {string} confName  - Config name (bundle/config/filename without extension)
+     *
+     * */
+    getConfig = function(bundle, confName) {
+        
+        var ctx             = null
+            , ctxFilename   = getContext('argvFilename') // for workers ctx
+            , confPath      = null
+        ;
+
+        if ( typeof(ctxFilename) != 'undefined' ) {
+            ctx = JSON.parse(fs.readFileSync(_(ctxFilename, true)));
+            if (!ctx.gina) {
+                ctx.gina = {
+                    Config : require('./../core/config')
+                }
+            }
+                
+        } else {
+            ctx = self.contexts
+        }
+
+        if (arguments.length == 1 || !bundle) {
+
+            var confName = (arguments.length == 1) ? bundle : confName
+                , bundle = null
+                , file = null
+                , stackFileName = null;
+
+            for (var i = 1, len = 10; i < len; ++i) {
+                stackFileName = __stack[i].getFileName();
+                if (stackFileName && !/node_modules/.test(stackFileName)) {
+                    file = stackFileName;
+                    break;
+                }
+            }
+            var a = file.replace('.js', '').split('/')
+                , i = a.length - 1;
+
+            if (bundle == confName) {
+                bundle = ctx.bundle
+            } else {
+
+                if (ctx.bundles) {
+                    for (; i >= 0; --i) {
+                        index = ctx.bundles.indexOf(a[i]);
+                        if (index > -1) {
+                            ctx.bundle = bundle = ctx.bundles[index];
+
+                            break
+                        }
+                    }
+                } else if (ctx.bundle) {
+                    bundle = ctx.bundle
+                }
+
+            }
+        }
+
+        var env = GINA_ENV;
+        var cacheless = GINA_ENV_IS_DEV;
+        var Config = ctx.gina.Config;
+        var conf = null;
+
+        if (Config.instance && typeof(Config.instance.env) != 'undefined') {
+            conf = Config.instance
+        } else {
+            conf = new Config({
+                env: env,
+                project: getContext('project'),
+                executionPath: getPath('project'),
+                startingApp: bundle,
+                ginaPath: getPath('gina').core
+            }).getInstance(bundle);
+        }
+        
+
+        if ( typeof(confName) != 'undefined') {
+
+            try {
+                return conf.bundlesConfiguration.conf[bundle][env].content[confName]
+            } catch (err) {
+                throwError(500, err)
+            }
+
+        } else {
+
+            try {
+                conf.bundlesConfiguration.conf.bundle = bundle;
+                conf.bundlesConfiguration.conf.env = env;
+                conf.bundlesConfiguration.conf.project = getContext('project');
+                conf.bundlesConfiguration.conf.bundles = getContext('bundles');
+
+                return conf.bundlesConfiguration.conf
+            } catch (err) {
+                throwError(500, err)
+            }
         }
     }
 

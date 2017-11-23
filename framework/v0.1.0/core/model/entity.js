@@ -592,32 +592,6 @@ function EntitySuper(conn, caller) {
     }
 
 
-
-    ///**
-    // * Get config
-    // *
-    // * @param {string} [name] - Conf name without extension.
-    // * @return {object} result
-    // *
-    // * TODO - Protect result
-    // * */
-    //this.getConfig = function(name) {
-    //    var tmp = null;
-    //
-    //    if ( typeof(name) != 'undefined' ) {
-    //        try {
-    //            // needs to be read only
-    //            tmp = JSON.stringify(local.options.conf.content[name]);
-    //            return JSON.parse(tmp)
-    //        } catch (err) {
-    //            return undefined
-    //        }
-    //    } else {
-    //        tmp = JSON.stringify(local.options.conf);
-    //        return JSON.parse(tmp)
-    //    }
-    //}
-
     return init(conn, caller)
 };
 

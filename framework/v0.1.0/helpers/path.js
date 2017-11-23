@@ -1371,11 +1371,11 @@ function PathHelper() {
                         merge(paths, userPaths, true)
                     }
                 }
-                setContext("paths", paths)
+                setContext('paths', paths)
 
             } else {
                 paths[name] = path;
-                setContext("paths", paths)
+                setContext('paths', paths)
             }
         }
     }
