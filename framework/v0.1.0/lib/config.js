@@ -90,15 +90,15 @@ function ConfigUtil() {
                         try {
                             config = self.value;//????
                         } catch (err) {
-                            err = 'Utils.Config.get(...) : self.value['+file+'] : key not found.\n' + err;
+                            err = 'Utils.Config.get(...) : self.value['+ file +'] : key not found.\n' + err;
                         }
 
                     } else {
                         //Getting paths.
-                        if ( typeof(self.paths.root) != 'undefined' ) {
-                            //console.error("requiring :=> ",  self.paths.root + '/.gna/locals.json');
+                        if ( typeof(self.paths.project) != 'undefined' ) {
+                            //console.error("requiring :=> ",  self.paths.project + '/.gna/locals.json');
                             try {
-                                config = require(self.paths.root  + '/.gna/' + file);
+                                config = require(self.paths.project  + '/.gna/' + file);
                                 self.value = config;
                                 self.paths = config['paths'];
 
@@ -113,14 +113,14 @@ function ConfigUtil() {
                     callback(err, config)
 
                 } catch (err) {
-                    var err = new Error('.gna/locals.json: project configuration file not found. \n' + (err.stack||err.message));
+                    var err = new Error('[ UtilsConfig ]  .gna/locals.json: project configuration file not found. \n' + (err.stack||err.message));
                     //logger.error('gina', 'UTILS:CONFIG:ERR:3', err, __stack);
                     callback(err);
                 }
                 break;
 
             default :
-                callback('Config.get('+project+'): case not found');
+                callback('[ UtilsConfig ] Config.get('+project+'): case not found');
         }
     }
 
@@ -141,12 +141,12 @@ function ConfigUtil() {
             var file = 'locals.json'
         }
 
-        if ( typeof(self.value) != "undefined" ) {
+        if ( typeof(self.value) != 'undefined' ) {
             return self.value;
         } else {
             var filename = self.paths.root +'/.gna/'+ file;
             if (i > 0) {
-                console.debug('retrying [ '+i+' ] to load: ' + filename)
+                console.debug('[ UtilsConfig ] retrying [ '+i+' ] to load: `' + filename +'`')
             }
 
             try {
@@ -155,23 +155,23 @@ function ConfigUtil() {
                 } else {
                     // you might just be experimenting some latencies
                     if (i < maxRetry) {
-                        console.debug('retrying to load config after timeout');
+                        console.debug('[ UtilsConfig ] retrying to load config after timeout `' + filename +'`');
                         setTimeout(function(){
-                            console.debug('It is time re reload config');
+                            console.debug('[ UtilsConfig ] It is time re reload config');
                             self.getSync(project, file, i+1)
                         }, delay);
                         //return
                     } else {
-                        var err = new Error(filename+ ' not found');
+                        var err = new Error('[ UtilsConfig ] '+ filename + ' not found');
                         console.emerg(err.stack||err.message);
                         process.exit(1);
                     }
                 }
             } catch (err) {
                 if (i < maxRetry) {
-                    console.debug('(catched) retrying to load config after timeout');
+                    console.debug('[ UtilsConfig ] (catched) retrying to load config after timeout');
                     setTimeout(function(){
-                        console.debug('It is time re reload config');
+                        console.debug('[ UtilsConfig ] It is time re reload config');
                         self.getSync(project, file, i+1)
                     }, delay);
                 } else {
