@@ -125,6 +125,7 @@ function Routing() {
             , isRoute       = null
             , route         = null
             , isXMLRequest  = getContext().router.isProcessingXMLRequest
+            , isUrlMask     = ( /\:/.test(url) ) ? true : false
         ;
 
         var hostname    = config.envConf[bundle][env].hostname
@@ -149,9 +150,52 @@ function Routing() {
 
                 if (routing[rule].bundle != bundle) continue;
 
+                // from mask to url 
+                // if (isUrlMask && url == routing[rule].url || Array.isArray(routing[rule].url) && routing[rule].url.indexOf(url)) {
+
+                //     route = JSON.parse(JSON.stringify(routing[rule]));
+                //     var variable = null
+                //     for (var p in route.param) {
+                //         if (/^:/.test(route.param[p])) {
+                //             variable = route.param[p].substr(1);
+                //             if (typeof (params) != 'undefined' && typeof (params[variable]) != 'undefined') {
+                //                 route.url = route.url.replace(new RegExp('(/:' + variable + '|/:' + variable + '$)', 'g'), '/' + params[variable]);
+
+                //                 if (typeof (route.param.path) != 'undefined' && /:/.test(route.param.path)) {
+                //                     route.param.path = route.param.path.replace(new RegExp('(:' + variable + '/|:' + variable + '$)', 'g'), params[variable]);
+                //                 }
+                //             }
+                //         }
+                //     }
+
+                //     if (Array.isArray(route.url)) {
+                //         route.url = route.url[0]
+                //     }
+
+                //     route.toUrl = function(ignoreWebRoot) {
+
+                //         var conf = config.bundlesConfiguration.conf[bundle][env]
+                //             , wroot = conf.server.webroot
+                //             , path = this.url
+                //             ;
+
+                //         if (wroot.substr(wroot.length - 1, 1) == '/') {
+                //             wroot = wroot.substr(wroot.length - 1, 1).replace('/', '')
+                //         }
+
+                //         this.url = (typeof (ignoreWebRoot) != 'undefined' && ignoreWebRoot == true) ? path.replace(wroot, '') : path;
+
+                //         return conf.hostname + path
+                //     };
+
+                //     return route;
+                // }
+
                 // this will only work with rules declared with `GET` method property
                 if ( typeof(routing[rule].method) != 'undefined' && !/^get$/i.test(routing[rule].method) ) continue;
+              
 
+                // normal case
                 //Preparing params to relay to the router.
                 params = {
                     method              : routing[rule].method || 'GET',

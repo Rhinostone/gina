@@ -49,7 +49,7 @@ var inherits    = require( _(__dirname + '/inherits') );
 var console     = require( _(__dirname + '/logger') );
 //var helpers     = require( _(__dirname + '/helpers') );
 
-//console.log('path ? ', getPaths());
+//console.debug('[ FRAMEWORK ][ PROC ] path ? ', getPaths());
 
 /**
  * @constructor
@@ -98,7 +98,7 @@ function Proc(bundle, proc, usePidFile){
     //     var bundlesPath = getPath('bundlesPath');
     //     var connPath = _(bundlesPath +'/'+ bundle + '/config/connector.json');
     //     try {
-    //         console.log('reading connPath: ', connPath);
+    //         console.debug('[ FRAMEWORK ][ PROC ] Reading connPath: ', connPath);
     //         var content = fs.readFileSync(connPath);
     //         return JSON.parse(content).httpClient.shutdown
     //     } catch (err) {
@@ -118,7 +118,7 @@ function Proc(bundle, proc, usePidFile){
     var respawn = function(bundle, env, pid, callback) {
         //var loggerInstance = getContext('logger');
         //loggerInstance["trace"]('Fatal error !');
-        //console.debug("Exiting and re spawning : ", bundle, env);
+        //console.debug('[ FRAMEWORK ][ PROC ] Exiting and re spawning : ', bundle, env);
         // TODO - Count the restarts and prevent unilimited loop
         // TODO - Send notification to admin or/and root to the Fatal Error Page.
 
@@ -127,9 +127,9 @@ function Proc(bundle, proc, usePidFile){
         } catch (err) {
             var bundle = process.argv[3];
             //var port = self.getBundlePortByBundleName(bundle);
-            //console.log("Bundle ", bundle," already running or port[ "+port+" ] is taken by another process...");
+            //console.debug('[ FRAMEWORK ][ PROC ] Bundle ', bundle,' already running or port[ '+port+' ] is taken by another process...');
             //loggerInstance["trace"]("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
-            console.debug("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
+            console.debug('[ FRAMEWORK ][ PROC ] Bundle [ '+ bundle +' ] already running or [ '+env+' ] port is use by another process');
             dismiss(process.pid);
         }
 
@@ -182,8 +182,8 @@ function Proc(bundle, proc, usePidFile){
     var setDefaultEvents = function(bundle, PID, proc) {
 
 
-        if ( typeof(PID) != "undefined" && typeof(PID) == "number" ) {
-            console.debug("setting listeners for ", PID, ':', bundle);
+        if ( typeof(PID) != 'undefined' && typeof(PID) == 'number' ) {
+            console.debug('[ FRAMEWORK ][ PROC ] Setting listeners for ', PID, ':', bundle);
 
             proc.dismiss = dismiss;
             proc.isMaster = isMaster;
@@ -202,16 +202,16 @@ function Proc(bundle, proc, usePidFile){
                 if (code == undefined)
                     var code = 0;
 
-                console.info("\nGot exit code. Now killing: ", code);
+                console.info('[ FRAMEWORK ][ PROC ] Got exit code. Now killing: ', code);
                 proc.exit(code);//tigger exit event.
             });
 
             //Will prevent the server from stopping.
             proc.on('uncaughtException', function(err) {
 
-                console.emerg(err.stack);
+                console.emerg('[ FRAMEWORK ][ uncaughtException ] ', err.stack);
 
-                //console.log("@=>", self.args);
+                //console.debug("[ FRAMEWORK ][ PROC ] @=>", self.args);
                 //var env =  process.env.NODE_ENV || 'prod';
                 var bundle = self.bundle;
                 var pid = self.getPidByBundleName(bundle);
@@ -242,7 +242,7 @@ function Proc(bundle, proc, usePidFile){
             });
 
             proc.on('SIGHUP', function(code){
-                console.debug("Hanging up ! Code: "+ code+"\n"+ process.argv);
+                console.debug('[ FRAMEWORK ] Hanging up ! Code: '+ code +'\n'+ process.argv);
 
                 var bundle = self.bundle;
                 var env =  process.env.NODE_ENV || 'prod';
@@ -261,7 +261,7 @@ function Proc(bundle, proc, usePidFile){
         }
 
         try {
-            //console.debug('\n=> '+ JSON.stringify(process.list, null, 4));
+            //console.debug('[ FRAMEWORK ][ PROC ] => '+ JSON.stringify(process.list, null, 4));
             var index       = null
                 , mountPath = null
                 , pidPath   = null
@@ -291,7 +291,7 @@ function Proc(bundle, proc, usePidFile){
             }
         } catch (err) {
             //Means that it does not exists anymore.
-            console.debug(err.stack)
+            console.debug('[ FRAMEWORK ][ PROC ] ', err.stack)
         }
 
         if (index != null)
@@ -305,7 +305,7 @@ function Proc(bundle, proc, usePidFile){
                 fs.unlinkSync( pidPath );
         }
 
-        console.debug('received '+ signal +' signal to end process [ '+ pid +' ]\n');
+        console.debug('[ FRAMEWORK ][ PROC ] Received '+ signal +' signal to end process [ '+ pid +' ]');
     };
 
     /**
@@ -355,7 +355,7 @@ function Proc(bundle, proc, usePidFile){
         try{
             return self.PID;
         } catch (err) {
-            console.error('Could not get PID for bundle: '+ self.bundle + (err.stack||err.message));
+            console.error('[ FRAMEWORK ][ PROC ] Could not get PID for bundle: '+ self.bundle + (err.stack||err.message));
             return null;
         }
     };
@@ -418,10 +418,10 @@ function Proc(bundle, proc, usePidFile){
                 //var path    = pathObj.toString();
 
                 pathObj.mkdir( function(err, path){
-                    console.debug('path created ('+ path +') now saving PID ' + bundle);
+                    console.debug('[ FRAMEWORK ][ PROC ] Path created ('+ path +') now saving PID ' + bundle);
                     //save file
                     if (err)
-                        console.debug('Found '+ path +': not replacing');
+                        console.debug('[ FRAMEWORK ][ PROC ] Found '+ path +': not replacing');
 
                     if (!err) {
                         self.PID    = self.proc.pid;
@@ -450,7 +450,7 @@ function Proc(bundle, proc, usePidFile){
 
     //init
     if ( typeof(self.bundle) == "undefined" ) {
-        console.error('Invalid or undefined proc name . Proc naming Aborted');
+        console.error('[ FRAMEWORK ][ PROC ] Invalid or undefined proc name . Proc naming Aborted');
         process.exit(1)
     } else {
         init()

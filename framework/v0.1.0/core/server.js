@@ -1330,6 +1330,7 @@ function Server(options) {
         if (!res.headersSent) {
             if (isXMLRequest || !withViews || !isUsingTemplate ) {
                 // allowing this.throwError(err)
+                debugger;
                 if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
                     msg     = code.error;
                     code    = code.status;

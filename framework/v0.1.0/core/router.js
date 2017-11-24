@@ -15,10 +15,12 @@ var url                 = require('url')
     , console           = lib.logger
     , inherits          = lib.inherits
     , merge             = lib.merge
+    , routing           = lib.routing
     , SuperController   = require('./controller')
     , Config            = require('./config')
     //get config instance
-    , config            = new Config();
+    , config            = new Config()
+;
 
 /**
  * @class Router
@@ -613,13 +615,15 @@ function Router(env) {
             }
 
         } catch (err) {
-            var superController = new SuperController(options);
-            superController.setOptions(request, response, next, options);
-            if ( typeof(controller) != 'undefined' && typeof(controller[action]) == 'undefined') {
-                superController.throwError(response, 500, (new Error('control not found: `'+ action+'`. Please, check your routing.json or the related control in your `'+controllerFile+'`.')).stack);
-            } else {
-                superController.throwError(response, 500, err.stack);
-            }
+            
+            throwError(response, 500, err);
+            // var superController = new SuperController(options);
+            // superController.setOptions(request, response, next, options);
+            // if ( typeof(controller) != 'undefined' && typeof(controller[action]) == 'undefined') {
+            //     superController.throwError(response, 500, (new Error('control not found: `'+ action+'`. Please, check your routing.json or the related control in your `'+controllerFile+'`.')).stack);
+            // } else {
+            //     superController.throwError(response, 500, err.stack);
+            // }
         }
 
         action = null
@@ -716,6 +720,8 @@ function Router(env) {
         }
 
         if (!res.headersSent) {
+            
+            
             if (local.isXMLRequest || !hasViews() || !local.isUsingTemplate) {
                 // Internet Explorer override
                 if ( /msie/i.test(local.request.headers['user-agent']) ) {
@@ -724,19 +730,28 @@ function Router(env) {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
 
-                console.error(res.req.method +' [ '+code+' ] '+ res.req.url)
+                console.error('[ ROUTER ] ' + res.req.method + ' [ ' + code + ' ] ' + res.req.url /**routing.getRouteByUrl(res.req.url).toUrl()*/ );
+                var err = null;
 
-                var e = {
-                    status: code,
-                    error: msg
-                };
+                if ( typeof(msg) == 'object' ) {
+                    err = {
+                        status: code,
+                        message: msg
+                    }
+                } else {
+                    err = {
+                        status: code,
+                        message : msg.message,
+                        stack: msg.stack || null
+                    }
+                }
+                
 
-                if ( typeof(msg) == 'object' && typeof(msg.stack) != 'undefined' ) {
-                    e.error.stack   = msg.stack;
-                    e.error.message = msg.message;
+                if ( !err.stack ) {
+                    delete err.stack
                 }
 
-                res.end(JSON.stringify(e))
+                res.end(JSON.stringify(err))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
                 console.error(res.req.method +' [ '+code+' ] '+ res.req.url);

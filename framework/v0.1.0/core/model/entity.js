@@ -236,7 +236,7 @@ function EntitySuper(conn, caller) {
 
                         this[m].onComplete = function (cb) {
 
-                            console.debug('setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
+                            console.debug('[ MODEL ][ ENTITY ] Setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
 
                             //Setting local listener : normal case
                             if (entity._triggers.indexOf(events[i].shortName) > -1) {
@@ -258,46 +258,6 @@ function EntitySuper(conn, caller) {
 
                         return this[m] // chaining event & method
                     };
-
-
-                    // var func = function () {
-                    //
-                    //     // retrieving local arguments, & binding it to the event callback
-                    //
-                    //     cached.apply(this[m], arguments);
-                    //
-                    //     this[m].onComplete = function (cb) {
-                    //
-                    //         console.debug('setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
-                    //
-                    //         //Setting local listener : normal case
-                    //         if (entity._triggers.indexOf(events[i].shortName) > -1) {
-                    //
-                    //             if (typeof(entity._arguments) == 'undefined' || typeof(entity._arguments) != 'undefined' && typeof(entity._arguments[events[i].shortName]) == 'undefined') {
-                    //                 entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
-                    //                     // check if not already fired
-                    //                     if (entity._callbacks[events[i].shortName])
-                    //                         cb.apply(this[m], arguments);
-                    //                 });
-                    //
-                    //                 // backing up callback
-                    //                 entity._callbacks[events[i].shortName] = cb;
-                    //             } else { // in case the event is not ready yet
-                    //                 cb.apply(entity[m], entity._arguments[events[i].shortName])
-                    //             }
-                    //         }
-                    //     }
-                    //
-                    //     return this[m] // chaining event & method
-                    // };
-                    //
-                    // var funcStr = func.toString();
-                    // var first   = funcStr.indexOf('{') + 1
-                    // var last    = funcStr.lastIndexOf('}') -1;
-                    //
-                    // funcStr = funcStr.substring(first, last);
-                    //
-                    // return new Function(variables, funcStr)
 
                 }(events[i].shortName, f, i, fSource));
 
