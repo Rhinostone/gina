@@ -569,6 +569,7 @@ function Collection(content, option) {
     }
 
     this['delete'] = function(filter) {
+
         if ( typeof(filter) !== 'object' ) {
             throw new Error('filter must be an object');
         } else {
@@ -576,36 +577,28 @@ function Collection(content, option) {
                 , i                 = 0
                 , localeLowerCase   = ''
                 , _content          = Array.isArray(this) ? JSON.parse(JSON.stringify(this)) : JSON.parse(JSON.stringify(content))
-                , result            = JSON.parse(JSON.stringify(_content));
+                , result            = JSON.parse(JSON.stringify(_content))
+                ;
 
-            for (var o in _content) {
-                for (var f in filter) {
-                    if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
+            
+            var found = instance.find.apply(this, arguments);
 
-                    localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
-                    if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(_content[o][f]) != 'undefined' && typeof(_content[o][f]) !== 'object' && _content[o][f] != 'null' && _content[o][f] != 'undefined' ) {
-                        result.splice(o, 1)
-                    } else if ( typeof(_content[o][f]) != 'undefined' && typeof(_content[o][f]) !== 'object' && _content[o][f] === filter[f] ) {
-                        ++i;
-                        if (i === condition) result.splice(o, 1);
-                    } else if ( typeof(_content[o][f]) != 'undefined' && typeof(_content[o][f]) !== 'object' && _content[o][f] === filter[f] ) {
-                        result.splice(o, 1)
-                    }
-                }
+            if (found.length > 0) {
+                result = found.notIn(result)
             }
+
+            //content = result;
+            result.limit = instance.limit;
+            result.find = instance.find;
+            result.findOne = instance.findOne;
+            result.insert = instance.insert;
+            result.update = instance.update;
+            result.replace = instance.replace;
+            result.orderBy = instance.orderBy;
+            result.notIn = instance.notIn;
+
+            return result
         }
-
-        //content = result;
-        result.limit    = instance.limit;
-        result.find     = instance.find;
-        result.findOne  = instance.findOne;
-        result.insert   = instance.insert;
-        result.update   = instance.update;
-        result.replace  = instance.replace;
-        result.orderBy  = instance.orderBy;
-        result.notIn    = instance.notIn;
-
-        return result
     }
 
 
