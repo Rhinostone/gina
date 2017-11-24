@@ -181,8 +181,9 @@ function SuperController(options) {
 
             set('page.view.ext', ext);
             set('page.view.control', action);
+            set('page.view.controller', local.options.controller.replace(options.conf.bundlesPath, ''), true);
             if (typeof (local.options.controlRequired) != 'undefined' ) {
-                set('page.view.controlRequired', local.options.controlRequired);
+                set('page.view.controlRequired', local.options.controlRequired.replace(options.conf.bundlesPath, ''));
             }
             set('page.view.method', local.options.method);
             set('page.view.namespace', namespace); // by default
@@ -843,10 +844,10 @@ function SuperController(options) {
         }
     }
 
-    var parseDataObject = function (o, obj) {
+    var parseDataObject = function(o, obj, override) {
 
         for (var i in o) {
-            if (o[i] !== null && typeof(o[i]) == 'object') {
+            if ( o[i] !== null && typeof(o[i]) == 'object' || override && o[i] !== null && typeof(o[i]) == 'object' ) {
                 parseDataObject(o[i], obj);
             } else if (o[i] == '_content_'){
                 o[i] = obj
@@ -861,6 +862,7 @@ function SuperController(options) {
      *
      * @param {string} nave -  variable name to set
      * @param {string|object} value - value to set
+     * @param {boolean} [override]
      *
      * @return {void}
      * */
@@ -869,7 +871,9 @@ function SuperController(options) {
     //         local._data[variable] = value
     // }
 
-    var set = function(name, value) {
+    var set = function(name, value, override) {
+
+        var override = ( typeof(override) != 'undefined' ) ? override : false;
 
         if ( typeof(name) == 'string' && /\./.test(name) ) {
             var keys        = name.split(/\./g)
@@ -890,7 +894,7 @@ function SuperController(options) {
                 }
             }
 
-            newObj = parseDataObject(JSON.parse(str), value);
+            newObj = parseDataObject(JSON.parse(str), value, override);
             local.userData = merge(local.userData, newObj);
 
         } else if ( typeof(local.userData[name]) == 'undefined' ) {
