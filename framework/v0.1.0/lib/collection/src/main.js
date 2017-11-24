@@ -265,6 +265,7 @@ function Collection(content, option) {
         }
 
         // chaining
+        result.insert   = instance.insert;
         result.notIn    = instance.notIn;
         result.find     = instance.find;
         result.update   = instance.update;
@@ -272,6 +273,7 @@ function Collection(content, option) {
         result.findOne  = instance.findOne;
         result.limit    = instance.limit;
         result.orderBy  = instance.orderBy;
+        result.delete   = instance.delete;
 
         return result
     }
@@ -294,11 +296,13 @@ function Collection(content, option) {
         result = result.splice(0, resultLimit);
 
         // chaining
+        result.insert   = instance.insert;
         result.update   = instance.update;
         result.replace  = instance.replace;
         result.notIn    = instance.notIn;
         result.findOne  = instance.findOne;
         result.orderBy  = instance.orderBy;
+        result.delete   = instance.delete;
 
         return result
     }
@@ -441,7 +445,11 @@ function Collection(content, option) {
         result.limit    = instance.limit;
         result.find     = instance.find;
         result.findOne  = instance.findOne;
+        result.insert   = instance.insert;
+        result.replace  = instance.replace;
+        result.update   = instance.update;
         result.orderBy  = instance.orderBy;
+        result.delete   = instance.delete;
 
         return result
     }
@@ -463,10 +471,14 @@ function Collection(content, option) {
         }
 
         // chaining
+        result.limit    = instance.limit;
         result.find     = instance.find;
         result.findOne  = instance.findOne;
+        result.update   = instance.update;
+        result.replace  = instance.replace;
         result.orderBy  = instance.orderBy;
         result.notIn    = instance.notIn;
+        result.delete   = instance.delete;
 
         return result
     }
@@ -501,10 +513,15 @@ function Collection(content, option) {
         }
 
         // chaining
+        result.limit    = instance.limit;
         result.find     = instance.find;
         result.findOne  = instance.findOne;
+        result.insert   = instance.insert;
+        result.update   = instance.update;
+        result.replace  = instance.replace;
         result.orderBy  = instance.orderBy;
         result.notIn    = instance.notIn;
+        result.delete   = instance.delete;
 
         return result
     }
@@ -539,10 +556,14 @@ function Collection(content, option) {
         }
 
         // chaining
+        result.limit    = instance.limit;
         result.find     = instance.find;
         result.findOne  = instance.findOne;
+        result.insert   = instance.insert;
+        result.update   = instance.update;
         result.orderBy  = instance.orderBy;
         result.notIn    = instance.notIn;
+        result.delete   = instance.delete;
 
         return result
     }
@@ -575,6 +596,15 @@ function Collection(content, option) {
         }
 
         //content = result;
+        result.limit    = instance.limit;
+        result.find     = instance.find;
+        result.findOne  = instance.findOne;
+        result.insert   = instance.insert;
+        result.update   = instance.update;
+        result.replace  = instance.replace;
+        result.orderBy  = instance.orderBy;
+        result.notIn    = instance.notIn;
+
         return result
     }
 
@@ -735,9 +765,11 @@ function Collection(content, option) {
 
 
         // chaining
+        result.find     = instance.find;
         result.findOne  = instance.findOne;
         result.limit    = instance.limit;
         result.notIn    = instance.notIn;
+        result.insert   = instance.insert;
         result.update   = instance.update;
         result.replace  = instance.replace;
         result.delete   = instance.delete;
