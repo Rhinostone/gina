@@ -423,7 +423,8 @@ function Router(env) {
             // view namespace first
             namespace       : params.param.namespace || namespace,
             control: params.param.control,
-            //method          : params.method,
+            controller: controllerFile,
+            //controller: '<span class="gina-bundle-name">' + bundle +'</span>/controllers/controller.js',
             file: actionFile,
             //bundle          : bundle,//module
             bundlePath: conf.bundlesPath + '/' + bundle,
@@ -438,6 +439,7 @@ function Router(env) {
             //isXMLRequest    : params.isXMLRequest,
             //withCredentials : false
         };
+        
         options = merge(options, JSON.parse(JSON.stringify(params)));
         delete options.middleware;
         delete options.param;
