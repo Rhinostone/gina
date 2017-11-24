@@ -58,7 +58,7 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
             
             if (/^--argv-filename=/.test(tmp[a])) {
                 ctxFilename = tmp[a].split(/=/)[1];
-                console.log('found context file `' + ctxFilename +'`' );
+                console.debug('[ FRAMEWORK ] Found context file `' + ctxFilename +'`' );
                 break;
             }
         }
@@ -84,7 +84,7 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
             ctxObj = tmp[2];
 
         } else {
-            throw new Error('No *.ctx file found to import context !')
+            throw new Error('[ FRAMEWORK ] No *.ctx file found to import context !')
         }
     } else {
         isLoadedThroughCLI = true;
@@ -141,7 +141,7 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
             process.argv.splice(2);
             
     } catch (error) {
-        console.error('[ ginaConfigurationError ] ', error.stack | error.message | error)
+        console.error('[ FRAMEWORK ][ configurationError ] ', error.stack | error.message | error)
     }
 }
 
@@ -159,9 +159,9 @@ try {
 }
 
 if ( typeof(getEnvVar) == 'undefined') {
-    console.debug('==> PROCESS LENGTH ' + process.argv.length, projectName, getContext('bundle'));
+    console.debug('[ FRAMEWORK ][PROCESS ARGV] Process ARGV error ' + process.argv);
 }
-//console.debug('GINA_HOMEDIR ' + getEnvVar('GINA_HOMEDIR') );
+//console.debug('[ FRAMEWORK ] GINA_HOMEDIR ' + getEnvVar('GINA_HOMEDIR') );
 var projects    = require( _(GINA_HOMEDIR + '/projects.json') );
 var root        = projects[projectName].path;
 
@@ -225,11 +225,11 @@ var abort = function(err) {
 
     ) {
         if (isPath && !isLoadedThroughCLI) {
-            console.debug('You are trying to load gina by hand: just make sure that your env ['+env+'] matches the given path ['+ path +']\n'+ err);
+            console.debug('[ FRAMEWORK ] You are trying to load gina by hand: just make sure that your env ['+env+'] matches the given path ['+ path +']\n'+ err);
         } else if ( typeof(err.stack) != 'undefined' ) {
-            console.log('Gina could not determine which bundle to load: ' + err +' ['+env+']' + '\n' + err.stack);
+            console.debug('[ FRAMEWORK ] Gina could not determine which bundle to load: ' + err +' ['+env+']' + '\n' + err.stack);
         } else {
-            console.log('Gina could not determine which bundle to load: ' + err +' ['+env+']');
+            console.debug('[ FRAMEWORK ] Gina could not determine which bundle to load: ' + err +' ['+env+']');
         }
         process.exit(1);
     }
@@ -303,7 +303,7 @@ gna.getProjectConfiguration = function (callback){
         }
 
     } else {
-        console.warn('missing project !');
+        console.warn('[ FRAMEWORK ] Missing project !');
         gna.project = project;
         callback(false, project);
     }
@@ -326,8 +326,8 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
     //creating folders.
     //use junction when using Win XP os.release == '5.1.2600'
     var exists = fs.existsSync(source);
-    console.debug('source: ', source);
-    console.debug('checking before mounting ', target, fs.existsSync(target), bundlesPath);
+    console.debug('[ FRAMEWORK ][ MOUNT ] Source: ', source);
+    console.debug('[ FRAMEWORK ][ MOUNT ]checking before mounting ', target, fs.existsSync(target), bundlesPath);
     if ( fs.existsSync(target) ) {
         try {
             fs.unlinkSync(target)
@@ -348,7 +348,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
                     callback(false)
                 } catch (err) {
                     if (err) {
-                        console.emerg(err.stack||err.message);
+                        console.emerg('[ FRAMEWORK ] '+ (err.stack||err.message));
                         process.exit(1)
                     }
                     if ( fs.existsSync(target) ) {
@@ -370,7 +370,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
         });
     } else {
         // Means that it did not find the release. Build and re mount.
-        callback('Found no release to mount for: ', source)
+        callback('[ FRAMEWORK ] Found no release to mount for: ', source)
     }
 };
 
@@ -410,11 +410,10 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                 tmp = JSON.stringify(conf.content[name]);
                                 return JSON.parse(tmp)
                             } catch (err) {
-                                console.error(err.stack);
+                                console.error('[ FRAMEWORK ] ', err.stack);
                                 return undefined
                             }
-                        } else {
-                            //console.error("config!!!! ", conf);
+                        } else {                            
                             tmp = JSON.stringify(conf);
                             return JSON.parse(tmp)
                         }
@@ -424,7 +423,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                         callback(e, instance, middleware)
                     } catch (err) {
                         // TODO Output this to the error logger.
-                        console.error('Could not complete initialization: ', err.stack)
+                        console.error('[ FRAMEWORK ] Could not complete initialization: ', err.stack)
                     }
 
                 })// EO modelUtil
@@ -473,7 +472,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 callback(e, request, response, next, params)
             } catch (err) {
                 // TODO Output this to the error logger.
-                console.error('Could not complete routing: ', err.stack)
+                console.error('[ FRAMEWORK ] Could not complete routing: ', err.stack)
             }
         })
     }
@@ -609,7 +608,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
             var projectName = getContext('project')
         }
 
-        //console.log('appName ', appName);
+        //console.log('[ FRAMEWORK ] appName ', appName);
         core.project        = projectName;
         core.startingApp    = appName;
         core.executionPath  = root;
@@ -679,7 +678,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                 }
 
 
-                                console.info(
+                                console.info('[ FRAMEWORK ] Bundle started !',
                                     '\nbundle: [ ' + conf.bundle +' ]',
                                     '\nenv: [ '+ conf.env +' ]',
                                     '\nport: ' + conf.port[conf.protocol],
@@ -692,7 +691,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                             });
 
 
-                            console.debug('[ '+ process.pid +' ] '+ conf.bundle +'@'+ core.project +' mounted ! ');
+                            console.debug('[ FRAMEWORK ][ '+ process.pid +' ] '+ conf.bundle +'@'+ core.project +' mounted ! ');
                             server.start(instance);
 
 
@@ -714,13 +713,13 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                             // -- EO
                         } else {
 
-                            console.error( 'Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
+                            console.error( '[ FRAMEWORK ] Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
 
                             abort(err)
                         }
 
                     } else {
-                        console.error(err.stack||err.message)
+                        console.error('[ FRAMEWORK ] ', err.stack||err.message)
                     }
                 };
 
@@ -746,8 +745,8 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
      * Stop server
      * */
     gna.stop = process.stop = function(pid, code) {
-        console.log("stoped server");
-        if(typeof(code) != "undefined")
+        console.info('[ FRAMEWORK ] Stopped service');
+        if(typeof(code) != 'undefined')
             process.exit(code);
 
         process.exit()
@@ -757,13 +756,13 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
      * Get Status
      * */
     gna.status = process.status = function(bundle) {
-        console.log("getting server status")
+        console.info('[ FRAMEWORK ] Getting service status')
     }
     /**
      * Restart server
      * */
     gna.restart = process.restart = function() {
-        console.log("starting server")
+        console.info('[ FRAMEWORK ] Starting service')
     }
 
 
@@ -786,16 +785,12 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         path = _(process.argv[1])
     }
 
-    console.debug('track 0 ', path);
     path = path.replace(root + '/', '');
-    console.debug('track 1 ', path);
     var search;
     if ((/index.js/).test(path) || p[p.length - 1] == 'index') {
         var self;
         path = (self = path.split('/')).splice(0, self.length - 1).join('/')
     }
-
-    console.debug('track 2 ', path);
 
     try {
         //finding app.

@@ -183,7 +183,7 @@ function SuperController(options) {
             set('page.view.control', action);
             set('page.view.controller', local.options.controller.replace(options.conf.bundlesPath, ''), true);
             if (typeof (local.options.controlRequired) != 'undefined' ) {
-                set('page.view.controlRequired', local.options.controlRequired.replace(options.conf.bundlesPath, ''));
+                set('page.view.controlRequired', local.options.controlRequired);
             }
             set('page.view.method', local.options.method);
             set('page.view.namespace', namespace); // by default
@@ -1886,6 +1886,7 @@ function SuperController(options) {
     this.throwError = function(res, code, msg) {
 
         // preventing multiple call of self.throwError() when controller is rendering from another required controller
+        debugger;
         if (local.options.renderingStack.length > 1) {
             return false
         }
