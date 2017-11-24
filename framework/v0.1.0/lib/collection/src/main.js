@@ -407,7 +407,22 @@ function Collection(content, option) {
 
 
 
-    this['notIn'] =  function(collection){
+    /** 
+     * notIn
+     * 
+     * = target - source
+     *  -> extract from target all those in source
+     * 
+     * @param {array} collection
+     * @param {string} [key]
+    */
+    this['notIn'] =  function(collection, key){
+
+        var key = (typeof (key) != 'undefined') ? key : '_uuid';
+
+        if ( typeof(key) != 'string' ) {
+            throw new Error('`key` argument must be a string');
+        }
 
         // where `this` is the source & `collection` is the target to be compared with
 
@@ -431,7 +446,7 @@ function Collection(content, option) {
         // removing those not in collection
         for (var i = 0, len = target.length; i < len; ++i) {
             for (var s = 0, sLen = source.length; s < sLen; ++s) {
-                if (target[i]._uuid == source[s]._uuid) {
+                if (target[i][key] == source[s][key]) {
                     target.splice(i, 1);
                     source.splice(s, 1);
                     --i;
