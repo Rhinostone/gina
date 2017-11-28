@@ -1886,7 +1886,6 @@ function SuperController(options) {
     this.throwError = function(res, code, msg) {
 
         // preventing multiple call of self.throwError() when controller is rendering from another required controller
-        debugger;
         if (local.options.renderingStack.length > 1) {
             return false
         }

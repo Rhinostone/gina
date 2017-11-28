@@ -265,7 +265,7 @@ function Merge() {
 
             // if collection, comparison will be done uppon the `id` attribute
             if (
-                typeof(options[0]) == 'object' && typeof(options[0].id) != 'undefined'
+                typeof (options[0]) != 'undefined' && typeof (options[0]) == 'object' && options[0] != null && typeof(options[0].id) != 'undefined'
                 && typeof(target[0]) == 'object' && typeof(target[0].id) != 'undefined'
             ) {
 
