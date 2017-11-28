@@ -1,6 +1,3 @@
-var uuis    = require('uuid'); 
-var lib     = require('../../index');
-var merge   = lib.merge;
 /**
  * Collection cLass
  * Allows you to handle your own collections as you would normaly with mongodb
