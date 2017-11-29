@@ -631,16 +631,7 @@ function Collection(content, option) {
             throw new Error('filter must be an object');
         } else {
 
-            var _content    = Array.isArray(this) ? JSON.parse(JSON.stringify(this)) : JSON.parse(JSON.stringify(content))
-                , result    = JSON.parse(JSON.stringify(_content))
-            ;
-
-            
-            var found = instance.find.apply(this, arguments);
-
-            if (found.length > 0) {
-                result = found.notIn(result)
-            }
+            var result = instance.notIn.apply(this, arguments);
 
             result.limit = instance.limit;
             result.find = instance.find;
