@@ -10,6 +10,11 @@ var data = {
 var hotels = new Collection(data.hotels);
 var result = null, mocks = null;
 
+exports['[ Instance is Array ]'] = function(test) {
+
+    test.equal(Array.isArray(hotels), true);
+    test.done()
+}
 
 exports['[ find limit ] Hotel WHERE country === `France`\n    [ limit ] 2 '] = function(test) {
 
