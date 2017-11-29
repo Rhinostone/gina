@@ -1,3 +1,4 @@
+var lib = require('../../index');
 /**
  * Collection cLass
  * Allows you to handle your own collections as you would normaly with mongodb
@@ -60,8 +61,10 @@ function Collection(content, option) {
     if ( !Array.isArray(content) )
         throw new Error('`new Collection([content] [, option] )`: `content` argument must me an Array !');
 
-    var entryUuid = null;
-    this.indexes = []; // uuids are generated for each entry
+    // Indexing : uuids are generated for each entry
+    for (var entry = 0, entryLen = content.length; entry < entryLen; ++entry) {
+        content[entry]._uuid = uuid.v4();
+    }
     
 
     this['find'] = function() {
@@ -83,7 +86,8 @@ function Collection(content, option) {
             var filter              = null
                 , condition         = null
                 , i                 = 0
-                , tmpContent        = ( Array.isArray(this) && !withOrClause) ? this : JSON.parse(JSON.stringify(content))
+                //, tmpContent        = ( Array.isArray(this) && !withOrClause) ? this : JSON.parse(JSON.stringify(content))
+                , tmpContent        = ( Array.isArray(this) ) ? this : JSON.parse(JSON.stringify(content))
                 , resultObj         = {}
                 , result            = []
                 , localeLowerCase   = ''
@@ -172,8 +176,6 @@ function Collection(content, option) {
                     }
 
                 }
-
-                
 
                 return {
                     matched: matched
@@ -266,13 +268,8 @@ function Collection(content, option) {
                         }
 
                         if (matched == condition) { // all conditions must be fulfilled to match                           
-    
-                            result[i] = tmpContent[o];
-                            // indexing
-                            entryUuid                   = uuid.v4();
-                            instance.indexes[i]         = JSON.parse(JSON.stringify(tmpContent[o]));
-                            instance.indexes[i]._uuid   = entryUuid;
-                            
+
+                            result[i] = tmpContent[o];                            
                             ++i;
                         }
 
@@ -293,7 +290,7 @@ function Collection(content, option) {
         // chaining
         result.insert   = instance.insert;
         result.notIn    = instance.notIn;
-        result.find     = instance.find;
+        result.find     = this.find;
         result.update   = instance.update;
         result.replace  = instance.replace;
         result.or       = instance.or;
@@ -349,6 +346,8 @@ function Collection(content, option) {
      * 
      * @param {object} filter
      * @param {object} [options]
+     * 
+     * @return {object} result
      * 
     */
     this['findOne'] = function(filter, options) {
@@ -459,7 +458,8 @@ function Collection(content, option) {
             throw new Error('[ Collection ][ notIn ] `filters` argument must be defined: Array or Filter Object(s) expected');
         }
 
-        var currentResult = JSON.parse(JSON.stringify((Array.isArray(instance.indexes)) ? instance.indexes : this ));
+        // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
+        var currentResult = JSON.parse(JSON.stringify((Array.isArray(this)) ? this : content));
         
         var foundResults = null;
         if ( Array.isArray(arguments[0]) ) {
@@ -468,26 +468,30 @@ function Collection(content, option) {
             foundResults = instance.find.apply(this, arguments) || [];
         }
         
-        if (foundResults.length > 0 && currentResult.length > 0) {
+        if (foundResults.length > 0) {
             // check key
-            if (key && typeof(currentResult[0][key]) == 'undefined' ) {
+            if (key && typeof (foundResults[0]) == 'undefined' && typeof (foundResults[0][key]) == 'undefined' ) {
                 throw new Error('[ Collection ][ notIn ] `key` not valid');
             } else if (!key) {
                 key = '_uuid'
             }
 
-            // for every single result found
-            for (var f = 0, fLen = instance.indexes.length; f < fLen; ++f) {
+            // for every single result found            
+            for (var f = 0, fLen = foundResults.length; f < fLen; ++f) {
+                
+                if (!currentResult.length)
+                    break;
+                
                 onRemoved:
                 for (var c = 0, cLen = currentResult.length; c < cLen; ++c) {
                     // when matched, we want to remove those not in current result
-                    if (typeof (currentResult[c]) != 'undefined' && currentResult[c].hasOwnProperty(key) && currentResult[c][key] === instance.indexes[f][key]) {
+                    if (typeof (currentResult[c]) != 'undefined' && currentResult[c].hasOwnProperty(key) && currentResult[c][key] === foundResults[f][key]) {
                         currentResult.splice(c,1);
                         break onRemoved;
                     }
                 }
             }
-        }
+        } 
 
         result          = currentResult;
         result.notIn    = instance.notIn;
@@ -506,18 +510,18 @@ function Collection(content, option) {
 
     this['insert'] = function (set) {
 
+        var result = null;
         if ( typeof(set) !== 'object' ) {
             throw new Error('filter must be an object');
         } else {
 
             var tmpContent = Array.isArray(this) ? this :  content;
+
+            // Indexing;
+            set._uuid = uuid.v4();
             tmpContent.push(set);
 
-            var index = tmpContent.length-1;
-            instance.indexes[index] = tmpContent[index];
-            instance.indexes[ index ]._uuid = uuid.v4();
-
-            var result = instance.indexes;
+            result = tmpContent;
         }
 
         // chaining
@@ -529,7 +533,7 @@ function Collection(content, option) {
         result.orderBy  = instance.orderBy;
         result.notIn    = instance.notIn;
         result.delete   = instance.delete;
-        result.toRaw = instance.toRaw;
+        result.toRaw    = instance.toRaw;
 
         return result
     }
@@ -831,16 +835,17 @@ function Collection(content, option) {
     this['toRaw'] = function(result) {
 
         var result = ( Array.isArray(this) ) ? this :  content;
-        if (result && typeof (result.length) != 'undefined' && typeof(result[0]._uuid) != 'undefined' ) {
+        if (result && typeof(result.length) != 'undefined' && typeof(result[0]) != 'undefined'  && typeof(result[0]._uuid) != 'undefined' ) {
             for (var i = 0, len = result.length; i < len; ++i) {
-                delete result[i]._uuid
+                if (result[i]._uuid)
+                    delete result[i]._uuid;
             }
         }
 
         return JSON.parse(JSON.stringify(result))
     }
 
-    return this.find();
+    //return this.find();
 };
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {

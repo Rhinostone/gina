@@ -28,13 +28,31 @@ exports['[ find limit ] Hotel WHERE country === `France`\n    [ limit ] 2 '] = 
     test.done()
 }
 
-exports['[ find notIn ] Hotel WHERE country NOTIN `United Kingdom` OR NOTIN `United States`'] = function(test) {
+exports['[ find notIn filters ] Hotel WHERE country NOTIN `United Kingdom` OR NOTIN `United States`'] = function(test) {
 
     result  = hotels
                 .notIn({ country: 'United Kingdom' }, { country: 'United States' })
                 .toRaw();
 
     mocks   = JSON.parse(fs.readFileSync(__dirname + '/data/result/' + collectionName + '/find/findHotelWhereCountryNotInUkOrNotInUsa.json'));
+
+    test.equal(Array.isArray(result), true);
+    test.equal(result.length, mocks.length);
+    test.deepEqual(result, mocks);
+
+    test.done()
+}
+
+exports['[ find notIn Array ] Hotel WHERE country == `United Kingdom` AND city NOTIN `[ "Orange" ]`'] = function(test) {
+
+    var excludedCity = hotels.find({ country: 'France', city: 'Orange' });
+
+    result = hotels
+                .find({ country: 'France', state: "Provence-Alpes-Côte d'Azur" })
+                .notIn(excludedCity, 'id') // can be written as : .notIn({ country: 'France', city: 'Orange' })
+                .toRaw();
+
+    mocks = JSON.parse(fs.readFileSync(__dirname + '/data/result/' + collectionName + '/find/findHotelWhereCountryIsFranceAndStateIsPacaAndCityNotInOrange.json'));
 
     test.equal(Array.isArray(result), true);
     test.equal(result.length, mocks.length);
