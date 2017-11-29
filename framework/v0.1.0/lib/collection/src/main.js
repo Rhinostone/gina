@@ -43,8 +43,6 @@ function Collection(content, option) {
     var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
     var merge           = (isGFFCtx) ? require('lib/merge') : require('../../../lib/merge');
 
-    var instance        = this;
-
     var defaultOptions = {
         'useLocalStorage': false,
         'locale': 'en' // get settigs.region, or user.region
@@ -65,9 +63,11 @@ function Collection(content, option) {
     for (var entry = 0, entryLen = content.length; entry < entryLen; ++entry) {
         content[entry]._uuid = uuid.v4();
     }
-    
 
-    this['find'] = function() {
+    var instance = content;
+
+    
+    instance['find'] = function() {
 
         var withOrClause = false;
         if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
@@ -303,14 +303,14 @@ function Collection(content, option) {
         return result
     }
 
-    this['or'] = function () {
+    instance['or'] = function () {
         arguments[arguments.length] = true;
         ++arguments.length;
 
         return instance.find.apply(this, arguments);
     }
 
-    this['limit'] = function(resultLimit) {
+    instance['limit'] = function(resultLimit) {
         if ( typeof(resultLimit) == 'undefined' || typeof(resultLimit) != 'number' ) {
             throw new Error('[Collection::result->limit(resultLimit)] : `resultLimit` parametter must by a `number`')
         }
@@ -350,7 +350,7 @@ function Collection(content, option) {
      * @return {object} result
      * 
     */
-    this['findOne'] = function(filter, options) {
+    instance['findOne'] = function(filter, options) {
         
         if ( typeof(filter) !== 'object' ) {
             throw new Error('filter must be an object');
@@ -444,7 +444,7 @@ function Collection(content, option) {
      * @param {object|array} filters|arrayToFilter - works like find filterss
      * @param {string} [key]
     */
-    this['notIn'] =  function(filters){
+    instance['notIn'] =  function(filters){
 
         var key = null; // comparison key
         var result = null;
@@ -508,7 +508,7 @@ function Collection(content, option) {
         return result
     }
 
-    this['insert'] = function (set) {
+    instance['insert'] = function (set) {
 
         var result = null;
         if ( typeof(set) !== 'object' ) {
@@ -538,7 +538,7 @@ function Collection(content, option) {
         return result
     }
 
-    this['update'] = function(filter, set) {
+    instance['update'] = function(filter, set) {
         if ( typeof(filter) !== 'object' ) {
             throw new Error('filter must be an object');
         } else {
@@ -582,7 +582,7 @@ function Collection(content, option) {
         return result
     }
 
-    this['replace'] = function(filter, set) {
+    instance['replace'] = function(filter, set) {
         if ( typeof(filter) !== 'object' ) {
             throw new Error('filter must be an object');
         } else {
@@ -625,7 +625,7 @@ function Collection(content, option) {
         return result
     }
 
-    this['delete'] = function(filter) {
+    instance['delete'] = function(filter) {
 
         if ( typeof(filter) !== 'object' ) {
             throw new Error('filter must be an object');
@@ -654,7 +654,7 @@ function Collection(content, option) {
      *
      * @param {object|array} filter
      * */
-    this['orderBy'] = function (filter) {
+    instance['orderBy'] = function (filter) {
 
         if ( typeof(filter) == 'undefined' )
             throw new Error('[ Collection->sort(filter) ] where `filter` must not be empty or null' );
@@ -819,24 +819,23 @@ function Collection(content, option) {
 
     /**
      * toRaw
-     * Trasnform result into a storable format
+     * Trasnform result into a clean format (without _uuid)
      *
      * @param {object|array} result
      * */
-    this['toRaw'] = function(result) {
+    instance['toRaw'] = function(result) {
 
         var result = ( Array.isArray(this) ) ? this :  content;
-        if (result && typeof(result.length) != 'undefined' && typeof(result[0]) != 'undefined'  && typeof(result[0]._uuid) != 'undefined' ) {
-            for (var i = 0, len = result.length; i < len; ++i) {
-                if (result[i]._uuid)
-                    delete result[i]._uuid;
-            }
+        // cleanup
+        for (var i = 0, len = result.length; i < len; ++i) {
+            if (result[i]._uuid)
+                delete result[i]._uuid;
         }
 
         return JSON.parse(JSON.stringify(result))
     }
 
-    //return this.find();
+    return instance;
 };
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
