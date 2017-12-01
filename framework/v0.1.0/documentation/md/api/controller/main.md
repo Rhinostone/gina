@@ -18,7 +18,7 @@ adding the target to an existing route description
             "/index.html",
             "default.js"
         ],
-        "param": { "action": "home" }
+        "param": { "control": "home" }
     }
 }
 ```
@@ -44,13 +44,13 @@ Creating a new route description
 {
     "default": {
         "url": "/",
-        "param": { "action": "home" }
+        "param": { "control": "home" }
     },
     "default-redirect": {
     	"comment": "will redirect to the route named [ default ] using 302 code"
         "url": [ "", "/index.html", "default.js" ],
         "param": {
-            "action": "redirect",
+            "control": "redirect",
             "route" : "default",
             "code" : 302
         }

@@ -422,6 +422,7 @@ function SuperController(options) {
                      *      <a href="{{ 'users-edit' | getUrl({ id: user.id }) }}">Edit user</a>
                      *      <a href="{{ 'users-list' | getUrl(null, 'http://domain.com') }}">Display all users</a>
                      *      <a href="{{ '/dashboard' | getUrl(null, 'admin') }}">Go to admin bundle's dashboard page</a>
+                     *      <a href="{{ 'home@admin' | getUrl() }}">Go to admin bundle's dashboard page</a>
                      *
                      *      // can also be used with standalone mode: will add webroot if current bundle is not master
                      *      <script src="{{ '/js/vendor/modernizr-2.8.3.min.js' | getUrl() }}"></script>
@@ -440,7 +441,7 @@ function SuperController(options) {
                         , isMaster          = null
                         , routing           = null
                         , isWithoutLayout   = null
-                        , rule              = ''
+                        , rule              = null
                         , url               = NaN
                         , urlStr            = null
                     ;
@@ -450,6 +451,12 @@ function SuperController(options) {
                         // if no route, returns current route
                         if ( typeof(route) == 'undefined') {
                             var route = local.options.rule
+                        }
+
+                        if (/\@/.test(route) && typeof(base) == 'undefined') {
+                            var r = route.split(/\@/);
+                            route = r[0];
+                            base = config.bundle = r[1];
                         }
 
                         // setting default config
@@ -502,6 +509,7 @@ function SuperController(options) {
 
                         // rules are now unique per bundle : rule@bundle
                         rule = route + '@' + config.bundle;
+                        
 
                         if ( typeof(routing[rule]) != 'undefined' ) { //found
                             url = routing[rule].url;

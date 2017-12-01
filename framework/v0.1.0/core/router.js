@@ -610,13 +610,17 @@ function Router(env) {
                         controller[reservedActions[e]](request, response, next)
                     }
                 }
-
+                
                 controller[action](request, response, next)
             }
 
         } catch (err) {
+            if ( typeof(controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
+                throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);
+            } else {
+                throwError(response, 500, err.stack);
+            }
             
-            throwError(response, 500, err);
             // var superController = new SuperController(options);
             // superController.setOptions(request, response, next, options);
             // if ( typeof(controller) != 'undefined' && typeof(controller[action]) == 'undefined') {
