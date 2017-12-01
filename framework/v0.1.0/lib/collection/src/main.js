@@ -1,4 +1,7 @@
-var lib = require('../../index');
+if ( typeof(module) !== 'undefined' && module.exports ) {
+    var lib = require('../../index');
+}
+
 /**
  * Collection cLass
  * Allows you to handle your own collections as you would normaly with mongodb

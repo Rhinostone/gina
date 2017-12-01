@@ -254,6 +254,15 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     $currentForms = $forms;
                     $htmlForms.html('');
                     $htmlForms.html( parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length, isXHR) );
+                    // Form binding
+                    $htmlForms.find('div.gina-toolbar-section > h2').off('click').on('click', function(event) {
+                        event.preventDefault();
+
+                        $(this)
+                            .parent()
+                            .find('ul').first()
+                            .slideToggle();
+                    });
 
                     //$htmlForms.html( parseView(jsonObject.forms, ginaJsonObject.forms, null, $htmlForms) );
                 } else if ( /^(data-xhr)$/.test(section) ) {
@@ -949,7 +958,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             var $form = $(
                         '<div id="gina-toolbar-form-'+ id +'" class="gina-toolbar-section">' +
                             '<h2 class="gina-toolbar-section-title">'+ id +'</h2>' +
-                            '<ul class="gina-toolbar-section-content gina-toolbar-code">' +
+                            '<ul class="gina-toolbar-section-content gina-toolbar-code" style="display: none;">' +
                                 '<li class="'+ attrClass +'">' +
                                     '<h3 class="gina-toolbar-sub-section-title">'+ attrClass.replace(/gina-toolbar-form-/, '') +'</h3>' +
                                     '<ul class="gina-toolbar-code"></ul>' +
@@ -1093,6 +1102,13 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                             '<ul class="gina-toolbar-properties">'+ parseSection( obj, id, elIsXHR, section ) +'</ul>' +
                         '</li>');
             }
+
+            // Form binding
+            var $sectionContent = $form.find('ul.gina-toolbar-section-content');
+            if ( !$sectionContent.is(':visible') ) {
+                $sectionContent.slideToggle()
+            }
+            
         }
 
         var createInputFile = function(id, label) {
