@@ -17,7 +17,7 @@ var b = {
     "status": "ko",
     "msg": "hello Jane !",
     "page": {
-        "action": "home",
+        "control": "home",
         "ext": ".html",
         "content": "home.html"
     }

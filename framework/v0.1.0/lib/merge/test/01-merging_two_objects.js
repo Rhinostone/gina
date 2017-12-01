@@ -16,7 +16,7 @@ var setVariable = function () {
         "status": "ko",
         "msg": "hello Jane !",
         "page": {
-            "action": "home",
+            "control": "home",
             "ext": ".html",
             "content": "home.html",
             "javascripts": [
@@ -51,7 +51,7 @@ exports['Merge : A<-B with override'] = function(test) {
                 "/entreprise/handlers/client/edit.js",
                 "/js/lib/jquery.min.js"
             ],
-            "action": "home",
+            "control": "home",
             "ext": ".html"
         }
     };
@@ -72,7 +72,7 @@ exports['Merge : B<-A with override'] = function(test) {
                 "mango"
             ],
             "javascripts": [ "/entreprise/handlers/client/main.js" ],
-            "action": "home",
+            "control": "home",
             "ext": ".html"
         }
     };
@@ -97,7 +97,7 @@ exports['Merge : A<-B without override'] = function(test) {
                 "/entreprise/handlers/client/edit.js",
                 "/js/lib/jquery.min.js"
             ],
-            "action": "home",
+            "control": "home",
             "ext": ".html"
         }
     };
@@ -122,7 +122,7 @@ exports['Merge : B<-A without override'] = function(test) {
                 "/js/lib/jquery.min.js",
                 "/entreprise/handlers/client/main.js"
             ],
-            "action": "home",
+            "control": "home",
             "ext": ".html"
         }
     };
