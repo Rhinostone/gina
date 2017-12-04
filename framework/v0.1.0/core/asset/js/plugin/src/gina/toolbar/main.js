@@ -275,6 +275,15 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     $currentForms = $('#' + jsonObject[section]).find('form:not('+ formsIgnored +')');
                     $htmlForms.html('');
                     $htmlForms.html( parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length, isXHR ) );
+                    // Form binding
+                    $htmlForms.find('div.gina-toolbar-section > h2').off('click').on('click', function(event) {
+                        event.preventDefault();
+
+                        $(this)
+                            .parent()
+                            .find('ul').first()
+                            .slideToggle();
+                    });
                 } else if ( /^(forms)$/.test(section) ) {
                     isXHR = true;
                     self.isValidator = true;
