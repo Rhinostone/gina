@@ -1288,7 +1288,7 @@ function ValidatorPlugin(rules, data, formId) {
             if ($select[s].options && !$form.defaultFields[ elId ]) {
                 selectedIndex = 0;
                 selectedValue = $select[s].getAttribute('data-value');
-
+                
                 if ( $select[s].options[ $select[s].selectedIndex ].index ) {
                     selectedIndex = $select[s].options[ $select[s].selectedIndex ].index
                 } else if ( typeof(selectedValue) != 'undefined' ) {
