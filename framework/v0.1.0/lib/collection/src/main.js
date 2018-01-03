@@ -657,11 +657,21 @@ function Collection(content, option) {
      *
      * @param {object|array} filter
      * */
-    instance['orderBy'] = function (filter) {
-
-        if ( typeof(filter) == 'undefined' )
+    instance['orderBy'] = function () {
+        
+        if ( typeof(arguments) == 'undefined' || arguments.length < 1)
             throw new Error('[ Collection->sort(filter) ] where `filter` must not be empty or null' );
-
+            
+        var filter = null;
+        if ( arguments.length == 1 ) {
+            filter = arguments[0];
+        } else {
+            // converting arguments into array
+            filter = new Array(arguments.length);
+            for (var f = 0, fLen = filter.length; f < fLen; ++f) {
+                filter[f] = arguments[f]
+            }
+        }
 
         var variableContent = (Array.isArray(this)) ? this : JSON.parse(JSON.stringify(content));
         return sortResult(filter, variableContent)
@@ -678,7 +688,11 @@ function Collection(content, option) {
      *
      *  // overriding filters -> last filter is always right
      *  .orderBy([ { updatedAt : 'desc'}, { name: 'asc' } ])
-     *
+     * 
+     *  // sorting boolean 
+     *  .orderBy({ isActive: 'desc'}) => will display all active(TRUE) first
+     *  NB.: Boolean are 0 (FALSE) or 1 (TRUE)
+     * 
      *  // combining filters -> the first one is always right
      *  .orderBy({ updatedAt : 'desc'}, { name: 'asc' })
      *
@@ -701,22 +715,10 @@ function Collection(content, option) {
 
         // asc
         sortOp['asc'] = function (prop, content) {
+
             return content.sort(function onAscSort(a, b) {
                 
                 if ( typeof(a) == 'string' && a != '') {
-                    // var fieldA = a.toUpperCase(); // ignore upper and lowercase
-                    // var fieldB = b.toUpperCase(); // ignore upper and lowercase
-                    //
-                    // if (fieldA < fieldB) {
-                    //     return -1;
-                    // }
-                    //
-                    // if (fieldA > fieldB) {
-                    //     return 1;
-                    // }
-                    //
-                    // // fields must be equal
-                    // return 0;
 
                     return a.localeCompare(b)
 
@@ -775,33 +777,77 @@ function Collection(content, option) {
             return sortOp['asc'](prop, content).reverse()
         }
 
-        if ( Array.isArray(filter) ) {
-
-            for (var f = 0, len = filter.length; f < len; ++f) {
-
-                prop    = Object.keys(filter[f])[0];
-                key     = filter[prop];
-
-                result  = sortOp[key](prop, content);
+        multiSortOp = function(content, filter) {
+            
+            var props = [], keys = [];
+            
+            for (var f = 0, fLen = filter.length; f < fLen; ++f) {
+                props[f] = Object.keys(filter[f])[0];
+                keys[f] = filter[f][ props[f]] ;     
             }
-        } else {
 
-            if (filter.count() > 1) {
-                
-                for (var f in filter) {
-                    prop    = f;
-                    key     = filter[prop];
+            sortRecursive = function(a, b, columns, order_by, index) {
 
-                    result  = sortOp[key](prop, content);
+                var direction = order_by[index] == 'desc' ? 1 : 0;
 
+                var res = null, x = null, y = null;
+
+                if ( typeof(a[columns[index]]) == 'string' && a[columns[index]] != '' ) {
+
+                    res = a[columns[index]].localeCompare(b[columns[index]]);
+
+                    return direction == 0 ? res : 1;
+
+                } else if ( typeof(a[columns[index]]) == 'boolean' || typeof (b[columns[index]]) == 'boolean' ) {
+
+                    if ( typeof(a[columns[index]]) == 'boolean' ) {
+                        x = (a[columns[index]]) ? 1 : 0;
+                    }
+
+                    if ( typeof(b[columns[index]]) == 'boolean' ) {
+                        y = (b[columns[index]]) ? 1 : 0;
+                    }
+
+                    if (x > y) {
+                        return direction == 0 ? 1 : -1;
+                    }
+
+                    if (x < y) {
+                        return direction == 0 ? -1: 1;
+                    }
+
+                    // a must be equal to b
+                    return columns.length - 1 > index ? sortRecursive(a, b, columns, order_by, index + 1) : 0;
+
+                } else {
+
+                    if (a[columns[index]] > b[columns[index]]) {
+                        return direction == 0 ? 1 : -1;
+                    }
+
+                    if (a[columns[index]] < b[columns[index]]) {
+                        return direction == 0 ? -1 : 1;
+                    }
+                    // a must be equal to b
+                    return columns.length - 1 > index ? sortRecursive(a, b, columns, order_by, index + 1) : 0;
                 }
-
-            } else {
-                prop    = Object.keys(filter)[0];
-                key     = filter[prop];
-
-                result  = sortOp[key](prop, content);
             }
+
+            return content.sort(function onMultiSort(a, b) {
+                return sortRecursive(a, b, props, keys, 0);
+            })
+        }
+
+        if ( Array.isArray(filter) ) {
+            
+            result = multiSortOp(content, filter);
+            
+        } else {
+                        
+            prop    = Object.keys(filter)[0];
+            key     = filter[prop];
+
+            result  = sortOp[key](prop, content);
         }
 
 
