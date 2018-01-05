@@ -57,6 +57,15 @@ function Collection(content, option) {
         ;
     ;
 
+    var tryEval = function(condition) {
+
+        try {
+            return eval(condition)
+        } catch(err) {
+            throw new Error('Could not evaluate condition `'+ condition +'`.\n' + err.stack )
+        }
+    }
+
    
 
     if ( !Array.isArray(content) )
@@ -116,23 +125,23 @@ function Collection(content, option) {
                         ++matched;
                     }
 
-                } else if (typeof (_content) != 'undefined' && typeof (_content) !== 'object' && /(<|>|=)/.test(filter) && !/undefined|function/.test(typeof (_content))) { // with operations
+                } else if ( typeof(_content) != 'undefined' && typeof (_content) !== 'object' && /(<|>|=)/.test(filter) && !/undefined|function/.test(typeof (_content))) { // with operations
                     // looking for a datetime ?
                     if (
                         /(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/.test(_content)
                         && /(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/.test(filter)
                     ) {
 
-                        if (eval(_content.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') + filter.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")'))) {
+                        if (tryEval(_content.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') + filter.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")'))) {
 
                             ++matched;
                         }
 
-                    } else if (eval(_content + filter)) {
+                    } else if (tryEval(_content + filter)) {
                         ++matched;
                     }
 
-                } else if (typeof (_content) != 'undefined' && typeof (_content) !== 'object' && _content === filter) {
+                } else if ( typeof (_content) != 'undefined' && typeof (_content) !== 'object' && _content === filter ) {
 
                     ++matched;
                 }
@@ -162,12 +171,12 @@ function Collection(content, option) {
                             && /(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/.test(filter)
                         ) {
 
-                            if (eval(value.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') + filter.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")'))) {
+                            if (tryEval(value.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') + filter.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")'))) {
 
                                 ++matched;
                             }
 
-                        } else if (eval(value + filter)) {
+                        } else if (tryEval(value + filter)) {
 
                             ++matched;
                         }
