@@ -805,7 +805,16 @@ function Collection(content, option) {
 
                     res = a[columns[index]].localeCompare(b[columns[index]]);
 
-                    return direction == 0 ? res : 1;
+                    if ( direction == 0 && res != 0 ) {
+                        return res < 0 ? -1 : 1
+                    } else if (res != 0) {
+                        return res < 0 ? 1 : -1
+                    }
+
+                    //return direction == 0 ? res : 1;
+
+                    // a must be equal to b
+                    return columns.length - 1 > index ? sortRecursive(a, b, columns, order_by, index + 1) : 0;
 
                 } else if ( typeof(a[columns[index]]) == 'boolean' || typeof (b[columns[index]]) == 'boolean' ) {
 

@@ -253,7 +253,7 @@ function Merge() {
             }
         }
 
-        if (newTarget.length == 0 && target.length > 0) {
+        if (newTarget.length == 0 && target.length > 0) {            
             // ok, but don't merge objects
             for (var a = 0; a < target.length; ++a ) {
                 if ( typeof(target[a]) != 'object' && newTarget.indexOf(target[a]) == -1)
@@ -262,28 +262,35 @@ function Merge() {
         }
 
         if ( target.length > 0 ) {
-
+            
             // if collection, comparison will be done uppon the `id` attribute
             if (
-                typeof (options[0]) != 'undefined' && typeof (options[0]) == 'object' && options[0] != null && typeof(options[0].id) != 'undefined'
-                && typeof(target[0]) == 'object' && typeof(target[0].id) != 'undefined'
+                typeof (options[0]) != 'undefined' 
+                && typeof (options[0]) == 'object' 
+                && options[0] != null 
+                && typeof(options[0].id) != 'undefined'
+                && typeof(target[0]) == 'object' 
+                && typeof(target[0].id) != 'undefined'
             ) {
 
                 newTarget       = JSON.parse(JSON.stringify(target))
                 var _options    = JSON.parse(JSON.stringify(options));
                 var next        = null;
 
+                
+
                 for (var a = 0, aLen = newTarget.length; a < aLen; ++a) {
                     end:
                         for (var n = next || 0, nLen = _options.length; n < nLen; ++n) {
-
+                            
                             if (
                                 _options[n] != null && typeof(_options[n].id) != 'undefined' && _options[n].id !== newTarget[a].id
 
                             ) {
                                 newTarget.push(_options[n]);
-
-                                next = n+1;
+                                next = n+1; 
+                                ++aLen;
+                                          
                                 break end;
                             } else if( _options[n] != null && typeof(_options[n].id) != 'undefined' && _options[n].id === newTarget[a].id ) {
 

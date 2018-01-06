@@ -1,3 +1,4 @@
+var reporter = require('nodeunit').reporters.default;
 var merge = require('../src/main');// Not needed if the framework installed
 
 var a = null;
@@ -31,6 +32,11 @@ var setVariable = function () {
         {
             id: 3,
             value: 'mango'
+        },
+        {
+            id: 5,
+            value: 'lemon',
+            createdAt: '2018-01-01T00:00:00'
         }
     ];
 };
@@ -97,7 +103,7 @@ exports['Merge : B<-C with override'] = function(test) {
         }
     ];
 
-    test.equal( Array.isArray(BtoAwithOverride), true );
+    test.equal(Array.isArray(BtoCwithOverride), true );
     test.deepEqual(BtoCwithOverride, res);
 
     test.done()
@@ -120,7 +126,7 @@ exports['Merge : A<-B without override'] = function(test) {
         }
     ];
 
-    test.equal( Array.isArray(BtoAwithOverride), true );
+    test.equal(Array.isArray(AtoBwithoutOverride), true );
     test.deepEqual(AtoBwithoutOverride, res);
 
     test.done()
@@ -142,7 +148,7 @@ exports['Merge : B<-A without override'] = function(test) {
         }
     ];
 
-    test.equal( Array.isArray(BtoAwithOverride), true );
+    test.equal(Array.isArray(BtoAwithoutOverride), true );
     test.deepEqual(BtoAwithoutOverride, res);
 
     test.done()
@@ -161,14 +167,19 @@ exports['Merge : B<-C without override'] = function(test) {
         {
             id: 3,
             value: 'mango'
-        },
+        },        
         {
             id: 4,
             value: 'yellow'
+        },
+        {
+            id: 5,
+            value: 'lemon',
+            createdAt: '2018-01-01T00:00:00'
         }
     ];
 
-    test.equal( Array.isArray(BtoAwithOverride), true );
+    test.equal(Array.isArray(BtoCwithoutOverride), true );
     test.deepEqual(BtoCwithoutOverride, res);
 
     test.done()
@@ -184,3 +195,7 @@ exports['Compare : B<-A with override & A<-B without override'] = function(test)
 
     test.done()
 }
+
+// for debug purpose
+if (reporter)
+    reporter.run(['test/05-merging_two_collections.js']);
