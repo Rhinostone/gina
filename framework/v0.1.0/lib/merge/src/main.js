@@ -206,6 +206,7 @@ function Merge() {
     // Merging arrays is OK, but merging collections is still experimental
     var mergeArray = function(options, target, override) {
         newTarget = [];
+        var newTargetIds = [];
 
         if (override) {
 
@@ -256,8 +257,9 @@ function Merge() {
         if (newTarget.length == 0 && target.length > 0) {            
             // ok, but don't merge objects
             for (var a = 0; a < target.length; ++a ) {
-                if ( typeof(target[a]) != 'object' && newTarget.indexOf(target[a]) == -1)
+                if ( typeof(target[a]) != 'object' && newTarget.indexOf(target[a]) == -1) {
                     newTarget.push(target[a]);
+                }
             }
         }
 
@@ -273,13 +275,16 @@ function Merge() {
                 && typeof(target[0].id) != 'undefined'
             ) {
 
-                newTarget       = JSON.parse(JSON.stringify(target))
+                newTarget       = JSON.parse(JSON.stringify(target));
                 var _options    = JSON.parse(JSON.stringify(options));
                 var next        = null;
-
                 
 
                 for (var a = 0, aLen = newTarget.length; a < aLen; ++a) {
+                    newTargetIds.push(newTarget[a].id);
+                }
+                for (var a = 0, aLen = newTarget.length; a < aLen; ++a) {
+                    
                     end:
                         for (var n = next || 0, nLen = _options.length; n < nLen; ++n) {
                             
@@ -287,11 +292,18 @@ function Merge() {
                                 _options[n] != null && typeof(_options[n].id) != 'undefined' && _options[n].id !== newTarget[a].id
 
                             ) {
-                                newTarget.push(_options[n]);
-                                next = n+1; 
-                                ++aLen;
-                                          
-                                break end;
+                            
+                                if ( newTargetIds.indexOf(_options[n].id) == -1 ) {
+                                    newTarget.push(_options[n]);
+                                    newTargetIds.push(_options[n].id);
+                                    next = n + 1; 
+
+                                    if (aLen < nLen)
+                                        ++aLen;
+
+                                    break end; 
+                                }
+                                                               
                             } else if( _options[n] != null && typeof(_options[n].id) != 'undefined' && _options[n].id === newTarget[a].id ) {
 
                                 next = n+1;
