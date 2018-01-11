@@ -223,17 +223,17 @@ function Merge() {
                 for (var a = 0, aLen = target.length; a < aLen; ++a) {
 
                     for (var n = next || 0, nLen = _options.length; n < nLen; ++n) {
+
                         if ( typeof(_options[n].id) != 'undefined' && _options[n].id === target[a].id ) {
+
                             newTarget[a] = _options[n];
 
-                            next = n+1;
-                            break
                         } else {
                             newTarget.push(_options[n]);
-
-                            next = n+1;
-                            break
                         }
+
+                        next = n+1;
+                        break
                     }
                 }
 
@@ -296,7 +296,8 @@ function Merge() {
                                 if ( newTargetIds.indexOf(_options[n].id) == -1 ) {
                                     newTarget.push(_options[n]);
                                     newTargetIds.push(_options[n].id);
-                                    next = n + 1; 
+
+                                    next = n+1; 
 
                                     if (aLen < nLen)
                                         ++aLen;
@@ -312,7 +313,6 @@ function Merge() {
                             } else {
                                 break end;
                             }
-
                         }
 
 
