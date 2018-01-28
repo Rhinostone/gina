@@ -29,7 +29,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
         var instance        = {
             plugin      : this.plugin,
-            id          : 'gina-popins-' + uuid.v1(),
+            id          : 'gina-popins-' + uuid.v4(),
             on          : on,
             eventData   : {},
 
@@ -104,6 +104,17 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             instance.on         = on;
         }
 
+        var proxyClick = function($childNode, $el, evt) {
+
+            addListener(gina, $childNode, 'click', function(e) {
+                cancelEvent(e);
+
+                //var _evt = event.target.id;
+                //triggerEvent(gina, $el, evt, event.detail);
+                triggerEvent(gina, $el, evt);
+            });
+        }
+
         var bindOpen = function() {
             var attr    = 'data-gina-popin-name';
             var $els    = getElementsByAttribute(attr);
@@ -140,12 +151,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 }
 
                 if (name == $popin.name) {
-                    evt = 'popin.click.'+ 'gina-popin-' + instance.id +'-'+ uuid.v1() +'-'+ name;
+                    evt = 'popin.click.'+ 'gina-popin-' + instance.id +'-'+ uuid.v4() +'-'+ name;
                     $el['id'] = evt;
                     $el.setAttribute( 'id', evt);
 
+                    
                     if (!gina.events[evt]) {
-                    //proceed = function () {
+                    
                         // attach submit events
                         addListener(gina, $el, evt, function(e) {
                             cancelEvent(e);
@@ -167,7 +179,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                         for (var i = 0, len = $forms.length; i < len; ++i) {
 
                                             if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
-                                                _id = $forms[i].getAttribute('id') || 'form.' + uuid.v1();
+                                                _id = $forms[i].getAttribute('id') || 'form.' + uuid.v4();
                                                 $forms[i].setAttribute('id', _id);// just in case
                                                 $forms[i]['id'] = _id
                                             } else {
@@ -192,6 +204,19 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             // loading & binding popin
                             popinLoad($popin.name, e.target.url);
                         });
+
+
+
+                        // bind child elements
+                        var childNodes = $el.childNodes;
+
+                        if (childNodes.length > 0) {
+                            for (var n = 0, nLen = childNodes.length; n < nLen; ++n) {
+                                if (typeof (childNodes[n].tagName) != 'undefined') {
+                                    proxyClick(childNodes[n], $el, evt)
+                                }
+                            }
+                        }
                     }
 
 
@@ -212,7 +237,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             addListener(gina, document, evt, function(event) {
 
                 if ( typeof(event.target.id) == 'undefined' ) {
-                    event.target.setAttribute('id', evt +'.'+ uuid.v1() );
+                    event.target.setAttribute('id', evt +'.'+ uuid.v4() );
                     event.target.id = event.target.getAttribute('id')
                 }
 
@@ -452,7 +477,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                     for (var i = 0, len = $forms.length; i < len; ++i) {
 
                                         if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
-                                            _id = $forms[i].getAttribute('id') || 'form.' + uuid.v1();
+                                            _id = $forms[i].getAttribute('id') || 'form.' + uuid.v4();
                                             $forms[i].setAttribute('id', _id);// just in case
                                             $forms[i]['id'] = _id
                                         } else {
@@ -604,7 +629,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                 if (!$close[b]['id']) {
 
-                    evt = 'popin.close.'+ uuid.v1();
+                    evt = 'popin.close.'+ uuid.v4();
                     $close[b]['id'] = evt;
                     $close[b].setAttribute( 'id', evt);
 
