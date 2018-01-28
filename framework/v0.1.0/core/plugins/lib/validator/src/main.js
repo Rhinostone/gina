@@ -1618,7 +1618,13 @@ function ValidatorPlugin(rules, data, formId) {
                         // TODO - add switch cases against tagName (checkbox/radio)
                         if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
 
-                            if ( $target[i].checked ) {
+                            if ( 
+                                $target[i].checked 
+                                || !$target[i].checked
+                                && typeof (rules[name]) != 'undefined'
+                                && typeof (rules[name].isBoolean) != 'undefined' && /^true$/.test(rules[name].isBoolean)
+                                && typeof (rules[name].isRequired) != 'undefined' && /^true$/.test(rules[name].isRequired)
+                            ) {
                                 // if is boolean
                                 if ( /^(true|false)$/.test($target[i].value) ) {
                                     fields[name] = $target[i].value = ( /^true$/.test($target[i].value) ) ? true : false
@@ -1631,6 +1637,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 && typeof(rules[name].isBoolean) != 'undefined'
                                 && typeof(rules[name].isRequired) != 'undefined'
                                 && !/^(true|false)$/.test($target[i].value)
+
                             ) {
                                 fields[name] = false;
                             }
@@ -1890,8 +1897,10 @@ function ValidatorPlugin(rules, data, formId) {
             for (var field in fields) {
                 
                 // $fields[field].tagName getAttribute('type')
-                if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
-                    continue;
+                //if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
+                if ($fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test($fields[field].getAttribute('type')) && !$fields[field].checked ) {
+                    //if ( typeof(rules[field]) == 'undefined' && !$fields[field].checked || typeof(rules[field]) != 'undefined' && typeof(rules[field]['isRequired']) != 'undefined' && /(false)/.test(rules[field]['isRequired']) )
+                        continue;
                 }
 
                 hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;

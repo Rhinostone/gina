@@ -33,10 +33,12 @@ uuid                = require('uuid');
 function Connector(dbString) {
     var self    = this
         , local = {
-        options: {
-            keepAlive: true,
-            pingInterval : "1m"
-        }
+            bundle: null,
+            env: null,
+            options: {
+                keepAlive: true,
+                pingInterval : "1m"
+            }
     };
 
     /**
@@ -62,7 +64,7 @@ function Connector(dbString) {
             self
                 .connect(dbString)
                 .on('error', function(err){
-                    console.emerg('['+ dbString.database +'] Handshake aborted !\n',  err.message);
+                    console.emerg('[ '+ dbString.database +' ] Handshake aborted !\n',  err.message);
                 })
                 .once('connect', function () {
                     // default driver does not trigger any conn event, so we have to intercept it thu gina
@@ -154,8 +156,12 @@ function Connector(dbString) {
                         , conf      = ctx['gina'].config.envConf[bundle][env]
                         , name      = dbString.database
                     //Reload models.
-                        , modelsPath = _(conf.modelsPath);
+                        , modelsPath = _(conf.modelsPath)
+                    ;
 
+                    local.bundle    = bundle;
+                    local.env       = env;
+                    
                     modelUtil.setConnection(bundle, name, self.instance);
 
                     if ( fs.existsSync(modelsPath) ) {
@@ -167,11 +173,11 @@ function Connector(dbString) {
                                 cb(err)
                             })
                     } else {
-                        cb( new Error(modelsPath+ ' not found') )
+                        cb(new Error('[ ' + local.bundle +' ] '+ modelsPath+ ' not found') )
                     }
 
                 } else {
-                    console.debug('couchbase is alive !!');
+                    console.debug('[ ' + local.bundle +' ] couchbase is alive !!');
                     self.emit('ready', false, self.instance)
                 }
             })
@@ -231,13 +237,13 @@ function Connector(dbString) {
 
             self.pingId = setInterval(function onTimeout(){
                 self.instance.get('heartbeat', function(err, res){
-                    console.debug('connection is being kept alive ...')
+                    console.debug('[ ' + local.bundle +' ] connection is being kept alive ...')
                 })
             }, interval);
             cb()
         } else {
             self.instance.get('heartbeat', function(err, result){
-                console.debug('sent ping to couchbase ...');
+                console.debug('[ ' + local.bundle +' ] sent ping to couchbase ...');
                 cb()
             })
         }
