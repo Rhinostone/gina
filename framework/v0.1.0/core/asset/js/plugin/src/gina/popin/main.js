@@ -109,8 +109,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             addListener(gina, $childNode, 'click', function(e) {
                 cancelEvent(e);
 
-                //var _evt = event.target.id;
-                //triggerEvent(gina, $el, evt, event.detail);
                 triggerEvent(gina, $el, evt);
             });
         }
