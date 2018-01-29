@@ -1401,9 +1401,9 @@ function ValidatorPlugin(rules, data, formId) {
                         // if (isBoolean) {
                         //     radioGroup[r].value = false;
                         // }
-                        if ( /^(true|false)$/.test($el.value) ) {
-                            radioGroup[r].value = (/^true$/.test(radioGroup[r].value)) ? true : false
-                        }
+                        // if ( /^(true|false)$/.test($el.value) ) {
+                        //     radioGroup[r].value = (/^true$/.test(radioGroup[r].value)) ? true : false
+                        // }
                         
                     }
                 }
@@ -1627,7 +1627,15 @@ function ValidatorPlugin(rules, data, formId) {
                             ) {
                                 // if is boolean
                                 if ( /^(true|false)$/.test($target[i].value) ) {
-                                    fields[name] = $target[i].value = ( /^true$/.test($target[i].value) ) ? true : false
+
+                                    if ($target[i].type == 'radio') {
+                                        if (/^true$/.test(rules[name].isBoolean) && $target[i].checked ) {
+                                            fields[name] = (/^true$/.test($target[i].value)) ? true : false;
+                                        }
+                                    } else {
+                                        fields[name] = $target[i].value = (/^true$/.test($target[i].value)) ? true : false;
+                                    }
+
                                 } else {
                                     fields[name] = $target[i].value
                                 }
