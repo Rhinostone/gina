@@ -1813,8 +1813,8 @@ function ValidatorPlugin(rules, data, formId) {
                     }  else if ( // force validator to pass `false` if boolean is required explicitly
                     rules
                     && typeof(rules[name]) != 'undefined'
-                    && typeof(rules[name].isBoolean) != 'undefined'
-                    && typeof(rules[name].isRequired) != 'undefined'
+                    && typeof (rules[name].isBoolean) != 'undefined' && $target[i].type == 'checkbox'
+                    //&& typeof(rules[name].isRequired) != 'undefined'
                     && !/^(true|false)$/.test($target[i].value)
                     ) {
                         fields[name] = false;
