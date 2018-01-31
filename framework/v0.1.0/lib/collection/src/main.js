@@ -44,7 +44,7 @@ function Collection(content, option) {
 
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
     var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
-    var merge           = (isGFFCtx) ? require('lib/merge') : require('../../../lib/merge');
+    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../lib/merge');
 
     var defaultOptions = {
         'useLocalStorage': false,
@@ -727,7 +727,7 @@ function Collection(content, option) {
 
             return content.sort(function onAscSort(a, b) {
                 
-                if ( typeof(a) == 'string' && a != '') {
+                if (typeof (a) == 'string' && a != '' ) {
 
                     return a.localeCompare(b)
 
@@ -750,6 +750,10 @@ function Collection(content, option) {
                     // a must be equal to b
                     return 0;
 
+                } else if (typeof (a) == 'number') { 
+
+                    return ''+a.localeCompare(''+b, { numeric: true })
+                
                 } else if ( typeof(a) == 'object' ) {
                     try {
                         
@@ -757,12 +761,12 @@ function Collection(content, option) {
                         //if ( /\[object Date\]/.test(Object.prototype.toString.call(a[prop])) ) {
                             
                         if (typeof (a[prop]) == 'number') {
-
-                            a[prop] = '' + a[prop];
-                            b[prop] = '' + b[prop];
+                            return ''+a[prop].localeCompare(''+b[prop], { numeric: true })
+                        } else {
+                            return a[prop].localeCompare(b[prop])
                         }
 
-                        return a[prop].localeCompare(b[prop], { numeric: true })
+                        
                         
                     } catch (err) {
                         return -1
@@ -810,8 +814,19 @@ function Collection(content, option) {
                     } else if (res != 0) {
                         return res < 0 ? 1 : -1
                     }
+                    
+                    // a must be equal to b
+                    return columns.length - 1 > index ? sortRecursive(a, b, columns, order_by, index + 1) : 0;
 
-                    //return direction == 0 ? res : 1;
+                } else if (typeof (a[columns[index]]) == 'number' || typeof(b[columns[index]]) == 'number' ) {
+
+                    res = '' + a[columns[index]].localeCompare('' + b[columns[index]], { numeric: true });
+
+                    if (direction == 0 && res != 0) {
+                        return res < 0 ? -1 : 1
+                    } else if (res != 0) {
+                        return res < 0 ? 1 : -1
+                    }
 
                     // a must be equal to b
                     return columns.length - 1 > index ? sortRecursive(a, b, columns, order_by, index + 1) : 0;
