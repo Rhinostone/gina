@@ -132,9 +132,7 @@ function removeListener(target, element, name, callback) {
         target.customEvent.removeListener(name, callback)
     }
 
-    //console.log('tying to removing ', name, element);// avoid event proxies
-    //if (! /^(click|submit)$/.test(name))
-    if ( /**! /^(click|submit)$/.test(name) &&*/ typeof(gina.events[name]) != 'undefined' ) {
+    if ( typeof(gina.events[name]) != 'undefined' ) {
         //console.log('------> [removed] ' + name);
         delete gina.events[name]
     }
@@ -146,7 +144,7 @@ function on(event, cb) {
 
     var events = gina.registeredEvents[this.plugin];
 
-    if ( events.indexOf(event) < 0 && !/^init$/.test(event) ) {
+    if ( events.indexOf(event) < 0 && !/^init$/.test(event) && !/\.hform$/.test(event) ) {
         cb(new Error('Event `'+ event +'` not handled by ginaEventHandler'))
     } else {
         var $target = null, id = null;
@@ -167,13 +165,18 @@ function on(event, cb) {
         if ( this.eventData && !$target.eventData)
             $target.eventData = this.eventData
 
-        event += '.' + id;
-
+        if ( /\.hform$/.test(event) ) {
+            event = event.replace(/\.hform$/, '.' + id + '.hform');
+        } else { // normal case
+            event += '.' + id;
+        }
+        
 
         if (!gina.events[event]) {
 
             addListener(gina, $target, event, function(e) {
 
+                //if ( typeof(e.defaultPrevented) != 'undefined' && e.defaultPrevented)
                 cancelEvent(e);
 
                 var data = null;

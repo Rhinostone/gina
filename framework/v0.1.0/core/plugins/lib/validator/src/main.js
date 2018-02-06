@@ -533,9 +533,14 @@ function ValidatorPlugin(rules, data, formId) {
         var options = (typeof (options) != 'undefined') ? merge(options, xhrOptions) : xhrOptions;
         var result  = null;
         var XHRData = null;
+        var hFormIsRequired = null;
         
-        // forward callback to HTML attribute
-        listenToXhrEvents($form);
+        // forward callback to HTML data event attribute through `hform` status
+        hFormIsRequired = ( $target.getAttribute('data-gina-form-event-on-submit-success') || $target.getAttribute('data-gina-form-event-on-submit-error') ) ? true : false;
+        // success -> data-gina-form-event-on-submit-success
+        // error -> data-gina-form-event-on-submit-error
+        if (hFormIsRequired)
+            listenToXhrEvents($form);
 
         var url         = $target.getAttribute('action') || options.url;
         var method      = $target.getAttribute('method') || options.method;
@@ -616,7 +621,9 @@ function ValidatorPlugin(rules, data, formId) {
                                 }
                             }
 
-                            triggerEvent(gina, $target, 'success.' + id, result)
+                            triggerEvent(gina, $target, 'success.' + id, result);
+                            if (hFormIsRequired)
+                                triggerEvent(gina, $target, 'success.' + id + '.hform', result);
 
                         } catch (err) {
 
@@ -644,7 +651,9 @@ function ValidatorPlugin(rules, data, formId) {
                                 }
                             }
 
-                            triggerEvent(gina, $target, 'error.' + id, result)
+                            triggerEvent(gina, $target, 'error.' + id, result);
+                            if (hFormIsRequired)
+                                triggerEvent(gina, $target, 'error.' + id + '.hform', result);
                         }
 
                     } else if ( xhr.status != 0) {
@@ -692,7 +701,9 @@ function ValidatorPlugin(rules, data, formId) {
                             }
                         }
 
-                        triggerEvent(gina, $target, 'error.' + id, result)
+                        triggerEvent(gina, $target, 'error.' + id, result);
+                        if (hFormIsRequired)
+                            triggerEvent(gina, $target, 'error.' + id + '.hform', result);
                     }
                 }
             };
@@ -724,7 +735,9 @@ function ValidatorPlugin(rules, data, formId) {
 
                 $form.eventData.ontimeout = result;
 
-                triggerEvent(gina, $target, 'error.' + id, result)
+                triggerEvent(gina, $target, 'error.' + id, result);
+                if (hFormIsRequired)
+                    triggerEvent(gina, $target, 'error.' + id + '.hform', result);
             };
 
 
@@ -737,7 +750,9 @@ function ValidatorPlugin(rules, data, formId) {
                     try {
                         data = JSON.stringify(data)
                     } catch (err) {
-                        triggerEvent(gina, $target, 'error.' + id, err)
+                        triggerEvent(gina, $target, 'error.' + id, err);
+                        if (hFormIsRequired)
+                            triggerEvent(gina, $target, 'error.' + id + '.hform', err);
                     }
                 }
                 //console.log('sending -> ', data);
@@ -769,9 +784,6 @@ function ValidatorPlugin(rules, data, formId) {
 
     var listenToXhrEvents = function($form) {
 
-        //$form['plugin'] = $validator.plugin;
-        //$form['on']     = $validator.on;
-
 
         //data-gina-form-event-on-submit-success
         var htmlSuccesEventCallback =  $form.target.getAttribute('data-gina-form-event-on-submit-success') || null;
@@ -780,7 +792,7 @@ function ValidatorPlugin(rules, data, formId) {
             if ( /\((.*)\)/.test(htmlSuccesEventCallback) ) {
                 eval(htmlSuccesEventCallback)
             } else {
-                $form.on('success',  window[htmlSuccesEventCallback])
+                $form.on('success.hform',  window[htmlSuccesEventCallback])
             }
         }
 
@@ -790,7 +802,7 @@ function ValidatorPlugin(rules, data, formId) {
             if ( /\((.*)\)/.test(htmlErrorEventCallback) ) {
                 eval(htmlErrorEventCallback)
             } else {
-                $form.on('error', window[htmlErrorEventCallback])
+                $form.on('error.hform', window[htmlErrorEventCallback])
             }
         }
     }
@@ -834,9 +846,18 @@ function ValidatorPlugin(rules, data, formId) {
 
             // form events
             removeListener(gina, $form, 'success.' + _id);
+            removeListener(gina, $form, 'error.' + _id);
+
+            if ($form.target.getAttribute('data-gina-form-event-on-submit-success'))
+                removeListener(gina, $form, 'success.' + _id + '.hform');
+                
+            if ($form.target.getAttribute('data-gina-form-event-on-submit-error'))
+                removeListener(gina, $form, 'error.' + _id + '.hform');
+
             removeListener(gina, $form, 'validate.' + _id);
             removeListener(gina, $form, 'submit.' + _id);
-            removeListener(gina, $form, 'error.' + _id);
+            
+            
 
             // binded elements
             var $el         = null
@@ -874,6 +895,7 @@ function ValidatorPlugin(rules, data, formId) {
             for (var i = 0, len = $els.length; i < len; ++i) {
 
                 $el = $els[i];
+
                 if ($el.type == 'submit') {
 
                     evt = $el.getAttribute('id');
@@ -1426,8 +1448,9 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ( /(label)/i.test(event.target.tagName) )
                     return false;
-
-                if ( typeof(event.target.id) == 'undefined' || !event.target.getAttribute('id') ) {
+                
+                
+                if ( typeof (event.target.id) == 'undefined' || !event.target.getAttribute('id') ) {
                     event.target.setAttribute('id', 'click.' + uuid.v4() );
                     event.target.id = event.target.getAttribute('id')
                 } else {
