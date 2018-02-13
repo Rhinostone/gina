@@ -147,16 +147,46 @@ function Logger(opt) {
 
         var content = '', payload = null;
         //To handle logs with coma separated arguments.
-        for (var i=0; i<args.length; ++i) {
+        for (var i = 0, iLen = args.length; i < iLen; ++i) {
+
             if (args[i] instanceof Function) {
                 content += args[i].toString() + ""
             } else if (args[i] instanceof Object) {
                 // careful, [ parse ] will be out of the main execution context: passing it for recursive use
                 content += parse(parse, args[i], "")
-            } else {
-                content += args[i] + ' '
+            } else {   
+
+                if ( /(?:\\[rnt]|[\r\n\t])/.test(args[i]) ) { // special replacement for mixed string
+                    args[i] = args[i]
+                        .replace(/(?:\\[rn]|[\r\n])/g, String.fromCharCode(10)) // \r should be 13, but will be 10 because of the terminal                            
+                        .replace(/(?:\\[t]|[\t])/g, String.fromCharCode(09))
+                    ;
+                    /** 
+                     *  Oct   Dec   Hex   Char
+                    *  ─────────────────────────────────────────────
+                    *  000   0     00    NUL '\0'
+                    *  001   1     01    SOH (start of heading)
+                    *  002   2     02    STX (start of text)
+                    *  003   3     03    ETX (end of text)
+                    *  004   4     04    EOT (end of transmission)
+                    *  005   5     05    ENQ (enquiry)
+                    *  006   6     06    ACK (acknowledge)
+                    *  007   7     07    BEL '\a' (bell)
+                    *  010   8     08    BS  '\b' (backspace)
+                    *  011   9     09    HT  '\t' (horizontal tab)
+                    *  012   10    0A    LF  '\n' (new line)
+                    *  013   11    0B    VT  '\v' (vertical tab)
+                    *  014   12    0C    FF  '\f' (form feed)
+                    *  015   13    0D    CR  '\r' (carriage ret)
+                    */
+
+                    content += args[i] + ' '
+                } else {
+                    content += args[i] + ' '
+                }                
             }
         }
+
 
         if (content != '') {
             var now = new Date();
@@ -185,9 +215,11 @@ function Logger(opt) {
     }
 
     var parse = function(parse, obj, str) {
+
         var l = 0, len = obj.count(), isArray = (obj instanceof Array) ? true : false;
         str += (isArray) ? '[ ' : '{';
 
+        //log('object count '+ obj.count());
         for (var attr in obj) {
             ++l;
             if (obj[attr] instanceof Function) {
@@ -211,6 +243,7 @@ function Logger(opt) {
                 }
                 str += (l<len) ? ', ' : ''
             }
+            
         }
 
         str += (isArray) ? ' ]' : '}';

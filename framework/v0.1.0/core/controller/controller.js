@@ -161,20 +161,25 @@ function SuperController(options) {
                 local.options.views.default.ext = ext
             }
 
+            var ctx = getContext('gina');
             // new declaration && overrides
             var version = {
-                "number"        : getContext('gina').version,
+                "number"        : ctx.version,
                 "platform"      : process.platform,
                 "arch"          : process.arch,
                 "nodejs"        : process.versions.node,
-                "middleware"    : getContext('gina').middleware
+                "middleware"    : ctx.middleware
             };
 
             set('page.environment.gina', version.number);
             set('page.environment.nodejs', version.nodejs +' '+ version.platform +' '+ version.arch);
             set('page.environment.middleware', version.middleware);
-            set('page.environment.env', options.conf.env);
+            set('page.environment.env', GINA_ENV);
             set('page.environment.envIsDev', GINA_ENV_IS_DEV);
+            
+            //console.debug('hostname is ', ctx.config.envConf[options.conf.bundle][GINA_ENV].hostname);
+            set('page.environment.routing', escape(JSON.stringify(options.conf.content.routing))); // export for GFF
+            set('page.environment.hostname', ctx.config.envConf[options.conf.bundle][GINA_ENV].hostname);
             set('page.environment.webroot', options.conf.server.webroot);
             set('page.environment.bundle', options.conf.bundle);
             set('page.environment.project', options.conf.project);
@@ -590,6 +595,7 @@ function SuperController(options) {
                             var toolbarInfos        = getToolbarInfos(layout, data)
                                 , userScripts       = toolbarInfos.scripts
                                 , usersStylesheets  = toolbarInfos.stylesheets
+
                             ;
 
 
@@ -874,11 +880,6 @@ function SuperController(options) {
      *
      * @return {void}
      * */
-    // var set = function(variable, value) {
-    //     if ( typeof(local._data[variable]) == 'undefined' )
-    //         local._data[variable] = value
-    // }
-
     var set = function(name, value, override) {
 
         var override = ( typeof(override) != 'undefined' ) ? override : false;

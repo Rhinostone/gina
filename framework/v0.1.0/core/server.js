@@ -9,6 +9,7 @@ var Config          = require('./config');
 var Router          = require('./router');
 var util            = require('util');
 var lib             = require('./../lib');
+var routingUtils    = lib.routing;         
 var inherits        = lib.inherits;
 var merge           = lib.merge;
 var Proc            = lib.Proc;
@@ -956,43 +957,44 @@ function Server(options) {
 
 
         out:
-            for (var rule in routing) {
-                if (typeof(routing[rule]['param']) == 'undefined')
+            for (var name in routing) {
+                if (typeof(routing[name]['param']) == 'undefined')
                     break;
 
-                if (routing[rule].bundle != bundle) continue;
+                if (routing[name].bundle != bundle) continue;
 
                 //Preparing params to relay to the router.
                 params = {
-                    method              : routing[rule].method || req.method,
-                    requirements        : routing[rule].requirements,
-                    namespace           : routing[rule].namespace || undefined,
+                    method              : routing[name].method || req.method,
+                    requirements        : routing[name].requirements,
+                    namespace           : routing[name].namespace || undefined,
                     url                 : unescape(pathname), /// avoid %20
-                    rule                : routing[rule].originalRule || rule,
-                    param               : routing[rule].param,
-                    middleware          : routing[rule].middleware,
-                    bundle              : routing[rule].bundle,
+                    rule                : routing[name].originalRule || name,
+                    param               : routing[name].param,
+                    middleware          : routing[name].middleware,
+                    bundle              : routing[name].bundle,
                     isXMLRequest        : isXMLRequest
                 };
+
                 //Parsing for the right url.
                 try {
-                    isRoute = router.compareUrls(req, params, routing[rule].url);
+                    isRoute = routingUtils.compareUrls(params, routing[name].url, req);
                 } catch (err) {
-                    throwError(res, 500, 'Rule [ '+rule+' ] needs your attention.\n'+err.stack);
+                    throwError(res, 500, 'Rule [ '+name+' ] needs your attention.\n'+err.stack);
                     break;
                 }
 
-                if (pathname === routing[rule].url || isRoute.past) {
+                if (pathname === routing[name].url || isRoute.past) {
 
                     //console.debug('Server is about to route to '+ pathname);
 
-                    if (!routing[rule].method && req.method) { // setting client request method if no method is defined in routing
-                        routing[rule].method  = req.method
-                    } else if (!routing[rule].method) { // by default
-                        routing[rule].method = 'GET'
+                    if (!routing[name].method && req.method) { // setting client request method if no method is defined in routing
+                        routing[name].method  = req.method
+                    } else if (!routing[name].method) { // by default
+                        routing[name].method = 'GET'
                     }
 
-                    var allowed = (typeof(routing[rule].method) == 'undefined' || routing[rule].method.length > 0 || routing[rule].method.indexOf(req.method) != -1)
+                    var allowed = (typeof(routing[name].method) == 'undefined' || routing[name].method.length > 0 || routing[name].method.indexOf(req.method) != -1)
                     if (!allowed) {
                         throwError(res, 405, 'Method Not Allowed for [' + params.bundle + '] => ' + req.originalUrl);
                         break;
@@ -1000,8 +1002,8 @@ function Server(options) {
 
 
                         // comparing routing method VS request.url method
-                        if ( routing[rule].method.toLowerCase() != req.method.toLowerCase() ) {
-                            throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.originalUrl+'` is expecting `' + routing[rule].method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
+                        if ( routing[name].method.toLowerCase() != req.method.toLowerCase() ) {
+                            throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.originalUrl+'` is expecting `' + routing[name].method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
                             break
                         }
 
@@ -1055,7 +1057,8 @@ function Server(options) {
                     }
                     matched = true;
                     isRoute = {};
-                    break out;
+                    //break out;
+                    break
 
                 }
             }

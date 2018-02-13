@@ -6,8 +6,8 @@
  *
  *      <script type="text/javascript" src="/js/vendor/gina/gina.min.js"></script>
  *
- *  You can add options through the `data-options`
- *      <script type="text/javascript" src="/js/vendor/gina/gina.min.js" data-options="{ env: 'dev', envIsDev: true, webroot: '/' }"></script>
+ *  You can add or edit config options through the `data-gina-config`
+ *      <script type="text/javascript" src="/js/vendor/gina/gina.min.js" data-gina-config="{ env: 'dev', envIsDev: true, webroot: '/' }"></script>
  *
  *  Through RequireJS
  *
@@ -162,7 +162,8 @@ require([
     "utils/dom",
     "utils/events",
     "utils/form-validator",
-    "utils/collection"
+    "utils/collection",
+    "utils/routing"
 ]);
 
 
@@ -174,7 +175,7 @@ for (var t = 0, len = tags.length; t < len; ++t) {
     if ( /gina.min.js|gina.js/.test( tags[t].getAttribute('src') ) ) {
 
         tags[t]['onload'] = function onGinaLoaded(e) {
-            // TODO - get the version number from the response ?? console.log('tag ', tags[t].getAttribute('data-options'));
+            // TODO - get the version number from the response ?? console.log('tag ', tags[t].getAttribute('data-gina-config'));
             // var req = new XMLHttpRequest();
             // req.open('GET', document.location, false);
             // req.send(null);
@@ -191,7 +192,7 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                             return true
                         }
 
-                        var options = gina.options = {
+                        var options = gina['config'] = {
                             /**@js_externs env*/
                             //env     : '{{ page.environment.env }}',
                             /**@js_externs envIsDev*/
@@ -202,6 +203,7 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                             webroot : '/'
                         };
 
+                       
                         // globals
                         window['GINA_ENV']          = '{{ GINA_ENV }}';
                         window['GINA_ENV_IS_DEV']   = '{{ GINA_ENV_IS_DEV }}';

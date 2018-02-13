@@ -89,12 +89,12 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
 
         /**
          * setOptions
-         * Override default options or add new options properties
+         * Override default config options or add new options properties
          *
          * @param {object} options
          * */
         var setOptions = function(options) {
-            proto.options = merge(proto.options, options, true)
+            proto.config = merge(proto.config, options, true)
         }
 
         var proto           = { // instance proto
@@ -114,7 +114,7 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
             'isFrameworkLoaded' : false,
             'hasValidator'      : false,
             'hasPopinHandler'   : false,
-            'options'           : {},
+            'config'           : {},
             'registeredEvents'  : {},
             'events'            : {},
 

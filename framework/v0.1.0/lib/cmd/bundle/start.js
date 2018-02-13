@@ -7,7 +7,7 @@ var console     = lib.logger;
  * Start a given bundle or start all bundles at once
  *
  * e.g.
- *  gina bundle:start [ @<bundle_name> ]
+ *  gina bundle:start <bundle_name> @<project_name>
  *  gina bundle:start --all
  *
  * */

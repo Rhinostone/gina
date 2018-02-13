@@ -468,22 +468,22 @@ function ValidatorPlugin(rules, data, formId) {
             $form = instance.$forms[_id]
         }
 
-        if ($form.defaultFields) {
+        if ($form.fieldsSet) {
 
             var elId        = null
                 , $element  = null
                 , type      = null;
 
-            for (var f in $form.defaultFields) {
+            for (var f in $form.fieldsSet) {
 
                 $element    = document.getElementById(f)
                 type        = $element.tagName.toLowerCase();
 
                 if (type == 'input') {
-                    $element.value = $form.defaultFields[f];
+                    $element.value = $form.fieldsSet[f].value;
                 } else if ( type == 'select' ) {
-                    $element.options[ $form.defaultFields[f] ].selected = true;
-                    $element.setAttribute('data-value',  $element.options[ $form.defaultFields[f] ].value);
+                    $element.options[ $form.fieldsSet[f].value ].selected = true;
+                    $element.setAttribute('data-value',  $element.options[ $form.fieldsSet[f].value ].value);
                 }
             }
         }
@@ -677,7 +677,7 @@ function ValidatorPlugin(rules, data, formId) {
                         $form.eventData.error = result;
 
                         // forward appplication errors to forms.errors when available
-                        if (typeof (result) != 'undefined' && typeof (result.error) != 'undefined' &&  result.error.fields && typeof (result.error.fields) == 'object' /**&& $form.fields*/) {
+                        if (typeof (result) != 'undefined' && typeof (result.error) != 'undefined' &&  result.error.fields && typeof (result.error.fields) == 'object') {
                             var formsErrors = {}, errCount = 0;
                             for (var f in result.error.fields) {
                                 ++errCount;
@@ -1274,9 +1274,9 @@ function ValidatorPlugin(rules, data, formId) {
             $form.rules = rule
         }
 
-        // form fields
-        if (!$form.defaultFields)
-            $form.defaultFields = {};
+        // form fields collection
+        if (!$form.fieldsSet)
+            $form.fieldsSet = {};
 
         // binding form elements
         var type        = null
@@ -1295,19 +1295,27 @@ function ValidatorPlugin(rules, data, formId) {
                 $inputs[i].setAttribute('id', elId)
             }
 
-            if (!$form.defaultFields[ elId ])
-                $form.defaultFields[ elId ] = $inputs[i].value;
+            if (!$form.fieldsSet[ elId ]) {
+                $form.fieldsSet[elId] = {
+                    id: elId,
+                    name: $inputs[i].name || null,
+                    value: $inputs[i].value || null
+                }
+            }
         }
 
         var selectedIndex = null, selectedValue = null;
         for (var s = 0, sLen = $select.length; s < sLen; ++s) {
             elId = $select[s].getAttribute('id');
+
+            if (elId && /^gina\-toolbar/.test(elId)) continue;
+
             if (!elId) {
                 elId = 'select.' + uuid.v4();
                 $select[s].setAttribute('id', elId)
             }
 
-            if ($select[s].options && !$form.defaultFields[ elId ]) {
+            if ($select[s].options && !$form.fieldsSet[ elId ]) {
                 selectedIndex = 0;
                 selectedValue = $select[s].getAttribute('data-value');
                 
@@ -1322,7 +1330,12 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                 }
 
-                $form.defaultFields[ elId ] = selectedIndex;
+                $form.fieldsSet[ elId ] = {
+                    id: elId,
+                    name: $select[s].name || null,
+                    value: selectedIndex || null
+                };
+
                 // update select
                 $select[s].options[ selectedIndex ].selected = true;
                 $select[s].setAttribute('data-value',  $select[s].options[ selectedIndex ].value);
@@ -2172,5 +2185,5 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     module.exports  = ValidatorPlugin
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('gina/validator', function(){ return ValidatorPlugin })
+    define('gina/validator', ['utils/events', 'utils/dom', 'utils/form-validator'], function(){ return ValidatorPlugin })
 }
