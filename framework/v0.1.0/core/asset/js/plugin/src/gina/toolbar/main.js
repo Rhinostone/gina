@@ -1,9 +1,11 @@
-define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/collection', 'gina/storage' ], function (require) {
+define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'utils/collection', 'utils/routing', 'gina/storage', 'gina/validator' ], function (require) {
 
     var $           = require('jquery');
     var merge       = require('utils/merge');
+    var routing     = require('utils/routing');
     var Collection  = require('utils/collection');
     var Storage     = require('gina/storage');
+    var Validator   = require('gina/validator');
 
     /**
      * Toolbar plugin
@@ -24,7 +26,9 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
         };
 
         var bucket      = new Storage({bucket: 'gina'}) // <Bucket>
-            , plugins   = bucket.Collection('plugin'); // <Collection>
+            , plugins   = bucket.Collection('plugin') // <Collection>
+            , validator = new Validator() // <Validator>
+        ;
 
         var $toolbar             = null
             , settings           = null
@@ -212,6 +216,9 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
                 // Create DOM from JSON
                 // -> Configuration::environment
+                // filtering before
+                delete jsonObject.environment.routing;
+                delete ginaJsonObject.environment.routing;
                 $htmlConfigurationEnvironment.html(parseObject(jsonObject.environment, ginaJsonObject.environment));
 
 
@@ -233,7 +240,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     ginaObject.data = ginaJsonObject['data-xhr'];
                 }
 
-                if ( !section || /^(data)$/.test(section) || /^(view-xhr)$/.test(section) ) {
+                if ( !section || /^(data)$/.test(section) ) {
                     
 
                     // -> Data
@@ -251,7 +258,7 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     $htmlView.html( parseView(userObject.view, ginaObject.view, null, isXHR, $htmlView) );
 
                     // -> Forms
-                    $currentForms = $forms;
+                    $currentForms = $forms;                    
                     $htmlForms.html('');
                     $htmlForms.html( parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length, isXHR) );
                     // Form binding
@@ -271,8 +278,8 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                     $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject[section], ginaJsonObject[section], null, isXHR) +'</ul>');
                 } else if ( /^(el-xhr)$/.test(section) ) {
                     // -> XHR Forms
-                    isXHR = true;
-                    $currentForms = $('#' + jsonObject[section]).find('form:not('+ formsIgnored +')');
+                    isXHR = true;                    
+                    $currentForms = $('#' + data).find('form:not(' + formsIgnored + ')');
                     $htmlForms.html('');
                     $htmlForms.html( parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length, isXHR ) );
                     // Form binding
@@ -959,10 +966,15 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
             if (!len) return false;
 
             var attributes  = $forms[i].attributes;
+            var formMethod  = null;
             var attrClass   = 'gina-toolbar-form-attributes';
-            var id          = $forms[i].getAttribute('id');
+            var id          = $forms[i].getAttribute('id');            
             var section     = attrClass; // by default
             var isXHR       = ( typeof(elIsXHR) != 'undefined' && elIsXHR != null ) ? '-xhr' : '';
+            // form fields set
+            // var fields      = validator
+            //                     .getFormById(id)
+            //                     .fieldsSet;
 
             var $form = $(
                         '<div id="gina-toolbar-form-'+ id +'" class="gina-toolbar-section">' +
@@ -979,9 +991,13 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                 , val       = null
                 , content   = null
                 , hasEvents = false
+                , routeObj  = null
             ;
 
-            // adding for attributes
+            // testing for action attr to add action route            
+           
+
+            // adding form attributes
             for ( var a = 0, aLen = attributes.length; a < aLen; ++a ) {
 
                 key     = attributes[a].name;
@@ -994,7 +1010,52 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
                 if ( /^class$/.test(key) && /\s+/.test(val) )
                     val = '<ul><li>'+ val.replace(/\s+/g, '</li><li>') +'</li></ul>';
 
-                content = val;
+                if ( /^action$/.test(key) ) {
+                    
+                    formMethod  = ( typeof(attributes['method']) != 'undefined' ) ? attributes['method'].nodeValue : undefined;                   
+                    routeObj    = routing.getRouteByUrl(val, formMethod);
+
+                    if ( typeof(routeObj) == 'undefined' ) {
+                        routeObj = {
+                            name: 'not found',
+                            namespace: 'not found',
+                            param: {
+                                control: 'not found',
+                                file: 'not found'
+                            }
+                        }
+                    } 
+                    
+                    val =   '<ul>' +
+                                '<li>' +
+                                    '<span class="gina-toolbar-key">url</span>' +
+                                    '<span class="gina-toolbar-value">' + (val || '#') + '</span>' +
+                                '</li>' +
+                                '<li>' +
+                                    '<span class="gina-toolbar-key">route</span>' +
+                                    '<span class="gina-toolbar-value">' + routeObj.name +'</span>' +
+                                '</li>' +
+                                '<li>' +
+                                    '<span class="gina-toolbar-key">namespace</span>' +
+                                    '<span class="gina-toolbar-value">' + (routeObj.namespace || 'root controller') + '</span>' +
+                                '</li>' +
+                                '<li>' +
+                                    '<span class="gina-toolbar-key">control</span>' +
+                                    '<span class="gina-toolbar-value">' + routeObj.param.control + '</span>' +
+                                '</li>' +
+                                '<li>' +
+                                    '<span class="gina-toolbar-key">file</span>' +
+                                    '<span class="gina-toolbar-value">' + routeObj.param.file + '</span>' +
+                                '</li>' +
+                            '<ul>';
+
+                    content =   '<li>' +
+                                    '<span class="gina-toolbar-key">' + key + ':</span>' +
+                                    '<span class="gina-toolbar-value">' + val + '</span>' +
+                                '</li>';
+                }
+
+                //content = val;
 
 
                 // events
@@ -1031,13 +1092,18 @@ define('gina/toolbar', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'util
 
 
                 } else { // normal case
+
+                    if (!/^action$/.test(key)) {
+                        content = '<li>' +
+                                    '<span class="gina-toolbar-key">' + key + ':</span>' +
+                                    '<span class="gina-toolbar-value">' + val + '</span>' +
+                                '</li>';
+                    }
+
                     $form
                         .find('ul.gina-toolbar-section-content')
                         .find('li.'+ attrClass +' > ul')
-                        .append('<li>' +
-                            '       <span class="gina-toolbar-key">'+ key +':</span>' +
-                            '       <span class="gina-toolbar-value">'+ content +'</span>' +
-                            '</li>')
+                        .append(content)
                 }
 
 

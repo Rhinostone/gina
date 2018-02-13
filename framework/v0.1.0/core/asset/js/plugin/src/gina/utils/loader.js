@@ -25,15 +25,48 @@ window['onGinaLoaded']  = function(gina) {
             return true
         }
 
-        var options = gina.options = {
+        var options = gina['config'] = {
+            /**@js_externs bundle*/
+            'bundle': '{{ page.environment.bundle }}',
             /**@js_externs env*/
             'env'     : '{{ page.environment.env }}',
             /**@js_externs envIsDev*/
             'envIsDev' : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
+            /**@js_externs hostname*/
+            'hostname': '{{ page.environment.hostname }}',
+            /**@js_externs routing*/
+            'routing': JSON.parse(unescape('{{ page.environment.routing }}')),
             /**@js_externs version*/
             version : '{{ page.environment.version }}',
             /**@js_externs webroot*/
             'webroot' : '{{ page.environment.webroot }}'
+        };
+
+        
+        /** 
+         * getRouting
+         * 
+         * @param {string} [bundle]
+         * 
+         * @return {object} routing
+        */        
+        gina['config']['getRouting'] = function(bundle) {
+
+            if ( typeof(bundle) == 'undefined' ) {
+                return gina['config']['routing']
+            }
+
+            var routes      = {};
+            var routing     = gina['config']['routing'];
+            var re = new RegExp("\\@" + bundle + String.fromCharCode(36)); // Closure compiler requirements: $ -> String.fromCharCode(36)
+            
+            for (var route in routing) {
+                
+                if ( re.test(route) )
+                   routes[route] = routing[route]
+            }
+            
+            return (routes.count() > 0) ? routes : null
         };
 
         // globals
