@@ -1288,18 +1288,18 @@ function ValidatorPlugin(rules, data, formId) {
         ;
 
         var elId = null;
-        for (var i = 0, len = $inputs.length; i < len; ++i) {
-            elId = $inputs[i].getAttribute('id');
+        for (var f = 0, len = $inputs.length; f < len; ++f) {
+            elId = $inputs[f].getAttribute('id');
             if (!elId) {
                 elId = 'input.' + uuid.v4();
-                $inputs[i].setAttribute('id', elId)
+                $inputs[f].setAttribute('id', elId)
             }
 
             if (!$form.fieldsSet[ elId ]) {
                 $form.fieldsSet[elId] = {
                     id: elId,
-                    name: $inputs[i].name || null,
-                    value: $inputs[i].value || null
+                    name: $inputs[f].name || null,
+                    value: $inputs[f].value || null
                 }
             }
         }
@@ -1499,7 +1499,7 @@ function ValidatorPlugin(rules, data, formId) {
 
         procced()
 
-        for (var i=0, len = $inputs.length; i<len; ++i) {
+        for (var i = 0, iLen = $inputs.length; i < iLen; ++i) {
             type    = $inputs[i].getAttribute('type');
 
             if ( typeof($inputs[i].id) == 'undefined' || $inputs[i].id == '' ) {

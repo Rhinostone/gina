@@ -625,7 +625,7 @@ function SuperController(options) {
 
                                 + '\n<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
 
-                                + '{{ page.view.scripts }}'
+                                + '{{ page.view.scripts }}'                                
                             ;
 
                             if (local.options.isWithoutLayout && GINA_ENV_IS_DEV) {

@@ -5,7 +5,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
     var routing     = require('utils/routing');
     var Collection  = require('utils/collection');
     var Storage     = require('gina/storage');
-    var Validator   = require('gina/validator');
+    //var Validator   = require('gina/validator');
 
     /**
      * Toolbar plugin
@@ -27,7 +27,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
 
         var bucket      = new Storage({bucket: 'gina'}) // <Bucket>
             , plugins   = bucket.Collection('plugin') // <Collection>
-            , validator = new Validator() // <Validator>
+            //, validator = new Validator() // <Validator>
         ;
 
         var $toolbar             = null
@@ -276,6 +276,23 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                     // -> XHR Data
                     isXHR = true;
                     $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject[section], ginaJsonObject[section], null, isXHR) +'</ul>');
+
+                    // setTimeout(function onXhrReset(){
+                    //     console.log('refreshing forms ');
+                    //     $currentForms = $forms.find('form:not(' + formsIgnored + ')');
+                    //     $htmlForms.html('');
+                    //     $htmlForms.html(parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length, isXHR));
+                    //     // Form binding
+                    //     $htmlForms.find('div.gina-toolbar-section > h2').off('click').on('click', function(event) {
+                    //         //event.preventDefault();
+
+                    //         $(this)
+                    //             .parent()
+                    //             .find('ul').first()
+                    //             .slideToggle();
+                    //     });
+
+                    // }, 800)
                 } else if ( /^(el-xhr)$/.test(section) ) {
                     // -> XHR Forms
                     isXHR = true;                    
@@ -343,7 +360,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                         }
                     })
                 }
-            }
+            }            
         }
 
 
@@ -481,37 +498,40 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
             });
 
             // Show/hide toolbar using gg shorcut
-            $('body').off('keypress').on('keypress', function(event) {
-                // console.log('event', event);
-                if(event.keyCode) {
-                    // IE
-                    keynum = event.keyCode;
-                } else if(event.which) {
-                    // Netscape/Firefox/Opera
-                    keynum = event.which;
-                } else {
-                    // Chrome/Safari
-                    keynum = event.charCode;
-                }
-                var now = new Date();
-                if (
-                    typeof lastPressedKey.keynum != "undefined"
-                    && lastPressedKey.keynum == keynum
-                    && typeof lastPressedKey.pressTime != "undefined"
-                    && now.getTime() - lastPressedKey.pressTime < 500
-                ) {
-                    switch (keynum) {
-                        case 103: //This is the "g" key
-                            $toolbar.toggle();
-                            // variousTools.setCookie("gina-toolbar[hub]", params.display.hub, 365);
-                            break;
+            $('body').off('keypress').on('keypress', function onKeypressed(event){                 
+            
+                if (!/INPUT|TEXTAREA/.test(event.target.tagName )) {
+                    if (event.keyCode) {
+                        // IE
+                        keynum = event.keyCode;
+                    } else if (event.which) {
+                        // Netscape/Firefox/Opera
+                        keynum = event.which;
+                    } else {
+                        // Chrome/Safari
+                        keynum = event.charCode;
                     }
+                    var now = new Date();
+                    if (
+                        typeof lastPressedKey.keynum != "undefined"
+                        && lastPressedKey.keynum == keynum
+                        && typeof lastPressedKey.pressTime != "undefined"
+                        && now.getTime() - lastPressedKey.pressTime < 500
+                    ) {
+                        switch (keynum) {
+                            case 103: //This is the "g" key
+                                $toolbar.toggle();
+                                // variousTools.setCookie("gina-toolbar[hub]", params.display.hub, 365);
+                                break;
+                        }
+                    }
+                    lastPressedKey.pressTime = now.getTime();
+                    lastPressedKey.keynum = keynum;
                 }
-                lastPressedKey.pressTime = now.getTime();
-                lastPressedKey.keynum = keynum;
+                
             });
 
-
+                       
             // Updates Toolbar with current values
 
             // Select the current tab
@@ -968,7 +988,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
             var attributes  = $forms[i].attributes;
             var formMethod  = null;
             var attrClass   = 'gina-toolbar-form-attributes';
-            var id          = $forms[i].getAttribute('id');            
+            var id = $forms[i].getAttribute('id') || $forms[i].id;            
             var section     = attrClass; // by default
             var isXHR       = ( typeof(elIsXHR) != 'undefined' && elIsXHR != null ) ? '-xhr' : '';
             // form fields set
@@ -1292,7 +1312,16 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
             loadData('data', originalData.jsonObject, originalData.ginaJsonObject);
         }
 
-        init();
+        
+        if ( typeof(gina.validator) != 'undefined' ) {
+            gina.validator.on('initialized', function onValidatorReady(){
+                console.log('toolbar validator ready');
+                init();
+            })
+        } else {
+            init();
+        }       
+        
     }
 
     return Toolbar

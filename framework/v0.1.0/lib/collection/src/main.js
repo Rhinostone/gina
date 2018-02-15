@@ -894,6 +894,7 @@ function Collection(content, option) {
         result.update   = instance.update;
         result.replace  = instance.replace;
         result.delete   = instance.delete;
+        result.orderBy  = instance.orderBy;
         result.toRaw    = instance.toRaw;
         
         return result
