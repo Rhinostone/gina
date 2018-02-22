@@ -151,8 +151,11 @@ function Couchbase(conn, infos) {
                 returnType = null
             }*/
 
-            params          = comments[0].match(/\$\w+/g); // param list from comments
-            queryString     = queryString.replace(comments[0], '');
+            if (comments) {
+                params = comments[0].match(/\$\w+/g); // param list from comments
+                queryString = queryString.replace(comments[0], '');
+            }
+            
             inlineParams    = queryString.match(/\$\w+/g);
             
             // getting rid of duplicated
