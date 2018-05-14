@@ -600,8 +600,8 @@ function Server(options) {
                         for (i in fields) {
 
                             // false & true case
-                            if ( /(false|true|on)/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
-                                fields[i][0] = ( /(true|on)/.test( fields[i][0] ) ) ? true : false;
+                            if ( /^(false|true|on)$/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
+                                fields[i][0] = ( /^(true|on)$/.test( fields[i][0] ) ) ? true : false;
 
                             // should be: request.post[i] = fields[i];
                             request.post[i] = fields[i][0]; // <-- to fixe on multiparty
@@ -610,8 +610,8 @@ function Server(options) {
                         for (i in fields) {
 
                             // false & true case
-                            if ( /(false|true|on)/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
-                                fields[i][0] = ( /(true|on)/.test( fields[i][0] ) ) ? true : false;
+                            if ( /^(false|true|on)$/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
+                                fields[i][0] = ( /^(true|on)$/.test( fields[i][0] ) ) ? true : false;
 
                             // should be: request.get[i] = fields[i];
                             request.get[i] = fields[i][0]; // <-- to fixe on multiparty
@@ -751,7 +751,7 @@ function Server(options) {
                                                 try {
                                                     request.put = merge(request.put, JSON.parse(request.body));
                                                 } catch (err) {
-                                                    console.log('Case `put` [ merge error ]: ' + (err.stack||err.message))
+                                                    console.log('Case `put` #0 [ merge error ]: ' + (err.stack||err.message))
                                                 }
                                             }
                                         }
@@ -1017,8 +1017,8 @@ function Server(options) {
                             for (var parameter in req.params) {
                                 if (p > 0) {
                                     // false & true case
-                                    if ( /(false|true|on)/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
-                                        req.params[parameter] = ( /(true|on)/.test( req.params[parameter] ) ) ? true : false;
+                                    if ( /^(false|true|on)$/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
+                                        req.params[parameter] = ( /^(true|on)$/.test( req.params[parameter] ) ) ? true : false;
 
                                     req[method][parameter] = req.params[parameter]
                                 }
@@ -1029,8 +1029,8 @@ function Server(options) {
                             for (var parameter in req.params) {
                                 if (p > 0) {
                                     // false & true case
-                                    if ( /(false|true|on)/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
-                                        req.params[parameter] = ( /(true|on)/.test( req.params[parameter] ) ) ? true : false;
+                                    if ( /^(false|true|on)$/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
+                                        req.params[parameter] = ( /^(true|on)$/.test( req.params[parameter] ) ) ? true : false;
 
                                     req[method][parameter] = req.params[parameter]
                                 }
@@ -1333,7 +1333,7 @@ function Server(options) {
         if (!res.headersSent) {
             if (isXMLRequest || !withViews || !isUsingTemplate ) {
                 // allowing this.throwError(err)
-                debugger;
+                
                 if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
                     msg     = code.error;
                     code    = code.status;
