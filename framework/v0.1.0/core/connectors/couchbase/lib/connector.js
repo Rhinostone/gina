@@ -55,7 +55,7 @@ function Connector(dbString) {
             dbString        = merge(dbString, local.options);
             local.options   = dbString;
 
-            console.info('connecting to couchbase cluster');
+            console.info('[ CONNECTOR ] [ ' + dbString.connector +' ] connecting to couchbase cluster');
             self.cluster = new couchbase.Cluster(dbString.protocol + dbString.host);
             // version 5.x
             if ( typeof(self.cluster.authenticate) != 'undefined' )
@@ -64,7 +64,7 @@ function Connector(dbString) {
             self
                 .connect(dbString)
                 .on('error', function(err){
-                    console.emerg('[ '+ dbString.database +' ] Handshake aborted !\n',  err.message);
+                    console.emerg('[ CONNECTOR ] [ '+ dbString.database +' ] Handshake aborted !\n',  err.message);
                 })
                 .once('connect', function () {
                     // default driver does not trigger any conn event, so we have to intercept it thu gina
@@ -95,7 +95,7 @@ function Connector(dbString) {
 
                             if (err && err instanceof Error) {
 
-                                console.error('gina fatal error: ' + err.message + '\nstack: '+ err.stack);
+                                console.error('[ CONNECTOR ] [ ' + dbString.database +' ] gina fatal error: ' + err.message + '\nstack: '+ err.stack);
                                 
                                 if ( typeof(err) == 'object' ) {
                                     res.end(JSON.stringify({
@@ -146,21 +146,23 @@ function Connector(dbString) {
             var options = local.options;
             // will send heartbeat every 4 minutes if keepAlive == `true`
             self.ping(options.pingInterval, function(){
-                if ( typeof(cb) != 'undefined' ) { // this portition is not working yet on Mac OS X
-                    console.debug('reconnected to couchbase !!');
 
-                    // updating context
-                    var ctx       = getContext()
-                        , bundle    = ctx.bundle
-                        , env       = ctx.env
-                        , conf      = ctx['gina'].config.envConf[bundle][env]
-                        , name      = dbString.database
+                // updating context
+                var ctx = getContext()
+                    , bundle = ctx.bundle
+                    , env = ctx.env
+                    , conf = ctx['gina'].config.envConf[bundle][env]
+                    , name = dbString.database
                     //Reload models.
-                        , modelsPath = _(conf.modelsPath)
+                    , modelsPath = _(conf.modelsPath)
                     ;
 
-                    local.bundle    = bundle;
-                    local.env       = env;
+                local.bundle = bundle;
+                local.env = env;
+
+                if ( typeof(cb) != 'undefined' ) { // this portition is not working yet on Mac OS X
+                    console.debug('[ ' + local.bundle +' ] reconnected to couchbase !!');
+
                     
                     modelUtil.setConnection(bundle, name, self.instance);
 
@@ -237,13 +239,13 @@ function Connector(dbString) {
 
             self.pingId = setInterval(function onTimeout(){
                 self.instance.get('heartbeat', function(err, res){
-                    console.debug('[ ' + local.bundle +' ] connection is being kept alive ...')
+                    console.debug('[ CONNECTOR ] [ ' + local.bundle +' ] connection is being kept alive ...')
                 })
             }, interval);
             cb()
         } else {
             self.instance.get('heartbeat', function(err, result){
-                console.debug('[ ' + local.bundle +' ] sent ping to couchbase ...');
+                console.debug('[ CONNECTOR ] [ ' + local.bundle +' ] sent ping to couchbase ...');
                 cb()
             })
         }
