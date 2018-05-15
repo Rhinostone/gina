@@ -7,9 +7,13 @@
   border: 0;
   outline: 0;
   vertical-align: baseline;
-  background: none; }
+  background: none;
+  -webkit-box-sizing: inherit;
+          box-sizing: inherit; }
 
 .gina-toolbar {
+  -webkit-box-sizing: content-box;
+          box-sizing: content-box;
   display: block;
   color: #fff;
   font: 12px/18px "Lucida Grande", Lucida, Arial, Helvetica, sans-serif; }
@@ -348,8 +352,8 @@
     border-left-color: #eeffff; }
 
 .gina-toolbar-object > ul, .gina-toolbar-collection > ul {
-  margin-left: 20px; 
-  display: none;}
+  margin-left: 20px;
+  display: none; }
 
 .gina-toolbar-unfolded::before {
   -webkit-transform: rotate(90deg);

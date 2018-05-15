@@ -2,7 +2,7 @@
 
 Last updated October 16th, 2016
 
-## Requirments
+## Requirements
 
 - [Requirejs](http://requirejs.org/)
 - [sass](http://sass-lang.com/install)
