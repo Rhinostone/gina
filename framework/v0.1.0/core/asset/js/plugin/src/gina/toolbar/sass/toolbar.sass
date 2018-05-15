@@ -31,13 +31,21 @@ $code-hightlight: #323e41
   outline: 0
   vertical-align: baseline
   background: none
+  box-sizing: inherit
+
+.gina-toolbar *,
+.gina-toolbar *:before,
+.gina-toolbar *:after
+  %reset
 
 .gina-toolbar
   // all: initial
+  @extend %reset
+  box-sizing: content-box
   display: block
   color: $white
   font: 12px/18px "Lucida Grande", Lucida, Arial, Helvetica, sans-serif
-  @extend %reset
+
 
   div, p, ul, li, form, fieldset, legend
     @extend %reset
