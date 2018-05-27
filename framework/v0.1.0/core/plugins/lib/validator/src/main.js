@@ -1665,6 +1665,9 @@ function ValidatorPlugin(rules, data, formId) {
                                 if ( /^(true|false)$/.test($target[i].value) ) {
 
                                     if ($target[i].type == 'radio') {
+                                        if ( typeof(rules[name]) == 'undefined' )
+                                            throw new Error('rule '+ name +' is not defined');
+                                            
                                         if (/^true$/.test(rules[name].isBoolean) && $target[i].checked ) {
                                             fields[name] = (/^true$/.test($target[i].value)) ? true : false;
                                         }

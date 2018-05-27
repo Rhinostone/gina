@@ -56,6 +56,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
             , $jsonRAW           = null
             , originalData       = null
             , jsonObject         = null
+            , lastJsonObjectState = null
             , ginaJsonObject     = null
             , forms              = null
             , formsIgnored       = '.gina-toolbar-options, .gina-toolbar-content'
@@ -181,12 +182,14 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                     ginaJsonObject = JSON.parse($ginaJson.text());
                     $json.text('');
 
-                    // backing up document data
+                    // backing up document data for restore action
                     if (!originalData) {
                         originalData = {
                             jsonObject      : JSON.parse(JSON.stringify(jsonObject)),
                             ginaJsonObject  : JSON.parse(JSON.stringify(ginaJsonObject))
-                        }
+                        };
+                        lastJsonObjectState = {}; // jsonObject.data
+                        
                     }
                 }
 
@@ -230,9 +233,13 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                 self.initiatedXhrFoldingState = false;
                 // validator mode
                 self.isValidator = false;
-                var isXHR = null;
+
+                var isXHR = null, isXHRViewData = false;
+
                 if ( /^(view-xhr)$/.test(section) ) {
+
                     isXHR = true;
+
                     userObject.view = jsonObject[section];
                     ginaObject.view = ginaJsonObject[section];
 
@@ -273,26 +280,37 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
 
                     //$htmlForms.html( parseView(jsonObject.forms, ginaJsonObject.forms, null, $htmlForms) );
                 } else if ( /^(data-xhr)$/.test(section) ) {
+                    
+                    // reset case
+                    if ( typeof(jsonObject[section]) == 'undefined' || !jsonObject[section] || jsonObject[section] == 'null' ) {
+                        return false;
+                    }
+
                     // -> XHR Data
                     isXHR = true;
+                    isXHRViewData = (typeof (jsonObject[section].isXHRViewData) != 'undefined') ? true : isXHRViewData;
+                        
+                    
+                    // update data section without erasing old data
+                    if (!isXHRViewData ) {
+                        //jsonObject[section] = merge(jsonObject[section], jsonObject.data);
+                        // also update original data to handle restore action
+                        if ( typeof (jsonObject['el-xhr']) != 'undefined' ) {
+                            lastJsonObjectState.data = JSON.parse(JSON.stringify(jsonObject[section]));
+                        }
+
+                        //jsonObject[section] = merge(jsonObject[section], jsonObject.data);
+                        
+                    }
+
+                    // -> isXHRViewData (from popin) : cleanup
+                    if (isXHRViewData) {
+                        delete jsonObject[section].isXHRViewData;
+                    }
+
                     $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject[section], ginaJsonObject[section], null, isXHR) +'</ul>');
 
-                    // setTimeout(function onXhrReset(){
-                    //     console.log('refreshing forms ');
-                    //     $currentForms = $forms.find('form:not(' + formsIgnored + ')');
-                    //     $htmlForms.html('');
-                    //     $htmlForms.html(parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length, isXHR));
-                    //     // Form binding
-                    //     $htmlForms.find('div.gina-toolbar-section > h2').off('click').on('click', function(event) {
-                    //         //event.preventDefault();
-
-                    //         $(this)
-                    //             .parent()
-                    //             .find('ul').first()
-                    //             .slideToggle();
-                    //     });
-
-                    // }, 800)
+                    
                 } else if ( /^(el-xhr)$/.test(section) ) {
                     // -> XHR Forms
                     isXHR = true;                    
@@ -1309,6 +1327,11 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
         }
 
         this.restore = function () {
+            // get last jsonObject.data state
+            if (lastJsonObjectState && typeof (lastJsonObjectState.data) != 'undefined' ) {
+                originalData.jsonObject.data = lastJsonObjectState.data;
+            }
+
             loadData('data', originalData.jsonObject, originalData.ginaJsonObject);
         }
 
