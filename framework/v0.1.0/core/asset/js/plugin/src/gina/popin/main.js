@@ -408,7 +408,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                         XHRData = result = XHRDataNew
                                     }
                                         
-
+                                    XHRData.isXHRViewData = true;
                                     ginaToolbar.update("data-xhr", XHRData )
                                 } catch (err) {
                                     throw err
@@ -670,7 +670,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         XHRData = JSON.parse( decodeURIComponent( XHRData.value ) );
                         // reset data-xhr
                         ginaToolbar.update("data-xhr", null);
-
+                        XHRData.isXHRViewData = true;
                         ginaToolbar.update("data-xhr", XHRData);
                     }
 

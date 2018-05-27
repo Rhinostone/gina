@@ -82,7 +82,7 @@ function Connector(dbString) {
                         if (
                             err instanceof couchbase.Error && err.code == 16 && !self.reconnected
                             //|| err instanceof couchbase.Error && err.code == 23 && !self.reconnecting
-                            || err.message == 'cannot perform operations on a shutdown bucket' && !self.reconnecting && !self.reconnected
+                            || /cannot perform operations on a shutdown bucket/.test(err.message ) && !self.reconnecting && !self.reconnected
                         ) {
                             // reconnecting
                             self.reconnecting = true;
