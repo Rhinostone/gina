@@ -147,11 +147,21 @@ function Connector(dbString) {
             // will send heartbeat every 4 minutes if keepAlive == `true`
             self.ping(options.pingInterval, function(){
 
+                console.debug('[ CONNECTOR ] [ctx] ', getConfig().bundle, getConfig().env );
                 // updating context
-                var ctx = getContext()
+                // var ctx = getContext()
+                //     , bundle = ctx.bundle
+                //     , env = ctx.env
+                //     , conf = ctx['gina'].config.envConf[bundle][env]
+                //     , name = dbString.database
+                //     //Reload models.
+                //     , modelsPath = _(conf.modelsPath)
+                //     ;
+
+                var ctx = getConfig()
                     , bundle = ctx.bundle
                     , env = ctx.env
-                    , conf = ctx['gina'].config.envConf[bundle][env]
+                    , conf = ctx[bundle][env]
                     , name = dbString.database
                     //Reload models.
                     , modelsPath = _(conf.modelsPath)
