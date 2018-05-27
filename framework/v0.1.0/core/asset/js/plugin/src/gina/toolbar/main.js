@@ -1329,7 +1329,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
         this.restore = function () {
             // get last jsonObject.data state
             if (lastJsonObjectState && typeof (lastJsonObjectState.data) != 'undefined' ) {
-                originalData.jsonObject.data = lastJsonObjectState.data;
+                //originalData.jsonObject.data = lastJsonObjectState.data;
+                originalData.jsonObject.data = merge(lastJsonObjectState.data, originalData.jsonObject.data);
             }
 
             loadData('data', originalData.jsonObject, originalData.ginaJsonObject);
