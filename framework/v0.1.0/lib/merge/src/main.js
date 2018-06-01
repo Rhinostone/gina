@@ -325,6 +325,20 @@ function Merge() {
                 for (var a = 0; a < options.length; ++a ) {
                     if ( target.indexOf(options[a]) > -1 && override) {
                         target.splice(target.indexOf(options[a]), 1, options[a])
+                    } else if (typeof(options[a]) == 'object' ) {
+                        // merge using index        
+                        if (typeof (newTarget[a]) == 'undefined') {
+                            newTarget = JSON.parse(JSON.stringify(target));
+                            for (var k in options[a]) {
+                                if (typeof (newTarget[a]) == 'undefined')
+                                    newTarget[a] = {};
+
+                                if (!newTarget[a].hasOwnProperty(k)) {
+                                    newTarget[a][k] = options[a][k]
+                                }
+                            }   
+                        }                
+                    
                     } else {
                         if (newTarget.indexOf(options[a]) == -1)
                             newTarget.push(options[a]);

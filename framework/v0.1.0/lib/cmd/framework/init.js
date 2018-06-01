@@ -60,7 +60,7 @@ function Initialize(opt) {
 
         try {
             if ( GINA_ENV_IS_DEV )
-                delete require.cache[path];
+                delete require.cache[require.resolve(path)];
             require(path)(opt, cmd)
         } catch(err) {
             console.crit('Gina has some troubles with command [ ', process.argv.join(' ') + ' ]\n' + err.stack)

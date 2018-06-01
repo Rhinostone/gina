@@ -172,13 +172,13 @@ function Add(opt, cmd) {
 
 
         if ( typeof(require.cache[portsPath]) != 'undefined') {
-            delete require.cache[portsPath]
+            delete require.cache[require.resolve(portsPath)]
         }
         if ( typeof(require.cache[portsReversePath]) != 'undefined') {
-            delete require.cache[portsReversePath]
+            delete require.cache[require.resolve(portsReversePath)]
         }
         if ( typeof(require.cache[envDataPath]) != 'undefined') {
-            delete require.cache[envDataPath]
+            delete require.cache[require.resolve(envDataPath)]
         }
 
         var envData = require(envDataPath)

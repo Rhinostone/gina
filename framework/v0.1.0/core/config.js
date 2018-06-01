@@ -100,7 +100,7 @@ function Config(opt) {
             filename = framework[file];
 
             if ( self.isCacheless() ) {
-                delete require.cache[filename];
+                delete require.cache[require.resolve(filename)];
             }
 
             setContext('gina.'+ file, require(filename))
@@ -351,6 +351,7 @@ function Config(opt) {
         }
     }
 
+
     /**
      * Load config according to specific template
      * @param {String} filename  Path of source config file
@@ -490,7 +491,7 @@ function Config(opt) {
         }//EO for.
 
 
-        console.debug('Env configuration loaded \n');
+        console.debug('[ '+ app +' ] [ '+ env +' ] Env configuration loaded \n');
 
         // TRUE means that all apps sharing the same process will merge into one.
         if (!isStandalone) self.Host.standaloneMode = isStandalone;
@@ -552,6 +553,42 @@ function Config(opt) {
         return originalRule
     }
 
+    var parseFileConf = function(root, arr, obj, len, i, content) {
+
+
+        var key = arr[i];
+        if (/\-/.test(key)) {
+            key = key.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
+        }
+
+        if (i == len - 1) { // end
+            if (!obj.hasOwnProperty(key)) {
+                obj[key] = content;
+            } else { // overiding exiting
+                obj[key] = merge(content, obj[key]);
+            }
+
+            return root
+        }
+        
+        if (typeof (obj[key]) == 'undefined') {
+
+            obj[key] = {};
+            ++i;
+
+            return parseFileConf(root, arr, obj[key], len, i, content);
+        }
+
+
+        for (var k in obj) {
+
+            if (k == key) {
+                ++i;
+                return parseFileConf(root, arr, obj[key], len, i, content);
+            }
+        }
+    }
+
     var loadBundleConfig = function(bundles, b, callback, reload, collectedRules) {
 
         if ( typeof(bundles[b]) == "undefined") {
@@ -609,36 +646,166 @@ function Config(opt) {
         }
 
 
-        var files = {"routing": {}};
-        var main = '';
-        for (var name in  conf[bundle][env].files) {
-            main = _(appPath +'/config/'+ conf[bundle][env].files[name]).replace('.'+env, '');
+        
+        // files to be ignored while parsing config dir
+        var defaultConfigFiles = (conf[bundle][env].files.join(".json,") + '.json').split(',');
 
-            //Server only because of the shared mode VS the standalone mode.
-            if (name == 'routing' && cacheless && typeof(reload) != 'undefined') {
-                tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
+        // getting bunddle config files
+        var configFiles = fs.readdirSync(_(appPath + '/config'));
+        var fName       = null, fNameWithNoExt = null;
+        var files       = { "routing": {} }, filesList = {};
+        var main        = '';
+        var name        = null;
+        var exists      = false;
+        var fileContent = null, nameArr = null;
+
+        for (var c = 0, cLen = configFiles.length; c < cLen; ++c) {
+            
+            fName = configFiles[c];
+            if (/^\./.test(fName) || /\.dev\.json$/.test(fName) || !/\.json$/.test(fName)  )
+                continue;
+            
+            name            = fName.replace(/\.json$/, '');
+            fNameWithNoExt  = fName.replace(/.json/, '');
+            
+
+            // exceptions            
+            //if (/^(routing)$/.test(name))
+            //    continue;
+
+            if (/\-/.test(name)) {
+                name = name.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
+            }
+
+            filesList[name] = fName;
+
+            // handle registered config files
+            main = fName;
+            tmp = fName.replace(/.json/, '.' + env + '.json'); // dev
+
+            files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};
+            fileContent = files[name];
+
+            // loading dev if exists
+            if (GINA_ENV_IS_DEV) {
                 filename = _(appPath + '/config/' + tmp);
-                if ( !fs.existsSync(filename) ) {
-                    filename = main;
-                }
-
-                delete require.cache[_(filename, true)];
                 try {
-                    routing = merge( require(_(filename, true)), routing, true );
-                } catch (err) {
-                    callback(err)
-                }
+                    exists = fs.existsSync(_(filename, true));
+                    if (cacheless && exists) {
+                        delete require.cache[require.resolve(_(filename, true))];
+                    }
 
-                if (filename != main) {
-                    delete require.cache[_(main, true)];
-                    try {
-                        routing = merge(require(main), routing, true)
-                    } catch (err) {
-                        callback(err)
+                    if (exists) {
+                        fileContent = merge(require(_(filename, true)), fileContent);
+                    }
+
+                } catch (_err) {
+
+                    if (fs.existsSync(filename)) {
+                        callback(new Error('[ ' + filename + ' ] is malformed !!'))
+                    } else {
+                        fileContent = undefined
                     }
                 }
+            }
 
-                tmp = '';
+
+            // loading main
+            filename = _(appPath + '/config/' + main);
+            //Can't do anything without.
+            try {
+                exists = fs.existsSync(_(filename, true));
+                if (cacheless && exists) { 
+                    delete require.cache[require.resolve(_(filename, true))];
+                }
+
+                if (exists) {
+                    //console.debug('[ GINA ] [ CONFIG ] required: ' + _(filename, true));
+                    //console.debug('[ GINA ] [ CONFIG ] file content: ' + JSON.stringify(require(_(filename, true)), null, 2));
+                    if (typeof (fileContent) != 'undefined') {
+                        
+                        fileContent = merge(require(_(filename, true)), fileContent);
+                    } else {
+                        fileContent = require(_(filename, true));
+                    }
+
+
+                } else {
+                    console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
+                }
+            } catch (_err) {
+
+                if (fs.existsSync(filename)) {
+                    callback(new Error('[ ' + filename + ' ] is malformed !!'))
+                } else {
+                    fileContent = undefined
+                }
+            }
+
+            if (/\./.test(fNameWithNoExt)) {
+                nameArr = fNameWithNoExt.split(/\./g);
+                //console.debug('fNameWithNoExt: ', fNameWithNoExt);
+                files = parseFileConf(files, nameArr, files, nameArr.length, 0, fileContent);
+                continue;
+            } else {
+                files[name] = fileContent;
+            }
+
+        } // EO for (var c = 0, cLen = configFiles.length; c < cLen; ++c) 
+
+
+        // building file list
+        // var filesList = {}, tmpFilename = null;
+        // for (var f = 0, fLen = defaultConfigFiles.length; f < fLen; ++f) {
+
+        //     fName = defaultConfigFiles[f];
+        //     tmpFilename = fName.replace(/\.json$/, '');
+        //     // hyphens to camelcase
+        //     if (/\-/.test(tmpFilename) ){
+        //         tmpFilename = tmpFilename.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
+        //     }
+
+        //     filesList[tmpFilename] = fName;
+        // }
+        
+
+        conf[bundle][env].configFiles = filesList;
+        
+        
+        //for (var name in  filesList) {
+            
+            // if (/^_comment/.test(name))
+            //     continue;
+
+            //main = _(appPath +'/config/'+ filesList[name]).replace('.'+env, '');
+            name = 'routing';
+            routing = files[name];
+            //Server only because of the shared mode VS the standalone mode.
+            if (cacheless && typeof (reload) != 'undefined') {
+            //if (name == 'routing' && cacheless && typeof(reload) != 'undefined') {
+                // tmp = filesList[name].replace(/.json/, '.' +env + '.json');
+                // filename = _(appPath + '/config/' + tmp);
+                // if ( !fs.existsSync(filename) ) {
+                //     filename = main;
+                // }
+
+                // delete require.cache[_(filename, true)];
+                // try {
+                //     routing = merge( require(_(filename, true)), routing, true );
+                // } catch (error) {
+                //     callback(error)
+                // }
+
+                // if (filename != main) {
+                //     delete require.cache[_(main, true)];
+                //     try {
+                //         routing = merge(require(main), routing, true)
+                //     } catch (error) {
+                //         callback(error)
+                //     }
+                // }
+
+                // tmp = '';
 
                 //setting app param
                 for (var rule in routing) {
@@ -749,49 +916,49 @@ function Config(opt) {
                     }
                 }
                 self.setReverseRouting(bundle, env, reverseRouting);
-                continue;
-            } else if (name == 'routing') {
-                continue;
+            //    continue;
+            // } else if (name == 'routing') {
+            //     continue;
             }
 
 
-            tmp = conf[bundle][env].files[name].replace(/.json/, '.' +env + '.json');
-            filename = _(appPath + '/config/' + tmp);
-            if (!fs.existsSync(filename) ) {
-                filename = _(appPath +'/config/'+ conf[bundle][env].files[name])
-            } else {
-                conf[bundle][env].files[name] = tmp
-            }
+            // tmp = filesList[name].replace(/.json/, '.' + env + '.json');
+            // filename = _(appPath + '/config/' + tmp);
+            // if (!fs.existsSync(filename) ) {
+            //     filename = _(appPath +'/config/'+ filesList[name])
+            // } else {
+            //     filesList[name] = tmp
+            // }
 
-            //Can't do a thing without.
-            try {
-                var exists = fs.existsSync(_(filename, true));
-                if (cacheless && exists) {
-                    delete require.cache[_(filename, true)];
-                }
+            // //Can't do anything without.
+            // try {
+            //     var exists = fs.existsSync(_(filename, true));
+            //     if (cacheless && exists) {
+            //         delete require.cache[_(filename, true)];
+            //     }
 
-                if ( exists ) {
-                    files[name] = require(_(filename, true));
-                    tmp = '';
-                    if ( filename != main && fs.existsSync(_(main, true)) ) {
-                        if (cacheless) {
-                            delete require.cache[_(main, true)];
-                        }
-                        files[name] = merge(files[name], require(_(main, true)));
-                    }
-                } else {
-                    continue
-                }
-            } catch (_err) {
+            //     if ( exists ) {
+            //         files[name] = require(_(filename, true));
+            //         tmp = '';
+            //         if ( filename != main && fs.existsSync(_(main, true)) ) {
+            //             if (cacheless) {
+            //                 delete require.cache[_(main, true)];
+            //             }
+            //             files[name] = merge(files[name], require(_(main, true)));
+            //         }
+            //     } else {
+            //         continue
+            //     }
+            // } catch (_err) {
 
-                if ( fs.existsSync(filename) ) {
-                    callback( new Error('[ ' +filename + ' ] is malformed !!') )
-                } else {
-                    files[name] = undefined
-                }
-            }
+            //     if ( fs.existsSync(filename) ) {
+            //         callback( new Error('[ ' +filename + ' ] is malformed !!') )
+            //     } else {
+            //         files[name] = undefined
+            //     }
+            // }
 
-        }//EO for (name
+        //}//EO for (name
 
 
         var hasViews = (typeof(files['views']) != 'undefined' && typeof(files['views']['default']) != 'undefined') ? true : false;
@@ -874,7 +1041,7 @@ function Config(opt) {
             }
 
             if (fs.existsSync(staticsPath))
-                delete require.cache[staticsPath];
+                delete require.cache[require.resolve(staticsPath)];
 
 
             if (hasViews && typeof(files['statics']) == 'undefined') {
@@ -1025,7 +1192,7 @@ function Config(opt) {
             try {
                 // will get a buffer
                 if (cacheless) {
-                    delete require.cache[_(loaderSrcPath, true)]
+                    delete require.cache[require.resolve(_(loaderSrcPath, true))]
                 }
                 files['views'].default.pluginLoader = fs.readFileSync( _(loaderSrcPath, true))
             } catch (err) {
@@ -1084,7 +1251,7 @@ function Config(opt) {
                             try {
 
                                 if (cacheless) {
-                                    delete require.cache[filename];
+                                    delete require.cache[require.resolve(filename)];
                                 }
 
                                 k = key.split(/\//g);

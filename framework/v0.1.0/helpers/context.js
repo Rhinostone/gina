@@ -360,7 +360,7 @@ function ContextHelper(contexts) {
 
                 var libToLoad = _(libPath +'/'+ lib, true);
 
-                if (cacheless) delete require.cache[libToLoad];
+                if (cacheless) delete require.cache[require.resolve(libToLoad)];
 
                 // init with options
                 try {
