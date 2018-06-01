@@ -133,7 +133,7 @@ function Model(namespace, _config) {
             var exists = fs.existsSync(connectorPath);
             if (exists) {
                 if (cacheless)
-                    delete require.cache[_(connectorPath, true)];
+                    delete require.cache[require.resolve(_(connectorPath, true))];
 
                 var Connector = require(_(connectorPath, true));
 

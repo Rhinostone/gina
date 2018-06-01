@@ -78,17 +78,17 @@ function Router(env) {
         }
 
         //update utils
-        delete require.cache[_(libPath +'/index.js', true)];
+        delete require.cache[require.resolve(_(libPath +'/index.js', true))];
         require.cache[_(libPath +'/index.js', true)] = require( _(libPath +'/index.js', true) );
         require.cache[_(corePath + '/gna.js', true)].exports.utils = require.cache[_(libPath +'/index.js', true)];
 
         //update plugins
-        delete require.cache[_(corePath +'/plugins/index.js', true)];
+        delete require.cache[require.resolve(_(corePath +'/plugins/index.js', true))];
         require.cache[_(corePath +'/plugins/index.js', true)] = require( _(corePath +'/plugins/index.js', true) );
         require.cache[_(corePath + '/gna.js', true)].exports.plugins = require.cache[_(corePath +'/plugins/index.js', true)];
 
         // Super controller
-        delete require.cache[_(corePath +'/controller/index.js', true)];
+        delete require.cache[require.resolve(_(corePath +'/controller/index.js', true))];
         require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
         SuperController = require.cache[_(corePath +'/controller/index.js', true)];
 
@@ -224,10 +224,10 @@ function Router(env) {
 
             if (cacheless) {
 
-                delete require.cache[_(controllerFile, true)];
+                delete require.cache[require.resolve(_(controllerFile, true))];
 
                 if ( hasSetup )
-                    delete require.cache[_(setupFile, true)];
+                    delete require.cache[require.resolve(_(setupFile, true))];
             }
 
             Controller = require(_(controllerFile, true));
@@ -314,10 +314,10 @@ function Router(env) {
 
                     if (cacheless) {
                         // Super controller
-                        delete require.cache[_(corePath +'/controller/index.js', true)];
+                        delete require.cache[require.resolve(_(corePath +'/controller/index.js', true))];
                         require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
 
-                        delete require.cache[filename];
+                        delete require.cache[require.resolve(filename)];
                     }
 
                     var SuperController     = require.cache[_(corePath +'/controller/index.js', true)];
@@ -418,7 +418,7 @@ function Router(env) {
                     throwError(res, 501, new Error('middleware not found '+ middleware).stack);
                 }
 
-                if (local.cacheless) delete require.cache[_(filename, true)];
+                if (local.cacheless) delete require.cache[require.resolve(_(filename, true))];
 
                 var MiddlewareClass = function() {
 

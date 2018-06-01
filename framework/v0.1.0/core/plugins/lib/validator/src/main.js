@@ -1132,6 +1132,42 @@ function ValidatorPlugin(rules, data, formId) {
         }
     }
 
+    var makeObjectFromArgs = function(root, args, obj, len, i, value) {
+
+        var key = args[i].replace(/^\[|\]$/g, '');
+
+
+        if (i == len - 1) { // end
+            obj[key] = value
+
+            return root
+        }
+
+        var nextKey = args[i + 1].replace(/^\[|\]$/g, '');
+
+        if (typeof (obj[key]) == 'undefined') {
+
+            if (/^\d+$/.test(nextKey)) { // collection index ?
+                obj[key] = [];
+            } else {
+                obj[key] = {};
+            }
+
+            ++i;
+
+            return makeObjectFromArgs(root, args, obj[key], len, i, value);
+        }
+
+
+        for (var k in obj) {
+
+            if (k == key) {
+                ++i;
+                return makeObjectFromArgs(root, args, obj[key], len, i, value);
+            }
+        }
+    }
+
     /**
      * makeObject - Preparing form data
      *
@@ -1160,38 +1196,54 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
 
-        for (var o in obj) {
-
-            if ( typeof(obj[o]) == 'object' ) {
-
-                if ( Array.isArray(obj[o]) ) {
-
-
-                    if (o === key) {
-
-                        var _args = JSON.parse(JSON.stringify(args));
-                        _args.splice(0, 1);
-
-                        for (var a = i, aLen = _args.length; a < aLen; ++a) {
-                            key = parseInt(_args[a].replace(/^\[|\]$/g, ''))
-                            obj[o][key] = {};
-
-                            if (a == aLen-1) {
-                                obj[o][key] = value;
-                            }
-                        }
-                    }
-
-                } else if ( o === key ) {
-
-                    if (i == len-1) {
-                        obj[o] = value;
-                    } else {
-                        makeObject(obj[o], value, args, len, i+1)
-                    }
-                }
+        if ( Array.isArray(obj[key]) ) {
+            makeObjectFromArgs(obj[key], args, obj[key], args.length, 1, value);
+        } else {
+            if (i == len - 1) {
+                obj[key] = value;
+            } else {
+                makeObject(obj[key], value, args, len, i + 1)
             }
         }
+
+        // for (var o in obj) {
+
+        //     if ( typeof(obj[o]) == 'object' ) {
+
+        //         if ( Array.isArray(obj[o]) ) {
+
+
+        //             if (o === key) {
+
+        //                 // var _args = JSON.parse(JSON.stringify(args));
+        //                 // _args.splice(0, 1);
+
+        //                 // for (var a = i, aLen = _args.length; a < aLen; ++a) {
+        //                 //     key = _args[a].replace(/^\[|\]$/g, '');
+        //                 //     if ( /^\d+$/.test(key) ) {
+        //                 //         key = parseInt(key)
+        //                 //     }
+        //                 //     obj[o][nextKey] = {};
+
+        //                 //     if (a == aLen-1) {
+        //                 //         obj[o][nextKey][key] = value;
+        //                 //     }
+        //                 // }
+        //                 //obj[o] = makeObjectFromArgs(obj[o], args, obj[o], args.length, 0, value);
+        //                 makeObjectFromArgs(obj[o], args, obj[o], args.length, 0, value);
+                        
+        //             }
+
+        //         } else if ( o === key ) {
+
+        //             if (i == len-1) {
+        //                 obj[o] = value;
+        //             } else {
+        //                 makeObject(obj[o], value, args, len, i+1)
+        //             }
+        //         }
+        //     }
+        // }
 
     }
 
@@ -1217,7 +1269,12 @@ function ValidatorPlugin(rules, data, formId) {
                 // building object tree
                 makeObject(obj, data[key], args, args.length, 0);
 
-                fields[name] = merge( fields[name], obj );
+                //if ( Array.isArray(obj) ) {
+                //    fields[name] = merge(fields[name], obj);
+                //} else {
+                    fields[name] = merge(fields[name], obj);
+                //}
+                
                 obj = {}
 
             } else {

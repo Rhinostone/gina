@@ -827,9 +827,18 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
             var section         = ( typeof(elSection) != 'undefined' && elSection != null ) ? elSection : '';
             var isXHR           = ( typeof(elIsXHR) != 'undefined' && elIsXHR != null ) ? '-xhr' : '';
 
+            // patch 
+            if (!ginaArr) {
+                ginaArr = [];
+            }
             for (var i = 0, len = arr.length; i<len; ++i) {
                 if ( typeof(arr[i]) == 'object' && !Array.isArray(arr[i]) ) {
                     //id   += i + '-';
+                    // patch 
+                    if (!ginaArr[i]) {
+                        ginaArr[i] = arr[i]
+                    }
+
                     id   += '-'+ i;
                     if (section == '') {
                         section = id;
@@ -1329,8 +1338,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
         this.restore = function () {
             // get last jsonObject.data state
             if (lastJsonObjectState && typeof (lastJsonObjectState.data) != 'undefined' ) {
-                //originalData.jsonObject.data = lastJsonObjectState.data;
-                originalData.jsonObject.data = merge(lastJsonObjectState.data, originalData.jsonObject.data);
+                originalData.jsonObject.data = lastJsonObjectState.data;
+                //originalData.jsonObject.data = merge(originalData.jsonObject.data, lastJsonObjectState.data, true);
             }
 
             loadData('data', originalData.jsonObject, originalData.ginaJsonObject);

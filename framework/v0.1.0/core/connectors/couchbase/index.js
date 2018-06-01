@@ -41,7 +41,7 @@ function Couchbase(conn, infos) {
         // superEntity
         filename = getPath('gina').core + '/model/entity.js';
         if (cacheless)
-            delete require.cache[_(filename, true)]; //EntitySuperClass
+            delete require.cache[require.resolve(_(filename, true))]; //EntitySuperClass
 
         EntitySuperClass = require(_(filename, true));
 
@@ -53,7 +53,7 @@ function Couchbase(conn, infos) {
             if ( ! /^\./.test(files[f]) || f == len-1 ) {
 
                 if (cacheless && files[f] != 'n1ql.js') {
-                    delete require.cache[_(path + '/' +files[f], true)];//child
+                    delete require.cache[require.resolve(_(path + '/' +files[f], true))];//child
                 }
 
                 entityName      = files[f].replace(/.js/, '');

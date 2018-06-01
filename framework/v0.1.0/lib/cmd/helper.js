@@ -61,7 +61,7 @@ function CmdHelper(cmd, client) {
 
         if ( fs.existsSync(file) ) {
             if ( typeof(require.cache[file]) != 'undefined') {
-                delete require.cache[file]
+                delete require.cache[require.resolve(file)]
             }
 
             cmdArguments = require(file);
@@ -124,13 +124,13 @@ function CmdHelper(cmd, client) {
 
             // main config
             if ( typeof(require.cache[_(GINA_HOMEDIR + '/main.json', true)]) != 'undefined') {
-                delete require.cache[_(GINA_HOMEDIR + '/main.json', true)]
+                delete require.cache[require.resolve(_(GINA_HOMEDIR + '/main.json', true))]
             }
             cmd.mainConfig  = require( _(GINA_HOMEDIR + '/main.json', true) );
 
             // projects
             if ( typeof(require.cache[_(GINA_HOMEDIR + '/projects.json', true)]) != 'undefined') {
-                delete require.cache[_(GINA_HOMEDIR + '/projects.json', true)]
+                delete require.cache[require.resolve(_(GINA_HOMEDIR + '/projects.json', true))]
             }
             cmd.projects    = require( _(GINA_HOMEDIR + '/projects.json', true) );
 
@@ -264,7 +264,7 @@ function CmdHelper(cmd, client) {
         if ( typeof(cmd.projects[cmd.projectName]) != 'undefined') { // ignore when adding project
 
             if ( typeof(require.cache[cmd.projectPath]) != 'undefined') {
-                delete require.cache[cmd.projectPath]
+                delete require.cache[require.resolve(cmd.projectPath)]
             }
             cmd.projectData         = require(cmd.projectPath);
             cmd.projectLocation     = cmd.projects[cmd.projectName].path;
@@ -272,7 +272,7 @@ function CmdHelper(cmd, client) {
 
 
             if (typeof(require.cache[cmd.envPath]) != 'undefined') {
-                delete require.cache[cmd.envPath]
+                delete require.cache[require.resolve(cmd.envPath)]
             }
             cmd.envData = require(cmd.envPath);
 
@@ -284,12 +284,12 @@ function CmdHelper(cmd, client) {
             cmd.envs.sort();
 
             if ( typeof(require.cache[cmd.portsPath]) != 'undefined') {
-                delete require.cache[cmd.portsPath]
+                delete require.cache[require.resolve(cmd.portsPath)]
             }
             cmd.portsData          = require(cmd.portsPath);
 
             if ( typeof(require.cache[cmd.portsReversePath]) != 'undefined') {
-                delete require.cache[cmd.portsReversePath]
+                delete require.cache[require.resolve(cmd.portsReversePath)]
             }
             cmd.portsReverseData   = require(cmd.portsReversePath);
 

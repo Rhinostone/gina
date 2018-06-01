@@ -186,9 +186,9 @@ AddBundle = function(conf, exports) {
     var testJSONFiles = function(callback) {
         testJSONFilesDone = true;
         try {
-            delete require.cache[_(workspace + '/project.json', true)];
+            delete require.cache[require.resolve(_(workspace + '/project.json', true))];
             var project = require(_(workspace + '/project.json') );
-            delete require.cache[_(workspace + '/env.json', true)];
+            delete require.cache[require.resolve(_(workspace + '/env.json', true))];
             var env = require(_(workspace + '/env.json') );
             var isConform = true;
 

@@ -9,6 +9,9 @@ var terms           = null;
 var terms2          = null;
 var settingTerms    = null;
 
+var design          = null;
+var newFonts        = null;
+
 var setVariable = function () {
     a = [];
     b = [
@@ -304,6 +307,35 @@ var setVariable = function () {
         }
     ];
 
+    design = {
+        id: "sys-desing-1",
+        fonts: [
+            {
+                id: "font-1",
+                name: "Titles",
+                value: "Poiret One",
+                weight: 400
+            },
+            {
+                id: "font-2",
+                name: "Text",
+                value: "Open Sans",
+                weight: 400
+            }
+        ]
+    };
+
+    newFonts = {
+        fonts: [
+            {
+                id: "font-3",
+                name: "Text Bold",
+                value: "Open Sans",
+                weight: 600
+            }
+        ]
+    };
+
 };
 
 setVariable();
@@ -327,6 +359,12 @@ setVariable();
 var TermstoSettingTermsWithoutOverride = merge(terms, settingTerms);
 setVariable();
 var Terms2toSettingTermsWithoutOverride = merge(terms2, settingTerms);
+
+setVariable();
+var NewFontsToDesignWithoutOverride = merge(design, newFonts)
+setVariable();
+var NewFontsFontsToDesignNewFontsWithoutOverride = merge(design.fonts, newFonts.fonts);
+
 
 exports['Merge : A<-B with override'] = function(test) {
     var res = [
@@ -723,6 +761,66 @@ exports['Merge : terms2<-settingTerms without override'] = function(test) {
 
     test.done()
 }
+
+exports['Merge : design<-newFonts without override'] = function(test) {
+    var res = {
+        id: "sys-desing-1",
+        fonts: [
+            {
+                id: "font-1",
+                name: "Titles",
+                value: "Poiret One",
+                weight: 400
+            },
+            {
+                id: "font-2",
+                name: "Text",
+                value: "Open Sans",
+                weight: 400
+            },
+            {
+                id: "font-3",
+                name: "Text Bold",
+                value: "Open Sans",
+                weight: 600
+            }
+        ]
+    };
+
+    test.equal(typeof (NewFontsToDesignWithoutOverride), 'object');
+    test.deepEqual(NewFontsToDesignWithoutOverride, res);
+
+    test.done()
+}
+
+exports['Merge : design.fonts<-newFonts.fonts without override'] = function(test) {
+    var res = [
+        {
+            id: "font-1",
+            name: "Titles",
+            value: "Poiret One",
+            weight: 400
+        },
+        {
+            id: "font-2",
+            name: "Text",
+            value: "Open Sans",
+            weight: 400
+        },
+        {
+            id: "font-3",
+            name: "Text Bold",
+            value: "Open Sans",
+            weight: 600
+        }
+    ];
+
+    test.equal( Array.isArray(NewFontsFontsToDesignNewFontsWithoutOverride), true);
+    test.deepEqual(NewFontsFontsToDesignNewFontsWithoutOverride, res);
+
+    test.done()
+}
+
 
 exports['Compare : A<-B with override & B<-A without override'] = function(test) {
     test.deepEqual(AtoBwithOverride, BtoAwithoutOverride);

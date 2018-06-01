@@ -184,9 +184,9 @@ function Server(options) {
             if (!self.isStandalone && i == 0) appName = apps[i];
 
             try {
-                main        = _(appPath + '/config/' + conf.envConf[apps[i]][self.env].files.routing);
+                main        = _(appPath + '/config/' + conf.envConf[apps[i]][self.env].configFiles.routing);
                 filename    = main;//by default
-                filename    = conf.envConf[apps[i]][self.env].files.routing.replace(/.json/, '.' +env + '.json');
+                filename    = conf.envConf[apps[i]][self.env].configFiles.routing.replace(/.json/, '.' +env + '.json');
                 filename    = _(appPath + '/config/' + filename);
                 //Can't do a thing without.
                 if ( !fs.existsSync(filename) ) {
@@ -194,7 +194,7 @@ function Server(options) {
                 }
 
                 if (cacheless) {
-                    delete require.cache[_(filename, true)]
+                    delete require.cache[require.resolve(_(filename, true))]
                 }
 
                 if (filename != main) {
@@ -1181,7 +1181,7 @@ function Server(options) {
                         if (fs.statSync(filename).isDirectory()) filename += '/index.html';
 
                         if (cacheless) {
-                            delete require.cache[filename]
+                            delete require.cache[require.resolve(filename)]
                         }
 
                         fs.readFile(filename, "binary", function(err, file) {
@@ -1261,7 +1261,7 @@ function Server(options) {
                         if (fs.statSync(filename).isDirectory()) filename += 'index.html';
 
                         if (cacheless) {
-                            delete require.cache[filename]
+                            delete require.cache[require.resolve(filename)]
                         }
 
                         fs.readFile(filename, "binary", function(err, file) {
