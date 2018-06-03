@@ -11,6 +11,7 @@ var settingTerms    = null;
 
 var design          = null;
 var newFonts        = null;
+var designNew       = null;
 
 var setVariable = function () {
     a = [];
@@ -325,6 +326,18 @@ var setVariable = function () {
         ]
     };
 
+    designNew = {
+        id: "sys-desing-1",
+        fonts: [
+            {
+                id: "font-1",
+                name: "Titles",
+                value: "Open Sans",
+                weight: 300
+            }
+        ]
+    };
+
     newFonts = {
         fonts: [
             {
@@ -364,6 +377,10 @@ setVariable();
 var NewFontsToDesignWithoutOverride = merge(design, newFonts)
 setVariable();
 var NewFontsFontsToDesignNewFontsWithoutOverride = merge(design.fonts, newFonts.fonts);
+setVariable();
+var DesignNewToDesignWithoutOverride = merge(designNew, design);
+setVariable();
+var DesignToDesignNewWithOverride = merge(design, designNew, true);
 
 
 exports['Merge : A<-B with override'] = function(test) {
@@ -402,16 +419,18 @@ exports['Merge : B<-C with override'] = function(test) {
             value: 'green'
         },
         {
-            id: 2,
-            value: 'orange'
+            id: 4,
+            value: 'yellow'
         },
         {
             id: 3,
             value: 'mango'
         },
+        
         {
-            id: 4,
-            value: 'yellow'
+            id: 5,
+            value: 'lemon',
+            createdAt: '2018-01-01T00:00:00'
         }
     ];
 
@@ -817,6 +836,51 @@ exports['Merge : design.fonts<-newFonts.fonts without override'] = function(test
 
     test.equal( Array.isArray(NewFontsFontsToDesignNewFontsWithoutOverride), true);
     test.deepEqual(NewFontsFontsToDesignNewFontsWithoutOverride, res);
+
+    test.done()
+}
+
+
+exports['Merge : designNew<-design without override'] = function(test) {
+    var res = {
+        id: "sys-desing-1",
+        fonts: [
+            {
+                id: "font-1",
+                name: "Titles",
+                value: "Open Sans",
+                weight: 300
+            },
+            {
+                id: "font-2",
+                name: "Text",
+                value: "Open Sans",
+                weight: 400
+            }
+        ]
+    };
+
+    test.equal(typeof (DesignNewToDesignWithoutOverride), 'object');
+    test.deepEqual(DesignNewToDesignWithoutOverride, res);
+
+    test.done()
+}
+
+exports['Merge : design<-designNew with override'] = function(test) {
+    var res = {
+        id: "sys-desing-1",
+        fonts: [
+            {
+                id: "font-1",
+                name: "Titles",
+                value: "Open Sans",
+                weight: 300
+            }
+        ]
+    };
+
+    test.equal(typeof (DesignToDesignNewWithOverride), 'object');
+    test.deepEqual(DesignToDesignNewWithOverride, res);
 
     test.done()
 }
