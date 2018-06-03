@@ -2,7 +2,7 @@
   "dependencies": {
     "colors": "^1.1.2",
     "couchbase": "^2.4.6",
-    "engine.io": "^3.1.0",
+    "engine.io": "^3.2.0",
     "engine.io-client": "^3.1.1",
     "express": "^4.16.3",
     "express-http2-workaround": "^1.1.3",

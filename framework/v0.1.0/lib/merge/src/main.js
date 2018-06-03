@@ -216,26 +216,48 @@ function Merge() {
                 && typeof(target[0]) == 'object' && typeof(target[0].id) != 'undefined'
             ) {
 
-                newTarget       = JSON.parse(JSON.stringify(target));
+                newTarget = [];
+                
                 var _options    = JSON.parse(JSON.stringify(options));
-                var next        = null;
+                
+                var index = 0;
 
-                for (var a = 0, aLen = target.length; a < aLen; ++a) {
+                for (var n = next || 0, nLen = target.length; n < nLen; ++n) {
+                    
+                    // if (newTargetIds.indexOf(target[n].id) == -1) {
+                    //     newTargetIds.push(target[n].id);
+                        
+                    //     //newTarget.push(target[n]);
+                    //     //++index;
+                    // }
+                    
+                    label:
+                    for (var a = a || 0, aLen = _options.length; a < aLen; ++a) {
+                    
+                        if (_options[a].id === target[n].id ) {
 
-                    for (var n = next || 0, nLen = _options.length; n < nLen; ++n) {
+                            if (newTargetIds.indexOf(_options[a].id) > -1) {
+                                
+                                newTarget[index] = _options[a];
+                                ++index
+                                
+                            } else if (newTargetIds.indexOf(_options[a].id) == -1) {
 
-                        if ( typeof(_options[n].id) != 'undefined' && _options[n].id === target[a].id ) {
+                                newTargetIds.push(_options[a].id);                                
+                                newTarget.push(_options[a]);
+                            }
 
-                            newTarget[a] = _options[n];
-
-                        } else {
-                            newTarget.push(_options[n]);
+                            break label;
+                            
+                        } else if (newTargetIds.indexOf(_options[a].id) == -1) {
+                                
+                            newTargetIds.push(_options[a].id);
+                            newTarget.push(_options[a]);
                         }
-
-                        next = n+1;
-                        break
                     }
                 }
+
+                newTargetIds = [];
 
                 return newTarget
 
@@ -262,7 +284,7 @@ function Merge() {
                 }
             }
         }
-
+        
         if ( target.length > 0 ) {
             
             // if collection, comparison will be done uppon the `id` attribute
@@ -308,7 +330,8 @@ function Merge() {
                             } else if( _options[n] != null && typeof(_options[n].id) != 'undefined' && _options[n].id === newTarget[a].id ) {
 
                                 next = n+1;
-                                break end;
+
+                                //break end;
 
                             } else {
                                 break end;
@@ -325,35 +348,40 @@ function Merge() {
                 for (var a = 0; a < options.length; ++a ) {
                     if ( target.indexOf(options[a]) > -1 && override) {
                         target.splice(target.indexOf(options[a]), 1, options[a])
-                    } else if (newTarget.indexOf(options[a]) > -1 && typeof(options[a]) == 'object' ) {
-                        // merge using index        
-                        //if (typeof (newTarget[a]) == 'undefined') {
-                            newTarget = JSON.parse(JSON.stringify(target));
-                            //newTarget = target;
-                             if (typeof (newTarget) == 'undefined')
-                                 newTarget = {};
+                    } else if ( typeof(newTarget[a]) == 'undefined' && typeof(options[a]) == 'object' ) {
+                        // merge using index   
+                        newTarget = target;
 
-                            if (typeof (newTarget[a]) == 'undefined')
-                                newTarget[a] = {};
-
-                            for (var k in options[a]) {
-                                if (!newTarget[a].hasOwnProperty(k)) {
-                                    newTarget[a][k] = options[a][k]
-                                }
-                            }   
-                        //}     
-                        //newTarget = JSON.parse(JSON.stringify(target));          
-                        // for (var nt = 0, ntLen = newTarget.length; nt < ntLen; ++nt) {
-                        //     for (var k in options[a]) {
-                        //         if (!newTarget[nt].hasOwnProperty(k) ) {
-                        //             newTarget[nt][k] = options[a][k];
-                        //         }
-                        //     }
+                        if (typeof (newTarget[a]) == 'undefined')
+                            newTarget[a] = {};
+                                                    
                             
-                        // }
+                        for (var k in options[a]) {
+                            if (!newTarget[a].hasOwnProperty(k)) {
+                                newTarget[a][k] = options[a][k]
+                            }
+                        }   
+                        
                     } else {
-                        if (newTarget.indexOf(options[a]) == -1)
+                        // if (newTarget.indexOf(options[a]) == -1)
+                        //     newTarget.push(options[a]);
+                        
+                        if (
+                            typeof (target[a]) != 'undefined'
+                            && typeof (target[a].id) != 'undefined'
+                            && typeof (options[a]) != 'undefined'
+                            && typeof (options[a].id) != 'undefined'
+                            && target[a].id == options[a].id
+                        ) {
+                            if (override)
+                                newTarget[a] = options[a]
+                            else
+                                newTarget[a] = target[a]
+                        } else if (newTarget.indexOf(options[a]) == -1) {
                             newTarget.push(options[a]);
+                        }
+                        
+                        
                     }
                 }
             }

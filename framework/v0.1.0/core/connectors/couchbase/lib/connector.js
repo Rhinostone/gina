@@ -12,7 +12,7 @@ var modelUtil       = new utils.Model();
 N1qlQuery           = couchbase.N1qlQuery;
 N1qlStringQuery     = couchbase.N1qlStringQuery;
 ViewQuery           = couchbase.ViewQuery;
-//uuid                = require('uuid');
+uuid                = require('uuid');
 
 
 /**
