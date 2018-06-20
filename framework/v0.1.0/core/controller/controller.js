@@ -193,8 +193,17 @@ function SuperController(options) {
             set('page.view.method', local.options.method);
             set('page.view.namespace', namespace); // by default
             
-            set('page.view.params', options.params); // view parameters passed through URI
-            //set('page.view.title', rule.replace(new RegExp('@' + options.conf.bundle), ''));
+            var parameters = JSON.parse(JSON.stringify(req.getParams()));//merge(options.params, options.conf.content.routing[rule].param);
+            parameters = merge(parameters, options.conf.content.routing[rule].param);
+            // excluding default page properties
+            delete parameters[0];            
+            delete parameters.file;
+            delete parameters.control;
+            delete parameters.title;
+
+            if (parameters.count() > 0)
+                set('page.view.params', parameters); // view parameters passed through URI or route params
+
             set('page.view.route', rule);
 
             set('page.forms', options.conf.content.forms);
