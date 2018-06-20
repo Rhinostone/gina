@@ -263,6 +263,13 @@ function ValidatorPlugin(rules, data, formId) {
 
     }
 
+    /**
+     * handleErrorsDisplay
+     * Attention: if you are going to handle errors display by hand, set data to `null` to prevent Toolbar refresh with empty data
+     * @param {object} $form 
+     * @param {object} errors 
+     * @param {object|null} data 
+     */
     var handleErrorsDisplay = function($form, errors, data) {
 
         if ( GINA_ENV_IS_DEV )
@@ -1376,7 +1383,7 @@ function ValidatorPlugin(rules, data, formId) {
                 selectedIndex = 0;
                 selectedValue = $select[s].getAttribute('data-value');
                 
-                if ( $select[s].options[ $select[s].selectedIndex ].index ) {
+                if ( typeof($select[s].options[$select[s].selectedIndex]) != 'undefined' && $select[s].options[ $select[s].selectedIndex ].index ) {
                     selectedIndex = $select[s].options[ $select[s].selectedIndex ].index
                 } else if ( typeof(selectedValue) != 'undefined' ) {
                     for (var o = 0, oLen = $select[s].options.length; o < oLen; ++o ) {
@@ -1394,8 +1401,10 @@ function ValidatorPlugin(rules, data, formId) {
                 };
 
                 // update select
-                $select[s].options[ selectedIndex ].selected = true;
-                $select[s].setAttribute('data-value',  $select[s].options[ selectedIndex ].value);
+                if ( typeof($select[s].options[selectedIndex]) != 'undefined' ) {
+                    $select[s].options[ selectedIndex ].selected = true;
+                    $select[s].setAttribute('data-value',  $select[s].options[ selectedIndex ].value);
+                }
 
             }
         }
