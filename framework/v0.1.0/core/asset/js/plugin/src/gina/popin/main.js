@@ -1,6 +1,7 @@
 define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/events' ], function (require) {
 
     var $       = require('jquery');
+    $.noConflict();
     var uuid    = require('vendor/uuid');
     var merge   = require('utils/merge');
 

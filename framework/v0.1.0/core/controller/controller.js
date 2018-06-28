@@ -1346,7 +1346,7 @@ function SuperController(options) {
 
     // TODO - download file
     /**
-     * Download to targeteded filename.ext - Will create target if new
+     * Download to targeted filename.ext - Will create target if new
      * Use `cb` callback or `onComplete` event
      *
      * @param {string} filename
@@ -1366,7 +1366,7 @@ function SuperController(options) {
      * Upload to target - Will create target if new
      * Use `cb` callback or `onComplete` event
      *
-     * @param {string} target
+     * @param {string} target is the upload dir
      *
      * @callback [cb]
      *  @param {object} error
@@ -1393,8 +1393,7 @@ function SuperController(options) {
                 var uploadDir   = new _(target)
                     , list      = []
                     , i         = 0
-                    , folder    = uploadDir.mkdirSync()
-                    , el        = null;
+                    , folder    = uploadDir.mkdirSync();
 
                 if (folder instanceof Error) {
                     if (cb) {
@@ -1403,14 +1402,14 @@ function SuperController(options) {
                         self.emit('uploaded', folder)
                     }
                 } else {
-                    // files list
-                    for (el in files) {
+                    // files list                    
+                    for (var len = files.length; i < len; ++i ){
                         list[i] = {
-                            source: files[el].path,
-                            target: _(uploadDir.toString() + '/' + files[el].originalFilename)
+                            source: files[i].path,
+                            target: _(uploadDir.toString() + '/' + files[i].originalFilename)
                         };
-                        uploadedFiles[i] = { location: list[i].target, file: files[el].originalFilename };
-                        ++i
+                        uploadedFiles[i] = { location: list[i].target, file: files[i].originalFilename };
+                        
                     }
 
                     movefiles(0, local.res, list, function (err) {

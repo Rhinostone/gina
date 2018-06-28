@@ -1,6 +1,7 @@
 define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'utils/collection', 'utils/routing', 'gina/storage', 'gina/validator' ], function (require) {
 
-    var $           = require('jquery');
+    var $           = require('jquery');
+    $.noConflict();
     var merge       = require('utils/merge');
     var routing     = require('utils/routing');
     var Collection  = require('utils/collection');
