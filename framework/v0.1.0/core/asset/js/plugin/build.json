@@ -23,7 +23,7 @@
     "helpers/dateFormat"    : "../../../../../helpers/dateFormat"
   },
   "include": [
-    "requireLib"
+    "requireLib" 
   ],
   "name": "core",
   "out": "./dist/gina.min.js",

@@ -169,6 +169,13 @@ function ValidatorPlugin(rules, data, formId) {
 
         _id = _id.replace(/\#/, '');
 
+        // in case form is created on the fly and is not yet registered
+        if (document.getElementById(_id) != null && typeof (instance['$forms'][_id]) == 'undefined') {
+            //instance['$forms'][_id] = document.getElementById(_id);
+            
+            initForm( document.getElementById(_id) );
+        }
+
         if ( typeof(instance['$forms'][_id]) != 'undefined' ) {
             instance['$forms'][_id].withUserBindings = true;
 
@@ -531,7 +538,7 @@ function ValidatorPlugin(rules, data, formId) {
      *
      *
      * @param {object} data
-     * @param {object} [ options ]
+     * @param {object} [ options ] : { isSynchrone: true, withCredentials: true }
      * */
     var send = function(data, options) {
 
@@ -589,15 +596,17 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
 
-        // setting up headers
+        // setting up headers -    all but Content-Type ; it will be set right before .send() si called
         for (var hearder in options.headers) {
-            if ( hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '') {
-                options.headers[hearder] = enctype
-            }
+             //if ( hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '') {
+             //    options.headers[hearder] = enctype
+             //}
+            if (hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '')
+                continue;
 
             xhr.setRequestHeader(hearder, options.headers[hearder]);
         }
-
+        
         if (xhr) {
             // catching ready state cb
             xhr.onreadystatechange = function (event) {
@@ -717,13 +726,16 @@ function ValidatorPlugin(rules, data, formId) {
 
             // catching request progress
             xhr.onprogress = function(event) {
-                // console.log(
-                //    'progress position '+ event.position,
-                //    '\nprogress total size '+ event.totalSize
-                // );
+                
+                var percentComplete = '0';
+                if (event.lengthComputable) {
+                    percentComplete = event.loaded / event.total;
+                    percentComplete = parseInt(percentComplete * 100);
 
-                var percentComplete = (event.position / event.totalSize)*100;
-                result = {
+                }
+
+                //var percentComplete = (event.position / event.totalSize)*100;
+                var result = {
                     'status': 100,
                     'progress': percentComplete
                 };
@@ -753,9 +765,68 @@ function ValidatorPlugin(rules, data, formId) {
                 data = event.detail.data;
 
             if (data) {
+
+                var hasBinaries = false;
+                
                 if ( typeof(data) == 'object' ) {
+
+                    var binaries    = []
+                        , b         = 0;
+
                     try {
-                        data = JSON.stringify(data)
+                        if ( !(data instanceof FormData) ) {
+                            data = JSON.stringify(data)
+                        } else {
+                            var newData = {};
+                            for (var [key, value] of data.entries()) {
+                                // file upload case
+                                if (value instanceof File) {
+                                    if (!hasBinaries)
+                                        hasBinaries = true;
+
+                                    binaries[b] = {
+                                        key: key,
+                                        file: value,
+                                        bin: ''
+                                    };
+                                   
+                                    ++b;
+                                } else {
+                                    newData[key] = value
+                                }
+                                
+                            }
+                        }
+
+                        
+                        if (hasBinaries && binaries.length > 0) {
+
+                            // We need a separator to define each part of the request
+                            var boundary = '--ginaWKBoundary' + uuid.v4().replace(/\-/g, ''); 
+                            
+                            
+                            return processFiles(binaries, boundary, '', 0, function onComplete(err, data, done) {
+                                
+                                if (err) {
+                                    throw err
+                                } else {
+
+                                    if (done) {
+                                        xhr.setRequestHeader('Content-Type', 'multipart/form-data; boundary=' + boundary);
+                                        xhr.send(data);
+
+                                        $form.sent = true;
+                                    }
+
+                                    done = false;
+
+                                    return false;
+                                }                                
+                            });
+                            
+                        }
+                        
+                        
                     } catch (err) {
                         triggerEvent(gina, $target, 'error.' + id, err);
                         if (hFormIsRequired)
@@ -764,7 +835,29 @@ function ValidatorPlugin(rules, data, formId) {
                 }
                 //console.log('sending -> ', data);
                 //try {
+                if (!hasBinaries) {
+                //     var intervalID = null;
+                //     intervalID = setInterval(function onTotalReadersCheck() {
+                //         if (totalReaders <= 0) {
+                            
+                //             // rather than letting XMLHttpRequest decode the data first.
+                //             //xhr.responseType = 'arraybuffer';
+                //             //xhr.setRequestHeader('Content-Type', null);
+                //             xhr.setRequestHeader('Content-Type', 'multipart/form-data; boundary=' + boundary);                                                        
+                //             xhr.send(data);
+                            
+                //             clearInterval(intervalID);
+                //         }
+                //     }, 200);
+                // } else {
+
+                    if (typeof (enctype) != 'undefined' && enctype != null && enctype != '') {
+                        xhr.setRequestHeader('Content-Type', enctype);
+                    }
+
                     xhr.send(data)
+                }
+                    
                 // } catch (err) {
                 //     XHRData = result;
                 //     if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
@@ -781,14 +874,128 @@ function ValidatorPlugin(rules, data, formId) {
                 // }
 
             } else {
+
+                if ( typeof(enctype) != 'undefined' && enctype != null && enctype != ''){
+                    xhr.setRequestHeader('Content-Type', enctype);
+                }
+
                 xhr.send()
             }
+
             $form.sent = true;
-
-
         }
     }
 
+    /**
+     * Convert <Uint8Array|Uint16Array|Uint32Array> to <String>
+     * @param {array} buffer
+     * @param {number} [byteLength] e.g.: 8, 16 or 32
+     * 
+     * @return {string} stringBufffer
+     */
+    var ab2str = function(buf, byteLength) {
+
+        var str = '';
+        var ab = null;
+
+        if ( typeof(byteLength) == 'undefined' ) {
+            var byteLength = 8;
+        }
+
+        switch (byteLength) {
+            case 8:
+                ab = new Uint8Array(buf);
+                break;
+            case 16:
+                ab = new Uint16Array(buf);
+                break;
+
+            case 32:
+                ab = new Uint32Array(buf);
+                break;
+                
+            default:
+                ab = new Uint8Array(buf);                
+
+        }
+        
+        var abLen = ab.length;
+        var CHUNK_SIZE = Math.pow(2, byteLength);
+        var offset, len, subab;
+        for (offset = 0; offset < abLen; offset += CHUNK_SIZE) {
+            len = Math.min(CHUNK_SIZE, abLen - offset);
+            subab = ab.subarray(offset, offset + len);
+            str += String.fromCharCode.apply(null, subab);
+        }
+        return str;
+    }
+
+    var processFiles = function(binaries, boundary, data, f, onComplete) {
+
+        var reader = new FileReader();
+
+        reader.addEventListener('load', function onReaderLoaded(e) {
+
+            e.preventDefault();
+
+            try {
+                var bin = ab2str(this.result);
+                binaries[this.index].bin += bin;
+
+            } catch (err) {
+
+                return onComplete(err, null, true);
+            }
+
+            // Start a new part in our body's request
+            data += "--" + boundary + "\r\n";
+
+            // Describe it as form data
+            data += 'Content-Disposition: form-data; '
+
+                // Define the name of the form data
+                + 'name="' + binaries[this.index].key + '"; '
+
+                // Provide the real name of the file
+                + 'filename="' + binaries[this.index].file.name + '"\r\n';
+
+
+            // And the MIME type of the file
+            data += 'Content-Type: ' + binaries[this.index].file.type + '\r\n';
+
+
+            // File length
+            data += 'Content-Length: ' + binaries[this.index].bin.length + '\r\n';
+
+            // There's a blank line between the metadata and the data
+            data += '\r\n';
+
+            // Append the binary data to our body's request
+            data += binaries[this.index].bin + '\r\n';
+
+            ++this.index;
+            // is last file ?
+            if (this.index == binaries.length) {
+
+                // Once we are done, "close" the body's request
+                data += "--" + boundary + "--";
+
+                onComplete(false, data, true);
+
+            } else { // process next file
+                processFiles(binaries, boundary, data, this.index, onComplete)
+            }
+
+            
+        }, false);
+
+        reader.index = f;
+        binaries[f].bin = '';
+
+        reader.readAsArrayBuffer(binaries[f].file);
+    }
+
+    
     var listenToXhrEvents = function($form) {
 
 
@@ -1038,8 +1245,8 @@ function ValidatorPlugin(rules, data, formId) {
                         if (customRule) {
                             customRule = customRule.replace(/\-/g, '.');
                             if ( typeof(instance.rules[customRule]) == 'undefined' ) {
-                                throw new Error('['+$allForms[f].id+'] no rule found with key: `'+customRule+'`');
-                                customRule = null
+                                customRule = null;
+                                throw new Error('['+$allForms[f].id+'] no rule found with key: `'+customRule+'`');                                
                             } else {
                                 customRule = instance.rules[customRule]
                             }
@@ -1113,6 +1320,80 @@ function ValidatorPlugin(rules, data, formId) {
 
         instance.initialized = true;
         return instance
+    }
+
+    var initForm = function ($form) {
+
+        var customRule = null;
+
+        if ($form.getAttribute) {
+            id = $form.getAttribute('id') || 'form.' + uuid.v4();
+            if (id !== $form.getAttribute('id')) {
+                $form.setAttribute('id', id)
+            }
+        } else {
+            id = 'form.' + uuid.v4();
+            $form.setAttribute('id', id)
+        }
+
+        $form.id = $validator.id = id;
+
+        if (typeof ($form.id) != 'undefined' && $form.id != 'null' && $form.id != '') {
+
+            $validator.target = $form;
+            instance.$forms[$form.id] = merge({}, $validator);
+
+            customRule = $form.getAttribute('data-gina-form-rule');
+
+            if (customRule) {
+                customRule = customRule.replace(/\-/g, '.');
+                if (typeof (instance.rules[customRule]) == 'undefined') {
+                    customRule = null;
+                    throw new Error('[' + $form.id + '] no rule found with key: `' + customRule + '`');
+                } else {
+                    customRule = instance.rules[customRule]
+                }
+            }
+
+            // finding forms handled by rules
+            if (typeof ($form.id) == 'string' && typeof (instance.rules[$form.id.replace(/\-/g, '.')]) != 'undefined') {
+                $target = instance.$forms[$form.id].target;
+                if (customRule) {
+                    bindForm($target, customRule)
+                } else {
+                    bindForm($target)
+                }
+
+            } else {
+                // weird exception when having in the form an element with name="id"
+                if (typeof ($form.id) == 'object') {
+                    delete instance.$forms[$form.id];
+
+                    var _id = $form.attributes.getNamedItem('id').nodeValue || 'form.' + uuid.v4();
+
+                    $form.setAttribute('id', _id);
+                    $form.id = _id;
+
+                    $validator.target = $form;
+                    instance.$forms[_id] = merge({}, $validator);
+
+                    $target = instance.$forms[_id].target;
+                    if (customRule) {
+                        bindForm($target, customRule)
+                    } else {
+                        bindForm($target)
+                    }
+                } else {
+
+                    $target = instance.$forms[$form.id].target;
+                    if (customRule) {
+                        bindForm($target, customRule)
+                    } else {
+                        bindForm($target)
+                    }
+                }
+            }
+        }        
     }
 
     /**
@@ -1261,7 +1542,7 @@ function ValidatorPlugin(rules, data, formId) {
             , key       = null
             , fields    = {};
 
-        for (name in data) {
+        for (var name in data) {
 
             if ( /\[(.*)\]/.test(name) ) {
                 // backup name key
@@ -1439,6 +1720,7 @@ function ValidatorPlugin(rules, data, formId) {
             }
         };
 
+        var radioGroup = null;
         var updateRadio = function($el, isInit) {
             var checked = $el.checked;
             var isBoolean = /^(true|false)$/i.test($el.value);
@@ -1446,7 +1728,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             // loop if radio group
             if (!isInit) {
-                var radioGroup = document.getElementsByName($el.name);
+                radioGroup = document.getElementsByName($el.name);
                 //console.log('found ', radioGroup.length, radioGroup)
                 for (var r = 0, rLen = radioGroup.length; r < rLen; ++r) {
                     if (radioGroup[r].id !== $el.id) {
@@ -1492,18 +1774,18 @@ function ValidatorPlugin(rules, data, formId) {
 
                 
 
-                var radioGroup = document.getElementsByName($el.name);
+                radioGroup = document.getElementsByName($el.name);
                 //console.log('found ', radioGroup.length, radioGroup)
-                for (var r = 0, rLen = radioGroup.length; r < rLen; ++r) {
-                    if (radioGroup[r].id !== $el.id) {
-                        radioGroup[r].checked = false;
-                        radioGroup[r].removeAttribute('checked');
+                for (var g = 0, gLen = radioGroup.length; g < gLen; ++g) {
+                    if (radioGroup[g].id !== $el.id) {
+                        radioGroup[g].checked = false;
+                        radioGroup[g].removeAttribute('checked');
                         
                         // if (isBoolean) {
-                        //     radioGroup[r].value = false;
+                        //     radioGroup[g].value = false;
                         // }
                         // if ( /^(true|false)$/.test($el.value) ) {
-                        //     radioGroup[r].value = (/^true$/.test(radioGroup[r].value)) ? true : false
+                        //     radioGroup[g].value = (/^true$/.test(radioGroup[g].value)) ? true : false
                         // }
                         
                     }
@@ -1569,8 +1851,8 @@ function ValidatorPlugin(rules, data, formId) {
             type    = $inputs[i].getAttribute('type');
 
             if ( typeof($inputs[i].id) == 'undefined' || $inputs[i].id == '' ) {
-                $inputs[i]['id'] = type +'-'+ uuid.v4();
-                $inputs[i].setAttribute('id', $inputs[i]['id'])
+                $inputs[i].id = type +'-'+ uuid.v4();
+                $inputs[i].setAttribute('id', $inputs[i].id)
             }
 
 

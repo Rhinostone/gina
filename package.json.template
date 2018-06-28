@@ -15,7 +15,7 @@
     "gina.io",
     "gina js"
   ],
-  "version": "{gina_version}",
+  "version": "0.1.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/rhinostone/gina.git"
@@ -24,14 +24,17 @@
     "name": "Rhinostone",
     "email": "gina@rhinosotne.com"
   },
-  "copyright" : "Copyright (c) {copyright}",
+  "copyright" : "Copyright (c) 2009-2017 Rhinostone <gina@rhinostone.com>",
   "dependencies": {
-    "colors": "",
-    "express": "4.x",
-    "swig": ""
+    "colors": "^1.1.2",
+    "tar": ""
+  },
+  "ginaDependencies": {
+    "colors": "^1.1.2",
+    "tar": ""
   },
   "engine": [
-    "node >=0.25"
+    "node >=0.10.25"
   ],
   "preferGlobal": "true",
   "bin": {
@@ -46,11 +49,8 @@
     "./doc/man/gina-model.1",
     "./doc/man/gina-env.1"
   ],
-  "main": "./bin/cli",
+  "main": "./framework/v0.1.0/core/gna",
   "scripts": {
-    "test": "nodeunit bin/test",
-    "preinstall": "node script/pre_install.js",
-    "postinstall": "node script/post_install.js"
   },
   "license": "MIT",
   "readmeFilename": "README.md"

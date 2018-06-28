@@ -1,8 +1,10 @@
 //Imports.
 var fs              = require('fs');
+var os              = require('os');
 var path            = require('path');
 var EventEmitter    = require('events').EventEmitter;
 var express         = require('express');
+var Busboy          = require('busboy');
 var zlib            = require('zlib'); // gzip / deflate
 var url             = require('url');
 var Config          = require('./config');
@@ -13,7 +15,6 @@ var routingUtils    = lib.routing;
 var inherits        = lib.inherits;
 var merge           = lib.merge;
 var Proc            = lib.Proc;
-var multiparty      = lib.multiparty;
 var console         = lib.logger;
 
 function Server(options) {
@@ -554,6 +555,7 @@ function Server(options) {
             request.post    = {};
             request.put     = {};
             request.delete  = {};
+            request.files   = [];
             //request.patch = {}; ???
             //request.cookies = {}; // ???
 
@@ -575,7 +577,7 @@ function Server(options) {
 
             // multipart wrapper for uploads
             // files are available from your controller or any middlewares:
-            //  @param {object} req.files
+            //  @param {object} req.files            
             if ( /multipart\/form-data;/.test(request.headers['content-type']) ) {
                 // TODO - get options from settings.json & settings.{env}.json ...
                 // -> https://github.com/andrewrk/node-multiparty
@@ -589,7 +591,140 @@ function Server(options) {
                     return false
                 }
 
+                var uploadDir = opt.uploadDir || os.tmpdir();
+
+                var str2ab = function(str) {
+                    //var buf = new ArrayBuffer(str.length * 2); // 2 bytes for each char when using Uint16Array(buf)
+                    var buf = new ArrayBuffer(str.length); // 2 bytes for each char
+                    var bufView = new Uint8Array(buf);
+                    for (var i = 0, strLen = str.length; i < strLen; i++) {
+                        bufView[i] = str.charCodeAt(i);
+                    }
+                    return buf;
+                }; 
+                
+                
+                var busboy = new Busboy({ headers: request.headers });
+                var fileObj         = null
+                    , tmpFilename   = null
+                    , data          = null;
+
+                request.files = [];
+                busboy.on('file', function(fieldname, file, filename, encoding, mimetype) {
+                    
+                    //f = file._index = request.files.length; 
+
+                    // request.files[f] = {
+                    //     name                : fieldname,
+                    //     originalFilename    : filename,
+                    //     encoding            : encoding,
+                    //     type                : mimetype,
+                    //     size                : 0,
+                    //     path                : _(uploadDir + '/' + filename)
+                    // };
+
+
+                    // data = '';
+                    file._dataChunk = ''             
+                    
+                    file.on('data', function(chunk) {                   
+                        this._dataChunk += chunk;
+                    });
+
+                    file.on('end', function() {
+                        
+                        fileObj = Buffer.from(str2ab(this._dataChunk));
+                        delete this._dataChunk;
+                        
+                        tmpFilename = _(uploadDir + '/' + filename);
+
+                        request.files.push({
+                            name: fieldname,
+                            originalFilename: filename,
+                            encoding: encoding,
+                            type: mimetype,
+                            size: fileObj.length,
+                            path: tmpFilename
+                        });
+                        //request.files[this._index].data = Buffer.from(str2ab(data));
+                        //request.files[this._index].size = request.files[this._index].data.length;
+
+                        
+                        // write to /tmp
+                        if (fs.existsSync(tmpFilename))
+                            fs.unlinkSync(tmpFilename);
+
+                      
+                        var writeStream = fs.createWriteStream(tmpFilename);
+                        writeStream._index = this._index;
+                        writeStream.write(fileObj);
+
+                        writeStream.on('error', function onWriteError(err) {
+                            console.error('[ busboy ] [ onWriteError ]', err);
+                            throwError(response, 500, 'Internal server error\n' + err, next);
+
+                            writeStream.close(); 
+                        });
+
+                        //writeStream.on('finish', function onFinishWriting() { });
+
+                        writeStream.end(); 
+                                               
+                    });
+                });
+
+                busboy.on('finish', function(params) {
+
+                    loadBundleConfiguration(request, response, next, function(err, bundle, pathname, config, req, res, next) {
+                        if (!req.handled) {
+                            req.handled = true;
+                            if (err) {
+                                if (!res.headersSent)
+                                    throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                            } else {
+                                handle(req, res, next, bundle, pathname, config)
+                            }
+                        }
+                    })
+                })
+
+               
+
+                request.pipe(busboy);
+
+
+                
+                // request.body = '';
+                // request.on('data', function(chunk) { // for this to work, don't forget the name attr for you form elements
+                    
+                //     request.body += new Buffer(new Uint8Array(chunk))
+                //     // if (!files[data.name]) {
+                //     //     files[data.name] = Object.assign({}, struct, chunk);
+                //     //     files[data.name].data = [];
+                //     // }
+                    
+                //     // //convert the ArrayBuffer to Buffer 
+                //     // data.data = new Buffer(new Uint8Array(data.data));
+                //     // //save the data 
+                //     // files[data.name].data.push(data.data);
+                //     // files[data.name].slice++;
+
+                //     // if (files[data.name].slice * 100000 >= files[data.name].size) {
+                //     //     var fileBuffer = Buffer.concat(files[data.name].data);
+
+                //     //     fs.write(_(uploadDir +'/' + data.name), fileBuffer, (err) => {
+                //     //         delete files[data.name];
+                //     //         request.files = files;
+                //     //         //if (err) return socket.emit('upload error');
+                //     //         request.emit('end');
+                //     //     });
+                //     // }
+                // });
+
+                
+                /**
                 var i = 0, form = new multiparty.Form(opt);
+                
                 form.parse(request, function(err, fields, files) {
                     if (err) {
                         throwError(response, 400, err.stack||err.message);
@@ -618,10 +753,36 @@ function Server(options) {
                         }
                     }
 
-                    request.files = {};
+                    request.files = [];
+                    var f = 0;
                     for (var i in files) {
                         // should be: request.files[i] = files[i];
-                        request.files[i] = files[i][0]; // <-- to fixe on multiparty
+                        //request.files[i] = files[i][0]; // <-- to fixe on multiparty
+                        
+                        
+                        request.files[f] = {
+                            name                : files[i][f].fieldName,
+                            originalFilename    : files[i][f].originalFilename,
+                            size                : files[i][f].size,
+                            source              : files[i][f].path,
+                        }
+
+                        if ( typeof(files[i][f].headers) != 'undefined' ) {
+
+                            request.files[f].headers = files[i][f].headers;
+
+                            if (files[i][f].headers['content-type'])
+                                request.files[f].type = files[i][f].headers['content-type'];
+
+                            if (files[i][f].headers['content-length']) {
+                                files[i][f].headers['content-length'] = parseInt(files[i][f].headers['content-length']);
+
+                                request.files[f].size = files[i][f].headers['content-length'];
+                            }
+                                
+                        }
+
+                        ++f
                     }
 
                     if (request.fields) delete request.fields; // <- not needed anymore
@@ -637,7 +798,7 @@ function Server(options) {
                             }
                         }
                     })
-                })
+                })*/
             } else {
 
                 request.on('data', function(chunk){ // for this to work, don't forget the name attr for you form elements
