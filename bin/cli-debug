@@ -1,0 +1,36 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs    = require('fs');
+const {exec} = require('child_process');
+const os    = require('os');
+
+var isWin32 = function() {
+    return (os.platform() == 'win32') ? true : false;
+}
+
+var argv = process.argv.splice(2);
+argv = argv.join(' ');
+
+console.log('running: gina ' + argv );
+
+// fetching config
+var homeDir = (process.env[(isWin32()) ? 'USERPROFILE' : 'HOME'] );
+homeDir += (isWin32()) ? '\\.gina' :  '/.gina';
+var mainConf = require(homeDir + ((isWin32()) ? '\\main.json' : '/main.json'));
+
+var version = mainConf.def_framework.split(/\./g);
+version = version.splice(0, 2).join('.');
+
+var settings = require(homeDir + ((isWin32()) ? '\\' + version + '\\settings.json' : '/' + version +'/settings.json'));
+
+// gina debug port
+var debugPort = settings.debug_port;
+exec('node --inspect-brk=' + debugPort +' '+ __dirname +'/cli ' + argv, (error, stdout, stderr) => {
+    if (error) {
+        console.error(`exec error: ${error}`);
+        return;
+    }
+    console.log(`${stdout}`);
+    console.error(`${stderr}`);
+});

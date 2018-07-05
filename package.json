@@ -36,10 +36,10 @@
   "engine": [
     "node >=0.10.25"
   ],
-  "preferGlobal": "true",
+  "preferGlobal": true,
   "bin": {
     "gina" : "./bin/cli",
-    "gina-debug": "./bin/cli"
+    "gina-debug": "./bin/cli-debug"
   },
   "man" : [
     "./doc/man/gina.1",

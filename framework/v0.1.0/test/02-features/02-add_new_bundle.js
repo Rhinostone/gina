@@ -203,19 +203,19 @@ AddBundle = function(conf, exports) {
             };
             var envDataCmp = {
                 "dev" : {
-                    "host" : "127.0.0.1",
+                    "host" : "localhost",
                     "port" : {
                         "http" : 3100
                     }
                 },
                 "stage" : {
-                    "host" : "127.0.0.1",
+                    "host" : "localhost",
                     "port" : {
                         "http" : 3100
                     }
                 },
                 "prod" : {
-                    "host" : "127.0.0.1",
+                    "host" : "localhost",
                     "port" : {
                         "http" : 3100
                     }

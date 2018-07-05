@@ -251,7 +251,7 @@ function ContextHelper(contexts) {
         } else {
             conf = new Config({
                 env: env,
-                project: getContext('project'),
+                projectName: getContext('projectName'),
                 executionPath: getPath('project'),
                 startingApp: bundle,
                 ginaPath: getPath('gina').core
@@ -272,7 +272,7 @@ function ContextHelper(contexts) {
             try {
                 conf.bundlesConfiguration.conf.bundle = bundle;
                 conf.bundlesConfiguration.conf.env = env;
-                conf.bundlesConfiguration.conf.project = getContext('project');
+                conf.bundlesConfiguration.conf.projectName = getContext('projectName');
                 conf.bundlesConfiguration.conf.bundles = getContext('bundles');
 
                 return conf.bundlesConfiguration.conf
@@ -345,7 +345,7 @@ function ContextHelper(contexts) {
         var Config  = ctx.gina.Config;
         var conf = new Config({
             env             : env,
-            project         : getContext('project'),
+            projectName     : getContext('projectName'),
             executionPath   : getPath('project'),
             startingApp     : bundle,
             ginaPath        : getPath('gina').core

@@ -153,19 +153,19 @@ AddBundle = function(opt, project, env, bundle) {
         //TODO - Check if port is not in use before
         content[bundle] = {
             "dev" : {
-                "host" : "127.0.0.1",
+                "host" : "localhost",
                 "port" : {
                     "http" : last
                 }
             },
             "stage" : {
-                "host" : "127.0.0.1",
+                "host" : "localhost",
                 "port" : {
                     "http" : last
                 }
             },
             "prod" : {
-                "host" : "127.0.0.1",
+                "host" : "localhost",
                 "port" : {
                     "http" : last
                 }

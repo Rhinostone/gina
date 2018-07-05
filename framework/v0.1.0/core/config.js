@@ -38,7 +38,8 @@ function Config(opt) {
     // framework settings from homedir
     var framework = {
         ports : _( GINA_HOMEDIR +'/ports.json', true),
-        portsReverse : _( GINA_HOMEDIR +'/ports.reverse.json', true)
+        portsReverse : _( GINA_HOMEDIR +'/ports.reverse.json', true),
+        project : _( GINA_HOMEDIR +'/projects.json', true)
     };
 
     this.bundles = [];
@@ -53,7 +54,7 @@ function Config(opt) {
         if ( !Config.initialized) {
             var env = opt.env;
 
-            self.project        = opt.project || getContext('gina').project;
+            self.projectName    = opt.projectName || getContext('projectName');
             self.startingApp    = opt.startingApp;
             self.executionPath  = opt.executionPath; // project path
 
@@ -65,8 +66,7 @@ function Config(opt) {
             if ( fs.existsSync(path) ) {
 
                 self.userConf = require(path);
-                console.debug('Application config file loaded ['
-                    + _(self.executionPath + '/env.json') + ']');
+                console.debug('Application config file loaded [' + path + ']');
             }
 
             self.Env.parent = self;
@@ -93,7 +93,7 @@ function Config(opt) {
         console.debug('Loading conf...');
 
         // framework settings
-        var filename = null;
+        var filename = null, content = null;
 
         for (var file in framework) {
 
@@ -102,8 +102,14 @@ function Config(opt) {
             if ( self.isCacheless() ) {
                 delete require.cache[require.resolve(filename)];
             }
-
-            setContext('gina.'+ file, require(filename))
+            
+            if (file == 'project') {
+                content = require(filename)[self.projectName] // get only related project infos
+            } else {
+                content = require(filename);
+            }
+            
+            setContext('gina.'+ file, content)
         }
 
 
@@ -369,7 +375,10 @@ function Config(opt) {
             appPort         = null,
             env             = self.Env.get(),
             appsPath        = '',
-            modelsPath      = '';
+            modelsPath      = '',
+            ctx             = getContext('gina'),
+            projectConf     = ctx.project,
+            portsReverse    = ctx.portsReverse;
 
 
         //Pushing default app first.
@@ -379,7 +388,7 @@ function Config(opt) {
             var pkg     = require(_(root + '/project.json')).bundles;
             var ports   = require( _(GINA_HOMEDIR + '/ports.reverse.json') );
 
-            masterPort = ports[self.startingApp+'@'+self.project][env].http
+            masterPort = ports[self.startingApp+'@'+self.projectName][env].http
         } catch (err) {
             console.error(err.stack);
 
@@ -395,10 +404,10 @@ function Config(opt) {
             if ( typeof(content[app][env]) != "undefined" ) {
 
                 // setting port
-                if ( typeof(ports[app+'@'+self.project]) == 'undefined' )
+                if ( typeof(ports[app+'@'+self.projectName]) == 'undefined' )
                     continue;
 
-                appPort = ports[app+'@'+self.project][env].http;
+                appPort = ports[app+'@'+self.projectName][env].http;
 
                 if (
                     pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && GINA_ENV_IS_DEV
@@ -420,9 +429,20 @@ function Config(opt) {
                     ?  content[app][env].modelsPath
                     :  template["{bundle}"]["{env}"].modelsPath;
 
-                newContent[app][env].protocol = ( typeof(content[app][env]['protocol'] ) != "undefined")
-                    ?  content[app][env].protocol
-                    :  template["{bundle}"]["{env}"].protocol;
+                // newContent[app][env].server.protocol = ( typeof(content[app][env].server['protocol'] ) != "undefined")
+                //     ?  content[app][env].server.protocol
+                //     :  template["{bundle}"]["{env}"].server.protocol;
+                
+                newContent[app][env].server = ( typeof(content[app][env].server ) != "undefined")
+                    ?  content[app][env].server
+                    :  template["{bundle}"]["{env}"].server;                    
+                
+                // getting server protocol: bundle's settings first, if not available ->W project's config
+                // If the users has set a different protocol in its /config/settings.json, it will override the one bellow
+                // at server init (see server.js)
+                newContent[app][env].server.protocol = projectConf.def_protocol; // from ~/.gina/projects.json
+                // getting server port
+                newContent[app][env].server.port = portsReverse[ app +'@'+ self.projectName ][env][projectConf.def_protocol];
 
                 //I had to for this one...
                 appsPath = appsPath.replace(/\{executionPath\}/g, root);
@@ -439,7 +459,7 @@ function Config(opt) {
                     newContent[app][env].port = {}
                 }
 
-                newContent[app][env].port[ newContent[app][env].protocol ] = appPort;
+                newContent[app][env].port[ newContent[app][env].server.protocol ] = appPort;
 
                 //Check if standalone or shared instance
                 if (appPort != masterPort) {
@@ -630,7 +650,7 @@ function Config(opt) {
 
         var routing = {}, reverseRouting = {};
 
-        conf[bundle][env].project       = getContext('project');
+        conf[bundle][env].projectName   = getContext('projectName');
         conf[bundle][env].allBundles    = bundles;
         conf[bundle][env].cacheless     = cacheless;
         conf[bundle][env].standalone    = standalone;
@@ -657,10 +677,14 @@ function Config(opt) {
         var main        = '';
         var name        = null;
         var exists      = false;
-        var fileContent = null, nameArr = null;
+        var fileContent = null
+            , nameArr   = null
+            , foundDevVersion = null;
 
         for (var c = 0, cLen = configFiles.length; c < cLen; ++c) {
             
+            foundDevVersion = false;
+
             fName = configFiles[c];
             if (/^\./.test(fName) || /\.dev\.json$/.test(fName) || !/\.json$/.test(fName)  )
                 continue;
@@ -696,6 +720,7 @@ function Config(opt) {
                     }
 
                     if (exists) {
+                        foundDevVersion = true;
                         fileContent = merge(require(_(filename, true)), fileContent);
                     }
 
@@ -722,9 +747,9 @@ function Config(opt) {
                 if (exists) {
                     //console.debug('[ GINA ] [ CONFIG ] required: ' + _(filename, true));
                     //console.debug('[ GINA ] [ CONFIG ] file content: ' + JSON.stringify(require(_(filename, true)), null, 2));
-                    if (typeof (fileContent) != 'undefined') {
+                    if (foundDevVersion) {
                         
-                        fileContent = merge(require(_(filename, true)), fileContent);
+                        fileContent = merge(fileContent, require(_(filename, true)));
                     } else {
                         fileContent = require(_(filename, true));
                     }
@@ -1211,7 +1236,7 @@ function Config(opt) {
 
         conf[bundle][env].env       = env;
         // this setting is replace on http requests by the value extracted form the request header
-        conf[bundle][env].hostname = conf[bundle][env].protocol + '://' + conf[bundle][env].host + ':' + conf[bundle][env].port[conf[bundle][env].protocol];
+        conf[bundle][env].hostname = conf[bundle][env].server.protocol + '://' + conf[bundle][env].host + ':' + conf[bundle][env].port[conf[bundle][env].server.protocol];
 
 
         self.envConf[bundle][env] = conf[bundle][env];

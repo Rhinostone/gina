@@ -824,6 +824,8 @@ function ValidatorPlugin(rules, data, formId) {
                                 }                                
                             });
                             
+                        } else { // without file
+                            data = JSON.stringify(newData)
                         }
                         
                         
@@ -886,6 +888,8 @@ function ValidatorPlugin(rules, data, formId) {
         }
     }
 
+    
+
     /**
      * Convert <Uint8Array|Uint16Array|Uint32Array> to <String>
      * @param {array} buffer
@@ -902,6 +906,10 @@ function ValidatorPlugin(rules, data, formId) {
             var byteLength = 8;
         }
 
+        
+        var bits = (byteLength / 8) 
+
+
         switch (byteLength) {
             case 8:
                 ab = new Uint8Array(buf);
@@ -915,12 +923,14 @@ function ValidatorPlugin(rules, data, formId) {
                 break;
                 
             default:
-                ab = new Uint8Array(buf);                
+                ab = new Uint8Array(buf);      
+                break;      
 
         }
-        
+
+
         var abLen = ab.length;
-        var CHUNK_SIZE = Math.pow(2, byteLength);
+        var CHUNK_SIZE = Math.pow(2, 8) + bits;
         var offset, len, subab;
         for (offset = 0; offset < abLen; offset += CHUNK_SIZE) {
             len = Math.min(CHUNK_SIZE, abLen - offset);
@@ -929,6 +939,8 @@ function ValidatorPlugin(rules, data, formId) {
         }
         return str;
     }
+
+    
 
     var processFiles = function(binaries, boundary, data, f, onComplete) {
 
@@ -940,7 +952,12 @@ function ValidatorPlugin(rules, data, formId) {
 
             try {
                 var bin = ab2str(this.result);
+                //var bin = this.result;
                 binaries[this.index].bin += bin;
+
+                if (!binaries[this.index].file.type) {
+                    binaries[this.index].file.type = 'application/octet-stream'
+                }
 
             } catch (err) {
 
@@ -962,7 +979,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             // And the MIME type of the file
             data += 'Content-Type: ' + binaries[this.index].file.type + '\r\n';
-
+            
 
             // File length
             data += 'Content-Length: ' + binaries[this.index].bin.length + '\r\n';
@@ -993,6 +1010,7 @@ function ValidatorPlugin(rules, data, formId) {
         binaries[f].bin = '';
 
         reader.readAsArrayBuffer(binaries[f].file);
+        //reader.readAsBinaryString(binaries[f].file);
     }
 
     
@@ -1806,7 +1824,7 @@ function ValidatorPlugin(rules, data, formId) {
         procced = function () {
             // click proxy
             addListener(gina, $target, 'click', function(event) {
-
+                // exclude these elements for the binding
                 if ( /(label)/i.test(event.target.tagName) )
                     return false;
                 

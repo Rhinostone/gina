@@ -24,7 +24,8 @@
     $ gina bundle:remove <bundle_name> @<project_name>
 
 
-    [ Listing bundles ]
+
+[ Listing bundles ]
 
     $ gina bundle:list @<project_name>
 

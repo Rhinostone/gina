@@ -12,7 +12,7 @@ var console     = lib.logger;
 module.exports = function scan(opt, cb){
 
     var defaultOptions = {
-        host: '127.0.0.1', // default binding for localhost
+        host: 'localhost', // default binding for localhost
         start: 3100,
         end: 10000,
         timeout: 2000,

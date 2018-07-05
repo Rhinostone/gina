@@ -38,97 +38,101 @@ function Start(opt, cmd) {
 
         } else {
 
+            var isStarting = false;
             isRealApp(bundle, function(err, appPath){
 
                 if (err) {
                     console.error(err.stack||err.message)
                 } else {
 
-                }
+                    if (isStarting)
+                        return;
 
-                console.info('starting bundle [ ' + bundle +'@'+ self.projectName +' ]');
-                process.list = (process.list == undefined) ? [] : process.list;
-                setContext('processList', process.list);
-                setContext('ginaProcess', process.pid);
+                    
+                    console.info('starting bundle [ ' + bundle + '@' + self.projectName + ' ]');
+                    process.list = (process.list == undefined) ? [] : process.list;
+                    setContext('processList', process.list);
+                    setContext('ginaProcess', process.pid);
 
-                var params = [
-                    // node arguments will be passed by gina
-                    appPath,
-                    JSON.stringify( getContext() ), //Passing context to child.
-                    self.projectName, // project name
-                    bundle // bundle name
-                ];
+                    var params = [
+                        // node arguments will be passed by gina
+                        appPath,
+                        JSON.stringify(getContext()), //Passing context to child.
+                        self.projectName, // project name
+                        bundle // bundle name
+                    ];
 
-                // injecting node arguments
-                var index = 0;
-                if (self.nodeParams.length > 0) {
-                    for (var p = 0, pLen = self.nodeParams.length; p < pLen; ++p) {
-                        params.splice(index, 0, self.nodeParams[p]);
-                        ++index
+                    // injecting node arguments
+                    var index = 0;
+                    if (self.nodeParams.length > 0) {
+                        for (var p = 0, pLen = self.nodeParams.length; p < pLen; ++p) {
+                            params.splice(index, 0, self.nodeParams[p]);
+                            ++index
+                        }
                     }
-                }
 
 
 
-                for (var i=0; i<params.length; ++i) {
-                    if (params[i] == '') {
-                        params.splice(i,1);
+                    for (var i = 0; i < params.length; ++i) {
+                        if (params[i] == '') {
+                            params.splice(i, 1);
+                        }
                     }
-                }
-
-                var child = spawn(opt.argv[0], params,
-                    {
-                        detached : true
-                    }
-                );
 
 
-                var hasGreeted = false;
-                child.stdout.setEncoding('utf8');//Set encoding.
-                child.stdout.on('data', function(data) {
 
-                    console.log( data );
+                    var child = spawn(opt.argv[0], params,
+                        {
+                            detached: true
+                        }
+                    );
 
-                    if ( !opt.client.destroyed && !hasGreeted ) {
-                        opt.client.write('bundle [ ' + bundle +'@'+ self.projectName +' ] started !');
-                        hasGreeted = true
-                    }
-                });
 
-                //when an exception is thrown, it is sent to the client
-                child.stderr.setEncoding('utf8');
-                var error = null;
-                child.stderr.on('data', function(err) {
+                    child.stdout.setEncoding('utf8');//Set encoding.
+                    child.stdout.on('data', function(data) {
 
-                    error = err.toString();
-                    if ( /Debugger listening|Debugger attached|Warning/.test(error) ) {
-                        console.warn(error);
+                        console.log(data);
 
-                        if (!opt.client.destroyed) {
-                            opt.client.write(error);
+                        if (!opt.client.destroyed && !isStarting) {
+                            isStarting = true;
+                            opt.client.write('bundle [ ' + bundle + '@' + self.projectName + ' ] started !');
+                        }
+                    });
+
+                    //when an exception is thrown, it is sent to the client
+                    child.stderr.setEncoding('utf8');
+                    var error = null;
+                    child.stderr.on('data', function(err) {
+
+                        error = err.toString();
+                        if (/Debugger listening|Debugger attached|Warning/.test(error)) {
+                            console.warn(error);
+
+                            if (!opt.client.destroyed) {
+                                opt.client.write(error);
+                            }
+
+                        } else {
+                            console.error(error);
+                        }
+                    });
+
+                    child.on('exit', function(code, signal) {
+                        // handles only signals that cannot be cannot be caught or ignored
+                        // ref.: `framework/<version>/lib/proc.js`
+                        if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
+                            console.emerg('[' + this.pid + '] exiting with signal: ', signal);
+                            cmd.proc.dismiss(this.pid, signal);
                         }
 
-                    } else {
-                        console.error(error);
-                    }
-                });
+                    });
 
-                child.on('exit', function (code, signal) {
-                    // handles only signals that cannot be cannot be caught or ignored
-                    // ref.: `framework/<version>/lib/proc.js`
-                    if ( /(SIGKILL|SIGSTOP)/i.test(signal) ) {
-                        console.emerg('['+ this.pid +'] exiting with signal: ', signal);
-                        cmd.proc.dismiss(this.pid, signal);
-                    }
-
-                });
-
-                // CMD exit
-                setTimeout(function () {
-                    opt.client.emit('end');
-                }, 1000)
-
-
+                    // CMD exit
+                    setTimeout(function() {
+                        opt.client.emit('end');
+                    }, 1000)
+                }
+                
             })//EO isRealApp
         }
     }

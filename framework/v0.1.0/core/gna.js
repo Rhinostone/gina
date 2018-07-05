@@ -13,9 +13,11 @@
  * @author     Rhinostone <gina@rhinostone.com>
  */
 
-var gna         = {core:{}};
-var fs          = require('fs');
+var fs              = require('fs');
+var EventEmitter    = require('events').EventEmitter;
+var e               = new EventEmitter();
 
+var gna         = {core:{}};
 var Config      = require('./config');
 var config      = null;
 var lib         = require('./../lib');
@@ -25,8 +27,7 @@ var locales     = require('./locales');
 var plugins     = lib.plugins;
 var modelUtil   = new lib.Model();
 
-var EventEmitter    = require('events').EventEmitter;
-var e               = new EventEmitter();
+
 
 
 gna.initialized = process.initialized = false;
@@ -50,18 +51,20 @@ var projectName = null;
 if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
 
     var ctxObj = null;
-    if ( /child\.js$/.test(tmp[1]) ) { // required under a worker
+    if ( /(child)\.js$/.test(tmp[1]) ) { // required under a worker
         
         isLoadedThroughWorker = true;
         var ctxFilename = null;
+        
         for (var a = 0, aLen = tmp.length; a < aLen; ++a) {
             
             if (/^--argv-filename=/.test(tmp[a])) {
-                ctxFilename = tmp[a].split(/=/)[1];
+                ctxFilename = tmp[a].split(/=/)[1];                    
                 console.debug('[ FRAMEWORK ] Found context file `' + ctxFilename +'`' );
                 break;
             }
         }
+        
 
         if (ctxFilename) {
 
@@ -102,7 +105,7 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
         setContext('ginaProcess', ctxObj.ginaProcess);
 
         projectName = tmp[3];
-        setContext('project', projectName);
+        setContext('projectName', projectName);
         setContext('bundle', tmp[4]);
 
         var obj = ctxObj.envVars;
@@ -136,6 +139,7 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
             defineDefault(obj)
         }
 
+        
         //Cleaning process argv.
         if (isLoadedThroughCLI )
             process.argv.splice(2);
@@ -605,14 +609,14 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         }
 
         if (projectName == undefined) {
-            var projectName = getContext('project')
+            var projectName = getContext('projectName')
         }
 
         //console.log('[ FRAMEWORK ] appName ', appName);
-        core.project        = projectName;
-        core.startingApp    = appName;
-        core.executionPath  = root;
-        core.ginaPath       = ginaPath;
+        core.projectName        = projectName;
+        core.startingApp        = appName;
+        core.executionPath      = root;
+        core.ginaPath           = ginaPath;
 
 
         //Inherits parent (gina) context.
@@ -642,7 +646,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 config = new Config({
                     env             : env,
                     executionPath   : core.executionPath,
-                    project         : core.project,
+                    projectName     : core.projectName,
                     startingApp     : core.startingApp,
                     ginaPath        : core.ginaPath
                 });
@@ -681,7 +685,9 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                 console.info('[ FRAMEWORK ] Bundle started !',
                                     '\nbundle: [ ' + conf.bundle +' ]',
                                     '\nenv: [ '+ conf.env +' ]',
-                                    '\nport: ' + conf.port[conf.protocol],
+                                    '\nengine: ' + conf.server.engine,
+                                    '\nprotocol: ' + conf.server.protocol,
+                                    '\nport: ' + conf.server.port,
                                     '\npid: ' + process.pid,
                                     '\nThis way please -> '+ conf.hostname
                                 );
@@ -691,7 +697,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                             });
 
 
-                            console.debug('[ FRAMEWORK ][ '+ process.pid +' ] '+ conf.bundle +'@'+ core.project +' mounted ! ');
+                            console.debug('[ FRAMEWORK ][ '+ process.pid +' ] '+ conf.bundle +'@'+ core.projectName +' mounted ! ');
                             server.start(instance);
 
 
@@ -724,6 +730,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 };
 
                 var opt = {
+                    projectName     : core.projectName,
                     bundle          : core.startingApp,
                     //Apps list.
                     bundles         : obj.bundles,
@@ -736,6 +743,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
                 var server = new Server(opt);
                 server.onConfigured(initialize);
+                
 
             })//EO config.
         })//EO mount.
@@ -836,7 +844,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
             } else {
                 setContext('bundle', appName);
                 //to remove after merging gina processes into a single process.
-                var projectName = getContext('project');
+                var projectName = getContext('projectName');
                 var processList = getContext('processList');
                 process.list = processList;
                 var bundleProcess = new Proc(appName + '@' + projectName, process);
@@ -845,7 +853,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
         } else {
             appName = getContext('bundle');
-            var projectName = getContext('project');
+            var projectName = getContext('projectName');
             var processList = getContext('processList');
             process.list = processList;
             var bundleProcess = new Proc(appName + '@' + projectName, process);

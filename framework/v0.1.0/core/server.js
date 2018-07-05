@@ -3,13 +3,12 @@ var fs              = require('fs');
 var os              = require('os');
 var path            = require('path');
 var EventEmitter    = require('events').EventEmitter;
-var express         = require('express');
 var Busboy          = require('busboy');
 var zlib            = require('zlib'); // gzip / deflate
 var url             = require('url');
+var util            = require('util');
 var Config          = require('./config');
 var Router          = require('./router');
-var util            = require('util');
 var lib             = require('./../lib');
 var routingUtils    = lib.routing;         
 var inherits        = lib.inherits;
@@ -46,7 +45,8 @@ function Server(options) {
      * @public
      */
     var init = function(options) {
-
+        
+        self.projectName    = options.projectName;
         //Starting app.
         self.appName        = options.bundle;
 
@@ -112,7 +112,49 @@ function Server(options) {
             process.exit(1)
         }
 
-        self.emit('configured', false, express(), express, self.conf[self.appName][self.env]);
+        try {
+            var serverOpt = {};
+            if ( 
+                typeof(options.conf[self.appName][self.env].content.settings.server) != 'undefined' 
+                && options.conf[self.appName][self.env].content.settings.server != ''
+                && options.conf[self.appName][self.env].content.settings.server != null
+            ) {
+                serverOpt = options.conf[self.appName][self.env].content.settings.server
+            }
+            
+            serverOpt = merge(serverOpt, {
+                engine: options.conf[self.appName][self.env].server.engine,
+                protocol: options.conf[self.appName][self.env].server.protocol
+            });
+            
+            
+            // controlling one last time protocol & ports
+            
+            
+            var ctx         = getContext('gina'),
+            projectConf     = ctx.project,
+            //protocols       = projectConf.protocols,
+            // TODO - check if the user prefered protocol is register in projectConf
+            portsReverse    = ctx.portsReverse;
+                        
+            // locking port & protocol so it can't be changed by the user's settings
+            //serverOpt.protocol  = serverOpt.protocol;
+            self.conf[self.appName][self.env].server.protocol = serverOpt.protocol;
+            serverOpt.port      = self.conf[self.appName][self.env].server.port = portsReverse[ self.appName +'@'+ self.projectName ][self.env][serverOpt.protocol];
+            var protocol = ( /^http\/2/.test(serverOpt.protocol) ) ? 'https' : serverOpt.protocol;
+            self.conf[self.appName][self.env].hostname = protocol + '://' + self.conf[self.appName][self.env].host + ':' + serverOpt.port;
+            
+
+            Engine = require('./server.' + ((typeof (serverOpt.engine) != 'undefined' && serverOpt.engine != '') ? serverOpt.engine : 'express'));
+            var engine = new Engine(serverOpt);
+
+            self.emit('configured', false, engine.instance, engine.middleware, self.conf[self.appName][self.env]);
+
+        } catch (err) {
+            
+            console.emerg('[ BUNDLE ] [ '+ self.appName +' ] ServerEngine ' + err.stack)
+            process.exit(1)
+        }
     }
 
     this.onConfigured = function(callback) {
@@ -548,7 +590,8 @@ function Server(options) {
                 request.url = self.conf[self.appName][self.env].server.webroot
             }
             //Only for dev & debug purposes.
-            self.conf[self.appName][self.env]['protocol'] = request.protocol || self.conf[self.appName][self.env]['hostname'];
+            //if ( typeof(request.protocol) != 'undefined' && request.protocol != '')
+            //    self.conf[self.appName][self.env].server['protocol'];
 
             request.body    = {};
             request.get     = {};
@@ -593,39 +636,91 @@ function Server(options) {
 
                 var uploadDir = opt.uploadDir || os.tmpdir();
 
-                var str2ab = function(str) {
+                /** 
+                 * str2ab
+                 * One common practical question about ArrayBuffer is how to convert a String to an ArrayBuffer and vice-versa.
+                 * Since an ArrayBuffer is, in fact, a byte array, this conversion requires that both ends agree on how 
+                 * to represent the characters in the String as bytes. 
+                 * You probably have seen this "agreement" before: it is the 
+                 * String's character encoding (and the usual "agreement terms" are, for example, Unicode UTF-16 and iso8859-1). 
+                 * Thus, supposing you and the other party have agreed on the UTF-16 encoding 
+                 * 
+                 * ref.: 
+                 *  - https://developers.google.com/web/updates/2012/06/How-to-convert-ArrayBuffer-to-and-from-String
+                 *  - https://jsperf.com/arraybuffer-string-conversion/4
+                 * 
+                 * @param {string} str
+                 * 
+                 * @returns {array} buffer
+                 * */
+                var str2ab = function(str, bits) {
+                    
+                    var bytesLength = str.length
+                        //, bits         = 8 // default bytesLength
+                        , bits      = ( typeof (bits) != 'undefined' ) ? (bits/8) : 1 
+                        , buffer    = new ArrayBuffer(bytesLength * bits) // `bits`  bytes for each char
+                        , bufView   = null;
+
+                    switch (bytesLength) {
+                        case 8:
+                            bufView = new Uint8Array(buffer);
+                            break;
+
+                        case 16:
+                            bufView = new Uint16Array(buffer);
+                            break;
+
+                        case 32:
+                            bufView = new Uint32Array(buffer);
+                            break;
+                    
+                        default:
+                            bufView = new Uint8Array(buffer);
+                            break;
+                    }
                     //var buf = new ArrayBuffer(str.length * 2); // 2 bytes for each char when using Uint16Array(buf)
-                    var buf = new ArrayBuffer(str.length); // 2 bytes for each char
-                    var bufView = new Uint8Array(buf);
+                    //var buf = new ArrayBuffer(str.length); // Uint8Array
+                    //var bufView = new Uint8Array(buf);
                     for (var i = 0, strLen = str.length; i < strLen; i++) {
                         bufView[i] = str.charCodeAt(i);
                     }
-                    return buf;
+                    
+                    return buffer;
                 }; 
+
+                /**
+                 * str2ab
+                 * 
+                 * With TypedArray now available, the Buffer class implements the Uint8Array API 
+                 * in a manner that is more optimized and suitable for Node.js.
+                 * ref.:
+                 *  - https://nodejs.org/api/buffer.html#buffer_buffer_from_buffer_alloc_and_buffer_allocunsafe
+                 * 
+                 * @param {string} str
+                 *
+                 * @returns {array} buffer
+                 */
+                // var str2ab = function(str, encoding) {
+                    
+                //     const buffer = Buffer.allocUnsafe(str.length);
+
+                //     for (let i = 0, len = str.len; i < len; i++) {
+                //         buffer[i] = str.charCodeAt(i);
+                //     }
+
+                //     return buffer;
+                // }
                 
-                
-                var busboy = new Busboy({ headers: request.headers });
+
                 var fileObj         = null
-                    , tmpFilename   = null
-                    , data          = null;
+                    , tmpFilename   = null;
 
                 request.files = [];
+
+                var busboy = new Busboy({ headers: request.headers });
                 busboy.on('file', function(fieldname, file, filename, encoding, mimetype) {
                     
-                    //f = file._index = request.files.length; 
-
-                    // request.files[f] = {
-                    //     name                : fieldname,
-                    //     originalFilename    : filename,
-                    //     encoding            : encoding,
-                    //     type                : mimetype,
-                    //     size                : 0,
-                    //     path                : _(uploadDir + '/' + filename)
-                    // };
-
-
-                    // data = '';
-                    file._dataChunk = ''             
+                    file._dataChunk = '';             
                     
                     file.on('data', function(chunk) {                   
                         this._dataChunk += chunk;
@@ -646,9 +741,6 @@ function Server(options) {
                             size: fileObj.length,
                             path: tmpFilename
                         });
-                        //request.files[this._index].data = Buffer.from(str2ab(data));
-                        //request.files[this._index].size = request.files[this._index].data.length;
-
                         
                         // write to /tmp
                         if (fs.existsSync(tmpFilename))
@@ -686,10 +778,9 @@ function Server(options) {
                             }
                         }
                     })
-                })
+                });
 
                
-
                 request.pipe(busboy);
 
 
@@ -875,10 +966,10 @@ function Server(options) {
                                 break;
 
                             case 'get':
-                                if ( request.query.count() > 0 ) {
+                                if ( typeof(request.query) != 'undefined' && request.query.count() > 0 ) {
                                     request.get = request.query;
                                 }
-                                // else, matching route params against url context instead once route is identified
+                                // else, wilol be matching route params against url context instead once route is identified
 
 
                                 // cleaning
@@ -987,8 +1078,7 @@ function Server(options) {
         });//EO this.instance
 
 
-        self.instance.listen(self.conf[self.appName][self.env].port.http);//By Default 3100
-        //self.instance.timeout = 120000; // check node.js express & documentation
+        self.instance.listen(self.conf[self.appName][self.env].server.port);//By Default 3100
 
         self.emit('started', self.conf[self.appName][self.env], true);
     }
@@ -1108,8 +1198,8 @@ function Server(options) {
                 , routing   = JSON.parse(JSON.stringify( config.getRouting(bundle, self.env) ));
 
             if ( routing == null || routing.count() == 0 ) {
-                console.error('Malformed routing or Null value for bundle [' + bundle + '] => ' + req.originalUrl);
-                throwError(res, 500, 'Internal server error\nMalformed routing or Null value for bundle [' + bundle + '] => ' + req.originalUrl, next);
+                console.error('Malformed routing or Null value for bundle [' + bundle + '] => ' + req.url);
+                throwError(res, 500, 'Internal server error\nMalformed routing or Null value for bundle [' + bundle + '] => ' + req.url, next);
             }
 
         } catch (err) {
@@ -1141,11 +1231,11 @@ function Server(options) {
                 try {
                     isRoute = routingUtils.compareUrls(params, routing[name].url, req);
                 } catch (err) {
-                    throwError(res, 500, 'Rule [ '+name+' ] needs your attention.\n'+err.stack);
+                    throwError(res, 500, 'Rule [ '+name+' ] needs your attention.\n'+ err.stack);
                     break;
                 }
 
-                if (pathname === routing[name].url || isRoute.past) {
+                if (pathname == routing[name].url || isRoute.past) {
 
                     //console.debug('Server is about to route to '+ pathname);
 
@@ -1157,22 +1247,24 @@ function Server(options) {
 
                     var allowed = (typeof(routing[name].method) == 'undefined' || routing[name].method.length > 0 || routing[name].method.indexOf(req.method) != -1)
                     if (!allowed) {
-                        throwError(res, 405, 'Method Not Allowed for [' + params.bundle + '] => ' + req.originalUrl);
+                        throwError(res, 405, 'Method Not Allowed for [' + params.bundle + '] => ' + req.url);
                         break;
                     } else {
 
 
                         // comparing routing method VS request.url method
                         if ( routing[name].method.toLowerCase() != req.method.toLowerCase() ) {
-                            throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.originalUrl+'` is expecting `' + routing[name].method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
+                            throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.url+'` is expecting `' + routing[name].method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
                             break
                         }
 
                         // handling GET method exception - if no param found
                         var methods = ['get', 'delete'], method = req.method.toLowerCase();
+                        
                         if (
                             methods.indexOf(method) > -1 && typeof(req.query) != 'undefined' && req.query.count() == 0
                             || methods.indexOf(method) > -1 && typeof(req.query) == 'undefined' && typeof(req.params) != 'undefined' && req.params.count() > 1
+                            //|| methods.indexOf(method) > -1 && typeof(req.query) == 'undefined' && typeof(req.params) != 'undefined' && req.params.count() > 0
                         ) {
                             var p = 0;
                             for (var parameter in req.params) {
@@ -1185,6 +1277,7 @@ function Server(options) {
                                 }
                                 ++p
                             }
+                            
                         } else if ( method == 'put' ) { // merging req.params with req.put (passed through URI)
                             var p = 0;
                             for (var parameter in req.params) {
@@ -1507,7 +1600,7 @@ function Server(options) {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
 
-                console.error(res.req.method +' [ '+code+' ] '+ res.req.url);
+                console.error(local.request.method +' [ '+code+' ] '+ local.request.url);
                 res.end(JSON.stringify({
                     status: code,
                     error: msg
@@ -1515,7 +1608,7 @@ function Server(options) {
                 res.headersSent = true
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
-                console.error(res.req.method +' [ '+code+' ] '+ res.req.url);
+                console.error(local.request.method +' [ '+code+' ] '+ local.request.url);
                 res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
                 res.headersSent = true
             }

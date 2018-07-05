@@ -170,6 +170,7 @@ function Add(opt, cmd) {
             "envs": self.envs,
             "def_env": self.defaultEnv,
             "dev_env": self.devEnv,
+            "protocols": self.protocols,
             "def_protocol": self.defaultProtocol
         };
 

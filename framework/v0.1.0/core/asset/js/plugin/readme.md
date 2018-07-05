@@ -137,7 +137,7 @@ GFF will be made available on load through the global variable `gina`.
 ### engine.io (client)
 ```javascript
 var eio = require('engine.io');
-var socket = eio('ws://127.0.0.1:8888');
+var socket = eio('ws://localhost:8888');
 
 socket.on('open', function(){
     socket.on('close', function(){

@@ -9,8 +9,14 @@
 //Imports.
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
-var http            = require('http');
-var https           = require('https');
+var protocols       = {
+    http    : {},//require('http'),
+    https   : {},//require('https'),
+    http2   : {},//require('http2')
+};
+// const tls = require('tls');
+// const crypto = require('crypto');
+
 var lib             = require('./../../lib') || require.cache[require.resolve('./../../lib')];
 var merge           = lib.merge;
 var inherits        = lib.inherits;
@@ -44,10 +50,10 @@ function SuperController(options) {
         _data   : {}
     };
 
-    var ports = {
-        'http': 80,
-        'https': 443
-    };
+    // var ports = {
+    //     'http': 80,
+    //     'https': 443
+    // };
 
 
     /**
@@ -110,8 +116,11 @@ function SuperController(options) {
         //      var data = { page: { view: { title: "My Title"}}};
         //      self.render(data)
         // }
+        
         if ( typeof(options.conf.content.routing[options.rule].param) !=  'undefined' ) {
-            var str = 'page.', p = options.conf.content.routing[options.rule].param;
+            var str = 'page.'
+            , p = options.conf.content.routing[options.rule].param;
+            
             for (var key in p) {
                 if ( p.hasOwnProperty(key) && !/^(control)$/.test(key) ) {
                     str += key + '.';
@@ -173,7 +182,7 @@ function SuperController(options) {
 
             set('page.environment.gina', version.number);
             set('page.environment.nodejs', version.nodejs +' '+ version.platform +' '+ version.arch);
-            set('page.environment.middleware', version.middleware);
+            set('page.environment.engine', options.conf.server.engine);//version.middleware
             set('page.environment.env', GINA_ENV);
             set('page.environment.envIsDev', GINA_ENV_IS_DEV);
             
@@ -182,7 +191,8 @@ function SuperController(options) {
             set('page.environment.hostname', ctx.config.envConf[options.conf.bundle][GINA_ENV].hostname);
             set('page.environment.webroot', options.conf.server.webroot);
             set('page.environment.bundle', options.conf.bundle);
-            set('page.environment.project', options.conf.project);
+            set('page.environment.project', options.conf.projectName);
+            set('page.environment.protocol', options.conf.server.protocol);
 
             set('page.view.ext', ext);
             set('page.view.control', action);
@@ -281,7 +291,8 @@ function SuperController(options) {
         }
 
         local.options.isWithoutLayout = true;
-        local.options.debugMode = GINA_ENV_IS_DEV; // only active for dev env
+        
+        local.options.debugMode = (typeof(displayToolbar) != 'undefined' ) ? displayToolbar : undefined; // only active for dev env
         self.render(data)
     }
 
@@ -420,7 +431,7 @@ function SuperController(options) {
                     // Allows you to get a bundle web root
                     swig.setFilter('getWebroot', function (input, obj) {
                         var prop = options.envObj.getConf(obj, options.conf.env),
-                            url = prop.protocol + '://'+ prop.host +':'+ prop.port[prop.protocol];
+                            url = prop.server.protocol + '://'+ prop.host +':'+ prop.port[prop.server.protocol];
                         if ( typeof(prop.server['webroot']) != 'undefined') {
                             url += prop.server['webroot']
                         }
@@ -547,7 +558,7 @@ function SuperController(options) {
                                         try {
                                             url = url.replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]+'$1')
                                         } catch (err) {
-                                            self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\nsounds like you are having troubles with the following call `{{ "'+route+'" | getUrl() }}` where `'+p+'` parameter is expected according to your `routing.json`'  +'\n'+(err.stack||err.message));
+                                            self.throwError(local.res, 500, new Error('template compilation exception encoutered: [ '+path+' ]\nsounds like you are having troubles with the following call `{{ "'+route+'" | getUrl() }}` where `'+p+'` parameter is expected according to your `routing.json`'  +'\n'+ (err.stack||err.message)));
                                         }
 
                                     }
@@ -585,7 +596,7 @@ function SuperController(options) {
                     // i sent an email to [ paul@paularmstrongdesigns.com ] on 2014/08 to see if there is
                     // a way of retrieving swig compilation stack traces
                     //var stack = __stack.splice(1).toString().split(',').join('\n');
-                    self.throwError(local.res, 500, 'template compilation exception encoutered: [ '+path+' ]\n'+(err.stack||err.message));
+                    self.throwError(local.res, 500, new Error('template compilation exception encoutered: [ '+path+' ]\n'+(err.stack||err.message)));
                 }
 
                 dic['page.content'] = content;
@@ -595,11 +606,11 @@ function SuperController(options) {
                 fs.readFile(layoutPath, function(err, layout) {
 
                     if (err) {
-                        self.throwError(local.res, 500, err.stack);
+                        self.throwError(local.res, 500, err);
                     } else {
                         layout = layout.toString();
                         // adding plugins
-                        if ( hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout ) {
+                        if (hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout || hasViews() && local.options.debugMode ) {
 
                             var toolbarInfos        = getToolbarInfos(layout, data)
                                 , userScripts       = toolbarInfos.scripts
@@ -637,14 +648,18 @@ function SuperController(options) {
                                 + '{{ page.view.scripts }}'                                
                             ;
 
-                            if (local.options.isWithoutLayout && GINA_ENV_IS_DEV) {
+                            if (local.options.isWithoutLayout && local.options.debugMode == true) {
 
                                 var XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
 
-                                layout = XHRData + layout;
+                                //layout = XHRData + layout;
+                                layout = layout.replace(/<\/body>/i, XHRData + '\n\t</body>');
                             }
-
-                            layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
+                            
+                            if (GINA_ENV_IS_DEV || local.options.debugMode == true && !GINA_ENV_IS_DEV) {
+                                layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
+                            }
+                            
 
                         } else if ( hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() ) {
 
@@ -699,7 +714,7 @@ function SuperController(options) {
                         } catch (err) {
                             var filename = local.options.views[template].html;
                             filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
-                            self.throwError(local.res, 500, 'Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message))
+                            self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)))
                         }
 
                         if ( !local.res.headersSent ) {
@@ -732,7 +747,7 @@ function SuperController(options) {
                 })
             })
         } catch (err) {
-            self.throwError(local.res, 500, err.stack||err.message)
+            self.throwError(local.res, 500, err)
         }
     }
 
@@ -836,7 +851,7 @@ function SuperController(options) {
                 }
             }
         } catch (err) {
-            self.throwError(response, 500, err.stack||err.message)
+            self.throwError(response, 500, err)
         }
 
     }
@@ -938,7 +953,7 @@ function SuperController(options) {
      * */
     var setResources = function(viewConf, localRessource) {
         if (!viewConf) {
-            self.throwError(500, 'No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: ./gina.sh -av '+options.conf.bundle)
+            self.throwError(500, new Error('No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: ./gina.sh -av '+ options.conf.bundle))
         }
 
         var res     = '',
@@ -1106,8 +1121,8 @@ function SuperController(options) {
             , stylesheets   = layout.toString().match(/<link .*?<\/link>|<link .*?(.*)/g) || []
         ;
 
-        var userScripts         = data.page.view.scripts
-            , usersStylesheets  = data.page.view.stylesheets
+        var userScripts         = data.page.view.scripts || []
+            , usersStylesheets  = data.page.view.stylesheets || []
         ;
 
         //userScripts = merge(scripts, userScripts);
@@ -1116,7 +1131,7 @@ function SuperController(options) {
         userScripts += scripts.join('');
         var scriptsArr = userScripts.match(/src=".*?"/g);
 
-        if ( scriptsArr != null || typeof(scriptsArr.length) != 'undefined' )
+        if ( scriptsArr != null || scriptsArr != null && typeof(scriptsArr.length) != 'undefined' )
             userScripts = scriptsArr.join(',').replace(/src=/g, '');
         else
             userScripts = '';
@@ -1124,7 +1139,7 @@ function SuperController(options) {
         usersStylesheets += stylesheets.join('');
         var stylesArr = usersStylesheets.match(/href=".*?"/g);
 
-        if ( stylesArr != null || typeof(stylesArr.length) != 'undefined' )
+        if ( stylesArr != null || stylesArr != null && typeof(stylesArr.length) != 'undefined' )
             usersStylesheets = stylesArr.join(',').replace(/href=/g, '');
         else
             usersStylesheets = '';
@@ -1215,7 +1230,7 @@ function SuperController(options) {
                 } else {
                     res = local.res;
                     var stack = __stack.splice(1).toString().split(',').join('\n');
-                    self.throwError(res, 500, 'Internal Server Error\n@param `ignoreWebRoot` must be a boolean\n' + stack);
+                    self.throwError(res, 500, new Error('RedirectError: @param `ignoreWebRoot` must be a boolean\n' + stack));
                 }
             }
 
@@ -1281,7 +1296,7 @@ function SuperController(options) {
             // nothing to do, just ignoring
             //} else {
             } else if ( !path && typeof(isRelative) ==  'undefined' ) {
-                //path = conf.protocol + '://' +conf.hostname + path
+                //path = conf.server.protocol + '://' +conf.hostname + path
                 path = conf.hostname + path
             }
 
@@ -1350,23 +1365,36 @@ function SuperController(options) {
      * Use `cb` callback or `onComplete` event
      *
      * @param {string} filename
-     * @param {string} content
      *
-     * @callback [cb]
-     *  @param {object|null} error
-     *
-     * @event
-     *  @param {object|null} error
      **/
-    //this.download(filename, content, cb) {}
+    this.downloadAttachment = function(filename) {
+        
+        var file    = filename.split(/\//g).pop(); 
+        var ext     = file.split(/\./g).pop(), contentType = null;
+        
+        if ( typeof(local.options.conf.server.coreConfiguration.mime[ext]) != 'undefined' ) {
+
+            contentType = local.options.conf.server.coreConfiguration.mime[ext];
+            local.res.setHeader('Content-Type', contentType);
+            local.res.setHeader('Content-Disposition', 'attachment; filename=' + file);            
+
+            var filestream = fs.createReadStream(filename);
+            filestream.pipe(local.res);
+
+        } else { // extension not supported
+            self.throwError(local.res, 500, new Error('[ '+ ext +' ] Extension not supported. Ref.: gina/core mime.types'));
+        }
+        
+    }
 
     //this.downloadLocalfile = function(pathname){}
 
     /**
-     * Upload to target - Will create target if new
+     * Store file to a targeted directory - Will create target if new
+     * You only need to provide the destination path
      * Use `cb` callback or `onComplete` event
      *
-     * @param {string} target is the upload dir
+     * @param {string} target is the upload dir destination
      *
      * @callback [cb]
      *  @param {object} error
@@ -1377,7 +1405,7 @@ function SuperController(options) {
      *  @param {array} files
      *
      * */
-    this.upload = function(target, cb) {
+    this.store = function(target, cb) {
 
         var start = function(target, cb) {
             var files = local.req.files, uploadedFiles = [];
@@ -1450,6 +1478,9 @@ function SuperController(options) {
      *
      * Allows you to act as a proxy between your frontend and a 1/3 API
      * */
+    function sha256(s) {
+        return crypto.createHash('sha256').update(s).digest('base64');
+    }
     local.query.data = {};
     local.query.options = {
         host    : undefined, // Must be an IP
@@ -1457,17 +1488,61 @@ function SuperController(options) {
         path    : undefined, // e.g.: /test.html
         port    : 80, // #80 by default but can be 3000 or <bundle>@<project>/<environment>
         method  : 'GET', // POST | GET | PUT | DELETE
-        agent   : false,
         keepAlive: true,
-        auth    : undefined, // use `"username:password"` for basic authentification
-        rejectUnauthorized: undefined, // ignore verification when requesting on https (443)
-        headers : {
+        auth: undefined, // use `"username:password"` for basic authentification
+        rejectUnauthorized: null, // false to ignore verification when requesting on https (443)
+        headers: {
             'Content-Type': 'application/json',
             // 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
 
             // 'X-Requested-With': 'XMLHttpRequest' // to convert into an XHR query
             'Content-Length': local.query.data.length
-        }
+        },
+        agent   : false/**,
+        checkServerIdentity: function(host, cert) {
+            // Make sure the certificate is issued to the host we are connected to
+            const err = tls.checkServerIdentity(host, cert);
+            if (err) {
+                return err;
+            }
+
+            // Pin the public key, similar to HPKP pin-sha25 pinning
+            const pubkey256 = 'pL1+qb9HTMRZJmuC/bB/ZI9d302BYrrqiVuRyW+DGrU=';
+            if (sha256(cert.pubkey) !== pubkey256) {
+                const msg = 'Certificate verification error: ' +
+                    `The public key of '${cert.subject.CN}' ` +
+                    'does not match our pinned fingerprint';
+                return new Error(msg);
+            }
+
+            // Pin the exact certificate, rather then the pub key
+            const cert256 = '25:FE:39:32:D9:63:8C:8A:FC:A1:9A:29:87:' +
+                'D8:3E:4C:1D:98:DB:71:E4:1A:48:03:98:EA:22:6A:BD:8B:93:16';
+            if (cert.fingerprint256 !== cert256) {
+                const msg = 'Certificate verification error: ' +
+                    `The certificate of '${cert.subject.CN}' ` +
+                    'does not match our pinned fingerprint';
+                return new Error(msg);
+            }
+
+            // This loop is informational only.
+            // Print the certificate and public key fingerprints of all certs in the
+            // chain. Its common to pin the public key of the issuer on the public
+            // internet, while pinning the public key of the service in sensitive
+            // environments.
+            do {
+                console.log('Subject Common Name:', cert.subject.CN);
+                console.log('  Certificate SHA256 fingerprint:', cert.fingerprint256);
+
+                hash = crypto.createHash('sha256');
+                console.log('  Public key ping-sha256:', sha256(cert.pubkey));
+
+                lastprint256 = cert.fingerprint256;
+                cert = cert.issuerCertificate;
+            } while (cert.fingerprint256 !== lastprint256);
+
+        }*/
+        
     };
 
     this.query = function(options, data, callback) {
@@ -1494,11 +1569,7 @@ function SuperController(options) {
             self.emit('query#complete', new Error('SuperController::query() needs at least a `host IP` or a `hostname`'))
         }
 
-        if ( /\:\/\//.test(options.host) ) {
-            var hArr = options.host.split('://');
-            options.port = ports[hArr[0]];
-            options.host = hArr[1]
-        }
+        
 
         if (arguments.length <3) {
             if ( typeof(data) == 'function') {
@@ -1536,7 +1607,7 @@ function SuperController(options) {
             queryData = ''
         }
 
-
+        
         // Internet Explorer override
         if ( /msie/i.test(local.req.headers['user-agent']) ) {
             options.headers['Content-Type'] = 'text/plain';
@@ -1552,30 +1623,88 @@ function SuperController(options) {
         options.headers['Content-Length'] = queryData.length;
 
         var ctx = getContext(), protocol = null;
+        
+        // if (/\:\/\//.test(options.hostname)) {
+        //     var hArr = options.host.split('://');
+
+        //     options.protocol = hArr[0];
+
+        //     var pArr = hArr[1].split(/\//g);
+
+        //     options.port = pArr.pop();
+        //     options.host = hArr[0]
+        // }
+
+        // retrieve protocol: if empty, take the bundles protocol
+        protocol = options.protocol || ctx.gina.config.envConf[bundle][ctx.env].server.protocol;// bundle servers's protocol by default
+        protocol = protocol.match(/[a-z 0-9]+/ig)[0];
+        
         //retrieving dynamic host
         if ( /\@/.test(options.hostname) ) {
-            protocol = 'http';
+            
             if ( /\:\/\//.test(options.hostname) ) {
                 protocol            = options.hostname.match(/(.*)\:\/\//)[1]
             }
 
             var bundle = ( options.hostname.replace(/(.*)\:\/\//, '') ).split(/\@/)[0];
             // No shorcut possible because conf.hostname might differ from user inputs
-            options.hostname = ctx.gina.config.envConf[bundle][ctx.env].host; // +':'+ ctx.gina.config.envConf[bundle][ctx.env].port[protocol]
+            options.host        = ctx.gina.config.envConf[bundle][ctx.env].host; // +':'+ ctx.gina.config.envConf[bundle][ctx.env].port[protocol]
+            options.hostname    = ctx.gina.config.envConf[bundle][ctx.env].hostname;
         }
 
         //retrieving dynamic port
         if ( /\@/.test(options.port) ) {
-            protocol = (protocol != null) ? protocol : 'http';
+            
             if ( /\:\/\//.test(options.port) ) {
                 protocol        = options.port.match(/(.*)\:\/\//)[1];
                 options.port    = options.port.replace(/(.*)\:\/\//, '');
-            }
-            options.port = ctx.gina.portsReverse[options.port][ctx.env][protocol]
+            }          
+             
+            //options.port = ctx.gina.portsReverse[options.port][ctx.env][ctx.gina.portsReverse[options.port][ctx.env].protocol];
+            options.port = ctx.gina.portsReverse[options.port][ctx.env]['https'];
+            //ctx.gina.portsReverse[options.port][ctx.env]
+
+            if (!options.port)
+                self.throwError(local.res, 500, new Error('Port number not found. Make sure that `' + protocol +'` protocol is properly set for your bundle environment: see `env.json`.'))
         }
 
-        browser = (options.port == 443) ? https : http;
+             
+        // reformating protocol
+        if( !/\:$/.test(options.protocol) )
+            options.protocol += ':';
+        
+        try {
+            browser = require(''+ protocol.replace(/\:/, ''));
+            //browser = protocols[protocol]
+            
+        } catch(err) {
+            
+            throw new Error('Protocol `'+ protocol +'` not supported')
+        }
+           
+            
 
+
+        // options = {
+        //     hostname: 'localhost:3108',
+        //     host: 'localhost',
+        //     protocol: 'https:',
+        //     port: 3108,
+        //     path: options.path,
+        //     method: options.method,
+        //     // CA for origin server if necessary
+        //     ca: fs.readFileSync(ctx.gina.config.envConf[bundle][ctx.env].projectPath + '/ssl/server/rootCA.pem'),
+
+        //     // Client certification for origin server if necessary
+        //     key: fs.readFileSync(ctx.gina.config.envConf[bundle][ctx.env].projectPath + '/ssl/client/ca-key.pem'),
+        //     cert: fs.readFileSync(ctx.gina.config.envConf[bundle][ctx.env].projectPath + '/ssl/client/ca-crt.pem'),
+            
+        //     requestCert: true,
+        //     rejectUnauthorized: false  
+        // };
+        
+        options.agent = new browser.Agent(options);
+        
         var req = browser.request(options, function(res) {
 
             res.setEncoding('utf8');
@@ -1591,7 +1720,7 @@ function SuperController(options) {
                 data += chunk;
             });
 
-            res.on('end', function onEnd() {
+            res.on('end', function onEnd(err) {
 
                 //Only when needed.
                 if ( typeof(callback) != 'undefined' ) {
@@ -1638,7 +1767,7 @@ function SuperController(options) {
         //starting from from >0.10.15
         req.on('error', function onError(err) {
 
-            if ( err.address == '127.0.0.1') {
+            if ( /(127\.0\.0\.1|localhost)/.test(err.address) ) {
 
                 var port = getContext('gina').ports.http[ err.port ];
                 if ( typeof(port) != 'undefined' )
@@ -1887,7 +2016,7 @@ function SuperController(options) {
             }
 
         } catch (err) {
-            self.throwError(local.res, 500, err.stack||err.message)
+            self.throwError(local.res, 500, err)
         }
     }
 
@@ -2003,7 +2132,8 @@ function SuperController(options) {
                 res.end(msgString)
             }
         } else {
-            next()
+            if (typeof(next) != 'undefined')
+                next();
         }
     }
 

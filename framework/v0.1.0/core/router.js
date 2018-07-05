@@ -206,6 +206,7 @@ function Router(env) {
         };
         
         options = merge(options, JSON.parse(JSON.stringify(params)));
+        options.conf.content.routing[options.rule].param = params.param;
         delete options.middleware;
         delete options.param;
         delete options.requirements;
@@ -485,7 +486,7 @@ function Router(env) {
                 , code  = res || 500
                 , res   = local.res;
         }
-
+        
         if (!res.headersSent) {
             
             
@@ -497,7 +498,7 @@ function Router(env) {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
 
-                console.error('[ ROUTER ] ' + res.req.method + ' [ ' + code + ' ] ' + res.req.url /**routing.getRouteByUrl(res.req.url).toUrl()*/ );
+                console.error('[ ROUTER ] ' + local.request.method + ' [ ' + code + ' ] ' + local.request.url /**routing.getRouteByUrl(res.req.url).toUrl()*/ );
                 var err = null;
 
                 if ( typeof(msg) == 'object' ) {

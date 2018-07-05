@@ -354,7 +354,7 @@ function Add(opt, cmd) {
                 content[local.bundle] = {}
             }
             content[local.bundle][ self.envs[e] ] = {
-                "host" : "127.0.0.1"
+                "host" : "localhost"
             };
 
         }

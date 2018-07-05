@@ -127,8 +127,7 @@ cmd.onExec = function(client, isFromFramework, opt) {
         opt.task.action = arr[1];
 
         var init = require('./framework/init')(opt);
-        init.onListen( function done(err, run, opt){
-
+        init.onListen( function done(err, run, opt){            
             run(opt, cmd)
         })
 

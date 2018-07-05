@@ -118,18 +118,20 @@ function Initialize(opt) {
 
     self.checkIfMain = function() {
         console.debug('checking main...');
-        var source = getPath('gina').root + '/resources/home/main.json';
-        var target = self.opt.homedir + '/main.json';
+        var source  = getPath('gina').root + '/resources/home/main.json';
+        var target  = self.opt.homedir + '/main.json';
+        var version = 'v' + getEnvVar('GINA_VERSION');
 
+        var data = require(source);
+        var dic = {
+            'release' : self.release,
+            'version' : version
+        };
+        data = whisper(dic, data);
+        
+                
         if ( !fs.existsSync(target) ) {
-            try {
-                var data = require(source);
-                var dic = {
-                    'release' : self.release,
-                    'version' : 'v' + getEnvVar('GINA_VERSION')
-                };
-                data = whisper(dic, data);
-
+            try {                
                 lib.generator.createFileFromDataSync(data, target)
             } catch (err) {
                 console.error(err.stack);
@@ -137,6 +139,21 @@ function Initialize(opt) {
             }
         } else {
             // update if needed : like the version number ...
+            var mainConfig  = require(target);
+            mainConfig      = whisper(dic, mainConfig);
+            
+            // updating protocols
+            mainConfig.protocols = merge(mainConfig.protocols, data.protocols, true);
+            // don't remove def_protocol
+            var defProtocol = mainConfig['def_protocol'][self.release];
+            if ( mainConfig.protocols[self.release].indexOf(defProtocol) < 0 )
+                mainConfig.protocols[self.release].push(defProtocol);
+            
+            mainConfig.protocols[self.release].sort();
+            
+            
+            // commit
+            lib.generator.createFileFromDataSync(mainConfig, target)
         }
     }
 
