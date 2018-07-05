@@ -202,6 +202,7 @@ function ConfigUtil() {
         };
         var gnaFolder = content.paths.root + '/.gna';
 
+        // !! Not the project name
         self.project = content.project;
 
         self.paths = paths;

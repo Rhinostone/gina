@@ -75,6 +75,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
         var init = function () {
             // Get elements
             $toolbar           = $('#gina-toolbar');
+            if (!$toolbar.length) return false;
+
             $tabs              = $toolbar.find('.gina-toolbar-tab > a');
             $logo              = $('#gina-toolbar-toggle');
             $panelsContainer   = $('#gina-toolbar-panels');

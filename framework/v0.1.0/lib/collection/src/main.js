@@ -42,16 +42,16 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  * */
 function Collection(content, option) {
 
-    var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+    var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
     var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
-    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../lib/merge');
+    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../lib/merge');
 
     var defaultOptions = {
         'useLocalStorage': false,
         'locale': 'en' // get settigs.region, or user.region
     };
 
-    var content     = (content) ? JSON.parse(JSON.stringify(content)) : [] // original content -> not to be touched
+    var content     = (content) ? JSON.parse(JSON.stringify(content)) : [] // original content -> not to be touched
         , options   = (typeof(options) == 'object') ? merge(options, defaultOptions) : defaultOptions
         , keywords  = ['not null'] // TODO - null, exists (`true` if property is defined)
         ;
@@ -327,7 +327,7 @@ function Collection(content, option) {
             throw new Error('[Collection::result->limit(resultLimit)] : `resultLimit` parametter must by a `number`')
         }
 
-        var result = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+        var result = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
 
         //resultLimit
         result = result.splice(0, resultLimit);
@@ -370,7 +370,7 @@ function Collection(content, option) {
             
             var condition = filter.count()
                 , i                 = 0
-                , tmpContent        = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content))
+                , tmpContent        = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content))
                 , result            = []
                 , localeLowerCase   = '';
 
@@ -527,7 +527,7 @@ function Collection(content, option) {
             throw new Error('filter must be an object');
         } else {
 
-            var tmpContent = Array.isArray(this) ? this :  content;
+            var tmpContent = Array.isArray(this) ? this : content;
 
             // Indexing;
             set._uuid = uuid.v4();
@@ -557,7 +557,7 @@ function Collection(content, option) {
             var condition           = filter.count()
                 , i                 = 0
                 , localeLowerCase   = ''
-                , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+                , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
 
             for (var o in result) {
                 for (var f in filter) {
@@ -601,7 +601,7 @@ function Collection(content, option) {
             var condition           = filter.count()
                 , i                 = 0
                 , localeLowerCase   = ''
-                , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+                , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
 
             for (var o in result) {
                 for (var f in filter) {
@@ -682,7 +682,7 @@ function Collection(content, option) {
             }
         }
 
-        var variableContent = (Array.isArray(this)) ? this : JSON.parse(JSON.stringify(content));
+        var variableContent = (Array.isArray(this)) ? this : JSON.parse(JSON.stringify(content));
         return sortResult(filter, variableContent)
     }
 
@@ -908,7 +908,7 @@ function Collection(content, option) {
      * */
     instance['toRaw'] = function(result) {
 
-        var result = ( Array.isArray(this) ) ? this :  content;
+        var result = ( Array.isArray(this) ) ? this : content;
         // cleanup
         for (var i = 0, len = result.length; i < len; ++i) {
             if (result[i]._uuid)

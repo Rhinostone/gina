@@ -146,6 +146,14 @@ function Routing() {
             }
         }
 
+        //  if custom title, title rewrite
+        if (request.routing.param.title) {            
+            regex = new RegExp(urlVar, 'g')
+            if (regex.test(request.routing.param.title)) {
+                request.routing.param.title = request.routing.param.title.replace(regex, urlVal);
+            }
+        }
+
         if (_param.length == 1) {// fast one
             matched = (_param.indexOf(urlVar) > -1) ? _param.indexOf(urlVar) : false;
 
@@ -171,7 +179,7 @@ function Routing() {
                 typeof (params.requirements) != 'undefined' &&
                 typeof (params.requirements[key]) != 'undefined' &&
                 tested
-            ) {
+            ) {                
                 request.params[key] = urlVal;
                 return true
             }
@@ -299,7 +307,7 @@ function Routing() {
 
 
             // getting protocol
-            protocol = ( /\:\/\//.test(rule) ) ? rule.split(/\:\/\//)[0] : config.bundlesConfiguration.conf[bundle][env].protocol;
+            protocol = ( /\:\/\//.test(rule) ) ? rule.split(/\:\/\//)[0] : config.bundlesConfiguration.conf[bundle][env].server.protocol;
 
             rule = arr[0] +'@'+ bundle;
         }
@@ -320,6 +328,9 @@ function Routing() {
 
                     if ( typeof(route.param.path) != 'undefined' && /:/.test(route.param.path) ) {
                         route.param.path = route.param.path.replace( new RegExp('(:'+variable+'/|:'+variable+'$)', 'g'), params[variable]);
+                    }
+                    if (typeof (route.param.title) != 'undefined' && /:/.test(route.param.title)) {
+                        route.param.title = route.param.title.replace(new RegExp('(:' + variable + '/|:' + variable + '$)', 'g'), params[variable]);
                     }
                 }
             }

@@ -4,12 +4,12 @@ var CmdHelper = require('./../helper');
 var console = lib.logger;
 
 /**
- * List ports for a given bundle, a given project & a given env
+ * List protocols for a given bundle, a given project & a given env
  *
  * e.g.
- *  gina port:list
- *  gina port:list @<project_name>
- *  gina port:list <bundle> @<project_name>
+ *  gina protocol:list
+ *  gina protocol:list @<project_name>
+ *  gina protocol:list <bundle> @<project_name>
  *
  * */
 function List(opt, cmd) {
@@ -30,7 +30,7 @@ function List(opt, cmd) {
             listAll()
         } else if (self.projectName && isDefined(self.projectName) && !self.name) {
             listProjectOnly()
-        } else if (typeof (self.name) != 'undefined' && isValidName(self.name)) {
+        } else if (typeof (self.name) != 'undefined' && isValidName(self.name) ) {
             listBundleOnly()
         } else {
             console.error('[ ' + self.name + ' ] is not a valid project name.');
@@ -56,12 +56,10 @@ function List(opt, cmd) {
 
 
     var listAll = function() {
-        
         var protocols = self.protocols
             , projects = self.projects
             , list = []
             , p = ''
-            , re = null
             , str = '';
 
         for (p in projects) {
@@ -71,8 +69,7 @@ function List(opt, cmd) {
 
         p = 0;
         for (; p < list.length; ++p) {
-            
-            re = new RegExp('\@' + list[p] + '\/', '');// searching by projectName
+                           
             str += '------------------------------------\n\r';
             if (!projects[list[p]].exists) {
                 str += '?! '
@@ -80,14 +77,11 @@ function List(opt, cmd) {
             str += list[p] + '\n\r';
             str += '------------------------------------\n\r';
             for (var i = 0, len = protocols.length; i < len; ++i) {
-
-                str += '[ '+ protocols[i]+' ]\n\r';
-                for (var port in self.portsData[ protocols[i] ]) {
-                    if (re.test(self.portsData[protocols[i]][port]) ) {
-                        str += '\n\r  - ' + port + '  ' + self.portsData[protocols[i]][port].replace(re, ' (') + ')'
-                    }
+                if (self.defaultProtocol == protocols[i]) {
+                    str += '[ * ] ' + protocols[i]
+                } else {
+                    str += '[   ] ' + protocols[i]
                 }
-                
                 str += '\n\r'
             }
             str += '\n\r'
@@ -97,18 +91,15 @@ function List(opt, cmd) {
     }
 
     var listProjectOnly = function() {
-
+        
         var protocols = self.protocols
-            , str = ''
-            , re = null;
+            , str = '';
 
         for (var i = 0, len = protocols.length; i < len; ++i) {
-            str += '[ ' + protocols[i] + ' ]\n\r';
-            re = new RegExp('\@' + self.projectName + '\/', '');// searching by projectName
-            for (var port in self.portsData[protocols[i]]) {
-                if (re.test(self.portsData[protocols[i]][port])) {
-                    str += '\n\r  - ' + port + '  ' + self.portsData[protocols[i]][port].replace(re, ' (') + ')'
-                }
+            if (self.defaultProtocol == protocols[i]) {
+                str += '[ * ] ' + protocols[i]
+            } else {
+                str += '[   ] ' + protocols[i]
             }
             str += '\n\r'
         }
@@ -119,19 +110,35 @@ function List(opt, cmd) {
     var listBundleOnly = function() {
 
         var protocols = self.protocols
-            , str = ''
-            , re = null;
+            // inherits project's protocol if none is set in /config/settings.json
+            , defaultProtocol = self.defaultProtocol 
+            , str = '';
+        
+        var bundleConfig = self.bundlesByProject[self.projectName][self.name];
+        var env = bundleConfig.defaultEnv;
+        var settingsPath = _(bundleConfig.configPaths.settings, true);
+        var settings = {};
+        
+        if ( fs.existsSync(settingsPath) ) {
+            settings = require(settingsPath);
+        }
+        
+        if ( 
+            typeof(settings.server) != 'undefined' 
+            && typeof(settings.server.protocol) != 'undefined' 
+        ) {
+            defaultProtocol = settings.server.protocol;
+        }
 
         for (var i = 0, len = protocols.length; i < len; ++i) {
-            re = new RegExp('^' + self.name + '\@', '');// searching by bundle name
-            for (var port in self.portsData[protocols[i]]) {
-                if (re.test(self.portsData[protocols[i]][port])) {
-                    str += '\n\r  - ' + port + '  ' + self.name + ' ' + self.portsData[protocols[i]][port].replace(re, '').replace(/[-_a-z 0-9]+\//i, '(') + ')'
-                }
+            if (defaultProtocol == protocols[i]) {
+                str += '[ * ] ' + protocols[i]
+            } else {
+                str += '[   ] ' + protocols[i]
             }
             str += '\n\r'
         }
-
+    
 
         console.log(str)
     };

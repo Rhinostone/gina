@@ -1,4 +1,13 @@
 {
+  "server": {
+    "engine": "express",
+    "credentials": {
+      "_comment": "SSL Credentials: private key & certificate - passphrase is ignored if left blank",
+      "privateKey": "{projectPath}/ssl/server.key",
+      "certificate": "{projectPath}/ssl/server.crt",
+      "passphrase": ""
+    }
+  },
   "upload": {
     "_comment": "for more details, check out https://github.com/andrewrk/node-multiparty",
     "encoding": "utf8",

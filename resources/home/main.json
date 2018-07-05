@@ -13,8 +13,8 @@
         "{release}": "dev"
     },
     "protocols": {
-        "_comment": "e.g.:  http, https, ftp, ssh, tftp, tls, udp",
-        "{release}": [ "http" ]
+        "_comment": "e.g.:  http, https, http/2, net",
+        "{release}": [  "https", "http/2" ]
     },
     "def_protocol": {
         "{release}": "http"

@@ -119,7 +119,7 @@ function Add(opt, cmd) {
             config = new Config({
                 env             : local.env,
                 executionPath   : local.root,
-                project         : self.name,
+                projectName     : self.name,
                 startingApp     : local.bundle,
                 ginaPath        : getPath('gina').core,
                 task            : self.task

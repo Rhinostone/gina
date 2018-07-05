@@ -201,7 +201,7 @@ function Add(opt, cmd) {
             }
             if ( typeof(content[local.bundle][self.envs[e]]) == 'undefined' ) {
                 content[local.bundle][self.envs[e]] = {
-                    "host" : "127.0.0.1"
+                    "host" : "localhost"
                 }
             }
 

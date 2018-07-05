@@ -49,6 +49,7 @@ function BuildBundle(project, bundle) {
 
     var buildBundleFromSources = function(project, bundle) {
         var config = new Config({
+            projectName     : self.project.name,
             env             : self.env,
             executionPath   : self.root,
             startingApp     : bundle,
