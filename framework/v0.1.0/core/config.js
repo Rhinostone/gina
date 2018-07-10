@@ -1,4 +1,4 @@
-/*
+ /*
  * This file is part of the gina package.
  * Copyright (c) 2016 Rhinostone <gina@rhinostone.com>
  *
@@ -102,13 +102,13 @@ function Config(opt) {
             if ( self.isCacheless() ) {
                 delete require.cache[require.resolve(filename)];
             }
-            
+
             if (file == 'project') {
                 content = require(filename)[self.projectName] // get only related project infos
             } else {
                 content = require(filename);
             }
-            
+
             setContext('gina.'+ file, content)
         }
 
@@ -432,11 +432,11 @@ function Config(opt) {
                 // newContent[app][env].server.protocol = ( typeof(content[app][env].server['protocol'] ) != "undefined")
                 //     ?  content[app][env].server.protocol
                 //     :  template["{bundle}"]["{env}"].server.protocol;
-                
+
                 newContent[app][env].server = ( typeof(content[app][env].server ) != "undefined")
                     ?  content[app][env].server
-                    :  template["{bundle}"]["{env}"].server;                    
-                
+                    :  template["{bundle}"]["{env}"].server;
+
                 // getting server protocol: bundle's settings first, if not available ->W project's config
                 // If the users has set a different protocol in its /config/settings.json, it will override the one bellow
                 // at server init (see server.js)
@@ -454,7 +454,7 @@ function Config(opt) {
                     new _(appsPath).mkdirSync()
                 }
 
-                
+
                 if ( typeof (content[app][env].port) == 'undefined' ) {
                     newContent[app][env].port = {}
                 }
@@ -588,9 +588,10 @@ function Config(opt) {
                 obj[key] = merge(content, obj[key]);
             }
 
+            //root = merge(root, obj);
             return root
         }
-        
+
         if (typeof (obj[key]) == 'undefined') {
 
             obj[key] = {};
@@ -666,7 +667,7 @@ function Config(opt) {
         }
 
 
-        
+
         // files to be ignored while parsing config dir
         var defaultConfigFiles = (conf[bundle][env].files.join(".json,") + '.json').split(',');
 
@@ -682,18 +683,18 @@ function Config(opt) {
             , foundDevVersion = null;
 
         for (var c = 0, cLen = configFiles.length; c < cLen; ++c) {
-            
+
             foundDevVersion = false;
 
             fName = configFiles[c];
             if (/^\./.test(fName) || /\.dev\.json$/.test(fName) || !/\.json$/.test(fName)  )
                 continue;
-            
+
             name            = fName.replace(/\.json$/, '');
             fNameWithNoExt  = fName.replace(/.json/, '');
-            
 
-            // exceptions            
+
+            // exceptions
             //if (/^(routing)$/.test(name))
             //    continue;
 
@@ -706,6 +707,8 @@ function Config(opt) {
             // handle registered config files
             main = fName;
             tmp = fName.replace(/.json/, '.' + env + '.json'); // dev
+
+
 
             files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};
             fileContent = files[name];
@@ -740,19 +743,19 @@ function Config(opt) {
             //Can't do anything without.
             try {
                 exists = fs.existsSync(_(filename, true));
-                if (cacheless && exists) { 
+                if (cacheless && exists) {
                     delete require.cache[require.resolve(_(filename, true))];
                 }
 
                 if (exists) {
                     //console.debug('[ GINA ] [ CONFIG ] required: ' + _(filename, true));
                     //console.debug('[ GINA ] [ CONFIG ] file content: ' + JSON.stringify(require(_(filename, true)), null, 2));
-                    if (foundDevVersion) {
-                        
+                    //if (foundDevVersion) {
+
                         fileContent = merge(fileContent, require(_(filename, true)));
-                    } else {
-                        fileContent = require(_(filename, true));
-                    }
+                    //} else {
+                    //    fileContent = require(_(filename, true));
+                    //}
 
 
                 } else {
@@ -769,6 +772,8 @@ function Config(opt) {
 
             if (/\./.test(fNameWithNoExt)) {
                 nameArr = fNameWithNoExt.split(/\./g);
+                if ( typeof(files[nameArr[0]]) == 'undefined')
+                    files[nameArr[0]] = {};
                 //console.debug('fNameWithNoExt: ', fNameWithNoExt);
                 files = parseFileConf(files, nameArr, files, nameArr.length, 0, fileContent);
                 continue;
@@ -776,7 +781,7 @@ function Config(opt) {
                 files[name] = fileContent;
             }
 
-        } // EO for (var c = 0, cLen = configFiles.length; c < cLen; ++c) 
+        } // EO for (var c = 0, cLen = configFiles.length; c < cLen; ++c)
 
 
         // building file list
@@ -792,13 +797,13 @@ function Config(opt) {
 
         //     filesList[tmpFilename] = fName;
         // }
-        
+
 
         conf[bundle][env].configFiles = filesList;
-        
-        
+
+
         //for (var name in  filesList) {
-            
+
             // if (/^_comment/.test(name))
             //     continue;
 
