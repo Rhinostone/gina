@@ -60,7 +60,7 @@ function Router(env) {
     }
 
 
-    
+
 
     var refreshCore = function() {
         //var corePath = getPath('gina.core');
@@ -204,13 +204,13 @@ function Router(env) {
             //isXMLRequest    : params.isXMLRequest,
             //withCredentials : false
         };
-        
+
         options = merge(options, JSON.parse(JSON.stringify(params)));
         options.conf.content.routing[options.rule].param = params.param;
         delete options.middleware;
         delete options.param;
         delete options.requirements;
-        
+
 
         // clean options.params
         // for (var p in options.params) {
@@ -219,7 +219,7 @@ function Router(env) {
         // }
 
         try {
-            
+
             if ( fs.existsSync(_(setupFile, true)) )
                 hasSetup = true;
 
@@ -281,7 +281,7 @@ function Router(env) {
                 }
             }
 
-            
+
             /**
              * requireController
              * Allowing another controller (public methods) to be required inside the current controller
@@ -291,7 +291,7 @@ function Router(env) {
              *
              * @return {object} controllerInstance
              * */
-            
+
             controller.requireController = function (namespace, options) {
 
                 var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
@@ -307,7 +307,7 @@ function Router(env) {
                 if (typeof (options.controlRequired) == 'undefined')
                     options.controlRequired = [];
 
-                var ctrlInfo = {}; 
+                var ctrlInfo = {};
                 ctrlInfo[controllerFile] = filename;
                 options.controlRequired.push(ctrlInfo);
 
@@ -364,7 +364,7 @@ function Router(env) {
                                 superController.throwError(response, 500, err.stack);
                             }
                         }
-                        
+
                     })
             } else {
                 // handle superController events
@@ -374,7 +374,7 @@ function Router(env) {
                         controller[reservedActions[e]](request, response, next)
                     }
                 }
-                
+
                 controller[action](request, response, next)
             }
 
@@ -384,7 +384,7 @@ function Router(env) {
             } else {
                 throwError(response, 500, err.stack);
             }
-            
+
             // var superController = new SuperController(options);
             // superController.setOptions(request, response, next, options);
             // if ( typeof(controller) != 'undefined' && typeof(controller[action]) == 'undefined') {
@@ -486,10 +486,10 @@ function Router(env) {
                 , code  = res || 500
                 , res   = local.res;
         }
-        
+
         if (!res.headersSent) {
-            
-            
+
+
             if (local.isXMLRequest || !hasViews() || !local.isUsingTemplate) {
                 // Internet Explorer override
                 if ( /msie/i.test(local.request.headers['user-agent']) ) {
@@ -513,7 +513,7 @@ function Router(env) {
                         stack: msg.stack || null
                     }
                 }
-                
+
 
                 if ( !err.stack ) {
                     delete err.stack
@@ -526,7 +526,10 @@ function Router(env) {
                 res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
             }
         } else {
-            local.next()
+            if (typeof(local.next) != 'undefined')
+                local.next();
+            else
+                return;
         }
     };
 
