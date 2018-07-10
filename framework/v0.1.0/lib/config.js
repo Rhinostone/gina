@@ -473,8 +473,8 @@ function ConfigUtil() {
      *
      * */
     this.getProjectName = function(){
-        if ( this.paths != undefined && this.paths.root != undefined ) {
-            var arr = this.paths.root.split("/");
+        if ( self.paths != undefined && self.paths.root != undefined ) {
+            var arr = self.paths.root.split("/");
             return arr[arr.length-1]
         } else {
             return null
