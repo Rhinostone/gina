@@ -250,6 +250,10 @@ function Set(opt, cmd) {
                     arr = key.split(/\//g);
                     env = arr.pop();
                     b = arr.join(); //bundle
+                    
+                    if ( typeof(portsReverse[b]) == 'undefined' )
+                        portsReverse[b] = {};
+                        
                     if ( typeof(portsReverse[b][env]) == 'undefined' )
                             portsReverse[b][ env ] = {};
                             
