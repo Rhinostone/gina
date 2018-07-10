@@ -24,9 +24,19 @@ version = version.splice(0, 2).join('.');
 
 var settings = require(homeDir + ((isWin32()) ? '\\' + version + '\\settings.json' : '/' + version +'/settings.json'));
 
-// gina debug port
-var debugPort = settings.debug_port;
-exec('node --inspect-brk=' + debugPort +' '+ __dirname +'/cli ' + argv, (error, stdout, stderr) => {
+var debugPort = null;
+var params = argv.split(/\s+/g);
+if ( params.length > 0 ) {
+    for (var p = 0, len = params.length; p < len; ++p) {
+        if ( /^\-\-(inspect|debug)/.test(params[p]) ) {
+            debugPort = params[p]
+        }
+    }
+}
+
+// gina defaullt debug port
+debugPort = (debugPort != null) ? debugPort : '--inspect-brk=' + settings.debug_port;
+exec('node ' + debugPort +' '+ __dirname +'/cli ' + argv, (error, stdout, stderr) => {
     if (error) {
         console.error(`exec error: ${error}`);
         return;

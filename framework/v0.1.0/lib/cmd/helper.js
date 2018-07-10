@@ -489,7 +489,7 @@ function CmdHelper(cmd, client) {
                 }            
                 
                 // bundle default environment inherits project's default environement
-                cmd.bundlesByProject[project][bundle].defaultEnv = cmd.projects[cmd.projectName].def_env;
+                cmd.bundlesByProject[project][bundle].defaultEnv = cmd.projects[project].def_env;
                 
                 if ( fs.existsSync(_(cmd.projectLocation + '/'+ cmd.bundlesByProject[project][bundle].src )) ) {
                     cmd.bundlesByProject[project][bundle].exists = true;                    
