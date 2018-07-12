@@ -403,11 +403,9 @@ function Config(opt) {
 
             if ( typeof(content[app][env]) != "undefined" ) {
 
-                // setting port
+                // setting protocol & port
                 if ( typeof(ports[app+'@'+self.projectName]) == 'undefined' )
                     continue;
-
-                appPort = ports[app+'@'+self.projectName][env].http;
 
                 if (
                     pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && GINA_ENV_IS_DEV
@@ -429,9 +427,7 @@ function Config(opt) {
                     ?  content[app][env].modelsPath
                     :  template["{bundle}"]["{env}"].modelsPath;
 
-                // newContent[app][env].server.protocol = ( typeof(content[app][env].server['protocol'] ) != "undefined")
-                //     ?  content[app][env].server.protocol
-                //     :  template["{bundle}"]["{env}"].server.protocol;
+           
 
                 newContent[app][env].server = ( typeof(content[app][env].server ) != "undefined")
                     ?  content[app][env].server
@@ -443,6 +439,8 @@ function Config(opt) {
                 newContent[app][env].server.protocol = projectConf.def_protocol; // from ~/.gina/projects.json
                 // getting server port
                 newContent[app][env].server.port = portsReverse[ app +'@'+ self.projectName ][env][projectConf.def_protocol];
+                
+                appPort = ports[app+'@'+self.projectName][env][newContent[app][env].server.protocol];
 
                 //I had to for this one...
                 appsPath = appsPath.replace(/\{executionPath\}/g, root);
@@ -1205,6 +1203,16 @@ function Config(opt) {
         }
 
         files = whisper(reps, files);
+        
+        // favicons rewrite
+        var faviconsPath = files['statics'][  ( (_wroot) ? _wroot +'/' : '' ) + 'favicons'];
+        if ( hasViews && typeof(files['statics']) != 'undefiened' && fs.existsSync( faviconsPath ) ) {
+            var favFiles = fs.readdirSync(faviconsPath);
+            for (var f = 0, fLen = favFiles.length; f < fLen; ++f) {
+                if ( !/^\./.test(favFiles[f]) )
+                    files['statics'][ ( (_wroot) ? _wroot +'/' : '' ) + favFiles[f] ] = faviconsPath +'/'+ favFiles[f];                
+            }
+        }
 
         // loading forms rules
         if (hasViews && typeof(files['views'].default.forms) != 'undefined') {

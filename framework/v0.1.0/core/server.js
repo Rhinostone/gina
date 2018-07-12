@@ -1065,7 +1065,10 @@ function Server(options) {
                                     handle(req, res, next, bundle, pathname, config)
                                 }
                             } else {
-                                next()
+                                if (typeof(next) != 'undefined')
+                                    next();
+                                else
+                                    return;
                             }
                         })
 
@@ -1613,7 +1616,10 @@ function Server(options) {
                 res.headersSent = true
             }
         } else {
-            next()
+            if (typeof(next) != 'undefined')
+                next();
+            else
+                return;
         }
     }
 

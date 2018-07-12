@@ -510,7 +510,6 @@ function CmdHelper(cmd, client) {
         if ( cmd.projectName != null && cmd.name != null && typeof(cmd.bundlesByProject[cmd.projectName][cmd.name]) == 'undefined' ) { 
             errMsg = 'Bundle name `'+ cmd.name +'` not found in your project `@'+ cmd.projectName +'`';
             console.error(errMsg);
-            exit(errMsg);
             return false;
         }  
 
