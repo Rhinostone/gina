@@ -741,7 +741,10 @@ function SuperController(options) {
                             local.res.end(layout);
                             local.res.headersSent = true
                         } else {
-                            local.next()
+                            if (typeof(local.next) != 'undefined')
+                                local.next();
+                            else
+                                return;
                         }
                     }
                 })
@@ -1300,7 +1303,13 @@ function SuperController(options) {
                 path = conf.hostname + path
             }
 
-            if (req.headersSent) return next();
+            
+            if (req.headersSent) {
+                if (typeof(next) != 'undefined')
+                    return next();
+                else
+                    return;
+            }
 
             if (GINA_ENV_IS_DEV) {
                 res.writeHead(code, {
@@ -1318,7 +1327,11 @@ function SuperController(options) {
             res.end();
             local.res.headersSent = true;// done for the render() method
         }
-        next()
+        
+        if ( typeof(next) != 'undefined' )
+            next();
+        else
+            return;
     }
 
     /**

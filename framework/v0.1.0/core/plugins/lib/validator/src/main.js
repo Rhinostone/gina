@@ -824,7 +824,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 }                                
                             });
                             
-                        } else { // without file
+                        } else if ( typeof(newData) != 'undefined' ) { // without file
                             data = JSON.stringify(newData)
                         }
                         
