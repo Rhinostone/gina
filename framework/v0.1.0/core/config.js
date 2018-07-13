@@ -1249,7 +1249,7 @@ function Config(opt) {
 
         conf[bundle][env].env       = env;
         // this setting is replace on http requests by the value extracted form the request header
-        conf[bundle][env].hostname = conf[bundle][env].server.protocol + '://' + conf[bundle][env].host + ':' + conf[bundle][env].port[conf[bundle][env].server.protocol];
+        conf[bundle][env].hostname = conf[bundle][env].server.protocol + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
 
 
         self.envConf[bundle][env] = conf[bundle][env];
