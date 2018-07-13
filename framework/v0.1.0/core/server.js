@@ -141,8 +141,8 @@ function Server(options) {
             //serverOpt.protocol  = serverOpt.protocol;
             self.conf[self.appName][self.env].server.protocol = serverOpt.protocol;
             serverOpt.port      = self.conf[self.appName][self.env].server.port = portsReverse[ self.appName +'@'+ self.projectName ][self.env][serverOpt.protocol];
-            var protocol = ( /^http\/2/.test(serverOpt.protocol) ) ? 'https' : serverOpt.protocol;
-            self.conf[self.appName][self.env].hostname = protocol + '://' + self.conf[self.appName][self.env].host + ':' + serverOpt.port;
+            //var protocol = ( /^http\/2/.test(serverOpt.protocol) ) ? 'https' : serverOpt.protocol;
+            //self.conf[self.appName][self.env].hostname = protocol + '://' + self.conf[self.appName][self.env].host + ':' + serverOpt.port;
             
 
             Engine = require('./server.' + ((typeof (serverOpt.engine) != 'undefined' && serverOpt.engine != '') ? serverOpt.engine : 'express'));

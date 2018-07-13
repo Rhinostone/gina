@@ -626,7 +626,7 @@ function SuperController(options) {
                                 + '{%- set ginaDataInspector.view.stylesheets    = "ignored-by-toolbar" -%}'
                                 + layout.replace('{{ page.view.scripts }}', '')
                                 ;
-
+                            
                             plugin = '\t'
                                 + '{# Gina Toolbar #}'
                                 + '{%- set userDataInspector                = JSON.parse(JSON.stringify(page)) -%}'
