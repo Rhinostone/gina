@@ -76,15 +76,17 @@ function Connector(dbString) {
                         //          err instanceof CouchbaseError
 
                         if (!self.instance.connected) {
-                            self.reconnected = false
+                            self.reconnected = false;
+                            self.reconnecting = false;
                         }
-
+                        
                         if (
                             err instanceof couchbase.Error && err.code == 16 && !self.reconnected
                             //|| err instanceof couchbase.Error && err.code == 23 && !self.reconnecting
                             || /cannot perform operations on a shutdown bucket/.test(err.message ) && !self.reconnecting && !self.reconnected
                         ) {
                             // reconnecting
+                            console.debug('[ CONNECTOR ] [ ' + dbString.database +' ] trying to reconnect...');
                             self.reconnecting = true;
                             self.connect(dbString, next)
 
@@ -181,7 +183,7 @@ function Connector(dbString) {
                         modelUtil.reloadModels(
                             conf,
                             function doneReloadingModel(err) {
-                                delete self.reconnecting;
+                                self.reconnecting = false;
                                 cb(err)
                             })
                     } else {
