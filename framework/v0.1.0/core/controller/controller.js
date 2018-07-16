@@ -9,11 +9,7 @@
 //Imports.
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
-var protocols       = {
-    http    : {},//require('http'),
-    https   : {},//require('https'),
-    http2   : {},//require('http2')
-};
+
 // const tls = require('tls');
 // const crypto = require('crypto');
 
@@ -1371,19 +1367,200 @@ function SuperController(options) {
                 })
         }
     }
+    
+    /**
+     * downloadFromURL
+     * Download from an URL
+     *  - attachment/inline
+     *  OR
+     *  - locally: `Controller.store(target, cb)` must be called to store on `onComplete` event  
+     * 
+     * @param {string} url - eg.: https://upload.wikimedia.org/wikipedia/fr/2/2f/Firefox_Old_Logo.png
+     * @param {object} [options]
+     * 
+     * 
+     * */
+    this.downloadFromURL = function(url, options) {
+        
+        var defaultOptions = { 
+            // only if you want to store locally the downloaded file
+            toLocalDir: false, // this option will disable attachment download
+            // Content-Disposition (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Disposition)
+            contentDisposition: 'attachment',
+            // Content-type (https://developer.mozilla.org/en-US/docs/Web/Security/Securing_your_site/Configuring_server_MIME_types)
+            contentType: 'application/octet-stream',
+            
+            agent: false,
+            // set to false to ignore certificate verification
+            rejectUnauthorized: true,
+            port: 80,
+            method: 'GET',
+            keepAlive: true,
+            headers: {}
+        };
+        
+        var opt = ( typeof(options) != 'undefined' ) ? merge(options, defaultOptions) : defaultOptions;
+        
+        var requestOptions = {};
+        for (var o in opt) {
+            if ( !/(toLocalDir|contentDisposition|contentType)/.test(o) )
+                requestOptions[o] = opt[o];
+        }
 
-    // TODO - download file
+        // defining protocol
+        var protocol  = null;   
+        
+        if ( /\:\/\//.test(url) ) {
+            protocol = url.match(/^\w+\:/)[0];
+            protocol = protocol.substr(0, protocol.length-1);
+            
+            if ( !/^http/.test(protocol) )
+                self.throwError(local.res, 500, new Error('[ '+ protocol +' ] Protocol not supported. Ref.: `http` or `https` only'));
+                
+        } else { // by default
+            protocol = 'http';
+        }
+        requestOptions.protocol = protocol +':';
+        
+        //defining port
+        var port = url.match(/\:\d+\//) || null;
+        if ( port != null ) {
+            port = port[0].substr(1, port[0].length-2);
+            requestOptions.port = ~~port;            
+        }
+        
+        // defining hostname & path
+        var parts = url.replace(new RegExp( protocol + '\:\/\/'), '').split(/\//g);
+        requestOptions.host = parts[0].replace(/\:\d+/, '');
+        requestOptions.path = '/' + parts.splice(1).join('/');
+        
+        
+        // extension and mime
+        var filename    = url.split(/\//g).pop(); 
+        if ( !/\.\w+$/.test(filename) )
+                self.throwError(local.res, 500, new Error('[ '+ filename +' ] Extension not found.'));
+        
+        if ( opt.contentDisposition == 'attachment')
+            opt.contentDisposition += '; filename=' + filename;
+        
+        var ext         = filename.match(/\.\w+$/)[0].substr(1)
+        , contentType   = null
+        , tmp           = _(GINA_TMPDIR +'/'+ filename, true);
+        
+        if ( typeof(local.options.conf.server.coreConfiguration.mime[ext]) != 'undefined' ) {
+
+            contentType = (opt.contentType != defaultOptions.contentType) ? opt.contentType : local.options.conf.server.coreConfiguration.mime[ext];
+            
+        } else { // extension not supported
+            self.throwError(local.res, 500, new Error('[ '+ ext +' ] Extension not supported. Ref.: gina/core mime.types'));
+        }
+        
+        // defining responseType
+        requestOptions.headers['Content-Type'] = contentType;
+        requestOptions.headers['Content-Disposition'] = opt.contentDisposition;
+        
+        //'Content-Type': 'application/json',
+        //var file = fs.createWriteStream(tmp);
+        var browser = require(''+ protocol);
+        console.debug('requestOptions: \n', JSON.stringify(requestOptions, null, 4));
+        browser.get(requestOptions, function(response) {
+            
+            //response.setEncoding('utf8');
+
+            // upgrade response headers to handler
+            if ( typeof(response.headers['access-control-allow-credentials']) != 'undefined' )
+                local.options.withCredentials = response.headers['access-control-allow-credentials'];
+                
+            
+            local.res.setHeader('Content-Type', contentType);
+            local.res.setHeader('Content-Disposition', opt.contentDisposition);  
+            response.pipe(local.res);
+               
+            /**
+            var data = '', dataLength = 0;
+            
+            
+            response.on('data', (chunk) => {
+                data += chunk;
+                dataLength += chunk.length;
+            });
+            
+            response.on('end', () => {
+                
+                local.res.setHeader('Content-Type', contentType);
+                local.res.setHeader('Content-Disposition', opt.contentDisposition);     
+                local.res.setHeader('Content-Length', dataLength);  
+                
+                // var data = 'toto la menace';
+                // local.res.setHeader('Content-Type', 'text/plain');
+                // //local.res.setHeader('Content-Length', data.length);  
+                // local.res.setHeader('Content-Disposition', 'attachment; filename=test.txt');          
+                
+                local.res.end( Buffer.from(data) );
+                
+                local.res.headersSent = true;       
+                
+                if ( typeof(local.next) != 'undefined')
+                    local.next();
+                else
+                    return;
+            });*/
+            
+            
+            
+        //     response.pipe(file);
+
+        //     file
+        //         .on('finish', function() {
+        //             file.close( function onDownloaded(){
+                        
+                    
+        //             local.res.setHeader('Content-Type', contentType);
+        //             local.res.setHeader('Content-Disposition', opt.contentDisposition);            
+                    
+        //             local.res.end(  )
+        //             // var filestream = fs.createReadStream(filename);
+        //             // filestream.pipe(local.res);
+
+                    
+        //             // if (fs.existsSync(target))
+        //             //     fs.unlinkSync(target);
+
+        //             // fs.writeFile(target, JSON.stringify(newFonts), function onWrite(err) {
+        //             //     if (err) {
+        //             //         console.error('[ controller ] [ downloadFromURL ] ' + err.stack);
+        //             //     } else {
+        //             //         fs.unlinkSync(tmp);
+        //             //         console.info('[ controller ] [ downloadFromURL ] Fonts download complete');  
+        //             //     }
+        //             // })
+
+        //         });
+        //     });
+        // })
+        // .on('error', function(err) {
+        //     console.error('[ controller ] [ downloadFromURL ] '+ err.stack );
+        //     fs.unlinkSync(tmp);
+        //     self.throwError(local.res, 500, err);
+        });
+        
+        
+
+    }
+
+    
     /**
      * Download to targeted filename.ext - Will create target if new
      * Use `cb` callback or `onComplete` event
      *
      * @param {string} filename
-     *
+     * @param {object} options
      **/
-    this.downloadAttachment = function(filename) {
+    this.downloadFromLocal = function(filename) {
         
-        var file    = filename.split(/\//g).pop(); 
-        var ext     = file.split(/\./g).pop(), contentType = null;
+        var file        = filename.split(/\//g).pop(); 
+        var ext         = file.split(/\./g).pop()
+        , contentType   = null;
         
         if ( typeof(local.options.conf.server.coreConfiguration.mime[ext]) != 'undefined' ) {
 
@@ -1400,7 +1577,6 @@ function SuperController(options) {
         
     }
 
-    //this.downloadLocalfile = function(pathname){}
 
     /**
      * Store file to a targeted directory - Will create target if new
@@ -1687,9 +1863,7 @@ function SuperController(options) {
             options.protocol += ':';
         
         try {
-            browser = require(''+ protocol.replace(/\:/, ''));
-            //browser = protocols[protocol]
-            
+            browser = require(''+ protocol.replace(/\:/, ''));            
         } catch(err) {
             
             throw new Error('Protocol `'+ protocol +'` not supported')

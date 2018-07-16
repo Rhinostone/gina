@@ -208,7 +208,12 @@ function Proc(bundle, proc, usePidFile){
 
             //Will prevent the server from stopping.
             proc.on('uncaughtException', function(err) {
-
+                
+                if ( /ERR\_HTTP\_HEADERS\_SENT/.test(err.stack) ) {
+                    console.error('[ FRAMEWORK ][ uncaughtException ] ', err.stack);
+                    return false;
+                }
+                
                 console.emerg('[ FRAMEWORK ][ uncaughtException ] ', err.stack);
 
                 //console.debug("[ FRAMEWORK ][ PROC ] @=>", self.args);
