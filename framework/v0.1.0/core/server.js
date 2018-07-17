@@ -4,6 +4,7 @@ var os              = require('os');
 var path            = require('path');
 var EventEmitter    = require('events').EventEmitter;
 var Busboy          = require('busboy');
+const Stream        = require('stream')
 var zlib            = require('zlib'); // gzip / deflate
 var url             = require('url');
 var util            = require('util');
@@ -713,23 +714,48 @@ function Server(options) {
                 
 
                 var fileObj         = null
-                    , tmpFilename   = null;
+                    , tmpFilename   = null
+                    , writeStreams  = []
+                    , index         = 0;
 
                 request.files = [];
 
                 var busboy = new Busboy({ headers: request.headers });
                 busboy.on('file', function(fieldname, file, filename, encoding, mimetype) {
                     
-                    file._dataChunk = '';             
+                    file._dataLen = 0; 
+                    // TODO - https://github.com/TooTallNate/node-wav
+                    //file._mimetype = mimetype;
                     
-                    file.on('data', function(chunk) {                   
-                        this._dataChunk += chunk;
-                    });
+                    
+                    writeStreams[index] = fs.createWriteStream( _(uploadDir + '/' + filename) );
+                    // https://strongloop.com/strongblog/practical-examples-of-the-new-node-js-streams-api/
+                    var liner = new require('stream').Transform({objectMode: true});
+                   
+                    liner._transform = function (chunk, encoding, done) {
+                        
+                        var str = chunk.toString();
+                        file._dataLen += str.length;
+                    
+                        var ab = Buffer.from(str2ab(str));
+                        this.push(ab)
+                        
+                        done()
+                    }
+                    
+                //     liner._flush = function (done) {
+                        
+                //         done()
+                //     }
+                                                        
+                    file.pipe(liner).pipe(writeStreams[index]);                    
+                    ++index;
+                    
 
                     file.on('end', function() {
                         
-                        fileObj = Buffer.from(str2ab(this._dataChunk));
-                        delete this._dataChunk;
+                        //fileObj = Buffer.from(str2ab(this._dataChunk));
+                        //delete this._dataChunk;
                         
                         tmpFilename = _(uploadDir + '/' + filename);
 
@@ -738,46 +764,53 @@ function Server(options) {
                             originalFilename: filename,
                             encoding: encoding,
                             type: mimetype,
-                            size: fileObj.length,
+                            size: this._dataLen,
                             path: tmpFilename
                         });
                         
                         // write to /tmp
-                        if (fs.existsSync(tmpFilename))
-                            fs.unlinkSync(tmpFilename);
-
-                      
-                        var writeStream = fs.createWriteStream(tmpFilename);
-                        writeStream._index = this._index;
-                        writeStream.write(fileObj);
-
-                        writeStream.on('error', function onWriteError(err) {
-                            console.error('[ busboy ] [ onWriteError ]', err);
-                            throwError(response, 500, 'Internal server error\n' + err, next);
-
-                            writeStream.close(); 
-                        });
-
-                        //writeStream.on('finish', function onFinishWriting() { });
-
-                        writeStream.end(); 
-                                               
+                        // if (fs.existsSync(tmpFilename))
+                        //     fs.unlinkSync(tmpFilename);
+                         
                     });
                 });
 
                 busboy.on('finish', function(params) {
+                    var total = writeStreams.length;
+                    for (var ws = 0, wsLen = writeStreams.length; ws < wsLen; ++ws ) {
+                        
+                        writeStreams[ws].on('error', function(err) {
+                            console.error('[ busboy ] [ onWriteError ]', err);
+                            throwError(response, 500, 'Internal server error\n' + err, next);
 
-                    loadBundleConfiguration(request, response, next, function(err, bundle, pathname, config, req, res, next) {
-                        if (!req.handled) {
-                            req.handled = true;
-                            if (err) {
-                                if (!res.headersSent)
-                                    throwError(response, 500, 'Internal server error\n' + err.stack, next)
-                            } else {
-                                handle(req, res, next, bundle, pathname, config)
-                            }
-                        }
-                    })
+                            this.close(); 
+                        });
+                        
+                        writeStreams[ws].on('finish', function() {
+                            this.close( function onUploaded(){
+                                --total;
+                                console.log('closing it : ' + total);
+                                
+                                if (total == 0) {
+                                    loadBundleConfiguration(request, response, next, function(err, bundle, pathname, config, req, res, next) {
+                                        if (!req.handled) {
+                                            req.handled = true;
+                                            if (err) {
+                                                if (!res.headersSent)
+                                                    throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                                            } else {
+                                                handle(req, res, next, bundle, pathname, config)
+                                            }
+                                        }
+                                    })
+                                }
+                            })
+                        });
+                        
+                        
+                    }
+
+                    
                 });
 
                

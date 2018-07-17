@@ -498,7 +498,7 @@ function Router(env) {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
 
-                console.error('[ ROUTER ] ' + local.request.method + ' [ ' + code + ' ] ' + local.request.url /**routing.getRouteByUrl(res.req.url).toUrl()*/ );
+                
                 var err = null;
 
                 if ( typeof(msg) == 'object' ) {
@@ -510,7 +510,7 @@ function Router(env) {
                     err = {
                         status: code,
                         message : msg.message,
-                        stack: msg.stack || null
+                        stack: msg.stack || msg || null
                     }
                 }
 
@@ -518,13 +518,17 @@ function Router(env) {
                 if ( !err.stack ) {
                     delete err.stack
                 }
+                
+                
 
                 res.end(JSON.stringify(err))
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
-                console.error(res.req.method +' [ '+code+' ] '+ res.req.url);
+                //console.error('[ ROUTER ] '+ res.req.method +' [ '+code+' ] '+ res.req.url);
                 res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
             }
+            
+            console.error('[ ROUTER ] ' + local.request.method + ' [ ' + code + ' ] ' + local.request.url + '\n'+ (msg.stack || msg.message || msg) /**routing.getRouteByUrl(res.req.url).toUrl()*/ );
         } else {
             if (typeof(local.next) != 'undefined')
                 local.next();

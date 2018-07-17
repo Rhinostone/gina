@@ -288,8 +288,7 @@ function SuperController(options) {
 
         local.options.isWithoutLayout = true;
         
-        local.options.debugMode = (typeof(displayToolbar) != 'undefined' ) ? displayToolbar : undefined; // only active for dev env
-        self.render(data)
+        self.render(data, displayToolbar)
     }
 
     /**
@@ -306,16 +305,18 @@ function SuperController(options) {
      *
      *
      * @param {object} userData
-     *
+     * @param {boolean} [displayToolbar]
      * @return {void}
      * */
-    this.render = function(userData) {
+    this.render = function(userData, displayToolbar) {
 
         local.options.renderingStack.push( self.name );
         // preventing multiple call of self.render() when controller is rendering from another required controller
         if ( local.options.renderingStack.length > 1 ) {
             return false
         }
+        
+        local.options.debugMode = (typeof(displayToolbar) != 'undefined' ) ? displayToolbar : undefined; // only active for dev env
 
         try {
             var data        = getData()
@@ -596,9 +597,17 @@ function SuperController(options) {
                 }
 
                 dic['page.content'] = content;
-
-                var layoutPath = (local.options.isWithoutLayout) ? local.options.views[template].noLayout : local.options.views[template].layout;
-
+                
+                var layoutPath = null;
+                
+                if ( local.options.isWithoutLayout || !local.options.isWithoutLayout && typeof(local.options.views[template].layout) != 'undefined' && fs.existsSync(local.options.views[template].layout) ) {
+                    layoutPath = (local.options.isWithoutLayout) ? local.options.views[template].noLayout : local.options.views[template].layout;
+                } else {
+                    var layoutRoot = ( typeof(local.options.namespace) != 'undefined' && local.options.namespace != '') ? local.options.views[template].views + '/'+ local.options.namespace  : local.options.views[template].views;
+                    layoutPath = layoutRoot +'/'+ local.options.file + local.options.views[template].ext;    
+                }                
+                
+                
                 fs.readFile(layoutPath, function(err, layout) {
 
                     if (err) {
@@ -644,7 +653,7 @@ function SuperController(options) {
                                 + '{{ page.view.scripts }}'                                
                             ;
 
-                            if (local.options.isWithoutLayout && local.options.debugMode == true) {
+                            if (local.options.isWithoutLayout && local.options.debugMode == true || local.options.debugMode == true ) {
 
                                 var XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
 
@@ -652,7 +661,7 @@ function SuperController(options) {
                                 layout = layout.replace(/<\/body>/i, XHRData + '\n\t</body>');
                             }
                             
-                            if (GINA_ENV_IS_DEV || local.options.debugMode == true && !GINA_ENV_IS_DEV) {
+                            if (GINA_ENV_IS_DEV || local.options.debugMode == true ) {
                                 layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
                             }
                             
@@ -696,15 +705,17 @@ function SuperController(options) {
                         }
 
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
-
+                        
+                        var mapping = { filename: local.options.views[template].layout};
                         try {
-
-                            layout = swig.compile(layout)(data);
+                            
+                            layout = swig.compile(layout, mapping)(data);
                             // special case for template without layout in debug mode - dev only
-                            if ( hasViews() && local.options.isWithoutLayout && GINA_ENV_IS_DEV ) {
+                            if ( hasViews() && local.options.debugMode == true  && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
+                                
                                 layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
                                 layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
-                                layout = swig.compile(layout)(data);
+                                layout = swig.compile(layout, mapping)(data);
                             }
 
                         } catch (err) {
@@ -735,7 +746,19 @@ function SuperController(options) {
                             console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
 
                             local.res.end(layout);
-                            local.res.headersSent = true
+                            
+                            // try {
+                            //     data.filename = local.options.views[template].html;
+                            //     local.res.end( swig.render( layout, data) ) ;//{ locals: data,  filename: local.options.views[template].html }
+                            //     local.res.headersSent = true
+                                
+                            // } catch(err) {
+                            //     var filename = local.options.views[template].html;
+                            //     filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
+                            //     self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)))
+                            // }
+                            
+                            
                         } else {
                             if (typeof(local.next) != 'undefined')
                                 local.next();
@@ -985,7 +1008,8 @@ function SuperController(options) {
                 var noneDefaultJs   = (viewConf[localRessource]['javascripts']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['javascripts'])) : [] ;
                 var noneDefaultCss  = (viewConf[localRessource]['stylesheets']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['stylesheets'])) : [] ;
 
-                viewConf[localRessource] = merge(viewConf.default, viewConf[localRessource]);
+                //viewConf[localRessource] = merge(viewConf.default, viewConf[localRessource]);
+                viewConf[localRessource] = merge(viewConf[localRessource], viewConf.default);
 
                 if ( viewConf[localRessource]["javascriptsExclude"] ) {
 
@@ -1464,14 +1488,7 @@ function SuperController(options) {
         var browser = require(''+ protocol);
         console.debug('requestOptions: \n', JSON.stringify(requestOptions, null, 4));
         browser.get(requestOptions, function(response) {
-            
-            //response.setEncoding('utf8');
 
-            // upgrade response headers to handler
-            if ( typeof(response.headers['access-control-allow-credentials']) != 'undefined' )
-                local.options.withCredentials = response.headers['access-control-allow-credentials'];
-                
-            
             local.res.setHeader('Content-Type', contentType);
             local.res.setHeader('Content-Disposition', opt.contentDisposition);  
             response.pipe(local.res);

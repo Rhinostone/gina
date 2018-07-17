@@ -95,11 +95,19 @@ function ServerEngineClass(options) {
                             p = 0; 
                             for (; p < arr.length; ++p) {
                                 a = arr[p].split(/\=/);
+                                // false & true case
+                                if ( /^(false|true|on)$/i.test(a[1]) )
+                                    a[1] = ( /^(true|on)$/i.test(a[1]) ) ? true : false;
+                                
                                 request.query[ a[0] ] = a[1] 
                             }                        
                         } 
                     } else {
                         a = queryParams[1].split(/\=/);
+                        // false & true case
+                        if ( /^(false|true|on)$/i.test(a[1]) )
+                            a[1] = ( /^(true|on)$/i.test(a[1]) ) ? true : false;
+                        
                         request.query[ a[0] ] = a[1]                        
                     }                  
                 } else {
