@@ -90,7 +90,7 @@ function Config(opt) {
 
     var getConf = function() {
 
-        console.debug('Loading conf...');
+        console.debug('[ config ] Loading conf...');
 
         // framework settings
         var filename = null, content = null;
@@ -119,7 +119,7 @@ function Config(opt) {
                 // Need to globalize some of them.
                 self.env = env;
                 self.envConf = envConf;
-
+                
                 loadBundlesConfiguration( function(err, file, routing) {
 
                     if ( typeof(Config.initialized) == 'undefined' ) {
@@ -282,7 +282,10 @@ function Config(opt) {
                 if ( !bundle && typeof(self.bundle) != 'undefined' ) {
                     var bundle = self.bundle
                 }
-                return ( typeof(self.envConf) != "undefined" ) ? self.envConf[bundle][env] : null;
+                
+                                
+                return ( typeof(self.envConf) != 'undefined' ) ? self.envConf[bundle][env]  : null;
+                
             } else {
 
                 if (!bundle) { // if getContext().bundle is lost .. eg.: worker context
@@ -302,7 +305,7 @@ function Config(opt) {
                     }
                 }
 
-                if ( typeof(self.envConf) != "undefined" ) {
+                if ( typeof(self.envConf) != 'undefined' ) {
                     self.envConf[bundle][env].hostname = self.envConf[self.startingApp][env].hostname;
                     self.envConf[bundle][env].content.routing = self.envConf[self.startingApp][env].content.routing;
 
@@ -334,7 +337,7 @@ function Config(opt) {
      */
     this.Host = {
         //By default.
-        standaloneMode : true,
+        standaloneMode : self.isStandalone || true,
         /**
          * Set Master instance
          * @param {String} appName Application name
@@ -1027,7 +1030,7 @@ function Config(opt) {
             "logsPath"      : conf[bundle][env].logsPath,
             "tmpPath"       : conf[bundle][env].tmpPath,
             "bundle"        : bundle,
-            "host"          : conf[bundle][env].host,
+            //"host"          : conf[bundle][env].host,
             "version"       : getContext('gina').version
         };
 
@@ -1248,10 +1251,11 @@ function Config(opt) {
             conf[bundle][env].bundles   = self.getBundles();
 
         conf[bundle][env].env       = env;
+        
         // this setting is replace on http requests by the value extracted form the request header
         conf[bundle][env].hostname = conf[bundle][env].server.protocol + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
 
-
+        
         self.envConf[bundle][env] = conf[bundle][env];
         ++b;
         if (b < bundles.length) {

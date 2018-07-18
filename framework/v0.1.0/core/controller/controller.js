@@ -1840,40 +1840,24 @@ function SuperController(options) {
         //     options.port = pArr.pop();
         //     options.host = hArr[0]
         // }
-
+        
         // retrieve protocol: if empty, take the bundles protocol
-        protocol = options.protocol || ctx.gina.config.envConf[bundle][ctx.env].server.protocol;// bundle servers's protocol by default
+        protocol = options.protocol || ctx.gina.config.envConf[ctx.bundle][ctx.env].server.protocol;// bundle servers's protocol by default
         protocol = protocol.match(/[a-z 0-9]+/ig)[0];
         
-        //retrieving dynamic host
+        //retrieving dynamic host, hostname & port
         if ( /\@/.test(options.hostname) ) {
             
-            if ( /\:\/\//.test(options.hostname) ) {
-                protocol            = options.hostname.match(/(.*)\:\/\//)[1]
-            }
-
             var bundle = ( options.hostname.replace(/(.*)\:\/\//, '') ).split(/\@/)[0];
             // No shorcut possible because conf.hostname might differ from user inputs
-            options.host        = ctx.gina.config.envConf[bundle][ctx.env].host; // +':'+ ctx.gina.config.envConf[bundle][ctx.env].port[protocol]
+            options.host        = ctx.gina.config.envConf[bundle][ctx.env].host.replace(/(.*)\:\/\//, '').replace(/\:\d+/, ''); // +':'+ ctx.gina.config.envConf[bundle][ctx.env].port[protocol]
             options.hostname    = ctx.gina.config.envConf[bundle][ctx.env].hostname;
+            options.port        = ctx.gina.config.envConf[bundle][ctx.env].server.port;
         }
-
-        //retrieving dynamic port
-        if ( /\@/.test(options.port) ) {
-            
-            if ( /\:\/\//.test(options.port) ) {
-                protocol        = options.port.match(/(.*)\:\/\//)[1];
-                options.port    = options.port.replace(/(.*)\:\/\//, '');
-            }          
-             
-            //options.port = ctx.gina.portsReverse[options.port][ctx.env][ctx.gina.portsReverse[options.port][ctx.env].protocol];
-            options.port = ctx.gina.portsReverse[options.port][ctx.env]['https'];
-            //ctx.gina.portsReverse[options.port][ctx.env]
-
-            if (!options.port)
-                self.throwError(local.res, 500, new Error('Port number not found. Make sure that `' + protocol +'` protocol is properly set for your bundle environment: see `env.json`.'))
+                
+        if ( typeof(options.protocol) == 'undefined' ) {
+            options.protocol = protocol
         }
-
              
         // reformating protocol
         if( !/\:$/.test(options.protocol) )
@@ -1886,26 +1870,7 @@ function SuperController(options) {
             throw new Error('Protocol `'+ protocol +'` not supported')
         }
            
-            
-
-
-        // options = {
-        //     hostname: 'localhost:3108',
-        //     host: 'localhost',
-        //     protocol: 'https:',
-        //     port: 3108,
-        //     path: options.path,
-        //     method: options.method,
-        //     // CA for origin server if necessary
-        //     ca: fs.readFileSync(ctx.gina.config.envConf[bundle][ctx.env].projectPath + '/ssl/server/rootCA.pem'),
-
-        //     // Client certification for origin server if necessary
-        //     key: fs.readFileSync(ctx.gina.config.envConf[bundle][ctx.env].projectPath + '/ssl/client/ca-key.pem'),
-        //     cert: fs.readFileSync(ctx.gina.config.envConf[bundle][ctx.env].projectPath + '/ssl/client/ca-crt.pem'),
-            
-        //     requestCert: true,
-        //     rejectUnauthorized: false  
-        // };
+        
         
         options.agent = new browser.Agent(options);
         
