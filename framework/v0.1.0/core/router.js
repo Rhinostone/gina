@@ -106,10 +106,10 @@ function Router(env) {
     this.route = function(request, response, next, params) {
 
         //Routing.
-        var pathname        = url.parse(request.url).pathname;
+        //var pathname        = url.parse(request.url).pathname;
         var bundle          = local.bundle = params.bundle;
         var conf            = config.Env.getConf( bundle, env );
-        var bundles         = conf.bundles;
+        //var bundles         = conf.bundles;
         local.request       = request;
         local.conf          = conf;
         local.isStandalone  = config.Host.isStandalone();

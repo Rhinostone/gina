@@ -1220,9 +1220,10 @@ function Server(options) {
             , wroot             = null
             , isXMLRequest      = self.conf[bundle][self.env].server.request.isXMLRequest;
 
-        if (self.conf[bundle][self.env]['hostname'].replace(self.conf[bundle][self.env]['protocol'] + '://', '') != req.headers.host) {
-            self.conf[bundle][self.env]['hostname'] = req.headers.host
-        }
+        // if (self.conf[bundle][self.env].hostname.replace(self.conf[bundle][self.env].server.protocol + '://', '') != req.headers.host) {
+        //     self.conf[bundle][self.env].host = req.headers.host;
+        //     self.conf[bundle][self.env].hostname = self.conf[bundle][self.env].server.protocol + '://' + req.headers.host
+        // }
 
         router.setMiddlewareInstance(self.instance);
 
