@@ -649,11 +649,19 @@ function ValidatorPlugin(rules, data, formId) {
                                 //release the reference to the file by revoking the Object URL
                                 window.URL.revokeObjectURL(url);
                                 
-                                return;
+                                result = {
+                                    status : xhr.status,
+                                    statusText: xhr.statusText,
+                                    responseType: xhr.responseType,
+                                    type : xhr.response.type,
+                                    size : xhr.response.size 
+                                }
+                                //return;
+                            } else { // normal case
+                                result = xhr.responseText;
                             }
                             
-                            
-                            result = xhr.responseText;
+
                             
                             if ( /json$/.test( contentType ) ) {
                                 result = JSON.parse(xhr.responseText)
@@ -1749,7 +1757,7 @@ function ValidatorPlugin(rules, data, formId) {
         var updateCheckBox = function($el) {
 
             var checked     = $el.checked;
-
+            // set to checked if not checked: false -> true
             if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
                 // prevents ticking behavior
@@ -1760,9 +1768,12 @@ function ValidatorPlugin(rules, data, formId) {
                 $el.removeAttribute('checked');
                 $el.value = false;
                 $el.setAttribute('value', 'false');
-
-            } else {
-
+                
+                if ( typeof($el.getAttribute('data-value') != 'undefined' ) )
+                    $el.setAttribute('data-value', 'false');
+                                   
+            } else {                
+                
                 // prevents ticking behavior
                 setTimeout(function () {
                     $el.checked = true;
@@ -1772,7 +1783,10 @@ function ValidatorPlugin(rules, data, formId) {
                 //boolean exception handling
                 $el.value = true;
                 $el.setAttribute('value', 'true');
-
+                
+                if ( typeof($el.getAttribute('data-value') != 'undefined' ) )
+                    $el.setAttribute('data-value', 'true');
+                    
             }
         };
 
@@ -1861,30 +1875,42 @@ function ValidatorPlugin(rules, data, formId) {
 
         procced = function () {
             // click proxy
-            addListener(gina, $target, 'mouseup', function(event) {
+            addListener(gina, $target, 'click', function(event) {
                 
-                // exclude these elements for the binding
+                var $el = event.target;
+                
+                if (/(label)/i.test(event.target.tagName) && typeof(event.target.control) != 'undefined' && /(checkbox|radio)/i.test(event.target.control.type) ) {                    
+                    // if `event.target.control` not working on all browser,
+                    // try to detect `for` attribute OR check if on of the label's event.target.children is an input & type == (checkbox|radio)
+                    $el = event.target.control;
+                    if ( /(checkbox|radio)/i.test($el.type) ) {
+                        // apply checked choice : if true -> set to false, and if false -> set to true
+                        $el.checked = ($el.checked) ?  false : true;
+                    }
+                }
+                
+                // include only these elements for the binding
                 if ( 
-                    /(button|input)/i.test(event.target.tagName) && event.target.type == 'submit'
-                    || /a/i.test(event.target.tagName) && event.target.attributes.getNamedItem('data-gina-form-submit')
+                    /(button|input)/i.test($el.tagName) && /(submit|checkbox|radio)/i.test($el.type)
+                    || /a/i.test($el.tagName) && $el.attributes.getNamedItem('data-gina-form-submit')
                 ) {
                     
-                    if ( typeof(event.target.id) == 'undefined' || !event.target.getAttribute('id') ) {
-                        event.target.setAttribute('id', 'click.' + uuid.v4() );
-                        event.target.id = event.target.getAttribute('id')
+                    if ( typeof($el.id) == 'undefined' || !$el.getAttribute('id') ) {
+                        $el.setAttribute('id', 'click.' + uuid.v4() );
+                        $el.id = $el.getAttribute('id')
                     } else {
-                        event.target.id = event.target.getAttribute('id')
+                        $el.id = $el.getAttribute('id')
                     }
     
                     
-                    if (/^click\./.test(event.target.id) || withRules) {
+                    if (/^click\./.test($el.id) || withRules) {
     
-                        var _evt = event.target.id;
+                        var _evt = $el.id;
     
                         if (!_evt) return false;
     
                         if ( ! /^click\./.test(_evt) ) {
-                            _evt = event.target.id
+                            _evt = $el.id
                         }
     
                         // prevent event to be triggered twice
@@ -1894,7 +1920,7 @@ function ValidatorPlugin(rules, data, formId) {
                         if (gina.events[_evt]) {
                             cancelEvent(event);
     
-                            triggerEvent(gina, event.target, _evt, event.detail);
+                            triggerEvent(gina, $el, _evt, event.detail);
                         }
     
                     }
@@ -1936,8 +1962,10 @@ function ValidatorPlugin(rules, data, formId) {
 
                     // recover default state only on value === true || false
                     addListener(gina, $el, evt, function(event) {
-
-                        if ( /^(true|false|on)$/i.test(event.target.value) ) {
+                        
+                        var value = event.target.value || event.target.getAttribute('value') || event.target.getAttribute('data-value');
+                        
+                        if ( /^(true|false|on)$/i.test(value) ) {
                             cancelEvent(event);
                             updateCheckBox(event.target);
                         }
@@ -1945,16 +1973,10 @@ function ValidatorPlugin(rules, data, formId) {
 
                     // default state recovery
                     var value = $el.value || $el.getAttribute('value') || $el.getAttribute('data-value');
-                    if ( /^(true|false|on)$/i.test(value)  ) {
-
-                        if ( typeof(value) != 'undefined' && /^(true|on|false)$/.test(value) ) {
-                            $el.checked = /true|on/.test(value) ? true : false;
-                        }
-
+                    if ( typeof(value) != 'undefined' && /^(true|on|false)$/.test(value) ) {
+                        $el.checked = /true|on/.test(value) ? true : false;
                         updateCheckBox($el);
-                    }
-
-
+                    }    
                 }
 
                 if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
