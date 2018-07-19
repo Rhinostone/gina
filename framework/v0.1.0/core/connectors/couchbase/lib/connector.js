@@ -92,7 +92,13 @@ function Connector(dbString) {
 
                         } else if (err instanceof couchbase.Error && err.code == 23 && !self.reconnecting) {
                             self.instance.disconnect();
-                            next(err)
+                            // express js patch
+                            if (typeof(next) != 'undefined') {
+                                next(err); // might just be a "false" error: `err` is replaced with cb() caller `data`
+                            } else {
+                                console.error('[ CONNECTOR ] [ ' + dbString.database +' ] gina fatal error: ' + err.message + '\nstack: '+ err.stack);
+                                return;
+                            }
                         } else {
 
                             if (err && err instanceof Error) {
@@ -112,7 +118,12 @@ function Connector(dbString) {
                                 res.headersSent = true;
                             } else {
                                 // express js patch
-                                next(err) // might just be a "false" error: `err` is replaced with cb() caller `data`
+                                if (typeof(next) != 'undefined') {
+                                    next(err); // might just be a "false" error: `err` is replaced with cb() caller `data`
+                                } else {
+                                    console.error('[ CONNECTOR ] [ ' + dbString.database +' ] gina fatal error: ' + err.message + '\nstack: '+ err.stack);
+                                    return;
+                                }
                             }                            
                         }
                     })
