@@ -64,7 +64,7 @@ function Connector(dbString) {
             self
                 .connect(dbString)
                 .on('error', function(err){
-                    console.emerg('[ CONNECTOR ] [ '+ dbString.database +' ] Handshake aborted !\n',  err.message);
+                    console.emerg('[ CONNECTOR ] [ '+ dbString.database +' ] Handshake aborted ! PLease check that Couchbase is running.\n',  err.message);
                 })
                 .once('connect', function () {
                     // default driver does not trigger any conn event, so we have to intercept it thu gina
@@ -250,9 +250,18 @@ function Connector(dbString) {
             }
 
             self.pingId = setInterval(function onTimeout(){
-                self.instance.get('heartbeat', function(err, res){
-                    console.debug('[ CONNECTOR ] [ ' + local.bundle +' ] connection is being kept alive ...')
-                })
+                
+                if (!self.instance.connected) {
+                    console.debug('[ CONNECTOR ] [ ' + local.bundle +' ] connection is dead: trying to reconnect');
+                    self.reconnected = false;
+                    self.reconnecting = true;
+                    self.connect(dbString, next)
+                } else {
+                    self.instance.get('heartbeat', function(err, res){
+                        console.debug('[ CONNECTOR ] [ ' + local.bundle +' ] connection is being kept alive ...')
+                    })
+                }
+                                
             }, interval);
             cb()
         } else {
