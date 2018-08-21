@@ -608,7 +608,7 @@ function SuperController(options) {
                 }                
                 
                 
-                fs.readFile(layoutPath, function(err, layout) {
+                fs.readFile(layoutPath, function onReadingLayout(err, layout) {
 
                     if (err) {
                         self.throwError(local.res, 500, err);
@@ -1642,7 +1642,14 @@ function SuperController(options) {
                             source: files[i].path,
                             target: _(uploadDir.toString() + '/' + files[i].originalFilename)
                         };
-                        uploadedFiles[i] = { location: list[i].target, file: files[i].originalFilename };
+                        
+                        uploadedFiles[i] = { 
+                            file        : files[i].originalFilename,
+                            filename    : list[i].target, 
+                            size        : files[i].size,
+                            type        : files[i].type,
+                            encoding    : files[i].encoding
+                        };
                         
                     }
 
@@ -1762,7 +1769,8 @@ function SuperController(options) {
             , defaultOptions    = local.query.options
             , path              = options.path
             , browser           = null
-            , options           = merge(options, defaultOptions)
+            // options must be used as a copy in case of multiple calls of self.query(options, ...)
+            , options           = merge(JSON.parse(JSON.stringify(options)), defaultOptions)
         ;
 
         for (var o in options) {//cleaning
@@ -1849,10 +1857,15 @@ function SuperController(options) {
         if ( /\@/.test(options.hostname) ) {
             
             var bundle = ( options.hostname.replace(/(.*)\:\/\//, '') ).split(/\@/)[0];
+            
             // No shorcut possible because conf.hostname might differ from user inputs
-            options.host        = ctx.gina.config.envConf[bundle][ctx.env].host.replace(/(.*)\:\/\//, '').replace(/\:\d+/, ''); // +':'+ ctx.gina.config.envConf[bundle][ctx.env].port[protocol]
+            options.host        = ctx.gina.config.envConf[bundle][ctx.env].host.replace(/(.*)\:\/\//, '').replace(/\:\d+/, '');
             options.hostname    = ctx.gina.config.envConf[bundle][ctx.env].hostname;
             options.port        = ctx.gina.config.envConf[bundle][ctx.env].server.port;
+            
+            options.protocol    = ctx.gina.config.envConf[bundle][ctx.env].server.protocol;
+            // might be != from the bundle requesting
+            //options.protocol    = ctx.gina.config.envConf[bundle][ctx.env].content.settings.server.protocol || ctx.gina.config.envConf[bundle][ctx.env].server.protocol;
         }
                 
         if ( typeof(options.protocol) == 'undefined' ) {
@@ -1863,16 +1876,25 @@ function SuperController(options) {
         if( !/\:$/.test(options.protocol) )
             options.protocol += ':';
         
-        try {
-            browser = require(''+ protocol.replace(/\:/, ''));            
-        } catch(err) {
+        try {            
+            browser = require(''+ options.protocol.replace(/http\/2/, 'http2').replace(/\:/, ''));   
+            if ( /(http\/2|http2)/.test(options.protocol) ) {
+                options.protocol = options.protocol.replace(/(http\/2|http2)/, 'https');
+                //delete options.protocol;
+                options.queryData = queryData;
+                return handleHTTP2ClientRequest(browser, options, callback);
+            } else {
+                options.agent = new browser.Agent(options);
+            }         
             
-            throw new Error('Protocol `'+ protocol +'` not supported')
+        } catch(err) {
+            throw err;
+            //throw new Error('Protocol `'+ protocol +'` not supported')
         }
            
         
         
-        options.agent = new browser.Agent(options);
+        
         
         var req = browser.request(options, function(res) {
 
@@ -1891,6 +1913,22 @@ function SuperController(options) {
 
             res.on('end', function onEnd(err) {
 
+                // exceptions filter
+                if ( typeof(data) == 'string' && /^Unknown ALPN Protocol/.test(data) ) {
+                    var err = {
+                        status: 500,
+                        error: new Error(data)
+                    };
+                    
+                    if ( typeof(callback) != 'undefined' ) {
+                        callback(err)
+                    } else {
+                        self.emit('query#complete', err)
+                    }
+                    
+                    return
+                }
+                
                 //Only when needed.
                 if ( typeof(callback) != 'undefined' ) {
                     if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
@@ -1972,6 +2010,194 @@ function SuperController(options) {
             onComplete  : function(cb) {
                 self.once('query#complete', function(err, data){
 
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
+                        try {
+                            data = JSON.parse(data)
+                        } catch (err) {
+                            data = {
+                                status    : 500,
+                                error     : data
+                            }
+                        }
+                    }
+
+                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
+                        cb(data)
+                    } else {
+                        cb(err, data)
+                    }
+                })
+            }
+        }
+    }
+    
+    var handleHTTP2ClientRequest = function(browser, options, callback) {
+        
+        //cleanup
+        if ( typeof(options[':path']) == 'undefined' ) {
+            options[':path'] = options.path;
+            delete options.path;
+        } 
+        if ( typeof(options[':method']) == 'undefined' ) {
+            options[':method'] = options.method.toUpperCase();
+            delete options.method;
+        }
+        
+        // only if binary !! 
+        // if ( typeof(options['content-length']) == 'undefined' ) {
+        //     options['content-length'] = options.headers['Content-Length'] ;
+        //     delete options.headers['Content-Length'];
+        // }
+        // if ( typeof(options['content-type']) == 'undefined' ) {
+        //     options['content-type'] = options.headers['Content-Type'] ;
+        //     delete options.headers['Content-Type'];
+        // }
+        
+        if ( typeof(options[':scheme']) == 'undefined' ) {
+            options[':scheme'] = 'https' ;
+        }
+        
+        delete options.host;
+        
+        var body = options.queryData;
+        delete options.queryData;
+                
+        const client = browser.connect(options.hostname, options);
+        
+        client.on('error', (err) => {
+            
+            console.error(err.stack||err.message);
+           
+            if ( typeof(callback) != 'undefined' ) {
+
+                callback(err)
+
+            } else {
+                var data = {
+                    status    : 500,
+                    error     : err.stack || err.message
+                };
+
+                self.emit('query#complete', data)
+            }
+        });
+
+        const req = client.request(options);
+        // getting headers infos
+        // req.on('response', (headers, flags) => {
+        //     for (const name in headers) {
+        //         console.log(`${name}: ${headers[name]}`);
+        //     }
+        // });
+
+        req.setEncoding('utf8');
+        
+        let data = '';
+        req.on('data', (chunk) => { 
+            data += chunk; 
+        });
+        
+        req.on('error', (err) => {
+            
+            if ( /(127\.0\.0\.1|localhost)/.test(err.address) ) {
+
+                var port = getContext('gina').ports.http[ err.port ];
+                if ( typeof(port) != 'undefined' )
+                    err.accessPoint = getContext('gina').ports.http[ err.port ];
+            }
+
+
+            console.error(err.stack||err.message);
+            // you can get here if :
+            //  - you are trying to query using: `enctype="multipart/form-data"`
+            //  -
+            if ( typeof(callback) != 'undefined' ) {
+
+                callback(err)
+
+            } else {
+                var data = {
+                    status    : 500,
+                    error     : err.stack || err.message
+                };
+
+                self.emit('query#complete', data)
+            }
+        })
+        
+        req.on('end', () => {   
+              
+            // exceptions filter
+            if ( typeof(data) == 'string' && /^Unknown ALPN Protocol/.test(data) ) {
+                var err = {
+                    status: 500,
+                    error: new Error(data)
+                };
+                
+                if ( typeof(callback) != 'undefined' ) {
+                    callback(err)
+                } else {
+                    self.emit('query#complete', err)
+                }
+                
+                client.close();         
+                return
+            }
+            
+            //Only when needed.
+            if ( typeof(callback) != 'undefined' ) {
+                if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
+                    try {
+                        data = JSON.parse(data)
+                    } catch (err) {
+                        data = {
+                            status    : 500,
+                            error     : data
+                        }
+                    }
+                }
+
+                if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
+                    callback(data)
+                } else {
+                    callback( false, data )
+                }
+
+            } else {
+                if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
+                    try {
+                        data = JSON.parse(data)
+                    } catch (err) {
+                        data = {
+                            status    : 500,
+                            error     : data
+                        }
+                        self.emit('query#complete', data)
+                    }
+                }
+
+                if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
+                    self.emit('query#complete', data)
+                } else {
+                    self.emit('query#complete', false, data)
+                }
+            }
+            
+            client.close();
+            
+        });
+        
+        if ( typeof(body) != 'undefined' && body != '' ) {
+            req.end(body);
+        } else {
+            req.end();
+        }
+        
+        
+        return {
+            onComplete  : function(cb) {
+                self.once('query#complete', function(err, data){
+                    client.close();  
                     if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
                         try {
                             data = JSON.parse(data)

@@ -5,11 +5,18 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-if (typeof (module) !== 'undefined' && module.exports) {
-    var lib     = require('../../index');
-    var console = lib.logger;
-    var merge   = lib.merge;
-}
+// if (typeof (module) !== 'undefined' && module.exports) {
+    
+//     var lib = null;
+//     if ( typeof( getPath('gina') ) != 'undefined' ) {
+//         lib     = require(getPath('gina').lib);
+//     } else {
+//         lib     = require('../../index');
+//     }
+    
+//     var console = lib.logger;
+//     //var merge   = lib.merge;
+// }
 
 
 /**
@@ -89,7 +96,10 @@ function Routing() {
             , score = 0
             , foundRoute = {}
             , i = 0;
-
+        
+        if ( params.rule == "estimate-update-social-security-organism@coreAPI" ) {            
+            process.stdout.write('debugging this route');
+        }
         //attaching routing description for this request
         request.routing = params; // can be retried in controller with: req.routing
 

@@ -55,7 +55,7 @@ function ContextHelper(contexts) {
     }
 
     var parseCtxObject = function (o, obj) {
-
+        
         for (var i in o) {
             if (o[i] !== null && typeof(o[i]) == 'object') {
                 parseCtxObject(o[i], obj);
@@ -414,14 +414,14 @@ function ContextHelper(contexts) {
      * @return {object} revealed
      * */
     whisper = function(dictionary, replaceable, rule) {
-        var s, key;
+        
         if ( typeof(rule) != 'undefined') {
             return replaceable.replace(rule, function(s, key) {
                 return dictionary[key] || s;
             })
         } else {
 
-            if ( typeof(replaceable) == 'object' &&  !/\[native code\]/.test(replaceable.constructor) ||  typeof(replaceable) == 'function' /** && /Object/.test(replaceable.constructor) */ ) { // /Object/.test(replaceable.constructor)
+            if ( typeof(replaceable) == 'object' &&  !/\[native code\]/.test(replaceable.constructor) ||  typeof(replaceable) == 'function' ) { // /Object/.test(replaceable.constructor)
                 for (var attr in replaceable) {
                     if ( typeof(replaceable[attr]) != 'function') {
                         replaceable[attr] = (typeof(replaceable[attr]) != 'string' && typeof(replaceable[attr]) != 'object') ? JSON.stringify(replaceable[attr], null, 2) : replaceable[attr];
