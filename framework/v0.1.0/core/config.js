@@ -305,7 +305,12 @@ function Config(opt) {
                     }
                 }
 
+
                 if ( typeof(self.envConf) != 'undefined' ) {
+                    
+                    var protocol = self.envConf[self.startingApp][env].content.settings.server.protocol || self.envConf[self.startingApp][env].server.protocol;
+                    self.envConf[self.startingApp][env].hostname = protocol.replace(/(http\/2|http2)/, 'https') + '://' + self.envConf[self.startingApp][env].host + ':' + self.envConf[self.startingApp][env].server.port;
+
                     self.envConf[bundle][env].hostname = self.envConf[self.startingApp][env].hostname;
                     self.envConf[bundle][env].content.routing = self.envConf[self.startingApp][env].content.routing;
 
@@ -389,9 +394,9 @@ function Config(opt) {
         var root = new _(self.executionPath).toUnixStyle();
         try {
             var pkg     = require(_(root + '/project.json')).bundles;
-            var ports   = require( _(GINA_HOMEDIR + '/ports.reverse.json') );
-
-            masterPort = ports[self.startingApp+'@'+self.projectName][env].http
+            //var ports   = require( _(GINA_HOMEDIR + '/ports.reverse.json') );
+            // by default but may be overriden
+            masterPort = portsReverse[self.startingApp+'@'+self.projectName][env][projectConf.def_protocol]
         } catch (err) {
             console.error(err.stack);
 
@@ -407,7 +412,7 @@ function Config(opt) {
             if ( typeof(content[app][env]) != "undefined" ) {
 
                 // setting protocol & port
-                if ( typeof(ports[app+'@'+self.projectName]) == 'undefined' )
+                if ( typeof(portsReverse[app+'@'+self.projectName]) == 'undefined' )
                     continue;
 
                 if (
@@ -438,12 +443,14 @@ function Config(opt) {
 
                 // getting server protocol: bundle's settings first, if not available ->W project's config
                 // If the users has set a different protocol in its /config/settings.json, it will override the one bellow
-                // at server init (see server.js)
+                // at server init (see server.js) 
+                
+                // by default
                 newContent[app][env].server.protocol = projectConf.def_protocol; // from ~/.gina/projects.json
                 // getting server port
                 newContent[app][env].server.port = portsReverse[ app +'@'+ self.projectName ][env][projectConf.def_protocol];
                 
-                appPort = ports[app+'@'+self.projectName][env][newContent[app][env].server.protocol];
+                appPort = portsReverse[app+'@'+self.projectName][env][newContent[app][env].server.protocol];
 
                 //I had to for this one...
                 appsPath = appsPath.replace(/\{executionPath\}/g, root);
@@ -612,11 +619,12 @@ function Config(opt) {
     }
 
     var loadBundleConfig = function(bundles, b, callback, reload, collectedRules) {
-
-        if ( typeof(bundles[b]) == "undefined") {
-            var bundle = self.startingApp
+        
+        var bundle = null;
+        if ( typeof(bundles[b]) == 'undefined' ) {
+            bundle = self.startingApp
         } else {
-            var bundle = bundles[b]
+            bundle = bundles[b]
         }
         var cacheless   = self.isCacheless();
         var standalone  = self.Host.isStandalone();
@@ -628,7 +636,11 @@ function Config(opt) {
         var standaloneRouting = {};
         var tmp         = '';
         var filename    = '';
-        var appPath     = '';
+        var appPath         = ''
+            , appPort       = null
+            , masterPort    = null
+            , portsReverse  = getContext('gina').portsReverse;
+            
         var err         = false;
         if ( !/^\//.test(self.envConf[bundle][env].server.webroot) ) {
             self.envConf[bundle][env].server.webroot = '/' + self.envConf[bundle][env].server.webroot
@@ -679,6 +691,7 @@ function Config(opt) {
         var main        = '';
         var name        = null;
         var exists      = false;
+        var protocol    = null;
         var fileContent = null
             , nameArr   = null
             , foundDevVersion = null;
@@ -695,10 +708,6 @@ function Config(opt) {
             fNameWithNoExt  = fName.replace(/.json/, '');
 
 
-            // exceptions
-            //if (/^(routing)$/.test(name))
-            //    continue;
-
             if (/\-/.test(name)) {
                 name = name.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
             }
@@ -708,7 +717,6 @@ function Config(opt) {
             // handle registered config files
             main = fName;
             tmp = fName.replace(/.json/, '.' + env + '.json'); // dev
-
 
 
             files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};
@@ -749,16 +757,7 @@ function Config(opt) {
                 }
 
                 if (exists) {
-                    //console.debug('[ GINA ] [ CONFIG ] required: ' + _(filename, true));
-                    //console.debug('[ GINA ] [ CONFIG ] file content: ' + JSON.stringify(require(_(filename, true)), null, 2));
-                    //if (foundDevVersion) {
-
-                        fileContent = merge(fileContent, require(_(filename, true)));
-                    //} else {
-                    //    fileContent = require(_(filename, true));
-                    //}
-
-
+                    fileContent = merge(fileContent, require(_(filename, true)));
                 } else {
                     console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
                 }
@@ -786,20 +785,6 @@ function Config(opt) {
 
 
         // building file list
-        // var filesList = {}, tmpFilename = null;
-        // for (var f = 0, fLen = defaultConfigFiles.length; f < fLen; ++f) {
-
-        //     fName = defaultConfigFiles[f];
-        //     tmpFilename = fName.replace(/\.json$/, '');
-        //     // hyphens to camelcase
-        //     if (/\-/.test(tmpFilename) ){
-        //         tmpFilename = tmpFilename.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
-        //     }
-
-        //     filesList[tmpFilename] = fName;
-        // }
-
-
         conf[bundle][env].configFiles = filesList;
 
 
@@ -813,31 +798,7 @@ function Config(opt) {
             routing = files[name];
             //Server only because of the shared mode VS the standalone mode.
             if (cacheless && typeof (reload) != 'undefined') {
-            //if (name == 'routing' && cacheless && typeof(reload) != 'undefined') {
-                // tmp = filesList[name].replace(/.json/, '.' +env + '.json');
-                // filename = _(appPath + '/config/' + tmp);
-                // if ( !fs.existsSync(filename) ) {
-                //     filename = main;
-                // }
-
-                // delete require.cache[_(filename, true)];
-                // try {
-                //     routing = merge( require(_(filename, true)), routing, true );
-                // } catch (error) {
-                //     callback(error)
-                // }
-
-                // if (filename != main) {
-                //     delete require.cache[_(main, true)];
-                //     try {
-                //         routing = merge(require(main), routing, true)
-                //     } catch (error) {
-                //         callback(error)
-                //     }
-                // }
-
-                // tmp = '';
-
+                            
                 //setting app param
                 for (var rule in routing) {
                     routing[rule +'@'+ bundle] = routing[rule];
@@ -909,11 +870,6 @@ function Config(opt) {
                             }
                         }
                     }
-
-                    // deprecated: rules are now unique per bundle : rule@bundle
-                    // if ( standalone && routing[rule] && bundle != self.startingApp ) {
-                    //     standaloneRouting[bundle + '-' + rule] = JSON.parse(JSON.stringify(routing[rule]))
-                    // }
                 }
 
                 files[name] = collectedRules = merge(collectedRules, ((standalone && bundle != self.startingApp ) ? standaloneRouting : routing), true);
@@ -946,10 +902,7 @@ function Config(opt) {
                         }
                     }
                 }
-                self.setReverseRouting(bundle, env, reverseRouting);
-            //    continue;
-            // } else if (name == 'routing') {
-            //     continue;
+                self.setReverseRouting(bundle, env, reverseRouting);            
             }
 
 
@@ -1253,7 +1206,30 @@ function Config(opt) {
         conf[bundle][env].env       = env;
         
         // this setting is replace on http requests by the value extracted form the request header
-        conf[bundle][env].hostname = conf[bundle][env].server.protocol + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
+        if ( 
+            typeof(conf[bundle][env].content.settings) != 'undefined' 
+            && typeof(conf[bundle][env].content.settings.server) != 'undefined' 
+            //&& conf[bundle][env].content.settings.server != ''
+            //&& conf[bundle][env].content.settings.server != null
+            && typeof(conf[bundle][env].content.settings.server.protocol) != 'undefined' 
+        ) {
+            protocol = conf[bundle][env].server.protocol = conf[bundle][env].content.settings.server.protocol; // from user's bundle/config/settings.json     
+            // updating server & connectino infos
+            // getting server port
+            conf[bundle][env].server.port = portsReverse[ bundle +'@'+ self.projectName ][env][protocol];
+            appPort = portsReverse[bundle+'@'+self.projectName][env][protocol];    
+            conf[bundle][env].port[ protocol ] = appPort;  
+            
+            // masterPort = portsReverse[self.startingApp+'@'+self.projectName][env][projectConf.protocol];
+            // if (appPort != masterPort) {
+            //     self.Host.standaloneMode = false
+            // }
+            
+        } else {
+            protocol = conf[bundle][env].server.protocol;
+        }
+        
+        conf[bundle][env].hostname = protocol.replace(/(http\/2|http2)/, 'https') + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
 
         
         self.envConf[bundle][env] = conf[bundle][env];

@@ -131,14 +131,15 @@ function Router(env) {
             "onReady",
             "setup"
         ];
+        
         if (reservedActions.indexOf(action) > -1) throwError(response, 500, '[ '+action+' ] is reserved for the framework');
+        
         var middleware      = params.middleware || [];
         var actionFile      = params.param.file; // matches rule name
         var namespace       = params.namespace;
         var routeHasViews   = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
         var isUsingTemplate = conf.template;
         var hasSetup        = false;
-        var hasNamespace    = false;
 
         local.routeHasViews     = routeHasViews;
         local.isUsingTemplate   = isUsingTemplate;
@@ -154,13 +155,19 @@ function Router(env) {
         var resHeaders = conf.server.response.header;
         //TODO - to test
         if ( resHeaders.count() > 0 ) {
-            for (var h in resHeaders) {
-                if (!response.headersSent)
-                    response.setHeader(h, resHeaders[h])
+            var authority = (typeof(request.headers.referer) != 'undefined') ? local.conf.server.protocol.replace(/(http\/2|http2)/, 'https') +'://'+ request.headers.referer.match(/:\/\/(.[^\/]+)(.*)/)[1] : (request.headers[':authority'] || request.headers.host || null);
+            var re = new RegExp(authority);
+            for (var h in resHeaders) {                
+                if (!response.headersSent) {
+                    // handles multiple origins
+                if ( /Access\-Control\-Allow\-Origin/.test(h) && re.test(resHeaders[h]) /**|| re.test(local.conf.hostname))*/ ) {
+                        response.setHeader(h, authority)
+                    } else {
+                        response.setHeader(h, resHeaders[h])
+                    }
+                }                    
             }
         }
-
-        //console.debug('ACTION ON  ROUTING IS : ' + action);
 
         //Getting superCleasses & extending it with super Models.
         var controllerFile         = {}

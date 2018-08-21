@@ -241,7 +241,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ( typeof(instance.rules[rule]) != 'undefined' ) {
                     $form['rule'] = customRule = instance.rules[rule];
-                } else if ( $form.target.getAttribute('data-gina-form-rule') ) {
+                } else if ( typeof($form.target) != 'undefined' && $form.target !== null && $form.target.getAttribute('data-gina-form-rule') ) {
                     rule = $form.target.getAttribute('data-gina-form-rule').replace(/\-/g, '.');
 
                     if ( typeof(instance.rules[rule]) != 'undefined' ) {
@@ -514,10 +514,10 @@ function ValidatorPlugin(rules, data, formId) {
 
         var $form = null, _id = null, $target = null;
 
-        if ( this.getAttribute ) {
+        if ( typeof(this.getAttribute) != 'undefined' ) {
             _id = this.getAttribute('id');
             $target = this;
-        } else if ( typeof(this.target) && this.target.getAttribute ) {
+        } else if ( typeof(this.target) != 'undefined' && this.target != null && typeof(this.target.getAttribute) != 'undefined' ) {
             _id = this.target.getAttribute('id');
             $target = this.target
         }
@@ -977,7 +977,8 @@ function ValidatorPlugin(rules, data, formId) {
 
         var abLen = ab.length;
         var CHUNK_SIZE = Math.pow(2, 8) + bits;
-        var offset, len, subab;
+        var offset = null, len = null, subab = null;
+        
         for (offset = 0; offset < abLen; offset += CHUNK_SIZE) {
             len = Math.min(CHUNK_SIZE, abLen - offset);
             subab = ab.subarray(offset, offset + len);
@@ -986,7 +987,6 @@ function ValidatorPlugin(rules, data, formId) {
         return str;
     }
 
-    
 
     var processFiles = function(binaries, boundary, data, f, onComplete) {
 
@@ -997,8 +997,8 @@ function ValidatorPlugin(rules, data, formId) {
             e.preventDefault();
 
             try {
-                var bin = ab2str(this.result);
-                //var bin = this.result;
+                
+                var bin = ab2str(this.result);                
                 binaries[this.index].bin += bin;
 
                 if (!binaries[this.index].file.type) {
@@ -1006,7 +1006,6 @@ function ValidatorPlugin(rules, data, formId) {
                 }
 
             } catch (err) {
-
                 return onComplete(err, null, true);
             }
 
@@ -1190,7 +1189,6 @@ function ValidatorPlugin(rules, data, formId) {
 
             $form.binded = false;
 
-            //addListener(gina, instance['$forms'][_id].target, 'destroy.' + _id, function(event) {
             addListener(gina, $form.target, 'destroy.' + _id, function(event) {
 
                 cancelEvent(event);

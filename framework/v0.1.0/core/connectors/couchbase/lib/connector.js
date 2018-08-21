@@ -88,7 +88,11 @@ function Connector(dbString) {
                             // reconnecting
                             console.debug('[ CONNECTOR ] [ ' + dbString.database +' ] trying to reconnect...');
                             self.reconnecting = true;
-                            self.connect(dbString, next)
+                            if ( typeof(next) != 'undefined' ) {
+                                self.connect(dbString, next)
+                            } else {
+                                self.connect(dbString)
+                            }
 
                         } else if (err instanceof couchbase.Error && err.code == 23 && !self.reconnecting) {
                             self.instance.disconnect();
@@ -184,7 +188,7 @@ function Connector(dbString) {
                 local.env = env;
 
                 if ( typeof(cb) != 'undefined' ) { // this portition is not working yet on Mac OS X
-                    console.debug('[ ' + local.bundle +' ] reconnected to couchbase !!');
+                    console.debug('[ ' + local.bundle +' ] connected to couchbase !!');
 
                     
                     modelUtil.setConnection(bundle, name, self.instance);
@@ -266,7 +270,12 @@ function Connector(dbString) {
                     console.debug('[ CONNECTOR ] [ ' + local.bundle +' ] connection is dead: trying to reconnect');
                     self.reconnected = false;
                     self.reconnecting = true;
-                    self.connect(dbString, next)
+                    if ( typeof(next) != 'undefined' ) {
+                        self.connect(dbString, next)
+                    } else {
+                        self.connect(dbString)
+                    }
+                    
                 } else {
                     self.instance.get('heartbeat', function(err, res){
                         console.debug('[ CONNECTOR ] [ ' + local.bundle +' ] connection is being kept alive ...')

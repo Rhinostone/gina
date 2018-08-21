@@ -114,13 +114,15 @@ function Server(options) {
         }
 
         try {
-            var serverOpt = {};
+            
+            // updating server protocol
+            var serverOpt = {};            
             if ( 
                 typeof(options.conf[self.appName][self.env].content.settings.server) != 'undefined' 
                 && options.conf[self.appName][self.env].content.settings.server != ''
                 && options.conf[self.appName][self.env].content.settings.server != null
             ) {
-                serverOpt = options.conf[self.appName][self.env].content.settings.server
+                serverOpt = options.conf[self.appName][self.env].content.settings.server;
             }
             
             serverOpt = merge(serverOpt, {
@@ -792,7 +794,7 @@ function Server(options) {
                                 console.log('closing it : ' + total);
                                 
                                 if (total == 0) {
-                                    loadBundleConfiguration(request, response, next, function(err, bundle, pathname, config, req, res, next) {
+                                    loadBundleConfiguration(request, response, next, function onBundleConfigurationLoaded(err, bundle, pathname, config, req, res, next) {
                                         if (!req.handled) {
                                             req.handled = true;
                                             if (err) {
@@ -1196,19 +1198,19 @@ function Server(options) {
             , callback  = options.callback;
 
         //Reloading assets & files.
-        if (!cacheless) { // all but dev & debug
+        //if (!cacheless) { // all but dev & debug
             callback(err, bundle, pathname, options.config, req, res, next)
-        } else {
-            config.refresh(bundle, function(err, routing) {
-                if (err) {
-                    throwError(res, 500, 'Internal Server Error: \n' + (err.stack||err), next)
-                } else {
-                    //refreshing routing at the same time.
-                    self.routing = routing;
-                    callback(err, bundle, pathname, options.config, req, res, next)
-                }
-            })
-        }
+        // } else {
+        //     config.refresh(bundle, function(err, routing) {
+        //         if (err) {
+        //             throwError(res, 500, 'Internal Server Error: \n' + (err.stack||err), next)
+        //         } else {
+        //             //refreshing routing at the same time.
+        //             self.routing = routing;
+        //             callback(err, bundle, pathname, options.config, req, res, next)
+        //         }
+        //     })
+        // }
     }
 
     var handle = function(req, res, next, bundle, pathname, config) {
@@ -1220,11 +1222,7 @@ function Server(options) {
             , wroot             = null
             , isXMLRequest      = self.conf[bundle][self.env].server.request.isXMLRequest;
 
-        // if (self.conf[bundle][self.env].hostname.replace(self.conf[bundle][self.env].server.protocol + '://', '') != req.headers.host) {
-        //     self.conf[bundle][self.env].host = req.headers.host;
-        //     self.conf[bundle][self.env].hostname = self.conf[bundle][self.env].server.protocol + '://' + req.headers.host
-        // }
-
+        
         router.setMiddlewareInstance(self.instance);
 
         //Middleware configuration.
