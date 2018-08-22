@@ -97,7 +97,7 @@ function Routing() {
             , foundRoute = {}
             , i = 0;
         
-        if ( params.rule == "estimate-update-social-security-organism@coreAPI" ) {            
+        if ( params.rule == "register-xml@public" ) {            
             process.stdout.write('debugging this route');
         }
         //attaching routing description for this request

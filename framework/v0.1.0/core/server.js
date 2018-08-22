@@ -294,9 +294,9 @@ function Server(options) {
                         if (typeof(tmp[rule].url) != 'object') {
                             if (tmp[rule].url.length > 1 && tmp[rule].url.substr(0,1) != '/') {
                                 tmp[rule].url = '/'+tmp[rule].url
-                            } else if (tmp[rule].url.length > 1 && conf.envConf[apps[i]][self.env].server.webroot.substr(conf.envConf[apps[i]][self.env].server.webroot.length-1,1) == '/') {
+                            }/** else if (tmp[rule].url.length > 1 && conf.envConf[apps[i]][self.env].server.webroot.substr(conf.envConf[apps[i]][self.env].server.webroot.length-1,1) == '/') {
                                 tmp[rule].url = tmp[rule].url.substr(1)
-                            } else {
+                            }*/ else {
                                 if (wroot.substr(wroot.length-1,1) == '/') {
                                     wroot = wroot.substr(wroot.length-1,1).replace('/', '')
                                 }
