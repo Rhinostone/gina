@@ -97,9 +97,10 @@ function Routing() {
             , foundRoute = {}
             , i = 0;
         
-        if ( params.rule == "register-xml@public" ) {            
-            process.stdout.write('debugging this route');
-        }
+        // specific route debug
+        // if ( params.rule == "register-xml@public" ) {            
+        //     process.stdout.write('debugging this route');
+        // }
         //attaching routing description for this request
         request.routing = params; // can be retried in controller with: req.routing
 

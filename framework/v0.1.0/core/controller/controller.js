@@ -364,7 +364,7 @@ function SuperController(options) {
                 }
                 path = _(local.options.views[template].html +'/'+ local.options.namespace + '/' + file)
             } else {
-                if (local.options.path) {
+                if ( local.options.path && !/(\?|\#)/.test(local.options.path) ) {
                     path = _(local.options.path);
                     var re = new RegExp( data.page.view.ext+'$');
                     if ( data.page.view.ext && re.test(data.page.view.file) ) {
