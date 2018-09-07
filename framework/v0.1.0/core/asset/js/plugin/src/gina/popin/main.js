@@ -24,7 +24,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 'name' : undefined,
                 'class': 'gina-popin-default'
             },
-            autorizedEvents : ['ready', 'error'],
+            authorizedEvents : ['ready', 'error'],
             events: {}
         };
 
@@ -114,7 +114,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             });
         }
 
-        var bindOpen = function() {
+        var bindOpen = function(isRouting) {
+            
+            isRouting = ( typeof(isRouting) != 'undefined' ) ? isRouting : false;
+            
             var attr    = 'data-gina-popin-name';
             var $els    = getElementsByAttribute(attr);
             var $el     = null, name = null;
@@ -168,39 +171,41 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                 if (!fired) {
                                     fired = true;
 
-                                    e.target.innerHTML = e.detail;
+                                    //e.target.innerHTML = e.detail;
 
 
                                     // bind with formValidator if forms are found
-                                    if ( /<form/i.test(e.target.innerHTML) && typeof($validator) != 'undefined' ) {
-                                        var _id = null;
-                                        var $forms = e.target.getElementsByTagName('form');
-                                        for (var i = 0, len = $forms.length; i < len; ++i) {
+                                    // if ( /<form/i.test(e.target.innerHTML) && typeof($validator) != 'undefined' ) {
+                                    //     var _id = null;
+                                    //     var $forms = e.target.getElementsByTagName('form');
+                                    //     for (var i = 0, len = $forms.length; i < len; ++i) {
 
-                                            if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
-                                                _id = $forms[i].getAttribute('id') || 'form.' + uuid.v4();
-                                                $forms[i].setAttribute('id', _id);// just in case
-                                                $forms[i]['id'] = _id
-                                            } else {
-                                                _id = $forms[i]['id']
-                                            }
+                                    //         if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
+                                    //             _id = $forms[i].getAttribute('id') || 'form.' + uuid.v4();
+                                    //             $forms[i].setAttribute('id', _id);// just in case
+                                    //             $forms[i]['id'] = _id
+                                    //         } else {
+                                    //             _id = $forms[i]['id']
+                                    //         }
 
-                                            //console.log('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
-                                            if ($popin['$forms'].indexOf(_id) < 0)
-                                                $popin['$forms'].push(_id);
+                                    //         //console.log('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
+                                    //         if ($popin['$forms'].indexOf(_id) < 0)
+                                    //             $popin['$forms'].push(_id);
 
-                                            $forms[i].close = popinClose;
-                                            $validator.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
+                                    //         $forms[i].close = popinClose;
+                                    //         $validator.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
 
-                                            removeListener(gina, $popin.target, e.type);
-                                        }
-                                    }
-
-                                    popinOpen($popin.name);
+                                    //         removeListener(gina, $popin.target, e.type);
+                                    //     }
+                                    // }
+                                    
+                                    popinBind(e);
+                                    if (!$popin.isOpen);
+                                        popinOpen($popin.name);
                                 }
                             });
 
-                            // loading & binding popin
+                            // loading & binding popin                            
                             popinLoad($popin.name, e.target.url);
                         });
 
@@ -217,14 +222,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             }
                         }
                     }
-
-
-                    // if ( typeof(instance.events[evt]) != 'undefined' && instance.events[evt] == $el.id ) {
-                    //     removeListener(gina, $el, evt, proceed);
-                    //     delete instance.events[evt]
-                    // } else {
-                    //     proceed()
-                    // }
                 }
 
             }
@@ -261,6 +258,358 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
             gina.popinIsBindinded = true
         }
+        
+        
+        function popinBind(e) {
+            
+            var $el = e.target;
+            var eventType = e.type;
+            
+            if ( typeof(e.detail) != 'undefined' )
+                $el.innerHTML = e.detail.trim();
+            
+            var register = function (type, evt, $element) {
+                // attach submit events
+                addListener(gina, $element, evt, function(event) {
+
+                    cancelEvent(event);
+                    
+                    if (type != 'close') {
+                        
+                        var fired = false;
+                        var _evt = 'loaded.' + $popin.id;
+                        
+                        if ( typeof(gina.events[_evt]) == 'undefined' ) {
+                            addListener(gina, $el, _evt, function(e) {
+                            
+                                e.preventDefault();
+
+                                if (!fired) {
+                                    fired = true;                                                                        
+                                    popinLoadContent($popin.target, e.detail);   
+                                }
+                            });
+                        }
+                        
+                        // Non-Preflighted requests
+                        var options = {                            
+                            isSynchrone: false,
+                            withCredentials: false
+                        };
+                        options = merge(options, $popin.options);                        
+                        popinLoad($popin.name, $element.href, options);
+                    }            
+                            
+                    removeListener(gina, event.target, event.type)
+                });
+                
+                addListener(gina, $element, 'click', function(event) {
+                    cancelEvent(event);
+                    
+                    if ( type == 'link' ) {
+                        
+                        if ( event.target.getAttribute('target') != null && event.target.getAttribute('target') != '' ) {
+                            window.open(event.target.getAttribute('href'), event.target.getAttribute('target'));
+                        } else { // else, inside viewbox
+                            // TODO - Integrate https://github.com/box/viewer.js#loading-a-simple-viewer
+                            
+                            triggerEvent(gina, event.target, event.currentTarget.id, $popin);
+                        }
+                        
+                    } else { // close
+                        
+                        if ( typeof(event.target.id) == 'undefined' ) {
+                            event.target.setAttribute('id', evt +'.'+ uuid.v4() );
+                            event.target.id = event.target.getAttribute('id')
+                        }
+        
+                        if ( /^popin\.close\./.test(event.target.id) ) {
+                            cancelEvent(event);
+        
+                            popinClose($popin.name);
+                        }
+        
+                        if ( /^popin\.click\./.test(event.target.id) ) {
+                            cancelEvent(event);
+                            //console.log('popin.click !! ', event.target);
+                            var _evt = event.target.id;
+        
+                            if ( new RegExp( '^popin.click.gina-popin-' + instance.id).test(_evt) )
+                                triggerEvent(gina, event.target, _evt, event.detail);
+        
+                        }
+                    }
+                    
+                });
+                    
+            };
+            
+            // bind overlay on click
+            if (!$popin.isOpen) {                
+                var $overlay = instance.target.childNodes[0];
+                addListener(gina, $overlay, 'click', function(event) {
+
+                    // don't cancel here, it will corrupt child elements behaviors such as checkboxes and radio buttons
+                    if ( /gina-popin-is-active/.test(event.target.className) ) {
+
+                        // remove listeners
+                        removeListener(gina, event.target, 'click');
+        
+                        // binding popin close
+                        var $close = [], $buttonsTMP = [];
+        
+                        $buttonsTMP = $el.getElementsByTagName('button');
+                        if ( $buttonsTMP.length > 0 ) {
+                            for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                                if ( /gina-popin-close/.test($buttonsTMP[b].className) )
+                                    $close.push($buttonsTMP[b])
+                            }
+                        }
+        
+                        $buttonsTMP = $el.getElementsByTagName('div');
+                        if ( $buttonsTMP.length > 0 ) {
+                            for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                                if ( /gina-popin-close/.test($buttonsTMP[b].className) )
+                                    $close.push($buttonsTMP[b])
+                            }
+                        }
+        
+                        $buttonsTMP = $el.getElementsByTagName('a');
+                        if ( $buttonsTMP.length > 0 ) {
+                            for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                                if ( /gina-popin-close/.test($buttonsTMP[b].className) )
+                                    $close.push($buttonsTMP[b])
+                            }
+                        }
+        
+                        for (var b = 0, len = $close.length; b < len; ++b) {
+                            removeListener(gina, $close[b], $close[b].getAttribute('id') )
+                        }
+        
+                        popinClose($popin.name);
+                    }
+                    
+                });
+            }
+
+            // bind with formValidator if forms are found
+            if ( /<form/i.test($el.innerHTML) && typeof($validator) != 'undefined' ) {
+                var _id = null;
+                var $forms = $el.getElementsByTagName('form');
+                for (var i = 0, len = $forms.length; i < len; ++i) {
+
+                    if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
+                        _id = $forms[i].getAttribute('id') || 'form.' + uuid.v4();
+                        $forms[i].setAttribute('id', _id);// just in case
+                        $forms[i]['id'] = _id
+                    } else {
+                        _id = $forms[i]['id']
+                    }
+
+                    //console.log('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
+                    if ($popin['$forms'].indexOf(_id) < 0)
+                        $popin['$forms'].push(_id);
+
+                    $forms[i].close = popinClose;
+                    $validator.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
+
+                    removeListener(gina, $popin.target, eventType);
+                }
+            }
+            
+            // binding popin close & links (& its target attributes)
+            var $close          = []
+                , $buttonsTMP   = []
+                , $link         = [];
+
+            $buttonsTMP = $el.getElementsByTagName('button');
+            if ( $buttonsTMP.length > 0 ) {
+                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                    if ( /gina-popin-close/.test($buttonsTMP[b].className) )
+                        $close.push($buttonsTMP[b])
+                }
+            }
+
+            $buttonsTMP = $el.getElementsByTagName('div');
+            if ( $buttonsTMP.length > 0 ) {
+                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                    if ( /gina-popin-close/.test($buttonsTMP[b].className) )
+                        $close.push($buttonsTMP[b])
+                }
+            }
+
+            $buttonsTMP = $el.getElementsByTagName('a');
+            if ( $buttonsTMP.length > 0 ) {
+                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                    if ( /gina-popin-close/.test($buttonsTMP[b].className) ) {
+                        $close.push($buttonsTMP[b]);
+                        continue
+                    }
+                    
+                    if ( typeof($buttonsTMP[b]) != 'undefined' && !/\#$/.test($buttonsTMP[b].href) ) {
+                        $link.push($buttonsTMP[b]);
+                        continue
+                    }
+                }
+            }
+            
+            var onclickAttribute = null, evt = null;
+            // close events
+            for (var b = 0, len = $close.length; b < len; ++b) {
+                if ($close[b].tagName == 'A') {
+                    onclickAttribute = $close[b].getAttribute('onclick');
+                }
+
+                if ( !onclickAttribute ) {
+                    $close[b].setAttribute('onclick', 'return false;')
+                } else if ( typeof(onclickAttribute) != 'undefined' && !/return false/.test(onclickAttribute) ) {
+                    if ( /\;$/.test(onclickAttribute) ) {
+                        onclickAttribute += 'return false;'
+                    } else {
+                        onclickAttribute += '; return false;'
+                    }
+                }
+
+                if (!$close[b]['id']) {
+
+                    evt = 'popin.close.'+ uuid.v4();
+                    $close[b]['id'] = evt;
+                    $close[b].setAttribute( 'id', evt);
+
+                } else {
+                    evt = $close[b]['id'];
+                }               
+
+
+                if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $close[b].id ) {
+                    register('close', evt, $close[b])
+                }
+            }
+            
+            // link events
+            for (var l = 0, lLen = $link.length; l < lLen; ++l) {
+                
+                // onclickAttribute = $link[l].getAttribute('onclick');
+
+                // if ( !onclickAttribute && !$link[l].target ) {
+                //     $link[l].setAttribute('onclick', 'return false;')
+                // } else if ( typeof(onclickAttribute) != 'undefined' && !$link[l].target && !/return false/.test(onclickAttribute)) {
+                //     if ( /\;$/.test(onclickAttribute) ) {
+                //         onclickAttribute += 'return false;'
+                //     } else {
+                //         onclickAttribute += '; return false;'
+                //     }
+                // }
+
+                if (!$link[l]['id']) {
+
+                    evt = 'popin.link.'+ uuid.v4();
+                    $link[l]['id'] = evt;
+                    $link[l].setAttribute( 'id', evt);
+
+                } else {
+                    evt = $link[l]['id'];
+                }               
+
+
+                if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $link[l].id ) {
+                    register('link', evt, $link[l])
+                }
+            }
+            
+        }
+        
+        function updateToolbar(result, resultIsObject) {
+            // update toolbar errors
+            
+            if ( gina && typeof(window.ginaToolbar) == "object" && typeof(result) != 'undefined' && typeof(resultIsObject) != 'undefined' && result ) {
+                
+                var XHRData = result;
+                
+                try {                    
+                    
+                    if ( !resultIsObject && XHRData.error && /^(\{|\[)/.test(XHRData.error) )
+                        XHRData.error = JSON.parse(XHRData.error);
+
+                    // bad .. should not happen
+                    if ( typeof(XHRData.error) != 'undefined' && typeof(XHRData.error) == 'object' && typeof(XHRData.error) == 'object' ) {
+                        // by default
+                        var XHRDataNew = { 'status' : XHRData.status };
+                        // existing will be overriden by user
+                        for (xErr in XHRData.error) {
+                            if ( !/^error$/.test(xErr ) ) {
+                                XHRDataNew[xErr] = XHRData.error[xErr];
+                            }
+                        }
+
+                        XHRDataNew.error = XHRData.error.error;
+
+                        XHRData = result = XHRDataNew
+                    }
+                        
+                    XHRData.isXHRViewData = true;
+                    ginaToolbar.update("data-xhr", XHRData )
+                } catch (err) {
+                    throw err
+                }
+            }
+            
+            // update toolbar
+            var $el = $popin.target;
+            
+            // XHRData
+            var XHRData = null;            
+            if ( typeof(result) == 'string' && /\<(.*)\>/.test(result) ) {
+                // converting Element to DOM object
+                XHRData = new DOMParser().parseFromString(result, "text/html").getElementById('gina-without-layout-xhr-data');               
+            } else {
+                XHRData = document.getElementById('gina-without-layout-xhr-data');
+            }
+            
+            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                try {
+
+                    if ( typeof(XHRData.value) != 'undefined' && XHRData.value ) {
+                        XHRData = JSON.parse( decodeURIComponent( XHRData.value ) );
+                        // reset data-xhr
+                        //ginaToolbar.update("data-xhr", null);
+                        XHRData.isXHRViewData = true;
+                        ginaToolbar.update("data-xhr", XHRData);
+                    }
+
+                } catch (err) {
+                    throw err
+                }
+            }
+
+            // XHRView
+            var XHRView = null;
+            if ( typeof(result) == 'string' && /\<(.*)\>/.test(result) ) {                
+                // converting Element to DOM object
+                XHRView = new DOMParser().parseFromString(result, "text/html").getElementById('gina-without-layout-xhr-view');                
+            } else {
+                XHRView = document.getElementById('gina-without-layout-xhr-view');
+            }
+            
+            if ( gina && typeof(window.ginaToolbar) == "object" && XHRView ) {
+                try {
+
+                    if ( typeof(XHRView.value) != 'undefined' && XHRView.value ) {
+                        
+                        XHRView = JSON.parse( decodeURIComponent( XHRView.value ) );                        
+                        // reset data-xhr
+                        //ginaToolbar.update("view-xhr", null);
+                        ginaToolbar.update("view-xhr", XHRView);
+                    }
+
+                    // popin content
+                    ginaToolbar.update("el-xhr", $popin.id);
+
+                } catch (err) {
+                    throw err
+                }
+            }
+        }
 
 
 
@@ -274,7 +623,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             'withCredentials': true, // if should be enabled under a trusted env
             'headers'       : {
                 // cross domain is enabled by default, but you need to setup `Access-Control-Allow-Origin`
-                'X-Requested-With': 'XMLHttpRequest' // in case of cross domain origin
+                'X-Requested-With': 'XMLHttpRequest' // to set isXMLRequest == true && in case of cross domain origin
 
             }
         };
@@ -302,16 +651,22 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 instance.target.firstChild.appendChild($el);
             }
 
-            if ( typeof(options) != 'undefined' ) {
-                var options = merge(options, xhrOptions);
+            if ( typeof(options) == 'undefined' ) {
+                options = xhrOptions;
             } else {
-                var options = xhrOptions;
+                options = merge(options, xhrOptions);
             }
-
+            // proxy external urls
+            // TODO - instead of using `cors.io`, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
+            if ( /^(http|https)\:/.test(url) && !new RegExp('^' + window.location.protocol + '//'+ window.location.host).test(url) ) {                
+                url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url
+            }
             options.url     = url;
+            // updating popin options
+            $popin.options  = options;
 
 
-            if ( options.withCredentials ) {
+            if ( options.withCredentials ) { // Preflighted requests               
                 if ('withCredentials' in xhr) {
                     // XHR for Chrome/Firefox/Opera/Safari.
                     if (options.isSynchrone) {
@@ -329,7 +684,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     var result = 'CORS not supported: the server is missing the header `"Access-Control-Allow-Credentials": true` ';
                     triggerEvent(gina, $el, 'error.' + id, result)
                 }
-            } else {
+            } else { // simple requests
+                
                 if (options.isSynchrone) {
                     xhr.open(options.method, options.url, options.isSynchrone)
                 } else {
@@ -337,12 +693,20 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 }
             }
 
-            // setting up headers
-            for (var hearder in options.headers) {
-                xhr.setRequestHeader(hearder, options.headers[hearder]);
-            }
+            
 
             if (xhr) {
+                // setting up headers
+                xhr.withCredentials = ( typeof(options.withCredentials) != 'undefined' ) ? options.withCredentials : false;
+                    
+                for (var hearder in options.headers) {
+                    xhr.setRequestHeader(hearder, options.headers[hearder]);
+                }
+                
+                xhr.onerror = function(event, err) {
+                    console.log('error found ', err);
+                }
+                
                 // catching ready state cb
                 xhr.onreadystatechange = function (event) {
                     if (xhr.readyState == 4) {
@@ -357,16 +721,28 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
 
                                 instance.eventData.success = result;
-
+                                
                                 triggerEvent(gina, $el, 'loaded.' + id, result);
+                                
+                                updateToolbar(result);
 
                             } catch (err) {
+                                
+                                var resultIsObject = false;
+                                
                                 var result = {
                                     'status':  422,
-                                    'error' : err.description
+                                    'error' : err.description || err.stack
                                 };
+                                
+                                if ( /json$/.test( xhr.getResponseHeader("Content-Type") ) ) {
+                                    result.error = JSON.parse(xhr.responseText);
+                                    resultIsObject = true
+                                }
 
                                 instance.eventData.error = result;
+                                
+                                updateToolbar(result, resultIsObject);
 
                                 triggerEvent(gina, $el, 'error.' + id, result)
                             }
@@ -387,34 +763,35 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             instance.eventData.error = result;
 
                             // update toolbar
-                            var XHRData = result;
-                            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
-                                try {
-                                    if ( !resultIsObject && XHRData.error && /^(\{|\[).test(XHRData.error) /)
-                                        XHRData.error = JSON.parse(XHRData.error);
+                            updateToolbar(result, resultIsObject);
+                            // var XHRData = result;
+                            // if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                            //     try {
+                            //         if ( !resultIsObject && XHRData.error && /^(\{|\[).test(XHRData.error) /)
+                            //             XHRData.error = JSON.parse(XHRData.error);
 
-                                    // bad .. should not happen
-                                    if ( typeof(XHRData.error) != 'undefined' && typeof(XHRData.error) == 'object' && typeof(XHRData.error) == 'object' ) {
-                                        // by default
-                                        var XHRDataNew = { 'status' : XHRData.status };
-                                        // existing will be overriden by user
-                                        for (xErr in XHRData.error) {
-                                            if ( !/^error$/.test(xErr ) ) {
-                                                XHRDataNew[xErr] = XHRData.error[xErr];
-                                            }
-                                        }
+                            //         // bad .. should not happen
+                            //         if ( typeof(XHRData.error) != 'undefined' && typeof(XHRData.error) == 'object' && typeof(XHRData.error) == 'object' ) {
+                            //             // by default
+                            //             var XHRDataNew = { 'status' : XHRData.status };
+                            //             // existing will be overriden by user
+                            //             for (xErr in XHRData.error) {
+                            //                 if ( !/^error$/.test(xErr ) ) {
+                            //                     XHRDataNew[xErr] = XHRData.error[xErr];
+                            //                 }
+                            //             }
 
-                                        XHRDataNew.error = XHRData.error.error;
+                            //             XHRDataNew.error = XHRData.error.error;
 
-                                        XHRData = result = XHRDataNew
-                                    }
+                            //             XHRData = result = XHRDataNew
+                            //         }
                                         
-                                    XHRData.isXHRViewData = true;
-                                    ginaToolbar.update("data-xhr", XHRData )
-                                } catch (err) {
-                                    throw err
-                                }
-                            }
+                            //         XHRData.isXHRViewData = true;
+                            //         ginaToolbar.update("data-xhr", XHRData )
+                            //     } catch (err) {
+                            //         throw err
+                            //     }
+                            // }
 
 
                             triggerEvent(gina, $el, 'error.' + id, result)
@@ -455,6 +832,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                 // sending
                 xhr.send();
+                
 
                 return {
                     'open': function () {
@@ -466,34 +844,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             if (!fired) {
                                 fired = true;
 
-                                e.target.innerHTML = e.detail;
-
-
-                                // bind with formValidator if forms are found
-                                if ( /<form/i.test(e.target.innerHTML) && typeof($validator) != 'undefined' ) {
-                                    var _id = null;
-                                    var $forms = e.target.getElementsByTagName('form');
-                                    for (var i = 0, len = $forms.length; i < len; ++i) {
-
-                                        if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
-                                            _id = $forms[i].getAttribute('id') || 'form.' + uuid.v4();
-                                            $forms[i].setAttribute('id', _id);// just in case
-                                            $forms[i]['id'] = _id
-                                        } else {
-                                            _id = $forms[i]['id']
-                                        }
-
-                                        //console.log('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
-                                        if ($popin['$forms'].indexOf(_id) < 0)
-                                            $popin['$forms'].push(_id);
-
-                                        $forms[i].close = popinClose;
-                                        $validator.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
-
-                                        removeListener(gina, $popin.target, e.type);
-                                    }
-                                }
-
+                                popinBind(e);
                                 popinOpen($popin.name);
                             }
                         });
@@ -504,9 +855,18 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
         }
 
-        function popinLoadContent() {
-
+        function popinLoadContent($el, $content) {
+            
+            if ( !$popin.isOpen )
+                throw new Error('Popin `'+$popin.name+'` is not open !');
+                
+            $el.innerHTML = $content.trim(); 
+            popinUnbind($popin.name, true);          
+            popinBind({ target: $el, type: 'loaded.' + $popin.id });
+            
+            triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
         }
+               
 
         /**
          * popinOpen
@@ -518,55 +878,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
          * */
         function popinOpen(name) {
 
-            // bind overlay on click
-            var $overlay = instance.target.childNodes[0];
-
-            addListener(gina, $overlay, 'click', function(event) {
-
-                // don't cancel here, it will corrupt child elements behaviors such as checkboxes and radio buttons
-
-                if ( /gina-popin-is-active/.test(event.target.className) ) {
-
-
-                    // remove listeners
-                    removeListener(gina, event.target, 'click');
-
-                    // binding popin close
-                    var $close = [], $buttonsTMP = [];
-
-                    $buttonsTMP = $el.getElementsByTagName('button');
-                    if ( $buttonsTMP.length > 0 ) {
-                        for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                            if ( /gina-popin-close/.test($buttonsTMP[b].className) )
-                                $close.push($buttonsTMP[b])
-                        }
-                    }
-
-                    $buttonsTMP = $el.getElementsByTagName('div');
-                    if ( $buttonsTMP.length > 0 ) {
-                        for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                            if ( /gina-popin-close/.test($buttonsTMP[b].className) )
-                                $close.push($buttonsTMP[b])
-                        }
-                    }
-
-                    $buttonsTMP = $el.getElementsByTagName('a');
-                    if ( $buttonsTMP.length > 0 ) {
-                        for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                            if ( /gina-popin-close/.test($buttonsTMP[b].className) )
-                                $close.push($buttonsTMP[b])
-                        }
-                    }
-
-                    for (var b = 0, len = $close.length; b < len; ++b) {
-                        removeListener(gina, $close[b], $close[b].getAttribute('id') )
-                    }
-
-                    popinClose(name);
-                }
-            });
-
-
             var id = null, $el = null;
             if ( typeof(name) == 'string' && name != '' ) {
                 id = 'gina-popin-' + instance.id +'-'+ name;
@@ -575,84 +886,17 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             } else if ( typeof(name) == 'undefined' ) {
                 id = $popin.id
             }
-
+            
             $el = document.getElementById(id);
+            
+            popinBind({ target: $el, type: 'loaded.' + $popin.id });
+                       
 
             if ( !/gina-popin-is-active/.test($el.className) )
                 $el.className += ' gina-popin-is-active';
 
             if ( !/gina-popin-is-active/.test(instance.target.firstChild.className) )
-                instance.target.firstChild.className += ' gina-popin-is-active';
-
-            // binding popin close
-            var $close = [], $buttonsTMP = [];
-
-            $buttonsTMP = $el.getElementsByTagName('button');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ( /gina-popin-close/.test($buttonsTMP[b].className) )
-                        $close.push($buttonsTMP[b])
-                }
-            }
-
-            $buttonsTMP = $el.getElementsByTagName('div');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ( /gina-popin-close/.test($buttonsTMP[b].className) )
-                        $close.push($buttonsTMP[b])
-                }
-            }
-
-            $buttonsTMP = $el.getElementsByTagName('a');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ( /gina-popin-close/.test($buttonsTMP[b].className) )
-                        $close.push($buttonsTMP[b])
-                }
-            }
-            var onclickAttribute = null, evt = null;
-            for (var b = 0, len = $close.length; b < len; ++b) {
-                if ($close[b].tagName == 'A') {
-                    onclickAttribute = $close[b].getAttribute('onclick');
-                }
-
-                if ( !onclickAttribute ) {
-                    $close[b].setAttribute('onclick', 'return false;')
-                } else if ( !/return false/) {
-                    if ( /\;$/.test(onclickAttribute) ) {
-                        onclickAttribute += 'return false;'
-                    } else {
-                        onclickAttribute += '; return false;'
-                    }
-                }
-
-                if (!$close[b]['id']) {
-
-                    evt = 'popin.close.'+ uuid.v4();
-                    $close[b]['id'] = evt;
-                    $close[b].setAttribute( 'id', evt);
-
-                } else {
-                    evt = $close[b]['id'];
-                }
-
-                var register = function (evt, $close) {
-                    // attach submit events
-                    addListener(gina, $close, evt, function(event) {
-
-                        cancelEvent(event);
-
-                        popinClose(name);
-                        removeListener(gina, event.target, event.type)
-                    });
-                }
-
-
-                if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $close[b].id ) {
-                    register(evt, $close[b])
-                }
-            }
-
+                instance.target.firstChild.className += ' gina-popin-is-active';    
 
             if ( /gina-popin-is-active/.test(event.target.className) ) {
                 removeListener(gina, event.target, event.target.getAttribute('id'))
@@ -663,70 +907,75 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             $popin.target = $el;
 
             // update toolbar
-            var XHRData = document.getElementById('gina-without-layout-xhr-data');
-            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
-                try {
+            updateToolbar();
+            // var XHRData = document.getElementById('gina-without-layout-xhr-data');
+            // if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+            //     try {
 
-                    if ( typeof(XHRData.value) != 'undefined' && XHRData.value ) {
-                        XHRData = JSON.parse( decodeURIComponent( XHRData.value ) );
-                        // reset data-xhr
-                        ginaToolbar.update("data-xhr", null);
-                        XHRData.isXHRViewData = true;
-                        ginaToolbar.update("data-xhr", XHRData);
-                    }
+            //         if ( typeof(XHRData.value) != 'undefined' && XHRData.value ) {
+            //             XHRData = JSON.parse( decodeURIComponent( XHRData.value ) );
+            //             // reset data-xhr
+            //             ginaToolbar.update("data-xhr", null);
+            //             XHRData.isXHRViewData = true;
+            //             ginaToolbar.update("data-xhr", XHRData);
+            //         }
 
-                } catch (err) {
-                    throw err
-                }
-            }
+            //     } catch (err) {
+            //         throw err
+            //     }
+            // }
 
-            var XHRView = document.getElementById('gina-without-layout-xhr-view');
-            if ( gina && typeof(window.ginaToolbar) == "object" && XHRView ) {
-                try {
+            // var XHRView = document.getElementById('gina-without-layout-xhr-view');
+            // if ( gina && typeof(window.ginaToolbar) == "object" && XHRView ) {
+            //     try {
 
-                    if ( typeof(XHRView.value) != 'undefined' && XHRView.value ) {
-                        XHRView = JSON.parse( decodeURIComponent( XHRView.value ) );
-                        // reset data-xhr
-                        ginaToolbar.update("view-xhr", null);
+            //         if ( typeof(XHRView.value) != 'undefined' && XHRView.value ) {
+            //             XHRView = JSON.parse( decodeURIComponent( XHRView.value ) );
+            //             // reset data-xhr
+            //             ginaToolbar.update("view-xhr", null);
 
-                        ginaToolbar.update("view-xhr", XHRView);
-                    }
+            //             ginaToolbar.update("view-xhr", XHRView);
+            //         }
 
-                    // popin content
-                    ginaToolbar.update("el-xhr", id);
+            //         // popin content
+            //         ginaToolbar.update("el-xhr", id);
 
-                } catch (err) {
-                    throw err
-                }
-            }
+            //     } catch (err) {
+            //         throw err
+            //     }
+            // }
 
             triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
         }
 
-
         /**
-         * popinClose
+         * popinUnbind
          *
          * Closes a popin by `name` or all `is-active`
          *
          * @parama {string} [name]
          *
          * */
-        function popinClose(name) {
+        function popinUnbind(name, isRouting) {
+            
             var id = null, $el = null;
             if ( typeof(name) == 'string' && name != '' ) {
                 if (name !== $popin.name)
                     throw new Error('Popin `'+name+'` not found !');
             }
             // by default
-            id = $popin.id;
-
+            //id  = $popin.id;
+            
+            isRouting = ( typeof(isRouting) != 'undefined' ) ? isRouting : false;
+            
             $el = $popin.target;
 
             if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
-                instance.target.firstChild.className  = instance.target.firstChild.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
-                $el.className           = $el.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
-                $el.innerHTML = '';
+                if (!isRouting) {
+                    instance.target.firstChild.className  = instance.target.firstChild.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
+                    $el.className           = $el.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
+                    $el.innerHTML = '';
+                }                    
 
                 // removing from FormValidator instance
                 var i = 0, formsLength = $popin['$forms'].length;
@@ -738,19 +987,66 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         $popin['$forms'].splice( i, 1);
                     }
                 }
+                
+                gina.popinIsBindinded = false;
+                
                 // remove listeners
                 removeListener(gina, $popin.target, 'loaded.' + $popin.id);
+            }
+        }
+        
+
+        /**
+         * popinClose
+         *
+         * Closes a popin by `name` or all `is-active`
+         *
+         * @parama {string} [name]
+         *
+         * */
+        function popinClose(name) {
+            
+            var id = null, $el = null;
+            if ( typeof(name) == 'string' && name != '' ) {
+                if (name !== $popin.name)
+                    throw new Error('Popin `'+name+'` not found !');
+            }
+            
+            
+            // by default
+            //id = $popin.id;
+            $el = $popin.target;
+
+            if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
+                popinUnbind(name);
+            //     instance.target.firstChild.className  = instance.target.firstChild.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
+            //     $el.className           = $el.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
+            //     $el.innerHTML = '';
+
+            //     // removing from FormValidator instance
+            //     var i = 0, formsLength = $popin['$forms'].length;
+            //     if ($validator['$forms'] && formsLength > 0) {
+            //         for (; i < formsLength; ++i) {
+            //             if ( typeof($validator['$forms'][ $popin['$forms'][i] ]) != 'undefined' )
+            //                 $validator['$forms'][ $popin['$forms'][i] ].destroy();
+
+            //             $popin['$forms'].splice( i, 1);
+            //         }
+            //     }
+            //     // remove listeners
+            //     removeListener(gina, $popin.target, 'loaded.' + $popin.id);
 
 
 
 
                 $popin.isOpen = false;
+                gina.popinIsBindinded = false;
 
                 // restore toolbar
                 if ( gina && typeof(window.ginaToolbar) == "object" )
                     ginaToolbar.restore();
 
-                triggerEvent(gina, $popin.target, 'close.'+ id, $popin);
+                triggerEvent(gina, $popin.target, 'close.'+ $popin.id, $popin);
             }
         }
 

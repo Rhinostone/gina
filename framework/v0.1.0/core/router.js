@@ -189,7 +189,7 @@ function Router(env) {
         }
         controllerFile = filename
 
-
+        
         // default param setting
         var options = {
             // view namespace first
@@ -201,7 +201,7 @@ function Router(env) {
             //bundle          : bundle,//module
             bundlePath: conf.bundlesPath + '/' + bundle,
             rootPath: self.executionPath,
-            conf: conf,
+            conf: JSON.parse(JSON.stringify(conf)),
             instance: self.middlewareInstance,
             views: (routeHasViews) ? conf.content.views : undefined,
             isUsingTemplate: local.isUsingTemplate,
@@ -212,7 +212,8 @@ function Router(env) {
             //withCredentials : false
         };
 
-        options = merge(options, JSON.parse(JSON.stringify(params)));
+        
+        options = merge(options, params);
         options.conf.content.routing[options.rule].param = params.param;
         delete options.middleware;
         delete options.param;
