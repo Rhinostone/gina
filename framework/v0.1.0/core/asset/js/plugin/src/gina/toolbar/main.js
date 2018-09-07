@@ -282,7 +282,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                     });
 
                     //$htmlForms.html( parseView(jsonObject.forms, ginaJsonObject.forms, null, $htmlForms) );
-                } else if ( /^(data-xhr)$/.test(section) ) {
+                } else if ( /^(data-xhr|view-xhr)$/.test(section) ) {
                     
                     // reset case
                     if ( typeof(jsonObject[section]) == 'undefined' || !jsonObject[section] || jsonObject[section] == 'null' ) {
@@ -295,7 +295,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                         
                     
                     // update data section without erasing old data
-                    if (!isXHRViewData ) {
+                    if (!isXHRViewData && !/^(view-xhr)$/.test(section)) {
                         //jsonObject[section] = merge(jsonObject[section], jsonObject.data);
                         // also update original data to handle restore action
                         if ( typeof (jsonObject['el-xhr']) != 'undefined' ) {
@@ -311,8 +311,20 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                         delete jsonObject[section].isXHRViewData;
                     }
 
-                    $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject[section], ginaJsonObject[section], null, isXHR) +'</ul>');
+                    if ( /^(data-xhr)$/.test(section) ) {
+                        $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(jsonObject[section], ginaJsonObject[section], null, isXHR) +'</ul>');
+                    } else if ( /^(view-xhr)$/.test(section) ) {
+                        //$htmlView.html( parseView(userObject.view, ginaObject.view, null, isXHR, $htmlView) );
+                        // -> View
+                        // init view
+                        var htmlProp =  '<div id="gina-toolbar-view-html-properties" class="gina-toolbar-section">\n' +
+                                        '    <h2 class="gina-toolbar-section-title">properties</h2>\n' +
+                                        '    <ul class="gina-toolbar-properties"></ul>\n' +
+                                        '</div>';
 
+                        $htmlView.html(htmlProp);
+                        $htmlView.html( parseView(jsonObject[section], ginaJsonObject[section], null, isXHR, $htmlView) );
+                    }
                     
                 } else if ( /^(el-xhr)$/.test(section) ) {
                     // -> XHR Forms

@@ -604,7 +604,7 @@ function Server(options) {
             request.files   = [];
             //request.patch = {}; ???
             //request.cookies = {}; // ???
-
+            
             // be carfull, if you are using jQuery + cross domain, you have to set the header manually in your $.ajax query -> headers: {'X-Requested-With': 'XMLHttpRequest'}
             self.conf[self.appName][self.env].server.request.isXMLRequest       = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
 
@@ -1256,7 +1256,7 @@ function Server(options) {
                     namespace           : routing[name].namespace || undefined,
                     url                 : unescape(pathname), /// avoid %20
                     rule                : routing[name].originalRule || name,
-                    param               : routing[name].param,
+                    param               : JSON.parse(JSON.stringify(routing[name].param)),
                     middleware          : routing[name].middleware,
                     bundle              : routing[name].bundle,
                     isXMLRequest        : isXMLRequest
@@ -1335,12 +1335,12 @@ function Server(options) {
                                     if (err) {
                                         throwError(res, 500, err.msg||err.stack , next)
                                     } else {
-                                        router.route(req, res, next, params)
+                                        router.route(req, res, next, req.routing)
                                     }
                                 })
                             } else {
                                 console.debug('[ 200 ] '+ pathname);
-                                router.route(req, res, next, params)
+                                router.route(req, res, next, req.routing)
                             }
                         }
                     }

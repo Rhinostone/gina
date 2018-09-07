@@ -42,7 +42,7 @@ function Routing() {
      * @return {object|false} foundRoute
      * */
     self.compareUrls = function(params, url, request) {
-
+        
         if ( typeof(request) == 'undefined' ) {
             var request = { routing: {} }
         }
@@ -103,12 +103,22 @@ function Routing() {
         // }
         //attaching routing description for this request
         request.routing = params; // can be retried in controller with: req.routing
-
+        
+        if ( typeof(request.routing.requirements) != 'undefined' && typeof(request.get) != 'undefined' ) {            
+            for (var p in request.get) {
+                if ( typeof(request.routing.requirements[p]) != 'undefined' && uRo.indexOf(':' + p) < 0 ) {
+                    uRo.push(':' + p);
+                    uRe.push(request.get[p]);
+                    ++maxLen;
+                }
+            }
+        }
+        
         if (uRe.length === uRo.length) {
             for (; i < maxLen; ++i) {
                 if (uRe[i] === uRo[i]) {
                     ++score
-                } else if (score == i && hasParams(uRo[i]) && fitsWithRequirements(uRo[i], uRe[i], params, request)) {
+                } else if (score == i && hasParams(uRo[i]) && fitsWithRequirements(uRo[i], uRe[i], request.routing, request)) {
                     ++score
                 }
             }
@@ -133,7 +143,7 @@ function Routing() {
      * @private
      * */
     var fitsWithRequirements = function(urlVar, urlVal, params, request) {
-
+        
         var matched = -1
             , _param = urlVar.match(/\:\w+/g)
             , regex = null
@@ -143,15 +153,15 @@ function Routing() {
 
         //  if custom path, path rewrite
         if (request.routing.param.path) {
-            regex = new RegExp(urlVar, 'g')
+            regex = new RegExp(urlVar, 'g');
             if (regex.test(request.routing.param.path)) {
                 request.routing.param.path = request.routing.param.path.replace(regex, urlVal);
             }
         }
-
+        
         //  if custom file, file rewrite
         if (request.routing.param.file) {
-            regex = new RegExp(urlVar, 'g')
+            regex = new RegExp(urlVar, 'g');
             if (regex.test(request.routing.param.file)) {
                 request.routing.param.file = request.routing.param.file.replace(regex, urlVal);
             }
@@ -159,7 +169,7 @@ function Routing() {
 
         //  if custom title, title rewrite
         if (request.routing.param.title) {            
-            regex = new RegExp(urlVar, 'g')
+            regex = new RegExp(urlVar, 'g');
             if (regex.test(request.routing.param.title)) {
                 request.routing.param.title = request.routing.param.title.replace(regex, urlVal);
             }
@@ -297,7 +307,7 @@ function Routing() {
      * @return {object} route
      * */
     self.getRoute = function(rule, params) {
-
+        
         var config      = getContext('gina').config
             , env       = GINA_ENV // by default, using same protocol
             , protocol  = null
@@ -342,6 +352,9 @@ function Routing() {
                     }
                     if (typeof (route.param.title) != 'undefined' && /:/.test(route.param.title)) {
                         route.param.title = route.param.title.replace(new RegExp('(:' + variable + '/|:' + variable + '$)', 'g'), params[variable]);
+                    }
+                    if (typeof (route.param.file) != 'undefined' && /:/.test(route.param.file)) {
+                        route.param.file = route.param.file.replace(new RegExp('(:' + variable + '/|:' + variable + '$)', 'g'), params[variable]);
                     }
                 }
             }

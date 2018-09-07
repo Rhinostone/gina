@@ -706,7 +706,7 @@ function SuperController(options) {
 
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
                         
-                        var mapping = { filename: local.options.views[template].layout};
+                        var mapping = { filename: local.options.views[template].layout };
                         try {
                             
                             layout = swig.compile(layout, mapping)(data);
