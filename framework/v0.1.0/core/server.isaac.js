@@ -21,6 +21,12 @@ function ServerEngineClass(options) {
         key: fs.readFileSync(options.credentials.privateKey),
         cert: fs.readFileSync(options.credentials.certificate)
     };
+    
+    if (typeof (options.credentials.allowHTTP1) != 'undefined' && options.credentials.allowHTTP1 != '' )
+        credentials.allowHTTP1 = options.credentials.allowHTTP1;
+        
+    if (typeof (options.credentials.ca) != 'undefined' && options.credentials.ca != '' )
+        credentials.ca = options.credentials.ca;
 
     if (typeof (options.credentials.pfx) != 'undefined' && options.credentials.pfx != '' )
         credentials.pfx = fs.readFileSync(options.credentials.pfx);
@@ -43,6 +49,8 @@ function ServerEngineClass(options) {
         case 'http/2':
             var http2   = require('http2');
             server      = http2.createSecureServer(credentials);
+            // unknownProtocol handling
+            //if (typeof())
             break;
     
         default:
@@ -75,7 +83,7 @@ function ServerEngineClass(options) {
             , a         = null;
             
         server.on('request', (request, response) => {
-            
+              
             if (/^\*$/.test(path) || path == request.url) {
                 request.params  = {};
                 request.query   = {};

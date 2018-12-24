@@ -2,7 +2,7 @@
   "dependencies": {
     "busboy": "^0.2.14",
     "colors": "^1.1.2",
-    "couchbase": "^2.4.6",
+    "couchbase": "^2.6.2",
     "engine.io": "^3.2.0",
     "engine.io-client": "^3.1.1",
     "express": "^4.16.3",

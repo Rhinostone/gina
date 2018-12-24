@@ -2,27 +2,28 @@
     "frameworks": {
         "{release}": [ "{version}" ]
     },
-    "projects": [],
-    "bundles": {
-        "{release}": {}
-    },
-    "services": {
-        "{release}": {
-            "shutdown": "framework",
-            "updater": "framework"
-        }
-    },
+    "def_framework": "{version}",
     "envs": {
-        "{release}": ["dev", "prod"]
+        "{release}": [ "dev" ]
+    },
+    "def_env": {
+      "{release}": "dev"
     },
     "dev_env": {
         "{release}": "dev"
     },
     "protocols": {
-        "{release}": [ "http" ]
+        "_comment": "e.g.:  http/1.1, http/2.0, net",
+        "{release}": [  "http/1.1", "http/2.0" ]
     },
     "def_protocol": {
-        "_comment": "e.g.:  http, https, ftp, ssh, tftp, tls, udp",
+        "{release}": "http/1.1"
+    },
+    "schemes": {
+        "_comment": "e.g.:  http, https",
+        "{release}": [  "http", "https" ]
+    },
+    "def_scheme": {
         "{release}": "http"
     }
 }
