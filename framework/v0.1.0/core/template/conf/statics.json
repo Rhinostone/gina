@@ -2,6 +2,8 @@
   "favicon.ico": "{views}/favicon.ico",
   "favicons": "{views}/favicons",
   "html": "{views}/html",
+  "_public_comment": "Used for static content only: not including template !",
+  "public": "{views}",
   "common": "{projectPath}/common",
   "js/vendor/gina": "{gina}/framework/v{version}/core/asset/js/plugin/dist"
 }

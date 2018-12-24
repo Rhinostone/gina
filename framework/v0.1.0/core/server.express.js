@@ -22,6 +22,12 @@ function ServerEngineClass(options) {
 
     var local = {};
 
+    if (typeof (options.credentials.allowHTTP1) != 'undefined' && options.credentials.allowHTTP1 != '' )
+        credentials.allowHTTP1 = options.credentials.allowHTTP1;
+        
+    if (typeof (options.credentials.ca) != 'undefined' && options.credentials.ca != '' )
+        credentials.ca = options.credentials.ca;
+
     if (typeof (options.credentials.passphrase) != 'undefined' && options.credentials.passphrase != '')
         credentials.passphrase = options.credentials.passphrase;
 

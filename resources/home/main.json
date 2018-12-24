@@ -13,10 +13,17 @@
         "{release}": "dev"
     },
     "protocols": {
-        "_comment": "e.g.:  http, https, http/2, net",
-        "{release}": [  "https", "http/2" ]
+        "_comment": "e.g.:  http/1.1, http/2.0, net",
+        "{release}": [  "http/1.1", "http/2.0" ]
     },
     "def_protocol": {
+        "{release}": "http/1.1"
+    },
+    "schemes": {
+        "_comment": "e.g.:  http, https",
+        "{release}": [  "http", "https" ]
+    },
+    "def_scheme": {
         "{release}": "http"
     }
 }
