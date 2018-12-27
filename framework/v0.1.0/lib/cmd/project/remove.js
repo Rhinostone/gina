@@ -29,8 +29,8 @@ function Remove(opt, cmd) {
             process.exit(1)
         }
 
-        if ( typeof(self.projects[self.projectName].path) == 'undefined' ) {
-            console.error('project path not defined in ~/.gina/projects.json for [ '+ self.projectName + ' ]');
+        if ( typeof(self.projects[self.projectName]) == 'undefined' ) {
+            console.error('project [ '+ self.projectName + ' ] not found in `~/.gina/projects.json`');
             process.exit(1)
         }
 
@@ -50,33 +50,6 @@ function Remove(opt, cmd) {
                     console.error(folder.stack);
                     process.exit(1)
                 }
-
-                // removing ports
-                var ports               = JSON.parse(JSON.stringify(self.portsData))
-                    , portsReverse      = JSON.parse(JSON.stringify(self.portsReverseData))
-                    , reversePortValue  = null
-                    , re                = null
-                ;
-
-                for(var protocol in ports) {
-
-                    for (var port in ports[protocol]) {
-
-                        re = new RegExp("\@"+ self.projectName +"\/");
-
-                        if ( re.test(ports[protocol][port]) ) {
-
-                            reversePortValue = ports[protocol][port].split('/')[0];
-
-                            delete portsReverse[reversePortValue];
-                            delete ports[protocol][port];
-                        }
-                    }
-                }
-
-                // now writing
-                lib.generator.createFileFromDataSync(ports, self.portsPath);
-                lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
             }
 
             end(true)
@@ -115,6 +88,41 @@ function Remove(opt, cmd) {
 
 
     var end = function(removed) {
+        
+        // removing ports
+        var ports               = JSON.parse(JSON.stringify(self.portsData))
+            , portsReverse      = JSON.parse(JSON.stringify(self.portsReverseData))
+            , reversePortValue  = null
+            , re                = null
+        ;
+
+        for (var protocol in ports) {
+            
+            for (var scheme in ports[protocol]) {
+                
+                for (var port in ports[protocol][scheme]) {
+
+                    re = new RegExp("\@"+ self.projectName +"\/");
+                    
+                    if ( re.test(ports[protocol][scheme][port]) ) { 
+                        // reverse ports
+                        reversePortValue = ports[protocol][scheme][port].split('/')[0];
+                        if ( typeof(portsReverse[reversePortValue]) != 'undefined' ) {
+                            delete portsReverse[reversePortValue];
+                        } 
+                        
+                        // ports                                           
+                        delete ports[protocol][scheme][port];
+                    }                    
+                }
+            }                    
+        }
+
+        // now writing
+        lib.generator.createFileFromDataSync(ports, self.portsPath);
+        lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
+        
+        
         var target = _(GINA_HOMEDIR + '/projects.json');
 
 
@@ -128,7 +136,7 @@ function Remove(opt, cmd) {
         }
 
         if (removed)
-            console.log('project [ '+ self.projectName +' ] removed');
+            console.log('Project [ '+ self.projectName +' ] removed');
 
         process.exit(0)
     };

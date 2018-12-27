@@ -84,7 +84,7 @@ function Add(opt, cmd) {
             // find available port
             options = {
                 ignore  : self.portsList,
-                len   : ( self.envs.length * self.bundles.length )
+                len   : ( self.protocolsAvailable.length * self.envs.length * self.bundles.length )
             };
 
             if (b == 0) {
@@ -199,10 +199,15 @@ function Add(opt, cmd) {
             , i                 = 0
             , assigned          = []
             , defaultProtocol   = self.defaultProtocol
+            , defaultScheme     = self.defaultScheme
         ;
 
         if ( typeof(ports[defaultProtocol]) == 'undefined' ) {
             ports[defaultProtocol] = {}
+        }
+        
+        if ( typeof(ports[defaultProtocol][defaultScheme]) == 'undefined' ) {
+            ports[defaultProtocol][defaultScheme] = {}
         }
 
 
@@ -214,44 +219,49 @@ function Add(opt, cmd) {
 
             if ( !ports.count() ) {
                 ports[defaultProtocol] = {};
-                ports[defaultProtocol][ portsList[i] ] = null;
+                ports[defaultProtocol][defaultScheme] = {};
+                ports[defaultProtocol][defaultScheme][ portsList[i] ] = null;
             }
 
             for ( var protocol in ports ) {
+                for (var scheme in ports[protocol]) {
+                    if ( !ports[protocol][scheme].count() ) {
+                        ports[protocol][scheme][ portsList[i] ] = null;
+                    }
 
-                if ( !ports[protocol].count() ) {
-                    ports[protocol][ portsList[i] ] = null;
-                }
-
-                // updating
-                for (var port in ports[protocol]) {
+                    // updating
+                    for (var port in ports[protocol][scheme]) {
 
 
-                    for (var e = 0, envsLen = envs.length; e < envsLen; ++e ) {
+                        for (var e = 0, envsLen = envs.length; e < envsLen; ++e ) {
 
-                        if (!portsList[i]) break;
-                        // ports
-                        portValue = local.bundle +'@'+ self.projectName +'/'+ envs[e];
-                        re = new RegExp(portValue);
+                            if (!portsList[i]) break;
+                            // ports
+                            portValue = local.bundle +'@'+ self.projectName +'/'+ envs[e];
+                            re = new RegExp(portValue);
 
-                        if ( !re.test(portsListStr) ) {
-                            ports[protocol][ portsList[i] ] = portValue;
+                            if ( !re.test(portsListStr) ) {
+                                ports[protocol][scheme][ portsList[i] ] = portValue;
 
-                            // reverse ports
-                            portReverseValue = portsList[i];
-                            if ( typeof(portsReverse[ local.bundle +'@'+ self.projectName ]) == 'undefined' )
-                                portsReverse[ local.bundle +'@'+ self.projectName ] = {};
+                                // reverse ports
+                                portReverseValue = portsList[i];
+                                if ( typeof(portsReverse[ local.bundle +'@'+ self.projectName ]) == 'undefined' )
+                                    portsReverse[ local.bundle +'@'+ self.projectName ] = {};
 
-                            if ( typeof(portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ]) == 'undefined' )
-                                portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ] = {};
+                                if ( typeof(portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ]) == 'undefined' )
+                                    portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ] = {};
+                                    
+                                if ( typeof(portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ]) == 'undefined' )
+                                    portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ] = {};
 
-                            // erasing in order to keep consistency
-                            portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][protocol] = portsList[i];
+                                // erasing in order to keep consistency
+                                portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ][ scheme ] = portsList[i];
 
-                            ++i;
+                                ++i;
+                            }
                         }
                     }
-                }
+                }  
             }
         }
 

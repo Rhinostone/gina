@@ -3,6 +3,7 @@ var fs          = require('fs');
 var CmdHelper   = require('./../helper');
 var Shell       = lib.Shell;
 var console     = lib.logger;
+var scan        = require('../port/inc/scan');
 
 /**
  * Add new project or register old one to `~/.gina/projects.json`.
@@ -10,8 +11,14 @@ var console     = lib.logger;
  * */
 function Add(opt, cmd) {
 
-    var self    = {}
-        , local = {}
+    var self        = {}
+        , local     = {
+            // bundle index while searching or browsing
+            b : 0,
+            bundle : null,
+            bundlePath : null,
+            ports : []
+        }
     ;
 
     var init = function() {
@@ -22,7 +29,9 @@ function Add(opt, cmd) {
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
 
-        checkImportMode();
+        if ( checkImportMode() ) {
+            return;
+        }
 
         var err         = false
             , folder    = null
@@ -70,6 +79,16 @@ function Add(opt, cmd) {
     }
 
     var checkImportMode = function() {
+        
+        if ( self.task != 'project:import')
+            return;
+        
+        console.debug('Starting import mode @'+ self.projectName );
+        if (!self.projects[self.projectName ]) {
+            console.error('[ '+ self.projectName  +' ] is not an existing project. Instead, use gina projet:add @'+ self.projectName +' --path=/your/project_location');
+            process.exit(1)
+        }
+        
         if ( typeof(self.projects[self.projectName ]) != 'undefined' ) {
             // import if exists but path just changed
             if ( typeof(self.projects[self.projectName ].path) != 'undefined') {
@@ -86,7 +105,7 @@ function Add(opt, cmd) {
                         projects,
                         target
                     );
-
+                   
 
                     var ginaModule = _( self.projectLocation +'/node_modules/gina',true );
 
@@ -97,11 +116,13 @@ function Add(opt, cmd) {
                                 process.exit(1)
                             },
                             function onSuccess() {
-                                console.log('project [ '+ self.projectName +' ] imported');
+                                end();
+                                return true;
                             })
 
                     } else {
-                        console.log('project [ '+ self.projectName +' ] imported');
+                        end()
+                        return true;
                     }
                 }
             } else {
@@ -171,8 +192,13 @@ function Add(opt, cmd) {
             "def_env": self.defaultEnv,
             "dev_env": self.devEnv,
             "protocols": self.protocols,
-            "def_protocol": self.defaultProtocol
+            "def_protocol": self.defaultProtocol,
+            "schemes": self.schemes,
+            "def_scheme": self.defaultScheme
         };
+        
+        // crearte/update ports, protocols & schemes
+        addBundlePorts(0);
 
         // writing file
         lib.generator.createFileFromDataSync(
@@ -181,14 +207,21 @@ function Add(opt, cmd) {
         );
 
         var onSuccess = function () {
-            console.log('project [ '+ self.projectName +' ] is ready');
+            if ( self.task == 'project:add' ) {
+                console.log('Project [ '+ self.projectName +' ] has been added');
+            } else {
+                console.log('Project [ '+ self.projectName +' ] has been imported');
+            }
+                        
             process.exit(0)
         }
 
         var onError = function (err) {
-            console.error('could not finalize [ '+ self.projectName +' ] install\n'+ err.stack);
+            console.error('Could not finalize [ '+ self.projectName +' ] install\n'+ err.stack);
             process.exit(1)
         }
+        
+        
 
 
         var ginaModule = new _( self.projectLocation +'/node_modules/gina',true );
@@ -206,6 +239,186 @@ function Add(opt, cmd) {
                 linkGina(onError, onSuccess)
             }
 
+        }
+    }
+    
+    /**
+     * Add / update project default protocol, scheme & ports
+     * 
+     * @param {number} b - Bundle index
+     */
+    var addBundlePorts = function(b) {
+        loadAssets();
+        
+        if (b > self.bundles.length-1) { // writing to files on complete
+                        
+            //console.debug('about to update project ports conf\n\rBundles: '+ JSON.stringify(self.projectData, null, 4));
+            var ports               = JSON.parse(JSON.stringify(self.portsData)) // cloning
+                , portsReverse      = JSON.parse(JSON.stringify(self.portsReverseData)) // cloning
+                , portsList         = local.ports
+                , isPortUsed        = false
+                , envs              = self.envs
+                , i                 = 0
+                , defaultProtocol   = self.defaultProtocol
+                , defaultScheme     = self.defaultScheme
+            ;
+            
+            if ( typeof(ports[defaultProtocol]) == 'undefined' ) {
+                ports[defaultProtocol] = {}
+            }
+            
+            if ( typeof(ports[defaultProtocol][defaultScheme]) == 'undefined' ) {
+                ports[defaultProtocol][defaultScheme] = {}
+            }
+    
+    
+            var portValue = null, portReverseValue = null;
+            var re = null, portsListStr = JSON.stringify(self.portsData);
+    
+            for (;i < portsList.length; ++i) {
+    
+                if ( !ports.count() ) {
+                    ports[defaultProtocol] = {};
+                    ports[defaultProtocol][defaultScheme] = {};
+                    ports[defaultProtocol][defaultScheme][ portsList[i] ] = null;
+                }
+    
+                
+                for ( var protocol in ports ) {
+                    // ignore unmatched protocol : in case of the framework update
+                    if ( self.protocolsAvailable.indexOf(protocol) < 0) {
+                        delete ports[protocol];
+                        if ( self.protocols.indexOf(protocol) < 0) {
+                            delete self.protocols[self.protocols.indexOf(protocol)]; 
+                        }                                               
+                        continue; 
+                    }
+                        
+                    for (var scheme in ports[protocol]) {
+                        
+                        // ignore unmatched scheme : in case of the framework update
+                        // if ( self.schemesAvailable.indexOf(scheme) < 0) {
+                        //     delete ports[protocol][scheme];
+                        //     if ( self.schemes.indexOf(scheme) < 0) {
+                        //         delete self.schemes[self.schemes.indexOf(scheme)]; 
+                        //     }                                               
+                        //     continue; 
+                        // } 
+                        
+                        if ( !ports[protocol][scheme].count() ) {
+                            ports[protocol][scheme][ portsList[i] ] = null;
+                        }
+                        
+                        for (var b = 0, bLen = self.bundles.length; b < bLen; ++b) {
+                            local.bundle = self.bundles[b];
+                        // updating
+                        for (var port in ports[protocol][scheme]) {    
+                            
+                                
+                                for (var e = 0, envsLen = envs.length; e < envsLen; ++e ) {
+    
+                                    if (!portsList[i]) break;
+                                    
+                                    // ports
+                                    portValue = local.bundle +'@'+ self.projectName +'/'+ envs[e];
+                                    re = new RegExp(portValue);
+                                    
+                                    
+                                    if ( !re.test(portsListStr) ) { 
+                                        
+                                        // ports - add only if not existing
+                                        isPortUsed = false;
+                                        
+                                        for (var portNum in ports[protocol][scheme]) {
+                                            if ( ports[protocol][scheme][portNum] == portValue ) {
+                                                isPortUsed = true;
+                                                break;
+                                            }                                                
+                                        }
+                                        //console.debug('portValue -> ', portValue+ ': '+ portsList[i] +' ? ' +isPortUsed);
+                                        if (!isPortUsed) {
+                                            //console.debug(local.bundle, ': ',portsList[i], ' => ', portValue);
+                                            ports[protocol][scheme][ portsList[i] ] = portValue;
+                                            
+                                            // reverse ports
+                                            portReverseValue = portsList[i];
+                                            if ( typeof(portsReverse[ local.bundle +'@'+ self.projectName ]) == 'undefined' )
+                                                portsReverse[ local.bundle +'@'+ self.projectName ] = {};
+            
+                                            if ( typeof(portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ]) == 'undefined' )
+                                                portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ] = {};
+                                                
+                                            if ( typeof(portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ]) == 'undefined' )
+                                                portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ] = {};
+            
+                                            // erasing in order to keep consistency
+                                            portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ][ scheme ] = portsList[i];
+                                        }
+        
+                                        ++i;
+                                    }
+                                }
+                                    
+                            }
+                        }
+                    }  
+                }
+            }
+    
+            // save to ~/.gina/ports.json
+            //console.debug('data \n'+ JSON.stringify(self.portsData, null, 4) +'\n\rcurrent \n'+ JSON.stringify(ports, null, 4));
+            lib.generator.createFileFromDataSync( merge(self.portsData, ports), self.portsPath);
+    
+            // save to ~/.gina/ports.reverse.json
+            lib.generator.createFileFromDataSync( merge(self.portsReverseData, portsReverse), self.portsReversePath);
+            
+            return;
+        }
+
+        //console.debug('Bundles list on project import [ '+ b +' ]', self.bundles.length, self.bundles);       
+        var options     = {}
+            , bundle    = self.bundles[b]
+        ;
+        
+        if ( /^[a-z0-9_.]/.test(bundle) ) {
+
+            local.b             = b;
+            local.bundle        = bundle;
+
+            // find available port
+            options = {
+                ignore  : merge(self.portsGlobalList, local.ports),
+                // get for each bundle ports for available protocol, scheme & env
+                len   : ( self.protocolsAvailable.length * self.schemesAvailable.length * self.envs.length * self.bundles.length )
+            };
+            
+            
+            // scanning for available ports ...
+            scan(options, function(err, ports){
+
+                if (err) {
+                    console.error(err.stack|err.message);
+                    process.exit(1)
+                }
+
+
+                for (var p = 0; p < ports.length; ++p) {
+                    local.ports.push(ports[p])
+                }
+
+                local.ports.sort();
+
+                ++local.b;
+                addBundlePorts(local.b);
+                
+            });
+            
+            
+
+
+        } else {
+            console.error('[ '+ bundle+' ] is not a valid bundle name')
+            process.exit(1)
         }
     }
 
