@@ -146,11 +146,15 @@ function Initialize(opt) {
             mainConfig.protocols = merge(mainConfig.protocols, data.protocols, true);
             // don't remove def_protocol
             var defProtocol = mainConfig['def_protocol'][self.release];
+            var defScheme   = mainConfig['def_scheme'][self.release];
             if ( mainConfig.protocols[self.release].indexOf(defProtocol) < 0 )
                 mainConfig.protocols[self.release].push(defProtocol);
             
+            if ( mainConfig.schemes[self.release].indexOf(defScheme) < 0 )
+                mainConfig.schemes[self.release].push(defScheme);
+                
             mainConfig.protocols[self.release].sort();
-            
+            mainConfig.schemes[self.release].sort();
             
             // commit
             lib.generator.createFileFromDataSync(mainConfig, target)
@@ -162,12 +166,24 @@ function Initialize(opt) {
      *
      **/
     self.checkIfPorts = function() {
-        console.debug('checking ports...');
+        console.debug('checking ports...');        
+        var mainConfig  = require(self.opt.homedir + '/main.json');
         var target = _(self.opt.homedir +'/ports.json');
 
         if ( !fs.existsSync(target) ) {
+            
+            var protocols   = mainConfig.protocols[self.release]
+                , schemes   = mainConfig.schemes[self.release]
+                , ports     = {};
+            
+            for (var p = 0, pLen = protocols.length; p < pLen; ++p) {
+                ports[protocols[p]] = {};
+                for (var s = 0, sLen = schemes.length; s < sLen; ++s) {
+                    ports[protocols[p]][schemes[s]] = {}
+                }
+            }                
             lib.generator.createFileFromDataSync(
-                { "http": {} },
+                ports,
                 target
             )
         }

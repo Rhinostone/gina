@@ -2,7 +2,7 @@
   "server": {
     "engine": "express",
     "credentials": {
-      "_comment": "Project ENV override: SSL Credentials: private key & certificate - passphrase is ignored if left blank",
+      "_comment": "Project ENV override: SSL Credentials: private key & certificate",
       "privateKey": "{projectPath}/ssl/server.key",
       "certificate": "{projectPath}/ssl/server.crt",
       "allowHTTP1": true

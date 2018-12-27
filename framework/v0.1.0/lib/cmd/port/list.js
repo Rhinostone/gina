@@ -57,12 +57,15 @@ function List(opt, cmd) {
 
     var listAll = function() {
         
-        var protocols = self.protocols
-            , projects = self.projects
-            , list = []
-            , p = ''
-            , re = null
-            , str = '';
+        var protocols   = self.protocols
+            , schemes   = self.schemes
+            , projects  = self.projects
+            , list      = []
+            , p         = ''
+            , re        = null
+            , found     = false
+            , strTmp    = ''
+            , str       = '';
 
         for (p in projects) {
             list.push(p)
@@ -74,22 +77,34 @@ function List(opt, cmd) {
             
             re = new RegExp('\@' + list[p] + '\/', '');// searching by projectName
             str += '------------------------------------\n\r';
-            if (!projects[list[p]].exists) {
+            if (!projects[list[p]].exists || projects[list[p]].exists && protocols.length == 0) {
                 str += '?! '
             }
             str += list[p] + '\n\r';
             str += '------------------------------------\n\r';
+            strTmp = '';
+            found = false;
             for (var i = 0, len = protocols.length; i < len; ++i) {
-
-                str += '[ '+ protocols[i]+' ]\n\r';
-                for (var port in self.portsData[ protocols[i] ]) {
-                    if (re.test(self.portsData[protocols[i]][port]) ) {
-                        str += '\n\r  - ' + port + '  ' + self.portsData[protocols[i]][port].replace(re, ' (') + ')'
-                    }
-                }
                 
-                str += '\n\r'
+                strTmp += '[ '+ protocols[i]+' ]\n\r';
+                for (var s = 0, sLen = schemes.length; s < sLen; ++s) {
+                    strTmp += '  [ '+ schemes[s]+' ]\n\r';
+                    
+                    for (var port in self.portsData[ protocols[i] ][ schemes[s] ]) {
+                        if (re.test(self.portsData[protocols[i]][schemes[s]][port]) ) {
+                            found = true;
+                            strTmp += '\n\r    - ' + port + '  ' + self.portsData[protocols[i]][schemes[s]][port].replace(re, ' (') + ')'
+                        }
+                    }                    
+                    strTmp += '\n\r'
+                }                
+                strTmp += '\n\r'
             }
+            
+            if (found) {
+                str += strTmp
+            } 
+            
             str += '\n\r'
         }
 
@@ -99,17 +114,23 @@ function List(opt, cmd) {
     var listProjectOnly = function() {
 
         var protocols = self.protocols
+            , schemes = self.schemes
             , str = ''
             , re = null;
 
         for (var i = 0, len = protocols.length; i < len; ++i) {
             str += '[ ' + protocols[i] + ' ]\n\r';
-            re = new RegExp('\@' + self.projectName + '\/', '');// searching by projectName
-            for (var port in self.portsData[protocols[i]]) {
-                if (re.test(self.portsData[protocols[i]][port])) {
-                    str += '\n\r  - ' + port + '  ' + self.portsData[protocols[i]][port].replace(re, ' (') + ')'
+            for (var s = 0, sLen = schemes.length; s < sLen; ++s) {
+                str += '  [ ' + schemes[s] + ' ]\n\r';
+                
+                re = new RegExp('\@' + self.projectName + '\/', '');// searching by projectName
+                for (var port in self.portsData[protocols[i]][schemes[s]]) {
+                    if (re.test(self.portsData[protocols[i]][schemes[s]][port])) {
+                        str += '\n\r    - ' + port + '  ' + self.portsData[protocols[i]][schemes[s]][port].replace(re, ' (') + ')'
+                    }
                 }
-            }
+                str += '\n\r'
+            }            
             str += '\n\r'
         }
 
@@ -123,13 +144,15 @@ function List(opt, cmd) {
             , re = null;
 
         for (var i = 0, len = protocols.length; i < len; ++i) {
-            re = new RegExp('^' + self.name + '\@', '');// searching by bundle name
-            for (var port in self.portsData[protocols[i]]) {
-                if (re.test(self.portsData[protocols[i]][port])) {
-                    str += '\n\r  - ' + port + '  ' + self.name + ' ' + self.portsData[protocols[i]][port].replace(re, '').replace(/[-_a-z 0-9]+\//i, '(') + ')'
+            for (var s = 0, sLen = schemes.length; s < sLen; ++s) {
+                re = new RegExp('^' + self.name + '\@', '');// searching by bundle name
+                for (var port in self.portsData[protocols[i]][schemes[s]]) {
+                    if (re.test(self.portsData[protocols[i]][schemes[s]][port])) {
+                        str += '\n\r  - ' + port + '  ' + self.name + ' ' + self.portsData[protocols[i]][schemes[s]][port].replace(re, '').replace(/[-_a-z 0-9]+\//i, '(') + ')'
+                    }
                 }
-            }
-            str += '\n\r'
+                str += '\n\r'    
+            }            
         }
 
 

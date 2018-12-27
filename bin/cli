@@ -83,6 +83,7 @@ var allowedOffline = [
     'bundle:',
     'port:',
     'protocol:',
+    'scheme:',
     'view:',
     '--', //options or other aliases.
     '-' //options or other aliases.
