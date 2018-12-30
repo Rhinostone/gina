@@ -99,23 +99,26 @@ function Rename(opt, cmd) {
             ;
 
             portsReverseStr = JSON.stringify(portsReverse);
-            for(var protocol in ports) {
+            for (var protocol in ports) {
+                
+                for (var scheme in ports[protocol]) {
+                    
+                    for (var port in ports[protocol][scheme]) {
 
-                for (var port in ports[protocol]) {
+                        re = new RegExp("\@"+ local.source +"\/");
 
-                    re = new RegExp("\@"+ local.source +"\/");
+                        if ( re.test(ports[protocol][scheme][port]) ) {
 
-                    if ( re.test(ports[protocol][port]) ) {
+                            projectValue = ( ports[protocol][scheme][port].split('/')[0] ).split('@')[1];
 
-                        projectValue = ( ports[protocol][port].split('/')[0] ).split('@')[1];
-
-                        ports[protocol][port] = ports[protocol][port].replace(re, "@"+ local.target +"/");
+                            ports[protocol][port] = ports[protocol][scheme][port].replace(re, "@"+ local.target +"/");
 
 
-                        portsReverseStr = portsReverseStr.replace( new RegExp('\@'+ projectValue, 'g'), '@'+ local.target );
+                            portsReverseStr = portsReverseStr.replace( new RegExp('\@'+ projectValue, 'g'), '@'+ local.target );
 
+                        }
                     }
-                }
+                }                    
             }
             portsReverse = JSON.parse(portsReverseStr);
 

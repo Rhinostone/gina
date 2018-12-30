@@ -144,6 +144,8 @@ function Initialize(opt) {
             
             // updating protocols
             mainConfig.protocols = merge(mainConfig.protocols, data.protocols, true);
+            mainConfig.schemes = merge(mainConfig.schemes, data.schemes, true);
+            
             // don't remove def_protocol
             var defProtocol = mainConfig['def_protocol'][self.release];
             var defScheme   = mainConfig['def_scheme'][self.release];

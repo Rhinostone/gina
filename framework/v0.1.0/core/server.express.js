@@ -4,9 +4,6 @@
  */
 const fs        = require('fs'); 
 var express   = require('express');
-//const http      = require('http');
-//const https     = require('https');
-//const http2     = require('http2');
 
 const lib = require('./../lib');
 const inherits = lib.inherits;
@@ -62,84 +59,142 @@ function ServerEngineClass(options) {
 
     //var app = express();
     var app = null;
-    switch (options.protocol) {
-        case 'http':
-            var http    = require('http');
-            server      = http.createServer();
-            break;
-            
-        case 'https':
-            var https   = require('https');
-            //server      = https.createServer(credentials, app);
-            
-            
-            
-            var app = express(credentials);
-            
-            app.init = function(credentials) {
-                this.cache = {};
-                this.engines = {};
-                this.settings = {};
-                this.credentials = credentials;
-                
-                this.defaultConfiguration();
-            };
-              
-            app.credentials = credentials;
-            app.listen = function() {
-                var server = https.createServer(this.credentials, this);
-                
-                //var server = http2.createSecureServer(this.credentials, this);
-                return server.listen.apply(server, arguments);
-            };
-            
-              
-            break;
-            
-        case 'http/2':
-            var http2   = require('http2');
-            //server      = http2.createSecureServer(credentials, app);
-            var app = express(credentials);
-            
-            app.init = function(credentials) {
-                this.cache = {};
-                this.engines = {};
-                this.settings = {};
-                this.credentials = credentials;
-                
-                this.defaultConfiguration();
-            };
-              
-            app.credentials = credentials;
-            app.listen = function() {               
-                var server = http2.createSecureServer(this.credentials, this);
-                
-                return server.listen.apply(server, arguments);
-            };
-            break;
     
-        default:
-            var http    = require('http');
-            server      = http.createServer();
-            break;
+    if ( /^http\/2/.test(options.protocol) ) {
+        var http2   = require('http2');
+        switch (options.scheme) {
+            case 'http':
+                var app = express();                
+                app.init = function() {
+                    this.cache = {};
+                    this.engines = {};
+                    this.settings = {};                    
+                    this.defaultConfiguration();
+                };
+                
+                app.listen = function() {               
+                    var server = http2.createServer(this);
+                    
+                    return server.listen.apply(server, arguments);
+                };
+                break;
+                
+            case 'https':                
+                
+                var app = express(credentials);                
+                app.init = function(credentials) {
+                    this.cache = {};
+                    this.engines = {};
+                    this.settings = {};
+                    this.credentials = credentials;
+                    
+                    this.defaultConfiguration();
+                };
+                
+                app.credentials = credentials;
+                app.listen = function() {               
+                    var server = http2.createSecureServer(this.credentials, this);
+                    
+                    return server.listen.apply(server, arguments);
+                };               
+                  
+                break;
+                
+            default:
+            
+                var app = express();                
+                app.init = function() {
+                    this.cache = {};
+                    this.engines = {};
+                    this.settings = {};                    
+                    this.defaultConfiguration();
+                };
+                
+                app.listen = function() {               
+                    var server = http2.createServer(this);
+                    
+                    return server.listen.apply(server, arguments);
+                };
+                
+                break;
+        }
+        
+    } else {
+        
+        switch (options.scheme) {
+            case 'http':
+                var http    = require('http');
+                var app = express();
+                
+                app.init = function(credentials) {
+                    this.cache = {};
+                    this.engines = {};
+                    this.settings = {};
+                    this.credentials = credentials;
+                    
+                    this.defaultConfiguration();
+                };
+                  
+                app.listen = function() {
+                    var server = http.createServer(this);
+                    
+                    return server.listen.apply(server, arguments);
+                };
+                break;
+                
+            case 'https':
+                var https   = require('https');          
+                            
+                var app = express(credentials);
+                
+                app.init = function(credentials) {
+                    this.cache = {};
+                    this.engines = {};
+                    this.settings = {};
+                    this.credentials = credentials;
+                    
+                    this.defaultConfiguration();
+                };
+                  
+                app.credentials = credentials;
+                app.listen = function() {
+                    var server = https.createServer(this.credentials, this);
+                    
+                    //var server = http2.createSecureServer(this.credentials, this);
+                    return server.listen.apply(server, arguments);
+                };
+                
+                  
+                break;
+                
+        
+            default:
+            
+                var http    = require('http');
+                var app = express();
+                
+                app.init = function(credentials) {
+                    this.cache = {};
+                    this.engines = {};
+                    this.settings = {};
+                    this.credentials = credentials;
+                    
+                    this.defaultConfiguration();
+                };
+                
+                app.listen = function() {
+                    var server = http.createServer(this);
+                    
+                    return server.listen.apply(server, arguments);
+                };
+                break;
+        }
     }
-        
-        
-        
-    //var http2Server = http2.createSecureServer(credentials);        
-    //var app = express(credentials);
-    
-    
-    
-
-    // your express configuration here
-    //var httpsServer = https.createServer(credentials, app);
-    
-    
+ 
+   
     
     return {
         instance: app,
-        //instance: server,
         middleware: express
     }
 };

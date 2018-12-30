@@ -9,7 +9,7 @@ var console = lib.logger;
  *
  * e.g.
  *  gina bundle:stop <bundle_name> @<project_name>
- *  gina bundle:stop --all
+ *  gina bundle:stop @<project_name>
  *
  * */
 function Stop(opt, cmd) {

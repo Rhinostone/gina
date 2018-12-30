@@ -188,7 +188,7 @@ function Connector(dbString) {
                 local.env = env;
 
                 if ( typeof(cb) != 'undefined' ) { // this portition is not working yet on Mac OS X
-                    console.debug('[ ' + local.bundle +' ] connected to couchbase !!');
+                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connected to couchbase !!');
 
                     
                     modelUtil.setConnection(bundle, name, self.instance);
@@ -202,11 +202,11 @@ function Connector(dbString) {
                                 cb(err)
                             })
                     } else {
-                        cb(new Error('[ ' + local.bundle +' ] '+ modelsPath+ ' not found') )
+                        cb(new Error('[ CONNECTOR ][ ' + local.bundle +' ] '+ modelsPath+ ' not found') )
                     }
 
                 } else {
-                    console.debug('[ ' + local.bundle +' ] couchbase is alive !!');
+                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ] couchbase is alive !!');
                     self.emit('ready', false, self.instance)
                 }
             })
