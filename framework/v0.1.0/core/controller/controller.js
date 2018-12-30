@@ -189,6 +189,7 @@ function SuperController(options) {
             set('page.environment.bundle', options.conf.bundle);
             set('page.environment.project', options.conf.projectName);
             set('page.environment.protocol', options.conf.server.protocol);
+            set('page.environment.scheme', options.conf.server.scheme);
 
             set('page.view.ext', ext);
             set('page.view.control', action);
@@ -428,7 +429,7 @@ function SuperController(options) {
                     // Allows you to get a bundle web root
                     swig.setFilter('getWebroot', function (input, obj) {
                         var prop = options.envObj.getConf(obj, options.conf.env),
-                            url = prop.server.protocol + '://'+ prop.host +':'+ prop.port[prop.server.protocol];
+                            url = prop.server.scheme + '://'+ prop.host +':'+ prop.port[prop.server.protocol][prop.server.scheme];
                         if ( typeof(prop.server['webroot']) != 'undefined') {
                             url += prop.server['webroot']
                         }
@@ -1212,8 +1213,8 @@ function SuperController(options) {
      *
      * Where `rule` is either a string defining
      *  - the rule/route name
-     *      => home (will use same bundle, same protocol & same environment)
-     *      => home@public (will use same protocol & same environment)
+     *      => home (will use same bundle, same protocol scheme & same environment)
+     *      => home@public (will use same protocol scheme & same environment)
      *      => http://home@public/dev (port style for more precision)
      *
      *  - an URI
@@ -1309,7 +1310,7 @@ function SuperController(options) {
                     path = path[0] //if it is an array, we just take the first one
                 }
             } else if (url && !path) {
-                path = ( (/\:\/\//).test(url) ) ? url : req.protocol + '://' + url;
+                path = ( (/\:\/\//).test(url) ) ? url : req.scheme + '://' + url;
 
                 if (/\@/.test(path)) {
                     path = lib.routing.getRoute(path).toUrl(ignoreWebRoot);
@@ -1319,7 +1320,7 @@ function SuperController(options) {
             // nothing to do, just ignoring
             //} else {
             } else if ( !path && typeof(isRelative) ==  'undefined' ) {
-                //path = conf.server.protocol + '://' +conf.hostname + path
+                //path = conf.server.scheme + '://' +conf.hostname + path
                 path = conf.hostname + path
             }
 
@@ -1431,20 +1432,22 @@ function SuperController(options) {
                 requestOptions[o] = opt[o];
         }
 
-        // defining protocol
-        var protocol  = null;   
+        // defining protocol & scheme
+        var protocol    = null;
+        var scheme      = null;   
         
         if ( /\:\/\//.test(url) ) {
-            protocol = url.match(/^\w+\:/)[0];
-            protocol = protocol.substr(0, protocol.length-1);
+            scheme = url.match(/^\w+\:/)[0];
+            scheme = scheme.substr(0, scheme.length-1);
             
-            if ( !/^http/.test(protocol) )
-                self.throwError(local.res, 500, new Error('[ '+ protocol +' ] Protocol not supported. Ref.: `http` or `https` only'));
+            if ( !/^http/.test(scheme) )
+                self.throwError(local.res, 500, new Error('[ '+ scheme +' ] Scheme not supported. Ref.: `http` or `https` only'));
                 
         } else { // by default
-            protocol = 'http';
+            scheme = 'http';
         }
-        requestOptions.protocol = protocol +':';
+        
+        requestOptions.scheme = scheme +':';
         
         //defining port
         var port = url.match(/\:\d+\//) || null;
@@ -1454,7 +1457,7 @@ function SuperController(options) {
         }
         
         // defining hostname & path
-        var parts = url.replace(new RegExp( protocol + '\:\/\/'), '').split(/\//g);
+        var parts = url.replace(new RegExp( scheme + '\:\/\/'), '').split(/\//g);
         requestOptions.host = parts[0].replace(/\:\d+/, '');
         requestOptions.path = '/' + parts.splice(1).join('/');
         
@@ -1485,7 +1488,7 @@ function SuperController(options) {
         
         //'Content-Type': 'application/json',
         //var file = fs.createWriteStream(tmp);
-        var browser = require(''+ protocol);
+        var browser = require(''+ scheme);
         console.debug('requestOptions: \n', JSON.stringify(requestOptions, null, 4));
         browser.get(requestOptions, function(response) {
 
@@ -1836,7 +1839,9 @@ function SuperController(options) {
         //you need this, even when empty.
         options.headers['Content-Length'] = queryData.length;
 
-        var ctx = getContext(), protocol = null;
+        var ctx         = getContext()
+            , protocol  = null
+            , scheme    = null;
         
         // if (/\:\/\//.test(options.hostname)) {
         //     var hArr = options.host.split('://');
@@ -1849,9 +1854,11 @@ function SuperController(options) {
         //     options.host = hArr[0]
         // }
         
-        // retrieve protocol: if empty, take the bundles protocol
-        protocol = options.protocol || ctx.gina.config.envConf[ctx.bundle][ctx.env].server.protocol;// bundle servers's protocol by default
-        protocol = protocol.match(/[a-z 0-9]+/ig)[0];
+        // retrieve protocol & scheme: if empty, take the bundles protocol
+        protocol    = options.protocol || ctx.gina.config.envConf[ctx.bundle][ctx.env].server.protocol;// bundle servers's protocol by default
+        protocol    = protocol.match(/[.a-z 0-9]+/ig)[0];
+        scheme      = options.scheme || ctx.gina.config.envConf[ctx.bundle][ctx.env].server.scheme;// bundle servers's scheme by default
+        scheme      = scheme.match(/[a-z 0-9]+/ig)[0];
         
         //retrieving dynamic host, hostname & port
         if ( /\@/.test(options.hostname) ) {
@@ -1864,23 +1871,29 @@ function SuperController(options) {
             options.port        = ctx.gina.config.envConf[bundle][ctx.env].server.port;
             
             options.protocol    = ctx.gina.config.envConf[bundle][ctx.env].server.protocol;
+            options.scheme      = ctx.gina.config.envConf[bundle][ctx.env].server.scheme;
             // might be != from the bundle requesting
             //options.protocol    = ctx.gina.config.envConf[bundle][ctx.env].content.settings.server.protocol || ctx.gina.config.envConf[bundle][ctx.env].server.protocol;
+            //options.scheme    = ctx.gina.config.envConf[bundle][ctx.env].content.settings.server.scheme || ctx.gina.config.envConf[bundle][ctx.env].server.scheme;
         }
                 
         if ( typeof(options.protocol) == 'undefined' ) {
             options.protocol = protocol
         }
+        if ( typeof(options.scheme) == 'undefined' ) {
+            options.scheme = scheme
+        }
              
-        // reformating protocol
-        if( !/\:$/.test(options.protocol) )
-            options.protocol += ':';
+        // reformating scheme
+        if( !/\:$/.test(options.scheme) )
+            options.scheme += ':';
         
         try {            
-            browser = require(''+ options.protocol.replace(/http\/2/, 'http2').replace(/\:/, ''));   
-            if ( /(http\/2|http2)/.test(options.protocol) ) {
-                options.protocol = options.protocol.replace(/(http\/2|http2)/, 'https');
-                //delete options.protocol;
+            var protocolVersion = ~~options.protocol.match(/\/(.*)$/)[1].replace(/\.\d+/, '');
+            var httpLib =  options.protocol.match(/^(.*)\//)[1] + ( (protocolVersion >= 2) ? protocolVersion : '' );
+            //delete options.protocol;
+            browser = require(''+ httpLib);   
+            if ( /http2/.test(httpLib) ) {                
                 options.queryData = queryData;
                 return handleHTTP2ClientRequest(browser, options, callback);
             } else {
@@ -1889,7 +1902,7 @@ function SuperController(options) {
             
         } catch(err) {
             throw err;
-            //throw new Error('Protocol `'+ protocol +'` not supported')
+            //throw new Error('Scheme `'+ scheme +'` not supported')
         }
            
         
@@ -2054,7 +2067,7 @@ function SuperController(options) {
         // }
         
         if ( typeof(options[':scheme']) == 'undefined' ) {
-            options[':scheme'] = 'https' ;
+            options[':scheme'] = options.scheme ;
         }
         
         delete options.host;
@@ -2099,11 +2112,11 @@ function SuperController(options) {
         
         req.on('error', (err) => {
             
-            if ( /(127\.0\.0\.1|localhost)/.test(err.address) ) {
+            if ( /(127\.0\.0\.1|::1|localhost)/.test(err.address) ) {
 
-                var port = getContext('gina').ports.http[ err.port ];
+                var port = getContext('gina').ports[options.protocol][options.scheme][ err.port ];
                 if ( typeof(port) != 'undefined' )
-                    err.accessPoint = getContext('gina').ports.http[ err.port ];
+                    err.accessPoint = port;
             }
 
 

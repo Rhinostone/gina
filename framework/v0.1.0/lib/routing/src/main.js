@@ -301,7 +301,7 @@ function Routing() {
     /**
      * @function getRoute
      *
-     * @param {string} rule e.g.: [ <protocol>:// ]<name>[ @<bundle> ][ /<environment> ]
+     * @param {string} rule e.g.: [ <scheme>:// ]<name>[ @<bundle> ][ /<environment> ]
      * @param {object} params
      *
      * @return {object} route
@@ -309,8 +309,8 @@ function Routing() {
     self.getRoute = function(rule, params) {
         
         var config      = getContext('gina').config
-            , env       = GINA_ENV // by default, using same protocol
-            , protocol  = null
+            , env       = GINA_ENV // by default, using same protocol scheme
+            , scheme    = null
             , bundle    = config.bundle // by default
         ;
 
@@ -327,8 +327,8 @@ function Routing() {
             }
 
 
-            // getting protocol
-            protocol = ( /\:\/\//.test(rule) ) ? rule.split(/\:\/\//)[0] : config.bundlesConfiguration.conf[bundle][env].server.protocol;
+            // getting scheme
+            scheme = ( /\:\/\//.test(rule) ) ? rule.split(/\:\/\//)[0] : config.bundlesConfiguration.conf[bundle][env].server.scheme;
 
             rule = arr[0] +'@'+ bundle;
         }

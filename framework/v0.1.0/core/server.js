@@ -127,13 +127,14 @@ function Server(options) {
             
             serverOpt = merge(serverOpt, {
                 engine: options.conf[self.appName][self.env].server.engine,
-                protocol: options.conf[self.appName][self.env].server.protocol
+                protocol: options.conf[self.appName][self.env].server.protocol,
+                scheme: options.conf[self.appName][self.env].server.scheme
             });
             
+            self.engine = serverOpt.engine;
+            console.debug('[ BUNDLE ][ server ][ init ] Initializing [ '+ self.appName +' ] server with `'+ serverOpt.engine +'`engine');
             
-            // controlling one last time protocol & ports
-            
-            
+            // controlling one last time protocol & ports            
             var ctx         = getContext('gina'),
             projectConf     = ctx.project,
             //protocols       = projectConf.protocols,
@@ -143,14 +144,13 @@ function Server(options) {
             // locking port & protocol so it can't be changed by the user's settings
             //serverOpt.protocol  = serverOpt.protocol;
             self.conf[self.appName][self.env].server.protocol = serverOpt.protocol;
-            serverOpt.port      = self.conf[self.appName][self.env].server.port = portsReverse[ self.appName +'@'+ self.projectName ][self.env][serverOpt.protocol];
-            //var protocol = ( /^http\/2/.test(serverOpt.protocol) ) ? 'https' : serverOpt.protocol;
-            //self.conf[self.appName][self.env].hostname = protocol + '://' + self.conf[self.appName][self.env].host + ':' + serverOpt.port;
-            
+            self.conf[self.appName][self.env].server.scheme = serverOpt.scheme;
+            serverOpt.port      = self.conf[self.appName][self.env].server.port = portsReverse[ self.appName +'@'+ self.projectName ][self.env][serverOpt.protocol][serverOpt.scheme];
+                       
 
             Engine = require('./server.' + ((typeof (serverOpt.engine) != 'undefined' && serverOpt.engine != '') ? serverOpt.engine : 'express'));
             var engine = new Engine(serverOpt);
-
+            
             self.emit('configured', false, engine.instance, engine.middleware, self.conf[self.appName][self.env]);
 
         } catch (err) {
@@ -170,8 +170,11 @@ function Server(options) {
 
     this.start = function(instance) {
 
-        if (instance) {
-            self.instance = instance
+        if (instance) {            
+            self.instance   = instance;
+            //Middlewares configuration.
+            var router      = local.router;
+            router.setMiddlewareInstance(instance);
         }
 
         onRoutesLoaded( function(err) {//load all registered routes in routing.json
@@ -592,10 +595,8 @@ function Server(options) {
             ) {
                 request.url = self.conf[self.appName][self.env].server.webroot
             }
-            //Only for dev & debug purposes.
-            //if ( typeof(request.protocol) != 'undefined' && request.protocol != '')
-            //    self.conf[self.appName][self.env].server['protocol'];
-
+            
+            
             request.body    = {};
             request.get     = {};
             request.post    = {};
@@ -1212,6 +1213,31 @@ function Server(options) {
         //     })
         // }
     }
+    
+    // Express middleware portability when using Isaac instead of expressjs
+    var nextExpressMiddleware = function(err) {
+
+                
+        var router              = local.router;
+        var expressMiddlewares  = self.instance._expressMiddlewares;
+        
+        expressMiddlewares[nextExpressMiddleware._index](nextExpressMiddleware._request, nextExpressMiddleware._response, function onNext(err) {
+            ++nextExpressMiddleware._index;
+            
+            if (err) {
+                throwError(res, 500, err.stack, nextExpressMiddleware._next)
+            }
+            
+            if (nextExpressMiddleware._index > nextExpressMiddleware._count) {                
+                router.route(nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next, nextExpressMiddleware._request.routing)
+            } else {
+                nextExpressMiddleware.call(this, err, true)
+            }                        
+        });
+        
+    };
+    
+    
 
     var handle = function(req, res, next, bundle, pathname, config) {
         var matched             = false
@@ -1223,10 +1249,9 @@ function Server(options) {
             , isXMLRequest      = self.conf[bundle][self.env].server.request.isXMLRequest;
 
         
-        router.setMiddlewareInstance(self.instance);
-
-        //Middleware configuration.
-        req.setEncoding(self.conf[bundle][self.env].encoding);
+        //router.setMiddlewareInstance(self.instance);
+        req.setEncoding(self.conf[bundle][self.env].encoding);       
+        
 
         try {
             var params      = {}
@@ -1240,8 +1265,7 @@ function Server(options) {
         } catch (err) {
             throwError(res, 500, err.stack, next)
         }
-
-
+                
         out:
             for (var name in routing) {
                 if (typeof(routing[name]['param']) == 'undefined')
@@ -1272,7 +1296,7 @@ function Server(options) {
 
                 if (pathname == routing[name].url || isRoute.past) {
 
-                    //console.debug('Server is about to route to '+ pathname);
+                    //console.debug('Server is about to route to '+ pathname);                    
 
                     if (!routing[name].method && req.method) { // setting client request method if no method is defined in routing
                         routing[name].method  = req.method
@@ -1329,18 +1353,42 @@ function Server(options) {
 
 
                         // onRouting Event ???
-                        if (isRoute.past) {
+                        if (isRoute.past) {                            
+                            
                             if ( cacheless ) {
                                 config.refreshModels(params.bundle, self.env, function onModelRefreshed(err){
                                     if (err) {
                                         throwError(res, 500, err.msg||err.stack , next)
                                     } else {
-                                        router.route(req, res, next, req.routing)
+                                        if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {
+                                            
+                                            nextExpressMiddleware._index = 0;
+                                            nextExpressMiddleware._count = self.instance._expressMiddlewares.length-1;
+                                            nextExpressMiddleware._request = req;
+                                            nextExpressMiddleware._response = res;
+                                            nextExpressMiddleware._next = next;
+                                            
+                                            nextExpressMiddleware()
+                                        } else {
+                                            router.route(req, res, next, req.routing)
+                                        }
+                                        
                                     }
                                 })
                             } else {
                                 console.debug('[ 200 ] '+ pathname);
-                                router.route(req, res, next, req.routing)
+                                if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {
+                                            
+                                    nextExpressMiddleware._index = 0;
+                                    nextExpressMiddleware._count = self.instance._expressMiddlewares.length-1;
+                                    nextExpressMiddleware._request = req;
+                                    nextExpressMiddleware._response = res;
+                                    nextExpressMiddleware._next = next;
+                                    
+                                    nextExpressMiddleware()
+                                } else {
+                                    router.route(req, res, next, req.routing)
+                                }
                             }
                         }
                     }

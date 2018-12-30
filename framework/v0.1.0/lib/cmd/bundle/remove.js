@@ -130,18 +130,21 @@ function Remove(opt, cmd) {
                 , re                = null
             ;
 
-            for(var protocol in ports) {
+            for (var protocol in ports) {
+                
+                for (var scheme in ports[protocol]) {
+                    
+                    for (var port in ports[protocol][scheme]) {
 
-                for (var port in ports[protocol]) {
+                        re = new RegExp(local.bundle +"\@"+ self.projectName +"\/");
 
-                    re = new RegExp(local.bundle +"\@"+ self.projectName +"\/");
+                        if ( re.test(ports[protocol][scheme][port]) ) {
 
-                    if ( re.test(ports[protocol][port]) ) {
+                            reversePortValue = ports[protocol][scheme][port].split('/')[0];
 
-                        reversePortValue = ports[protocol][port].split('/')[0];
-
-                        delete portsReverse[reversePortValue];
-                        delete ports[protocol][port];
+                            delete portsReverse[reversePortValue];
+                            delete ports[protocol][scheme][port];
+                        }
                     }
                 }
             }

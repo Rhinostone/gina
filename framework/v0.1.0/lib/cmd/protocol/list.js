@@ -56,11 +56,15 @@ function List(opt, cmd) {
 
 
     var listAll = function() {
-        var protocols = self.protocols
+        var protocols = null
+            , schemes = null
             , projects = self.projects
             , list = []
             , p = ''
-            , str = '';
+            , str = ''
+            , strArr = []
+            , schemeStr = ''
+            , protocolStr = '';
 
         for (p in projects) {
             list.push(p)
@@ -76,24 +80,65 @@ function List(opt, cmd) {
             }
             str += list[p] + '\n\r';
             str += '------------------------------------\n\r';
+            protocols = projects[list[p]].protocols;
+            schemes = projects[list[p]].schemes;
+            
+            if (!protocols) continue;
+            
+            str += '      Protocol(s)        Scheme(s)\n\r';
+            
+            
+            var indexObj = {}, index = 2;
             for (var i = 0, len = protocols.length; i < len; ++i) {
+                protocolStr = '';               
                 if (self.defaultProtocol == protocols[i]) {
-                    str += '[ * ] ' + protocols[i]
+                    protocolStr += '[ * ] ' + protocols[i]
                 } else {
-                    str += '[   ] ' + protocols[i]
+                    protocolStr += '[   ] ' + protocols[i]
+                }                
+                
+                if ( (index % 2) == 0 ){
+                    indexObj[index] = protocolStr;
+                    index += 2
                 }
-                str += '\n\r'
             }
+            
+            
+            index = 3;
+            for (var s = 0, sLen = schemes.length; s < sLen; ++s) {
+                schemeStr = '';
+                if (self.defaultScheme == schemes[s]) {
+                    schemeStr += '           [ * ] ' + schemes[s]
+                } else {
+                    schemeStr += '           [   ] ' + schemes[s]
+                }
+                      
+                if ( (index % 2) != 0 ){
+                    indexObj[index] = schemeStr;
+                    index += 2               
+                }                   
+            }
+            
+            for (var k in indexObj) {
+                str += indexObj[k];
+                if ( (~~k % 3) == 0 ){
+                    str += '\n\r'
+                }
+                
+            }
+            
+            //str += strArr.join('');
+            
             str += '\n\r'
         }
-
+        console.debug(JSON.stringify(indexObj, null, 4));
         console.log(str)
     }
 
     var listProjectOnly = function() {
         
-        var protocols = self.protocols
-            , str = '';
+        var protocols   = self.protocols//self.projects[self.projectName].protocols
+            , str       = '';
 
         for (var i = 0, len = protocols.length; i < len; ++i) {
             if (self.defaultProtocol == protocols[i]) {
@@ -129,10 +174,11 @@ function List(opt, cmd) {
         ) {
             defaultProtocol = settings.server.protocol;
         }
-
+        
+        
         for (var i = 0, len = protocols.length; i < len; ++i) {
             if (defaultProtocol == protocols[i]) {
-                str += '[ * ] ' + protocols[i]
+                str += '[ * ] ' + protocols[i];
             } else {
                 str += '[   ] ' + protocols[i]
             }

@@ -308,8 +308,10 @@ function Config(opt) {
 
                 if ( typeof(self.envConf) != 'undefined' ) {
                     
-                    var protocol = self.envConf[self.startingApp][env].content.settings.server.protocol || self.envConf[self.startingApp][env].server.protocol;
-                    self.envConf[self.startingApp][env].hostname = protocol.replace(/(http\/2|http2)/, 'https') + '://' + self.envConf[self.startingApp][env].host + ':' + self.envConf[self.startingApp][env].server.port;
+                    var protocol    = self.envConf[self.startingApp][env].content.settings.server.protocol || self.envConf[self.startingApp][env].server.protocol;
+                    var scheme      = self.envConf[self.startingApp][env].content.settings.server.scheme || self.envConf[self.startingApp][env].server.scheme;
+                    //self.envConf[self.startingApp][env].hostname = protocol.replace(/(http\/2|http2)/, 'https') + '://' + self.envConf[self.startingApp][env].host + ':' + self.envConf[self.startingApp][env].server.port;
+                    self.envConf[self.startingApp][env].hostname = scheme + '://' + self.envConf[self.startingApp][env].host + ':' + self.envConf[self.startingApp][env].server.port;
 
                     self.envConf[bundle][env].hostname = self.envConf[self.startingApp][env].hostname;
                     self.envConf[bundle][env].content.routing = self.envConf[self.startingApp][env].content.routing;
@@ -388,15 +390,14 @@ function Config(opt) {
             projectConf     = ctx.project,
             portsReverse    = ctx.portsReverse;
 
-
-        //Pushing default app first.
+        
+        //Pushing default app first.        
         self.bundles.push(self.startingApp);//This is a JSON.push.
         var root = new _(self.executionPath).toUnixStyle();
         try {
             var pkg     = require(_(root + '/project.json')).bundles;
-            //var ports   = require( _(GINA_HOMEDIR + '/ports.reverse.json') );
             // by default but may be overriden
-            masterPort = portsReverse[self.startingApp+'@'+self.projectName][env][projectConf.def_protocol]
+            masterPort = portsReverse[self.startingApp+'@'+self.projectName][env][projectConf.def_protocol][projectConf.def_scheme]
         } catch (err) {
             console.error(err.stack);
 
@@ -405,12 +406,26 @@ function Config(opt) {
 
 
         //For each app.
+        var bundleSettings = null
+            , bundHasSettings = true
+            , bundlesPath   = getPath('bundles')
+            , protocol      = null
+            , scheme        = null;
+            
         for (var app in content) {
             //Checking if genuine app.
             console.debug('Checking if application [ '+ app +' ] is registered ');
 
             if ( typeof(content[app][env]) != "undefined" ) {
-
+                
+                if ( !fs.existsSync(_(bundlesPath +'/'+ app +'/config/settings.json'))) {
+                    bundHasSettings = false
+                } else {
+                    bundleSettings = require(_(bundlesPath +'/'+ app +'/config/settings.json'));
+                }
+                
+                
+                
                 // setting protocol & port
                 if ( typeof(portsReverse[app+'@'+self.projectName]) == 'undefined' )
                     continue;
@@ -425,33 +440,60 @@ function Config(opt) {
                     content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
                 }
 
-                appsPath = (typeof(content[app][env]['bundlesPath']) != "undefined")
+                appsPath = (typeof(content[app][env]['bundlesPath']) != 'undefined')
                     ? content[app][env].bundlesPath
                     : template["{bundle}"]["{env}"].bundlesPath;
 
 
 
-                modelsPath = (typeof(content[app][env]['modelsPath']) != "undefined")
+                modelsPath = (typeof(content[app][env]['modelsPath']) != 'undefined')
                     ?  content[app][env].modelsPath
                     :  template["{bundle}"]["{env}"].modelsPath;
 
            
-
-                newContent[app][env].server = ( typeof(content[app][env].server ) != "undefined")
-                    ?  content[app][env].server
-                    :  template["{bundle}"]["{env}"].server;
-
+                
+                if ( typeof(content[app][env].server ) != 'undefined' ) {
+                    newContent[app][env].server = content[app][env].server;
+                    
+                } else if ( bundHasSettings && typeof(bundleSettings.server) != 'undefined') {
+                    newContent[app][env].server = bundleSettings.server;
+                } else {
+                    newContent[app][env].server = template["{bundle}"]["{env}"].server
+                }
+                
                 // getting server protocol: bundle's settings first, if not available ->W project's config
-                // If the users has set a different protocol in its /config/settings.json, it will override the one bellow
+                // If the users has set a different protocol in its /config/settings.json, it will override the project protocol
                 // at server init (see server.js) 
                 
                 // by default
-                newContent[app][env].server.protocol = projectConf.def_protocol; // from ~/.gina/projects.json
-                // getting server port
-                newContent[app][env].server.port = portsReverse[ app +'@'+ self.projectName ][env][projectConf.def_protocol];
+                if ( typeof(newContent[app][env].server.protocol) == 'undefined' ) {
+                    newContent[app][env].server.protocol = ( bundHasSettings && typeof(bundleSettings.server) != 'undefined' && typeof(bundleSettings.server.protocol) != 'undefined' ) ? bundleSettings.server.protocol : projectConf.def_protocol; // from ~/.gina/projects.json
+                }
                 
-                appPort = portsReverse[app+'@'+self.projectName][env][newContent[app][env].server.protocol];
-
+                if ( typeof(newContent[app][env].server.scheme) == 'undefined' ) {
+                    newContent[app][env].server.scheme = ( bundHasSettings && typeof(bundleSettings.server) != 'undefined' && typeof(bundleSettings.server.scheme) != 'undefined' ) ? bundleSettings.server.scheme : projectConf.def_scheme; // from ~/.gina/projects.json
+                }
+                
+                // getting server port
+                if ( typeof (newContent[app][env].port) == 'undefined' ) {
+                    newContent[app][env].port = {}
+                }
+                
+                if ( typeof (newContent[app][env].port[ newContent[app][env].server.protocol ]) == 'undefined' ) {
+                    newContent[app][env].port[ newContent[app][env].server.protocol ] = {}
+                }
+                
+                if ( typeof (newContent[app][env].port[ newContent[app][env].server.protocol ][ newContent[app][env].server.scheme ]) == 'undefined' ) {
+                    newContent[app][env].port[ newContent[app][env].server.protocol ][ newContent[app][env].server.scheme ] = {}
+                }
+                
+                newContent[app][env].server.port = portsReverse[ app +'@'+ self.projectName ][env][projectConf.def_protocol][projectConf.def_scheme];
+                try {
+                    appPort = portsReverse[app+'@'+self.projectName][env][ newContent[app][env].server.protocol ][ newContent[app][env].server.scheme ];
+                } catch (err) {
+                    console.emerg('[ config ][ settings.server.protocol ] Protocol or scheme settings inconsistency found in `'+ app +'/config/settings`. To fix this, try to run `gina project:import @'+ self.projectName +' --path='+  projectConf.path +'`\n\r'+ err.stack);
+                    process.exit(1)
+                }
                 //I had to for this one...
                 appsPath = appsPath.replace(/\{executionPath\}/g, root);
                 //modelsPath = modelsPath.replace(/\{executionPath\}/g, mPath);
@@ -463,11 +505,9 @@ function Config(opt) {
                 }
 
 
-                if ( typeof (content[app][env].port) == 'undefined' ) {
-                    newContent[app][env].port = {}
-                }
-
-                newContent[app][env].port[ newContent[app][env].server.protocol ] = appPort;
+                newContent[app][env].port[ newContent[app][env].server.protocol ][ newContent[app][env].server.scheme ] = appPort;
+                
+                
 
                 //Check if standalone or shared instance
                 if (appPort != masterPort) {
@@ -692,6 +732,7 @@ function Config(opt) {
         var name        = null;
         var exists      = false;
         var protocol    = null;
+        var scheme      = null;
         var fileContent = null
             , nameArr   = null
             , foundDevVersion = null;
@@ -1209,27 +1250,24 @@ function Config(opt) {
         if ( 
             typeof(conf[bundle][env].content.settings) != 'undefined' 
             && typeof(conf[bundle][env].content.settings.server) != 'undefined' 
-            //&& conf[bundle][env].content.settings.server != ''
-            //&& conf[bundle][env].content.settings.server != null
-            && typeof(conf[bundle][env].content.settings.server.protocol) != 'undefined' 
+            && typeof(conf[bundle][env].content.settings.server.protocol) != 'undefined'
+            && typeof(conf[bundle][env].content.settings.server.scheme) != 'undefined' 
         ) {
-            protocol = conf[bundle][env].server.protocol = conf[bundle][env].content.settings.server.protocol; // from user's bundle/config/settings.json     
+            protocol    = conf[bundle][env].server.protocol = conf[bundle][env].content.settings.server.protocol; // from user's bundle/config/settings.json
+            scheme      = conf[bundle][env].server.scheme = conf[bundle][env].content.settings.server.scheme; // from user's bundle/config/settings.json     
             // updating server & connectino infos
             // getting server port
-            conf[bundle][env].server.port = portsReverse[ bundle +'@'+ self.projectName ][env][protocol];
-            appPort = portsReverse[bundle+'@'+self.projectName][env][protocol];    
-            conf[bundle][env].port[ protocol ] = appPort;  
-            
-            // masterPort = portsReverse[self.startingApp+'@'+self.projectName][env][projectConf.protocol];
-            // if (appPort != masterPort) {
-            //     self.Host.standaloneMode = false
-            // }
+            conf[bundle][env].server.port = portsReverse[ bundle +'@'+ self.projectName ][env][protocol][scheme];
+            appPort = portsReverse[bundle+'@'+self.projectName][env][protocol][scheme];    
+            conf[bundle][env].port[ protocol ][ scheme ] = appPort;  
+      
             
         } else {
             protocol = conf[bundle][env].server.protocol;
+            scheme = conf[bundle][env].server.scheme;
         }
         
-        conf[bundle][env].hostname = protocol.replace(/(http\/2|http2)/, 'https') + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
+        conf[bundle][env].hostname = scheme + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
 
         
         self.envConf[bundle][env] = conf[bundle][env];

@@ -331,7 +331,7 @@ function CmdHelper(cmd, client) {
             if (typeof(require.cache[cmd.envPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.envPath)]
             }
-            console.debug('envPath ', cmd.envPath);
+            console.debug('[ ConfigAssetsLoaderHelper ] envPath ', cmd.envPath);
             cmd.envData = require(cmd.envPath);
 
             // updating envs list
@@ -357,14 +357,15 @@ function CmdHelper(cmd, client) {
             cmd.protocols = [];
             cmd.schemes = [];
             var re = null;
-            //console.debug('Loaded bundles list\n'+ JSON.stringify(cmd.bundles, null, 4));
+            //console.debug('[ ConfigAssetsLoaderHelper ] Loaded bundles list\n'+ JSON.stringify(cmd.bundles, null, 4));
             // // protocols & schemes list: for the bundle
             if (cmd.bundles.length > 0 && typeof (cmd.projects[cmd.projectName]) != 'undefined') { 
                 
                 for (var b = 0, bLen = cmd.bundles.length; b < bLen; ++b) {
                     
                     re = new RegExp('^' + cmd.bundles[b] +'\@', '');
-                    
+                    reProjectProtoScheme = new RegExp('\@'+ cmd.projectName +'$', '');
+                    reProtoScheme = new RegExp('^' + cmd.bundles[b] +'\@'+ cmd.projectName, '');
                     for (var protocol in ports) {
                         if ( typeof(cmd.portsData[protocol]) == 'undefined')
                             cmd.portsData[protocol] = {};
@@ -374,16 +375,16 @@ function CmdHelper(cmd, client) {
                                 cmd.portsData[protocol][scheme] = {};   
                                                          
                             for (var port in ports[protocol][scheme]) {
-                                // updating protocols list
+                                
                                 if (cmd.protocols.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
-                                    cmd.protocols.push(protocol);
+                                    //cmd.protocols.push(protocol);
                                     if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
                                         cmd.portsData[protocol][scheme][port] = {}
                                 }
                                 
                                 // updating schemes list
                                 if (cmd.schemes.indexOf(scheme) < 0 && re.test(ports[protocol][scheme][port])) {
-                                    cmd.schemes.push(scheme);
+                                    //cmd.schemes.push(scheme);
                                     if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
                                         cmd.portsData[protocol][scheme][port] = {}
                                 }
@@ -391,7 +392,7 @@ function CmdHelper(cmd, client) {
                                 // updating port list
                                 if (cmd.portsList.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
                                     cmd.portsList.push(~~port);
-                                    cmd.portsData[protocol][scheme][port] = ports[protocol][scheme][port]
+                                    cmd.portsData[protocol][scheme][port] = ports[protocol][scheme][port];                                    
                                 }
                             }
                         }                            
@@ -416,14 +417,14 @@ function CmdHelper(cmd, client) {
                         for (var port in ports[protocol][scheme]) {
                             // updating protocols list
                             if (cmd.protocols.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
-                                cmd.protocols.push(protocol);
+                                //cmd.protocols.push(protocol);
                                 if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
                                     cmd.portsData[protocol][scheme][port] = {}
                             }
                                                         
                             // updating schemes list
                             if (cmd.schemes.indexOf(scheme) < 0 && re.test(ports[protocol][scheme][port])) {
-                                cmd.schemes.push(scheme);
+                                //cmd.schemes.push(scheme);
                                 if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
                                     cmd.portsData[protocol][scheme][port] = {}
                             } 
@@ -438,7 +439,7 @@ function CmdHelper(cmd, client) {
                 }                
             }
             
-            //console.debug('Loaded portsData\n'+ JSON.stringify(cmd.portsData, null, 4));
+            //console.debug('[ ConfigAssetsLoaderHelper ] Loaded portsData\n'+ JSON.stringify(cmd.portsData, null, 4));
             
             // sorting
             cmd.protocols.sort();
@@ -486,28 +487,36 @@ function CmdHelper(cmd, client) {
         if ( cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined' ) {
             hasProject = true;
             re = new RegExp('\@'+ cmd.projectName +'\/', '');
+            
+            if ( cmd.name != null ) {
+                re = new RegExp(cmd.name + '\@'+ cmd.projectName +'\/', '');
+            }
         }
         
         for (var protocol in ports) {
-
-            if (cmd.protocols.indexOf(protocol) < 0)
-                cmd.protocols.push(protocol); // updating protocols list
-
-            for (var scheme in ports[protocol]) {
-                if (cmd.schemes.indexOf(scheme) < 0)
-                    cmd.schemes.push(scheme); // updating schemes list
-                
+            for (var scheme in ports[protocol]) {                
                 for (var port in ports[protocol][scheme]) {
                 
                     cmd.portsGlobalList.push(~~port); // updating global ports list
                     
                     if ( hasProject && re.test(ports[protocol][scheme][port]) ) {
                         cmd.portsList.push(~~port) // updating contextual ports list
+                        
+                        // updating protocols list
+                        if ( 
+                            //cmd.name && cmd.name == cmd.bundles[b] && reProtoScheme.test(cmd.portsData[protocol][scheme][port]) 
+                            //||
+                            re.test(ports[protocol][scheme][port])
+                        ) {
+                            if ( cmd.protocols.indexOf(protocol) < 0 )
+                                cmd.protocols.push(protocol); // updating contextual protocol list
+                            if ( cmd.schemes.indexOf(scheme) < 0 )
+                                cmd.schemes.push(scheme); // updating contextual protocol list
+                        } 
                     }
                     
                 }
-            }
-                
+            }                
         }
         //console.debug('Got Global Ports List ', cmd.portsGlobalList);
 
@@ -522,7 +531,7 @@ function CmdHelper(cmd, client) {
             
         // supplementing projects with bundles collection            
         var projectPropertiesPath = null;
-        //console.debug('getting bundles by project ', JSON.stringify(cmd.projects, null, 4));
+        //console.debug('[ ConfigAssetsLoaderHelper ] getting bundles by project ', JSON.stringify(cmd.projects, null, 4));
         for (var project in cmd.projects) {
 
             projectPropertiesPath = _(cmd.projects[project].path + '/project.json', true);

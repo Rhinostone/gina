@@ -423,7 +423,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                         }
                     };
                     try {
-                        //configureMiddleware(instance, express); // no, no and no...
+                        //configureMiddleware(instance, express); // no, no and no...                        
                         callback(e, instance, middleware)
                     } catch (err) {
                         // TODO Output this to the error logger.
@@ -671,7 +671,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                             server.on('started', function (conf) {
 
                                 // catching unhandled errors
-                                if ( typeof(instance.use) == 'function' ) {
+                                if ( /^express/.test(instance.engine) && typeof(instance.use) == 'function' ) {
                                     instance.use( function onUnhandledError(err, req, res, next){
                                         if (err) {
                                             e.emit('error', err, req, res, next)
@@ -687,6 +687,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                     '\nenv: [ '+ conf.env +' ]',
                                     '\nengine: ' + conf.server.engine,
                                     '\nprotocol: ' + conf.server.protocol,
+                                    '\nscheme: ' + conf.server.scheme,
                                     '\nport: ' + conf.server.port,
                                     '\npid: ' + process.pid,
                                     '\nThis way please -> '+ conf.hostname

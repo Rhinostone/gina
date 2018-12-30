@@ -54,6 +54,10 @@ function Router(env) {
     this.setMiddlewareInstance = function(instance) {
         self.middlewareInstance = instance
     }
+    
+    this.getMiddlewareInstance = function () {
+        return self.middlewareInstance;
+    }
 
     this.getInstance = function() {
         return self
@@ -155,7 +159,7 @@ function Router(env) {
         var resHeaders = conf.server.response.header;
         //TODO - to test
         if ( resHeaders.count() > 0 ) {
-            var authority = (typeof(request.headers.referer) != 'undefined') ? local.conf.server.protocol.replace(/(http\/2|http2)/, 'https') +'://'+ request.headers.referer.match(/:\/\/(.[^\/]+)(.*)/)[1] : (request.headers[':authority'] || request.headers.host || null);
+            var authority = (typeof(request.headers.referer) != 'undefined') ? local.conf.server.scheme +'://'+ request.headers.referer.match(/:\/\/(.[^\/]+)(.*)/)[1] : (request.headers[':authority'] || request.headers.host || null);
             var re = new RegExp(authority);
             for (var h in resHeaders) {                
                 if (!response.headersSent) {
@@ -422,17 +426,18 @@ function Router(env) {
                 middleware.splice(middleware.length-1);
                 middleware = middleware.join('/');
                 filename = _(filename +'/'+ middleware + '/index.js');
-                if ( !fs.existsSync( filename ) ) {
+                if ( /*!/^middlewares\.express\./.test(filename) &&*/ !fs.existsSync( filename ) ) {
                     // no middleware found with this alias
                     throwError(res, 501, new Error('middleware not found '+ middleware).stack);
                 }
-
+                
                 if (local.cacheless) delete require.cache[require.resolve(_(filename, true))];
 
                 var MiddlewareClass = function() {
 
                     return function () { // getting rid of the middleware context
 
+                        //var Middleware = ( !/^middlewares\.express\./.test(filename) ) ? require(_(filename, true)) : require(_(expressMiddlewareBootstrap, true));
                         var Middleware = require(_(filename, true));
                         // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
 
