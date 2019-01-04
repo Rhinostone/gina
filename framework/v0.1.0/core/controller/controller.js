@@ -9,7 +9,7 @@
 //Imports.
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
-
+const dns           = require('dns');
 // const tls = require('tls');
 // const crypto = require('crypto');
 
@@ -501,9 +501,13 @@ function SuperController(options) {
                                 if ( mainConf.allBundles.indexOf(base) > -1 ) {
                                     // config override
                                     config          = mainConf.Env.getConf(base, mainConf.env);
-
+                                    
                                     // retrieve hostname, webroot & routing
                                     hostname        = config.hostname;
+                                    // rewrite hostname vs local.req.headers.host
+                                    if ( typeof(local.req.headers.host) != 'undefined' && !/\:d+/.test(local.req.headers.host) ) {
+                                        hostname = hostname.replace(/\:\d+/, '');
+                                    }
                                     routing         = config.content.routing;
                                     wroot           = config.server.webroot;
 
@@ -1030,7 +1034,7 @@ function SuperController(options) {
 
                     if ( Array.isArray(viewConf[localRessource]["stylesheetsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"][0]) || typeof(viewConf[localRessource]["stylesheetsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"]) ) {
 
-                        for (var i = 0, len = viewConf.default['stylesheets'].length; i<len; ++i) {
+                        for (var i = 0, vcLen = viewConf.default['stylesheets'].length; i<vcLen; ++i) {
                             if ( viewConf.default['stylesheets'] && viewConf[localRessource]['javascripts'].indexOf(viewConf.default['javascripts'][i]) ) {
                                 viewConf[localRessource]['stylesheets'].splice(viewConf[localRessource]['javascripts'].indexOf(viewConf.default['javascripts'][i]), 1)
                             }
@@ -1323,7 +1327,12 @@ function SuperController(options) {
                 //path = conf.server.scheme + '://' +conf.hostname + path
                 path = conf.hostname + path
             }
-
+            
+            
+            // rewrite path vs local.req.headers.host
+            if ( typeof(local.req.headers.host) != 'undefined' && !/\:d+/.test(local.req.headers.host) ) {
+                path = path.replace(/\:\d+/, '');
+            }
             
             if (req.headersSent) {
                 if (typeof(next) != 'undefined')
@@ -1335,7 +1344,7 @@ function SuperController(options) {
             if (GINA_ENV_IS_DEV) {
                 res.writeHead(code, {
                     'Location': path,
-                    'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
+                    'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
                     'Pragma': 'no-cache',
                     'Expires': '0'
                 })
@@ -2047,6 +2056,15 @@ function SuperController(options) {
     var handleHTTP2ClientRequest = function(browser, options, callback) {
         
         //cleanup
+        /**if ( typeof(options[':authority']) == 'undefined' && typeof(options.host) != 'undefined' ) {
+            options[':authority'] = options.host;            
+        } else {
+            options[':authority'] = options.hostname;
+        }*/
+        options[':authority'] = options.hostname;
+        
+        delete options.host;
+        
         if ( typeof(options[':path']) == 'undefined' ) {
             options[':path'] = options.path;
             delete options.path;
@@ -2069,8 +2087,18 @@ function SuperController(options) {
         if ( typeof(options[':scheme']) == 'undefined' ) {
             options[':scheme'] = options.scheme ;
         }
-        
-        delete options.host;
+                
+        if ( typeof(options.ca) != 'undefined' ) {
+            try {
+                options.ca = fs.readFileSync(options.ca);
+            } catch(err) {
+                self.emit('query#complete', err);
+                return;
+            }
+            
+        } else {
+            console.warn('[ CONTROLLER ][ HTTP/2.0#query ] options.ca not found !');
+        }
         
         var body = options.queryData;
         delete options.queryData;
@@ -2094,8 +2122,14 @@ function SuperController(options) {
                 self.emit('query#complete', data)
             }
         });
+        
+        const {
+            HTTP2_HEADER_PATH,
+            HTTP2_HEADER_STATUS
+          } = browser.constants;
 
-        const req = client.request(options);
+        const req = client.request({ [HTTP2_HEADER_PATH]: options[':path'] });
+        //const req = client.request(options);
         // getting headers infos
         // req.on('response', (headers, flags) => {
         //     for (const name in headers) {
@@ -2104,15 +2138,16 @@ function SuperController(options) {
         // });
 
         req.setEncoding('utf8');
-        
         let data = '';
+        req.on('response', (headers, flags) => {   });
+        
         req.on('data', (chunk) => { 
             data += chunk; 
         });
         
         req.on('error', (err) => {
-            
-            if ( /(127\.0\.0\.1|::1|localhost)/.test(err.address) ) {
+                
+            if ( /(127\.0\.0\.1|localhost|127\.0\.0\.2)/.test(err.address) ) {
 
                 var port = getContext('gina').ports[options.protocol][options.scheme][ err.port ];
                 if ( typeof(port) != 'undefined' )
@@ -2136,10 +2171,10 @@ function SuperController(options) {
 
                 self.emit('query#complete', data)
             }
-        })
+        });
         
         req.on('end', () => {   
-              
+            
             // exceptions filter
             if ( typeof(data) == 'string' && /^Unknown ALPN Protocol/.test(data) ) {
                 var err = {
@@ -2199,13 +2234,12 @@ function SuperController(options) {
             client.close();
             
         });
-        
-        if ( typeof(body) != 'undefined' && body != '' ) {
-            req.end(body);
-        } else {
-            req.end();
-        }
-        
+               
+        // if ( typeof(body) != 'undefined' && body != '' ) {
+        //     req.end(body);
+        // } else {
+        //     req.end();
+        // } 
         
         return {
             onComplete  : function(cb) {
@@ -2491,7 +2525,7 @@ function SuperController(options) {
                     res.writeHead(code, "Content-Type", local.options.conf.server.coreConfiguration.mime['json'])
                 }
 
-                console.error(req.method +' ['+res.statusCode +'] '+ req.url);
+                console.error('[ BuNDLE ][ '+ local.options.conf.bundle +' ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
                 res.end(JSON.stringify({
                     status: code,
                     error: msg.error || msg,
@@ -2504,7 +2538,8 @@ function SuperController(options) {
                 //var msgString = msg.stack || msg.error || msg;
                 var msgString = '<h1 class="status">Error '+ code +'.</h1>';
                 var eCode = code.toString().substr(0,1);
-
+                
+                console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
                 if ( typeof(msg) == 'object' ) {
 
                     if (msg.title) {

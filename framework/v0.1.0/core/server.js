@@ -142,9 +142,10 @@ function Server(options) {
             portsReverse    = ctx.portsReverse;
                         
             // locking port & protocol so it can't be changed by the user's settings
-            //serverOpt.protocol  = serverOpt.protocol;
             self.conf[self.appName][self.env].server.protocol = serverOpt.protocol;
             self.conf[self.appName][self.env].server.scheme = serverOpt.scheme;
+            self.conf[self.appName][self.env].server.engine = serverOpt.engine;
+            
             serverOpt.port      = self.conf[self.appName][self.env].server.port = portsReverse[ self.appName +'@'+ self.projectName ][self.env][serverOpt.protocol][serverOpt.scheme];
                        
 
@@ -178,7 +179,7 @@ function Server(options) {
         }
 
         onRoutesLoaded( function(err) {//load all registered routes in routing.json
-            console.debug('Routing loaded' + '\n'+ JSON.stringify(self.routing, null, '\t'));
+            console.debug('[ ROUTING ][ '+ self.appName +' ] Routing loaded' /**+ '\n'+ JSON.stringify(self.routing, null, '\t')*/);
 
             if ( hasViews(self.appName) ) {
                 lib.url(self.conf[self.appName][self.env], self.routing)
@@ -365,12 +366,7 @@ function Server(options) {
                         }
 
                         if ( self.isStandalone && tmp[rule]) {
-                            // deprecated: rules are now unique per bundle : rule@bundle
-                            //if (apps[i] != self.appName) {
-                            //    standaloneTmp[apps[i] + '-' + rule] = JSON.parse(JSON.stringify(tmp[rule]))
-                            //} else {
-                                standaloneTmp[rule] = JSON.parse(JSON.stringify(tmp[rule]))
-                            //}
+                            standaloneTmp[rule] = JSON.parse(JSON.stringify(tmp[rule]))
                         }
                     }// EO for
 
@@ -442,18 +438,13 @@ function Server(options) {
     var parseObject = function (tmp, obj) {
         var el      = []
             , key   = null
-            ;
-
+        ;
 
         for (var o in tmp) {
-            //el[0]   = decodeURIComponent(o);
-            //el[1]   = ( typeof(tmp[o]) == 'string') ? decodeURIComponent(tmp[o]) : tmp[o];
+            
             el[0]   = o;
             el[1]   = tmp[o];
 
-            //if ( Array.isArray(el[1]) ) {
-            //    obj = parseCollection(el[1], obj)
-            //} else {
             if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
                 key = el[0].replace(/\]/g, '').split(/\[/g);
                 obj = parseLocalObj(obj, key, 0, el[1])
@@ -585,7 +576,8 @@ function Server(options) {
 
         self.instance.all('*', function onInstance(request, response, next) {
             local.request = request;
-            response.setHeader('X-Powered-By', 'Gina/'+self.version );
+            response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );
+            
             // Fixing an express js bug :(
             // express is trying to force : /path/dir => /path/dir/
             // which causes : /path/dir/path/dir/  <---- by trying to add a slash in the end
@@ -792,7 +784,7 @@ function Server(options) {
                         writeStreams[ws].on('finish', function() {
                             this.close( function onUploaded(){
                                 --total;
-                                console.log('closing it : ' + total);
+                                console.debug('closing it : ' + total);
                                 
                                 if (total == 0) {
                                     loadBundleConfiguration(request, response, next, function onBundleConfigurationLoaded(err, bundle, pathname, config, req, res, next) {
@@ -809,11 +801,7 @@ function Server(options) {
                                 }
                             })
                         });
-                        
-                        
                     }
-
-                    
                 });
 
                
@@ -1097,8 +1085,8 @@ function Server(options) {
                                 if (err) {
                                     if (!res.headersSent)
                                         throwError(response, 500, 'Internal server error\n' + err.stack, next)
-                                } else {
-                                    handle(req, res, next, bundle, pathname, config)
+                                } else {                                    
+                                    handle(req, res, next, bundle, pathname, config)                                                                       
                                 }
                             } else {
                                 if (typeof(next) != 'undefined')
@@ -1214,27 +1202,33 @@ function Server(options) {
         // }
     }
     
-    // Express middleware portability when using Isaac instead of expressjs
+    // Express middleware portability when using another engine instead of expressjs
     var nextExpressMiddleware = function(err) {
-
                 
         var router              = local.router;
         var expressMiddlewares  = self.instance._expressMiddlewares;
         
+        if (err) {
+            throwError(res, 500, (err.stack|err.message|err), nextExpressMiddleware._next)
+        }
+        
         expressMiddlewares[nextExpressMiddleware._index](nextExpressMiddleware._request, nextExpressMiddleware._response, function onNext(err) {
-            ++nextExpressMiddleware._index;
+            ++nextExpressMiddleware._index;  
             
             if (err) {
-                throwError(res, 500, err.stack, nextExpressMiddleware._next)
+                throwError(res, 500, (err.stack|err.message|err), nextExpressMiddleware._next)
             }
+            
+                     
             
             if (nextExpressMiddleware._index > nextExpressMiddleware._count) {                
                 router.route(nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next, nextExpressMiddleware._request.routing)
+                
+                //handle(nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next, nextExpressMiddleware._bundle, nextExpressMiddleware._pathname, nextExpressMiddleware._config)
             } else {
                 nextExpressMiddleware.call(this, err, true)
             }                        
-        });
-        
+        });        
     };
     
     
@@ -1360,8 +1354,8 @@ function Server(options) {
                                     if (err) {
                                         throwError(res, 500, err.msg||err.stack , next)
                                     } else {
-                                        if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {
-                                            
+                                        
+                                        if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
                                             nextExpressMiddleware._index = 0;
                                             nextExpressMiddleware._count = self.instance._expressMiddlewares.length-1;
                                             nextExpressMiddleware._request = req;
@@ -1370,15 +1364,15 @@ function Server(options) {
                                             
                                             nextExpressMiddleware()
                                         } else {
+                                            //console.info('[ 200 ] '+ pathname);
                                             router.route(req, res, next, req.routing)
                                         }
                                         
                                     }
                                 })
-                            } else {
-                                console.debug('[ 200 ] '+ pathname);
-                                if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {
-                                            
+                            } else {                                
+                                
+                                if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
                                     nextExpressMiddleware._index = 0;
                                     nextExpressMiddleware._count = self.instance._expressMiddlewares.length-1;
                                     nextExpressMiddleware._request = req;
@@ -1387,6 +1381,7 @@ function Server(options) {
                                     
                                     nextExpressMiddleware()
                                 } else {
+                                    //console.info('[ 200 ] '+ pathname);
                                     router.route(req, res, next, req.routing)
                                 }
                             }
@@ -1394,19 +1389,13 @@ function Server(options) {
                     }
                     matched = true;
                     isRoute = {};
-                    //break out;
+                    
                     break
-
                 }
             }
 
 
         if (!matched) {
-
-            //if ( typeof(self.isNotStatic) != 'undefined' && !res.headersSent) {
-            //    delete self.isNotStatic;
-            //    throwError(res, 404, 'Page not found: \n' + pathname, next)
-            //}
             // find targeted bundle
             var allowed     = null
                 , conf      = null
@@ -1426,7 +1415,8 @@ function Server(options) {
                     if ( (new RegExp('^/'+s)).test( pathname ) ) {
                         score = s.length;
                         if ( score > 0 && score > tmpKey.length) {
-                            tmpKey = s
+                            tmpKey = s;
+                            break; // added on 2018, december 30th
                         }
                     }
                 }
@@ -1444,23 +1434,7 @@ function Server(options) {
                     conf.content.statics[key] = conf.content.views.default.html +'/'+ uri.join('/') // normal case
                 }
 
-
-
-                uri = pathname.split('/');
-                /** TODO - remove this
-                uri = (pathname.replace(wroot, '')).split('/');
-                var len = uri.length;
-
-                uri.splice(0, 1);
-
-                key = pathname.substr(1);
-                // we add it into statics
-                if ( withViews && typeof(conf.content.statics[key]) == 'undefined' && conf.content.views.default.views != conf.content.views.default.html) {
-                    conf.content.statics[key] = conf.content.views.default.views +'/'+ uri.join('/')
-                } else if (withViews && typeof(conf.content.statics[key]) == 'undefined') {
-                    conf.content.statics[key] = conf.content.views.default.html +'/'+ uri.join('/') // normal case
-                }
-                */
+                uri = pathname.split('/');                
 
             } else {
 
@@ -1469,7 +1443,8 @@ function Server(options) {
                     if ( (new RegExp('^/'+s)).test( pathname ) ) {
                         score = s.length;
                         if ( score > 0 && score > tmpKey.length) {
-                            tmpKey = s
+                            tmpKey = s;
+                            break; // added on 2018, december 30th
                         }
                     }
                 }
@@ -1683,7 +1658,7 @@ function Server(options) {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
 
-                console.error(local.request.method +' [ '+code+' ] '+ local.request.url);
+                console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
                 res.end(JSON.stringify({
                     status: code,
                     error: msg
@@ -1691,7 +1666,7 @@ function Server(options) {
                 res.headersSent = true
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
-                console.error(local.request.method +' [ '+code+' ] '+ local.request.url);
+                console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
                 res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
                 res.headersSent = true
             }

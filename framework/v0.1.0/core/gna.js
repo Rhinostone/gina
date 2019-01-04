@@ -690,7 +690,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                     '\nscheme: ' + conf.server.scheme,
                                     '\nport: ' + conf.server.port,
                                     '\npid: ' + process.pid,
-                                    '\nThis way please -> '+ conf.hostname
+                                    '\nThis way please -> '+ conf.hostname + conf.server.webroot
                                 );
 
                                 e.emit('server#started', conf)

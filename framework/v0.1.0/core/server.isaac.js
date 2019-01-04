@@ -18,7 +18,7 @@ const slice             = Array.prototype.slice;
 
 function ServerEngineClass(options) {
 
-    console.debug('[ ENGINE ] Isaac says hello !');
+    console.debug('[ ENGINE ] Isaac says hello !');     
     
     // openssl req -x509 -newkey rsa:2048 -nodes -sha256 -subj "/CN=localhost" -keyout localhost-privkey.pem -out localhost-cert.pem
     const credentials = {
@@ -27,9 +27,9 @@ function ServerEngineClass(options) {
     };
     
     var allowHTTP1 = true;
-    if (typeof (options.credentials.allowHTTP1) != 'undefined' && options.credentials.allowHTTP1 != '' ) {
-        credentials.allowHTTP1 = options.credentials.allowHTTP1;
-        allowHTTP1 = options.credentials.allowHTTP1;
+    if (typeof (options.allowHTTP1) != 'undefined' && options.allowHTTP1 != '' ) {
+        credentials.allowHTTP1 = options.allowHTTP1;
+        allowHTTP1 = options.allowHTTP1;
     }
         
         
@@ -93,6 +93,28 @@ function ServerEngineClass(options) {
         // }
     };
     
+    // this can be removed
+    // Express middleware portability when using Isaac                
+    // const next = function(err) {
+        
+        
+    //     var expressMiddlewares  = server._expressMiddlewares;
+        
+    //     expressMiddlewares[next._index](next._request, next._response, function onNext(err) {
+            
+    //         if (err) {
+    //             throwError(next._response, 500, (err.stack|err.message|err))
+    //         }
+            
+    //         ++next._index;
+            
+    //         if (next._index > next._count) {
+    //             cb(next._request, next._response)
+    //         } else {
+    //             next.call(this, err, true)
+    //         }                        
+    //     });        
+    // };
        
     const onPath = function(path, cb, allowAll) {
         
@@ -143,57 +165,44 @@ function ServerEngineClass(options) {
                 } else {
                     request.params[0] = request.url
                 }
+                                
                 
-                // You can remove this ... can be found in server.js
-                // Express compatibility when using Isaac
-                // if ( /*/isaac/.test(self.engine ) &&*/ server.instance._expressMiddlewares.length > 0 ) {
+                // next._index     = 0;
+                // next._count     = server._expressMiddlewares.length-1;      
+                // next._request   = request;
+                // next._response  = response;                  
                 
-            //     var next = function(err) {
-
-            //         if (err) {
-            //             throwError(response, 500, err.msg||err.stack);
-            //         }
-                    
-            //         var expressMiddlewares  = server._expressMiddlewares;
-                    
-            //         expressMiddlewares[next._index](request, response, function onNext(err) {
-            //             ++next._index;
-                        
-            //             if (next._index > next._count) {
-            //                 cb(request, response)
-            //             } else {
-            //                 next.call(this, err, true)
-            //             }                        
-            //         });
-                    
-            //     };
-            //     next._index = 0;
-            //     next._count = server._expressMiddlewares.length-1;
-                         
-                
-            //     next();
+                // next();
                 cb(request, response);
             }
             
             
         });
 
-        // server.on('stream', (stream, requestHeaders) => {
+        server.on('stream', (stream, requestHeaders) => {
 
-        //     if ( /^\*$/.test(path) || path == requestHeaders.path ) {
+            // if ( /^\*$/.test(path) || path == requestHeaders.path ) {
 
-        //         let request     = requestHeaders;
-        //         let response    = new Http2ServerResponse();
-        //         let next        = undefined;
+            //     let request     = requestHeaders;
+            //     let response    = new Http2ServerResponse();
+            //     let next        = undefined;
 
-        //         //response = merge(response, stream);
+            //     //response = merge(response, stream);
                 
-        //         //stream.respond();
-        //         //stream.end('secured hello world!');
-        //         cb(request, response, next)
-        //     }
+            //     //stream.respond();
+            //     //stream.end('secured hello world!');
+            //     cb(request, response, next)
+            // }
             
-        // });
+            stream.on('error', (err) => {
+            const isRefusedStream = err.code === 'ERR_HTTP2_STREAM_ERROR' &&
+                stream.rstCode === NGHTTP2_REFUSED_STREAM;
+            
+            if (!isRefusedStream)
+                throw err;
+            });
+            
+        });
         
         
     }
@@ -204,8 +213,9 @@ function ServerEngineClass(options) {
     }
     
     // configuring express plugins|middlewares
+    server._expressMiddlewares = [];
     server.use = function use(fn) {
-        
+             
         var offset = 0;
         //var path = '/';
       

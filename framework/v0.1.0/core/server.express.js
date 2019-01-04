@@ -19,8 +19,11 @@ function ServerEngineClass(options) {
 
     var local = {};
 
-    if (typeof (options.credentials.allowHTTP1) != 'undefined' && options.credentials.allowHTTP1 != '' )
-        credentials.allowHTTP1 = options.credentials.allowHTTP1;
+    var allowHTTP1 = true;
+    if (typeof (options.allowHTTP1) != 'undefined' && options.allowHTTP1 != '' ) {
+        credentials.allowHTTP1 = options.allowHTTP1;
+        allowHTTP1 = options.allowHTTP1;
+    }
         
     if (typeof (options.credentials.ca) != 'undefined' && options.credentials.ca != '' )
         credentials.ca = options.credentials.ca;
@@ -64,7 +67,7 @@ function ServerEngineClass(options) {
         var http2   = require('http2');
         switch (options.scheme) {
             case 'http':
-                var app = express();                
+                var app = express({ allowHTTP1: allowHTTP1 });                
                 app.init = function() {
                     this.cache = {};
                     this.engines = {};
@@ -102,7 +105,7 @@ function ServerEngineClass(options) {
                 
             default:
             
-                var app = express();                
+                var app = express({ allowHTTP1: allowHTTP1 });                
                 app.init = function() {
                     this.cache = {};
                     this.engines = {};

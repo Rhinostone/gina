@@ -310,7 +310,7 @@ function Config(opt) {
                     
                     var protocol    = self.envConf[self.startingApp][env].content.settings.server.protocol || self.envConf[self.startingApp][env].server.protocol;
                     var scheme      = self.envConf[self.startingApp][env].content.settings.server.scheme || self.envConf[self.startingApp][env].server.scheme;
-                    //self.envConf[self.startingApp][env].hostname = protocol.replace(/(http\/2|http2)/, 'https') + '://' + self.envConf[self.startingApp][env].host + ':' + self.envConf[self.startingApp][env].server.port;
+                    
                     self.envConf[self.startingApp][env].hostname = scheme + '://' + self.envConf[self.startingApp][env].host + ':' + self.envConf[self.startingApp][env].server.port;
 
                     self.envConf[bundle][env].hostname = self.envConf[self.startingApp][env].hostname;
@@ -852,7 +852,6 @@ function Config(opt) {
                     routing[rule].param.file = ( typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
 
                     // by default, method is inherited from the request.method
-
                     if (
                         hasWebRoot && typeof(routing[rule].param.path) != 'undefined' && typeof(routing[rule].param.ignoreWebRoot) == 'undefined'
                         || hasWebRoot && typeof(routing[rule].param.path) != 'undefined' && !routing[rule].param.ignoreWebRoot
@@ -1409,7 +1408,7 @@ function Config(opt) {
         self.envConf[bundle][env].content.routing = routing;
     }
 
-    this.getRouting = function(bundle, env) {
+    this.getRouting = function(bundle, env) {        
         var routing = self.envConf[bundle][env].content.routing;
 
         return routing;
