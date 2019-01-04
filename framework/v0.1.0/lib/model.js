@@ -289,7 +289,7 @@ function ModelUtil() {
                     } else {
                         //e.g. var apiModel    = new Model(config.bundle + "/api");
                         // => var apiModel = getContext('apiModel')
-                        console.debug('[ MODEL ][ '+ c +' ]', conf.bundle + "/"+c + 'Model');
+                        console.debug('[ MODEL ][ '+ c +' ][ '+ conf.bundle +' ] loading model');
                         mObj[c + 'Model'] = new Model(conf.bundle + "/" + c, conf);
                         mObj[c+'Model']
                             .onReady(
@@ -420,7 +420,7 @@ function ModelUtil() {
                         new entitiesManager[nttClass](conn);
                     }
 
-                    console.debug('loaded model ', bundle+'/'+name);
+                    console.debug('[ MODEL ][ '+ name +' ][ '+ bundle +'] loaded model ');
                 }
             }
 

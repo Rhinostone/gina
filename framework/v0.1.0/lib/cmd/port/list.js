@@ -139,19 +139,30 @@ function List(opt, cmd) {
 
     var listBundleOnly = function() {
 
-        var protocols = self.protocols
-            , str = ''
-            , re = null;
+        var protocols   = self.protocols
+            , schemes   = self.schemes
+            , scheme    = null
+            , found     = false
+            , str       = ''
+            , re        = null;
 
         for (var i = 0, len = protocols.length; i < len; ++i) {
+            str += '[ '+ protocols[i] +' ]\n\r';
             for (var s = 0, sLen = schemes.length; s < sLen; ++s) {
+                found = false;
                 re = new RegExp('^' + self.name + '\@', '');// searching by bundle name
                 for (var port in self.portsData[protocols[i]][schemes[s]]) {
                     if (re.test(self.portsData[protocols[i]][schemes[s]][port])) {
-                        str += '\n\r  - ' + port + '  ' + self.name + ' ' + self.portsData[protocols[i]][schemes[s]][port].replace(re, '').replace(/[-_a-z 0-9]+\//i, '(') + ')'
+                        str +=  '    ' +schemes[s]+ ' ' + port + '  ' + self.name + ' ' + self.portsData[protocols[i]][schemes[s]][port].replace(re, '').replace(/[-_a-z 0-9]+\//i, '(') + ')';
+                        found = true;
+                        break;
                     }
                 }
-                str += '\n\r'    
+                
+                if (found) {
+                    str += '\n\r'
+                }
+                    
             }            
         }
 

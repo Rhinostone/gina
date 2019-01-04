@@ -95,12 +95,9 @@ function Routing() {
             , maxLen = uRo.length
             , score = 0
             , foundRoute = {}
-            , i = 0;
+            , i = 0
+        ;
         
-        // specific route debug
-        // if ( params.rule == "register-xml@public" ) {            
-        //     process.stdout.write('debugging this route');
-        // }
         //attaching routing description for this request
         request.routing = params; // can be retried in controller with: req.routing
         
@@ -310,6 +307,7 @@ function Routing() {
         
         var config      = getContext('gina').config
             , env       = GINA_ENV // by default, using same protocol scheme
+            , envTmp    = null
             , scheme    = null
             , bundle    = config.bundle // by default
         ;
@@ -322,8 +320,9 @@ function Routing() {
 
             // getting env
             if ( /\/(.*)$/.test(rule) ) {
-                env = ( rule.replace(/(.*)\:\/\//, '') ).split(/\/(.*)$/)[1];
-                bundle = bundle.replace(/\/(.*)$/, '')
+                envTmp  = ( rule.replace(/(.*)\:\/\//, '') ).split(/\/(.*)$/)[1];
+                bundle  = bundle.replace(/\/(.*)$/, '');
+                env     = envTmp || env;
             }
 
 
@@ -332,7 +331,8 @@ function Routing() {
 
             rule = arr[0] +'@'+ bundle;
         }
-
+        
+        
         var routing = config.getRouting(bundle, env);
 
         if ( typeof(routing[rule]) == 'undefined' ) {
