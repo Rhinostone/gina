@@ -26,11 +26,11 @@ function ServerEngineClass(options) {
         cert: fs.readFileSync(options.credentials.certificate)
     };
     
-    var allowHTTP1 = true;
-    if (typeof (options.allowHTTP1) != 'undefined' && options.allowHTTP1 != '' ) {
-        credentials.allowHTTP1 = options.allowHTTP1;
+    var allowHTTP1 = true; // by default
+    if (typeof (options.allowHTTP1) != 'undefined' && options.allowHTTP1 != '' ) {        
         allowHTTP1 = options.allowHTTP1;
     }
+    credentials.allowHTTP1 = allowHTTP1;
         
         
     if (typeof (options.credentials.ca) != 'undefined' && options.credentials.ca != '' )
