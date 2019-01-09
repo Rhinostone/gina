@@ -73,7 +73,7 @@ module.exports = function () {
                 if ( fs.existsSync(errFile) ) fs.unlinkSync(errFile);
 
                 if (error) {
-                    cmd.emit('stderr', new Buffer(error))
+                    cmd.emit('stderr', Buffer.from(error))
                 }
 
 
@@ -83,7 +83,7 @@ module.exports = function () {
                 if (fs.existsSync(outFile) ) fs.unlinkSync(outFile);
 
                 if ( data ) {
-                    cmd.emit('stdout', new Buffer(data))
+                    cmd.emit('stdout', Buffer.from(data))
                 }
 
 

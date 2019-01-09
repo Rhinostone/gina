@@ -159,13 +159,18 @@ function Router(env) {
         var resHeaders = conf.server.response.header;
         //TODO - to test
         if ( resHeaders.count() > 0 ) {
+            // authority by default if no Access Control Allow Origin set
             var authority = (typeof(request.headers.referer) != 'undefined') ? local.conf.server.scheme +'://'+ request.headers.referer.match(/:\/\/(.[^\/]+)(.*)/)[1] : (request.headers[':authority'] || request.headers.host || null);
             var re = new RegExp(authority);
+            var origin = ( typeof(conf.server.response.header['Access-Control-Allow-Origin']) != 'undefined' && conf.server.response.header['Access-Control-Allow-Origin'] != '' ) ? conf.server.response.header['Access-Control-Allow-Origin'] : authority;
             for (var h in resHeaders) {                
                 if (!response.headersSent) {
                     // handles multiple origins
-                if ( /Access\-Control\-Allow\-Origin/.test(h) && re.test(resHeaders[h]) /**|| re.test(local.conf.hostname))*/ ) {
-                        response.setHeader(h, authority)
+                if ( /Access\-Control\-Allow\-Origin/.test(h) ) { // re.test(resHeaders[h]                    
+                        if ( /\,/.test(origin) ) {
+                            origin = origin.split(/\,/g);
+                        }
+                        response.setHeader(h, origin)
                     } else {
                         response.setHeader(h, resHeaders[h])
                     }

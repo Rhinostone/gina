@@ -131,7 +131,7 @@ function PrePublish() {
                 fs.unlinkSync(errFile);
 
                 if (error) {
-                    cmd.emit('stderr', new Buffer(error))
+                    cmd.emit('stderr', Buffer.from(error))
                 }
 
                 var data = ( fs.existsSync(outFile) ) ? fs.readFileSync(outFile).toString() : undefined;
@@ -139,7 +139,7 @@ function PrePublish() {
                 fs.unlinkSync(outFile);
 
                 if ( data ) {
-                    cmd.emit('stdout', new Buffer(data))
+                    cmd.emit('stdout', Buffer.from(data))
                 }
 
             } catch (err) {

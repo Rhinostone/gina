@@ -798,7 +798,7 @@ function Config(opt) {
                 }
 
                 if (exists) {
-                    fileContent = merge(fileContent, require(_(filename, true)));
+                    fileContent = merge(fileContent, requireJSON(_(filename, true)));
                 } else {
                     console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
                 }
