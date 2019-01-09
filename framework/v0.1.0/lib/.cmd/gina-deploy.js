@@ -301,7 +301,7 @@ function Deploy(opt) {
                 if ( fs.existsSync(errFile) ) fs.unlinkSync(errFile);
 
                 if (error) {
-                    cmd.emit('stderr', new Buffer(error))
+                    cmd.emit('stderr', Buffer.from(error))
                 }
 
 
@@ -311,7 +311,7 @@ function Deploy(opt) {
                 if (fs.existsSync(outFile) ) fs.unlinkSync(outFile);
 
                 if ( data ) {
-                    cmd.emit('stdout', new Buffer(data))
+                    cmd.emit('stdout', Buffer.from(data))
                 }
 
 

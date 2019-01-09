@@ -610,10 +610,11 @@ function Server(options) {
              * and it will also set any cookies from the remote domain.
              * Note that these cookies still honor same-origin policies, so your JavaScript code can’t access the cookies
              * from document.cookie or the response headers.
-             * They can only be controlled by the remote domain.
+             * They can only be controlled/produced by the remote domain.
              * */
             self.conf[self.appName][self.env].server.request.isWithCredentials  = ( request.headers['access-control-allow-credentials'] && request.headers['access-control-allow-credentials'] == true ) ? true : false;
-
+                        
+            
             // multipart wrapper for uploads
             // files are available from your controller or any middlewares:
             //  @param {object} req.files            
@@ -812,14 +813,14 @@ function Server(options) {
                 // request.body = '';
                 // request.on('data', function(chunk) { // for this to work, don't forget the name attr for you form elements
                     
-                //     request.body += new Buffer(new Uint8Array(chunk))
+                //     request.body += Buffer.from(new Uint8Array(chunk))
                 //     // if (!files[data.name]) {
                 //     //     files[data.name] = Object.assign({}, struct, chunk);
                 //     //     files[data.name].data = [];
                 //     // }
                     
                 //     // //convert the ArrayBuffer to Buffer 
-                //     // data.data = new Buffer(new Uint8Array(data.data));
+                //     // data.data = Buffer.from(new Uint8Array(data.data));
                 //     // //save the data 
                 //     // files[data.name].data.push(data.data);
                 //     // files[data.name].slice++;
@@ -1187,19 +1188,19 @@ function Server(options) {
             , callback  = options.callback;
 
         //Reloading assets & files.
-        //if (!cacheless) { // all but dev & debug
+        if (!cacheless) { // all but dev & debug
             callback(err, bundle, pathname, options.config, req, res, next)
-        // } else {
-        //     config.refresh(bundle, function(err, routing) {
-        //         if (err) {
-        //             throwError(res, 500, 'Internal Server Error: \n' + (err.stack||err), next)
-        //         } else {
-        //             //refreshing routing at the same time.
-        //             self.routing = routing;
-        //             callback(err, bundle, pathname, options.config, req, res, next)
-        //         }
-        //     })
-        // }
+        } else {
+            config.refresh(bundle, function(err, routing) {
+                if (err) {
+                    throwError(res, 500, 'Internal Server Error: \n' + (err.stack||err), next)
+                } else {
+                    //refreshing routing at the same time.
+                    self.routing = routing;
+                    callback(err, bundle, pathname, options.config, req, res, next)
+                }
+            })
+        }
     }
     
     // Express middleware portability when using another engine instead of expressjs
@@ -1209,14 +1210,14 @@ function Server(options) {
         var expressMiddlewares  = self.instance._expressMiddlewares;
         
         if (err) {
-            throwError(res, 500, (err.stack|err.message|err), nextExpressMiddleware._next)
+            throwError(nextExpressMiddleware._response, 500, (err.stack|err.message|err), nextExpressMiddleware._next)
         }
         
         expressMiddlewares[nextExpressMiddleware._index](nextExpressMiddleware._request, nextExpressMiddleware._response, function onNext(err) {
             ++nextExpressMiddleware._index;  
             
             if (err) {
-                throwError(res, 500, (err.stack|err.message|err), nextExpressMiddleware._next)
+                throwError(nextExpressMiddleware._response, 500, (err.stack||err.message||err), nextExpressMiddleware._next)
             }
             
                      
@@ -1364,7 +1365,6 @@ function Server(options) {
                                             
                                             nextExpressMiddleware()
                                         } else {
-                                            //console.info('[ 200 ] '+ pathname);
                                             router.route(req, res, next, req.routing)
                                         }
                                         
@@ -1381,7 +1381,6 @@ function Server(options) {
                                     
                                     nextExpressMiddleware()
                                 } else {
-                                    //console.info('[ 200 ] '+ pathname);
                                     router.route(req, res, next, req.routing)
                                 }
                             }
@@ -1641,7 +1640,17 @@ function Server(options) {
         var withViews       = local.hasViews[self.appName] || hasViews(self.appName);
         var isUsingTemplate = self.conf[self.appName][self.env].template;
         var isXMLRequest    = self.conf[self.appName][self.env].server.request.isXMLRequest;
-
+        
+        var err = null;
+        if ( typeof(msg) != 'object' ) {
+            err = {
+                code: code,
+                message: msg
+            }
+        } else {
+            err = JSON.parse(JSON.stringify(msg))
+        }
+        
         if (!res.headersSent) {
             if (isXMLRequest || !withViews || !isUsingTemplate ) {
                 // allowing this.throwError(err)

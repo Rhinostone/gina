@@ -240,6 +240,8 @@ var abort = function(err) {
 };
 
 
+gna.emit = e.emit;
+
 /**
  * Get project conf from project.json
  *
@@ -495,6 +497,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
     gna.onError = process.onError = function(callback) {
         gna.errorCatched = true;
         e.on('error', function(err, request, response, next) {
+            
             callback(err, request, response, next)
         })
     }
@@ -671,8 +674,16 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                             server.on('started', function (conf) {
 
                                 // catching unhandled errors
-                                if ( /^express/.test(instance.engine) && typeof(instance.use) == 'function' ) {
+                                if ( /** /^express/.test(instance.engine) && */typeof(instance.use) == 'function' ) {
                                     instance.use( function onUnhandledError(err, req, res, next){
+                                        
+                                        if (arguments.length < 4) {
+                                            next = res;
+                                            res = req;
+                                            req = err;
+                                            err = false ;
+                                        }
+                                        
                                         if (err) {
                                             e.emit('error', err, req, res, next)
                                         } else {

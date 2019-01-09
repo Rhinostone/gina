@@ -190,6 +190,7 @@ function SuperController(options) {
             set('page.environment.project', options.conf.projectName);
             set('page.environment.protocol', options.conf.server.protocol);
             set('page.environment.scheme', options.conf.server.scheme);
+            set('page.environment.port', options.conf.server.port);
 
             set('page.view.ext', ext);
             set('page.view.control', action);
@@ -341,8 +342,7 @@ function SuperController(options) {
 
             template = local.options.rule.replace('\@'+ local.options.bundle, '');
             setResources(local.options.views, template);
-
-            //var file = local.options.file;
+            
             var file = data.page.view.file;
 
             // pre-compiling variables
@@ -738,7 +738,6 @@ function SuperController(options) {
                             ) {
 
                                 try {
-                                    //local.res.statusCode    = data.page.data.status;
                                     local.res.statusMessage = local.options.conf.server.coreConfiguration.statusCodes[data.page.data.status];
                                 } catch (err){
                                     local.res.statusCode    = 500;
@@ -1340,6 +1339,24 @@ function SuperController(options) {
                 else
                     return;
             }
+            
+            // retrieve original request cookie
+            // if ( 
+            //     typeof(res._headers['set-cookie']) == 'undefined' 
+            //     && typeof(req.headers.cookie) != 'undefined' 
+            //     && typeof(req.session) != 'undefined'
+            //     && typeof(req.session.cookie) != 'undefined'
+            //     //&& typeof(local.req.sessionID) != 'undefined'
+            // ) {
+            //     var reqCookie = req.headers.cookie.split(/\;/);                    
+            //     var cookieOpt = JSON.parse(reqCookie[0]), cookieValue = reqCookie[1];
+                
+            //     for (var cKey in cookieOpt ) {
+            //         cookieValue += '; '+ cKey +'='+ cookieOpt[cKey]
+            //     }
+            //     console.debug('[ Controller::query() ][ responseCookie ] '+ cookieValue);
+            //     res.setHeader('Set-Cookie', cookieValue);
+            // }
 
             if (GINA_ENV_IS_DEV) {
                 res.writeHead(code, {
@@ -1841,9 +1858,14 @@ function SuperController(options) {
             options.headers['Content-Type'] = local.options.conf.server.coreConfiguration.mime['json'];
         }
 
-        if ( typeof(local.req.headers.cookie) != 'undefined' ) { // useful for CORS : forward cookies from the original request
-            options.headers.cookie = local.req.headers.cookie;
-        }
+        // if ( typeof(local.req.headers.cookie) == 'undefined' && typeof(local.res._headers['set-cookie']) != 'undefined' ) { // useful for CORS : forward cookies from the original request
+        //     //options.headers.cookie = local.req.headers.cookie;
+        //     var originalResponseCookies = local.res._headers['set-cookie'];
+        //     options.headers.cookie = [];
+        //     for (var c = 0, cLen = originalResponseCookies.length; c < cLen; ++c) {
+        //         options.headers.cookie.push(originalResponseCookies[c])
+        //     }
+        // }
 
         //you need this, even when empty.
         options.headers['Content-Length'] = queryData.length;
@@ -1900,25 +1922,56 @@ function SuperController(options) {
         try {            
             var protocolVersion = ~~options.protocol.match(/\/(.*)$/)[1].replace(/\.\d+/, '');
             var httpLib =  options.protocol.match(/^(.*)\//)[1] + ( (protocolVersion >= 2) ? protocolVersion : '' );
+            if ( !/http2/.test(httpLib) && /https/.test(options.scheme) ) {
+                httpLib += 's';
+            }
             //delete options.protocol;
             browser = require(''+ httpLib);   
             if ( /http2/.test(httpLib) ) {                
                 options.queryData = queryData;
                 return handleHTTP2ClientRequest(browser, options, callback);
             } else {
-                options.agent = new browser.Agent(options);
+                
+                var altOpt = JSON.parse(JSON.stringify(options));
+                altOpt.protocol = options.scheme;
+                altOpt.hostname = options.host;
+                altOpt.port     = 443;
+                if ( typeof(altOpt.encKey) != 'undefined' ) {
+                    try {
+                        altOpt.encKey = fs.readFileSync(options.encKey);
+                    } catch(err) {
+                        self.emit('query#complete', err);
+                    }
+                    
+                } else {
+                    console.warn('[ CONTROLLER ][ HTTP/2.0#query ] options.encKey not found !');
+                }
+                
+                if ( typeof(altOpt.encCert) != 'undefined' ) {
+                    try {
+                        altOpt.encCert = fs.readFileSync(options.encCert);
+                    } catch(err) {
+                        self.emit('query#complete', err);
+                    }
+                    
+                } else {
+                    console.warn('[ CONTROLLER ][ HTTP/2.0#query ] options.encCert not found !');
+                }
+                
+                altOpt.agent = new browser.Agent(altOpt);
             }         
             
         } catch(err) {
-            throw err;
+            //throw err;
             //throw new Error('Scheme `'+ scheme +'` not supported')
+            self.emit('query#complete', err)
         }
            
         
         
         
         
-        var req = browser.request(options, function(res) {
+        var req = browser.request(altOpt, function(res) {
 
             res.setEncoding('utf8');
 
@@ -1934,7 +1987,25 @@ function SuperController(options) {
             });
 
             res.on('end', function onEnd(err) {
-
+                
+                // retrieve original request cookie
+                // if ( 
+                //     typeof(local.res._headers['set-cookie']) == 'undefined' 
+                //     && typeof(local.req.headers.cookie) != 'undefined' 
+                //     && typeof(local.req.session) != 'undefined'
+                //     && typeof(local.req.session.cookie) != 'undefined'
+                //     //&& typeof(local.req.sessionID) != 'undefined'
+                // ) {
+                //     var reqCookie = local.req.headers.cookie.split(/\;/);                    
+                //     var cookieOpt = JSON.parse(reqCookie[0]), cookieValue = reqCookie[1];
+                    
+                //     for (var cKey in cookieOpt ) {
+                //         cookieValue += '; '+ cKey +'='+ cookieOpt[cKey]
+                //     }
+                //     console.debug('[ Controller::query() ][ responseCookie ] '+ cookieValue);
+                //     local.res.setHeader('Set-Cookie', cookieValue);
+                // }
+                
                 // exceptions filter
                 if ( typeof(data) == 'string' && /^Unknown ALPN Protocol/.test(data) ) {
                     var err = {
@@ -1995,12 +2066,18 @@ function SuperController(options) {
 
         //starting from from >0.10.15
         req.on('error', function onError(err) {
+            
+            
+            if (
+                typeof(err.code != 'undefined') && /ECONNREFUSED|ECONNRESET/.test(err.code) 
+                || typeof(err.cause != 'undefined') && typeof(err.cause.code != 'undefined') &&  /ECONNREFUSED|ECONNRESET/.test(err.cause.code) 
+            ) {
 
-            if ( /(127\.0\.0\.1|localhost)/.test(err.address) ) {
-
-                var port = getContext('gina').ports.http[ err.port ];
-                if ( typeof(port) != 'undefined' )
-                    err.accessPoint = getContext('gina').ports.http[ err.port ];
+                var port = getContext('gina').ports[options.protocol][options.scheme.replace(/\:/, '')][ options.port ];//err.port || err.cause.port 
+                if ( typeof(port) != 'undefined' ) {
+                    err.accessPoint = port;
+                    err.message = '`Controller::query()` could not connect to [ ' + err.accessPoint + ' ] using port '+options.port+'.\n';
+                }
             }
 
 
@@ -2100,7 +2177,8 @@ function SuperController(options) {
             console.warn('[ CONTROLLER ][ HTTP/2.0#query ] options.ca not found !');
         }
         
-        var body = options.queryData;
+        var body = Buffer.from(options.queryData);
+        options.headers['Content-Length'] = body.length;
         delete options.queryData;
                 
         const client = browser.connect(options.hostname, options);
@@ -2124,11 +2202,19 @@ function SuperController(options) {
         });
         
         const {
+            HTTP2_HEADER_SCHEME,
+            HTTP2_HEADER_AUTHORITY,
             HTTP2_HEADER_PATH,
+            HTTP2_HEADER_METHOD,
             HTTP2_HEADER_STATUS
           } = browser.constants;
 
-        const req = client.request({ [HTTP2_HEADER_PATH]: options[':path'] });
+        const req = client.request( merge({ 
+            [HTTP2_HEADER_METHOD]: options[':method'],
+            [HTTP2_HEADER_PATH]: options[':path'] 
+        }, options.headers) );
+        //const req = client.request({ [HTTP2_HEADER_PATH]: options[':path'] });
+        //const req = client.request(options);
         //const req = client.request(options);
         // getting headers infos
         // req.on('response', (headers, flags) => {
@@ -2147,11 +2233,17 @@ function SuperController(options) {
         
         req.on('error', (err) => {
                 
-            if ( /(127\.0\.0\.1|localhost|127\.0\.0\.2)/.test(err.address) ) {
-
-                var port = getContext('gina').ports[options.protocol][options.scheme][ err.port ];
-                if ( typeof(port) != 'undefined' )
+            //if ( /(127\.0\.0\.1|localhost|127\.0\.0\.2)/.test(err.address) ) {
+            if ( 
+                typeof(err.cause != 'undefined') && /ECONNREFUSED/.test(err.cause.code) 
+                || /ECONNREFUSED/.test(err.code) 
+            ) {
+                
+                var port = getContext('gina').ports[options.protocol][options.scheme.replace(/\:/, '')][ options.port ];//err.port || err.cause.port 
+                if ( typeof(port) != 'undefined' ) {
                     err.accessPoint = port;
+                    err.message = 'Could not connect to [ ' + err.accessPoint + ' ].\n' + err.message;
+                }                    
             }
 
 
@@ -2235,11 +2327,11 @@ function SuperController(options) {
             
         });
                
-        // if ( typeof(body) != 'undefined' && body != '' ) {
-        //     req.end(body);
-        // } else {
-        //     req.end();
-        // } 
+        if ( typeof(body) != 'undefined' && body != '' ) {
+            req.end(body);
+        } else {
+            req.end();
+        } 
         
         return {
             onComplete  : function(cb) {
@@ -2496,7 +2588,11 @@ function SuperController(options) {
             var msg             = code || null
                 , code          = res || 500
                 , res           = local.res;
-        }
+        } /**else if ( typeof(msg) != 'undefined' && msg instanceof Error ) {
+            var err = JSON.parse(JSON.stringify(msg));
+            msg = err.message;
+            code = 
+        }*/
 
         var req     = local.req;
         var next    = local.next;
@@ -2525,7 +2621,7 @@ function SuperController(options) {
                     res.writeHead(code, "Content-Type", local.options.conf.server.coreConfiguration.mime['json'])
                 }
 
-                console.error('[ BuNDLE ][ '+ local.options.conf.bundle +' ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
+                console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
                 res.end(JSON.stringify({
                     status: code,
                     error: msg.error || msg,
@@ -2539,7 +2635,7 @@ function SuperController(options) {
                 var msgString = '<h1 class="status">Error '+ code +'.</h1>';
                 var eCode = code.toString().substr(0,1);
                 
-                console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
+                console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
                 if ( typeof(msg) == 'object' ) {
 
                     if (msg.title) {

@@ -54,8 +54,9 @@ function Connector(dbString) {
         try {
             dbString        = merge(dbString, local.options);
             local.options   = dbString;
+            local.bundle    = getConfig().bundle
 
-            console.info('[ CONNECTOR ] [ ' + dbString.connector +' ] connecting to couchbase cluster');
+            console.info('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ] connecting to couchbase cluster');
             self.cluster = new couchbase.Cluster(dbString.protocol + dbString.host);
             // version 5.x
             if ( typeof(self.cluster.authenticate) != 'undefined' )
@@ -64,7 +65,7 @@ function Connector(dbString) {
             self
                 .connect(dbString)
                 .on('error', function(err){
-                    console.emerg('[ CONNECTOR ] [ '+ dbString.database +' ] Handshake aborted ! PLease check that Couchbase is running.\n',  err.message);
+                    console.emerg('[ CONNECTOR ][ ' + local.bundle +' ][ '+ dbString.database +' ] Handshake aborted ! PLease check that Couchbase is running.\n',  err.message);                    
                 })
                 .once('connect', function () {
                     // default driver does not trigger any conn event, so we have to intercept it thu gina
@@ -86,7 +87,7 @@ function Connector(dbString) {
                             || /cannot perform operations on a shutdown bucket/.test(err.message ) && !self.reconnecting && !self.reconnected
                         ) {
                             // reconnecting
-                            console.debug('[ CONNECTOR ] [ ' + dbString.database +' ] trying to reconnect...');
+                            console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] trying to reconnect...');
                             self.reconnecting = true;
                             if ( typeof(next) != 'undefined' ) {
                                 self.connect(dbString, next)
@@ -100,14 +101,14 @@ function Connector(dbString) {
                             if (typeof(next) != 'undefined') {
                                 next(err); // might just be a "false" error: `err` is replaced with cb() caller `data`
                             } else {
-                                console.error('[ CONNECTOR ] [ ' + dbString.database +' ] gina fatal error: ' + err.message + '\nstack: '+ err.stack);
+                                console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
                                 return;
                             }
                         } else {
 
                             if (err && err instanceof Error) {
 
-                                console.error('[ CONNECTOR ] [ ' + dbString.database +' ] gina fatal error: ' + err.message + '\nstack: '+ err.stack);
+                                console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
                                 
                                 if ( typeof(err) == 'object' ) {
                                     res.end(JSON.stringify({
@@ -125,7 +126,7 @@ function Connector(dbString) {
                                 if (typeof(next) != 'undefined') {
                                     next(err); // might just be a "false" error: `err` is replaced with cb() caller `data`
                                 } else {
-                                    console.error('[ CONNECTOR ] [ ' + dbString.database +' ] gina fatal error: ' + err.message + '\nstack: '+ err.stack);
+                                    console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
                                     return;
                                 }
                             }                            
@@ -164,7 +165,7 @@ function Connector(dbString) {
             // will send heartbeat every 4 minutes if keepAlive == `true`
             self.ping(options.pingInterval, function(){
 
-                console.debug('[ CONNECTOR ] [ctx] ', getConfig().bundle, getConfig().env );
+                console.debug('[ CONNECTOR ][ ctx ] ', getConfig().bundle, getConfig().env );
                 // updating context
                 // var ctx = getContext()
                 //     , bundle = ctx.bundle
@@ -214,7 +215,8 @@ function Connector(dbString) {
 
         conn.on('error', function (err) {
             delete self.reconnecting;
-            self.reconnected = false
+            self.reconnected = false;
+            console.error('[ CONNECTOR ][ ' + local.bundle +' ] couchbase could not be reached !!\n'+ ( err.stack || err.message || err ) );
         });
 
         return conn
@@ -267,7 +269,8 @@ function Connector(dbString) {
             self.pingId = setInterval(function onTimeout(){
                 
                 if (!self.instance.connected) {
-                    console.debug('[ CONNECTOR ] [ ' + local.bundle +' ] connection is dead: trying to reconnect');
+                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connecting to couchbase');
+                    
                     self.reconnected = false;
                     self.reconnecting = true;
                     if ( typeof(next) != 'undefined' ) {
@@ -278,7 +281,19 @@ function Connector(dbString) {
                     
                 } else {
                     self.instance.get('heartbeat', function(err, res){
-                        console.debug('[ CONNECTOR ] [ ' + local.bundle +' ] connection is being kept alive ...')
+                        if (err) {
+                            console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connection encountered the following error: \n'+ ( err.stack || err.message || err ) );
+                            clearInterval(self.pingId );
+                            self.reconnected = false;
+                            self.reconnecting = true;
+                            if ( typeof(next) != 'undefined' ) {
+                                self.connect(dbString, next)
+                            } else {
+                                self.connect(dbString)
+                            }
+                        } else {
+                            console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connection is being kept alive ...')
+                        }                        
                     })
                 }
                                 
@@ -286,7 +301,7 @@ function Connector(dbString) {
             cb()
         } else {
             self.instance.get('heartbeat', function(err, result){
-                console.debug('[ CONNECTOR ] [ ' + local.bundle +' ] sent ping to couchbase ...');
+                console.debug('[ CONNECTOR ][ ' + local.bundle +' ] sent ping to couchbase ...');
                 cb()
             })
         }

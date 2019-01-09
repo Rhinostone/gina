@@ -662,13 +662,11 @@ function CmdHelper(cmd, client) {
 
 
     exit = function(errorMessage) {
-        
+        // CMD Client exit
         if ( typeof(errorMessage) != 'undefined' ) {
             client.write(errorMessage + '\n');
+            client.end();
         }
-
-        // CMD exit
-        process.exit(0)
     }
 };
 

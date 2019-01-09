@@ -165,6 +165,7 @@ function ServerEngineClass(options) {
                 } else {
                     request.params[0] = request.url
                 }
+                               
                                 
                 
                 // next._index     = 0;
@@ -241,14 +242,43 @@ function ServerEngineClass(options) {
         if (fns.length === 0) {
           throw new TypeError('server.use() requires a middleware function')
         }
-      
         
-        this._expressMiddlewares = merge(this._expressMiddlewares, fns);
+        fns.forEach(function (fn) {
+            // non-express app
+            // if (!fn || !fn.handle || !fn.set) {
+            //     return router.use(path, fn);
+            // }
+        
+            //console.debug('.use app under %s', fn);
+            // fn.mountpath = path;
+            // fn.parent = this;
+        
+            // // restore .app property on req and res
+            // router.use(path, function mounted_app(req, res, next) {
+            //     var orig = req.app;
+            //     fn.handle(req, res, function (err) {
+            //     setPrototypeOf(req, orig.request)
+            //     setPrototypeOf(res, orig.response)
+            //     next(err);
+            // });
+            
+            ///server._expressMiddlewares = merge(server._expressMiddlewares, fn);
+            server._expressMiddlewares[server._expressMiddlewares.length] = fn;
+        });
+        
+        // if ( typeof(fn) == 'function' ) {
+        //     this._expressMiddlewares = merge(this._expressMiddlewares, fn);
+        // }
+    
+        
+        //this._expressMiddlewares = merge(this._expressMiddlewares, fns[0]);
         
         return this;
     }
 
-    // server.on('error', (err) => console.error(err));
+    server.on('error', (err) => {
+        console.error(err)
+    });
 
     // server.on('stream', (stream, headers) => {
     //     // stream is a Duplex

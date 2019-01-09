@@ -23,6 +23,7 @@ function DateFormatHelper() {
 
     self.masks = {
         "default":      "ddd mmm dd yyyy HH:MM:ss",
+        cookieDate:     "GMT:ddd, dd mmm yyyy HH:MM:ss",
         shortDate:      "m/d/yy",
         shortDate2:      "mm/dd/yyyy",
         mediumDate:     "mmm d, yyyy",
@@ -156,8 +157,8 @@ function DateFormatHelper() {
     /**
      *  Count days from the current date to another
      *
-     *  TODO - add a closure to `ignoreWeekend()` based on Utils::Validator
-     *  TODO - add a closure to `ignoreFromList(array)` based on Utils::Validator
+     *  TODO - add a closure to `ignoreWeekend()` based on Lib::Validator
+     *  TODO - add a closure to `ignoreFromList(array)` based on Lib::Validator
      *
      *  @param {object} dateTo
      *  @return {number} count
