@@ -160,6 +160,10 @@ function Server(options) {
             process.exit(1)
         }
     }
+    
+    this.isCacheless = function() {
+        return (GINA_ENV_IS_DEV) ? true : false
+    }
 
     this.onConfigured = function(callback) {
         self.once('configured', function(err, instance, middleware, conf) {
@@ -351,7 +355,7 @@ function Server(options) {
                             // This is only an issue when it comes to the frontend dev
                             // views.useRouteNameAsFilename is set to true by default
                             // IF [ false ] the action is used as filename
-                            if ( !conf.envConf[apps[i]][self.env].content['views']['default'].useRouteNameAsFilename && tmp[rule].param.bundle != 'framework') {
+                            if ( !conf.envConf[apps[i]][self.env].content['templates']['default'].useRouteNameAsFilename && tmp[rule].param.bundle != 'framework') {
                                 var tmpRouting = [];
                                 for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
                                     if (/[A-Z]/.test(tmp[rule].param.file.charAt(r))) {
@@ -419,7 +423,7 @@ function Server(options) {
         if (typeof(local.hasViews[bundle]) != 'undefined') {
             _hasViews = local.hasViews[bundle];
         } else {
-            _hasViews = ( typeof(conf.envConf[bundle][self.env].content['views']) != 'undefined' ) ? true : false;
+            _hasViews = ( typeof(conf.envConf[bundle][self.env].content['templates']) != 'undefined' ) ? true : false;
             local.hasViews[bundle] = _hasViews;
         }
 
@@ -568,6 +572,107 @@ function Server(options) {
 
         return obj;
     }
+    
+    /**
+     * Handle statics 
+     * @param {object} staticProps - Expected : .isFile & .firstLevel
+     * 
+     * @param {*} request 
+     * @param {*} response 
+     * @param {*} next 
+     */
+    var handleStatics = function(staticProps, request, response, next) {        
+        
+        var pathname        = request.url
+            //, conf          = getContext('gina').config
+            , conf          = self.conf
+            , bundleConf    = conf[self.appName][self.env]
+        ;
+        
+        var cacheless       = bundleConf.cacheless;  
+        // by default
+        var filename        = bundleConf.publicPath + pathname;
+        
+        // catch `statics.json` defined paths
+        var staticIndex     = bundleConf.staticResources.indexOf(pathname);
+        if ( staticProps.isFile && staticIndex > -1 ) {
+            filename =  bundleConf.content.statics[ bundleConf.staticResources[staticIndex] ]
+        } else {
+            var s = 0, sLen = bundleConf.staticResources.length;
+            for ( ; s < sLen; ++s ) {
+                //if ( new RegExp('^'+ bundleConf.staticResources[s]).test(pathname) ) {                 
+                if ( eval('/^' + bundleConf.staticResources[s].replace(/\//g,'\\/') +'/').test(pathname) ) {
+                    filename = bundleConf.content.statics[ bundleConf.staticResources[s] ] +'/'+ pathname.replace(bundleConf.staticResources[s], '');
+                    break;
+                }
+            } 
+        }
+        
+        
+        fs.exists(filename, function onStaticExists(exist) {
+            
+            if (!exist) {
+                throwError(response, 404, 'Page not found: \n' + pathname, next);
+            } else {
+                
+                if ( fs.statSync(filename).isDirectory() ) {
+                    pathname += 'index.html';
+                    filename += 'index.html';
+                    
+                    if ( !fs.existsSync(filename) ) {
+                        throwError(response, 404, 'Page not found: \n' + pathname, next);  
+                        return;
+                    }
+                }
+                    
+
+                if (cacheless)
+                    delete require.cache[require.resolve(filename)];
+                
+
+                fs.readFile(filename, "binary", function(err, file) {
+                    if (err) {
+                        throwError(response, 404, 'Page not found: \n' + pathname, next);                        
+                    } else if (!response.headersSent) {
+                        try {
+                            response.setHeader("Content-Type", getHead(filename));
+                            // adding handler `gina.ready(...)` wrapper
+                            var hanlersPath   = bundleConf.handlersPath;
+
+                            if ( new RegExp('^'+ hanlersPath).test(filename) ) {
+                                file = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));'
+                            }
+
+                            if (cacheless) {
+                                // source maps integration for javascript & css
+                                if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') ) {
+                                    response.setHeader("X-SourceMap", pathname +'.map')
+                                }
+
+                                // serve without cache
+                                response.writeHead(200, {
+                                    'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
+                                    'Pragma': 'no-cache',
+                                    'Expires': '0'
+                                });
+
+                            } else {
+                                response.writeHead(200)
+                            }
+
+                            response.write(file, 'binary');
+                            response.end()
+                        } catch(err) {
+                            throwError(response, 500, err.stack)
+                        }
+                    }
+                    
+                    return
+                    
+                });
+            }
+        })
+    }
 
     var onRequest = function() {
 
@@ -588,497 +693,332 @@ function Server(options) {
                 request.url = self.conf[self.appName][self.env].server.webroot
             }
             
+            // priority to statics
+            var staticsArr = self.conf[self.appName][self.env].publicResources;
+            var staticProps = {
+                firstLevel  : '/'+ request.url.split(/\//g)[1] + '/',
+                isFile      :  /^\/[A-Za-z0-9_-]+\.(.*)$/.test(request.url)
+            };            
             
-            request.body    = {};
-            request.get     = {};
-            request.post    = {};
-            request.put     = {};
-            request.delete  = {};
-            request.files   = [];
-            //request.patch = {}; ???
-            //request.cookies = {}; // ???
-            
-            // be carfull, if you are using jQuery + cross domain, you have to set the header manually in your $.ajax query -> headers: {'X-Requested-With': 'XMLHttpRequest'}
-            self.conf[self.appName][self.env].server.request.isXMLRequest       = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
+            if ( 
+                staticProps.isFile && staticsArr.indexOf(request.url) > -1 
+                || staticsArr.indexOf(staticProps.firstLevel) > -1
+            ) {
+                handleStatics(staticProps, request, response, next);
+            } else { // none statics
+                request.body    = {};
+                request.get     = {};
+                request.post    = {};
+                request.put     = {};
+                request.delete  = {};
+                request.files   = [];
+                //request.patch = {}; ???
+                //request.cookies = {}; // ???
+                
+                // be carfull, if you are using jQuery + cross domain, you have to set the header manually in your $.ajax query -> headers: {'X-Requested-With': 'XMLHttpRequest'}
+                self.conf[self.appName][self.env].server.request.isXMLRequest       = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
 
-            // Passing credentials :
-            //      - if you are using jQuery + cross domain, you have to set the `xhrFields` in your $.ajax query -> xhrFields: { withCredentials: true }
-            //      - if you are using another solution or doing it by hand, make sure to properly set the header: headers: {'Access-Control-Allow-Credentials': true }
-            /**
-             * NB.: jQuery
-             * The `withCredentials` property will include any cookies from the remote domain in the request,
-             * and it will also set any cookies from the remote domain.
-             * Note that these cookies still honor same-origin policies, so your JavaScript code can’t access the cookies
-             * from document.cookie or the response headers.
-             * They can only be controlled/produced by the remote domain.
-             * */
-            self.conf[self.appName][self.env].server.request.isWithCredentials  = ( request.headers['access-control-allow-credentials'] && request.headers['access-control-allow-credentials'] == true ) ? true : false;
-                        
-            
-            // multipart wrapper for uploads
-            // files are available from your controller or any middlewares:
-            //  @param {object} req.files            
-            if ( /multipart\/form-data;/.test(request.headers['content-type']) ) {
-                // TODO - get options from settings.json & settings.{env}.json ...
-                // -> https://github.com/andrewrk/node-multiparty
-                var opt = self.conf[self.appName][self.env].content.settings.upload;
-                // checking size
-                var maxSize     = parseInt(opt.maxFieldsSize);
-                var fileSize    = request.headers["content-length"]/1024/1024; //MB
-
-                if (fileSize > maxSize) {
-                    throwError(response, 431, 'Attachment exceeded maximum file size [ '+ opt.maxFieldsSize +' ]');
-                    return false
-                }
-
-                var uploadDir = opt.uploadDir || os.tmpdir();
-
-                /** 
-                 * str2ab
-                 * One common practical question about ArrayBuffer is how to convert a String to an ArrayBuffer and vice-versa.
-                 * Since an ArrayBuffer is, in fact, a byte array, this conversion requires that both ends agree on how 
-                 * to represent the characters in the String as bytes. 
-                 * You probably have seen this "agreement" before: it is the 
-                 * String's character encoding (and the usual "agreement terms" are, for example, Unicode UTF-16 and iso8859-1). 
-                 * Thus, supposing you and the other party have agreed on the UTF-16 encoding 
-                 * 
-                 * ref.: 
-                 *  - https://developers.google.com/web/updates/2012/06/How-to-convert-ArrayBuffer-to-and-from-String
-                 *  - https://jsperf.com/arraybuffer-string-conversion/4
-                 * 
-                 * @param {string} str
-                 * 
-                 * @returns {array} buffer
+                // Passing credentials :
+                //      - if you are using jQuery + cross domain, you have to set the `xhrFields` in your $.ajax query -> xhrFields: { withCredentials: true }
+                //      - if you are using another solution or doing it by hand, make sure to properly set the header: headers: {'Access-Control-Allow-Credentials': true }
+                /**
+                 * NB.: jQuery
+                 * The `withCredentials` property will include any cookies from the remote domain in the request,
+                 * and it will also set any cookies from the remote domain.
+                 * Note that these cookies still honor same-origin policies, so your JavaScript code can’t access the cookies
+                 * from document.cookie or the response headers.
+                 * They can only be controlled/produced by the remote domain.
                  * */
-                var str2ab = function(str, bits) {
-                    
-                    var bytesLength = str.length
-                        //, bits         = 8 // default bytesLength
-                        , bits      = ( typeof (bits) != 'undefined' ) ? (bits/8) : 1 
-                        , buffer    = new ArrayBuffer(bytesLength * bits) // `bits`  bytes for each char
-                        , bufView   = null;
-
-                    switch (bytesLength) {
-                        case 8:
-                            bufView = new Uint8Array(buffer);
-                            break;
-
-                        case 16:
-                            bufView = new Uint16Array(buffer);
-                            break;
-
-                        case 32:
-                            bufView = new Uint32Array(buffer);
-                            break;
-                    
-                        default:
-                            bufView = new Uint8Array(buffer);
-                            break;
-                    }
-                    //var buf = new ArrayBuffer(str.length * 2); // 2 bytes for each char when using Uint16Array(buf)
-                    //var buf = new ArrayBuffer(str.length); // Uint8Array
-                    //var bufView = new Uint8Array(buf);
-                    for (var i = 0, strLen = str.length; i < strLen; i++) {
-                        bufView[i] = str.charCodeAt(i);
-                    }
-                    
-                    return buffer;
-                }; 
-
-                /**
-                 * str2ab
-                 * 
-                 * With TypedArray now available, the Buffer class implements the Uint8Array API 
-                 * in a manner that is more optimized and suitable for Node.js.
-                 * ref.:
-                 *  - https://nodejs.org/api/buffer.html#buffer_buffer_from_buffer_alloc_and_buffer_allocunsafe
-                 * 
-                 * @param {string} str
-                 *
-                 * @returns {array} buffer
-                 */
-                // var str2ab = function(str, encoding) {
-                    
-                //     const buffer = Buffer.allocUnsafe(str.length);
-
-                //     for (let i = 0, len = str.len; i < len; i++) {
-                //         buffer[i] = str.charCodeAt(i);
-                //     }
-
-                //     return buffer;
-                // }
+                self.conf[self.appName][self.env].server.request.isWithCredentials  = ( request.headers['access-control-allow-credentials'] && request.headers['access-control-allow-credentials'] == true ) ? true : false;
+                            
                 
+                // multipart wrapper for uploads
+                // files are available from your controller or any middlewares:
+                //  @param {object} req.files            
+                if ( /multipart\/form-data;/.test(request.headers['content-type']) ) {
+                    // TODO - get options from settings.json & settings.{env}.json ...
+                    // -> https://github.com/andrewrk/node-multiparty
+                    var opt = self.conf[self.appName][self.env].content.settings.upload;
+                    // checking size
+                    var maxSize     = parseInt(opt.maxFieldsSize);
+                    var fileSize    = request.headers["content-length"]/1024/1024; //MB
 
-                var fileObj         = null
-                    , tmpFilename   = null
-                    , writeStreams  = []
-                    , index         = 0;
-
-                request.files = [];
-
-                var busboy = new Busboy({ headers: request.headers });
-                busboy.on('file', function(fieldname, file, filename, encoding, mimetype) {
-                    
-                    file._dataLen = 0; 
-                    // TODO - https://github.com/TooTallNate/node-wav
-                    //file._mimetype = mimetype;
-                    
-                    
-                    writeStreams[index] = fs.createWriteStream( _(uploadDir + '/' + filename) );
-                    // https://strongloop.com/strongblog/practical-examples-of-the-new-node-js-streams-api/
-                    var liner = new require('stream').Transform({objectMode: true});
-                   
-                    liner._transform = function (chunk, encoding, done) {
-                        
-                        var str = chunk.toString();
-                        file._dataLen += str.length;
-                    
-                        var ab = Buffer.from(str2ab(str));
-                        this.push(ab)
-                        
-                        done()
-                    }
-                    
-                //     liner._flush = function (done) {
-                        
-                //         done()
-                //     }
-                                                        
-                    file.pipe(liner).pipe(writeStreams[index]);                    
-                    ++index;
-                    
-
-                    file.on('end', function() {
-                        
-                        //fileObj = Buffer.from(str2ab(this._dataChunk));
-                        //delete this._dataChunk;
-                        
-                        tmpFilename = _(uploadDir + '/' + filename);
-
-                        request.files.push({
-                            name: fieldname,
-                            originalFilename: filename,
-                            encoding: encoding,
-                            type: mimetype,
-                            size: this._dataLen,
-                            path: tmpFilename
-                        });
-                        
-                        // write to /tmp
-                        // if (fs.existsSync(tmpFilename))
-                        //     fs.unlinkSync(tmpFilename);
-                         
-                    });
-                });
-
-                busboy.on('finish', function(params) {
-                    var total = writeStreams.length;
-                    for (var ws = 0, wsLen = writeStreams.length; ws < wsLen; ++ws ) {
-                        
-                        writeStreams[ws].on('error', function(err) {
-                            console.error('[ busboy ] [ onWriteError ]', err);
-                            throwError(response, 500, 'Internal server error\n' + err, next);
-
-                            this.close(); 
-                        });
-                        
-                        writeStreams[ws].on('finish', function() {
-                            this.close( function onUploaded(){
-                                --total;
-                                console.debug('closing it : ' + total);
-                                
-                                if (total == 0) {
-                                    loadBundleConfiguration(request, response, next, function onBundleConfigurationLoaded(err, bundle, pathname, config, req, res, next) {
-                                        if (!req.handled) {
-                                            req.handled = true;
-                                            if (err) {
-                                                if (!res.headersSent)
-                                                    throwError(response, 500, 'Internal server error\n' + err.stack, next)
-                                            } else {
-                                                handle(req, res, next, bundle, pathname, config)
-                                            }
-                                        }
-                                    })
-                                }
-                            })
-                        });
-                    }
-                });
-
-               
-                request.pipe(busboy);
-
-
-                
-                // request.body = '';
-                // request.on('data', function(chunk) { // for this to work, don't forget the name attr for you form elements
-                    
-                //     request.body += Buffer.from(new Uint8Array(chunk))
-                //     // if (!files[data.name]) {
-                //     //     files[data.name] = Object.assign({}, struct, chunk);
-                //     //     files[data.name].data = [];
-                //     // }
-                    
-                //     // //convert the ArrayBuffer to Buffer 
-                //     // data.data = Buffer.from(new Uint8Array(data.data));
-                //     // //save the data 
-                //     // files[data.name].data.push(data.data);
-                //     // files[data.name].slice++;
-
-                //     // if (files[data.name].slice * 100000 >= files[data.name].size) {
-                //     //     var fileBuffer = Buffer.concat(files[data.name].data);
-
-                //     //     fs.write(_(uploadDir +'/' + data.name), fileBuffer, (err) => {
-                //     //         delete files[data.name];
-                //     //         request.files = files;
-                //     //         //if (err) return socket.emit('upload error');
-                //     //         request.emit('end');
-                //     //     });
-                //     // }
-                // });
-
-                
-                /**
-                var i = 0, form = new multiparty.Form(opt);
-                
-                form.parse(request, function(err, fields, files) {
-                    if (err) {
-                        throwError(response, 400, err.stack||err.message);
-                        return
+                    if (fileSize > maxSize) {
+                        throwError(response, 431, 'Attachment exceeded maximum file size [ '+ opt.maxFieldsSize +' ]');
+                        return false
                     }
 
-                    if ( request.method.toLowerCase() === 'post') {
-                        for (i in fields) {
+                    var uploadDir = opt.uploadDir || os.tmpdir();
 
-                            // false & true case
-                            if ( /^(false|true|on)$/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
-                                fields[i][0] = ( /^(true|on)$/.test( fields[i][0] ) ) ? true : false;
+                    /** 
+                     * str2ab
+                     * One common practical question about ArrayBuffer is how to convert a String to an ArrayBuffer and vice-versa.
+                     * Since an ArrayBuffer is, in fact, a byte array, this conversion requires that both ends agree on how 
+                     * to represent the characters in the String as bytes. 
+                     * You probably have seen this "agreement" before: it is the 
+                     * String's character encoding (and the usual "agreement terms" are, for example, Unicode UTF-16 and iso8859-1). 
+                     * Thus, supposing you and the other party have agreed on the UTF-16 encoding 
+                     * 
+                     * ref.: 
+                     *  - https://developers.google.com/web/updates/2012/06/How-to-convert-ArrayBuffer-to-and-from-String
+                     *  - https://jsperf.com/arraybuffer-string-conversion/4
+                     * 
+                     * @param {string} str
+                     * 
+                     * @returns {array} buffer
+                     * */
+                    var str2ab = function(str, bits) {
+                        
+                        var bytesLength = str.length
+                            //, bits         = 8 // default bytesLength
+                            , bits      = ( typeof (bits) != 'undefined' ) ? (bits/8) : 1 
+                            , buffer    = new ArrayBuffer(bytesLength * bits) // `bits`  bytes for each char
+                            , bufView   = null;
 
-                            // should be: request.post[i] = fields[i];
-                            request.post[i] = fields[i][0]; // <-- to fixe on multiparty
+                        switch (bytesLength) {
+                            case 8:
+                                bufView = new Uint8Array(buffer);
+                                break;
+
+                            case 16:
+                                bufView = new Uint16Array(buffer);
+                                break;
+
+                            case 32:
+                                bufView = new Uint32Array(buffer);
+                                break;
+                        
+                            default:
+                                bufView = new Uint8Array(buffer);
+                                break;
                         }
-                    } else if ( request.method.toLowerCase() === 'get') {
-                        for (i in fields) {
-
-                            // false & true case
-                            if ( /^(false|true|on)$/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
-                                fields[i][0] = ( /^(true|on)$/.test( fields[i][0] ) ) ? true : false;
-
-                            // should be: request.get[i] = fields[i];
-                            request.get[i] = fields[i][0]; // <-- to fixe on multiparty
+                        //var buf = new ArrayBuffer(str.length * 2); // 2 bytes for each char when using Uint16Array(buf)
+                        //var buf = new ArrayBuffer(str.length); // Uint8Array
+                        //var bufView = new Uint8Array(buf);
+                        for (var i = 0, strLen = str.length; i < strLen; i++) {
+                            bufView[i] = str.charCodeAt(i);
                         }
-                    }
+                        
+                        return buffer;
+                    }; 
+
+                    /**
+                     * str2ab
+                     * 
+                     * With TypedArray now available, the Buffer class implements the Uint8Array API 
+                     * in a manner that is more optimized and suitable for Node.js.
+                     * ref.:
+                     *  - https://nodejs.org/api/buffer.html#buffer_buffer_from_buffer_alloc_and_buffer_allocunsafe
+                     * 
+                     * @param {string} str
+                     *
+                     * @returns {array} buffer
+                     */
+                    // var str2ab = function(str, encoding) {
+                        
+                    //     const buffer = Buffer.allocUnsafe(str.length);
+
+                    //     for (let i = 0, len = str.len; i < len; i++) {
+                    //         buffer[i] = str.charCodeAt(i);
+                    //     }
+
+                    //     return buffer;
+                    // }
+                    
+
+                    var fileObj         = null
+                        , tmpFilename   = null
+                        , writeStreams  = []
+                        , index         = 0;
 
                     request.files = [];
-                    var f = 0;
-                    for (var i in files) {
-                        // should be: request.files[i] = files[i];
-                        //request.files[i] = files[i][0]; // <-- to fixe on multiparty
+
+                    var busboy = new Busboy({ headers: request.headers });
+                    busboy.on('file', function(fieldname, file, filename, encoding, mimetype) {
+                        
+                        file._dataLen = 0; 
+                        // TODO - https://github.com/TooTallNate/node-wav
+                        //file._mimetype = mimetype;
                         
                         
-                        request.files[f] = {
-                            name                : files[i][f].fieldName,
-                            originalFilename    : files[i][f].originalFilename,
-                            size                : files[i][f].size,
-                            source              : files[i][f].path,
+                        writeStreams[index] = fs.createWriteStream( _(uploadDir + '/' + filename) );
+                        // https://strongloop.com/strongblog/practical-examples-of-the-new-node-js-streams-api/
+                        var liner = new require('stream').Transform({objectMode: true});
+                    
+                        liner._transform = function (chunk, encoding, done) {
+                            
+                            var str = chunk.toString();
+                            file._dataLen += str.length;
+                        
+                            var ab = Buffer.from(str2ab(str));
+                            this.push(ab)
+                            
+                            done()
                         }
+                        
+                    //     liner._flush = function (done) {
+                            
+                    //         done()
+                    //     }
+                                                            
+                        file.pipe(liner).pipe(writeStreams[index]);                    
+                        ++index;
+                        
 
-                        if ( typeof(files[i][f].headers) != 'undefined' ) {
+                        file.on('end', function() {
+                            
+                            //fileObj = Buffer.from(str2ab(this._dataChunk));
+                            //delete this._dataChunk;
+                            
+                            tmpFilename = _(uploadDir + '/' + filename);
 
-                            request.files[f].headers = files[i][f].headers;
+                            request.files.push({
+                                name: fieldname,
+                                originalFilename: filename,
+                                encoding: encoding,
+                                type: mimetype,
+                                size: this._dataLen,
+                                path: tmpFilename
+                            });
+                            
+                            // write to /tmp
+                            // if (fs.existsSync(tmpFilename))
+                            //     fs.unlinkSync(tmpFilename);
+                            
+                        });
+                    });
 
-                            if (files[i][f].headers['content-type'])
-                                request.files[f].type = files[i][f].headers['content-type'];
+                    busboy.on('finish', function(params) {
+                        var total = writeStreams.length;
+                        for (var ws = 0, wsLen = writeStreams.length; ws < wsLen; ++ws ) {
+                            
+                            writeStreams[ws].on('error', function(err) {
+                                console.error('[ busboy ] [ onWriteError ]', err);
+                                throwError(response, 500, 'Internal server error\n' + err, next);
 
-                            if (files[i][f].headers['content-length']) {
-                                files[i][f].headers['content-length'] = parseInt(files[i][f].headers['content-length']);
-
-                                request.files[f].size = files[i][f].headers['content-length'];
-                            }
-                                
-                        }
-
-                        ++f
-                    }
-
-                    if (request.fields) delete request.fields; // <- not needed anymore
-
-                    loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
-                        if (!req.handled) {
-                            req.handled = true;
-                            if (err) {
-                                if (!res.headersSent)
-                                    throwError(response, 500, 'Internal server error\n' + err.stack, next)
-                            } else {
-                                handle(req, res, next, bundle, pathname, config)
-                            }
-                        }
-                    })
-                })*/
-            } else {
-
-                request.on('data', function(chunk){ // for this to work, don't forget the name attr for you form elements
-                    if ( typeof(request.body) == 'object') {
-                        request.body = '';
-                    }
-                    request.body += chunk.toString()
-                });
-
-                request.on('end', function onEnd() {
-                        // to compare with /core/controller/controller.js -> getParams()
-                        switch( request.method.toLowerCase() ) {
-                            case 'post':
-                                var obj = {}, configuring = false;
-                                if ( typeof(request.body) == 'string' ) {
-                                    // get rid of encoding issues
-                                    try {
-                                        if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
-                                                request.body = request.body.replace(/\+/g, ' ');
-                                            }
-
-                                            if ( request.body.substr(0,1) == '?')
-                                                request.body = request.body.substr(1);
-
-                                            // false & true case
-                                            if ( /(\"false\"|\"true\"|\"on\")/.test(request.body) )
-                                                request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-
-                                            obj = parseBody(request.body);
-                                            if (obj.count() == 0 && request.body.length > 1) {
-                                                try {
-                                                    request.post = JSON.parse(request.body);
-                                                } catch (err) {}
-                                            }
-                                        }
-
-                                    } catch (err) {
-                                        var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
-                                        console.warn(msg);
-                                    }
-
-                                } else {
-                                    // 2016-05-19: fix to handle requests from swagger/express
-                                    if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
-                                        request.body = request.query
-                                    }
-                                    var bodyStr = JSON.stringify(request.body);
-                                    // false & true case
-                                    if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
-                                        bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-
-                                    obj = JSON.parse(bodyStr)
-                                }
-
-                                if ( obj.count() > 0 ) {
-                                    // still need this to allow compatibility with express & connect middlewares
-                                    request.body = request.post = obj;
-                                }
-
-                                // see.: https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#POST
-                                //     Responses to this method are not cacheable,
-                                //     unless the response includes appropriate Cache-Control or Expires header fields.
-                                //     However, the 303 (See Other) response can be used to direct the user agent to retrieve a cacheable resource.
-                                response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-                                response.setHeader('Pragma', 'no-cache');
-                                response.setHeader('Expires', '0');
-
-                                // cleaning
-                                request.query   = undefined;
-                                request.get     = undefined;
-                                request.put     = undefined;
-                                request.delete  = undefined;
-                                break;
-
-                            case 'get':
-                                if ( typeof(request.query) != 'undefined' && request.query.count() > 0 ) {
-                                    request.get = request.query;
-                                }
-                                // else, wilol be matching route params against url context instead once route is identified
-
-
-                                // cleaning
-                                request.query   = undefined;
-                                request.post    = undefined;
-                                request.put     = undefined;
-                                request.delete  = undefined;
-                                break;
-
-                            case 'put':
-                                // eg.: PUT /user/set/1
-                                var obj = {};
-                                if ( typeof(request.body) == 'string' ) {
-                                    // get rid of encoding issues
-                                    try {
-                                        if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                                            if ( !/application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
-                                                request.body = request.body.replace(/\+/g, ' ');
-                                            }
-
-                                            if ( request.body.substr(0,1) == '?')
-                                                request.body = request.body.substr(1);
-
-                                            // false & true case
-                                            if ( /(\"false\"|\"true\"|\"on\")/.test(request.body) )
-                                                request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-
-                                            obj = parseBody(request.body);
-
-                                            if ( typeof(obj) != 'undefined' && obj.count() == 0 && request.body.length > 1 ) {
-                                                try {
-                                                    request.put = merge(request.put, JSON.parse(request.body));
-                                                } catch (err) {
-                                                    console.log('Case `put` #0 [ merge error ]: ' + (err.stack||err.message))
+                                this.close(); 
+                            });
+                            
+                            writeStreams[ws].on('finish', function() {
+                                this.close( function onUploaded(){
+                                    --total;
+                                    console.debug('closing it : ' + total);
+                                    
+                                    if (total == 0) {
+                                        loadBundleConfiguration(request, response, next, function onBundleConfigurationLoaded(err, bundle, pathname, config, req, res, next) {
+                                            if (!req.handled) {
+                                                req.handled = true;
+                                                if (err) {
+                                                    if (!res.headersSent)
+                                                        throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                                                } else {
+                                                    handle(req, res, next, bundle, pathname, config)
                                                 }
                                             }
-                                        }
-
-                                    } catch (err) {
-                                        var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
-                                        console.error(msg);
-                                        throwError(response, 500, msg);
+                                        })
                                     }
+                                })
+                            });
+                        }
+                    });
 
-                                } else {
-                                    // 2016-05-19: fix to handle requests from swagger/express
-                                    if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
-                                        request.body = request.query
-                                    }
-                                    var bodyStr = JSON.stringify(request.body);
-                                    // false & true case
-                                    if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
-                                        bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                
+                    request.pipe(busboy);
 
-                                    obj = JSON.parse(bodyStr)
+
+                    
+                    // request.body = '';
+                    // request.on('data', function(chunk) { // for this to work, don't forget the name attr for you form elements
+                        
+                    //     request.body += Buffer.from(new Uint8Array(chunk))
+                    //     // if (!files[data.name]) {
+                    //     //     files[data.name] = Object.assign({}, struct, chunk);
+                    //     //     files[data.name].data = [];
+                    //     // }
+                        
+                    //     // //convert the ArrayBuffer to Buffer 
+                    //     // data.data = Buffer.from(new Uint8Array(data.data));
+                    //     // //save the data 
+                    //     // files[data.name].data.push(data.data);
+                    //     // files[data.name].slice++;
+
+                    //     // if (files[data.name].slice * 100000 >= files[data.name].size) {
+                    //     //     var fileBuffer = Buffer.concat(files[data.name].data);
+
+                    //     //     fs.write(_(uploadDir +'/' + data.name), fileBuffer, (err) => {
+                    //     //         delete files[data.name];
+                    //     //         request.files = files;
+                    //     //         //if (err) return socket.emit('upload error');
+                    //     //         request.emit('end');
+                    //     //     });
+                    //     // }
+                    // });
+
+                    
+                    /**
+                    var i = 0, form = new multiparty.Form(opt);
+                    
+                    form.parse(request, function(err, fields, files) {
+                        if (err) {
+                            throwError(response, 400, err.stack||err.message);
+                            return
+                        }
+
+                        if ( request.method.toLowerCase() === 'post') {
+                            for (i in fields) {
+
+                                // false & true case
+                                if ( /^(false|true|on)$/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
+                                    fields[i][0] = ( /^(true|on)$/.test( fields[i][0] ) ) ? true : false;
+
+                                // should be: request.post[i] = fields[i];
+                                request.post[i] = fields[i][0]; // <-- to fixe on multiparty
+                            }
+                        } else if ( request.method.toLowerCase() === 'get') {
+                            for (i in fields) {
+
+                                // false & true case
+                                if ( /^(false|true|on)$/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
+                                    fields[i][0] = ( /^(true|on)$/.test( fields[i][0] ) ) ? true : false;
+
+                                // should be: request.get[i] = fields[i];
+                                request.get[i] = fields[i][0]; // <-- to fixe on multiparty
+                            }
+                        }
+
+                        request.files = [];
+                        var f = 0;
+                        for (var i in files) {
+                            // should be: request.files[i] = files[i];
+                            //request.files[i] = files[i][0]; // <-- to fixe on multiparty
+                            
+                            
+                            request.files[f] = {
+                                name                : files[i][f].fieldName,
+                                originalFilename    : files[i][f].originalFilename,
+                                size                : files[i][f].size,
+                                source              : files[i][f].path,
+                            }
+
+                            if ( typeof(files[i][f].headers) != 'undefined' ) {
+
+                                request.files[f].headers = files[i][f].headers;
+
+                                if (files[i][f].headers['content-type'])
+                                    request.files[f].type = files[i][f].headers['content-type'];
+
+                                if (files[i][f].headers['content-length']) {
+                                    files[i][f].headers['content-length'] = parseInt(files[i][f].headers['content-length']);
+
+                                    request.files[f].size = files[i][f].headers['content-length'];
                                 }
+                                    
+                            }
 
-                                if ( obj && typeof(obj) != 'undefined' && obj.count() > 0 ) {
-                                    // still need this to allow compatibility with express & connect middlewares
-                                    request.body = request.put = merge(request.put, obj);
-                                }
+                            ++f
+                        }
 
-
-                                request.query   = undefined; // added on september 13 2016
-                                request.post    = undefined;
-                                request.delete  = undefined;
-                                request.get     = undefined;
-                                break;
-
-
-                            case 'delete':
-                                if ( request.query.count() > 0 ) {
-                                    request.delete = request.query;
-
-                                }
-                                // else, matching route params against url context instead once route is identified
-
-                                request.post    = undefined;
-                                request.put     = undefined;
-                                request.get     = undefined;
-                                break
-
-
-                        };
+                        if (request.fields) delete request.fields; // <- not needed anymore
 
                         loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
                             if (!req.handled) {
@@ -1086,22 +1026,203 @@ function Server(options) {
                                 if (err) {
                                     if (!res.headersSent)
                                         throwError(response, 500, 'Internal server error\n' + err.stack, next)
-                                } else {                                    
-                                    handle(req, res, next, bundle, pathname, config)                                                                       
+                                } else {
+                                    handle(req, res, next, bundle, pathname, config)
                                 }
-                            } else {
-                                if (typeof(next) != 'undefined')
-                                    next();
-                                else
-                                    return;
                             }
                         })
+                    })*/
+                } else {
 
-                });
+                    request.on('data', function(chunk){ // for this to work, don't forget the name attr for you form elements
+                        if ( typeof(request.body) == 'object') {
+                            request.body = '';
+                        }
+                        request.body += chunk.toString()
+                    });
 
-                if (request.end) request.end();
+                    request.on('end', function onEnd() {
+                            // to compare with /core/controller/controller.js -> getParams()
+                            switch( request.method.toLowerCase() ) {
+                                case 'post':
+                                    var obj = {}, configuring = false;
+                                    if ( typeof(request.body) == 'string' ) {
+                                        // get rid of encoding issues
+                                        try {
+                                            if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                                                if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
+                                                    request.body = request.body.replace(/\+/g, ' ');
+                                                }
 
-            } //EO if multipart
+                                                if ( request.body.substr(0,1) == '?')
+                                                    request.body = request.body.substr(1);
+
+                                                // false & true case
+                                                if ( /(\"false\"|\"true\"|\"on\")/.test(request.body) )
+                                                    request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+
+                                                obj = parseBody(request.body);
+                                                if (obj.count() == 0 && request.body.length > 1) {
+                                                    try {
+                                                        request.post = JSON.parse(request.body);
+                                                    } catch (err) {}
+                                                }
+                                            }
+
+                                        } catch (err) {
+                                            var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
+                                            console.warn(msg);
+                                        }
+
+                                    } else {
+                                        // 2016-05-19: fix to handle requests from swagger/express
+                                        if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
+                                            request.body = request.query
+                                        }
+                                        var bodyStr = JSON.stringify(request.body);
+                                        // false & true case
+                                        if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                                            bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+
+                                        obj = JSON.parse(bodyStr)
+                                    }
+
+                                    if ( obj.count() > 0 ) {
+                                        // still need this to allow compatibility with express & connect middlewares
+                                        request.body = request.post = obj;
+                                    }
+
+                                    // see.: https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#POST
+                                    //     Responses to this method are not cacheable,
+                                    //     unless the response includes appropriate Cache-Control or Expires header fields.
+                                    //     However, the 303 (See Other) response can be used to direct the user agent to retrieve a cacheable resource.
+                                    response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                                    response.setHeader('Pragma', 'no-cache');
+                                    response.setHeader('Expires', '0');
+
+                                    // cleaning
+                                    request.query   = undefined;
+                                    request.get     = undefined;
+                                    request.put     = undefined;
+                                    request.delete  = undefined;
+                                    break;
+
+                                case 'get':
+                                    if ( typeof(request.query) != 'undefined' && request.query.count() > 0 ) {
+                                        request.get = request.query;
+                                    }
+                                    // else, wilol be matching route params against url context instead once route is identified
+
+
+                                    // cleaning
+                                    request.query   = undefined;
+                                    request.post    = undefined;
+                                    request.put     = undefined;
+                                    request.delete  = undefined;
+                                    break;
+
+                                case 'put':
+                                    // eg.: PUT /user/set/1
+                                    var obj = {};
+                                    if ( typeof(request.body) == 'string' ) {
+                                        // get rid of encoding issues
+                                        try {
+                                            if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                                                if ( !/application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
+                                                    request.body = request.body.replace(/\+/g, ' ');
+                                                }
+
+                                                if ( request.body.substr(0,1) == '?')
+                                                    request.body = request.body.substr(1);
+
+                                                // false & true case
+                                                if ( /(\"false\"|\"true\"|\"on\")/.test(request.body) )
+                                                    request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+
+                                                obj = parseBody(request.body);
+
+                                                if ( typeof(obj) != 'undefined' && obj.count() == 0 && request.body.length > 1 ) {
+                                                    try {
+                                                        request.put = merge(request.put, JSON.parse(request.body));
+                                                    } catch (err) {
+                                                        console.log('Case `put` #0 [ merge error ]: ' + (err.stack||err.message))
+                                                    }
+                                                }
+                                            }
+
+                                        } catch (err) {
+                                            var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
+                                            console.error(msg);
+                                            throwError(response, 500, msg);
+                                        }
+
+                                    } else {
+                                        // 2016-05-19: fix to handle requests from swagger/express
+                                        if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
+                                            request.body = request.query
+                                        }
+                                        var bodyStr = JSON.stringify(request.body);
+                                        // false & true case
+                                        if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                                            bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+
+                                        obj = JSON.parse(bodyStr)
+                                    }
+
+                                    if ( obj && typeof(obj) != 'undefined' && obj.count() > 0 ) {
+                                        // still need this to allow compatibility with express & connect middlewares
+                                        request.body = request.put = merge(request.put, obj);
+                                    }
+
+
+                                    request.query   = undefined; // added on september 13 2016
+                                    request.post    = undefined;
+                                    request.delete  = undefined;
+                                    request.get     = undefined;
+                                    break;
+
+
+                                case 'delete':
+                                    if ( request.query.count() > 0 ) {
+                                        request.delete = request.query;
+
+                                    }
+                                    // else, matching route params against url context instead once route is identified
+
+                                    request.post    = undefined;
+                                    request.put     = undefined;
+                                    request.get     = undefined;
+                                    break
+
+
+                            };
+
+                            loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
+                                if (!req.handled) {
+                                    req.handled = true;
+                                    if (err) {
+                                        if (!res.headersSent)
+                                            throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                                    } else {                                    
+                                        handle(req, res, next, bundle, pathname, config)                                                                       
+                                    }
+                                } else {
+                                    if (typeof(next) != 'undefined')
+                                        return next();
+                                    else
+                                        return;
+                                }
+                                
+                                return;
+                            })
+
+                    });
+
+                    if (request.end) request.end();
+
+                } //EO if multipart
+            }           
+                
 
         });//EO this.instance
 
@@ -1132,7 +1253,7 @@ function Server(options) {
         config.setBundles(self.bundles);
         var conf = config.getInstance(); // for all loaded bundles
         if ( typeof(conf) != 'undefined') {//for cacheless mode
-            self.conf = conf
+            self.conf = conf;
         }
 
         var pathname    = url.parse(req.url, true).pathname;
@@ -1174,7 +1295,9 @@ function Server(options) {
             conf        : config,
             next        : next,
             callback    : callback
-        })
+        });
+        
+        return;
     }
 
     var onBundleConfigLoaded = function(bundle, options) {
@@ -1191,15 +1314,15 @@ function Server(options) {
         if (!cacheless) { // all but dev & debug
             callback(err, bundle, pathname, options.config, req, res, next)
         } else {
-            config.refresh(bundle, function(err, routing) {
-                if (err) {
-                    throwError(res, 500, 'Internal Server Error: \n' + (err.stack||err), next)
-                } else {
+            // config.refresh(bundle, function(err, routing) {
+            //     if (err) {
+            //         throwError(res, 500, 'Internal Server Error: \n' + (err.stack||err), next)
+            //     } else {
                     //refreshing routing at the same time.
-                    self.routing = routing;
+            //        self.routing = routing;
                     callback(err, bundle, pathname, options.config, req, res, next)
-                }
-            })
+            //    }
+            // })
         }
     }
     
@@ -1247,10 +1370,12 @@ function Server(options) {
         //router.setMiddlewareInstance(self.instance);
         req.setEncoding(self.conf[bundle][self.env].encoding);       
         
-
+        var params      = {}
+            , _routing  = {}
+        ;
         try {
-            var params      = {}
-                , routing   = JSON.parse(JSON.stringify( config.getRouting(bundle, self.env) ));
+            //var routing   = JSON.parse(JSON.stringify( config.getRouting(bundle, self.env) ));
+            var routing   = config.getRouting(bundle, self.env);
 
             if ( routing == null || routing.count() == 0 ) {
                 console.error('Malformed routing or Null value for bundle [' + bundle + '] => ' + req.url);
@@ -1292,14 +1417,15 @@ function Server(options) {
                 if (pathname == routing[name].url || isRoute.past) {
 
                     //console.debug('Server is about to route to '+ pathname);                    
-
-                    if (!routing[name].method && req.method) { // setting client request method if no method is defined in routing
-                        routing[name].method  = req.method
-                    } else if (!routing[name].method) { // by default
-                        routing[name].method = 'GET'
+                    //_routing[name] = JSON.parse(JSON.stringify(routing[name]));    
+                    _routing = req.routing;                
+                    if (!_routing.method && req.method) { // setting client request method if no method is defined in routing
+                        _routing.method  = req.method
+                    } else if (!_routing.method) { // by default
+                        _routing.method = 'GET'
                     }
 
-                    var allowed = (typeof(routing[name].method) == 'undefined' || routing[name].method.length > 0 || routing[name].method.indexOf(req.method) != -1)
+                    var allowed = (typeof(_routing.method) == 'undefined' || _routing.method.length > 0 || _routing.method.indexOf(req.method) != -1)
                     if (!allowed) {
                         throwError(res, 405, 'Method Not Allowed for [' + params.bundle + '] => ' + req.url);
                         break;
@@ -1307,8 +1433,8 @@ function Server(options) {
 
 
                         // comparing routing method VS request.url method
-                        if ( routing[name].method.toLowerCase() != req.method.toLowerCase() ) {
-                            throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.url+'` is expecting `' + routing[name].method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
+                        if ( _routing.method.toLowerCase() != req.method.toLowerCase() ) {
+                            throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.url+'` is expecting `' + _routing[name].method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
                             break
                         }
 
@@ -1348,52 +1474,60 @@ function Server(options) {
 
 
                         // onRouting Event ???
-                        if (isRoute.past) {                            
+                        if (isRoute.past) {      
+                            matched = true;   
+                            isRoute = {};  
                             
-                            if ( cacheless ) {
-                                config.refreshModels(params.bundle, self.env, function onModelRefreshed(err){
-                                    if (err) {
-                                        throwError(res, 500, err.msg||err.stack , next)
-                                    } else {
-                                        
-                                        if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
-                                            nextExpressMiddleware._index = 0;
-                                            nextExpressMiddleware._count = self.instance._expressMiddlewares.length-1;
-                                            nextExpressMiddleware._request = req;
-                                            nextExpressMiddleware._response = res;
-                                            nextExpressMiddleware._next = next;
-                                            
-                                            nextExpressMiddleware()
-                                        } else {
-                                            router.route(req, res, next, req.routing)
-                                        }
-                                        
-                                    }
-                                })
-                            } else {                                
-                                
-                                if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
-                                    nextExpressMiddleware._index = 0;
-                                    nextExpressMiddleware._count = self.instance._expressMiddlewares.length-1;
-                                    nextExpressMiddleware._request = req;
-                                    nextExpressMiddleware._response = res;
-                                    nextExpressMiddleware._next = next;
-                                    
-                                    nextExpressMiddleware()
-                                } else {
-                                    router.route(req, res, next, req.routing)
-                                }
-                            }
+                            break;
                         }
                     }
-                    matched = true;
-                    isRoute = {};
                     
-                    break
+                    //break;
                 }
             }
+            
+            
 
-
+        if (matched) {
+            if ( cacheless ) {
+                // config.refreshModels(params.bundle, self.env, function onModelRefreshed(err){
+                //     if (err) {
+                //         throwError(res, 500, err.msg||err.stack , next)
+                //     } else {
+                        
+                        if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
+                            nextExpressMiddleware._index = 0;
+                            nextExpressMiddleware._count = self.instance._expressMiddlewares.length-1;
+                            nextExpressMiddleware._request = req;
+                            nextExpressMiddleware._response = res;
+                            nextExpressMiddleware._next = next;
+                            
+                            nextExpressMiddleware()
+                        } else {
+                            router.route(req, res, next, req.routing)
+                        }
+                        
+                //     }
+                // })
+            } else {                                
+                
+                if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
+                    nextExpressMiddleware._index = 0;
+                    nextExpressMiddleware._count = self.instance._expressMiddlewares.length-1;
+                    nextExpressMiddleware._request = req;
+                    nextExpressMiddleware._response = res;
+                    nextExpressMiddleware._next = next;
+                    
+                    nextExpressMiddleware()
+                } else {
+                    router.route(req, res, next, req.routing)
+                }
+            }
+        } else {
+            throwError(res, 404, 'Page not found: \n' + pathname, next)
+        }
+            
+        /**
         if (!matched) {
             // find targeted bundle
             var allowed     = null
@@ -1427,10 +1561,10 @@ function Server(options) {
                 }
 
                 // we add it into statics
-                if ( withViews && typeof(conf.content.statics[key]) == 'undefined' && conf.content.views.default.views != conf.content.views.default.html) {
-                    conf.content.statics[key] = conf.content.views.default.views +'/'+ uri.join('/')
+                if ( withViews && typeof(conf.content.statics[key]) == 'undefined' && conf.content.templates.default.templates != conf.content.templates.default.html) {
+                    conf.content.statics[key] = conf.content.templates.default.templates +'/'+ uri.join('/')
                 } else if (withViews && typeof(conf.content.statics[key]) == 'undefined') {
-                    conf.content.statics[key] = conf.content.views.default.html +'/'+ uri.join('/') // normal case
+                    conf.content.statics[key] = conf.content.templates.default.html +'/'+ uri.join('/') // normal case
                 }
 
                 uri = pathname.split('/');                
@@ -1633,7 +1767,8 @@ function Server(options) {
                     throwError(res, 404, 'Page not found: \n' + pathname, next)
             }
 
-        }
+        } // EO No match
+        */
     }
 
     var throwError = function(res, code, msg, next) {
@@ -1652,6 +1787,8 @@ function Server(options) {
         }
         
         if (!res.headersSent) {
+            res.headersSent = true;
+            
             if (isXMLRequest || !withViews || !isUsingTemplate ) {
                 // allowing this.throwError(err)
                 
@@ -1668,27 +1805,28 @@ function Server(options) {
                 }
 
                 console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
-                res.end(JSON.stringify({
+                return res.end(JSON.stringify({
                     status: code,
                     error: msg
                 }));
-                res.headersSent = true
+                //res.headersSent = true
             } else {
                 res.writeHead(code, { 'Content-Type': 'text/html'} );
                 console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
-                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
-                res.headersSent = true
+                return res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                //res.headersSent = true
             }
         } else {
+                        
             if (typeof(next) != 'undefined')
-                next();
+                return next();
             else
                 return;
         }
     }
 
 
-    return this
+    //return this
 };
 
 Server = inherits(Server, EventEmitter);

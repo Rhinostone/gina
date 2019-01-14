@@ -24,7 +24,6 @@ var _require = function(path) {
             return require(path)
         } catch (err) {
             throw err;
-            return {}
         }
 
     } else {

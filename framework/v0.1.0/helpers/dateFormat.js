@@ -1,7 +1,10 @@
 /**
  * Credits & thanks to Steven Levithan :)
  * http://blog.stevenlevithan.com/archives/date-time-format
- *
+ * 
+ * 
+ * 
+ * Original Copyrights
  * Date Format 1.2.3
  * (c) 2007-2009 Steven Levithan <stevenlevithan.com>
  * MIT license
@@ -24,6 +27,7 @@ function DateFormatHelper() {
     self.masks = {
         "default":      "ddd mmm dd yyyy HH:MM:ss",
         cookieDate:     "GMT:ddd, dd mmm yyyy HH:MM:ss",
+        logger:       "[yyyy mmm dd HH:MM:ss]",
         shortDate:      "m/d/yy",
         shortDate2:      "mm/dd/yyyy",
         mediumDate:     "mmm d, yyyy",

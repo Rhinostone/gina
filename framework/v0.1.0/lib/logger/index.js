@@ -11,7 +11,9 @@
 var util            = require('util');
 var EventEmitter    = require('events').EventEmitter;
 var e = new EventEmitter();
+
 var merge           = require('../merge');
+var helpers         = require('../../helpers');
 
 
 /**
@@ -131,10 +133,16 @@ function Logger(opt) {
         var opt = options || self._options;
 
         try {
+            opt._maxLevelLen = 0;
             for (var l in opt.levels) {
+                if (l.length > opt._maxLevelLen) {
+                    opt._maxLevelLen = l.length;
+                }
+                
                 if ( typeof(self[l]) != 'undefined' )
                     delete self[l];
-
+                    
+                
                 self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ parse +', "'+ l +'", arguments);');
             }
         } catch (err) {
@@ -189,10 +197,21 @@ function Logger(opt) {
 
 
         if (content != '') {
-            var now = new Date();
+            var now = new Date().format('logger');
+            var sCount = s.length;
+            if (sCount > opt._maxLevelLen ) {
+                opt._maxLevelLen = sCount;
+            }
+            
+            if ( sCount < opt._maxLevelLen ) {
+                for (; sCount < opt._maxLevelLen; ++sCount ) {
+                    s +=' ';
+                }
+            }
+            
             var repl = {
-                '%s': s, //severity
-                '%d': now, // timestamp
+                '%s': s, // severity
+                '%d': now, // date
                 '%m': content // message
                 //'%container', //container
             };

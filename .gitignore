@@ -1,3 +1,4 @@
+
 # IDE
 .jshintrc
 .idea
@@ -24,6 +25,8 @@ desktop.ini
 /data
 /cgi-bin
 ._.DS_Store
+*.bak
+*.old
 
 framework/v0.1.0/package-lock.json
 

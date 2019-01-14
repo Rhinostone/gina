@@ -141,35 +141,37 @@ function Routing() {
      * */
     var fitsWithRequirements = function(urlVar, urlVal, params, request) {
         
-        var matched = -1
-            , _param = urlVar.match(/\:\w+/g)
-            , regex = null
-            , tested = false;
+        var matched     = -1
+            , _param    = urlVar.match(/\:\w+/g)
+            , regex     = new RegExp(urlVar, 'g')
+            //, regex     = eval('/' + urlVar.replace(/\//g,'\\/') +'/g')
+            , tested    = false;
 
         if (!_param.length) return false;
 
         //  if custom path, path rewrite
-        if (request.routing.param.path) {
-            regex = new RegExp(urlVar, 'g');
-            if (regex.test(request.routing.param.path)) {
+        if (request.routing.param.path && regex.test(request.routing.param.path)) {
+            //regex = new RegExp(urlVar, 'g');
+            //regex = eval('/' + urlVar.replace(/\//g,'\\/') +'/g');
+            //if (regex.test(request.routing.param.path)) {
                 request.routing.param.path = request.routing.param.path.replace(regex, urlVal);
-            }
+            //}
         }
         
         //  if custom file, file rewrite
-        if (request.routing.param.file) {
-            regex = new RegExp(urlVar, 'g');
-            if (regex.test(request.routing.param.file)) {
+        if (request.routing.param.file && regex.test(request.routing.param.file)) {
+            //regex = new RegExp(urlVar, 'g');
+           // if (regex.test(request.routing.param.file)) {
                 request.routing.param.file = request.routing.param.file.replace(regex, urlVal);
-            }
+            //}
         }
 
         //  if custom title, title rewrite
-        if (request.routing.param.title) {            
-            regex = new RegExp(urlVar, 'g');
-            if (regex.test(request.routing.param.title)) {
+        if (request.routing.param.title && regex.test(request.routing.param.title)) {            
+            //regex = new RegExp(urlVar, 'g');
+            //if (regex.test(request.routing.param.title)) {
                 request.routing.param.title = request.routing.param.title.replace(regex, urlVal);
-            }
+            //}
         }
 
         if (_param.length == 1) {// fast one
@@ -216,7 +218,9 @@ function Routing() {
                 , values = {}
                 , strVal = ''
                 , started = false
-                , i = 0;
+                , i = 0
+                , re = null
+                , flags = null;
 
             for (var c = 0, posLen = url.length; c < posLen; ++c) {
                 if (url.charAt(c) == tplUrl.charAt(i) && !started) {
@@ -232,8 +236,8 @@ function Routing() {
                     urlVal = strVal.substr(0, strVal.length);
 
                     if (/^\//.test(regex)) {
-                        var re = regex.match(/\/(.*)\//).pop()
-                            , flags = regex.replace('/' + re + '/', '');
+                        re = regex.match(/\/(.*)\//).pop();
+                        flags = regex.replace('/' + re + '/', '');
 
                         tested = new RegExp(re, flags).test(urlVal)
 
@@ -264,8 +268,8 @@ function Routing() {
                     urlVal = strVal.substr(0, strVal.length);
 
                     if (/^\//.test(regex)) {
-                        var re = regex.match(/\/(.*)\//).pop()
-                            , flags = regex.replace('/' + re + '/', '');
+                        re = regex.match(/\/(.*)\//).pop();
+                        flags = regex.replace('/' + re + '/', '');
 
                         tested = new RegExp(re, flags).test(urlVal)
 
@@ -340,21 +344,24 @@ function Routing() {
         }
 
         var route = JSON.parse(JSON.stringify(routing[rule]));
-        var variable = null
+        var variable = null, regex = null;
         for (var p in route.param) {
             if ( /^:/.test(route.param[p]) ) {
                 variable = route.param[p].substr(1);
+                
                 if ( typeof(params) != 'undefined' && typeof(params[variable]) != 'undefined' ) {
-                    route.url = route.url.replace( new RegExp('(/:'+variable+'|/:'+variable+'$)', 'g'), '/'+ params[variable] );
+                    regex = new RegExp('(:'+variable+'/|:'+variable+'$)', 'g');
+                    
+                    route.url = route.url.replace( regex, '/'+ params[variable] );
 
                     if ( typeof(route.param.path) != 'undefined' && /:/.test(route.param.path) ) {
-                        route.param.path = route.param.path.replace( new RegExp('(:'+variable+'/|:'+variable+'$)', 'g'), params[variable]);
+                        route.param.path = route.param.path.replace( regex, params[variable]);
                     }
                     if (typeof (route.param.title) != 'undefined' && /:/.test(route.param.title)) {
-                        route.param.title = route.param.title.replace(new RegExp('(:' + variable + '/|:' + variable + '$)', 'g'), params[variable]);
+                        route.param.title = route.param.title.replace( regex, params[variable]);
                     }
                     if (typeof (route.param.file) != 'undefined' && /:/.test(route.param.file)) {
-                        route.param.file = route.param.file.replace(new RegExp('(:' + variable + '/|:' + variable + '$)', 'g'), params[variable]);
+                        route.param.file = route.param.file.replace( regex, params[variable]);
                     }
                 }
             }

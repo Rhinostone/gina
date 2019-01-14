@@ -63,41 +63,7 @@ function Router(env) {
         return self
     }
 
-
-
-
-    var refreshCore = function() {
-        //var corePath = getPath('gina.core');
-        var corePath = getPath('gina').core;
-        var libPath = getPath('gina').lib;
-        var core = new RegExp( corePath );
-        var excluded = [
-            _(corePath + '/gna.js', true)
-        ];
-
-        for (var c in require.cache) {
-            if ( (core).test(c) && excluded.indexOf(c) < 0 ) {
-                require.cache[c].exports = require( _(c, true) )
-            }
-        }
-
-        //update utils
-        delete require.cache[require.resolve(_(libPath +'/index.js', true))];
-        require.cache[_(libPath +'/index.js', true)] = require( _(libPath +'/index.js', true) );
-        require.cache[_(corePath + '/gna.js', true)].exports.utils = require.cache[_(libPath +'/index.js', true)];
-
-        //update plugins
-        delete require.cache[require.resolve(_(corePath +'/plugins/index.js', true))];
-        require.cache[_(corePath +'/plugins/index.js', true)] = require( _(corePath +'/plugins/index.js', true) );
-        require.cache[_(corePath + '/gna.js', true)].exports.plugins = require.cache[_(corePath +'/plugins/index.js', true)];
-
-        // Super controller
-        delete require.cache[require.resolve(_(corePath +'/controller/index.js', true))];
-        require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
-        SuperController = require.cache[_(corePath +'/controller/index.js', true)];
-
-    }
-
+   
     /**
      * Route on the fly
      *
@@ -122,7 +88,7 @@ function Router(env) {
         var routerObj = {
             response        : response,
             next            : next,
-            hasViews        : ( typeof(conf.content.views) != 'undefined' ) ? true : false,
+            hasViews        : ( typeof(conf.content.templates) != 'undefined' ) ? true : false,
             isUsingTemplate : conf.template,
             isProcessingXMLRequest : params.isXMLRequest
         };
@@ -141,7 +107,7 @@ function Router(env) {
         var middleware      = params.middleware || [];
         var actionFile      = params.param.file; // matches rule name
         var namespace       = params.namespace;
-        var routeHasViews   = ( typeof(conf.content.views) != 'undefined' ) ? true : false;
+        var routeHasViews   = ( typeof(conf.content.templates) != 'undefined' ) ? true : false;
         var isUsingTemplate = conf.template;
         var hasSetup        = false;
 
@@ -152,9 +118,8 @@ function Router(env) {
 
         var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
         local.cacheless = cacheless;
-
-        if (cacheless) refreshCore();
-
+        
+        
         //Middleware Filters when declared.
         var resHeaders = conf.server.response.header;
         //TODO - to test
@@ -212,7 +177,7 @@ function Router(env) {
             rootPath: self.executionPath,
             conf: JSON.parse(JSON.stringify(conf)),
             instance: self.middlewareInstance,
-            views: (routeHasViews) ? conf.content.views : undefined,
+            templates: (routeHasViews) ? conf.content.templates : undefined,
             isUsingTemplate: local.isUsingTemplate,
             cacheless: cacheless,
             //rule            : params.rule,
@@ -256,7 +221,8 @@ function Router(env) {
             // TODO - also check `stack-size` why not set it to at the same time => --stack-size=1024
             throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (err.stack || err.message) );
         }
-
+        
+        
         // about to contact Controller ...
         try {
 
@@ -506,7 +472,7 @@ function Router(env) {
         }
 
         if (!res.headersSent) {
-
+            res.headersSent = true;
 
             if (local.isXMLRequest || !hasViews() || !local.isUsingTemplate) {
                 // Internet Explorer override
@@ -549,7 +515,7 @@ function Router(env) {
             console.error('[ ROUTER ] ' + local.request.method + ' [ ' + code + ' ] ' + local.request.url + '\n'+ (msg.stack || msg.message || msg) /**routing.getRouteByUrl(res.req.url).toUrl()*/ );
         } else {
             if (typeof(local.next) != 'undefined')
-                local.next();
+                return local.next();
             else
                 return;
         }
