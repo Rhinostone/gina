@@ -77,7 +77,7 @@ function SuperController(options) {
     }
 
     var hasViews = function() {
-        return ( typeof(local.options.views) != 'undefined' ) ? true : false;
+        return ( typeof(local.options.templates) != 'undefined' ) ? true : false;
     }
 
     /**
@@ -149,7 +149,7 @@ function SuperController(options) {
         local.next = next;
 
         getParams(req);
-        if ( typeof(local.options.views) != 'undefined' && typeof(local.options.control) != 'undefined' ) {
+        if ( typeof(local.options.templates) != 'undefined' && typeof(local.options.control) != 'undefined' ) {
 
 
             var  action     = local.options.control
@@ -158,12 +158,12 @@ function SuperController(options) {
                 , namespace = local.options.namespace || '';
 
 
-            if ( typeof(local.options.views.default) != 'undefined' ) {
-                ext = local.options.views.default.ext || ext;
+            if ( typeof(local.options.templates.default) != 'undefined' ) {
+                ext = local.options.templates.default.ext || ext;
             }
             if( !/\./.test(ext) ) {
                 ext = '.' + ext;
-                local.options.views.default.ext = ext
+                local.options.templates.default.ext = ext
             }
 
             var ctx = getContext('gina');
@@ -268,7 +268,7 @@ function SuperController(options) {
             set('page.view.namespace', namespace);
 
             //TODO - detect when to use swig
-            var dir = self.views || local.options.views.default.views;
+            var dir = self.templates || local.options.templates.default.templates;
             var swigOptions = {
                 autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape: false,
                 loader: swig.loaders.fs(dir),
@@ -341,7 +341,7 @@ function SuperController(options) {
             }
 
             template = local.options.rule.replace('\@'+ local.options.bundle, '');
-            setResources(local.options.views, template);
+            setResources(local.options.templates, template);
             
             var file = data.page.view.file;
 
@@ -363,7 +363,7 @@ function SuperController(options) {
                 if (!file || file === local.options.namespace) {
                     file = 'index'
                 }
-                path = _(local.options.views[template].html +'/'+ local.options.namespace + '/' + file)
+                path = _(local.options.templates[template].html +'/'+ local.options.namespace + '/' + file)
             } else {
                 if ( local.options.path && !/(\?|\#)/.test(local.options.path) ) {
                     path = _(local.options.path);
@@ -379,7 +379,7 @@ function SuperController(options) {
                     }
 
                 } else {
-                    path = _(local.options.views[template].html +'/'+ file)
+                    path = _(local.options.templates[template].html +'/'+ file)
                 }
             }
 
@@ -605,11 +605,11 @@ function SuperController(options) {
                 
                 var layoutPath = null;
                 
-                if ( local.options.isWithoutLayout || !local.options.isWithoutLayout && typeof(local.options.views[template].layout) != 'undefined' && fs.existsSync(local.options.views[template].layout) ) {
-                    layoutPath = (local.options.isWithoutLayout) ? local.options.views[template].noLayout : local.options.views[template].layout;
+                if ( local.options.isWithoutLayout || !local.options.isWithoutLayout && typeof(local.options.templates[template].layout) != 'undefined' && fs.existsSync(local.options.templates[template].layout) ) {
+                    layoutPath = (local.options.isWithoutLayout) ? local.options.templates[template].noLayout : local.options.templates[template].layout;
                 } else {
-                    var layoutRoot = ( typeof(local.options.namespace) != 'undefined' && local.options.namespace != '') ? local.options.views[template].views + '/'+ local.options.namespace  : local.options.views[template].views;
-                    layoutPath = layoutRoot +'/'+ local.options.file + local.options.views[template].ext;    
+                    var layoutRoot = ( typeof(local.options.namespace) != 'undefined' && local.options.namespace != '') ? local.options.templates[template].templates + '/'+ local.options.namespace  : local.options.templates[template].templates;
+                    layoutPath = layoutRoot +'/'+ local.options.file + local.options.templates[template].ext;    
                 }                
                 
                 
@@ -649,7 +649,7 @@ function SuperController(options) {
 
                                 + '\n<script type="text/javascript">'
                                 + ' \n<!--'
-                                + '\n' + local.options.views.default.pluginLoader.toString()
+                                + '\n' + local.options.templates.default.pluginLoader.toString()
                                 + '//-->'
                                 + '\n</script>'
 
@@ -694,7 +694,7 @@ function SuperController(options) {
                             plugin = '\t'
                                 + '\n<script type="text/javascript">'
                                 + ' \n<!--'
-                                + '\n' + local.options.views.default.pluginLoader.toString()
+                                + '\n' + local.options.templates.default.pluginLoader.toString()
                                 + '//-->'
                                 + '\n</script>'
 
@@ -711,7 +711,7 @@ function SuperController(options) {
 
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
                         
-                        var mapping = { filename: local.options.views[template].layout };
+                        var mapping = { filename: local.options.templates[template].layout };
                         try {
                             
                             layout = swig.compile(layout, mapping)(data);
@@ -724,7 +724,7 @@ function SuperController(options) {
                             }
 
                         } catch (err) {
-                            var filename = local.options.views[template].html;
+                            var filename = local.options.templates[template].html;
                             filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
                             self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)))
                         }
@@ -752,12 +752,12 @@ function SuperController(options) {
                             local.res.end(layout);
                             
                             // try {
-                            //     data.filename = local.options.views[template].html;
-                            //     local.res.end( swig.render( layout, data) ) ;//{ locals: data,  filename: local.options.views[template].html }
+                            //     data.filename = local.options.templates[template].html;
+                            //     local.res.end( swig.render( layout, data) ) ;//{ locals: data,  filename: local.options.templates[template].html }
                             //     local.res.headersSent = true
                                 
                             // } catch(err) {
-                            //     var filename = local.options.views[template].html;
+                            //     var filename = local.options.templates[template].html;
                             //     filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
                             //     self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)))
                             // }

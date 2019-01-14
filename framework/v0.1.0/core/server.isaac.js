@@ -12,13 +12,47 @@ const inherits          = lib.inherits;
 const merge             = lib.merge;
 const console           = lib.logger;
 
+var refreshCore = function() {
+       
+    var corePath    = getPath('gina').core;
+    var libPath     = getPath('gina').lib;
+    
+    var core        = new RegExp( corePath );
+    var excluded    = [
+        _(corePath + '/gna.js', true)
+    ];
+
+    for (var c in require.cache) {
+        if ( (core).test(c) && excluded.indexOf(c) < 0 ) {
+            require.cache[c].exports = require( _(c, true) )
+        }
+    }
+
+    //update lib & helpers
+    delete require.cache[require.resolve(_(libPath +'/index.js', true))];        
+    require.cache[_(libPath +'/index.js', true)] = require( _(libPath +'/index.js', true) );
+    require.cache[_(corePath + '/gna.js', true)].exports.utils = require.cache[_(libPath +'/index.js', true)];
+    
+    //update plugins
+    delete require.cache[require.resolve(_(corePath +'/plugins/index.js', true))];
+    require.cache[_(corePath +'/plugins/index.js', true)] = require( _(corePath +'/plugins/index.js', true) );
+    require.cache[_(corePath + '/gna.js', true)].exports.plugins = require.cache[_(corePath +'/plugins/index.js', true)];
+
+    // Super controller
+    delete require.cache[require.resolve(_(corePath +'/controller/index.js', true))];
+    require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
+    SuperController = require.cache[_(corePath +'/controller/index.js', true)];
+
+}
+
 // Express compatibility
 const slice             = Array.prototype.slice;
 
 
 function ServerEngineClass(options) {
 
-    console.debug('[ ENGINE ] Isaac says hello !');     
+    console.debug('[ ENGINE ] Isaac says hello !');    
+        
     
     // openssl req -x509 -newkey rsa:2048 -nodes -sha256 -subj "/CN=localhost" -keyout localhost-privkey.pem -out localhost-cert.pem
     const credentials = {
@@ -127,7 +161,11 @@ function ServerEngineClass(options) {
             
             
         server.on('request', (request, response) => {
-              
+            
+            if (GINA_ENV_IS_DEV) {
+                refreshCore()
+            }
+                                      
             if (/^\*$/.test(path) || path == request.url) {
                 request.params  = {};
                 request.query   = {};
@@ -243,35 +281,9 @@ function ServerEngineClass(options) {
           throw new TypeError('server.use() requires a middleware function')
         }
         
-        fns.forEach(function (fn) {
-            // non-express app
-            // if (!fn || !fn.handle || !fn.set) {
-            //     return router.use(path, fn);
-            // }
-        
-            //console.debug('.use app under %s', fn);
-            // fn.mountpath = path;
-            // fn.parent = this;
-        
-            // // restore .app property on req and res
-            // router.use(path, function mounted_app(req, res, next) {
-            //     var orig = req.app;
-            //     fn.handle(req, res, function (err) {
-            //     setPrototypeOf(req, orig.request)
-            //     setPrototypeOf(res, orig.response)
-            //     next(err);
-            // });
-            
-            ///server._expressMiddlewares = merge(server._expressMiddlewares, fn);
+        fns.forEach(function (fn) {            
             server._expressMiddlewares[server._expressMiddlewares.length] = fn;
         });
-        
-        // if ( typeof(fn) == 'function' ) {
-        //     this._expressMiddlewares = merge(this._expressMiddlewares, fn);
-        // }
-    
-        
-        //this._expressMiddlewares = merge(this._expressMiddlewares, fns[0]);
         
         return this;
     }

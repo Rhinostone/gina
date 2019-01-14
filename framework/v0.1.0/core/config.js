@@ -50,7 +50,7 @@ function Config(opt) {
      * @constructor
      * */
     var init =  function(opt) {
-
+                
         if ( !Config.initialized) {
             var env = opt.env;
 
@@ -78,7 +78,7 @@ function Config(opt) {
             //if yes, join in case of standalone.. or create a new thread.
             self.Host.setMaster(opt.startingApp);
 
-            getConf()
+            getConf(env)
         } else {
             if (!opt) {
                 return Config.instance
@@ -88,8 +88,9 @@ function Config(opt) {
         }
     }
 
-    var getConf = function() {
-
+    var getConf = function(env) {
+        
+        self.env = env;
         console.debug('[ config ] Loading conf...');
 
         // framework settings
@@ -116,8 +117,7 @@ function Config(opt) {
         self.Env.load( function(err, envConf) {
 
             if ( typeof(self.Env.loaded) == 'undefined') {
-                // Need to globalize some of them.
-                self.env = env;
+                // Need to globalize some of them.                
                 self.envConf = envConf;
                 
                 loadBundlesConfiguration( function(err, file, routing) {
@@ -172,6 +172,7 @@ function Config(opt) {
             }
         });
     }
+        
 
     /**
      * Get Instance
@@ -421,7 +422,7 @@ function Config(opt) {
                 if ( !fs.existsSync(_(bundlesPath +'/'+ app +'/config/settings.json'))) {
                     bundHasSettings = false
                 } else {
-                    bundleSettings = require(_(bundlesPath +'/'+ app +'/config/settings.json'));
+                    bundleSettings = requireJSON(_(bundlesPath +'/'+ app +'/config/settings.json'));
                 }
                 
                 
@@ -605,8 +606,7 @@ function Config(opt) {
      * */
     this.getOriginalRule = function(rule, routing) {
 
-        var currentRouting  = routing[rule]
-            , originalRule  = undefined;
+        var currentRouting  = routing[rule];
 
         for (var f in routing) {
             if (
@@ -615,10 +615,10 @@ function Config(opt) {
                 && f != rule
                 && new RegExp(f+"$").test(rule)
             ) {
-                originalRule = f
+                return f
             }
         }
-        return originalRule
+        return undefined
     }
 
     var parseFileConf = function(root, arr, obj, len, i, content) {
@@ -635,8 +635,6 @@ function Config(opt) {
             } else { // overiding exiting
                 obj[key] = merge(content, obj[key]);
             }
-
-            //root = merge(root, obj);
             return root
         }
 
@@ -666,9 +664,13 @@ function Config(opt) {
         } else {
             bundle = bundles[b]
         }
+                
         var cacheless   = self.isCacheless();
         var standalone  = self.Host.isStandalone();
         var env         = self.env || self.Env.get();
+        
+        console.debug('[ CONFIG ] loading `'+ bundle +'/'+ env +'` configuration');
+        
         if ( typeof(collectedRules) == 'undefined') {
             var collectedRules = {}
         }
@@ -723,7 +725,7 @@ function Config(opt) {
 
         // files to be ignored while parsing config dir
         var defaultConfigFiles = (conf[bundle][env].files.join(".json,") + '.json').split(',');
-
+                
         // getting bunddle config files
         var configFiles = fs.readdirSync(_(appPath + '/config'));
         var fName       = null, fNameWithNoExt = null;
@@ -797,7 +799,7 @@ function Config(opt) {
                     delete require.cache[require.resolve(_(filename, true))];
                 }
 
-                if (exists) {
+                if (exists) {                    
                     fileContent = merge(fileContent, requireJSON(_(filename, true)));
                 } else {
                     console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
@@ -805,7 +807,9 @@ function Config(opt) {
             } catch (_err) {
 
                 if (fs.existsSync(filename)) {
-                    callback(new Error('[ ' + filename + ' ] is malformed !!'))
+                    var e = '[ ' + filename + ' ] is malformed !!\n\r' + (_err.stack || _err.message);
+                    console.error(e);
+                    callback(new Error(e))
                 } else {
                     fileContent = undefined
                 }
@@ -815,7 +819,7 @@ function Config(opt) {
                 nameArr = fNameWithNoExt.split(/\./g);
                 if ( typeof(files[nameArr[0]]) == 'undefined')
                     files[nameArr[0]] = {};
-                //console.debug('fNameWithNoExt: ', fNameWithNoExt);
+                
                 files = parseFileConf(files, nameArr, files, nameArr.length, 0, fileContent);
                 continue;
             } else {
@@ -828,164 +832,120 @@ function Config(opt) {
         // building file list
         conf[bundle][env].configFiles = filesList;
 
+        name = 'routing';
+        routing = files[name];
+        //Server only because of the shared mode VS the standalone mode.
+        if (cacheless && typeof (reload) != 'undefined') {
+                        
+            //setting app param
+            for (var rule in routing) {
+                routing[rule +'@'+ bundle] = routing[rule];
+                delete routing[rule];
+                file = rule;
+                rule = rule +'@'+ bundle;
 
-        //for (var name in  filesList) {
+                routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse search
+                //webroot control
+                routing[rule].param.file = ( typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
 
-            // if (/^_comment/.test(name))
-            //     continue;
+                // by default, method is inherited from the request.method
+                if (
+                    hasWebRoot && typeof(routing[rule].param.path) != 'undefined' && typeof(routing[rule].param.ignoreWebRoot) == 'undefined'
+                    || hasWebRoot && typeof(routing[rule].param.path) != 'undefined' && !routing[rule].param.ignoreWebRoot
+                ) {
+                    routing[rule].param.path = wroot + routing[rule].param.path
+                }
 
-            //main = _(appPath +'/config/'+ filesList[name]).replace('.'+env, '');
-            name = 'routing';
-            routing = files[name];
-            //Server only because of the shared mode VS the standalone mode.
-            if (cacheless && typeof (reload) != 'undefined') {
-                            
-                //setting app param
-                for (var rule in routing) {
-                    routing[rule +'@'+ bundle] = routing[rule];
-                    delete routing[rule];
-                    file = rule;
-                    rule = rule +'@'+ bundle;
+                if ( typeof(routing[rule].url) != 'object' ) {
 
-                    routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse search
-                    //webroot control
-                    routing[rule].param.file = ( typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
-
-                    // by default, method is inherited from the request.method
-                    if (
-                        hasWebRoot && typeof(routing[rule].param.path) != 'undefined' && typeof(routing[rule].param.ignoreWebRoot) == 'undefined'
-                        || hasWebRoot && typeof(routing[rule].param.path) != 'undefined' && !routing[rule].param.ignoreWebRoot
-                    ) {
-                        routing[rule].param.path = wroot + routing[rule].param.path
+                    // adding / if missing
+                    if (routing[rule].url.length > 1 && routing[rule].url.substr(0,1) != '/') {
+                        routing[rule].url = '/' + routing[rule].url
+                    } else {
+                        if (wroot.substr(wroot.length-1,1) == '/') {
+                            wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+                        }
                     }
 
-                    if ( typeof(routing[rule].url) != 'object' ) {
+                    if (routing[rule].bundle != bundle) { // allowing to override bundle name in routing.json
+                        // originalRule is used to facilitate cross bundles (hypertext)linking
+                        originalRules[oRuleCount] = ( standalone && routing[rule] && bundle != self.startingApp) ? bundle + '-' + rule : rule;
+                        ++oRuleCount;
 
-                        // adding / if missing
-                        if (routing[rule].url.length > 1 && routing[rule].url.substr(0,1) != '/') {
-                            routing[rule].url = '/' + routing[rule].url
+                        localWroot = conf[routing[rule].bundle][env].server.webroot;
+                        // standalone setup
+                        if ( standalone && routing[rule].bundle != self.startingApp && localWroot == '/') {
+                            localWroot = '/'+ routing[rule].bundle;
+                            conf[routing[rule].bundle][env].server.webroot = localWroot
+                        }
+                        if (localWroot.substr(localWroot.length-1,1) == '/') {
+                            localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
+                        }
+                        if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
+                            routing[rule].url = localWroot + routing[rule].url
+                    } else {
+                        if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
+                            routing[rule].url = wroot + routing[rule].url
+                        else if (!routing[rule].url.length)
+                            routing[rule].url += '/'
+                    }
+
+                } else {
+                    for (var u=0; u<routing[rule].url.length; ++u) {
+                        if (routing[rule].url[u].length > 1 && routing[rule].url[u].substr(0,1) != '/') {
+                            routing[rule].url[u] = '/' + routing[rule].url[u]
                         } else {
                             if (wroot.substr(wroot.length-1,1) == '/') {
                                 wroot = wroot.substr(wroot.length-1,1).replace('/', '')
                             }
                         }
 
-                        if (routing[rule].bundle != bundle) { // allowing to override bundle name in routing.json
-                            // originalRule is used to facilitate cross bundles (hypertext)linking
-                            originalRules[oRuleCount] = ( standalone && routing[rule] && bundle != self.startingApp) ? bundle + '-' + rule : rule;
-                            ++oRuleCount;
-
-                            localWroot = conf[routing[rule].bundle][env].server.webroot;
-                            // standalone setup
-                            if ( standalone && routing[rule].bundle != self.startingApp && localWroot == '/') {
-                                localWroot = '/'+ routing[rule].bundle;
-                                conf[routing[rule].bundle][env].server.webroot = localWroot
-                            }
-                            if (localWroot.substr(localWroot.length-1,1) == '/') {
-                                localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
-                            }
-                            if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
-                                routing[rule].url = localWroot + routing[rule].url
-                        } else {
-                            if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
-                                routing[rule].url = wroot + routing[rule].url
-                            else if (!routing[rule].url.length)
-                                routing[rule].url += '/'
-                        }
-
-                    } else {
-                        for (var u=0; u<routing[rule].url.length; ++u) {
-                            if (routing[rule].url[u].length > 1 && routing[rule].url[u].substr(0,1) != '/') {
-                                routing[rule].url[u] = '/' + routing[rule].url[u]
-                            } else {
-                                if (wroot.substr(wroot.length-1,1) == '/') {
-                                    wroot = wroot.substr(wroot.length-1,1).replace('/', '')
-                                }
-                            }
-
-                            if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
-                                routing[rule].url[u] = wroot + routing[rule].url[u]
-                            } else if (!routing[rule].url.length) {
-                                routing[rule].url += '/'
-                            }
+                        if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
+                            routing[rule].url[u] = wroot + routing[rule].url[u]
+                        } else if (!routing[rule].url.length) {
+                            routing[rule].url += '/'
                         }
                     }
                 }
-
-                files[name] = collectedRules = merge(collectedRules, ((standalone && bundle != self.startingApp ) ? standaloneRouting : routing), true);
-
-                // originalRule is used to facilitate cross bundles (hypertext)linking
-                for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
-                    files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
-                }
-                // creating rule for auto redirect: / => /webroot
-                if (hasWebRoot && webrootAutoredirect) {
-                    files[name]["@webroot"] = {
-                        url: "/",
-                        param: {
-                            action: "redirect",
-                            path: wroot,
-                            code: 302
-                        },
-                        bundle: (files[name].bundle) ? files[name].bundle : bundle
-                    }
-                }
-
-                self.setRouting(bundle, env, files[name]);
-                // reverse routing
-                for (var rule in files[name]) {
-                    if ( typeof(files[name][rule].url) != 'object' ) {
-                        reverseRouting[files[name][rule].url] = rule
-                    } else {
-                        for (var u=0, len=files[name][rule].url.length; u<len; ++u) {
-                            reverseRouting[files[name][rule].url[u]] = rule
-                        }
-                    }
-                }
-                self.setReverseRouting(bundle, env, reverseRouting);            
             }
 
+            files[name] = collectedRules = merge(collectedRules, ((standalone && bundle != self.startingApp ) ? standaloneRouting : routing), true);
 
-            // tmp = filesList[name].replace(/.json/, '.' + env + '.json');
-            // filename = _(appPath + '/config/' + tmp);
-            // if (!fs.existsSync(filename) ) {
-            //     filename = _(appPath +'/config/'+ filesList[name])
-            // } else {
-            //     filesList[name] = tmp
-            // }
+            // originalRule is used to facilitate cross bundles (hypertext)linking
+            for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
+                files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
+            }
+            // creating rule for auto redirect: / => /webroot
+            if (hasWebRoot && webrootAutoredirect) {
+                files[name]["@webroot"] = {
+                    url: "/",
+                    param: {
+                        action: "redirect",
+                        path: wroot,
+                        code: 302
+                    },
+                    bundle: (files[name].bundle) ? files[name].bundle : bundle
+                }
+            }
 
-            // //Can't do anything without.
-            // try {
-            //     var exists = fs.existsSync(_(filename, true));
-            //     if (cacheless && exists) {
-            //         delete require.cache[_(filename, true)];
-            //     }
-
-            //     if ( exists ) {
-            //         files[name] = require(_(filename, true));
-            //         tmp = '';
-            //         if ( filename != main && fs.existsSync(_(main, true)) ) {
-            //             if (cacheless) {
-            //                 delete require.cache[_(main, true)];
-            //             }
-            //             files[name] = merge(files[name], require(_(main, true)));
-            //         }
-            //     } else {
-            //         continue
-            //     }
-            // } catch (_err) {
-
-            //     if ( fs.existsSync(filename) ) {
-            //         callback( new Error('[ ' +filename + ' ] is malformed !!') )
-            //     } else {
-            //         files[name] = undefined
-            //     }
-            // }
-
-        //}//EO for (name
+            self.setRouting(bundle, env, files[name]);
+            // reverse routing
+            for (var rule in files[name]) {
+                if ( typeof(files[name][rule].url) != 'object' ) {
+                    reverseRouting[files[name][rule].url] = rule
+                } else {
+                    for (var u=0, len=files[name][rule].url.length; u<len; ++u) {
+                        reverseRouting[files[name][rule].url[u]] = rule
+                    }
+                }
+            }
+            self.setReverseRouting(bundle, env, reverseRouting);            
+        }
 
 
-        var hasViews = (typeof(files['views']) != 'undefined' && typeof(files['views']['default']) != 'undefined') ? true : false;
+
+
+        var hasViews = (typeof(files['templates']) != 'undefined' && typeof(files['templates']['default']) != 'undefined') ? true : false;
 
         // e.g.: 404 rendering for JSON APIs by checking `env.template`: JSON response can be forced even if the bundle has views
         if ( hasViews && typeof(self.userConf[bundle][env].template) != 'undefined' && self.userConf[bundle][env].template == false) {
@@ -995,17 +955,18 @@ function Config(opt) {
         }
 
         //Set default keys/values for views
-        if ( hasViews &&  typeof(files['views'].default.views) == 'undefined' ) {
-            files['views'].default.views =  _(appPath +'/views')
-        }
+               
+        // if ( hasViews &&  typeof(files['templates'].default.templates) == 'undefined' ) {
+        //     files['templates'].default.templates =  _(appPath +'/templates')
+        // }
 
-        if ( hasViews && typeof(files['views'].default.html) == 'undefined' ) {
-            files['views'].default.html =  _(appPath +'/views/html')
-        }
+        // if ( hasViews && typeof(files['templates'].default.html) == 'undefined' ) {
+        //     files['templates'].default.html =  _(appPath +'/views/html')
+        // }
 
-        if ( hasViews && typeof(files['views'].default.theme) == 'undefined' ) {
-            files['views'].default.theme =  'default_theme'
-        }
+        // if ( hasViews && typeof(files['templates'].default.theme) == 'undefined' ) {
+        //     files['templates'].default.theme =  'default_theme'
+        // }
 
 
         //Constants to be exposed in configuration files.
@@ -1019,6 +980,8 @@ function Config(opt) {
             "bundlesPath"   : conf[bundle][env].bundlesPath,
             "mountPath"     : conf[bundle][env].mountPath,
             "bundlePath"    : conf[bundle][env].bundlePath,
+            "templatesPath" : conf[bundle][env].templatesPath,
+            "publicPath"    : conf[bundle][env].publicPath,
             "modelsPath"    : conf[bundle][env].modelsPath,
             "logsPath"      : conf[bundle][env].logsPath,
             "tmpPath"       : conf[bundle][env].tmpPath,
@@ -1026,11 +989,17 @@ function Config(opt) {
             //"host"          : conf[bundle][env].host,
             "version"       : getContext('gina').version
         };
-
-        if (hasViews && typeof(files['views'].default) != 'undefined') {
-            reps['views']   = files['views'].default.views;
-            reps['html']    = files['views'].default.html;
-            reps['theme']   = files['views'].default.theme;
+        
+        var corePath = getPath('gina').core;            
+        var settingsPath = _(corePath +'/template/conf/settings.json', true);
+        var staticsPath = _(corePath +'/template/conf/statics.json', true);
+        var viewsPath = _(corePath +'/template/conf/templates.json', true);
+        
+        var defaultTemplateConf = requireJSON(viewsPath);
+        if (hasViews && typeof(files['templates'].default) != 'undefined') {
+            reps['templates']   = files['templates'].default.templates || defaultTemplateConf.default.templates;            
+            reps['html']        = files['templates'].default.html || defaultTemplateConf.default.html;
+            reps['theme']       = files['templates'].default.theme || defaultTemplateConf.default.theme;            
         }
 
         var ports = conf[bundle][env].port;
@@ -1050,16 +1019,12 @@ function Config(opt) {
         }
 
 
-        try {
-            var corePath = getPath('gina').core;
-            var settingsPath = _(corePath +'/template/conf/settings.json', true);
-            var staticsPath = _(corePath +'/template/conf/statics.json', true);
-            var viewsPath = _(corePath +'/template/conf/views.json', true);
+        try {                        
 
             if ( typeof(files['settings']) == 'undefined' ) {
-                files['settings'] = require(settingsPath)
+                files['settings'] = requireJSON(settingsPath)
             } else if ( typeof(files['settings']) != 'undefined' ) {
-                var defaultSettings = require(settingsPath);
+                var defaultSettings = requireJSON(settingsPath);
 
                 files['settings'] = merge(files['settings'], defaultSettings)
             }
@@ -1069,106 +1034,192 @@ function Config(opt) {
 
 
             if (hasViews && typeof(files['statics']) == 'undefined') {
-                files['statics'] = require(staticsPath)
+                files['statics'] = requireJSON(staticsPath)
             } else if ( typeof(files['statics']) != 'undefined' ) {
-                var defaultAliases = require(staticsPath);
+                var defaultAliases = requireJSON(staticsPath);
 
                 files['statics'] = merge(files['statics'], defaultAliases)
             }
 
 
-            // public root directories
-            if (reps['views']) { // !== hasViews; you don't need views to access statics
-                var d = 0
-                    , dirs = fs.readdirSync(reps['views'])
-                    , statics = {};
-                // ignoring html (template) directory
-                dirs.splice(dirs.indexOf(new _(reps.html, true).toArray().last()), 1);
+            // templates root directories
+            var d = 0, dirs = null;
+            // if (reps['templates'] && fs.existsSync(reps['templates']) ) { // !== hasViews; you don't need views to access statics
+            //     var templates = {};
+            //     d = 0;
+            //     dirs = fs.readdirSync(reps['templates']);
+                 
+            //     // ignoring html (template files) directory
+            //     dirs.splice(dirs.indexOf(new _(reps.html, true).toArray().last()), 1);
+            //     // making templates allowed directories
+            //     while ( d < dirs.length) {
+            //         if ( !/^\./.test(dirs[d]) && fs.lstatSync(_(reps['templates'] +'/'+ dirs[d], true)).isDirectory() ) {
+            //             templates[dirs[d]] = _('{templates}/'+dirs[d], true)
+            //         }
+            //         ++d
+            //     }
+
+            //     if (hasWebRoot) {
+            //         var wrootKey = wroot.substr(1);
+            //         for (var p in files['statics']) {
+            //             files['statics'][wrootKey +'/'+ p] = files['statics'][p]
+            //         }
+            //     }
+
+            //     files['statics'] = merge(files['statics'], templates);
+            // }
+            
+            // public resources ref
+            if ( typeof(conf[bundle][env].publicResources) == 'undefined') {
+                conf[bundle][env].publicResources = []
+            }
+            // static resources 
+            if ( typeof(conf[bundle][env].staticResources) == 'undefined') {
+                conf[bundle][env].staticResources = []
+            }
+            
+            var pCount = 0, sCount = 0;
+            if (conf[bundle][env].publicPath && fs.existsSync(conf[bundle][env].publicPath) ) {
+                var publicResources = []
+                    , lStat = null
+                ;
+                
+                d = 0;
+                dirs = fs.readdirSync(conf[bundle][env].publicPath);
+                // ignoring html (template files) directory
+                //dirs.splice(dirs.indexOf(new _(reps.html, true).toArray().last()), 1);
                 // making statics allowed directories
                 while ( d < dirs.length) {
-                    if ( !/^\./.test(dirs[d]) && fs.lstatSync(_(reps.views +'/'+ dirs[d], true)).isDirectory() ) {
-                        statics[dirs[d]] = _('{views}/'+dirs[d], true)
+                    lStat = fs.lstatSync(_(conf[bundle][env].publicPath +'/'+ dirs[d], true));
+                    if ( !/^\./.test(dirs[d]) && lStat.isDirectory() ) {
+                        publicResources[pCount] = '/'+ dirs[d] +'/';
+                        ++pCount
+                    } else if ( !/^\./.test(dirs[d]) && lStat.isFile() ) {
+                        publicResources[pCount] = '/'+ dirs[d];
+                        ++pCount
                     }
                     ++d
                 }
 
-                if (hasWebRoot) {
-                    var wrootKey = wroot.substr(1);
-                    for (var p in files['statics']) {
-                        files['statics'][wrootKey +'/'+ p] = files['statics'][p]
-                    }
-                }
+                // if (hasWebRoot) {
+                //     var wrootKey = wroot.substr(1);
+                //     for (var p in files['statics']) {
+                //         files['statics'][wrootKey +'/'+ p] = files['statics'][p]
+                //     }
+                // }
 
-                files['statics'] = merge(files['statics'], statics);
+                //files['statics'] = merge(files['statics'], statics);
+                
+                conf[bundle][env].publicResources = publicResources
+            } else {
+                console.warn('no public dir to scan...')
             }
 
 
-            if (hasViews && typeof(files['views']) == 'undefined') {
-                files['views'] = require(viewsPath)
-            } else if ( typeof(files['views']) != 'undefined' ) {
-                var defaultViews = require(viewsPath);
+            if (hasViews && typeof(files['templates']) == 'undefined') {
+                files['templates'] = requireJSON(viewsPath)
+            } else if ( typeof(files['templates']) != 'undefined' ) {
+                var defaultViews = requireJSON(viewsPath);
 
-                files['views'] = merge(files['views'], defaultViews)
+                files['templates'] = merge(files['templates'], defaultViews)
             }
 
         } catch (err) {
-            callback(err)
+            callback(err);
+            return;
         }
 
 
 
         //webroot vs statics
-        if (// Please, don't add `hasViews` condition. You can download files without having views: like for a `webdrive` API
-            conf[bundle][env].server.webroot  != '/' &&
-            typeof(files['statics']) != 'undefined'
-        ) {
-            var newStatics = {}, _wroot = '';
-            if (!wroot) {
-                _wroot = ( conf[bundle][env].server.webroot.substr(0,1) == '/' ) ?  conf[bundle][env].server.webroot.substr(1) : conf[bundle][env].server.webroot;
-            } else {
-                _wroot = ( wroot.substr(0,1) == '/' ) ?  wroot.substr(1) : wroot;
-            }
+        // if (// Please, don't add `hasViews` condition. You can download files without having views: like for a `webdrive` API
+        //     conf[bundle][env].server.webroot  != '/' &&
+        //     typeof(files['statics']) != 'undefined'
+        // ) {
+        //     var newStatics = {}
+        //         , _wroot = ''
+        //     ;
+        //     if (!wroot) {
+        //         _wroot = ( conf[bundle][env].server.webroot.substr(0,1) == '/' ) ?  conf[bundle][env].server.webroot.substr(1) : conf[bundle][env].server.webroot;
+        //     } else {
+        //         _wroot = ( wroot.substr(0,1) == '/' ) ?  wroot.substr(1) : wroot;
+        //     }
 
-            var k = null;
+        //     var k = null;
+        //     for (var i in files['statics']) {
+        //         k = i;
+        //         if ( !(new RegExp(wroot)).test(i) ) {
+        //             if (i.substr(0, 1) != '/') {
+        //                 i = '/' + i
+        //             }
+        //             //newStatics[ _wroot + i] = files['statics'][k]
+        //             newStatics[i] = files['statics'][k]
+        //         } else {
+        //             newStatics[k] = files['statics'][k]
+        //         }
+
+        //         delete files['statics'][k]
+        //     }
+
+        //     files['statics'] = JSON.parse( JSON.stringify(newStatics) );
+        // }
+        
+        
+        if ( typeof(files['statics']) != 'undefined' ) {   
+            pCount = conf[bundle][env].publicResources.length || 0;
+            sCount = conf[bundle][env].staticResources.length || 0;
+            
             for (var i in files['statics']) {
-                k = i;
-                if ( !(new RegExp(wroot)).test(i) ) {
-
-                    // if (i.substr(0, 1) != '/') {
-                    //     i = '/' + i
-                    // }
-                    //newStatics[ _wroot + i] = files['statics'][k]
-                    newStatics[i] = files['statics'][k]
-                } else {
-                    newStatics[k] = files['statics'][k]
+                if (!/^\//.test(i) ) {                    
+                    files['statics'][ '/'+ i ] = files['statics'][i];
+                    delete files['statics'][i];
+                    i = '/'+ i
                 }
-
-                delete files['statics'][k]
+                
+                if ( !/\.(.*)$/.test(i) && !/\/$/.test(i) ) {
+                    files['statics'][ i + '/' ] = files['statics'][i];
+                    delete files['statics'][i];
+                    i += '/' 
+                }
+                
+                // adding to public resources
+                if ( conf[bundle][env].publicResources.indexOf(i) < 0 ) {
+                    conf[bundle][env].publicResources[pCount] = i;                    
+                    ++pCount;
+                }
+                
+                // adding to static resources
+                if ( conf[bundle][env].staticResources.indexOf(i) < 0 ) {
+                    conf[bundle][env].staticResources[sCount] = i;                    
+                    ++sCount;
+                }
+                
+                // adding to first level resources
+                
             }
-
-            files['statics'] = JSON.parse( JSON.stringify(newStatics) );
         }
+        
 
         //webroot javascripts
         if (hasViews &&
             conf[bundle][env].server.webroot  != '/' &&
-            typeof(files['views'].default.javascripts) != 'undefined'
+            typeof(files['templates'].default.javascripts) != 'undefined'
         ) {
-            for (var v in files['views']) {
-                if (!files['views'][v].javascripts) continue;
-                for (var i=0; i<files['views'][v].javascripts.length; ++i) {
+            for (var v in files['templates']) {
+                if (!files['templates'][v].javascripts) continue;
+                for (var i=0; i<files['templates'][v].javascripts.length; ++i) {
                     if (
-                        files['views'][v].javascripts[i].substr(0,1) != '{' &&
-                        !/\:\/\//.test(files['views'][v].javascripts[i])
+                        files['templates'][v].javascripts[i].substr(0,1) != '{' &&
+                        !/\:\/\//.test(files['templates'][v].javascripts[i])
                     ) {
-                        if (files['views'][v].javascripts[i].substr(0,1) != '/')
-                            files['views'][v].javascripts[i] = '/'+files['views'][v].javascripts[i];
+                        if (files['templates'][v].javascripts[i].substr(0,1) != '/')
+                            files['templates'][v].javascripts[i] = '/'+files['templates'][v].javascripts[i];
 
                         // support src like:
-                        if (/^\/\//.test(files['views'][v].javascripts[i]) )
-                            files['views'][v].javascripts[i] = files['views'][v].javascripts[i]
+                        if (/^\/\//.test(files['templates'][v].javascripts[i]) )
+                            files['templates'][v].javascripts[i] = files['templates'][v].javascripts[i]
                         else
-                            files['views'][v].javascripts[i] = conf[bundle][env].server.webroot + files['views'][v].javascripts[i]
+                            files['templates'][v].javascripts[i] = conf[bundle][env].server.webroot + files['templates'][v].javascripts[i]
                     }
                 }
             }
@@ -1177,22 +1228,22 @@ function Config(opt) {
         //webroot stylesheets
         if (hasViews &&
             conf[bundle][env].server.webroot  != '/' &&
-            typeof(files['views'].default.stylesheets) != 'undefined'
+            typeof(files['templates'].default.stylesheets) != 'undefined'
         ) {
-            for (var v in files['views']) {
-                if (!files['views'][v].stylesheets) continue;
-                for (var i=0; i<files['views'][v].stylesheets.length; ++i) {
+            for (var v in files['templates']) {
+                if (!files['templates'][v].stylesheets) continue;
+                for (var i=0; i<files['templates'][v].stylesheets.length; ++i) {
                     if (
-                        files['views'][v].stylesheets[i].substr(0,1) != '{' &&
-                        !/\:\/\//.test(files['views'][v].stylesheets[i])
+                        files['templates'][v].stylesheets[i].substr(0,1) != '{' &&
+                        !/\:\/\//.test(files['templates'][v].stylesheets[i])
                     ) {
-                        if (files['views'][v].stylesheets[i].substr(0,1) != '/')
-                            files['views'][v].stylesheets[i] = '/'+files['views'][v].stylesheets[i];
+                        if (files['templates'][v].stylesheets[i].substr(0,1) != '/')
+                            files['templates'][v].stylesheets[i] = '/'+files['templates'][v].stylesheets[i];
 
-                        if (/^\/\//.test(files['views'][v].stylesheets[i]) )
-                            files['views'][v].stylesheets[i] = files['views'][v].stylesheets[i]
+                        if (/^\/\//.test(files['templates'][v].stylesheets[i]) )
+                            files['templates'][v].stylesheets[i] = files['templates'][v].stylesheets[i]
                         else
-                            files['views'][v].stylesheets[i] = conf[bundle][env].server.webroot + files['views'][v].stylesheets[i]
+                            files['templates'][v].stylesheets[i] = conf[bundle][env].server.webroot + files['templates'][v].stylesheets[i]
                     }
                 }
             }
@@ -1201,34 +1252,34 @@ function Config(opt) {
         files = whisper(reps, files);
         
         // favicons rewrite
-        var faviconsPath = files['statics'][  ( (_wroot) ? _wroot +'/' : '' ) + 'favicons'];
-        if ( hasViews && typeof(files['statics']) != 'undefiened' && fs.existsSync( faviconsPath ) ) {
-            var favFiles = fs.readdirSync(faviconsPath);
-            for (var f = 0, fLen = favFiles.length; f < fLen; ++f) {
-                if ( !/^\./.test(favFiles[f]) )
-                    files['statics'][ ( (_wroot) ? _wroot +'/' : '' ) + favFiles[f] ] = faviconsPath +'/'+ favFiles[f];                
-            }
-        }
+        // var faviconsPath = files['statics'][  ( (_wroot) ? _wroot +'/' : '' ) + 'favicons'];
+        // if ( hasViews && typeof(files['statics']) != 'undefiened' && fs.existsSync( faviconsPath ) ) {
+        //     var favFiles = fs.readdirSync(faviconsPath);
+        //     for (var f = 0, fLen = favFiles.length; f < fLen; ++f) {
+        //         if ( !/^\./.test(favFiles[f]) )
+        //             files['statics'][ ( (_wroot) ? _wroot +'/' : '' ) + favFiles[f] ] = faviconsPath +'/'+ favFiles[f];                
+        //     }
+        // }
 
         // loading forms rules
-        if (hasViews && typeof(files['views'].default.forms) != 'undefined') {
+        if (hasViews && typeof(files['templates'].default.forms) != 'undefined') {
             try {
-                files['forms'] = loadForms(files['views'].default.forms)
+                files['forms'] = loadForms(files['templates'].default.forms)
             } catch (err) {
                 callback(err)
             }
         }
 
         // plugin loader (frontend framework)
-        if ( hasViews && typeof(files['views'].default.pluginLoader) != 'undefined' ) {
+        if ( hasViews && typeof(files['templates'].default.pluginLoader) != 'undefined' ) {
             var loaderSrcPath = null;
-            loaderSrcPath = files['views'].default.pluginLoader.replace(/(\{src\:|\})/g, '');
+            loaderSrcPath = files['templates'].default.pluginLoader.replace(/(\{src\:|\})/g, '');
             try {
                 // will get a buffer
                 if (cacheless) {
                     delete require.cache[require.resolve(_(loaderSrcPath, true))]
                 }
-                files['views'].default.pluginLoader = fs.readFileSync( _(loaderSrcPath, true))
+                files['templates'].default.pluginLoader = fs.readFileSync( _(loaderSrcPath, true))
             } catch (err) {
                 callback(err)
             }
@@ -1236,9 +1287,14 @@ function Config(opt) {
 
         if ( typeof(conf[bundle][env].content) == 'undefined') {
             conf[bundle][env].content = {}
-        }
+        }        
+        
+        
+        
 
         conf[bundle][env].content   = files;
+       
+        
         conf[bundle][env].bundle    = bundle;
         if (bundle == self.startingApp)
             conf[bundle][env].bundles   = self.getBundles();
@@ -1254,7 +1310,7 @@ function Config(opt) {
         ) {
             protocol    = conf[bundle][env].server.protocol = conf[bundle][env].content.settings.server.protocol; // from user's bundle/config/settings.json
             scheme      = conf[bundle][env].server.scheme = conf[bundle][env].content.settings.server.scheme; // from user's bundle/config/settings.json     
-            // updating server & connectino infos
+            
             // getting server port
             conf[bundle][env].server.port = portsReverse[ bundle +'@'+ self.projectName ][env][protocol][scheme];
             appPort = portsReverse[bundle+'@'+self.projectName][env][protocol][scheme];    
@@ -1344,7 +1400,7 @@ function Config(opt) {
      * @return {boolean} isUsingCache
      * */
     this.isCacheless = function() {
-        var env = self.Env.get();//Config.instance.Env.get();
+        //var env = self.Env.get();//Config.instance.Env.get();
         //Also defined in core/gna.
         return (GINA_ENV_IS_DEV) ? true : false
     }

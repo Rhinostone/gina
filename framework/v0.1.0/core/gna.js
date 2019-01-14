@@ -20,6 +20,7 @@ var e               = new EventEmitter();
 var gna         = {core:{}};
 var Config      = require('./config');
 var config      = null;
+//var helpers     = require('./../helpers');
 var lib         = require('./../lib');
 var console     = lib.logger;
 var Proc        = lib.Proc;
@@ -34,6 +35,7 @@ gna.initialized = process.initialized = false;
 gna.routed      = process.routed = false;
 
 gna.utils       = lib;
+//gna.helpers     = helpers;
 gna.locales     = locales;
 gna.plugins     = plugins;
 

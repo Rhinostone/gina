@@ -26,14 +26,24 @@ module.exports = function(){
      * */
     requireJSON = function(filename){
         
-        var jsonStr = fs.readFileSync(filename);
-        comments    = jsonStr.match(/(\/\*([^*]|[\r\n]|(\*+([^*\/]|[\r\n])))*\*+\/)|(\/\/.*)[^{}]/g);        
+        var jsonStr = fs.readFileSync(filename).toString();   
+        // don't take any between quotes & and ignore chars like `:`  `,`  - ([^"A-Za-z0-9_:,"]+)
+        // ignore {" - [^}"]
         
-        if (comments.length > 0) {
-            jsonStr = jsonStr.replace(comments[0], '');
+        
+        comments_with_slashes    = jsonStr.match(/[^}"](\/\/\s+[A-Za-z0-9-_ \(\)\:\!\?\#]+|\/\/[A-Za-z0-9-_ \(\)\:\!\?\#]+)+|(\/\/".*\"\,|\/\/".*\")+/g);
+        if ( comments_with_slashes ) {
+            for (var m = 0, mLen = comments_with_slashes.length; m < mLen; ++m) {
+                jsonStr = jsonStr.replace(comments_with_slashes[m], '');
+            }                    
+        } 
+        
+        try {
+            return JSON.parse(jsonStr) 
+        } catch (err) {
+            throw new Error('[ requireJSON ] could not parse `'+ filename +'`:\n\r' + fs.readFileSync(filename).toString() +'\n\rVS\n\r<strong style="color:red">"</strong>'+jsonStr+'<strong style="color:red">"</strong>');            
         }
-        
-        return JSON.parse(jsonStr)        
+               
     };
    
 

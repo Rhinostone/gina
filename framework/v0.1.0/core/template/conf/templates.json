@@ -1,0 +1,19 @@
+{
+  "default": {
+    "layout": "{templatesPath}/html/layout.html",
+    "noLayout": "{gina}/framework/v{version}/core/asset/html/nolayout.html", 
+    "templates": "{templatesPath}", // only if hasView()
+    "html": "{templatesPath}/html",  // only if hasView()
+    "theme": "default_theme", // only if hasView()
+    "forms": "{templatesPath}/forms",
+    "handlers": "{templatesPath}/handlers",
+    "useRouteNameAsFilename": true,
+    "http-metas": {
+      "content-type": "text/html"
+    },
+    "stylesheets": [],
+    "javascripts": [],
+    "_pluginLoader": "{src:{gina}/framework/v{version}/core/asset/js/plugin/src/utils/loader.js}",
+    "pluginLoader": "{src:{gina}/framework/v{version}/core/asset/js/plugin/dist/gina.onload.min.js}"
+  }
+}

@@ -145,8 +145,8 @@ function BuildBundle(project, bundle) {
 
 
         var match = _(self.root +'/' +project.bundles[bundle].src);
-        if ( typeof(self.conf.content.views) != 'undefined') {
-            self['views_path'] = self.conf.content.views.default.views.replace(match, self['release_path']);
+        if ( typeof(self.conf.content.templates) != 'undefined') {
+            self['views_path'] = self.conf.content.templates.default.templates.replace(match, self['release_path']);
         }
 
         try {

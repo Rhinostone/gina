@@ -1,9 +1,9 @@
 {
-  "favicon.ico": "{views}/favicon.ico",
-  "favicons": "{views}/favicons",
-  "html": "{views}/html",
-  "_public_comment": "Used for static content only: not including template !",
-  "public": "{views}",
-  "common": "{projectPath}/common",
+  //"favicon.ico": "{templatesPath}/favicon.ico",
+  //"favicons": "{templatesPath}/favicons",
+  "html": "{templatesPath}/html",  // used for templating
+  "sass": "{templatesPath}/sass",  // used for templating
+  "handlers": "{handlersPath}",  // used for templating
+  //"common": "{sharedPath}", 
   "js/vendor/gina": "{gina}/framework/v{version}/core/asset/js/plugin/dist"
 }

@@ -37,7 +37,7 @@ function Connector(dbString) {
             env: null,
             options: {
                 keepAlive: true,
-                pingInterval : "1m"
+                pingInterval : "2m"
             }
     };
 
@@ -65,7 +65,8 @@ function Connector(dbString) {
             self
                 .connect(dbString)
                 .on('error', function(err){
-                    console.emerg('[ CONNECTOR ][ ' + local.bundle +' ][ '+ dbString.database +' ] Handshake aborted ! PLease check that Couchbase is running.\n',  err.message);                    
+                    if (!self.reconnecting)
+                        console.emerg('[ CONNECTOR ][ ' + local.bundle +' ][ '+ dbString.database +' ] Handshake aborted ! PLease check that Couchbase is running.\n',  err.message);                    
                 })
                 .once('connect', function () {
                     // default driver does not trigger any conn event, so we have to intercept it thu gina
@@ -87,13 +88,16 @@ function Connector(dbString) {
                             || /cannot perform operations on a shutdown bucket/.test(err.message ) && !self.reconnecting && !self.reconnected
                         ) {
                             // reconnecting
-                            console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] trying to reconnect...');
+                            console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] trying to reconnect in 5 secs...');
                             self.reconnecting = true;
-                            if ( typeof(next) != 'undefined' ) {
-                                self.connect(dbString, next)
-                            } else {
-                                self.connect(dbString)
-                            }
+                            
+                            setTimeout( function onRetry(){
+                                if ( typeof(next) != 'undefined' ) {
+                                    self.connect(dbString, next)
+                                } else {
+                                    self.connect(dbString)
+                                }
+                            }, 5000)                            
 
                         } else if (err instanceof couchbase.Error && err.code == 23 && !self.reconnecting) {
                             self.instance.disconnect();
@@ -217,6 +221,19 @@ function Connector(dbString) {
             delete self.reconnecting;
             self.reconnected = false;
             console.error('[ CONNECTOR ][ ' + local.bundle +' ] couchbase could not be reached !!\n'+ ( err.stack || err.message || err ) );
+            
+            // reconnecting
+            console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] trying to reconnect in a few secs...');
+            self.reconnecting = true;
+            
+            setTimeout( function onRetry(){
+                if ( typeof(next) != 'undefined' ) {
+                    self.connect(dbString, next)
+                } else {
+                    self.connect(dbString)
+                }
+            }, 5000)   
+            
         });
 
         return conn
@@ -281,19 +298,11 @@ function Connector(dbString) {
                     
                 } else {
                     self.instance.get('heartbeat', function(err, res){
-                        if (err) {
-                            console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connection encountered the following error: \n'+ ( err.stack || err.message || err ) );
-                            clearInterval(self.pingId );
-                            self.reconnected = false;
-                            self.reconnecting = true;
-                            if ( typeof(next) != 'undefined' ) {
-                                self.connect(dbString, next)
-                            } else {
-                                self.connect(dbString)
-                            }
-                        } else {
+                        //if (err) {
+                        //    console.debug('[ CONNECTOR ][ ' + local.bundle +' ] ping encountered the following error: \n'+ ( err.stack || err.message || err ) );                            
+                        //} else {
                             console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connection is being kept alive ...')
-                        }                        
+                        //}                        
                     })
                 }
                                 
@@ -301,7 +310,7 @@ function Connector(dbString) {
             cb()
         } else {
             self.instance.get('heartbeat', function(err, result){
-                console.debug('[ CONNECTOR ][ ' + local.bundle +' ] sent ping to couchbase ...');
+                console.debug('[ CONNECTOR ][ ' + local.bundle +' ] sent ping to couchbase ...');               
                 cb()
             })
         }
