@@ -1,5 +1,5 @@
 {
-  "default": {
+  "common": {
     "layout": "{templatesPath}/html/layout.html",
     "noLayout": "{gina}/framework/v{version}/core/asset/html/nolayout.html", 
     "templates": "{templatesPath}", // only if hasView()
@@ -7,12 +7,20 @@
     "theme": "default_theme", // only if hasView()
     "forms": "{templatesPath}/forms",
     "handlers": "{templatesPath}/handlers",
-    "useRouteNameAsFilename": true,
+    "routeNameAsFilenameEnabled": true,    
     "http-metas": {
       "content-type": "text/html"
     },
-    "stylesheets": [],
-    "javascripts": [],
+    "stylesheets": [
+      {
+        "media"   : "screen",
+        "rel"     : "stylesheet",
+        "type"    : "text/css",
+        "url": "/js/vendor/gina/gina.min.css"
+      }
+    ],
+    "javascriptsDeferEnabled": true, // will place scripts in defer mode in the head by default. If false, will place in the footer
+    "javascripts": ["/js/vendor/gina/gina.min.js"],    
     "_pluginLoader": "{src:{gina}/framework/v{version}/core/asset/js/plugin/src/utils/loader.js}",
     "pluginLoader": "{src:{gina}/framework/v{version}/core/asset/js/plugin/dist/gina.onload.min.js}"
   }

@@ -469,6 +469,7 @@ function Config(opt) {
                 // by default
                 if ( typeof(newContent[app][env].server.protocol) == 'undefined' ) {
                     newContent[app][env].server.protocol = ( bundHasSettings && typeof(bundleSettings.server) != 'undefined' && typeof(bundleSettings.server.protocol) != 'undefined' ) ? bundleSettings.server.protocol : projectConf.def_protocol; // from ~/.gina/projects.json
+                    newContent[app][env].server.protocolShort = newContent[app][env].server.protocol.split(/\./)[0];
                 }
                 
                 if ( typeof(newContent[app][env].server.scheme) == 'undefined' ) {
@@ -945,7 +946,7 @@ function Config(opt) {
 
 
 
-        var hasViews = (typeof(files['templates']) != 'undefined' && typeof(files['templates']['default']) != 'undefined') ? true : false;
+        var hasViews = (typeof(files['templates']) != 'undefined' && typeof(files['templates']['common']) != 'undefined') ? true : false;
 
         // e.g.: 404 rendering for JSON APIs by checking `env.template`: JSON response can be forced even if the bundle has views
         if ( hasViews && typeof(self.userConf[bundle][env].template) != 'undefined' && self.userConf[bundle][env].template == false) {
@@ -956,16 +957,16 @@ function Config(opt) {
 
         //Set default keys/values for views
                
-        // if ( hasViews &&  typeof(files['templates'].default.templates) == 'undefined' ) {
-        //     files['templates'].default.templates =  _(appPath +'/templates')
+        // if ( hasViews &&  typeof(files['templates'].common.templates) == 'undefined' ) {
+        //     files['templates'].common.templates =  _(appPath +'/templates')
         // }
 
-        // if ( hasViews && typeof(files['templates'].default.html) == 'undefined' ) {
-        //     files['templates'].default.html =  _(appPath +'/views/html')
+        // if ( hasViews && typeof(files['templates'].common.html) == 'undefined' ) {
+        //     files['templates'].common.html =  _(appPath +'/views/html')
         // }
 
-        // if ( hasViews && typeof(files['templates'].default.theme) == 'undefined' ) {
-        //     files['templates'].default.theme =  'default_theme'
+        // if ( hasViews && typeof(files['templates'].common.theme) == 'undefined' ) {
+        //     files['templates'].common.theme =  'default_theme'
         // }
 
 
@@ -996,10 +997,10 @@ function Config(opt) {
         var viewsPath = _(corePath +'/template/conf/templates.json', true);
         
         var defaultTemplateConf = requireJSON(viewsPath);
-        if (hasViews && typeof(files['templates'].default) != 'undefined') {
-            reps['templates']   = files['templates'].default.templates || defaultTemplateConf.default.templates;            
-            reps['html']        = files['templates'].default.html || defaultTemplateConf.default.html;
-            reps['theme']       = files['templates'].default.theme || defaultTemplateConf.default.theme;            
+        if (hasViews && typeof(files['templates'].common) != 'undefined') {
+            reps['templates']   = files['templates'].common.templates || defaultTemplateConf.common.templates;            
+            reps['html']        = files['templates'].common.html || defaultTemplateConf.common.html;
+            reps['theme']       = files['templates'].common.theme || defaultTemplateConf.common.theme;            
         }
 
         var ports = conf[bundle][env].port;
@@ -1120,11 +1121,32 @@ function Config(opt) {
                 files['templates'] = requireJSON(viewsPath)
             } else if ( typeof(files['templates']) != 'undefined' ) {
                 var defaultViews = requireJSON(viewsPath);
-
-                files['templates'] = merge(files['templates'], defaultViews)
+                
+                // updating javascripts & css order
+                var scriptsTmp      = JSON.parse(JSON.stringify(files['templates'].common.javascripts));  
+                var stylesheetsTmp  = JSON.parse(JSON.stringify(files['templates'].common.stylesheets));  
+                
+                delete files['templates'].common.javascripts;
+                delete files['templates'].common.stylesheets;
+                
+                files['templates'] = merge(files['templates'], defaultViews);
+            
+                files['templates'].common.javascripts = merge(files['templates'].common.javascripts, scriptsTmp);
+                
+                if ( stylesheetsTmp && Array.isArray(stylesheetsTmp) && stylesheetsTmp.length > 0 && typeof(stylesheetsTmp[0].url) != 'undefined' ) {
+                    files['templates'].common.stylesheets = merge(files['templates'].common.stylesheets, stylesheetsTmp);
+                } else {
+                    var defaultCommonCss = [];
+                    for (var s = 0, sLen = files['templates'].common.stylesheets.length; s< sLen; ++s) {
+                        defaultCommonCss[s] = files['templates'].common.stylesheets[s].url
+                    }
+                    files['templates'].common.stylesheets = merge(defaultCommonCss, stylesheetsTmp);
+                }
+                
             }
 
         } catch (err) {
+            console.error(err.stack||err.message||err);
             callback(err);
             return;
         }
@@ -1203,10 +1225,13 @@ function Config(opt) {
         //webroot javascripts
         if (hasViews &&
             conf[bundle][env].server.webroot  != '/' &&
-            typeof(files['templates'].default.javascripts) != 'undefined'
+            typeof(files['templates'].common.javascripts) != 'undefined'
         ) {
-            for (var v in files['templates']) {
-                if (!files['templates'][v].javascripts) continue;
+            
+            for (var v in files['templates']) { // for each section
+                
+                if (!files['templates'][v].javascripts) continue;                
+              
                 for (var i=0; i<files['templates'][v].javascripts.length; ++i) {
                     if (
                         files['templates'][v].javascripts[i].substr(0,1) != '{' &&
@@ -1228,22 +1253,28 @@ function Config(opt) {
         //webroot stylesheets
         if (hasViews &&
             conf[bundle][env].server.webroot  != '/' &&
-            typeof(files['templates'].default.stylesheets) != 'undefined'
+            typeof(files['templates'].common.stylesheets) != 'undefined'
         ) {
+            var rec = null;
             for (var v in files['templates']) {
+                
                 if (!files['templates'][v].stylesheets) continue;
-                for (var i=0; i<files['templates'][v].stylesheets.length; ++i) {
+                
+                for (var i=0; i<files['templates'][v].stylesheets.length; ++i) {                    
+                    
+                    if ( typeof(files['templates'][v].stylesheets[i].url) == 'undefined') continue;
+                    
                     if (
-                        files['templates'][v].stylesheets[i].substr(0,1) != '{' &&
-                        !/\:\/\//.test(files['templates'][v].stylesheets[i])
+                        files['templates'][v].stylesheets[i].url.substr(0,1) != '{' &&
+                        !/\:\/\//.test(files['templates'][v].stylesheets[i].url)
                     ) {
-                        if (files['templates'][v].stylesheets[i].substr(0,1) != '/')
-                            files['templates'][v].stylesheets[i] = '/'+files['templates'][v].stylesheets[i];
+                        if (files['templates'][v].stylesheets[i].url.substr(0,1) != '/')
+                            files['templates'][v].stylesheets[i].url = '/'+files['templates'][v].stylesheets[i].url;
 
-                        if (/^\/\//.test(files['templates'][v].stylesheets[i]) )
-                            files['templates'][v].stylesheets[i] = files['templates'][v].stylesheets[i]
+                        if (/^\/\//.test(files['templates'][v].stylesheets[i].url) )
+                            files['templates'][v].stylesheets[i].url = files['templates'][v].stylesheets[i].url
                         else
-                            files['templates'][v].stylesheets[i] = conf[bundle][env].server.webroot + files['templates'][v].stylesheets[i]
+                            files['templates'][v].stylesheets[i].url = conf[bundle][env].server.webroot + files['templates'][v].stylesheets[i].url
                     }
                 }
             }
@@ -1262,24 +1293,24 @@ function Config(opt) {
         // }
 
         // loading forms rules
-        if (hasViews && typeof(files['templates'].default.forms) != 'undefined') {
+        if (hasViews && typeof(files['templates'].common.forms) != 'undefined') {
             try {
-                files['forms'] = loadForms(files['templates'].default.forms)
+                files['forms'] = loadForms(files['templates'].common.forms)
             } catch (err) {
                 callback(err)
             }
         }
 
         // plugin loader (frontend framework)
-        if ( hasViews && typeof(files['templates'].default.pluginLoader) != 'undefined' ) {
+        if ( hasViews && typeof(files['templates'].common.pluginLoader) != 'undefined' ) {
             var loaderSrcPath = null;
-            loaderSrcPath = files['templates'].default.pluginLoader.replace(/(\{src\:|\})/g, '');
+            loaderSrcPath = files['templates'].common.pluginLoader.replace(/(\{src\:|\})/g, '');
             try {
                 // will get a buffer
                 if (cacheless) {
                     delete require.cache[require.resolve(_(loaderSrcPath, true))]
                 }
-                files['templates'].default.pluginLoader = fs.readFileSync( _(loaderSrcPath, true))
+                files['templates'].common.pluginLoader = fs.readFileSync( _(loaderSrcPath, true))
             } catch (err) {
                 callback(err)
             }

@@ -51,12 +51,30 @@ function Router(env) {
         }
     }
 
-    this.setMiddlewareInstance = function(instance) {
-        self.middlewareInstance = instance
+    /**
+     * Core dependencies refresh for cacheless env
+     *  - {core}/controller/controller.js
+     */
+    var refreshCoreDependencies= function() {
+        
+        var corePath    = getPath('gina').core;
+        
+        // Super controller
+        delete require.cache[require.resolve(_(corePath +'/controller/controller.js', true))];
+        delete require.cache[require.resolve(_(corePath +'/controller/index.js', true))];
+        require.cache[_(corePath +'/controller/controller.js', true)] = require( _(corePath +'/controller/controller.js', true) );
+        require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
+        
+        SuperController = require.cache[_(corePath +'/controller/index.js', true)];
     }
     
-    this.getMiddlewareInstance = function () {
-        return self.middlewareInstance;
+    this.setServerInstance = function(instance) {
+        instance._http2streamEventInitalized = false;
+        self.serverInstance = instance;
+    }
+    
+    this.getServerInstance = function () {
+        return self.serverInstance;
     }
 
     this.getInstance = function() {
@@ -74,7 +92,14 @@ function Router(env) {
      * @callback next
      * */
     this.route = function(request, response, next, params) {
-
+        
+        var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
+        local.cacheless = cacheless;
+        
+        if (cacheless) {
+            refreshCoreDependencies()
+        }
+        
         //Routing.
         //var pathname        = url.parse(request.url).pathname;
         var bundle          = local.bundle = params.bundle;
@@ -109,15 +134,15 @@ function Router(env) {
         var namespace       = params.namespace;
         var routeHasViews   = ( typeof(conf.content.templates) != 'undefined' ) ? true : false;
         var isUsingTemplate = conf.template;
-        var hasSetup        = false;
+        var hasSetup        = false;        
+        var serverInstance  = self.getServerInstance();
 
         local.routeHasViews     = routeHasViews;
         local.isUsingTemplate   = isUsingTemplate;
         local.next              = next;
         local.isXMLRequest      = params.isXMLRequest;
 
-        var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
-        local.cacheless = cacheless;
+        
         
         
         //Middleware Filters when declared.
@@ -176,7 +201,7 @@ function Router(env) {
             bundlePath: conf.bundlesPath + '/' + bundle,
             rootPath: self.executionPath,
             conf: JSON.parse(JSON.stringify(conf)),
-            instance: self.middlewareInstance,
+            //instance: self.serverInstance,
             templates: (routeHasViews) ? conf.content.templates : undefined,
             isUsingTemplate: local.isUsingTemplate,
             cacheless: cacheless,
@@ -225,12 +250,25 @@ function Router(env) {
         
         // about to contact Controller ...
         try {
-
+            
             Controller      = inherits(Controller, SuperController);
-
-            var controller  = new Controller(options);
-            controller.name = options.control;
+            
+            var controller  = new Controller(options);                        
+            controller.name = options.control;            
             controller.setOptions(request, response, next, options);
+            if ( /http\/2/.test(conf.server.protocol) ) { 
+                
+                serverInstance._referrer = local.request.url;
+                
+                if ( !serverInstance._http2streamEventInitalized ) {
+                    serverInstance._http2streamEventInitalized = true;
+                    serverInstance.on('stream', function onHttp2Strem(stream, headers) {                        
+                        controller.onHttp2Stream(this._referrer, stream, headers);
+                    });
+                }               
+            }
+            
+            
 
             if (hasSetup) { // adding setup
                 controller.setup = function(request, response, next) {
@@ -305,21 +343,33 @@ function Router(env) {
                     }
 
                     var SuperController     = require.cache[_(corePath +'/controller/index.js', true)];
+                                        
+                    
                     var RequiredController  = require(filename);
 
-                    RequiredController      = inherits(RequiredController, SuperController)
-
+                    RequiredController      = inherits(RequiredController, SuperController);
+                    
+                    var controller = null;
                     if ( typeof(options) != 'undefined' ) {
 
-                        var controller = new RequiredController( options );
+                        controller = new RequiredController( options );
                         controller.name = namespace;
+                        
                         controller.setOptions(request, response, next, options);
 
-                        return controller
-
                     } else {
-                        return new RequiredController();
+                        controller = new RequiredController();
                     }
+                    
+                    if ( /http\/2/.test(conf.server.protocol) ) {                
+                        controller.once('http2streamEventInitalized', function onHttp2streamEventInitalized(initialized){
+                            serverInstance._http2streamEventInitalized = initialized
+                        });
+                        controller.serverOn = serverInstance.on;
+                        controller._http2streamEventInitalized = serverInstance._http2streamEventInitalized;                        
+                    }
+                    
+                    return controller
 
                 } catch (err) {
                     throwError(response, 500, err );

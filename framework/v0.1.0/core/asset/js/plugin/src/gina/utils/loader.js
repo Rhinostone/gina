@@ -87,7 +87,6 @@ window['onGinaLoaded']  = function(gina) {
         document.getElementsByTagName('head')[0].appendChild(link);
 
         // all required must be listed in `src/gina.js` defined modules list
-        //gina["registeredScripts"] = '{{ page.view.scripts }}';
         if (options['envIsDev']) {
             var Toolbar             = require('gina/toolbar');
             window['ginaToolbar']   = new Toolbar();

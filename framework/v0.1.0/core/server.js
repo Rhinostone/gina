@@ -50,8 +50,7 @@ function Server(options) {
         self.projectName    = options.projectName;
         //Starting app.
         self.appName        = options.bundle;
-
-        self.env            = options.env;
+        self.env            = options.env;        
         self.version        = options.version;
         local.router        = new Router(self.env);
 
@@ -177,9 +176,9 @@ function Server(options) {
 
         if (instance) {            
             self.instance   = instance;
-            //Middlewares configuration.
+            //Router configuration.
             var router      = local.router;
-            router.setMiddlewareInstance(instance);
+            router.setServerInstance(instance);
         }
 
         onRoutesLoaded( function(err) {//load all registered routes in routing.json
@@ -353,9 +352,9 @@ function Server(options) {
 
                         if( hasViews(apps[i]) ) {
                             // This is only an issue when it comes to the frontend dev
-                            // views.useRouteNameAsFilename is set to true by default
+                            // views.routeNameAsFilenameEnabled is set to true by default
                             // IF [ false ] the action is used as filename
-                            if ( !conf.envConf[apps[i]][self.env].content['templates']['default'].useRouteNameAsFilename && tmp[rule].param.bundle != 'framework') {
+                            if ( !conf.envConf[apps[i]][self.env].content['templates']['common'].routeNameAsFilenameEnabled && tmp[rule].param.bundle != 'framework') {
                                 var tmpRouting = [];
                                 for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
                                     if (/[A-Z]/.test(tmp[rule].param.file.charAt(r))) {
@@ -574,9 +573,8 @@ function Server(options) {
     }
     
     /**
-     * Handle statics 
+     * Default http/1.x statics handler - For http/2.x check the SuperController
      * @param {object} staticProps - Expected : .isFile & .firstLevel
-     * 
      * @param {*} request 
      * @param {*} response 
      * @param {*} next 
@@ -616,11 +614,10 @@ function Server(options) {
             } else {
                 
                 if ( fs.statSync(filename).isDirectory() ) {
-                    pathname += 'index.html';
                     filename += 'index.html';
                     
                     if ( !fs.existsSync(filename) ) {
-                        throwError(response, 404, 'Page not found: \n' + pathname, next);  
+                        throwError(response, 403, 'Forbidden: \n' + pathname, next);  
                         return;
                     }
                 }
@@ -673,12 +670,14 @@ function Server(options) {
             }
         })
     }
-
+    
+    
     var onRequest = function() {
 
         var apps = self.bundles;
         var webrootLen = self.conf[self.appName][self.env].server.webroot.length;
 
+        // catch all (request urls)
         self.instance.all('*', function onInstance(request, response, next) {
             local.request = request;
             response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );
@@ -704,7 +703,9 @@ function Server(options) {
                 staticProps.isFile && staticsArr.indexOf(request.url) > -1 
                 || staticsArr.indexOf(staticProps.firstLevel) > -1
             ) {
+                //local['handle'+ self.conf[self.appName][self.env].server.protocolShort +'Statics'](staticProps, request, response, next);
                 handleStatics(staticProps, request, response, next);
+                
             } else { // none statics
                 request.body    = {};
                 request.get     = {};
@@ -1345,7 +1346,8 @@ function Server(options) {
             
                      
             
-            if (nextExpressMiddleware._index > nextExpressMiddleware._count) {                
+            if (nextExpressMiddleware._index > nextExpressMiddleware._count) {    
+                router._server = self.instance;            
                 router.route(nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next, nextExpressMiddleware._request.routing)
                 
                 //handle(nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next, nextExpressMiddleware._bundle, nextExpressMiddleware._pathname, nextExpressMiddleware._config)
@@ -1367,7 +1369,6 @@ function Server(options) {
             , isXMLRequest      = self.conf[bundle][self.env].server.request.isXMLRequest;
 
         
-        //router.setMiddlewareInstance(self.instance);
         req.setEncoding(self.conf[bundle][self.env].encoding);       
         
         var params      = {}
@@ -1504,6 +1505,7 @@ function Server(options) {
                             
                             nextExpressMiddleware()
                         } else {
+                            router._server = self.instance;
                             router.route(req, res, next, req.routing)
                         }
                         
@@ -1520,6 +1522,7 @@ function Server(options) {
                     
                     nextExpressMiddleware()
                 } else {
+                    router._server = self.instance;
                     router.route(req, res, next, req.routing)
                 }
             }
@@ -1561,10 +1564,10 @@ function Server(options) {
                 }
 
                 // we add it into statics
-                if ( withViews && typeof(conf.content.statics[key]) == 'undefined' && conf.content.templates.default.templates != conf.content.templates.default.html) {
-                    conf.content.statics[key] = conf.content.templates.default.templates +'/'+ uri.join('/')
+                if ( withViews && typeof(conf.content.statics[key]) == 'undefined' && conf.content.templates.common.templates != conf.content.templates.common.html) {
+                    conf.content.statics[key] = conf.content.templates.common.templates +'/'+ uri.join('/')
                 } else if (withViews && typeof(conf.content.statics[key]) == 'undefined') {
-                    conf.content.statics[key] = conf.content.templates.default.html +'/'+ uri.join('/') // normal case
+                    conf.content.statics[key] = conf.content.templates.common.html +'/'+ uri.join('/') // normal case
                 }
 
                 uri = pathname.split('/');                

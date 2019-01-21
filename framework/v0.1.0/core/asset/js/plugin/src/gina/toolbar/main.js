@@ -197,7 +197,9 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                 }
 
             } catch (err) {
-                $json.text('Could not load data');
+                
+                var sectionStr = ( section ) ? ' [ '+ section + ' ] ' : ' ';                                    
+                $json.text('Could not load'+ sectionStr +'json\n' + (err.stack||err.message||err));
             }
 
             if (jsonObject) {
@@ -744,6 +746,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                     section = stateSection
                         .replace(/(\]\[|\[)/g, '-')
                         .replace(/\]/, '')
+                        .replace(/[^A-Za-z0-9_-]/g, '_')
                 }
                 
                 foldingStateName += section + '-'
@@ -763,13 +766,13 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                 foldingStateName = foldingStateName.substr(0, foldingStateName.length-1)
             }
             
-            return foldingStateName
+            return foldingStateName.trim()
         }
 
         var parseObject = function(obj, ginaObj, elId, elIsXHR, elSection) {
 
             var html            = '';
-            var id              = ( typeof(elId) != 'undefined' && elId != null ) ? elId : '';
+            var id              = ( typeof(elId) != 'undefined' && elId != null ) ? elId.replace(/[^A-Za-z0-9_-]/g, '_') : '';
             var section         = ( typeof(elSection) != 'undefined' && elSection != null ) ? elSection : '';
             var isXHR           = ( typeof(elIsXHR) != 'undefined' && elIsXHR != null ) ? '-xhr' : '';
             var count           = '';
@@ -785,11 +788,11 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
 
                 if ( typeof(obj[i]) == 'object' && !Array.isArray(obj[i]) && obj[i] !== null ) { // parse
                     //id += i + '-';
-                    id += '-' + i;
+                    id += '-' + i.replace(/[^A-Za-z0-9_-]/g, '_');
                     isEmptyClass = (obj[i].count() > 0 || ginaObj[i].count() > 0) ? '' : ' is-empty';
 
                     html += '<li class="gina-toolbar-object">';
-                    html +=  '<a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( section, i ) + isEmptyClass +'">'+ i +' <span>{ }</span></a>';
+                    html +=  '<a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( section, i.replace(/[^A-Za-z0-9_-]/g, '_') ) + isEmptyClass +'">'+ i +' <span>{ }</span></a>';
                     html += '<ul class="gina-toolbar-object">' + parseObject(obj[i], ginaObj[i], id, elIsXHR, elSection) +'</ul>';
                     html += '</li>';
                     // clear one level
@@ -797,11 +800,11 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                     id = id.substr(0, id.length - i.length);
                 } else if ( Array.isArray(obj[i]) ) {
                     //id += i + '-';
-                    id += '-' + i;
+                    id += '-' + i.replace(/[^A-Za-z0-9_-]/g, '_');
                     isEmptyClass = (obj[i].length > 0 || ginaObj[i].length > 0) ? '' : ' is-empty';
 
                     html += '<li class="gina-toolbar-collection">';
-                    html +=  '<a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( section, i ) + isEmptyClass +'">'+ i +' <span>['+ obj[i].length +']</span></a>';
+                    html +=  '<a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( section, i.replace(/[^A-Za-z0-9_-]/g, '_') ) + isEmptyClass +'">'+ i +' <span>['+ obj[i].length +']</span></a>';
                     html += '<ul class="gina-toolbar-collection">' + parseCollection(obj[i], ginaObj[i], id, elIsXHR, elSection)  +'</ul>';
                     html += '</li>';
                     // clear one level
@@ -887,7 +890,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
 
         var parseView = function (obj, ginaObj, elId, elIsXHR, $html, $root) {
 
-            var id          = (elId != null) ? elId : '';
+            var id          = (elId != null) ? elId.replace(/[^A-Za-z0-9_-]/g, '_') : '';
             var section     = null;
             var isXHR       = ( typeof(elIsXHR) != 'undefined' && elIsXHR != null ) ? '-xhr' : '';
             var count       = '';
@@ -902,15 +905,15 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
             if (!$root)
                 $root = $html;
 
-            for (var i in obj) {
+            for (var i in obj) {                
                 section = i;
                 if ( typeof(obj[i]) == 'object' && !Array.isArray(obj[i]) && obj[i] !== null ) { // parse
 
                     $parent = $('#gina-toolbar-view-' + id.substr(0, id.length - 1));
                     hasParent = ( $parent.length ) ? true : false;
 
-                    if (!hasParent) {
-                        id += i + '-';
+                    if (!hasParent ) {
+                        id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
 
                         if (i == 'params') { // force to top 
                             var htmlParams =    '<div id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'" class="gina-toolbar-section">' +
@@ -921,28 +924,37 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                             $('#gina-toolbar-view-html-properties')
                                 .before(htmlParams);
                         } else {
-                            var htmlOther = '<div id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'" class="gina-toolbar-section">' +
+                            
+                            if ( !/^html/.test(id) ) {
+                                
+                                var htmlOther = '<div id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'" class="gina-toolbar-section">' +
                                                 '<h2 class="gina-toolbar-section-title">'+ id.substr(0, id.length - 1) +'</h2>' +
                                                 '<ul class="'+ id.substr(0, id.length - 1) +'"></ul>' +
                                             '</div>';
 
-                            $html
-                                .append(htmlOther);
+                                $html
+                                    .append(htmlOther);
+                            }/** else { // add to properties section
+                                $root
+                                    .find('.gina-toolbar-properties')
+                                    .append('ul.' + id.substr(0, id.length - 1))
+                            }*/
+                            
                         }
 
                         parseView(obj[i], ginaObj[i], id, elIsXHR, $html.find('ul.'+ id.substr(0, id.length - 1)), $root );
 
                     } else {
 
-                        parentId = id + i + '-';
+                        parentId = id + i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
 
                         $parent
                             .find('ul.'+ id.substr(0, id.length - 1))
-                            .append('<li class="gina-toolbar-object"><a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i, parentId.substr(0, parentId.length - 1) ) +'">'+ i +' <span>{ }</span></a><ul class="gina-toolbar-object '+ parentId.substr(0, parentId.length - 1) +'"></ul></li>');
+                            .append('<li class="gina-toolbar-object"><a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i.replace(/[^A-Za-z0-9_-]/g, '_'), parentId.substr(0, parentId.length - 1) ) +'">'+ i +' <span>{ }</span></a><ul class="gina-toolbar-object '+ parentId.substr(0, parentId.length - 1) +'"></ul></li>');
 
                         parseView(obj[i], ginaObj[i], parentId, elIsXHR, $parent.find('ul.'+ id.substr(0, id.length - 1)), $root );
 
-                        id += i + '-';
+                        id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
                     }
 
 
@@ -950,35 +962,45 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                     id = id.substr(0, id.length - i.length - 1);
 
 
-                } else if ( Array.isArray(obj[i]) ) {
+                } else if ( Array.isArray(obj[i]) ) { // parse collection
 
+                    
                     $parent = $('#gina-toolbar-view-' + id.substr(0, id.length - 1));
                     hasParent = ( $parent.length ) ? true : false;
 
-                    if (!hasParent) {
-                        id = id + i + '-';
+                    if ( !hasParent || /^html/.test(id) ) {                        
+                        id = id + i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
                         $root
                             .find('.gina-toolbar-properties')
-                            .append('<li class="gina-toolbar-collection"><a class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i, id.substr(0, id.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $root.find('.gina-toolbar-properties'), section) +'</ul></li>');
+                            .append('<li class="gina-toolbar-collection"><a class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i.replace(/[^A-Za-z0-9_-]/g, '_'), id.substr(0, id.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $root.find('.gina-toolbar-properties'), section) +'</ul></li>');
 
 
-                    } else {
-
-                        parentId = id + i + '-';
+                    } else {                       
+                        
+                        
+                        parentId = id + i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
 
                         $parent
                             .find('li.'+ id.substr(0, id.length - 1) +' ul')
-                            .append('<li class="gina-toolbar-collection"><a class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i, parentId.substr(0, parentId.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $parent.find('li ul.'+ id.substr(0, id.length - 1)), section ) +'</ul></li>');
+                            .append('<li class="gina-toolbar-collection"><a class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i.replace(/[^A-Za-z0-9_-]/g, '_'), parentId.substr(0, parentId.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $parent.find('li ul.'+ id.substr(0, id.length - 1)), section ) +'</ul></li>');
 
-                        id += i + '-';
+                        id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
                     }
 
                     // clear one level
                     id = id.substr(0, id.length - i.length - 1);
                 } else {
-
+                    
+                    
+                    
                     objType = (ginaObj[i] === null) ? 'null' : typeof(ginaObj[i]);
                     if ( objType == 'undefined' ) { // new key  declaration added by user
+                        if (/\-$/.test(id)) {
+                            id = id.substr(0, id.length - 1);
+                        }
+                        
+                        if (!id) continue;
+                        
                         $html
                             .find('ul.' + id)
                             .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key gina-toolbar-key-added">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i]+'</span></li>');
@@ -988,22 +1010,36 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                         if (/^_comment/.test(i) ) continue;
 
                         if (obj[i] !== ginaObj[i] ) {
+                            if (!id) {
+                                id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
+                            }
+                            
+                            try {
+                                $html
+                                    .find('ul.' + id)
+                                    .append('<li class="gina-toolbar-key-value gina-toolbar-is-overridden"><span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value">'+ ginaObj[i] +'</span></li>');
 
-                            $html
-                                .find('ul.' + id)
-                                .append('<li class="gina-toolbar-key-value gina-toolbar-is-overridden"><span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value">'+ ginaObj[i] +'</span></li>');
-
-                            $html
-                                .find('ul.' + id)
-                                .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</span></li>')
-
-                        } else {
-
-                            if (!id) { // properties case
-                                $root
-                                    .find('.gina-toolbar-properties')
+                                $html
+                                    .find('ul.' + id)
                                     .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</span></li>')
 
+                            } catch (err) {
+                                throw new Error('GinaToolbarError: `ul.'+ id +'` not found');
+                            }
+                            
+                        } else {
+
+                            if ( !id || /^html\-properties/.test(id) ) { // properties case
+                                // if (id) {
+                                //     $html
+                                //         .find('ul.' + id)
+                                //         .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</span></li>')
+                                // } else {
+                                    $root
+                                        .find('.gina-toolbar-properties')
+                                        .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</span></li>')
+                                //}                                
+                                    
                             } else {
                                                             
                                 $root

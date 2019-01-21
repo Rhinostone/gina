@@ -37,12 +37,6 @@ var refreshCore = function() {
     delete require.cache[require.resolve(_(corePath +'/plugins/index.js', true))];
     require.cache[_(corePath +'/plugins/index.js', true)] = require( _(corePath +'/plugins/index.js', true) );
     require.cache[_(corePath + '/gna.js', true)].exports.plugins = require.cache[_(corePath +'/plugins/index.js', true)];
-
-    // Super controller
-    delete require.cache[require.resolve(_(corePath +'/controller/index.js', true))];
-    require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
-    SuperController = require.cache[_(corePath +'/controller/index.js', true)];
-
 }
 
 // Express compatibility
@@ -127,28 +121,6 @@ function ServerEngineClass(options) {
         // }
     };
     
-    // this can be removed
-    // Express middleware portability when using Isaac                
-    // const next = function(err) {
-        
-        
-    //     var expressMiddlewares  = server._expressMiddlewares;
-        
-    //     expressMiddlewares[next._index](next._request, next._response, function onNext(err) {
-            
-    //         if (err) {
-    //             throwError(next._response, 500, (err.stack|err.message|err))
-    //         }
-            
-    //         ++next._index;
-            
-    //         if (next._index > next._count) {
-    //             cb(next._request, next._response)
-    //         } else {
-    //             next.call(this, err, true)
-    //         }                        
-    //     });        
-    // };
        
     const onPath = function(path, cb, allowAll) {
         
@@ -158,8 +130,10 @@ function ServerEngineClass(options) {
             , p         = null
             , arr       = null
             , a         = null;
-            
-            
+          
+        // http2stream handle by the Router class & the SuperController class
+        // See `${core}/router.js` & `${core}/controller/controller.js`    
+                
         server.on('request', (request, response) => {
             
             if (GINA_ENV_IS_DEV) {
@@ -205,44 +179,11 @@ function ServerEngineClass(options) {
                 }
                                
                                 
-                
-                // next._index     = 0;
-                // next._count     = server._expressMiddlewares.length-1;      
-                // next._request   = request;
-                // next._response  = response;                  
-                
-                // next();
                 cb(request, response);
             }
             
             
-        });
-
-        server.on('stream', (stream, requestHeaders) => {
-
-            // if ( /^\*$/.test(path) || path == requestHeaders.path ) {
-
-            //     let request     = requestHeaders;
-            //     let response    = new Http2ServerResponse();
-            //     let next        = undefined;
-
-            //     //response = merge(response, stream);
-                
-            //     //stream.respond();
-            //     //stream.end('secured hello world!');
-            //     cb(request, response, next)
-            // }
-            
-            stream.on('error', (err) => {
-            const isRefusedStream = err.code === 'ERR_HTTP2_STREAM_ERROR' &&
-                stream.rstCode === NGHTTP2_REFUSED_STREAM;
-            
-            if (!isRefusedStream)
-                throw err;
-            });
-            
-        });
-        
+        });  
         
     }
 
@@ -253,6 +194,12 @@ function ServerEngineClass(options) {
     
     // configuring express plugins|middlewares
     server._expressMiddlewares = [];
+    /**
+     * <server>.use()
+     * Applies middleware for every single route
+     * 
+     * @param {function} fn
+     */
     server.use = function use(fn) {
              
         var offset = 0;

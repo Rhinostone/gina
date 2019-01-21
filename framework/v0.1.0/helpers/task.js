@@ -8,6 +8,10 @@ module.exports = function () {
 
 	 /**
      * Run commande on local cli
+     * 
+     * Could also be used to open an url but need some tweaking
+     * // sample of a cross platform `open` command
+     *  e.g.: var openCmd = (process.platform == 'darwin'? 'open': process.platform == 'win32'? 'start': 'xdg-open');
      *
      * @param cmdLine {array|string}
      * @param opt {object}

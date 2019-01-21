@@ -35,7 +35,6 @@ gna.initialized = process.initialized = false;
 gna.routed      = process.routed = false;
 
 gna.utils       = lib;
-//gna.helpers     = helpers;
 gna.locales     = locales;
 gna.plugins     = plugins;
 
@@ -452,17 +451,18 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
 
             // open default browser for dev env only
-            // if (env == 'dev') {
+            // if ( GINA_ENV_IS_DEV) {
             //     var payload = JSON.stringify({
             //         code    : 200,
-            //         command  : "reload"
+            //         command  : "open"
             //     });
-            //
+            
             //     if (self.ioClient) { // if client has already made connexion
-            //
+            //         payload.command = "reload"
             //     } else {
             //         // get default home
-            //         child.spawn('open', [conf.hostname])
+            //         // helper/task::run() should be triggered from ioClient
+            //         //run('open', [conf.hostname + conf.server.webroot])
             //     }
             // }
 
