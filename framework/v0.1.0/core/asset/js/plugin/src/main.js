@@ -16,7 +16,9 @@
  *  Useful Globals
  *
  *  window['originalContext']
- *      - passe your `jQuery` or your `DollarDom` context to Gina
+ *      You have to passe your `jQuery` or your `DollarDom` context to Gina
+ *      e.g.: 
+ *          window['originalContext'] = window['jQuery']
  *
  * */
 
@@ -61,7 +63,10 @@ function ready() {
                     }, 50, i, readyList);
 
 
-                } else {
+                } else { // onEachHandlerReady
+                    
+                    readyList[i].ctx = window.originalContext || $;// passes the user's orignalContext by default; if no orignalContext is set will try users'jQuery
+                    
                     readyList[i].fn.call(window, readyList[i].ctx);
                     ++i;
                     handleEvent(i, readyList)

@@ -34,7 +34,7 @@ var swig            = require('swig');
 function SuperController(options) {
 
     this.name = 'SuperController';
-    
+        
     //private
     var self = this;
     var local = {
@@ -43,7 +43,8 @@ function SuperController(options) {
         next    : null,
         options : options || null,
         query   : {},
-        _data   : {}
+        _data   : {},
+        view    : {}
     };
 
     // var ports = {
@@ -158,12 +159,12 @@ function SuperController(options) {
                 , namespace = local.options.namespace || '';
 
 
-            if ( typeof(local.options.templates.default) != 'undefined' ) {
-                ext = local.options.templates.default.ext || ext;
+            if ( typeof(local.options.templates.common) != 'undefined' ) {
+                ext = local.options.templates.common.ext || ext;
             }
             if( !/\./.test(ext) ) {
                 ext = '.' + ext;
-                local.options.templates.default.ext = ext
+                local.options.templates.common.ext = ext
             }
 
             var ctx = getContext('gina');
@@ -197,9 +198,11 @@ function SuperController(options) {
             set('page.view.controller', local.options.controller.replace(options.conf.bundlesPath, ''), true);
             if (typeof (local.options.controlRequired) != 'undefined' ) {
                 set('page.view.controlRequired', local.options.controlRequired);
-            }
+            }            
             set('page.view.method', local.options.method);
             set('page.view.namespace', namespace); // by default
+            set('page.view.html.properties.mode.javascriptsDeferEnabled', local.options.templates.common.javascriptsDeferEnabled);
+            set('page.view.html.properties.mode.routeNameAsFilenameEnabled', local.options.templates.common.routeNameAsFilenameEnabled);
             
             var parameters = JSON.parse(JSON.stringify(req.getParams()));//merge(options.params, options.conf.content.routing[rule].param);
             parameters = merge(parameters, options.conf.content.routing[rule].param);
@@ -243,7 +246,7 @@ function SuperController(options) {
             local.options.conf.locales = userLocales;
 
             // user locale
-            options.conf.locale = new Collection(userLocales).findOne({ short: userCountryCode });
+            options.conf.locale = new Collection(userLocales).findOne({ short: userCountryCode }) || {};
 
             set('page.view.locale', options.conf.locale);
             set('page.view.lang', userCulture);
@@ -268,7 +271,7 @@ function SuperController(options) {
             set('page.view.namespace', namespace);
 
             //TODO - detect when to use swig
-            var dir = self.templates || local.options.templates.default.templates;
+            var dir = self.templates || local.options.templates.common.templates;
             var swigOptions = {
                 autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape: false,
                 loader: swig.loaders.fs(dir),
@@ -613,56 +616,92 @@ function SuperController(options) {
                 }                
                 
                 
-                fs.readFile(layoutPath, function onReadingLayout(err, layout) {
+                fs.readFile(layoutPath, function onLoadingLayout(err, layout) {
 
                     if (err) {
                         self.throwError(local.res, 500, err);
                     } else {
+                        var assets = { assets: "${asset}"}, XHRData = null;                        
+                        var mapping = { filename: local.options.templates[template].layout };         
+                        
+                        var isDeferModeEnabled = local.options.templates.common.javascriptsDeferEnabled;
                         layout = layout.toString();
+                        
+                        // adding stylesheets
+                        if (data.page.view.stylesheets && !/\{\{\s+(page\.view\.stylesheets)\s+\}\}/.test(layout) ) {
+                            layout = layout.replace(/\<\/head\>/i, '\n{{ page.view.stylesheets }}\n</head>')
+                        }
+                                                
+                        
+                        // if (
+                        //     hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout
+                        //     || hasViews() && local.options.debugMode
+                        //     || hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() 
+                        // ) {
+                        //     try {
+                        //         // assets string
+                        //         assets = getAssets(swig, template, layout, data); 
+                        //     } catch (err) {
+                        //         self.throwError(local.res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
+                        //     }
+                        // }
+                        
                         // adding plugins
                         if (hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout || hasViews() && local.options.debugMode ) {
-
-                            var toolbarInfos        = getToolbarInfos(layout, data)
-                                , userScripts       = toolbarInfos.scripts
-                                , usersStylesheets  = toolbarInfos.stylesheets
-
-                            ;
-
-
+                            
 
                             layout = ''
-                                + '{%- set ginaDataInspector                = JSON.parse(JSON.stringify(page)) -%}'
-                                + '{%- set ginaDataInspector.view.scripts    = "ignored-by-toolbar" -%}'
-                                + '{%- set ginaDataInspector.view.stylesheets    = "ignored-by-toolbar" -%}'
-                                + layout.replace('{{ page.view.scripts }}', '')
-                                ;
+                                + '{%- set ginaDataInspector                    = JSON.parse(JSON.stringify(page)) -%}'
+                                + '{%- set ginaDataInspector.view.assets        = {} -%}'
+                                + '{%- set ginaDataInspector.view.scripts       = "ignored-by-toolbar" -%}'
+                                + '{%- set ginaDataInspector.view.stylesheets   = "ignored-by-toolbar" -%}'
+                                + layout
+                            ;
                             
+                            
+                                
                             plugin = '\t'
                                 + '{# Gina Toolbar #}'
-                                + '{%- set userDataInspector                = JSON.parse(JSON.stringify(page)) -%}'
-                                //+ '{%- set userDataInspector.view.scripts        = "ignored-by-toolbar" -%}'
-                                + '{%- set userDataInspector.view.scripts        = ['+ userScripts +'] -%}'
-                                //+ '{%- set userDataInspector.view.stylesheets    = "ignored-by-toolbar" -%}'
-                                + '{%- set userDataInspector.view.stylesheets    = ['+ usersStylesheets +'] -%}'
+                                + '{%- set userDataInspector                    = JSON.parse(JSON.stringify(page)) -%}'
+                                + '{%- set userDataInspector.view.scripts        = "ignored-by-toolbar"  -%}'
+                                + '{%- set userDataInspector.view.stylesheets   = "ignored-by-toolbar"  -%}'
+                                + '{%- set userDataInspector.view.assets        = '+ JSON.stringify(assets) +' -%}'
                                 + '{%- include "'+ getPath('gina').core +'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector } -%}'
                                 + '{# END Gina Toolbar #}'
 
-                                + '\n<script type="text/javascript">'
-                                + ' \n<!--'
-                                + '\n' + local.options.templates.default.pluginLoader.toString()
-                                + '//-->'
-                                + '\n</script>'
+                                // + '\n\t<script type="text/javascript">'
+                                // + ' \n<!--'
+                                // + '\n' + local.options.templates.common.pluginLoader.toString()
+                                // + '\t\t//-->'
+                                // + '\n\t\t</script>'
 
-                                + '\n<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
+                                //+ '\n\t\t<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
 
-                                + '{{ page.view.scripts }}'                                
+                                //+ '\t\t{{ page.view.scripts }}'                              
                             ;
+                            
+                            // adding javascripts
+                            if ( isDeferModeEnabled ) {
+                                
+                                
+                                var ginaLoader = 
+                                    '\n\t\t<script defer type="text/javascript">'
+                                    + ' \n\t\t<!--'
+                                    + '\n\t\t\t' + local.options.templates.common.pluginLoader.toString().replace(/\;(\n|\r)/g, ';').replace(/\,(\n|\r)/g, ',')
+                                    + '\n\t\t//-->'
+                                    + '\n\t\t</script>'
+                                ;
+                                layout = layout.replace(/\<\/head\>/i, '\t'+ ginaLoader +'\n</head>');
+                                
+                                layout.replace('{{ page.view.scripts }}', '');
+                                layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n</head>');
+                                
+                            }
 
                             if (local.options.isWithoutLayout && local.options.debugMode == true || local.options.debugMode == true ) {
 
-                                var XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
-
-                                //layout = XHRData + layout;
+                                XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
+                                
                                 layout = layout.replace(/<\/body>/i, XHRData + '\n\t</body>');
                             }
                             
@@ -674,16 +713,12 @@ function SuperController(options) {
                         } else if ( hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() ) {
 
                             // means that we don't want GFF context or we already have it loaded
-                            var toolbarInfos        = getToolbarInfos(layout, data)
-                                , userScripts       = toolbarInfos.scripts
-                                , userStylesheets   = toolbarInfos.stylesheets
-                                , viewInfos         = JSON.parse(JSON.stringify(data.page.view))
-                            ;
+                            var viewInfos  = JSON.parse(JSON.stringify(data.page.view));
+                            viewInfos.assets = assets;
+                            //viewInfos.scripts       = userScripts.split(/,/g);
+                            //viewInfos.stylesheets   = userStylesheets.split(/,/g);
 
-                            viewInfos.scripts       = userScripts.split(/,/g);
-                            viewInfos.stylesheets   = userStylesheets.split(/,/g);
-
-                            var XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
+                            XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
                             var XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(viewInfos)) +'">';
 
 
@@ -692,13 +727,13 @@ function SuperController(options) {
                         } else { // production env
 
                             plugin = '\t'
-                                + '\n<script type="text/javascript">'
-                                + ' \n<!--'
-                                + '\n' + local.options.templates.default.pluginLoader.toString()
-                                + '//-->'
+                                + '\n\t<script type="text/javascript">'
+                                + ' \n\t<!--'
+                                + '\n\t' + local.options.templates.common.pluginLoader.toString()
+                                + '\t//-->'
                                 + '\n</script>'
 
-                                + '\n<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
+                                //+ '\n\t<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
                             ;
 
                             if ( !/page\.view\.scripts/.test(layout) ) {
@@ -711,10 +746,25 @@ function SuperController(options) {
 
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
                         
-                        var mapping = { filename: local.options.templates[template].layout };
+                        
                         try {
                             
                             layout = swig.compile(layout, mapping)(data);
+                            if (
+                                hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout
+                                || hasViews() && local.options.debugMode
+                                || hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() 
+                            ) {
+                                try {
+                                    // assets string
+                                    assets = getAssets(swig, template, layout, data); 
+                                    layout = layout.replace('"assets":{"assets":"${asset}"}', '"assets": '+JSON.stringify(assets) );
+                                } catch (err) {
+                                    self.throwError(local.res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
+                                }
+                            }
+                            
+                            
                             // special case for template without layout in debug mode - dev only
                             if ( hasViews() && local.options.debugMode == true  && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
                                 
@@ -748,21 +798,109 @@ function SuperController(options) {
                             local.res.setHeader("Content-Type", local.options.conf.server.coreConfiguration.mime['html']);
 
                             console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
-
-                            local.res.end(layout);
                             
-                            // try {
-                            //     data.filename = local.options.templates[template].html;
-                            //     local.res.end( swig.render( layout, data) ) ;//{ locals: data,  filename: local.options.templates[template].html }
-                            //     local.res.headersSent = true
-                                
-                            // } catch(err) {
-                            //     var filename = local.options.templates[template].html;
-                            //     filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
-                            //     self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)))
+                            // var aCount = 0, aLen = assets.count();
+                            // for (var asset in assets) {
+                            //     local.res.stream.pushStream({':path': asset}, function onStreamPush(err, pushStream, headers) {
+                            //         ++aCount;
+                            //         if (err) {
+                            //             self.throwError(local.res, 500, err)
+                            //         }
+                                    
+                            //         if ( assets[asset].filename != 404 )
+                            //             pushStream.respondWithFile( assets[asset].filename );
+                            //         //pushStream.respond({ ':status': 200 });
+                            //         // if (aCount == aLen) {
+                            //         //     pushStream.end(); 
+                            //         //     local.res.end(layout);
+                            //         // }                                    
+                            //     });
                             // }
                             
+                            /**
+                            // avoiding multiple binding for the same event when using cacheless env
+                            if ( typeof(self.serverOn) != 'undefined' && !self._http2streamEventInitalized ) {
+                                
+                                self.emit('http2streamEventInitalized', true);
+                                
+                                self.serverOn('stream', function onHttp2Stream(stream, headers){
+                                    
+                                    if (!stream.pushAllowed) { 
+                                        stream.respond({ ':status': 200 });
+                                        stream.end();
+                                        return; 
+                                    }
+                                    
+                                    stream.on('closed', (isClosed) => {
+                                        
+                                        console.debug('http2 closed: '+ isClosed);
+                                    });
+                                    
+                                    stream.on('error', (err) => {
+                                        
+                                        // const isRefusedStream = err.code === 'ERR_HTTP2_STREAM_ERROR' && stream.rstCode === NGHTTP2_REFUSED_STREAM;
+                                        
+                                        // if (!isRefusedStream)
+                                        //     throw err;
+                                        
+                                        if (err.code === 'ENOENT') {
+                                            stream.respond({ ':status': 404 });
+                                        } else {
+                                            stream.respond({ ':status': 500 });
+                                        }
+                                        
+                                        console.error(err.stack||err.message||err);
+                                        stream.end();
+                                        
+                                        
+                                    });                          
+                                    
+                                    
+                                    
+                                    var asset = headers[':path'];
+                                    // if (asset == local.req.url) {
+                                    //     stream.respond({
+                                    //         'Content-Type': local.options.conf.server.coreConfiguration.mime['html'],
+                                    //         ':status': 200
+                                    //     });
+                                    //     stream.write(layout);
+                                    //     stream.end();
+                                    // }
+                                    
+                                    if ( asset != local.req.url && typeof(assets[ asset ]) != 'undefined' && !/404/.test(assets[asset].filename) ) {      
+                                        stream.pushStream({ ':path': asset }, function onPushStream(err, pushStream, headers){
+                                            
+                                            if ( err ) {
+                                                //throw err;
+                                                if (err.code === 'ENOENT') {
+                                                    stream.respond({ ':status': 404 });
+                                                } else {
+                                                    stream.respond({ ':status': 500 });
+                                                }
+                                                
+                                                stream.end();
+                                            }
+                                            console.debug('h2 push: '+ headers[':path'] + ' -> '+ assets[ headers[':path'] ].filename);
+                                            pushStream.respondWithFile( 
+                                                assets[ headers[':path'] ].filename
+                                                , { 'content-type': assets[ headers[':path'] ].mime }
+                                                //, { onError }
+                                            );
+                                            
+                                        });
+                                    }  
+                                    
+                                    
+                                                            
+                                        
+                                });    
+                            }*/
                             
+                            
+
+                            
+                            local.res.end(layout);
+                                                        
                         } else {
                             if (typeof(local.next) != 'undefined')
                                 local.next();
@@ -775,6 +913,19 @@ function SuperController(options) {
         } catch (err) {
             self.throwError(local.res, 500, err)
         }
+    }
+    
+    this.onHttp2Stream = function(url, stream, headers) {
+                
+        if (!stream.pushAllowed) { 
+            stream.respond({ ':status': 200 });
+            stream.end();
+            return; 
+        }
+        
+        console.debug('h2 push detected: '+' [ '+url+' ] '+ headers[':path']);
+        
+        
     }
 
     this.isXMLRequest = function() {
@@ -957,7 +1108,7 @@ function SuperController(options) {
             local.userData = merge(local.userData, newObj);
 
         } else if ( typeof(local.userData[name]) == 'undefined' ) {
-            local.userData[name] = value
+            local.userData[name] = value.replace(/\\/g, '')
         }
     }
 
@@ -988,14 +1139,14 @@ function SuperController(options) {
                 media   : "screen",
                 rel     : "stylesheet",
                 type    : "text/css",
-                content : []
+                content : {}
             },
-            cssStr  = ' ',
+            cssStr  = '',
             js      = {
                 type    : "text/javascript",
-                content : []
+                content : {}
             },
-            jsStr   = ' ',
+            jsStr   = '',
             exclude  = null;
 
         //intercept errors in case of malformed config
@@ -1006,25 +1157,24 @@ function SuperController(options) {
 
 
         //cascading merging
-        if (localRessource !== 'default') {
+        if (localRessource !== 'common') {
             if ( typeof(viewConf[localRessource]) != 'undefined') {
 
                 var noneDefaultJs   = (viewConf[localRessource]['javascripts']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['javascripts'])) : [] ;
                 var noneDefaultCss  = (viewConf[localRessource]['stylesheets']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['stylesheets'])) : [] ;
-
-                //viewConf[localRessource] = merge(viewConf.default, viewConf[localRessource]);
-                viewConf[localRessource] = merge(viewConf[localRessource], viewConf.default);
+               
+                viewConf[localRessource] = merge(viewConf.common, viewConf[localRessource]);
 
                 if ( viewConf[localRessource]["javascriptsExclude"] ) {
 
                     if ( Array.isArray(viewConf[localRessource]["javascriptsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["javascriptsExclude"][0]) || typeof(viewConf[localRessource]["javascriptsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["javascriptsExclude"]) ) {
 
-                        for (var i = 0, len = viewConf.default['javascripts'].length; i<len; ++i) {
-                            if ( viewConf.default['javascripts'] && viewConf[localRessource]['javascripts'].indexOf(viewConf.default['javascripts'][i]) ) {
-                                viewConf[localRessource]['javascripts'].splice(viewConf[localRessource]['javascripts'].indexOf(viewConf.default['javascripts'][i]), 1)
+                        for (var i = 0, len = viewConf.common['javascripts'].length; i<len; ++i) {
+                            if ( viewConf.common['javascripts'] && viewConf[localRessource]['javascripts'].indexOf(viewConf.common['javascripts'][i]) ) {
+                                viewConf[localRessource]['javascripts'].splice(viewConf[localRessource]['javascripts'].indexOf(viewConf.common['javascripts'][i]), 1)
                             }
                         }
-                    } else {// else means that we exclude all default
+                    } else {// else means that we exclude all common
                         viewConf[localRessource]['javascripts'] = noneDefaultJs;
                     }
                 }
@@ -1033,41 +1183,41 @@ function SuperController(options) {
 
                     if ( Array.isArray(viewConf[localRessource]["stylesheetsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"][0]) || typeof(viewConf[localRessource]["stylesheetsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"]) ) {
 
-                        for (var i = 0, vcLen = viewConf.default['stylesheets'].length; i<vcLen; ++i) {
-                            if ( viewConf.default['stylesheets'] && viewConf[localRessource]['javascripts'].indexOf(viewConf.default['javascripts'][i]) ) {
-                                viewConf[localRessource]['stylesheets'].splice(viewConf[localRessource]['javascripts'].indexOf(viewConf.default['javascripts'][i]), 1)
+                        for (var i = 0, vcLen = viewConf.common['stylesheets'].length; i<vcLen; ++i) {
+                            if ( viewConf.common['stylesheets'] && viewConf[localRessource]['stylesheets'].indexOf(viewConf.common['stylesheets'][i]) ) {
+                                viewConf[localRessource]['stylesheets'].splice(viewConf[localRessource]['stylesheets'].indexOf(viewConf.common['stylesheets'][i]), 1)
                             }
                         }
-                    } else {// else means that we exclude all default
-                        viewConf[localRessource]['stylesheets'] = noneDefaultJs;
+                    } else {// else means that we exclude all common
+                        viewConf[localRessource]['stylesheets'] = noneDefaultCss;
                     }
                 }
 
 
             } else {
-                viewConf[localRessource] = viewConf.default
+                viewConf[localRessource] = viewConf.common
             }
         }
 
         //Get css
         if( viewConf[localRessource]["stylesheets"] ) {
-            tmpRes  = getNodeRes('css', cssStr, viewConf[localRessource]["stylesheets"], css);
+            tmpRes  = getNodeRes('css', cssStr, viewConf[localRessource]['stylesheets'], css);
 
             cssStr  = tmpRes.cssStr;
             css     = tmpRes.css;
-            tmpRes  = null
+            //tmpRes  = {}
         }
         //Get js
-        if( viewConf[localRessource]["javascripts"] ) {
-            tmpRes  = getNodeRes('js', jsStr, viewConf[localRessource]["javascripts"], js);
+        if( viewConf[localRessource]['javascripts'] ) {
+            tmpRes  = getNodeRes('js', jsStr, viewConf[localRessource]['javascripts'], js);
 
             jsStr   = tmpRes.jsStr;
             js      = tmpRes.js;
-            tmpRes  = null
+            //tmpRes  = {}
         }
 
         set('page.view.stylesheets', cssStr);
-        set('page.view.scripts', jsStr)
+        set('page.view.scripts', jsStr);
     }
 
     /**
@@ -1083,49 +1233,56 @@ function SuperController(options) {
      * @private
      * */
     var getNodeRes = function(type, resStr, resArr, resObj) {
+        
+        var r = 0, rLen = resArr.length;
         switch(type){
             case 'css':
-                var css = resObj;
-                for (var res in resArr) {
+                var css = {};
+                for (; r < rLen; ++r) {                    
                     //means that you will find options.
-                    if (typeof(resArr[res]) == "object") {
-                        //console.info('found object ', resArr[res]);
-                        css.media = (resArr[res].options.media) ? resArr[res].options.media : css.media;
-                        css.rel = (resArr[res].options.rel) ? resArr[res].options.rel : css.rel;
-                        css.type = (resArr[res].options.type) ? resArr[res].options.type : css.type;
-                        if (!css.content[resArr[res]._]) {
-                            css.content[resArr[res]._] = '<link href="'+ resArr[res]._ +'" media="'+ css.media +'" rel="'+ css.rel +'" type="'+ css.type +'">';
-                            resStr += '\n\t' + css.content[resArr[res]._]
+                    if (typeof(resArr[r]) == "object") {
+                        css = merge(resArr[r], resObj);
+                        if (!css.content[css.url]) {
+                            css.content[css.url] = '\n\t\t<link href="'+ css.url +'" media="'+ css.media +'" rel="'+ css.rel +'" type="'+ css.type +'">';
+                            resStr += css.content[resArr[r].url]
+                        } else {
+                            resStr += css.content[resArr[r].url]
                         }
-
+                        
                     } else {
-                        css.content[resArr[res]] = '<link href="'+ resArr[res] +'" media="screen" rel="'+ css.rel +'" type="'+ css.type +'">';
-                        resStr += '\n\t' + css.content[resArr[res]]
+                        css = merge(css, resObj);
+                        css.content[resArr[r]] = '\n\t\t<link href="'+ resArr[r] +'" media="screen" rel="'+ css.rel +'" type="'+ css.type +'">';
+                        resStr += css.content[resArr[r]]
                     }
-
-
                 }
+                
                 return { css : css, cssStr : resStr }
             break;
 
             case 'js':
-                var js = resObj;
-                for (var res in resArr) {
-                    //means that you will find options
-                    if ( typeof(resArr[res]) == "object" ) {
-                        js.type = (resArr[res].options.type) ? resArr[res].options.type : js.type;
-                        if (!js.content[resArr[res]._]) {
-                            js.content[resArr[res]._] = '<script type="'+ js.type +'" src="'+ resArr[res]._ +'"></script>';
-                            resStr += '\n' + js.content[resArr[res]._];
+                var js          = {}
+                    , deferMode = (local.options.templates.common.javascriptsDeferEnabled) ? ' defer' : ''
+                ;
+                for (; r < rLen; ++r) {
+                    
+                    //means that you will find options                    
+                    if ( typeof(resArr[r]) == "object" ) {     
+                        js = merge(resArr[r], resObj);                   
+                        //js.type = (resArr[r].options.type) ? resArr[res].options.type : js.type;
+                        if (!js.content[resArr[r].url]) {
+                            js.content[resArr[r].url] = '\n\t\t<script'+ deferMode +' type="'+ js.type +'" src="'+ resArr[r].url +'"></script>';
+                            resStr += js.content[resArr[r].url];
+                        } else {
+                            resStr += js.content[resArr[r].url]
                         }
-
+                        
                     } else {
-                        js.content[resArr[res]] = '<script type="'+ js.type +'" src="'+ resArr[res] +'"></script>';
-                        resStr += '\n' + js.content[resArr[res]]
+                        js = merge(js, resObj);
+                        js.content[resArr[r]] = '\n\t\t<script'+ deferMode +' type="'+ js.type +'" src="'+ resArr[r] +'"></script>';
+                        resStr += js.content[resArr[r]]
                     }
-
-
                 }
+                
                 return { js : js, jsStr : resStr }
             break;
         }
@@ -1141,40 +1298,410 @@ function SuperController(options) {
     var getData = function() {
         return refToObj( local.userData )
     }
-
-    var getToolbarInfos = function (layout, data) {
-
-        var scripts         = layout.toString().match(/<script.*?<\/script>/g) || []
-            , stylesheets   = layout.toString().match(/<link .*?<\/link>|<link .*?(.*)/g) || []
-        ;
-
-        var userScripts         = data.page.view.scripts || []
-            , usersStylesheets  = data.page.view.stylesheets || []
-        ;
-
-        //userScripts = merge(scripts, userScripts);
-        //usersStylesheets = merge(stylesheets, usersStylesheets);
-
-        userScripts += scripts.join('');
-        var scriptsArr = userScripts.match(/src=".*?"/g);
-
-        if ( scriptsArr != null || scriptsArr != null && typeof(scriptsArr.length) != 'undefined' )
-            userScripts = scriptsArr.join(',').replace(/src=/g, '');
-        else
-            userScripts = '';
-
-        usersStylesheets += stylesheets.join('');
-        var stylesArr = usersStylesheets.match(/href=".*?"/g);
-
-        if ( stylesArr != null || stylesArr != null && typeof(stylesArr.length) != 'undefined' )
-            usersStylesheets = stylesArr.join(',').replace(/href=/g, '');
-        else
-            usersStylesheets = '';
-
-        return {
-            scripts     : userScripts,
-            stylesheets : usersStylesheets
+    
+    var getAssetFilenameFromUrl = function(url) {
+        
+        var conf        = local.options.conf;
+        var staticsArr  = conf.publicResources;
+        var staticProps = {
+            firstLevel  : '/'+ url.split(/\//g)[1] + '/',
+            isFile      :  /^\/[A-Za-z0-9_-]+\.(.*)$/.test(url)
+        };
+        
+        if ( 
+            staticProps.isFile && staticsArr.indexOf(url) > -1 
+            || staticsArr.indexOf(staticProps.firstLevel) > -1
+        ) {
+            
+            var request         = local.req
+                , response      = local.res
+                , next          = local.next
+                , bundleConf    = conf
+            ;
+            
+            var cacheless       = bundleConf.cacheless;  
+            // by default
+            var filename        = bundleConf.publicPath + url;
+            
+            // catch `statics.json` defined paths
+            var staticIndex     = bundleConf.staticResources.indexOf(url);
+            if ( staticProps.isFile && staticIndex > -1 ) {
+                filename =  bundleConf.content.statics[ bundleConf.staticResources[staticIndex] ]
+            } else {
+                var s = 0, sLen = bundleConf.staticResources.length;
+                for ( ; s < sLen; ++s ) {
+                    //if ( new RegExp('^'+ bundleConf.staticResources[s]).test(url) ) {                 
+                    if ( eval('/^' + bundleConf.staticResources[s].replace(/\//g,'\\/') +'/').test(url) ) {
+                        filename = bundleConf.content.statics[ bundleConf.staticResources[s] ] +'/'+ url.replace(bundleConf.staticResources[s], '');
+                        break;
+                    }
+                } 
+            }
+            
+            if ( !fs.existsSync(filename) )
+                return 404;
+                
+            return filename
+            
+        } else {
+            return 404
         }
+    }
+
+    var getAssets = function (swig, template, layout, data) {
+        
+        // layout search for <link|script|img>
+        var layoutStr           = layout.toString(); 
+        var layoutAssets        = layoutStr.match(/<link .*?<\/link>|<link .*?(rel\=\"(stylesheet|icon|manifest|(.*)\-icon))(.*)|<script.*?<\/script>|<img .*?(.*)/g) || [];
+        
+        var assets      = {}
+            , cssFiles  = []
+            , aCount    = 0
+            , i         = 0
+            , len       = 0
+            , domain    = null
+            , key       = null // [ code ] url
+            , ext       = null
+            , url       = null
+            , filename  = null
+            , isObject  = null
+        ;
+        
+        // user's defineds assets
+        var userScripts         = local.options.templates[template].javascripts
+            , usersStylesheets  = local.options.templates[template].stylesheets
+            , layoutClasses     = []
+        ;
+                        
+        // i = 0;
+        // len = userScripts.length;
+        // if (len > 0) {
+        //     if ( typeof(userScripts[0].url) != 'undefined' ) {
+        //         isObject = true
+        //     } 
+            
+        //     for (; i < len; ++i) {
+                
+        //         domain = null;
+        //         url = (isObject) ? userScripts[i].url : userScripts[i]
+        //         if ( /^\{\{/.test(url) )
+        //             url = swig.compile(url)(data);
+                
+        //         if (!/(\:\/\/|^\/\/)/.test(url) ) {
+        //             filename = getAssetFilenameFromUrl(url);
+        //         } else {
+        //             domain      = url.match(/^.*:\/\/[a-z0-9._-]+\/?/);
+        //             url         = url.replace(domain, '/');
+        //             filename    = url
+        //         }
+        //         key =  (( /404/.test(filename) ) ? '[404]' : '[200]') +' '+ url; 
+                
+        //         ext = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];                
+        //         assets[key] = {
+        //             type        : 'javascript',
+        //             url         : url,
+        //             ext         : ext,
+        //             mime        : local.options.conf.server.coreConfiguration.mime[ext.substr(1)] || 'NA',
+        //             filename    : ( /404/.test(filename) ) ? 'not found' : filename
+        //         }; 
+                
+        //         if (domain)
+        //             assets[key].domain = domain;      
+                                          
+        //         //++aCount
+        //     }
+        // }
+            
+        
+        // i   = 0;
+        // len = usersStylesheets.length;
+        // if (len > 0) {
+        //     if ( typeof(usersStylesheets[0].url) != 'undefined' ) {
+        //         isObject = true
+        //     } 
+            
+        //     for (; i < len; ++i) {
+                
+        //         domain = null;
+        //         url = (isObject) ? usersStylesheets[i].url : usersStylesheets[i];      
+        //         if ( /^\{\{/.test(url) )
+        //             url = swig.compile(url)(data);
+                
+        //         if (!/(\:\/\/|^\/\/)/.test(url) ) {
+        //             filename = getAssetFilenameFromUrl(url);
+        //         } else {
+        //             domain      = url.match(/^.*:\/\/[a-z0-9._-]+\/?/);
+        //             url         = url.replace(domain, '/');
+        //             filename    = url
+        //         }
+        //         key =  (( /404/.test(filename) ) ? '[404]' : '[200]') +' '+ url; 
+        //         ext = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];
+        //         assets[key] = {
+        //             type        : 'stylesheet',
+        //             url         : url,
+        //             ext         : ext,
+        //             media       : ( isObject ) ? usersStylesheets[i].media: 'screen',
+        //             mime        : local.options.conf.server.coreConfiguration.mime[ext.substr(1)] || 'NA',
+        //             filename    : ( /404/.test(filename) ) ? 'not found' : filename
+        //         };
+                
+        //         if (domain)
+        //             assets[key].domain = domain;
+                
+        //         if ( !/not found/.test(assets[key].filename) ) {
+        //             cssFiles.push(assets[key].filename)
+        //         }                
+                
+        //         //++aCount
+        //     }
+        // }
+            
+            
+        // layout assets
+        i   = 0;
+        len = layoutAssets.length;         
+        var type            = null
+            , tag           = null
+            , properties    = null
+            , p             = 0
+            , pArr          = []            
+        ;
+        for (; i < len; ++i) {
+            
+            if ( !/(\<img|\<link|\<script)/g.test(layoutAssets[i]) )
+                continue;
+            
+            if ( /\<img/.test(layoutAssets[i]) ) {
+                type    = 'image';
+                tag     = 'img'; 
+            }
+            
+            if ( /\<script/.test(layoutAssets[i]) ) {
+                type    = 'javascript';
+                tag     = 'script'; 
+            }
+            
+            if ( /\<link/.test(layoutAssets[i]) ) {
+                if ( /rel\=\"stylesheet/.test(layoutAssets[i]) ) {
+                    type    = 'stylesheet';
+                } else if ( /rel\=\"(icon|(.*)\-icon)/.test(layoutAssets[i]) ) {
+                    type    = 'image';
+                } else {
+                    type = 'file';
+                }
+                
+                tag     = 'link'; 
+            }
+            
+            domain  = null;
+            try {
+                url     = layoutAssets[i].match(/(src|href)\=\".*?\"/)[0];
+            } catch (err) {
+                console.error('Problem with this asset ('+ i +'/'+ len +'): '+ layoutAssets[i]);
+                continue;
+            }
+            
+            
+            if ( /data\:/.test(url) ) { // ignoring "data:..."
+                continue
+            }
+            url = url.replace(/((src|href)\=\"|\")/g, '');
+            if ( /^\{\{/.test(url) )
+                url = swig.compile(url)(data);
+            
+            if (!/(\:\/\/|^\/\/)/.test(url) ) {
+                filename = getAssetFilenameFromUrl(url);
+            } else {
+                domain      = url.match(/^.*:\/\/[a-z0-9._-]+\/?/);
+                url         = url.replace(domain, '/');
+                filename    = url
+            }
+            key =  (( /404/.test(filename) ) ? '[404]' : '[200]') +' '+ url;
+            ext = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];
+            assets[key] = {
+                type        : type,
+                url         : url,
+                ext         : ext,
+                mime        : local.options.conf.server.coreConfiguration.mime[ext.substr(1)] || 'NA',
+                filename    : ( /404/.test(filename) ) ? 'not found' : filename
+            };
+            
+            if (domain)
+                assets[key].domain = domain;
+            
+            if ( type == 'stylesheet' && !/not found/.test(assets[key].filename) ) {
+                cssFiles.push(assets[key].filename)
+            }
+            
+            properties = layoutAssets[i].replace( new RegExp('(\<'+ tag +'\\s+|\>$|\/\>)', 'g'), '').split(/\"\s+/g);
+            p = 0;
+            
+            for (; p < properties.length; ++p ) {
+                pArr = properties[p].split(/\=/g);
+                if ( /(src|href)/.test(pArr[0]) )
+                    continue;
+                    
+                assets[key][pArr[0]] = pArr[1].replace(/\"/g, '');              
+            }            
+            //++aCount
+            
+        }
+        
+        // getting layout css classes in order to retrieve active css assets from <asset>.css
+        var classesArr = layoutStr.match(/class=\"([A-Za-z0-9_-\s+]+)\"?/g);
+        
+        if ( classesArr ) {
+            var cCount      = 0
+                , cArr      = null
+                , cArrI     = null
+                , cArrLen   = null
+            ;
+            i = 0;
+            len = classesArr.length;
+            for (; i < len; ++i) {
+                classesArr[i] = classesArr[i].replace(/(\"|class\=)/g, '').trim();
+                
+                if ( /\s+/g.test(classesArr[i]) ) {
+                    cArrI   = 0;                
+                    cArr    = classesArr[i].replace(/\s+/g, ',').split(/\,/g);
+                    //cArr    = classesArr[i].split(/\s+/g);
+                    cArrLen = cArr.length;
+                    
+                    for (; cArrI < cArrLen; ++cArrI) {
+                        
+                        if ( layoutClasses.indexOf( cArr[cArrI] ) < 0) {
+                            layoutClasses[cCount] = cArr[cArrI];
+                            
+                            ++cCount
+                        }
+                    }
+                    continue;
+                }
+                
+                if ( layoutClasses.indexOf( classesArr[i] ) < 0) {
+                    layoutClasses[cCount] = classesArr[i];
+                    ++cCount
+                }            
+            }
+            assets._classes = { 
+                total: layoutClasses.length,
+                list: layoutClasses.join(', ')
+            };
+            
+            // parsing css files
+            i = 0, len = cssFiles.length;
+            var cssContent = null
+                , hasUrls   = null
+                , definition = null
+                , defName   = null
+                , d = null
+                , dLen = null
+            ;
+            var cssArr = null, classNames = null, assetsInClassFound = {};
+            for (; i < len; ++i) {
+                cssContent = fs.readFileSync(cssFiles[i]).toString();
+                hasUrls = ( /(url\(|url\s+\()/.test(cssContent) ) ? true : false;
+                if (!hasUrls) continue;
+                
+                cssArr = cssContent.split(/}/g);
+                for (let c = 0; c < cssArr.length; ++c) {
+                    //if ( !/(url\(|url\s+\()/.test(cssArr[c]) || /(url\(data|url\s+\(data)/ ) continue;
+                    if ( /(url\(|url\s+\()/.test(cssArr[c]) && !/data\:|\@font-face/.test(cssArr[c]) ) {
+                        
+                        url = cssArr[c].match(/((background\:url|url)+\()([A-Za-z0-9-_.,:"'%/\s+]+).*?\)+/g)[0].replace(/((background\:url|url)+\(|\))/g, '').trim();                    
+                        if ( typeof(assetsInClassFound[url]) != 'undefined') continue; // already defined
+                        
+                        definition = cssArr[c].match(/((\.[A-Za-z0-9-_.,;:"'%\s+]+)(\s+\{|{))/)[0].replace(/\{/g, '');
+                        
+                        classNames = definition.replace(/\./g, '').split(/\s+/);
+                                        
+                        
+                        for( let clss = 0; clss < classNames.length; ++clss) {
+                            // this asset is in use
+                            if ( layoutClasses.indexOf(classNames[clss] < 0 && typeof(assetsInClassFound[url]) == 'undefined') ) {
+                                console.debug(' found -> (' +  url +')');
+                                assetsInClassFound[url] = true;
+                                // assetsInClassFound[url] = {
+                                //     cssFile: cssFiles[i],
+                                //     definition: definition,
+                                //     url: url
+                                // }     
+                                if (!/(\:\/\/|^\/\/)/.test(url) ) {
+                                    filename = getAssetFilenameFromUrl(url);
+                                } else {
+                                    domain      = url.match(/^.*:\/\/[a-z0-9._-]+\/?/);
+                                    url         = url.replace(domain, '/');
+                                    filename    = url
+                                }
+                                
+                                key =  (( /404/.test(filename) ) ? '[404]' : '[200]') +' '+ url;
+                                ext = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];
+                                assets[key] = {
+                                    referrer    : cssFiles[i],
+                                    definition  : definition,
+                                    type        : type,
+                                    url         : url,
+                                    ext         : ext,
+                                    mime        : local.options.conf.server.coreConfiguration.mime[ext.substr(1)] || 'NA',
+                                    filename    : ( /404/.test(filename) ) ? 'not found' : filename
+                                };  
+                                
+                                if (domain)
+                                    assets[key].domain = domain;
+                                
+                                break;                    
+                            }
+                        }
+                    }
+                    //font-family: source-sans-pro, sans-serif;
+                    
+                    
+                }
+                
+                // match all definitions .xxx {}
+                //definitions = cssContent.match(/((\.[A-Za-z0-9-_.\s+]+)+(\s+\{|{))([A-Za-z0-9-@'"/._:;()\s+]+)\}/g);
+                //definitions = cssContent.match(/((\.[A-Za-z0-9-_.\s+]+)+(\s+\{|{))?/g);
+                // d = 0, dLen = definitions.length;
+                // for (; d < dLen; ++d) {
+                //     if ( definitions[d] )
+                // }
+                
+                // fonts, images, background - attention required to relative paths !!
+                //var inSourceAssets = cssContent.match(/((background\:url|url)+\()([A-Za-z0-9-_."']+).*?\)+/g);
+            }
+            
+            assets._cssassets = assetsInClassFound.count();
+        } // EO if (classesArr) {
+        
+            
+        
+        // TODO - report
+        /**
+         * assets._report = {
+         *      total   : ${int: aCount}, // assets count
+         *      warning : [
+         *          {
+         *              message: "too many requests",
+         *              hint: "you should lower this"
+         *          },
+         *          {...}
+         *      ],
+         *      error: [
+         *          {
+         *              message: "${int: eCount} asset(s) not found",
+         *              hint: "check your assets location"
+         *          },
+         *          {
+         *              
+         *          }
+         *      ]
+         * }
+         */
+        
+        var assetsStr = JSON.stringify(assets);        
+        assets = swig.compile( assetsStr.substring(1, assetsStr.length-1) )(data);
+        
+        return JSON.parse('{'+ assets +'}')
     }
 
     var isValidURL = function(url){
@@ -1212,7 +1739,6 @@ function SuperController(options) {
      * ------------------------------------------------
      * where `this` is :
      *  - a Controller instance
-     *  - a Middleware instance
      *
      * Where `rule` is either a string defining
      *  - the rule/route name

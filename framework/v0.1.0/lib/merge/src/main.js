@@ -1,7 +1,10 @@
 function Merge() {
 
-    var newTarget = []/**, nextTickCalled = false*/;
-
+    var newTarget           = []
+        //, keyComparison     = 'id' // use for collections merging [{ id: 'val1' }, { id: 'val2' }, {id: 'val3' }, ...]
+    ;
+    
+    
     /**
      *
      * @param {object} target - Target object
@@ -11,6 +14,7 @@ function Merge() {
      * @return {object} [result]
      * */
     var browse = function (target, source) {
+        
 
         if ( typeof(target) == 'undefined' ) {
             target = ( typeof(source) != 'undefined' && Array.isArray(source)) ? [] : {}
@@ -193,27 +197,37 @@ function Merge() {
         }
 
         newTarget = [];
-
+        
+        
+        
+        // return { 
+        //     'setKeyComparison' : function(key) {
+        //         mergeArray.key = key;
+        //         return target;
+        //     }
+        // } || target
+            
         return target;
 
     }
-
-
-
+    
+    
 
 
     // Will not merge functions items: this is normal
-    // Merging arrays is OK, but merging collections is still experimental
+    // Merging arrays is OK, but merging collections is still experimental        
     var mergeArray = function(options, target, override) {
         newTarget = [];
-        var newTargetIds = [];
+                
+        
+        var newTargetIds = [], keyComparison = browse.getKeyComparison();
 
         if (override) {
 
-            // if collection, comparison will be done uppon the `id` attribute
+            // if collection, comparison will be done uppon the `id` attribute by default unless you call .setKeyComparison('someField')
             if (
-                typeof(options[0]) == 'object' && typeof(options[0].id) != 'undefined'
-                && typeof(target[0]) == 'object' && typeof(target[0].id) != 'undefined'
+                typeof(options[0]) == 'object' && typeof(options[0][keyComparison]) != 'undefined'
+                && typeof(target[0]) == 'object' && typeof(target[0][keyComparison]) != 'undefined'
             ) {
 
                 newTarget = [];
@@ -224,8 +238,8 @@ function Merge() {
 
                 for (var n = next || 0, nLen = target.length; n < nLen; ++n) {
                     
-                    // if (newTargetIds.indexOf(target[n].id) == -1) {
-                    //     newTargetIds.push(target[n].id);
+                    // if (newTargetIds.indexOf(target[n][keyComparison]) == -1) {
+                    //     newTargetIds.push(target[n][keyComparison]);
                         
                     //     //newTarget.push(target[n]);
                     //     //++index;
@@ -234,24 +248,24 @@ function Merge() {
                     label:
                     for (var a = a || 0, aLen = _options.length; a < aLen; ++a) {
                     
-                        if (_options[a].id === target[n].id ) {
+                        if (_options[a][keyComparison] === target[n][keyComparison] ) {
 
-                            if (newTargetIds.indexOf(_options[a].id) > -1) {
+                            if (newTargetIds.indexOf(_options[a][keyComparison]) > -1) {
                                 
                                 newTarget[index] = _options[a];
                                 ++index
                                 
-                            } else if (newTargetIds.indexOf(_options[a].id) == -1) {
+                            } else if (newTargetIds.indexOf(_options[a][keyComparison]) == -1) {
 
-                                newTargetIds.push(_options[a].id);                                
+                                newTargetIds.push(_options[a][keyComparison]);                                
                                 newTarget.push(_options[a]);
                             }
 
                             break label;
                             
-                        } else if (newTargetIds.indexOf(_options[a].id) == -1) {
+                        } else if (newTargetIds.indexOf(_options[a][keyComparison]) == -1) {
                                 
-                            newTargetIds.push(_options[a].id);
+                            newTargetIds.push(_options[a][keyComparison]);
                             newTarget.push(_options[a]);
                         }
                     }
@@ -292,9 +306,9 @@ function Merge() {
                 typeof (options[0]) != 'undefined' 
                 && typeof (options[0]) == 'object' 
                 && options[0] != null 
-                && typeof(options[0].id) != 'undefined'
+                && typeof(options[0][keyComparison]) != 'undefined'
                 && typeof(target[0]) == 'object' 
-                && typeof(target[0].id) != 'undefined'
+                && typeof(target[0][keyComparison]) != 'undefined'
             ) {
 
                 newTarget       = JSON.parse(JSON.stringify(target));
@@ -303,7 +317,7 @@ function Merge() {
                 
 
                 for (var a = 0, aLen = newTarget.length; a < aLen; ++a) {
-                    newTargetIds.push(newTarget[a].id);
+                    newTargetIds.push(newTarget[a][keyComparison]);
                 }
                 for (var a = 0, aLen = newTarget.length; a < aLen; ++a) {
                     
@@ -311,13 +325,13 @@ function Merge() {
                         for (var n = next || 0, nLen = _options.length; n < nLen; ++n) {
                             
                             if (
-                                _options[n] != null && typeof(_options[n].id) != 'undefined' && _options[n].id !== newTarget[a].id
+                                _options[n] != null && typeof(_options[n][keyComparison]) != 'undefined' && _options[n][keyComparison] !== newTarget[a][keyComparison]
 
                             ) {
                             
-                                if ( newTargetIds.indexOf(_options[n].id) == -1 ) {
+                                if ( newTargetIds.indexOf(_options[n][keyComparison]) == -1 ) {
                                     newTarget.push(_options[n]);
-                                    newTargetIds.push(_options[n].id);
+                                    newTargetIds.push(_options[n][keyComparison]);
 
                                     next = n+1; 
 
@@ -327,7 +341,7 @@ function Merge() {
                                     break end; 
                                 }
                                                                
-                            } else if( _options[n] != null && typeof(_options[n].id) != 'undefined' && _options[n].id === newTarget[a].id ) {
+                            } else if( _options[n] != null && typeof(_options[n][keyComparison]) != 'undefined' && _options[n][keyComparison] === newTarget[a][keyComparison] ) {
 
                                 next = n+1;
 
@@ -368,10 +382,10 @@ function Merge() {
                         
                         if (
                             typeof (target[a]) != 'undefined'
-                            && typeof (target[a].id) != 'undefined'
+                            && typeof (target[a][keyComparison]) != 'undefined'
                             && typeof (options[a]) != 'undefined'
-                            && typeof (options[a].id) != 'undefined'
-                            && target[a].id == options[a].id
+                            && typeof (options[a][keyComparison]) != 'undefined'
+                            && target[a][keyComparison] == options[a][keyComparison]
                         ) {
                             if (override)
                                 newTarget[a] = options[a]
@@ -392,6 +406,9 @@ function Merge() {
         if ( newTarget.length > 0 && target.length > 0 || newTarget.length == 0 && target.length == 0  ) {
             return newTarget
         }
+    }
+    mergeArray.prototype.setKeyComparison = function(keyComparison) {
+        this.keyComparison = keyComparison
     }
 
 
@@ -426,7 +443,23 @@ function Merge() {
         return key === undefined || hasOwn.call(obj, key)
     }
 
-
+    browse.setKeyComparison = function(keyComparison) {
+        
+        mergeArray.keyComparison = keyComparison;
+        
+        return browse
+    }
+    
+    browse.getKeyComparison = function() {
+        
+        var keyComparison = mergeArray.keyComparison || 'id';
+        
+        // reset for the next merge
+        mergeArray.keyComparison = 'id';
+        
+        return keyComparison
+    }
+    
     return browse
 
 }

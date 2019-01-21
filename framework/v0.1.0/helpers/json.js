@@ -31,7 +31,8 @@ module.exports = function(){
         // ignore {" - [^}"]
         
         
-        comments_with_slashes    = jsonStr.match(/[^}"](\/\/\s+[A-Za-z0-9-_ \(\)\:\!\?\#]+|\/\/[A-Za-z0-9-_ \(\)\:\!\?\#]+)+|(\/\/".*\"\,|\/\/".*\")+/g);
+        comments_with_slashes    = jsonStr.match(/[^}"](\/\/\s+[A-Za-z0-9-_ \.(\)\:\!\?\#\,]+|\/\/[A-Za-z0-9-_ \.(\)\:\!\?\#\,]+)+|(\/\/".*\"\,|\/\/".*\")+/g);
+        //comments_with_slashes    = jsonStr.match(/[^}"](\/\/\s+[A-Za-z0-9-_ \(\)\:\!\?\#]+|\/\/[A-Za-z0-9-_ \(\)\:\!\?\#]+)+|(\/\/".*\"\,|\/\/".*\")+/g);
         if ( comments_with_slashes ) {
             for (var m = 0, mLen = comments_with_slashes.length; m < mLen; ++m) {
                 jsonStr = jsonStr.replace(comments_with_slashes[m], '');
