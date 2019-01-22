@@ -22,7 +22,7 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  *      eg.: { country: 'The Hashemite Kingdom of Jordan' }, { country: 'Libanon'} // `OR` clause 
  *      eg.: { 'obj.prop': true }
  *      eg.: { 'contacts[*].name': 'Doe' } // `WITHIN` (array|collection) clause
- *      eg.: { lastUpdate: '>= 2016-12-01T00:00:00' }
+ *      eg.: { lastUpdate: '>= 2016-12-01T00:00:00' }  // also available for date comparison `=`, `<`, `>`
  *      eg.: { activity: null }
  *      eg.: { isActive: false }
  *
@@ -37,7 +37,7 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  *  @param {object} set
  *
  *  @return {array} result
- *      rasult.raw will give result without chaining
+ *      rasult.toRaw() will give result without chaining & _uuid
  *
  * */
 function Collection(content, option) {
@@ -254,7 +254,7 @@ function Collection(content, option) {
                         for (var f in filter) {
                             if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
-                            localeLowerCase = ( typeof(filter[f]) != 'boolean' && filter[f] !== null ) ? filter[f].toLocaleLowerCase() : filter[f];
+                            localeLowerCase = ( filter[f] !== null && !/(boolean|number)/.test(typeof(filter[f])) ) ? filter[f].toLocaleLowerCase() : filter[f];
                             
                             // cases with tmpContent.prop
                             if (/\./.test(f)) {
@@ -310,7 +310,7 @@ function Collection(content, option) {
         result.limit    = instance.limit;
         result.orderBy  = instance.orderBy;
         result.delete   = instance.delete;
-        result.toRaw = instance.toRaw;
+        result.toRaw    = instance.toRaw;
 
         return result
     }
@@ -396,7 +396,7 @@ function Collection(content, option) {
                 for (var f in filter) {
                     if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
-                    localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
+                    localeLowerCase = ( !/(boolean|number)/.test(typeof(filter[f])) ) ? filter[f].toLocaleLowerCase() : filter[f];
                     // NOT NULL case
                     if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] === filter[f] && tmpContent[o][f] != 'null' && tmpContent[o][f] != 'undefined' ) {
                         if (result.indexOf(tmpContent[o][f]) < 0 ) {
@@ -450,23 +450,54 @@ function Collection(content, option) {
 
     /** 
      * notIn
+     * Works like a filter to match results by `excluding` through given `filters` !!
+     * 
+     *  filter can be like 
+     *      { car: 'toyota' }
+     *      { car: 'toyota', color: 'red' }
+     *      
+     *  You can pass more than one filter
+     *      { car: 'toyota', color: 'red' }, { car: 'porche' }
+     * 
+     * .notIn(filter) // AND syntax
+     * .notIn(filter1, filter2, filter3) // OR syntax
+     * .notIn(filter, 'id') where `id` is the uuid used for the DIFF - `_uuid
+     * 
+     * By default, Collection use its own internal `_uuid` to search and compare.
+     * This mode is called `uuidSearchModeEnabled`, and it is by default set to `true`.
+     * If you want to disable this mode in order to MATCH/DIFF by forcing check on every single filter
+     * of the resultset :
+     *      .notIn(filter, false) where false must be a real boolean
      * 
      * 
      * 
      * @param {object|array} filters|arrayToFilter - works like find filterss
-     * @param {string} [key]
+     * @param {string} [key] - unique id for comparison; faster when provided
     */
-    instance['notIn'] =  function(filters){
+    instance['notIn'] =  function(){
 
-        var key = null; // comparison key
-        var result = null;
+        var key         = null // comparison key
+            , result    = null
+            , filters   = null
+            , uuidSearchModeEnabled = true;
+        ;
 
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
         }
+        
+        if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
+            uuidSearchModeEnabled = arguments[arguments.length - 1]
+            delete arguments[arguments.length - 1];
+        }
+        
+        if (arguments.length > 0) {
+            filters = arguments;
+        }
+        
 
-        if (typeof (filters) == 'undefined' || typeof(filters) != 'object' ) {
+        if ( typeof(filters) == 'undefined' || !filters || typeof(filters) != 'object' ) {
             throw new Error('[ Collection ][ notIn ] `filters` argument must be defined: Array or Filter Object(s) expected');
         }
 
@@ -482,27 +513,83 @@ function Collection(content, option) {
         
         if (foundResults.length > 0) {
             // check key
-            if (key && typeof (foundResults[0]) == 'undefined' && typeof (foundResults[0][key]) == 'undefined' ) {
+            if ( 
+                uuidSearchModeEnabled
+                && key 
+                && typeof(foundResults[0]) == 'undefined' 
+                && typeof(foundResults[0][key]) == 'undefined' 
+            ) {
                 throw new Error('[ Collection ][ notIn ] `key` not valid');
-            } else if (!key) {
+            } else if ( uuidSearchModeEnabled && !key && typeof(foundResults[0]['_uuid']) != 'undefined' ) {
                 key = '_uuid'
             }
 
-            // for every single result found            
-            for (var f = 0, fLen = foundResults.length; f < fLen; ++f) {
-                
-                if (!currentResult.length)
-                    break;
-                
-                onRemoved:
-                for (var c = 0, cLen = currentResult.length; c < cLen; ++c) {
-                    // when matched, we want to remove those not in current result
-                    if (typeof (currentResult[c]) != 'undefined' && currentResult[c].hasOwnProperty(key) && currentResult[c][key] === foundResults[f][key]) {
-                        currentResult.splice(c,1);
-                        break onRemoved;
+            // fast search with key
+            var r       = 0
+                , rLen  = foundResults.length
+                , c     = 0
+                , cLen  = currentResult.length
+                , f     = 0
+                , fLen  = filters.count()
+                , keyLen    = null
+                , matched = 0
+                , fullFiltersMatched = 0
+            ;
+            if ( uuidSearchModeEnabled && currentResult[c].hasOwnProperty(key) ) {
+                // for every single result found        
+                for (; r < rLen; ++r) {
+                    
+                    if (!currentResult.length) break;
+                    
+                    onRemoved:
+                    for (; c < cLen; ++c) {
+                        // when matched, we want to remove those not in current result
+                        
+                        if (typeof (currentResult[c]) != 'undefined' && currentResult[c].hasOwnProperty(key) && currentResult[c][key] === foundResults[r][key]) {
+                            currentResult.splice(c,1);
+                            break onRemoved;
+                        }
                     }
                 }
-            }
+            } else { // search based on provided filters
+                // for every single result found        
+                for (; r < rLen; ++r) {
+                    if (!currentResult.length) break;
+                    
+                    c = 0;
+                    onRemoved:
+                    for (; c < cLen; ++c) { // current results                        
+                
+                        if (typeof (currentResult[c]) != 'undefined') {
+                            
+                            // for each filter
+                            fullFiltersMatched = 0;  
+                            f = 0;  
+                            for (; f < fLen; ++f ) {
+                                if ( typeof(filters[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
+                                
+                                keyLen = filters[f].count();
+                                matched = 0;
+                                for (key in filters[f]) {
+                                    if ( currentResult[c].hasOwnProperty(key) && currentResult[c][key] === foundResults[r][key] ) {
+                                        ++matched;
+                                    }   
+                                }    
+                                if (matched == keyLen) {
+                                    ++fullFiltersMatched
+                                }              
+                            }
+                            
+                            if (fullFiltersMatched) {
+                                currentResult.splice(c,1);
+                                break onRemoved;
+                            }
+                            
+                        }
+                    }
+                }
+            }   
+                
         } 
 
         result          = currentResult;
@@ -563,7 +650,7 @@ function Collection(content, option) {
                 for (var f in filter) {
                     if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
-                    localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
+                    localeLowerCase = ( !/(boolean|number)/.test(typeof(filter[f])) ) ? filter[f].toLocaleLowerCase() : filter[f];
                     if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] != 'null' && result[o][f] != 'undefined' ) {
 
                         result[o] = merge(result[o], set, true);
@@ -607,7 +694,7 @@ function Collection(content, option) {
                 for (var f in filter) {
                     if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
-                    localeLowerCase = ( typeof(filter[f]) != 'boolean' ) ? filter[f].toLocaleLowerCase() : filter[f];
+                    localeLowerCase = ( !/(boolean|number)/.test(typeof(filter[f])) ) ? filter[f].toLocaleLowerCase() : filter[f];
                     if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] != 'null' && result[o][f] != 'undefined' ) {
 
                         result[o] = set;
@@ -636,27 +723,41 @@ function Collection(content, option) {
 
         return result
     }
+    
+    /**
+     * .delete({ key: 2 })
+     * .delete({ name: 'Jordan' }, 'id') where id will be use as the `uuid` to compare records
+     * 
+     * AND syntax
+     * .delete({ car: 'toyota', color: 'red' })
+     * 
+     * OR syntax
+     * .delete({ car: 'toyota', color: red }, { car: 'ford' } ) // will delete all `toyota red cars` & all `ford cars`
+     * 
+     *  N.B.: will not affect current result - just returning the DIFF
+     *  If you
+     * @param {object} filter - samme as `.find(filter)`
+     * @param {string|boolean} [ uuid | disabled ] - by default, Collection is using its internal _uuid
+     * If you want to delete without key comparison, disable `uuid` search mode
+     * .delete({ name: 'Jordan' }, false)
+     * 
+     * @return {array} result
+     */
+    instance['delete'] = function() {
 
-    instance['delete'] = function(filter) {
+        var result = instance.notIn.apply(this, arguments);
 
-        if ( typeof(filter) !== 'object' ) {
-            throw new Error('filter must be an object');
-        } else {
+        result.limit = instance.limit;
+        result.find = instance.find;
+        result.findOne = instance.findOne;
+        result.insert = instance.insert;
+        result.update = instance.update;
+        result.replace = instance.replace;
+        result.orderBy = instance.orderBy;
+        result.notIn = instance.notIn;
+        result.toRaw = instance.toRaw;
 
-            var result = instance.notIn.apply(this, arguments);
-
-            result.limit = instance.limit;
-            result.find = instance.find;
-            result.findOne = instance.findOne;
-            result.insert = instance.insert;
-            result.update = instance.update;
-            result.replace = instance.replace;
-            result.orderBy = instance.orderBy;
-            result.notIn = instance.notIn;
-            result.toRaw = instance.toRaw;
-
-            return result
-        }
+        return result
     }
 
 

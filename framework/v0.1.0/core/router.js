@@ -202,7 +202,7 @@ function Router(env) {
             rootPath: self.executionPath,
             conf: JSON.parse(JSON.stringify(conf)),
             //instance: self.serverInstance,
-            templates: (routeHasViews) ? conf.content.templates : undefined,
+            template: (routeHasViews) ? conf.content.templates[params.rule.replace('\@'+ bundle, '')] : undefined,
             isUsingTemplate: local.isUsingTemplate,
             cacheless: cacheless,
             //rule            : params.rule,
