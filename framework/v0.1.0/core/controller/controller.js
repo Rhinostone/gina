@@ -78,7 +78,7 @@ function SuperController(options) {
     }
 
     var hasViews = function() {
-        return ( typeof(local.options.templates) != 'undefined' ) ? true : false;
+        return ( typeof(local.options.template) != 'undefined' ) ? true : false;
     }
 
     /**
@@ -150,7 +150,7 @@ function SuperController(options) {
         local.next = next;
 
         getParams(req);
-        if ( typeof(local.options.templates) != 'undefined' && typeof(local.options.control) != 'undefined' ) {
+        if ( typeof(local.options.template) != 'undefined' && typeof(local.options.control) != 'undefined' ) {
 
 
             var  action     = local.options.control
@@ -159,12 +159,12 @@ function SuperController(options) {
                 , namespace = local.options.namespace || '';
 
 
-            if ( typeof(local.options.templates.common) != 'undefined' ) {
-                ext = local.options.templates.common.ext || ext;
+            if ( typeof(local.options.template) != 'undefined' ) {
+                ext = local.options.template.ext || ext;
             }
             if( !/\./.test(ext) ) {
                 ext = '.' + ext;
-                local.options.templates.common.ext = ext
+                local.options.template.ext = ext
             }
 
             var ctx = getContext('gina');
@@ -201,8 +201,8 @@ function SuperController(options) {
             }            
             set('page.view.method', local.options.method);
             set('page.view.namespace', namespace); // by default
-            set('page.view.html.properties.mode.javascriptsDeferEnabled', local.options.templates.common.javascriptsDeferEnabled);
-            set('page.view.html.properties.mode.routeNameAsFilenameEnabled', local.options.templates.common.routeNameAsFilenameEnabled);
+            set('page.view.html.properties.mode.javascriptsDeferEnabled', local.options.template.javascriptsDeferEnabled);
+            set('page.view.html.properties.mode.routeNameAsFilenameEnabled', local.options.template.routeNameAsFilenameEnabled);
             
             var parameters = JSON.parse(JSON.stringify(req.getParams()));//merge(options.params, options.conf.content.routing[rule].param);
             parameters = merge(parameters, options.conf.content.routing[rule].param);
@@ -271,7 +271,7 @@ function SuperController(options) {
             set('page.view.namespace', namespace);
 
             //TODO - detect when to use swig
-            var dir = self.templates || local.options.templates.common.templates;
+            var dir = self.templates || local.options.template.templates;
             var swigOptions = {
                 autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape: false,
                 loader: swig.loaders.fs(dir),
@@ -344,7 +344,7 @@ function SuperController(options) {
             }
 
             template = local.options.rule.replace('\@'+ local.options.bundle, '');
-            setResources(local.options.templates, template);
+            setResources(local.options.template);
             
             var file = data.page.view.file;
 
@@ -366,7 +366,7 @@ function SuperController(options) {
                 if (!file || file === local.options.namespace) {
                     file = 'index'
                 }
-                path = _(local.options.templates[template].html +'/'+ local.options.namespace + '/' + file)
+                path = _(local.options.template.html +'/'+ local.options.namespace + '/' + file)
             } else {
                 if ( local.options.path && !/(\?|\#)/.test(local.options.path) ) {
                     path = _(local.options.path);
@@ -382,7 +382,7 @@ function SuperController(options) {
                     }
 
                 } else {
-                    path = _(local.options.templates[template].html +'/'+ file)
+                    path = _(local.options.template.html +'/'+ file)
                 }
             }
 
@@ -608,11 +608,11 @@ function SuperController(options) {
                 
                 var layoutPath = null;
                 
-                if ( local.options.isWithoutLayout || !local.options.isWithoutLayout && typeof(local.options.templates[template].layout) != 'undefined' && fs.existsSync(local.options.templates[template].layout) ) {
-                    layoutPath = (local.options.isWithoutLayout) ? local.options.templates[template].noLayout : local.options.templates[template].layout;
+                if ( local.options.isWithoutLayout || !local.options.isWithoutLayout && typeof(local.options.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout) ) {
+                    layoutPath = (local.options.isWithoutLayout) ? local.options.template.noLayout : local.options.template.layout;
                 } else {
-                    var layoutRoot = ( typeof(local.options.namespace) != 'undefined' && local.options.namespace != '') ? local.options.templates[template].templates + '/'+ local.options.namespace  : local.options.templates[template].templates;
-                    layoutPath = layoutRoot +'/'+ local.options.file + local.options.templates[template].ext;    
+                    var layoutRoot = ( typeof(local.options.namespace) != 'undefined' && local.options.namespace != '') ? local.options.template.templates + '/'+ local.options.namespace  : local.options.template.templates;
+                    layoutPath = layoutRoot +'/'+ local.options.file + local.options.template.ext;    
                 }                
                 
                 
@@ -622,9 +622,9 @@ function SuperController(options) {
                         self.throwError(local.res, 500, err);
                     } else {
                         var assets = { assets: "${asset}"}, XHRData = null;                        
-                        var mapping = { filename: local.options.templates[template].layout };         
+                        var mapping = { filename: local.options.template.layout };         
                         
-                        var isDeferModeEnabled = local.options.templates.common.javascriptsDeferEnabled;
+                        var isDeferModeEnabled = local.options.template.javascriptsDeferEnabled;
                         layout = layout.toString();
                         
                         // adding stylesheets
@@ -671,7 +671,7 @@ function SuperController(options) {
 
                                 // + '\n\t<script type="text/javascript">'
                                 // + ' \n<!--'
-                                // + '\n' + local.options.templates.common.pluginLoader.toString()
+                                // + '\n' + local.options.template.pluginLoader.toString()
                                 // + '\t\t//-->'
                                 // + '\n\t\t</script>'
 
@@ -687,7 +687,7 @@ function SuperController(options) {
                                 var ginaLoader = 
                                     '\n\t\t<script defer type="text/javascript">'
                                     + ' \n\t\t<!--'
-                                    + '\n\t\t\t' + local.options.templates.common.pluginLoader.toString().replace(/\;(\n|\r)/g, ';').replace(/\,(\n|\r)/g, ',')
+                                    + '\n\t\t\t' + local.options.template.pluginLoader.toString().replace(/\;(\n|\r)/g, ';').replace(/\,(\n|\r)/g, ',')
                                     + '\n\t\t//-->'
                                     + '\n\t\t</script>'
                                 ;
@@ -729,7 +729,7 @@ function SuperController(options) {
                             plugin = '\t'
                                 + '\n\t<script type="text/javascript">'
                                 + ' \n\t<!--'
-                                + '\n\t' + local.options.templates.common.pluginLoader.toString()
+                                + '\n\t' + local.options.template.pluginLoader.toString()
                                 + '\t//-->'
                                 + '\n</script>'
 
@@ -774,7 +774,7 @@ function SuperController(options) {
                             }
 
                         } catch (err) {
-                            var filename = local.options.templates[template].html;
+                            var filename = local.options.template.html;
                             filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
                             self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)))
                         }
@@ -1125,95 +1125,153 @@ function SuperController(options) {
     /**
      * Set resources
      *
-     * @param {object} viewConf - template configuration
-     * @param {string} localRessouces - rule name
+     * @param {object} template - template configuration
      * */
-    var setResources = function(viewConf, localRessource) {
+    var setResources = function(viewConf) {
         if (!viewConf) {
-            self.throwError(500, new Error('No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: ./gina.sh -av '+ options.conf.bundle))
+            self.throwError(500, new Error('No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: gina bundle:add-view '+ options.conf.bundle +' @'+ options.conf.projectName))
         }
 
         var res     = '',
-            tmpRes  = {},
             css     = {
-                media   : "screen",
-                rel     : "stylesheet",
-                type    : "text/css",
-                content : {}
+                name    : '',
+                media   : 'screen',
+                rel     : 'stylesheet',
+                type    : 'text/css',
+                url     : ''
             },
             cssStr  = '',
             js      = {
-                type    : "text/javascript",
-                content : {}
+                name    : '',
+                type    : 'text/javascript',
+                url     : ''
             },
             jsStr   = '',
             exclude  = null;
 
         //intercept errors in case of malformed config
-        if ( typeof(viewConf) != "object" ) {
-            cssStr  = viewConf;
-            jsStr   = viewConf
-        }
+        // if ( typeof(viewConf) != "object" ) {
+        //     cssStr  = viewConf;
+        //     jsStr   = viewConf
+        // }
+        
+        // if (localRessource == '_common') {
+        //     self.throwError(res, 500, new Error('Using `_common` as your template name is not allowed'));
+        // }
+        
+
+        //cascading merging        
+        // if ( typeof(viewConf[localRessource]) != 'undefined') {
+
+        //     var noneDefaultJs   = (viewConf[localRessource]['javascripts']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['javascripts'])) : [] ;
+        //     var noneDefaultCss  = (viewConf[localRessource]['stylesheets']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['stylesheets'])) : [] ;
+            
+        //     var i       = null
+        //         , len   = null
+        //         , tmp   = null
+        //         , url   = null
+        //     ;
+        //     if ( Array.isArray(noneDefaultJs) && noneDefaultJs.length > 0 && typeof(noneDefaultJs[0].url) == 'undefined' ) {
+        //         tmp = JSON.parse(JSON.stringify(noneDefaultJs));
+        //         i   = 0;
+        //         len = tmp.length;
+        //         noneDefaultJs = [];
+        //         for (; i < len; ++i) {
+        //             noneDefaultJs       = JSON.parse(JSON.stringify(js));
+        //             url                 = tmp[i]; 
+        //             noneDefaultJs.url   = url;
+        //             noneDefaultJs.name  = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-')
+        //         }                
+        //     }
+        //     noneDefaultJs = merge.setKeyComparison('url')(viewConf._common.javascript, noneDefaultJs);
+        //     // checking js names
+        //     i = 0;
+        //     len = noneDefaultJs.length;
+        //     for (; i < len; ++i) {
+        //         url = noneDefaultJs[i].url;
+        //         if ( typeof(noneDefaultJs[i].name) == 'undefined' || noneDefaultJs[i].name == '' ) {
+        //             noneDefaultJs[i].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-')                        
+        //         }
+        //         // support src like:
+        //         if ( !/^\/\//.test(noneDefaultJs.url) ) {
+        //             noneDefaultJs.url = local.options.conf.server.webroot + url
+        //         } 
+        //     }
+            
+        //     if ( Array.isArray(noneDefaultCss) && noneDefaultCss.length > 0 && typeof(noneDefaultCss[0].url) == 'undefined' ) {
+        //         tmp = JSON.parse(JSON.stringify(noneDefaultCss));
+        //         i   = 0;
+        //         len = tmp.length;
+        //         noneDefaultCss = [];
+        //         for (; i < len; ++i) {
+        //             noneDefaultCss      = JSON.parse(JSON.stringify(css));
+        //             url                 = tmp[i];
+        //             noneDefaultCss.url  = url;
+        //             noneDefaultCss.name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-')
+        //         }                
+        //     }
+        //     noneDefaultCss = merge.setKeyComparison('url')(viewConf._common.stylesheets, noneDefaultCss);
+        //     // checking js names
+        //     i = 0;
+        //     len = noneDefaultCss.length;
+        //     for (; i < len; ++i) {
+        //         url = noneDefaultCss[i].url;
+        //         if ( typeof(noneDefaultCss[i].name) == 'undefined' ||noneDefaultCss[i].name == '' ) {
+        //             noneDefaultCss[i].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-')                    
+        //         }
+        //         // support src like:
+        //         if ( !/^\/\//.test(noneDefaultCss.url) ) {
+        //             noneDefaultCss.url = local.options.conf.server.webroot + url
+        //         } 
+        //     }
+            
+        //     viewConf[localRessource].javascripts = noneDefaultJs;
+        //     viewConf[localRessource].stylesheets = noneDefaultCss;
+                        
+        //     // var currentViewCollection = null;
+        //     // if ( viewConf[localRessource]["javascriptsExclude"] ) {
+        //     //     // `*` or `all` means that we exclude all `_common` from current template; excepted for gina & those defiened for the template
+        //     //     currentViewCollection = new Collection(viewConf[localRessource].javascripts);
+        //     //     len = viewConf._common['javascripts'].length; 
+        //     //     if ( len > 0 && Array.isArray(viewConf[localRessource]["javascriptsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["javascriptsExclude"][0]) || typeof(viewConf[localRessource]["javascriptsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["javascriptsExclude"]) ) {
+                                        
+        //     //         i = 0;                                       
+        //     //         for (; i<len; ++i) {
+        //     //             currentViewCollection.delete({ name: viewConf._common['javascripts'][i].name });
+        //     //         }
+                    
+        //     //     }
+        //     //     // TODO - exclude by ressource.name
+        //     //     viewConf[localRessource].javascripts = currentViewCollection.toRaw();
+        //     // }
+
+        //     // if ( viewConf[localRessource]["stylesheetsExclude"] ) {                 
+        //     //     currentViewCollection = new Collection(viewConf[localRessource].stylesheets);
+        //     //     len = viewConf._common['stylesheets'].length;   
+        //     //     if ( len > 0 && Array.isArray(viewConf[localRessource]["stylesheetsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"][0]) || typeof(viewConf[localRessource]["stylesheetsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"]) ) {
+
+        //     //         i = 0;                                    
+        //     //         for (; i<len; ++i) {
+        //     //             currentViewCollection.delete({ name: viewConf._common['stylesheets'][i].name });
+        //     //         }
+        //     //     }
+        //     //     // TODO - exclude by ressource.name
+        //     //     viewConf[localRessource].stylesheets = currentViewCollection.toRaw();
+        //     // }
 
 
-        //cascading merging
-        if (localRessource !== 'common') {
-            if ( typeof(viewConf[localRessource]) != 'undefined') {
-
-                var noneDefaultJs   = (viewConf[localRessource]['javascripts']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['javascripts'])) : [] ;
-                var noneDefaultCss  = (viewConf[localRessource]['stylesheets']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['stylesheets'])) : [] ;
-               
-                viewConf[localRessource] = merge(viewConf.common, viewConf[localRessource]);
-
-                if ( viewConf[localRessource]["javascriptsExclude"] ) {
-
-                    if ( Array.isArray(viewConf[localRessource]["javascriptsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["javascriptsExclude"][0]) || typeof(viewConf[localRessource]["javascriptsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["javascriptsExclude"]) ) {
-
-                        for (var i = 0, len = viewConf.common['javascripts'].length; i<len; ++i) {
-                            if ( viewConf.common['javascripts'] && viewConf[localRessource]['javascripts'].indexOf(viewConf.common['javascripts'][i]) ) {
-                                viewConf[localRessource]['javascripts'].splice(viewConf[localRessource]['javascripts'].indexOf(viewConf.common['javascripts'][i]), 1)
-                            }
-                        }
-                    } else {// else means that we exclude all common
-                        viewConf[localRessource]['javascripts'] = noneDefaultJs;
-                    }
-                }
-
-                if ( viewConf[localRessource]["stylesheetsExclude"] ) {
-
-                    if ( Array.isArray(viewConf[localRessource]["stylesheetsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"][0]) || typeof(viewConf[localRessource]["stylesheetsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"]) ) {
-
-                        for (var i = 0, vcLen = viewConf.common['stylesheets'].length; i<vcLen; ++i) {
-                            if ( viewConf.common['stylesheets'] && viewConf[localRessource]['stylesheets'].indexOf(viewConf.common['stylesheets'][i]) ) {
-                                viewConf[localRessource]['stylesheets'].splice(viewConf[localRessource]['stylesheets'].indexOf(viewConf.common['stylesheets'][i]), 1)
-                            }
-                        }
-                    } else {// else means that we exclude all common
-                        viewConf[localRessource]['stylesheets'] = noneDefaultCss;
-                    }
-                }
-
-
-            } else {
-                viewConf[localRessource] = viewConf.common
-            }
-        }
+        // } else {
+        //     viewConf[localRessource] = viewConf._common
+        // }
+        
 
         //Get css
-        if( viewConf[localRessource]["stylesheets"] ) {
-            tmpRes  = getNodeRes('css', cssStr, viewConf[localRessource]['stylesheets'], css);
-
-            cssStr  = tmpRes.cssStr;
-            css     = tmpRes.css;
-            //tmpRes  = {}
+        if( viewConf.stylesheets ) {
+            cssStr  = getNodeRes('css', viewConf.stylesheets)
         }
         //Get js
-        if( viewConf[localRessource]['javascripts'] ) {
-            tmpRes  = getNodeRes('js', jsStr, viewConf[localRessource]['javascripts'], js);
-
-            jsStr   = tmpRes.jsStr;
-            js      = tmpRes.js;
-            //tmpRes  = {}
+        if( viewConf.javascripts ) {            
+            jsStr   = getNodeRes('js', viewConf.javascripts)
         }
 
         set('page.view.stylesheets', cssStr);
@@ -1232,58 +1290,32 @@ function SuperController(options) {
      *
      * @private
      * */
-    var getNodeRes = function(type, resStr, resArr, resObj) {
+    var getNodeRes = function(type, resArr) {
         
-        var r = 0, rLen = resArr.length;
+        var r       = 0
+            , rLen  = resArr.length
+            , obj   = null
+            , str   = ''
+        ;
         switch(type){
             case 'css':
-                var css = {};
-                for (; r < rLen; ++r) {                    
-                    //means that you will find options.
-                    if (typeof(resArr[r]) == "object") {
-                        css = merge(resArr[r], resObj);
-                        if (!css.content[css.url]) {
-                            css.content[css.url] = '\n\t\t<link href="'+ css.url +'" media="'+ css.media +'" rel="'+ css.rel +'" type="'+ css.type +'">';
-                            resStr += css.content[resArr[r].url]
-                        } else {
-                            resStr += css.content[resArr[r].url]
-                        }
-                        
-                    } else {
-                        css = merge(css, resObj);
-                        css.content[resArr[r]] = '\n\t\t<link href="'+ resArr[r] +'" media="screen" rel="'+ css.rel +'" type="'+ css.type +'">';
-                        resStr += css.content[resArr[r]]
-                    }
+                for (; r < rLen; ++r) { 
+                    obj = resArr[r];
+                    str += '\n\t\t<link href="'+ obj.url +'" media="'+ obj.media +'" rel="'+ obj.rel +'" type="'+ obj.type +'">';                    
                 }
                 
-                return { css : css, cssStr : resStr }
+                return str;
             break;
 
             case 'js':
-                var js          = {}
-                    , deferMode = (local.options.templates.common.javascriptsDeferEnabled) ? ' defer' : ''
-                ;
+                var deferMode = (local.options.template.javascriptsDeferEnabled) ? ' defer' : '';
+                
                 for (; r < rLen; ++r) {
-                    
-                    //means that you will find options                    
-                    if ( typeof(resArr[r]) == "object" ) {     
-                        js = merge(resArr[r], resObj);                   
-                        //js.type = (resArr[r].options.type) ? resArr[res].options.type : js.type;
-                        if (!js.content[resArr[r].url]) {
-                            js.content[resArr[r].url] = '\n\t\t<script'+ deferMode +' type="'+ js.type +'" src="'+ resArr[r].url +'"></script>';
-                            resStr += js.content[resArr[r].url];
-                        } else {
-                            resStr += js.content[resArr[r].url]
-                        }
-                        
-                    } else {
-                        js = merge(js, resObj);
-                        js.content[resArr[r]] = '\n\t\t<script'+ deferMode +' type="'+ js.type +'" src="'+ resArr[r] +'"></script>';
-                        resStr += js.content[resArr[r]]
-                    }
+                    obj = resArr[r];
+                    str += '\n\t\t<script'+ deferMode +' type="'+ obj.type +'" src="'+ obj.url +'"></script>'                    
                 }
                 
-                return { js : js, jsStr : resStr }
+                return str;
             break;
         }
     }
@@ -1368,8 +1400,8 @@ function SuperController(options) {
         ;
         
         // user's defineds assets
-        var userScripts         = local.options.templates[template].javascripts
-            , usersStylesheets  = local.options.templates[template].stylesheets
+        var userScripts         = local.options.template.javascripts
+            , usersStylesheets  = local.options.template.stylesheets
             , layoutClasses     = []
         ;
                         

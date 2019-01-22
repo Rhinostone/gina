@@ -284,7 +284,7 @@ function Server(options) {
                     for (var rule in tmp){
                         tmp[rule +'@'+ appName] = tmp[rule];
                         delete tmp[rule];
-                        file = rule;
+                        file = ruleShort = rule;
                         rule = rule +'@'+ appName;
 
 
@@ -354,7 +354,7 @@ function Server(options) {
                             // This is only an issue when it comes to the frontend dev
                             // views.routeNameAsFilenameEnabled is set to true by default
                             // IF [ false ] the action is used as filename
-                            if ( !conf.envConf[apps[i]][self.env].content['templates']['common'].routeNameAsFilenameEnabled && tmp[rule].param.bundle != 'framework') {
+                            if ( !conf.envConf[apps[i]][self.env].content.templates['_common'].routeNameAsFilenameEnabled && tmp[rule].param.bundle != 'framework') {
                                 var tmpRouting = [];
                                 for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
                                     if (/[A-Z]/.test(tmp[rule].param.file.charAt(r))) {
@@ -1564,10 +1564,10 @@ function Server(options) {
                 }
 
                 // we add it into statics
-                if ( withViews && typeof(conf.content.statics[key]) == 'undefined' && conf.content.templates.common.templates != conf.content.templates.common.html) {
-                    conf.content.statics[key] = conf.content.templates.common.templates +'/'+ uri.join('/')
+                if ( withViews && typeof(conf.content.statics[key]) == 'undefined' && conf.content.templates._common.templates != conf.content.templates._common.html) {
+                    conf.content.statics[key] = conf.content.templates._common.templates +'/'+ uri.join('/')
                 } else if (withViews && typeof(conf.content.statics[key]) == 'undefined') {
-                    conf.content.statics[key] = conf.content.templates.common.html +'/'+ uri.join('/') // normal case
+                    conf.content.statics[key] = conf.content.templates._common.html +'/'+ uri.join('/') // normal case
                 }
 
                 uri = pathname.split('/');                

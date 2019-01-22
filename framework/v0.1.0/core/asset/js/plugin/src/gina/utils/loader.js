@@ -78,14 +78,33 @@ window['onGinaLoaded']  = function(gina) {
         gina["forms"]                   = JSON.parse('{{ JSON.stringify(page.forms) }}');
 
         // making adding css to the head
-        var link        = null;
-        link            = document.createElement('link');
-        link.href       = ((options['webroot'] !== '/') ? options['webroot'] + '/' : options['webroot']) + "js/vendor/gina/gina.min.css";
-        link.media      = "screen";
-        link.rel        = "stylesheet";
-        link.type       = "text/css";
-        document.getElementsByTagName('head')[0].appendChild(link);
-
+        var link        = null, cssPath = "js/vendor/gina/gina.min.css";
+        
+        // check if css has not been added yet
+        var links       = document.head.getElementsByTagName('link')
+            , i         = 0
+            , len       = links.length
+            , found     = false
+            , re        = new RegExp(cssPath)
+        ;
+        
+        for (; i < len; ++i ) {
+            if ( re.test(links[i].href) ) {
+                found = true;
+                break
+            }
+        }
+        
+        if (!found) { // add css           
+            link            = document.createElement('link');
+            link.href       = ((options['webroot'] !== '/') ? options['webroot'] + '/' : options['webroot']) + cssPath;
+            link.media      = "screen";
+            link.rel        = "stylesheet";
+            link.type       = "text/css";
+            
+            document.getElementsByTagName('head')[0].appendChild(link);        
+        }
+    
         // all required must be listed in `src/gina.js` defined modules list
         if (options['envIsDev']) {
             var Toolbar             = require('gina/toolbar');
