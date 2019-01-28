@@ -121,6 +121,34 @@ function Config(opt) {
                 // Need to globalize some of them.                
                 self.envConf = envConf;
                 
+                // getting server core config
+                var statusCodes     = null
+                    , statusCodes   = null
+                    , mime          = null
+                ;
+
+                try {
+                    var corePath = getPath('gina').core;
+                    statusCodes = fs.readFileSync( _( corePath + '/status.codes') ).toString();
+                    statusCodes = JSON.parse(statusCodes);
+                    if ( typeof(statusCodes['_comment']) != 'undefined' )
+                        delete statusCodes['_comment'];
+
+                    mime  = fs.readFileSync(corePath + '/mime.types').toString();
+                    mime  = JSON.parse(mime);
+                    if ( typeof(mime['_comment']) != 'undefined' )
+                        delete mime['_comment'];
+
+                    self.envConf.core = {
+                        statusCodes : statusCodes,
+                        mime        : mime
+                    };
+
+                } catch(err) {
+                    console.error(err.stack||err.message);
+                    process.exit(1)
+                }
+                
                 loadBundlesConfiguration( function(err, file, routing) {
 
                     if ( typeof(Config.initialized) == 'undefined' ) {
@@ -502,7 +530,7 @@ function Config(opt) {
                 //modelsPath = modelsPath.replace(/\{executionPath\}/g, mPath);
 
                 //console.log("My env ", env, self.executionPath, JSON.stringify(template, null, '\t') );
-                //Existing app and port sharing => != standalone.
+                //Existing app and port sharing => != isStandalone.
                 if ( !fs.existsSync(appsPath) ) {
                     new _(appsPath).mkdirSync()
                 }
@@ -512,7 +540,7 @@ function Config(opt) {
                 
                 
 
-                //Check if standalone or shared instance
+                //Check if isStandalone or shared instance
                 if (appPort != masterPort) {
                     isStandalone = false;
                     self.Host.standaloneMode = isStandalone
@@ -670,11 +698,14 @@ function Config(opt) {
         
         // environment
         var cacheless       = self.isCacheless()
-            , standalone    = self.Host.isStandalone()
+            , isStandalone  = self.Host.isStandalone()
             , env           = self.env || self.Env.get() // env
             , conf          = self.envConf // env conf
         ;
         console.debug('[ CONFIG ] loading `'+ bundle +'/'+ env +'` configuration, please wait ...');
+        
+        
+        self.setServerCoreConf(bundle, env, conf.core);
         
         // bundle paths, ports, protocols
         var appPath         = ''
@@ -690,7 +721,7 @@ function Config(opt) {
         conf[bundle][env].projectName   = getContext('projectName');
         conf[bundle][env].allBundles    = bundles;
         conf[bundle][env].cacheless     = cacheless;
-        conf[bundle][env].standalone    = standalone;
+        conf[bundle][env].isStandalone  = isStandalone;
         conf[bundle][env].executionPath = getContext('paths').root;
                        
         if ( self.task == 'run' && !GINA_ENV_IS_DEV ) {
@@ -712,7 +743,7 @@ function Config(opt) {
         wroot = ( !/\/$/.test(wroot) ) ? wroot + '/' : wroot;
         
         // standalone setup
-        if ( standalone && bundle != self.startingApp && wroot == '/') {
+        if ( isStandalone && bundle != self.startingApp && wroot == '/') {
             wroot += bundle + '/';            
         }
         conf[bundle][env].server.webroot = wroot;
@@ -847,31 +878,52 @@ function Config(opt) {
 
         // building file list
         conf[bundle][env].configFiles = filesList;
+        
+        var hasViews = (typeof(files['templates']) != 'undefined' && typeof(files['templates']['_common']) != 'undefined') ? true : false;
+
+        // e.g.: 404 rendering for JSON APIs by checking `env.template`: JSON response can be forced even if the bundle has views
+        if ( hasViews && typeof(self.userConf[bundle][env].template) != 'undefined' && self.userConf[bundle][env].template == false) {
+            conf[bundle][env].template = false
+        } else if (hasViews) {
+            conf[bundle][env].template = true;
+        }
 
         name = 'routing';
         routing = files[name];
         //Server only because of the shared mode VS the standalone mode.
-        if (cacheless && typeof (reload) != 'undefined') {
+        if (cacheless || typeof(reload) != 'undefined' && reload) {
                         
             //setting app param
             var r = null, rLen = null;
             for (var rule in routing) {
+                
+                if ( typeof(routing[rule].method) == 'undefined' || !routing[rule].method )
+                    routing[rule].method = 'GET';
+                                
                 routing[rule +'@'+ bundle] = routing[rule];
                 delete routing[rule];
+                
+                
+                
+                // link route & template if hasViews
+                if ( hasViews && /get/i.test(routing[rule +'@'+ bundle].method) && typeof(files['templates'][rule]) == 'undefined' ) {
+                    files['templates'][rule] = {}
+                }
+
                 
                 file        = rule;
                 rule        = rule +'@'+ bundle;
                 
-                localWroot  = webroot; // by default   
+                localWroot  = wroot; // by default   
                       
-                if ( routing[rule].bundle != bundle ) {
-                    localWroot  = conf[routing[rule].bundle][env].server.webroot;
+                if ( typeof(routing[rule].bundle) != 'undefined' && routing[rule].bundle != bundle ) {
+                    localWroot  = conf[routing[rule].bundle][env].server.webroot;//conf[bundle][env].server.webroot
                     // formating localWroot to have /mywebroot/
                     localWroot  = ( !/^\//.test(localWroot) ) ? '/' + localWroot : localWroot;
                     localWroot  = ( !/\/$/.test(localWroot) ) ? localWroot + '/' : localWroot;  
                      
                     // standalone setup
-                    if ( standalone && bundle != self.startingApp && localWroot == '/') {
+                    if ( isStandalone && bundle != self.startingApp && localWroot == '/') {
                         localWroot += bundle + '/';            
                     }
                      
@@ -882,7 +934,8 @@ function Config(opt) {
 
                 routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse lookup
                 // route file
-                routing[rule].param.file = ( typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
+                if (!routing[rule].param) continue;
+                routing[rule].param.file = ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
 
                 // by default, method is inherited from the request.method
                 if (
@@ -891,13 +944,13 @@ function Config(opt) {
                 ) {
                     routing[rule].param.path = localWroot + ( /^\//.test(routing[rule].param.path) ) ? routing[rule].param.path.substr(1) : routing[rule].param.path
                 }
-
+                
                 if ( /string/.test( typeof(routing[rule].url) ) ) {
                     
-                    if ( !routing[rule].url.length ) {// adding localWroot if url is missing
+                    if ( !routing[rule].url.length || routing[rule].url.length == 1) {// adding localWroot if url is missing
                         routing[rule].url = localWroot
                     } else {
-                        routing[rule].url = ( /^\//.test(routing[rule].url) ) ? routing[rule].url.substr(1) : routing[rule].url
+                        routing[rule].url = localWroot + ( /^\//.test(routing[rule].url) ) ? routing[rule].url.substr(1) : routing[rule].url
                     }
                     // ignoreWebRoot test
                     if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
@@ -906,13 +959,13 @@ function Config(opt) {
                         
                     if (routing[rule].bundle != bundle) { // allowing to override bundle name in routing.json
                         // originalRule is used to facilitate cross bundles (hypertext)linking
-                        originalRules[oRuleCount] = ( standalone && routing[rule] && bundle != self.startingApp) ? bundle + '-' + rule : rule;
+                        originalRules[oRuleCount] = ( isStandalone && routing[rule] && bundle != self.startingApp) ? bundle + '-' + rule : rule;
                         ++oRuleCount;
 
                         // if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
                         //     routing[rule].url = localWroot + routing[rule].url
                         // standalone setup
-                        // if ( standalone && routing[rule].bundle != self.startingApp && localWroot == '/') {
+                        // if ( isStandalone && routing[rule].bundle != self.startingApp && localWroot == '/') {
                         //     localWroot = '/'+ routing[rule].bundle;
                         //     conf[routing[rule].bundle][env].server.webroot = localWroot
                         // }
@@ -949,7 +1002,7 @@ function Config(opt) {
                 }
             }
 
-            files[name] = collectedRules = merge(collectedRules, ((standalone && bundle != self.startingApp ) ? standaloneRouting : routing), true);
+            files[name] = collectedRules = merge(collectedRules, ((isStandalone && bundle != self.startingApp ) ? standaloneRouting : routing), true);
 
             // originalRule is used to facilitate cross bundles (hypertext)linking
             r = 0;
@@ -958,12 +1011,13 @@ function Config(opt) {
                 files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
             }
             // creating rule for auto redirect: / => /webroot
-            if (localHasWebRoot && webrootAutoredirect) {
-                files[name]["@webroot"] = {
+            if (localHasWebRoot && webrootAutoredirect && localHasWebRoot != '/') {
+                files[name]["redirect@webroot"] = {
                     url: "/",
+                    method: "GET",
                     param: {
-                        action: "redirect",
-                        path: wroot,
+                        control: "redirect",
+                        path: localWroot,
                         code: 302
                     },
                     bundle: (files[name].bundle) ? files[name].bundle : bundle
@@ -978,24 +1032,12 @@ function Config(opt) {
                 } else {
                     r = 0;
                     rLen = files[name][rule].url.length;
-                    for (; r < rLen; ++u) {
+                    for (; r < rLen; ++r) {
                         reverseRouting[files[name][rule].url[r]] = rule
                     }
                 }
             }
             self.setReverseRouting(bundle, env, reverseRouting);            
-        }
-
-
-
-
-        var hasViews = (typeof(files['templates']) != 'undefined' && typeof(files['templates']['_common']) != 'undefined') ? true : false;
-
-        // e.g.: 404 rendering for JSON APIs by checking `env.template`: JSON response can be forced even if the bundle has views
-        if ( hasViews && typeof(self.userConf[bundle][env].template) != 'undefined' && self.userConf[bundle][env].template == false) {
-            conf[bundle][env].template = false
-        } else if (hasViews) {
-            conf[bundle][env].template = true;
         }
 
                
@@ -1026,11 +1068,11 @@ function Config(opt) {
         var staticsPath = _(corePath +'/template/conf/statics.json', true);
         var viewsPath = _(corePath +'/template/conf/templates.json', true);
         
-        var defaultTemplateConf = requireJSON(viewsPath);
+        var defaultViews = requireJSON(viewsPath);
         if (hasViews && typeof(files['templates']._common) != 'undefined') {
-            reps['templates']   = files['templates']._common.templates || defaultTemplateConf._common.templates;            
-            reps['html']        = files['templates']._common.html || defaultTemplateConf._common.html;
-            reps['theme']       = files['templates']._common.theme || defaultTemplateConf._common.theme;            
+            reps['templates']   = files['templates']._common.templates || defaultViews._common.templates;            
+            reps['html']        = files['templates']._common.html || defaultViews._common.html;
+            reps['theme']       = files['templates']._common.theme || defaultViews._common.theme;            
         }
 
         var ports = conf[bundle][env].port;
@@ -1101,10 +1143,18 @@ function Config(opt) {
                 while ( d < dirs.length) {
                     lStat = fs.lstatSync(_(conf[bundle][env].publicPath +'/'+ dirs[d], true));
                     if ( !/^\./.test(dirs[d]) && lStat.isDirectory() ) {
+                        // regular path
                         publicResources[pCount] = '/'+ dirs[d] +'/';
+                        ++pCount;
+                        // handle resources from public with webroot in url
+                        publicResources[pCount] = conf[bundle][env].server.webroot + dirs[d] +'/';
                         ++pCount
                     } else if ( !/^\./.test(dirs[d]) && lStat.isFile() ) {
+                        // regular path
                         publicResources[pCount] = '/'+ dirs[d];
+                        ++pCount;
+                        // handle resources from public with webroot in url
+                        publicResources[pCount] = conf[bundle][env].server.webroot + dirs[d];
                         ++pCount
                     }
                     ++d
@@ -1126,12 +1176,12 @@ function Config(opt) {
 
 
             if (hasViews && typeof(files['templates']) == 'undefined') {
-                files['templates'] = requireJSON(viewsPath)
+                files['templates'] = JSON.parse(JSON.stringify(defaultViews))
             }
             
             if ( typeof(files['templates']) != 'undefined' ) {
                 
-                var defaultViews = requireJSON(viewsPath);
+                //var defaultViews = requireJSON(viewsPath);
                 
                 var css     = {
                         name    : '',
@@ -1151,9 +1201,11 @@ function Config(opt) {
                 var excluded            = {}
                     , excludedType      = null
                     , excludedStr       = null
+                    , excludedName      = null
                     , currentCollection = null
                     , noneDefaultJs     = null
                     , noneDefaultCss    = null
+                    , reWebroot         = new RegExp('^'+conf[bundle][env].server.webroot)
                 ;
                 var t       = null
                     , tLen  = null
@@ -1161,7 +1213,7 @@ function Config(opt) {
                     , url   = null
                 ;                   
                 for (var section in files['templates']) {
-                                                            
+                                                                                
                     // updating javascripts & css order                        
                     noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.parse(JSON.stringify(files['templates'][section].javascripts)) : [];  
                     noneDefaultCss  = (files['templates'][section].stylesheets) ? JSON.parse(JSON.stringify(files['templates'][section].stylesheets)) : [];                                       
@@ -1173,7 +1225,8 @@ function Config(opt) {
                         noneDefaultJs = [];
                         for (; t < tLen; ++t) {
                             noneDefaultJs[t]        = JSON.parse(JSON.stringify(js));
-                            url                     = tTmp[t];                               
+                            //url                     = ( !reWebroot.test(tTmp[t]) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(tTmp[t]) ) ? tTmp[t].substr(1) : tTmp[t] ) : tTmp[t];                               
+                            url                     = tTmp[t];
                             noneDefaultJs[t].url    = url;                                
                             noneDefaultJs[t].name   = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');                            
                         }                
@@ -1184,18 +1237,20 @@ function Config(opt) {
                         noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs);
                     }
                     
-                    // checking js names
+                    // force js rechecking on `name` & `url`
                     t = 0;
                     tLen = noneDefaultJs.length;
+                    
                     for (; t < tLen; ++t) {
-                        url = noneDefaultJs[t].url;
+                        
+                        if (!noneDefaultJs[t].url /**|| reUrl.test(noneDefaultJs[t].url)*/ ) continue;
+                        
+                        //url = ( !reWebroot.test(noneDefaultJs[t].url) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(noneDefaultJs[t].url) ) ? noneDefaultJs[t].url.substr(1) : noneDefaultJs[t].url) : noneDefaultJs[t].url;
+                        url = noneDefaultJs[t].url;                        
                         if ( typeof(noneDefaultJs[t].name) == 'undefined' || noneDefaultJs[t].name == '' ) {                                
                             noneDefaultJs[t].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');                                
                         }
-                        // support src like:
-                        if ( !/^\/\//.test(noneDefaultJs.url) ) {
-                            noneDefaultJs[t].url = conf[bundle][env].server.webroot + ( ( /^\//.test(noneDefaultJs[t].url) ) ? noneDefaultJs[t].url.substr(1) : noneDefaultJs[t].url )
-                        } 
+                        
                         noneDefaultJs[t].type  = ( typeof(noneDefaultJs[t].type) != 'undefined' ) ? noneDefaultJs[t].type : js.type;
                     }
                     
@@ -1207,9 +1262,10 @@ function Config(opt) {
                         noneDefaultCss = [];
                         for (; t < tLen; ++t) {
                             noneDefaultCss[t]       = JSON.parse(JSON.stringify(css));
-                            url                     = tTmp[t];                               
-                            noneDefaultCss[t].url  = url;                                
-                            noneDefaultCss[t].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
+                            //url                     = ( !reWebroot.test(tTmp[t]) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(tTmp[t]) ) ? tTmp[t].substr(1) : tTmp[t] ) : tTmp[t];                               
+                            url                     = tTmp[t];
+                            noneDefaultCss[t].url   = url;                                
+                            noneDefaultCss[t].name  = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
                             noneDefaultCss[t].isCommon = ( /^_common$/.test(section) ) ? true : false;
                         }                
                     }
@@ -1220,18 +1276,19 @@ function Config(opt) {
                         noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss);
                     }
                     
-                    // checking css names
+                    // force css rechecking on `name` & `url`
                     t = 0;
                     tLen = noneDefaultCss.length;
                     for (; t < tLen; ++t) {
+                        if (!noneDefaultCss[t].url /**|| reUrl.test(noneDefaultCss[t].url)*/ ) continue;
+                        
+                        // ?? with webroot in path 
+                        //url = ( !reWebroot.test(noneDefaultCss[t].url) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(noneDefaultCss[t].url) ) ? noneDefaultCss[t].url.substr(1) : noneDefaultCss[t].url) : noneDefaultCss[t].url;
                         url = noneDefaultCss[t].url;
                         if ( typeof(noneDefaultCss[t].name) == 'undefined' || noneDefaultCss[t].name == '' ) {                                
                             noneDefaultCss[t].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');                                
                         }
-                        // support src like:
-                        if ( !/^\/\//.test(noneDefaultCss.url) ) {
-                            noneDefaultCss[t].url = conf[bundle][env].server.webroot + ( ( /^\//.test(noneDefaultCss[t].url) ) ? noneDefaultCss[t].url.substr(1) : noneDefaultCss[t].url )
-                        } 
+                        
                         
                         noneDefaultCss[t].rel   = ( typeof(noneDefaultCss[t].rel) != 'undefined' ) ? noneDefaultCss[t].rel : css.rel;
                         noneDefaultCss[t].type  = ( typeof(noneDefaultCss[t].type) != 'undefined' ) ? noneDefaultCss[t].type : css.type;
@@ -1269,7 +1326,8 @@ function Config(opt) {
                                     
                                     t = 0; tLen = excluded.length;
                                     for (; t < tLen; ++t) {
-                                        if (/^(\*|all)$/.test(excluded[t]) ) {
+                                        excludedName = excluded[t].trim();
+                                        if (/^(\*|all)$/.test(excludedName) ) {
                                             currentCollection = currentCollection
                                                                     .update({ name: 'gina'}, { isCommon: false })
                                                                     .delete({ 'isCommon': true });
@@ -1277,7 +1335,7 @@ function Config(opt) {
                                         } else {
                                             currentCollection = currentCollection
                                                                     .notIn({ name: 'gina'})
-                                                                    .delete({ 'name': excluded[t] });
+                                                                    .delete({ 'name': excludedName });
                                         }
                                     }       
                                     files['templates'][section][excludedType[r]] = currentCollection.toRaw();                  
@@ -1290,7 +1348,8 @@ function Config(opt) {
                         for (var ref in defaultViews._common) {
                             if ( /^(javascripts|stylesheets)$/.test(ref) ) continue;
                             
-                            files['templates'][section][ref] = defaultViews._common[ref];
+                            if ( typeof(files['templates'][section][ref]) == 'undefined' || !files['templates'][section][ref])
+                                files['templates'][section][ref] = defaultViews._common[ref];
                         }
                     }
                 } // EO for section                
@@ -1303,40 +1362,7 @@ function Config(opt) {
             return;
         }
 
-
-
-        //webroot vs statics
-        // if (// Please, don't add `hasViews` condition. You can download files without having views: like for a `webdrive` API
-        //     conf[bundle][env].server.webroot  != '/' &&
-        //     typeof(files['statics']) != 'undefined'
-        // ) {
-        //     var newStatics = {}
-        //         , _wroot = ''
-        //     ;
-        //     if (!wroot) {
-        //         _wroot = ( conf[bundle][env].server.webroot.substr(0,1) == '/' ) ?  conf[bundle][env].server.webroot.substr(1) : conf[bundle][env].server.webroot;
-        //     } else {
-        //         _wroot = ( wroot.substr(0,1) == '/' ) ?  wroot.substr(1) : wroot;
-        //     }
-
-        //     var k = null;
-        //     for (var i in files['statics']) {
-        //         k = i;
-        //         if ( !(new RegExp(wroot)).test(i) ) {
-        //             if (i.substr(0, 1) != '/') {
-        //                 i = '/' + i
-        //             }
-        //             //newStatics[ _wroot + i] = files['statics'][k]
-        //             newStatics[i] = files['statics'][k]
-        //         } else {
-        //             newStatics[k] = files['statics'][k]
-        //         }
-
-        //         delete files['statics'][k]
-        //     }
-
-        //     files['statics'] = JSON.parse( JSON.stringify(newStatics) );
-        // }
+       
         
         
         if ( typeof(files['statics']) != 'undefined' ) {   
@@ -1366,76 +1392,15 @@ function Config(opt) {
                 if ( conf[bundle][env].staticResources.indexOf(i) < 0 ) {
                     conf[bundle][env].staticResources[sCount] = i;                    
                     ++sCount;
-                }
-                
-                // adding to first level resources
+                }               
                 
             }
         }
         
 
-        //webroot javascripts
-        // if (hasViews &&
-        //     conf[bundle][env].server.webroot  != '/' &&
-        //     typeof(files['templates']._common.javascripts) != 'undefined'
-        // ) {
-            
-        //     for (var v in files['templates']) { // for each section
-                
-        //         if (!files['templates'][v].javascripts) continue;                
-              
-        //         for (var i=0; i<files['templates'][v].javascripts.length; ++i) {
-        //             if (
-        //                 files['templates'][v].javascripts[i].substr(0,1) != '{' &&
-        //                 !/\:\/\//.test(files['templates'][v].javascripts[i])
-        //             ) {
-        //                 if (files['templates'][v].javascripts[i].substr(0,1) != '/')
-        //                     files['templates'][v].javascripts[i] = '/'+files['templates'][v].javascripts[i];
-
-        //                 // support src like:
-        //                 if (/^\/\//.test(files['templates'][v].javascripts[i]) )
-        //                     files['templates'][v].javascripts[i] = files['templates'][v].javascripts[i]
-        //                 else
-        //                     files['templates'][v].javascripts[i] = conf[bundle][env].server.webroot + files['templates'][v].javascripts[i]
-        //             }
-        //         }
-        //     }
-
-        // }
-        
-        // //webroot stylesheets
-        // if (hasViews &&
-        //     conf[bundle][env].server.webroot  != '/' &&
-        //     typeof(files['templates']._common.stylesheets) != 'undefined'
-        // ) {
-        //     var rec = null;
-        //     for (var v in files['templates']) {
-                
-        //         if (!files['templates'][v].stylesheets) continue;
-                
-        //         for (var i=0; i<files['templates'][v].stylesheets.length; ++i) {                    
-                    
-        //             if ( typeof(files['templates'][v].stylesheets[i].url) == 'undefined') continue;
-                    
-        //             if (
-        //                 files['templates'][v].stylesheets[i].url.substr(0,1) != '{' &&
-        //                 !/\:\/\//.test(files['templates'][v].stylesheets[i].url)
-        //             ) {
-        //                 if (files['templates'][v].stylesheets[i].url.substr(0,1) != '/')
-        //                     files['templates'][v].stylesheets[i].url = '/'+files['templates'][v].stylesheets[i].url;
-
-        //                 if (/^\/\//.test(files['templates'][v].stylesheets[i].url) )
-        //                     files['templates'][v].stylesheets[i].url = files['templates'][v].stylesheets[i].url
-        //                 else
-        //                     files['templates'][v].stylesheets[i].url = conf[bundle][env].server.webroot + files['templates'][v].stylesheets[i].url
-        //             }
-        //         }
-        //     }
-        // }
-
         files = whisper(reps, files);
         
-        // favicons rewrite
+        // favicons rewrite - Not needed anymore
         // var faviconsPath = files['statics'][  ( (_wroot) ? _wroot +'/' : '' ) + 'favicons'];
         // if ( hasViews && typeof(files['statics']) != 'undefiened' && fs.existsSync( faviconsPath ) ) {
         //     var favFiles = fs.readdirSync(faviconsPath);
@@ -1456,32 +1421,39 @@ function Config(opt) {
 
         // plugin loader (frontend framework)
         if ( hasViews && typeof(files['templates']._common.pluginLoader) != 'undefined' ) {
-            var loaderSrcPath = null;
+            var loaderSrcPath = null, scriptTag = null;
             loaderSrcPath = files['templates']._common.pluginLoader.replace(/(\{src\:|\}$)/g, '');
             try {
                 // will get a buffer
                 if (cacheless) {
                     delete require.cache[require.resolve(_(loaderSrcPath, true))]
                 }
-                var pluginLoader = fs.readFileSync( _(loaderSrcPath, true));               
-                                           
-                for (var section in files['templates']) {
-                    files['templates'][section].pluginLoader = pluginLoader;
+                
+                if (files['templates']._common.javascriptsDeferEnabled) {
+                    scriptTag = '\n\t\t<script defer type="text/javascript">'
+                } else {
+                    scriptTag = '\n\t\t<script type="text/javascript">'
                 }
+                
+                
+                scriptTag = scriptTag 
+                    + '\n\t\t<!--'
+                    + '\n\t\t' + fs.readFileSync( _(loaderSrcPath, true)).toString()
+                    + '\n\t\t//-->'
+                    + '\n\t\t</script>';
+                                           
+                files['templates']._common.ginaLoader = scriptTag;
+                
             } catch (err) {
                 callback(err)
             }
         }
 
+        conf[bundle][env].content   = files;    
         if ( typeof(conf[bundle][env].content) == 'undefined') {
             conf[bundle][env].content = {}
-        }        
-        
-        
-        
-
-        conf[bundle][env].content   = files;
-       
+        }
+           
         
         conf[bundle][env].bundle    = bundle;
         if (bundle == self.startingApp)

@@ -47,7 +47,7 @@ function ready() {
                         try {
 
                             readyList[i].ctx = window.gina;
-                            result = readyList[i].fn.call(window, readyList[i].ctx);
+                            result = readyList[i].fn.call(window, readyList[i].ctx, window.require);
 
                             // clear
                             if (result) {
@@ -67,7 +67,7 @@ function ready() {
                     
                     readyList[i].ctx = window.originalContext || $;// passes the user's orignalContext by default; if no orignalContext is set will try users'jQuery
                     
-                    readyList[i].fn.call(window, readyList[i].ctx);
+                    readyList[i].fn.call(window, readyList[i].ctx, window.require);
                     ++i;
                     handleEvent(i, readyList)
                 }

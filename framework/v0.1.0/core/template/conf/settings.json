@@ -1,6 +1,6 @@
 {
   "server": {
-    "engine": "express",
+    "engine": "isaac",
     "credentials": {
       "_comment": "Project ENV override: SSL Credentials: private key & certificate",
       "privateKey": "{projectPath}/ssl/server.key",
@@ -14,6 +14,7 @@
     "maxFieldsSize": "2MB",
     "maxFields": "1000"
   },
+  "cache": {},
   "engine.io": {
     "port": 8888
   },

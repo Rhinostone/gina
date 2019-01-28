@@ -4,12 +4,6 @@ var lib             = require('./../../../lib') || require.cache[require.resolv
 var inherits        = lib.inherits;
 var merge           = lib.merge;
 var console         = lib.logger;
-//var helpers         = require('./../../../helpers') || require.cache[require.resolve('./../../../helpers')];
-//var modelUtil       = new utils.Model();
-// var bundle      = getContext().bundle;
-// var config      = getContext('gina').config;
-// var env         = config.env;
-// var conf        = config.Env.getConf( bundle, env);
 
 /**
  * Couchbase Class

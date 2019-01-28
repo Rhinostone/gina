@@ -103,14 +103,14 @@ var AppCommand = {
         this.opt['option'] = process.argv[2];
         this.env = 'prod'; // by default
         var envFound = this.checkEnv();
-
+        
         if (process.argv[2] == '-s' || process.argv[2] == '--start') {
             //use registeredEnvs for this.....
             if (process.argv.length >= 5 && !envFound) {
                 this.env = 'prod';
                 process.argv.splice(4, 0, this.env);
             }
-
+            
             this.PID = new Proc('gina', process);
             //herited from gna.js.
 
@@ -607,8 +607,7 @@ var AppCommand = {
                 setContext('processList', process.list);
                 setContext('ginaProcess', process.pid);
                 var params = [
-                    //"--debug-brk=5858",//what ever port you want.
-                    (opt['--debug-brk']) ? '--debug-brk=' + opt['--debug-brk'] : '',
+                    (opt['--inspect-brk']) ? '--inspect-brk=' + opt['--inspect-brk'] : '',
                     appPath,
                     opt['argument'],
                     JSON.stringify( getContext() )//Passing context to child.

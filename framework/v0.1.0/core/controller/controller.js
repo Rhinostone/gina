@@ -9,9 +9,11 @@
 //Imports.
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
-const dns           = require('dns');
-// const tls = require('tls');
-// const crypto = require('crypto');
+var zlib            = require('zlib');
+
+//var dns           = require('dns');
+// var tls = require('tls');
+// var crypto = require('crypto');
 
 var lib             = require('./../../lib') || require.cache[require.resolve('./../../lib')];
 var merge           = lib.merge;
@@ -33,10 +35,13 @@ var swig            = require('swig');
  */
 function SuperController(options) {
 
+    //public
     this.name = 'SuperController';
-        
-    //private
+    this.engine = {};    
+    
+    
     var self = this;
+    //private
     var local = {
         req     : null,
         res     : null,
@@ -63,12 +68,15 @@ function SuperController(options) {
             return getInstance()
         } else {
             
-            SuperController.initialized = true;
             SuperController.instance = self;
+            
             
             if (local.options) {
                 SuperController.instance._options = local.options;
             }
+            
+            SuperController.initialized = true;
+            
         }
     }
 
@@ -166,6 +174,35 @@ function SuperController(options) {
                 ext = '.' + ext;
                 local.options.template.ext = ext
             }
+            
+            if ( hasViews() ) {
+
+                if ( typeof(local.options.file) == 'undefined') {
+                    local.options.file = 'index'
+                }
+    
+                if ( typeof(local.options.isWithoutLayout) == 'undefined' ) {
+                    local.options.isWithoutLayout = false;
+                }
+    
+                var rule        = local.options.rule
+                    , namespace = local.options.namespace || rule;
+    
+    
+                set('page.view.file', local.options.file);
+                set('page.view.title', rule.replace(new RegExp('@' + options.conf.bundle), ''));
+                set('page.view.namespace', namespace);
+    
+                //TODO - detect when to use swig
+                var dir = self.templates || local.options.template.templates;
+                var swigOptions = {
+                    autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape: false,
+                    loader: swig.loaders.fs(dir),
+                    cache: (local.options.cacheless) ? false : 'memory'
+                };
+                swig.setDefaults(swigOptions);
+                self.engine = swig;
+            }
 
             var ctx = getContext('gina');
             // new declaration && overrides
@@ -192,6 +229,7 @@ function SuperController(options) {
             set('page.environment.protocol', options.conf.server.protocol);
             set('page.environment.scheme', options.conf.server.scheme);
             set('page.environment.port', options.conf.server.port);
+            set('page.environment.pid', process.pid);
 
             set('page.view.ext', ext);
             set('page.view.control', action);
@@ -252,34 +290,7 @@ function SuperController(options) {
             set('page.view.lang', userCulture);
         }
 
-        if ( hasViews() ) {
-
-            if ( typeof(local.options.file) == 'undefined') {
-                local.options.file = 'index'
-            }
-
-            if ( typeof(local.options.isWithoutLayout) == 'undefined' ) {
-                local.options.isWithoutLayout = false;
-            }
-
-            var rule        = local.options.rule
-                , namespace = local.options.namespace || rule;
-
-
-            set('page.view.file', local.options.file);
-            set('page.view.title', rule.replace(new RegExp('@' + options.conf.bundle), ''));
-            set('page.view.namespace', namespace);
-
-            //TODO - detect when to use swig
-            var dir = self.templates || local.options.template.templates;
-            var swigOptions = {
-                autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape: false,
-                loader: swig.loaders.fs(dir),
-                cache: (local.options.cacheless) ? false : 'memory'
-            };
-            swig.setDefaults(swigOptions);
-            self.engine = swig;
-        }
+        
     }
 
 
@@ -621,7 +632,7 @@ function SuperController(options) {
                     if (err) {
                         self.throwError(local.res, 500, err);
                     } else {
-                        var assets = { assets: "${asset}"}, XHRData = null;                        
+                        var assets = {assets:"${assets}"}, XHRData = null;                        
                         var mapping = { filename: local.options.template.layout };         
                         
                         var isDeferModeEnabled = local.options.template.javascriptsDeferEnabled;
@@ -631,21 +642,8 @@ function SuperController(options) {
                         if (data.page.view.stylesheets && !/\{\{\s+(page\.view\.stylesheets)\s+\}\}/.test(layout) ) {
                             layout = layout.replace(/\<\/head\>/i, '\n{{ page.view.stylesheets }}\n</head>')
                         }
-                                                
-                        
-                        // if (
-                        //     hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout
-                        //     || hasViews() && local.options.debugMode
-                        //     || hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() 
-                        // ) {
-                        //     try {
-                        //         // assets string
-                        //         assets = getAssets(swig, template, layout, data); 
-                        //     } catch (err) {
-                        //         self.throwError(local.res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
-                        //     }
-                        // }
-                        
+                                              
+
                         // adding plugins
                         if (hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout || hasViews() && local.options.debugMode ) {
                             
@@ -679,24 +677,7 @@ function SuperController(options) {
 
                                 //+ '\t\t{{ page.view.scripts }}'                              
                             ;
-                            
-                            // adding javascripts
-                            if ( isDeferModeEnabled ) {
-                                
-                                
-                                var ginaLoader = 
-                                    '\n\t\t<script defer type="text/javascript">'
-                                    + ' \n\t\t<!--'
-                                    + '\n\t\t\t' + local.options.template.pluginLoader.toString().replace(/\;(\n|\r)/g, ';').replace(/\,(\n|\r)/g, ',')
-                                    + '\n\t\t//-->'
-                                    + '\n\t\t</script>'
-                                ;
-                                layout = layout.replace(/\<\/head\>/i, '\t'+ ginaLoader +'\n</head>');
-                                
-                                layout.replace('{{ page.view.scripts }}', '');
-                                layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n</head>');
-                                
-                            }
+                                                        
 
                             if (local.options.isWithoutLayout && local.options.debugMode == true || local.options.debugMode == true ) {
 
@@ -707,6 +688,17 @@ function SuperController(options) {
                             
                             if (GINA_ENV_IS_DEV || local.options.debugMode == true ) {
                                 layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
+                            }
+                            
+                            // adding javascripts
+                            layout.replace('{{ page.view.scripts }}', '');
+                            if ( isDeferModeEnabled ) { // placed in the HEAD                                
+                                layout = layout.replace(/\<\/head\>/i, '\t'+ local.options.template.ginaLoader +'\n</head>');                                
+                                layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n</head>');
+                                
+                            } else { // placed in the BODY
+                                layout = layout.replace(/\<\/body\>/i, '\t'+ local.options.template.ginaLoader +'\n</body>');                                
+                                layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
                             }
                             
 
@@ -749,22 +741,6 @@ function SuperController(options) {
                         
                         try {
                             
-                            layout = swig.compile(layout, mapping)(data);
-                            if (
-                                hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout
-                                || hasViews() && local.options.debugMode
-                                || hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() 
-                            ) {
-                                try {
-                                    // assets string
-                                    assets = getAssets(swig, template, layout, data); 
-                                    layout = layout.replace('"assets":{"assets":"${asset}"}', '"assets": '+JSON.stringify(assets) );
-                                } catch (err) {
-                                    self.throwError(local.res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
-                                }
-                            }
-                            
-                            
                             // special case for template without layout in debug mode - dev only
                             if ( hasViews() && local.options.debugMode == true  && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
                                 
@@ -795,9 +771,9 @@ function SuperController(options) {
                                 }
                             }
 
-                            local.res.setHeader("Content-Type", local.options.conf.server.coreConfiguration.mime['html']);
+                            local.res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime['html'] + '; charset='+ local.options.conf.encoding );
 
-                            console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
+                            
                             
                             // var aCount = 0, aLen = assets.count();
                             // for (var asset in assets) {
@@ -836,31 +812,14 @@ function SuperController(options) {
                                         console.debug('http2 closed: '+ isClosed);
                                     });
                                     
-                                    stream.on('error', (err) => {
-                                        
-                                        // const isRefusedStream = err.code === 'ERR_HTTP2_STREAM_ERROR' && stream.rstCode === NGHTTP2_REFUSED_STREAM;
-                                        
-                                        // if (!isRefusedStream)
-                                        //     throw err;
-                                        
-                                        if (err.code === 'ENOENT') {
-                                            stream.respond({ ':status': 404 });
-                                        } else {
-                                            stream.respond({ ':status': 500 });
-                                        }
-                                        
-                                        console.error(err.stack||err.message||err);
-                                        stream.end();
-                                        
-                                        
-                                    });                          
+                                                          
                                     
                                     
                                     
                                     var asset = headers[':path'];
                                     // if (asset == local.req.url) {
                                     //     stream.respond({
-                                    //         'Content-Type': local.options.conf.server.coreConfiguration.mime['html'],
+                                    //         'content-type': local.options.conf.server.coreConfiguration.mime['html'],
                                     //         ':status': 200
                                     //     });
                                     //     stream.write(layout);
@@ -895,11 +854,33 @@ function SuperController(options) {
                                         
                                 });    
                             }*/
+                            layout = swig.compile(layout, mapping)(data);
                             
-                            
-
+                            if ( !self.isXMLRequest() && /http\/2/.test(local.options.conf.server.protocol) ) {
+                                try {
+                                    // TODO - button in toolbar to empty url assets cache    
+                                    if ( /**  GINA_ENV_IS_DEV ||*/ typeof(local.options.template.assets) == 'undefined' || typeof(local.options.template.assets[local.req.url]) == 'undefined' ) {
+                                        // assets string -> object
+                                        assets = getAssets(swig, template, layout, data)
+                                        local.options.template.assets = JSON.parse(assets);
+                                    }
+                                    
+                                    //  only for toolbar - TODO hasToolbar()
+                                    if (
+                                        GINA_ENV_IS_DEV && hasViews() && !local.options.isWithoutLayout
+                                        || hasViews() && local.options.debugMode
+                                        || GINA_ENV_IS_DEV && hasViews() && self.isXMLRequest() 
+                                    ) {                                
+                                        layout = layout.replace('{"assets":"${assets}"}',  assets ); 
+                                    }
+                                    
+                                } catch (err) {
+                                    self.throwError(local.res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
+                                }
+                            }                                
                             
                             local.res.end(layout);
+                            console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
                                                         
                         } else {
                             if (typeof(local.next) != 'undefined')
@@ -923,9 +904,63 @@ function SuperController(options) {
             return; 
         }
         
-        console.debug('h2 push detected: '+' [ '+url+' ] '+ headers[':path']);
-        
-        
+        if ( 
+            typeof(this._options.template.assets) != 'undefined'
+            && typeof(this._options.template.assets[ headers[':path'] ]) != 'undefined' 
+            && this._options.template.assets[ headers[':path'] ].isAvailable
+        ) {
+            var asset = {
+                filename    : this._options.template.assets[ headers[':path'] ].filename,
+                file        : null,
+                mime        : this._options.template.assets[ headers[':path'] ].mime,
+                encoding    : this._options.conf.encoding,
+                isHandler   : false
+            };
+            // adding handler `gina.ready(...)` wrapper
+            if ( new RegExp('^'+ this._options.conf.handlersPath).test(asset.filename) ) {
+                
+                if ( !fs.existsSync(asset.filename) )
+                    stream.respond({ ':status': 404 });
+                
+                asset.isHandler = true;
+                asset.file      = fs.readFileSync(asset.filename, 'binary');                
+                asset.file = '(gina.ready(function onGinaReady($){\n'+ asset.file + '\n},window["originalContext"]));'
+            }
+            stream.pushStream({ ':path': headers[':path'] }, function onPushStream(err, pushStream, headers){
+                                   
+                if ( err ) {
+                    if (err.code === 'ENOENT') {
+                        stream.respond({ ':status': 404 });
+                    } else {
+                        stream.respond({ ':status': 500 });
+                    }
+                    
+                    stream.end();
+                }
+                console.debug('h2 pushing: '+ headers[':path'] + ' -> '+ asset.filename);
+                
+                if (!asset.isHandler) {
+                    pushStream.respondWithFile( 
+                        asset.filename,
+                        { 
+                            ':status': 200,
+                            'content-type': asset.mime + '; charset='+ asset.encoding 
+                        }
+                        //, { onError }
+                    );
+                } else {
+                    pushStream.respond(
+                        { 
+                            ':status': 200,
+                            'content-type': asset.mime + '; charset='+ asset.encoding 
+                        }                        
+                    );
+                    pushStream.end(asset.file);
+                }     
+                           
+            });
+        }
+        //console.debug('h2 push detected: '+' [ '+url+' ] '+ headers[':path']);        
     }
 
     this.isXMLRequest = function() {
@@ -968,9 +1003,9 @@ function SuperController(options) {
                 jsonObj = JSON.parse(jsonObj)
             }
 
-            if( typeof(local.options) != "undefined" && typeof(local.options.charset) != "undefined" ){
-                response.setHeader("charset", local.options.charset);
-            }
+            // if( typeof(local.options) != "undefined" && typeof(local.options.charset) != "undefined" ){
+            //     response.setHeader("charset", local.options.charset);
+            // }
             
 
             //catching errors
@@ -991,9 +1026,9 @@ function SuperController(options) {
 
             // Internet Explorer override
             if ( /msie/i.test(request.headers['user-agent']) ) {
-                response.setHeader("Content-Type", "text/plain")
+                response.setHeader('content-type', 'text/plain' + '; charset='+ local.options.conf.encoding)
             } else {
-                response.setHeader("Content-Type", local.options.conf.server.coreConfiguration.mime['json'])
+                response.setHeader('content-type', local.options.conf.server.coreConfiguration.mime['json'] + '; charset='+ local.options.conf.encoding)
             }
 
             if ( !response.headersSent ) {
@@ -1010,7 +1045,7 @@ function SuperController(options) {
                         len = data.length
                     }
 
-                    response.setHeader("Content-Length", len);
+                    response.setHeader("content-length", len);
 
                     response.write(data);
                     response.headersSent = true;
@@ -1045,11 +1080,11 @@ function SuperController(options) {
             var content = content.toString();
         }
 
-        if (typeof(options) != "undefined" && typeof(options.charset) !="undefined") {
-            local.res.setHeader("charset", options.charset);
-        }
-        if ( !local.res.get('Content-Type') ) {
-            local.res.setHeader("Content-Type", "text/plain");
+        // if (typeof(options) != "undefined" && typeof(options.charset) !="undefined") {
+        //     local.res.setHeader("charset", options.charset);
+        // }
+        if ( !local.res.get('content-type') ) {
+            local.res.setHeader('content-type', 'text/plain' + '; charset='+ local.options.conf.encoding);
         }
 
         if ( !local.res.headersSent ) {
@@ -1132,139 +1167,8 @@ function SuperController(options) {
             self.throwError(500, new Error('No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: gina bundle:add-view '+ options.conf.bundle +' @'+ options.conf.projectName))
         }
 
-        var res     = '',
-            css     = {
-                name    : '',
-                media   : 'screen',
-                rel     : 'stylesheet',
-                type    : 'text/css',
-                url     : ''
-            },
-            cssStr  = '',
-            js      = {
-                name    : '',
-                type    : 'text/javascript',
-                url     : ''
-            },
-            jsStr   = '',
-            exclude  = null;
-
-        //intercept errors in case of malformed config
-        // if ( typeof(viewConf) != "object" ) {
-        //     cssStr  = viewConf;
-        //     jsStr   = viewConf
-        // }
+        var cssStr = '', jsStr = '';
         
-        // if (localRessource == '_common') {
-        //     self.throwError(res, 500, new Error('Using `_common` as your template name is not allowed'));
-        // }
-        
-
-        //cascading merging        
-        // if ( typeof(viewConf[localRessource]) != 'undefined') {
-
-        //     var noneDefaultJs   = (viewConf[localRessource]['javascripts']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['javascripts'])) : [] ;
-        //     var noneDefaultCss  = (viewConf[localRessource]['stylesheets']) ? JSON.parse(JSON.stringify(viewConf[localRessource]['stylesheets'])) : [] ;
-            
-        //     var i       = null
-        //         , len   = null
-        //         , tmp   = null
-        //         , url   = null
-        //     ;
-        //     if ( Array.isArray(noneDefaultJs) && noneDefaultJs.length > 0 && typeof(noneDefaultJs[0].url) == 'undefined' ) {
-        //         tmp = JSON.parse(JSON.stringify(noneDefaultJs));
-        //         i   = 0;
-        //         len = tmp.length;
-        //         noneDefaultJs = [];
-        //         for (; i < len; ++i) {
-        //             noneDefaultJs       = JSON.parse(JSON.stringify(js));
-        //             url                 = tmp[i]; 
-        //             noneDefaultJs.url   = url;
-        //             noneDefaultJs.name  = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-')
-        //         }                
-        //     }
-        //     noneDefaultJs = merge.setKeyComparison('url')(viewConf._common.javascript, noneDefaultJs);
-        //     // checking js names
-        //     i = 0;
-        //     len = noneDefaultJs.length;
-        //     for (; i < len; ++i) {
-        //         url = noneDefaultJs[i].url;
-        //         if ( typeof(noneDefaultJs[i].name) == 'undefined' || noneDefaultJs[i].name == '' ) {
-        //             noneDefaultJs[i].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-')                        
-        //         }
-        //         // support src like:
-        //         if ( !/^\/\//.test(noneDefaultJs.url) ) {
-        //             noneDefaultJs.url = local.options.conf.server.webroot + url
-        //         } 
-        //     }
-            
-        //     if ( Array.isArray(noneDefaultCss) && noneDefaultCss.length > 0 && typeof(noneDefaultCss[0].url) == 'undefined' ) {
-        //         tmp = JSON.parse(JSON.stringify(noneDefaultCss));
-        //         i   = 0;
-        //         len = tmp.length;
-        //         noneDefaultCss = [];
-        //         for (; i < len; ++i) {
-        //             noneDefaultCss      = JSON.parse(JSON.stringify(css));
-        //             url                 = tmp[i];
-        //             noneDefaultCss.url  = url;
-        //             noneDefaultCss.name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-')
-        //         }                
-        //     }
-        //     noneDefaultCss = merge.setKeyComparison('url')(viewConf._common.stylesheets, noneDefaultCss);
-        //     // checking js names
-        //     i = 0;
-        //     len = noneDefaultCss.length;
-        //     for (; i < len; ++i) {
-        //         url = noneDefaultCss[i].url;
-        //         if ( typeof(noneDefaultCss[i].name) == 'undefined' ||noneDefaultCss[i].name == '' ) {
-        //             noneDefaultCss[i].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-')                    
-        //         }
-        //         // support src like:
-        //         if ( !/^\/\//.test(noneDefaultCss.url) ) {
-        //             noneDefaultCss.url = local.options.conf.server.webroot + url
-        //         } 
-        //     }
-            
-        //     viewConf[localRessource].javascripts = noneDefaultJs;
-        //     viewConf[localRessource].stylesheets = noneDefaultCss;
-                        
-        //     // var currentViewCollection = null;
-        //     // if ( viewConf[localRessource]["javascriptsExclude"] ) {
-        //     //     // `*` or `all` means that we exclude all `_common` from current template; excepted for gina & those defiened for the template
-        //     //     currentViewCollection = new Collection(viewConf[localRessource].javascripts);
-        //     //     len = viewConf._common['javascripts'].length; 
-        //     //     if ( len > 0 && Array.isArray(viewConf[localRessource]["javascriptsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["javascriptsExclude"][0]) || typeof(viewConf[localRessource]["javascriptsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["javascriptsExclude"]) ) {
-                                        
-        //     //         i = 0;                                       
-        //     //         for (; i<len; ++i) {
-        //     //             currentViewCollection.delete({ name: viewConf._common['javascripts'][i].name });
-        //     //         }
-                    
-        //     //     }
-        //     //     // TODO - exclude by ressource.name
-        //     //     viewConf[localRessource].javascripts = currentViewCollection.toRaw();
-        //     // }
-
-        //     // if ( viewConf[localRessource]["stylesheetsExclude"] ) {                 
-        //     //     currentViewCollection = new Collection(viewConf[localRessource].stylesheets);
-        //     //     len = viewConf._common['stylesheets'].length;   
-        //     //     if ( len > 0 && Array.isArray(viewConf[localRessource]["stylesheetsExclude"]) && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"][0]) || typeof(viewConf[localRessource]["stylesheetsExclude"]) == 'string' && !/(all|\*)/.test(viewConf[localRessource]["stylesheetsExclude"]) ) {
-
-        //     //         i = 0;                                    
-        //     //         for (; i<len; ++i) {
-        //     //             currentViewCollection.delete({ name: viewConf._common['stylesheets'][i].name });
-        //     //         }
-        //     //     }
-        //     //     // TODO - exclude by ressource.name
-        //     //     viewConf[localRessource].stylesheets = currentViewCollection.toRaw();
-        //     // }
-
-
-        // } else {
-        //     viewConf[localRessource] = viewConf._common
-        // }
-        
-
         //Get css
         if( viewConf.stylesheets ) {
             cssStr  = getNodeRes('css', viewConf.stylesheets)
@@ -1493,6 +1397,7 @@ function SuperController(options) {
         i   = 0;
         len = layoutAssets.length;         
         var type            = null
+            , isAvailable   = null
             , tag           = null
             , properties    = null
             , p             = 0
@@ -1500,8 +1405,12 @@ function SuperController(options) {
         ;
         for (; i < len; ++i) {
             
-            if ( !/(\<img|\<link|\<script)/g.test(layoutAssets[i]) )
+            if ( 
+                !/(\<img|\<link|\<script)/g.test(layoutAssets[i])
+                || /\<img/.test(layoutAssets[i]) &&  /srcset/.test(layoutAssets[i]) // not able to handle this case for now
+            ) {
                 continue;
+            }                
             
             if ( /\<img/.test(layoutAssets[i]) ) {
                 type    = 'image';
@@ -1548,14 +1457,17 @@ function SuperController(options) {
                 url         = url.replace(domain, '/');
                 filename    = url
             }
-            key =  (( /404/.test(filename) ) ? '[404]' : '[200]') +' '+ url;
-            ext = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];
+            //key =  (( /404/.test(filename) ) ? '[404]' : '[200]') +' '+ url;
+            key         = url;
+            isAvailable =  ( /404/.test(filename) ) ? false : true;
+            ext         = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];
             assets[key] = {
                 type        : type,
                 url         : url,
                 ext         : ext,
                 mime        : local.options.conf.server.coreConfiguration.mime[ext.substr(1)] || 'NA',
-                filename    : ( /404/.test(filename) ) ? 'not found' : filename
+                filename    : ( /404/.test(filename) ) ? 'not found' : filename,
+                isAvailable : isAvailable
             };
             
             if (domain)
@@ -1565,16 +1477,17 @@ function SuperController(options) {
                 cssFiles.push(assets[key].filename)
             }
             
-            properties = layoutAssets[i].replace( new RegExp('(\<'+ tag +'\\s+|\>$|\/\>)', 'g'), '').split(/\"\s+/g);
+            properties = layoutAssets[i].replace( new RegExp('(\<'+ tag +'\\s+|\>|\/\>|\<\/'+ tag +'\>)', 'g'), '').replace(/[A-Za-z]+\s+/, '$&="true" ').split(/\"\s+/g);
             p = 0;
             
             for (; p < properties.length; ++p ) {
+                
                 pArr = properties[p].split(/\=/g);
                 if ( /(src|href)/.test(pArr[0]) )
                     continue;
                     
-                assets[key][pArr[0]] = pArr[1].replace(/\"/g, '');              
-            }            
+                assets[key][pArr[0]] = (pArr[1]) ? pArr[1].replace(/\"/g, '') : pArr[1];            
+        }            
             //++aCount
             
         }
@@ -1637,7 +1550,11 @@ function SuperController(options) {
                 
                 cssArr = cssContent.split(/}/g);
                 for (let c = 0; c < cssArr.length; ++c) {
-                    //if ( !/(url\(|url\s+\()/.test(cssArr[c]) || /(url\(data|url\s+\(data)/ ) continue;
+                    
+                    if ( /(\@media|\@font-face)/.test(cssArr[c]) ) { // one day maybe !
+                        continue
+                    }
+                    
                     if ( /(url\(|url\s+\()/.test(cssArr[c]) && !/data\:|\@font-face/.test(cssArr[c]) ) {
                         
                         url = cssArr[c].match(/((background\:url|url)+\()([A-Za-z0-9-_.,:"'%/\s+]+).*?\)+/g)[0].replace(/((background\:url|url)+\(|\))/g, '').trim();                    
@@ -1666,8 +1583,10 @@ function SuperController(options) {
                                     filename    = url
                                 }
                                 
-                                key =  (( /404/.test(filename) ) ? '[404]' : '[200]') +' '+ url;
-                                ext = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];
+                                //key =  (( /404/.test(filename) ) ? '[404]' : '[200]') +' '+ url;
+                                key         = url;
+                                isAvailable =  ( /404/.test(filename) ) ? false : true;
+                                ext         = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];
                                 assets[key] = {
                                     referrer    : cssFiles[i],
                                     definition  : definition,
@@ -1733,7 +1652,8 @@ function SuperController(options) {
         var assetsStr = JSON.stringify(assets);        
         assets = swig.compile( assetsStr.substring(1, assetsStr.length-1) )(data);
         
-        return JSON.parse('{'+ assets +'}')
+        //return JSON.parse('{'+ assets +'}')
+        return '{'+ assets +'}'
     }
 
     var isValidURL = function(url){
@@ -1807,6 +1727,7 @@ function SuperController(options) {
 
             if ( typeof(res) == 'undefined') {
                 // nothing to do
+                ignoreWebRoot = false
             } else if (typeof(res) === 'string' || typeof(res) === 'number' || typeof(res) === 'boolean') {
                 if ( /true|1/.test(res) ) {
                     ignoreWebRoot = true
@@ -1820,9 +1741,13 @@ function SuperController(options) {
             }
 
             if ( req.substr(0,1) === '/') { // is relative (not checking if the URI is defined in the routing.json)
-                if (wroot.substr(wroot.length-1,1) == '/') {
-                    wroot = wroot.substr(wroot.length-1,1).replace('/', '')
-                }
+                // if (wroot.substr(wroot.length-1,1) == '/') {
+                //     wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+                // }
+                
+                if ( /^\//.test(req) )
+                    req = req.substr(1);
+                
                 rte     = ( ignoreWebRoot != null && ignoreWebRoot) ? req : wroot + req;
                 req     = local.req;
                 res     = local.res;
@@ -1860,9 +1785,9 @@ function SuperController(options) {
 
         if ( !self.forward404Unless(condition, req, res) ) { // forward to 404 if bad route
 
-            if (wroot.substr(wroot.length-1,1) == '/') {
-                wroot = wroot.substr(wroot.length-1,1).replace('/', '')
-            }
+            // if (wroot.substr(wroot.length-1,1) == '/') {
+            //     wroot = wroot.substr(wroot.length-1,1).replace('/', '')
+            // }
 
 
             if (route) { // will go with route first
@@ -1994,9 +1919,9 @@ function SuperController(options) {
         var defaultOptions = { 
             // only if you want to store locally the downloaded file
             toLocalDir: false, // this option will disable attachment download
-            // Content-Disposition (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Disposition)
+            // content-disposition (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Disposition)
             contentDisposition: 'attachment',
-            // Content-type (https://developer.mozilla.org/en-US/docs/Web/Security/Securing_your_site/Configuring_server_MIME_types)
+            // content-type (https://developer.mozilla.org/en-US/docs/Web/Security/Securing_your_site/Configuring_server_MIME_types)
             contentType: 'application/octet-stream',
             
             agent: false,
@@ -2067,17 +1992,17 @@ function SuperController(options) {
         }
         
         // defining responseType
-        requestOptions.headers['Content-Type'] = contentType;
-        requestOptions.headers['Content-Disposition'] = opt.contentDisposition;
+        requestOptions.headers['content-type'] = contentType;
+        requestOptions.headers['content-disposition'] = opt.contentDisposition;
         
-        //'Content-Type': 'application/json',
+        //'content-type': 'application/json',
         //var file = fs.createWriteStream(tmp);
         var browser = require(''+ scheme);
         console.debug('requestOptions: \n', JSON.stringify(requestOptions, null, 4));
         browser.get(requestOptions, function(response) {
 
-            local.res.setHeader('Content-Type', contentType);
-            local.res.setHeader('Content-Disposition', opt.contentDisposition);  
+            local.res.setHeader('content-type', contentType + '; charset='+ local.options.conf.encoding);
+            local.res.setHeader('content-disposition', opt.contentDisposition);  
             response.pipe(local.res);
                
             /**
@@ -2091,14 +2016,14 @@ function SuperController(options) {
             
             response.on('end', () => {
                 
-                local.res.setHeader('Content-Type', contentType);
-                local.res.setHeader('Content-Disposition', opt.contentDisposition);     
-                local.res.setHeader('Content-Length', dataLength);  
+                local.res.setHeader('content-type', contentType);
+                local.res.setHeader('content-Disposition', opt.contentDisposition);     
+                local.res.setHeader('content-length', dataLength);  
                 
                 // var data = 'toto la menace';
-                // local.res.setHeader('Content-Type', 'text/plain');
-                // //local.res.setHeader('Content-Length', data.length);  
-                // local.res.setHeader('Content-Disposition', 'attachment; filename=test.txt');          
+                // local.res.setHeader('content-type', 'text/plain');
+                // //local.res.setHeader('content-length', data.length);  
+                // local.res.setHeader('content-disposition', 'attachment; filename=test.txt');          
                 
                 local.res.end( Buffer.from(data) );
                 
@@ -2119,8 +2044,8 @@ function SuperController(options) {
         //             file.close( function onDownloaded(){
                         
                     
-        //             local.res.setHeader('Content-Type', contentType);
-        //             local.res.setHeader('Content-Disposition', opt.contentDisposition);            
+        //             local.res.setHeader('content-type', contentType);
+        //             local.res.setHeader('content-disposition', opt.contentDisposition);            
                     
         //             local.res.end(  )
         //             // var filestream = fs.createReadStream(filename);
@@ -2169,8 +2094,8 @@ function SuperController(options) {
         if ( typeof(local.options.conf.server.coreConfiguration.mime[ext]) != 'undefined' ) {
 
             contentType = local.options.conf.server.coreConfiguration.mime[ext];
-            local.res.setHeader('Content-Type', contentType);
-            local.res.setHeader('Content-Disposition', 'attachment; filename=' + file);            
+            local.res.setHeader('content-type', contentType);
+            local.res.setHeader('content-disposition', 'attachment; filename=' + file);            
 
             var filestream = fs.createReadStream(filename);
             filestream.pipe(local.res);
@@ -2292,11 +2217,8 @@ function SuperController(options) {
         auth: undefined, // use `"username:password"` for basic authentification
         rejectUnauthorized: null, // false to ignore verification when requesting on https (443)
         headers: {
-            'Content-Type': 'application/json',
-            // 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-
-            // 'X-Requested-With': 'XMLHttpRequest' // to convert into an XHR query
-            'Content-Length': local.query.data.length
+            'content-type': 'application/json',
+            'content-length': local.query.data.length
         },
         agent   : false/**,
         checkServerIdentity: function(host, cert) {
@@ -2384,7 +2306,7 @@ function SuperController(options) {
 
             queryData = '?';
             // TODO - if 'application/json' && method == (put|post)
-            if ( ['put', 'post'].indexOf(options.method.toLowerCase()) >-1 && /(text\/plain|application\/json|application\/x\-www\-form)/i.test(options.headers['Content-Type']) ) {
+            if ( ['put', 'post'].indexOf(options.method.toLowerCase()) >-1 && /(text\/plain|application\/json|application\/x\-www\-form)/i.test(options.headers['content-type']) ) {
                 // replacing
                 queryData = encodeURIComponent(JSON.stringify(data))
 
@@ -2411,9 +2333,9 @@ function SuperController(options) {
         
         // Internet Explorer override
         if ( /msie/i.test(local.req.headers['user-agent']) ) {
-            options.headers['Content-Type'] = 'text/plain';
+            options.headers['content-type'] = 'text/plain';
         } else {
-            options.headers['Content-Type'] = local.options.conf.server.coreConfiguration.mime['json'];
+            options.headers['content-type'] = local.options.conf.server.coreConfiguration.mime['json'];
         }
 
         // if ( typeof(local.req.headers.cookie) == 'undefined' && typeof(local.res._headers['set-cookie']) != 'undefined' ) { // useful for CORS : forward cookies from the original request
@@ -2426,7 +2348,7 @@ function SuperController(options) {
         // }
 
         //you need this, even when empty.
-        options.headers['Content-Length'] = queryData.length;
+        options.headers['content-length'] = queryData.length;
 
         var ctx         = getContext()
             , protocol  = null
@@ -2489,34 +2411,7 @@ function SuperController(options) {
                 options.queryData = queryData;
                 return handleHTTP2ClientRequest(browser, options, callback);
             } else {
-                
-                var altOpt = JSON.parse(JSON.stringify(options));
-                altOpt.protocol = options.scheme;
-                altOpt.hostname = options.host;
-                altOpt.port     = 443;
-                if ( typeof(altOpt.encKey) != 'undefined' ) {
-                    try {
-                        altOpt.encKey = fs.readFileSync(options.encKey);
-                    } catch(err) {
-                        self.emit('query#complete', err);
-                    }
-                    
-                } else {
-                    console.warn('[ CONTROLLER ][ HTTP/2.0#query ] options.encKey not found !');
-                }
-                
-                if ( typeof(altOpt.encCert) != 'undefined' ) {
-                    try {
-                        altOpt.encCert = fs.readFileSync(options.encCert);
-                    } catch(err) {
-                        self.emit('query#complete', err);
-                    }
-                    
-                } else {
-                    console.warn('[ CONTROLLER ][ HTTP/2.0#query ] options.encCert not found !');
-                }
-                
-                altOpt.agent = new browser.Agent(altOpt);
+                return handleHTTP1ClientRequest(browser, options, callback);                
             }         
             
         } catch(err) {
@@ -2525,9 +2420,38 @@ function SuperController(options) {
             self.emit('query#complete', err)
         }
            
+    }
+    
+    var handleHTTP1ClientRequest = function(browser, options, callback) {
         
+        var altOpt = JSON.parse(JSON.stringify(options));
         
+        altOpt.protocol = options.scheme;
+        altOpt.hostname = options.host;
+        altOpt.port     = 443;
+        if ( typeof(altOpt.encKey) != 'undefined' ) {
+            try {
+                altOpt.encKey = fs.readFileSync(options.encKey);
+            } catch(err) {
+                self.emit('query#complete', err);
+            }
+            
+        } else {
+            console.warn('[ CONTROLLER ][ HTTP/2.0#query ] options.encKey not found !');
+        }
         
+        if ( typeof(altOpt.encCert) != 'undefined' ) {
+            try {
+                altOpt.encCert = fs.readFileSync(options.encCert);
+            } catch(err) {
+                self.emit('query#complete', err);
+            }
+            
+        } else {
+            console.warn('[ CONTROLLER ][ HTTP/2.0#query ] options.encCert not found !');
+        }
+        
+        altOpt.agent = new browser.Agent(altOpt);
         
         var req = browser.request(altOpt, function(res) {
 
@@ -2627,8 +2551,8 @@ function SuperController(options) {
             
             
             if (
-                typeof(err.code != 'undefined') && /ECONNREFUSED|ECONNRESET/.test(err.code) 
-                || typeof(err.cause != 'undefined') && typeof(err.cause.code != 'undefined') &&  /ECONNREFUSED|ECONNRESET/.test(err.cause.code) 
+                typeof(err.code) != 'undefined' && /ECONNREFUSED|ECONNRESET/.test(err.code) 
+                || typeof(err.cause) != 'undefined' && typeof(err.cause.code) != 'undefined' &&  /ECONNREFUSED|ECONNRESET/.test(err.cause.code) 
             ) {
 
                 var port = getContext('gina').ports[options.protocol][options.scheme.replace(/\:/, '')][ options.port ];//err.port || err.cause.port 
@@ -2711,12 +2635,12 @@ function SuperController(options) {
         
         // only if binary !! 
         // if ( typeof(options['content-length']) == 'undefined' ) {
-        //     options['content-length'] = options.headers['Content-Length'] ;
-        //     delete options.headers['Content-Length'];
+        //     options['content-length'] = options.headers['content-length'] ;
+        //     delete options.headers['content-length'];
         // }
         // if ( typeof(options['content-type']) == 'undefined' ) {
-        //     options['content-type'] = options.headers['Content-Type'] ;
-        //     delete options.headers['Content-Type'];
+        //     options['content-type'] = options.headers['content-type'] ;
+        //     delete options.headers['content-type'];
         // }
         
         if ( typeof(options[':scheme']) == 'undefined' ) {
@@ -2736,8 +2660,14 @@ function SuperController(options) {
         }
         
         var body = Buffer.from(options.queryData);
-        options.headers['Content-Length'] = body.length;
+        options.headers['content-length'] = body.length;
         delete options.queryData;
+        
+        // merging undefined query headers with previeous
+        for (var h in local.req.headers) {
+            if ( typeof(options.headers[h]) == 'undefined' )
+                options.headers[h] = local.req.headers[h]
+        }
                 
         const client = browser.connect(options.hostname, options);
         
@@ -2771,15 +2701,7 @@ function SuperController(options) {
             [HTTP2_HEADER_METHOD]: options[':method'],
             [HTTP2_HEADER_PATH]: options[':path'] 
         }, options.headers) );
-        //const req = client.request({ [HTTP2_HEADER_PATH]: options[':path'] });
-        //const req = client.request(options);
-        //const req = client.request(options);
-        // getting headers infos
-        // req.on('response', (headers, flags) => {
-        //     for (const name in headers) {
-        //         console.log(`${name}: ${headers[name]}`);
-        //     }
-        // });
+        
 
         req.setEncoding('utf8');
         let data = '';
@@ -2793,8 +2715,8 @@ function SuperController(options) {
                 
             //if ( /(127\.0\.0\.1|localhost|127\.0\.0\.2)/.test(err.address) ) {
             if ( 
-                typeof(err.cause != 'undefined') && /ECONNREFUSED/.test(err.cause.code) 
-                || /ECONNREFUSED/.test(err.code) 
+                typeof(err.cause) != 'undefined' && typeof(err.cause.code) != 'undefined' && /ECONNREFUSED|ECONNRESET/.test(err.cause.code) 
+                || /ECONNREFUSED|ECONNRESET/.test(err.code) 
             ) {
                 
                 var port = getContext('gina').ports[options.protocol][options.scheme.replace(/\:/, '')][ options.port ];//err.port || err.cause.port 
@@ -3015,8 +2937,8 @@ function SuperController(options) {
         if ( typeof(name) != 'undefined' ) {
             try {
                 // needs to be read only
-                config = JSON.stringify(local.options.conf.content[name]);
-                return JSON.parse(config)
+                config = JSON.parse(JSON.stringify(local.options.conf.content[name]));
+                return config
             } catch (err) {
                 return undefined
             }
@@ -3169,14 +3091,14 @@ function SuperController(options) {
                 // Internet Explorer override
                 if ( typeof(req.headers['user-agent']) != 'undefined' ) {
                     if ( /msie/i.test(req.headers['user-agent']) ) {
-                        res.writeHead(code, "Content-Type", "text/plain")
+                        res.writeHead(code, "content-type", "text/plain")
                     } else {
-                        res.writeHead(code, { 'Content-Type': req.headers['content-type']} )
+                        res.writeHead(code, { 'content-type': req.headers['content-type']} )
                     }
                 } else if ( typeof(req.headers['content-type']) != 'undefined' ) {
-                    res.writeHead(code, { 'Content-Type': req.headers['content-type']} )
+                    res.writeHead(code, { 'content-type': req.headers['content-type']} )
                 } else {
-                    res.writeHead(code, "Content-Type", local.options.conf.server.coreConfiguration.mime['json'])
+                    res.writeHead(code, "content-type", local.options.conf.server.coreConfiguration.mime['json'])
                 }
 
                 console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
@@ -3186,7 +3108,7 @@ function SuperController(options) {
                     stack: msg.stack
                 }))
             } else {
-                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.writeHead(code, { 'content-type': 'text/html'} );
                 console.error(req.method +' ['+ res.statusCode +'] '+ req.url);
 
                 //var msgString = msg.stack || msg.error || msg;

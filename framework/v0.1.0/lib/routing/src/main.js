@@ -29,8 +29,11 @@
 
 function Routing() {
 
-    var self        = {};
+    var self        = {};    
     var isGFFCtx    = ((typeof (module) !== 'undefined') && module.exports) ? false :  true;
+    
+    self.allowedMethods         = ['get', 'post', 'put', 'delete'];
+    self.allowedMethodsString   = self.allowedMethods.join(',');
 
     /**
      * Compare urls
@@ -404,9 +407,12 @@ function Routing() {
      *
      * @return {object} route
      * */
+    
     self.getRouteByUrl = function (url, bundle, method) {
-
-        if (arguments.length == 2 && typeof(arguments[1]) != 'undefined' && ['get', 'post', 'put', 'delete'].indexOf(arguments[1].toLowerCase()) > -1 ) {
+        
+        if (
+            arguments.length == 2 && typeof(arguments[1]) != 'undefined' && self.allowedMethods.indexOf(arguments[1].toLowerCase()) > -1 
+        ) {
             var method = arguments[1], bundle = undefined;
         }
 
@@ -471,8 +477,9 @@ function Routing() {
         };
 
         var paramsList = null;
-        var re = new RegExp('^'+ method +'$', 'i');
-
+        var re = new RegExp(method, 'i');
+        var localMethod = null;
+        // N.B.: this part of the code must remain identical to the one used in `server.js`
         out:
             for (var name in routing) {
                 if (typeof (routing[name]['param']) == 'undefined')
@@ -482,11 +489,15 @@ function Routing() {
                 if (routing[name].bundle != bundle) continue;
 
                 // method filter
-                if (typeof (routing[name].method) != 'undefined' && !re.test(routing[name].method)) continue;
+                localMethod = routing[name].method;             
+                if ( /\,/.test( localMethod ) && re.test(localMethod) ) {
+                    localMethod = request.method
+                } 
+                if (typeof (routing[name].method) != 'undefined' && !re.test(localMethod)) continue;
                 
-                //Preparing params to relay to the core/router.
+                //Preparing params to relay to the core/router.                
                 params = {
-                    method: (routing[name].method) ? routing[name].method.toLowerCase() : request.method,
+                    method: localMethod,
                     requirements: routing[name].requirements,
                     namespace: routing[name].namespace || undefined,
                     url: unescape(pathname), /// avoid %20

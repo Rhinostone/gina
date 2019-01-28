@@ -210,7 +210,12 @@ function Proc(bundle, proc, usePidFile){
             proc.on('uncaughtException', function(err) {
                 
                 if ( /ERR\_HTTP\_HEADERS\_SENT/.test(err.stack) ) {
-                    console.error('[ FRAMEWORK ][ uncaughtException ] ', err.stack);
+                    console.error('[ SERVER ][ HTTP UNCAUGHT EXCEPTION ]', err.stack);
+                    return false;
+                }
+                
+                if ( /ERR\_HTTP2/.test(err.stack) ) {
+                    console.warn('[ SERVER ][ HTTP2 UNCAUGHT EXCEPTION ]', err.stack);
                     return false;
                 }
                 

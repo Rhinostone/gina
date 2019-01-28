@@ -65,11 +65,11 @@ function Server(options) {
             self.conf[self.appName][self.env] = options.conf[self.appName][self.env];
             self.conf[self.appName][self.env].bundlesPath = options.conf[self.appName][self.env].bundlesPath;
             self.conf[self.appName][self.env].modelsPath =  options.conf[self.appName][self.env].modelsPath;
-            if (!self.conf[self.appName][self.env].server.request) {
-                self.conf[self.appName][self.env].server.request = {
-                    isXMLRequest: false
-                }
-            }
+            // if (!self.conf[self.appName][self.env].server.request) {
+            //     self.conf[self.appName][self.env].server.request = {
+            //         isXMLRequest: false
+            //     }
+            // }
         } else {
 
             //console.log("Running mode not handled yet..", self.appName, " VS ", self.bundles);
@@ -80,37 +80,37 @@ function Server(options) {
                 self.conf[apps[i]][self.env] = options.conf[apps[i]][self.env];
                 self.conf[apps[i]][self.env].bundlesPath = options.conf[apps[i]][self.env].bundlesPath;
                 self.conf[apps[i]][self.env].modelsPath = options.conf[apps[i]][self.env].modelsPath;
-                if (!self.conf[apps[i]][self.env].server.request) {
-                    self.conf[apps[i]][self.env].server.request = {
-                        isXMLRequest: false
-                    }
-                }
+                // if (!self.conf[apps[i]][self.env].server.request) {
+                //     self.conf[apps[i]][self.env].server.request = {
+                //         isXMLRequest: false
+                //     }
+                // }
             }
         }
 
         // getting server core config
-        var statusCodes = null
-            , mime      = null;
+        // var statusCodes = null
+        //     , mime      = null;
 
-        try {
-            var corePath = getPath('gina').core;
-            statusCodes = fs.readFileSync( _( corePath + '/status.codes') ).toString();
-            statusCodes = JSON.parse(statusCodes);
-            if ( typeof(statusCodes['_comment']) != 'undefined' )
-                delete statusCodes['_comment'];
+        // try {
+        //     var corePath = getPath('gina').core;
+        //     statusCodes = fs.readFileSync( _( corePath + '/status.codes') ).toString();
+        //     statusCodes = JSON.parse(statusCodes);
+        //     if ( typeof(statusCodes['_comment']) != 'undefined' )
+        //         delete statusCodes['_comment'];
 
-            mime  = fs.readFileSync(corePath + '/mime.types').toString();
-            mime  = JSON.parse(mime);
-            if ( typeof(mime['_comment']) != 'undefined' )
-                delete mime['_comment'];
+        //     mime  = fs.readFileSync(corePath + '/mime.types').toString();
+        //     mime  = JSON.parse(mime);
+        //     if ( typeof(mime['_comment']) != 'undefined' )
+        //         delete mime['_comment'];
 
-            self.conf.core.statusCodes  = statusCodes;
-            self.conf.core.mime         = mime
+        //     self.conf.core.statusCodes  = statusCodes;
+        //     self.conf.core.mime         = mime
 
-        } catch(err) {
-            console.error(err.stack||err.message);
-            process.exit(1)
-        }
+        // } catch(err) {
+        //     console.error(err.stack||err.message);
+        //     process.exit(1)
+        // }
 
         try {
             
@@ -178,20 +178,28 @@ function Server(options) {
             self.instance   = instance;
             //Router configuration.
             var router      = local.router;
+            instance.throwError = throwError;
             router.setServerInstance(instance);
         }
+        
+        // var config                  = new Config()
+        //     , conf                  = config.getInstance(self.appName)
+        //     , serverCoreConf        = self.conf.core
+        // ;
+        
+        onRequest()
 
-        onRoutesLoaded( function(err) {//load all registered routes in routing.json
-            console.debug('[ ROUTING ][ '+ self.appName +' ] Routing loaded' /**+ '\n'+ JSON.stringify(self.routing, null, '\t')*/);
+        // onRoutesLoaded( function(err) {//load all registered routes in routing.json
+        //     console.debug('[ ROUTING ][ '+ self.appName +' ] Routing loaded' /**+ '\n'+ JSON.stringify(self.routing, null, '\t')*/);
 
-            if ( hasViews(self.appName) ) {
-                lib.url(self.conf[self.appName][self.env], self.routing)
-            }
+        //     if ( hasViews(self.appName) ) {
+        //         lib.url(self.conf[self.appName][self.env], self.routing)
+        //     }
 
-            if (!err) {
-                onRequest()
-            }
-        });
+        //     if (!err) {
+        //         onRequest()
+        //     }
+        // });
     }
 
 
@@ -574,17 +582,19 @@ function Server(options) {
     
     /**
      * Default http/1.x statics handler - For http/2.x check the SuperController
-     * @param {object} staticProps - Expected : .isFile & .firstLevel
+     * @param {object} staticProps - Expected : .isStaticFilename & .firstLevel
      * @param {*} request 
      * @param {*} response 
      * @param {*} next 
      */
     var handleStatics = function(staticProps, request, response, next) {        
         
-        var pathname        = request.url
-            //, conf          = getContext('gina').config
-            , conf          = self.conf
+        var conf            = self.conf
             , bundleConf    = conf[self.appName][self.env]
+            , webroot       = bundleConf.server.webroot
+            , re            = new RegExp('^'+ webroot)
+            , pathname      = ( webroot.length > 1 && re.test(request.url) ) ? request.url.replace(re, '/') : request.url
+            , contentType   = null
         ;
         
         var cacheless       = bundleConf.cacheless;  
@@ -593,7 +603,7 @@ function Server(options) {
         
         // catch `statics.json` defined paths
         var staticIndex     = bundleConf.staticResources.indexOf(pathname);
-        if ( staticProps.isFile && staticIndex > -1 ) {
+        if ( staticProps.isStaticFilename && staticIndex > -1 ) {
             filename =  bundleConf.content.statics[ bundleConf.staticResources[staticIndex] ]
         } else {
             var s = 0, sLen = bundleConf.staticResources.length;
@@ -605,7 +615,7 @@ function Server(options) {
                 }
             } 
         }
-        
+                
         
         fs.exists(filename, function onStaticExists(exist) {
             
@@ -627,12 +637,24 @@ function Server(options) {
                     delete require.cache[require.resolve(filename)];
                 
 
-                fs.readFile(filename, "binary", function(err, file) {
+                fs.readFile(filename, 'binary', function(err, file) {
                     if (err) {
                         throwError(response, 404, 'Page not found: \n' + pathname, next);                        
                     } else if (!response.headersSent) {
                         try {
-                            response.setHeader("Content-Type", getHead(filename));
+                            contentType = getHead(filename);
+                            response.setHeader("Content-Type", contentType +'; charset='+ bundleConf.encoding);
+                            
+                            // adding gina loader
+                            if (/text\/html/i.test(contentType) && GINA_ENV_IS_DEV) {
+                                // javascriptsDeferEnabled
+                                if  (bundleConf.content.templates._common.javascriptsDeferEnabled ) {
+                                    file = file.replace(/\<\/head\>/i, '\t'+ bundleConf.content.templates._common.ginaLoader +'\n</head>');
+                                } else {
+                                    file = file.replace(/\<\/body\>/i, '\t'+ bundleConf.content.templates._common.ginaLoader +'\n</body>');
+                                }
+                            }
+                            
                             // adding handler `gina.ready(...)` wrapper
                             var hanlersPath   = bundleConf.handlersPath;
 
@@ -679,29 +701,42 @@ function Server(options) {
 
         // catch all (request urls)
         self.instance.all('*', function onInstance(request, response, next) {
+            
+            request.setEncoding(self.conf[self.appName][self.env].encoding);  
+            
             local.request = request;
+                        
             response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );
+            
+            
             
             // Fixing an express js bug :(
             // express is trying to force : /path/dir => /path/dir/
             // which causes : /path/dir/path/dir/  <---- by trying to add a slash in the end
-            if (
-                webrootLen > 1
-                && request.url === self.conf[self.appName][self.env].server.webroot + '/' + self.conf[self.appName][self.env].server.webroot + '/'
-            ) {
-                request.url = self.conf[self.appName][self.env].server.webroot
-            }
+            // if (
+            //     webrootLen > 1
+            //     && request.url === self.conf[self.appName][self.env].server.webroot + '/' + self.conf[self.appName][self.env].server.webroot + '/'
+            // ) {
+            //     request.url = self.conf[self.appName][self.env].server.webroot
+            // }
             
             // priority to statics
             var staticsArr = self.conf[self.appName][self.env].publicResources;
             var staticProps = {
-                firstLevel  : '/'+ request.url.split(/\//g)[1] + '/',
-                isFile      :  /^\/[A-Za-z0-9_-]+\.(.*)$/.test(request.url)
-            };            
+                firstLevel          : '/' + request.url.split(/\//g)[1] + '/',
+                //isFile      :  /^\/[A-Za-z0-9_-]+\.(.*)$/.test(request.url)
+                // to be considered as a stativ content, url must content at least 2 caracters after last `.`: .js, .html are ok
+                isStaticFilename    : /(\.([A-Za-z0-9]+){2}|\/)$/.test(request.url)
+            };  
+            
+            // handle resources from public with webroot in url
+            if ( staticProps.isStaticFilename && self.conf[self.appName][self.env].server.webroot != '/' && staticProps.firstLevel == self.conf[self.appName][self.env].server.webroot ) {
+                staticProps.firstLevel = self.conf[self.appName][self.env].server.webroot + request.url.replace(self.conf[self.appName][self.env].server.webroot, '').match(/[A-Za-z0-9_-]+\/?/)[0]
+            }
             
             if ( 
-                staticProps.isFile && staticsArr.indexOf(request.url) > -1 
-                || staticsArr.indexOf(staticProps.firstLevel) > -1
+                staticProps.isStaticFilename && staticsArr.indexOf(request.url) > -1 
+                || staticProps.isStaticFilename && staticsArr.indexOf(staticProps.firstLevel) > -1
             ) {
                 //local['handle'+ self.conf[self.appName][self.env].server.protocolShort +'Statics'](staticProps, request, response, next);
                 handleStatics(staticProps, request, response, next);
@@ -717,7 +752,7 @@ function Server(options) {
                 //request.cookies = {}; // ???
                 
                 // be carfull, if you are using jQuery + cross domain, you have to set the header manually in your $.ajax query -> headers: {'X-Requested-With': 'XMLHttpRequest'}
-                self.conf[self.appName][self.env].server.request.isXMLRequest       = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
+                request.isXMLRequest       = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
 
                 // Passing credentials :
                 //      - if you are using jQuery + cross domain, you have to set the `xhrFields` in your $.ajax query -> xhrFields: { withCredentials: true }
@@ -730,7 +765,7 @@ function Server(options) {
                  * from document.cookie or the response headers.
                  * They can only be controlled/produced by the remote domain.
                  * */
-                self.conf[self.appName][self.env].server.request.isWithCredentials  = ( request.headers['access-control-allow-credentials'] && request.headers['access-control-allow-credentials'] == true ) ? true : false;
+                request.isWithCredentials  = ( request.headers['access-control-allow-credentials'] && request.headers['access-control-allow-credentials'] == true ) ? true : false;
                             
                 
                 // multipart wrapper for uploads
@@ -1360,22 +1395,23 @@ function Server(options) {
     
 
     var handle = function(req, res, next, bundle, pathname, config) {
+        
         var matched             = false
             , isRoute           = {}
             , withViews         = hasViews(bundle)
             , router            = local.router
             , cacheless         = config.isCacheless()
             , wroot             = null
-            , isXMLRequest      = self.conf[bundle][self.env].server.request.isXMLRequest;
+        ;
 
-        
-        req.setEncoding(self.conf[bundle][self.env].encoding);       
-        
+    
         var params      = {}
             , _routing  = {}
+            , reMethod  = new RegExp(req.method, 'i')
+            , method    = null
         ;
         try {
-            //var routing   = JSON.parse(JSON.stringify( config.getRouting(bundle, self.env) ));
+            
             var routing   = config.getRouting(bundle, self.env);
 
             if ( routing == null || routing.count() == 0 ) {
@@ -1393,10 +1429,16 @@ function Server(options) {
                     break;
 
                 if (routing[name].bundle != bundle) continue;
-
+                // method filter    
+                method = routing[name].method;             
+                if ( /\,/.test( method ) && reMethod.test(method) ) {
+                    method = req.method
+                }               
+                //if (method != req.method) continue;
+                
                 //Preparing params to relay to the router.
                 params = {
-                    method              : routing[name].method || req.method,
+                    method              : method,
                     requirements        : routing[name].requirements,
                     namespace           : routing[name].namespace || undefined,
                     url                 : unescape(pathname), /// avoid %20
@@ -1404,7 +1446,8 @@ function Server(options) {
                     param               : JSON.parse(JSON.stringify(routing[name].param)),
                     middleware          : routing[name].middleware,
                     bundle              : routing[name].bundle,
-                    isXMLRequest        : isXMLRequest
+                    isXMLRequest        : req.isXMLRequest,
+                    isWithCredentials   : req.isWithCredentials
                 };
 
                 //Parsing for the right url.
@@ -1435,19 +1478,19 @@ function Server(options) {
 
                         // comparing routing method VS request.url method
                         if ( _routing.method.toLowerCase() != req.method.toLowerCase() ) {
-                            throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.url+'` is expecting `' + _routing[name].method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
+                            throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.url+'` is expecting `' + _routing.method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
                             break
                         }
 
                         // handling GET method exception - if no param found
                         var methods = ['get', 'delete'], method = req.method.toLowerCase();
-                        
+                        var p = null;
                         if (
                             methods.indexOf(method) > -1 && typeof(req.query) != 'undefined' && req.query.count() == 0
                             || methods.indexOf(method) > -1 && typeof(req.query) == 'undefined' && typeof(req.params) != 'undefined' && req.params.count() > 1
                             //|| methods.indexOf(method) > -1 && typeof(req.query) == 'undefined' && typeof(req.params) != 'undefined' && req.params.count() > 0
                         ) {
-                            var p = 0;
+                            p = 0;
                             for (var parameter in req.params) {
                                 if (p > 0) {
                                     // false & true case
@@ -1460,7 +1503,7 @@ function Server(options) {
                             }
                             
                         } else if ( method == 'put' ) { // merging req.params with req.put (passed through URI)
-                            var p = 0;
+                            p = 0;
                             for (var parameter in req.params) {
                                 if (p > 0) {
                                     // false & true case
@@ -1777,7 +1820,8 @@ function Server(options) {
     var throwError = function(res, code, msg, next) {
         var withViews       = local.hasViews[self.appName] || hasViews(self.appName);
         var isUsingTemplate = self.conf[self.appName][self.env].template;
-        var isXMLRequest    = self.conf[self.appName][self.env].server.request.isXMLRequest;
+        //var isXMLRequest    = self.conf[self.appName][self.env].server.request.isXMLRequest;
+        var isXMLRequest    = local.request.isXMLRequest;
         
         var err = null;
         if ( typeof(msg) != 'object' ) {
