@@ -51,7 +51,7 @@ function Model(namespace, _config) {
     var _connector = null;
 
     var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
-    var standalone = config.Host.isStandalone();
+    //var isStandalone = config.Host.isStandalone();
 
 
     var setup = function(namespace) {

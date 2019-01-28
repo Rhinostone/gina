@@ -47,7 +47,6 @@ function Start(opt, cmd) {
 
                     if (isStarting)
                         return;
-
                     
                     console.info('starting bundle [ ' + bundle + '@' + self.projectName + ' ]');
                     process.list = (process.list == undefined) ? [] : process.list;
@@ -79,13 +78,14 @@ function Start(opt, cmd) {
                         }
                     }
 
-
-
+                    
+                    
                     var child = spawn(opt.argv[0], params,
                         {
                             detached: true
                         }
                     );
+                    
 
 
                     child.stdout.setEncoding('utf8');//Set encoding.

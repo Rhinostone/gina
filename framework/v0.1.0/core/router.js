@@ -11,14 +11,16 @@
 
 var url                 = require('url')
     , fs                = require('fs')
+    
     , lib               = require('./../lib')
     , console           = lib.logger
     , inherits          = lib.inherits
     , merge             = lib.merge
     , SuperController   = require('./controller')
     , Config            = require('./config')
+    
     //get config instance
-    , config            = new Config()
+    //, config            = new Config()
 ;
 
 /**
@@ -33,22 +35,42 @@ var url                 = require('url')
 function Router(env) {
 
     this.name = 'Router';
+    
     var self = this
         , local = {
-            conf    : config.getInstance(),
-            bundle  : null
-        };
+            //conf    : config.getInstance(),
+            //bundle  : null
+        }
+    ;
 
     /**
      * Router Constructor
      * @constructor
      * */
-    var init = function(){
+    var init = function() {
+        
         if ( typeof(Router.initialized) != "undefined" ) {
             return self.getInstance()
         } else {
             Router.initialized = true
         }
+    }
+    
+    var isSetupRequired = function(control) {
+        
+        if (local.isXMLRequest) return false;
+        
+        return ([
+            'redirect',
+            'query',
+            'store',
+            'downloadFromLocal',
+            'downloadFromURL'
+        ].indexOf(control) < 0 ) ? true : false;
+    }
+    
+    this.getInstance = function() {
+        return self
     }
 
     /**
@@ -68,17 +90,13 @@ function Router(env) {
         SuperController = require.cache[_(corePath +'/controller/index.js', true)];
     }
     
-    this.setServerInstance = function(instance) {
-        instance._http2streamEventInitalized = false;
-        self.serverInstance = instance;
+    this.setServerInstance = function(serverInstance) {
+        serverInstance._http2streamEventInitalized = false;
+        self.serverInstance = serverInstance;
     }
     
     this.getServerInstance = function () {
         return self.serverInstance;
-    }
-
-    this.getInstance = function() {
-        return self
     }
 
    
@@ -93,41 +111,46 @@ function Router(env) {
      * */
     this.route = function(request, response, next, params) {
         
-        var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
-        local.cacheless = cacheless;
+        var cacheless           = (process.env.IS_CACHELESS == 'false') ? false : true
+            , bundle            = local.bundle = params.bundle
+            , config            = new Config().getInstance()
+            , serverInstance    = self.getServerInstance()
+            , env               = config.env
+            , conf              = config[bundle][env]
+        ;
+        
+        local.cacheless     = cacheless;
+        local.request       = request;
+        local.next          = next;
+        local.conf          = conf;
+        local.isStandalone  = conf.server.isStandalone;        
         
         if (cacheless) {
             refreshCoreDependencies()
         }
-        
-        //Routing.
-        //var pathname        = url.parse(request.url).pathname;
-        var bundle          = local.bundle = params.bundle;
-        var conf            = config.Env.getConf( bundle, env );
-        //var bundles         = conf.bundles;
-        local.request       = request;
-        local.conf          = conf;
-        local.isStandalone  = config.Host.isStandalone();
-
-        // for libs/context etc..
-        var routerObj = {
-            response        : response,
-            next            : next,
-            hasViews        : ( typeof(conf.content.templates) != 'undefined' ) ? true : false,
-            isUsingTemplate : conf.template,
-            isProcessingXMLRequest : params.isXMLRequest
-        };
-
-        setContext('router', routerObj);
+                       
 
         var action          = request.control = params.param.control;
         // more can be added ... but it will always start by `on`Something.
         var reservedActions = [
-            "onReady",
-            "setup"
-        ];
+            'onReady',
+            'setup'
+        ];        
         
-        if (reservedActions.indexOf(action) > -1) throwError(response, 500, '[ '+action+' ] is reserved for the framework');
+        
+        if (reservedActions.indexOf(action) > -1) serverInstance.throwError(response, 500, '[ this.'+action+' ] is reserved for the framework');
+        
+        // Routing object
+        var routerObj = {
+            response                    : response,
+            next                        : next,
+            hasViews                    : ( typeof(conf.content.templates) != 'undefined' ) ? true : false,
+            isUsingTemplate             : conf.template,
+            isProcessingXMLRequest      : params.isXMLRequest,
+            isProcessingWithcredentials : params.isWithCredentials
+        };
+
+        setContext('router', routerObj);
         
         var middleware      = params.middleware || [];
         var actionFile      = params.param.file; // matches rule name
@@ -135,15 +158,16 @@ function Router(env) {
         var routeHasViews   = ( typeof(conf.content.templates) != 'undefined' ) ? true : false;
         var isUsingTemplate = conf.template;
         var hasSetup        = false;        
-        var serverInstance  = self.getServerInstance();
-
+        
+        
+        local.isXMLRequest      = params.isXMLRequest;
+        local.isWithCredentials = params.isWithCredentials;
         local.routeHasViews     = routeHasViews;
         local.isUsingTemplate   = isUsingTemplate;
-        local.next              = next;
-        local.isXMLRequest      = params.isXMLRequest;
+        
+        
 
-        
-        
+                
         
         //Middleware Filters when declared.
         var resHeaders = conf.server.response.header;
@@ -171,7 +195,8 @@ function Router(env) {
         //Getting superCleasses & extending it with super Models.
         var controllerFile         = {}
             , setupFile            = {}
-            , Controller           = {};
+            , Controller           = {}
+        ;
 
         // TODO -  ?? merge all controllers into a single file while building for other env than `dev`
 
@@ -186,10 +211,16 @@ function Router(env) {
         } else {
             filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
         }
-        controllerFile = filename
+        controllerFile = filename;
 
         
         // default param setting
+        var templateName = params.rule.replace('\@'+ bundle, '') || '_common';
+        
+        // inheriting from _common
+        if (conf.content.templates[templateName])
+            conf.content.templates[templateName].ginaLoader = conf.content.templates._common.ginaLoader;
+        
         var options = {
             // view namespace first
             namespace       : params.param.namespace || namespace,
@@ -202,11 +233,12 @@ function Router(env) {
             rootPath: self.executionPath,
             conf: JSON.parse(JSON.stringify(conf)),
             //instance: self.serverInstance,
-            template: (routeHasViews) ? conf.content.templates[params.rule.replace('\@'+ bundle, '')] : undefined,
+            template: (routeHasViews) ? conf.content.templates[templateName] : undefined,
             isUsingTemplate: local.isUsingTemplate,
             cacheless: cacheless,
             //rule            : params.rule,
-            path: params.param.path || null // user custom path : namespace should be ignored | left blank
+            path: params.param.path || null, // user custom path : namespace should be ignored | left blank
+            assets: {}
             //isXMLRequest    : params.isXMLRequest,
             //withCredentials : false
         };
@@ -218,12 +250,6 @@ function Router(env) {
         delete options.param;
         delete options.requirements;
 
-
-        // clean options.params
-        // for (var p in options.params) {
-        //     if ( /^(file|control)$/.test( p ) )
-        //         delete options.params[p]
-        // }
 
         try {
 
@@ -244,7 +270,7 @@ function Router(env) {
             // means that you have a syntax errors in you controller file
             // TODO - increase `stack-trace` from 10 (default value) to 500 or more to get the exact error --stack-trace-limit=1000
             // TODO - also check `stack-size` why not set it to at the same time => --stack-size=1024
-            throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (err.stack || err.message) );
+            serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (err.stack || err.message) );
         }
         
         
@@ -256,50 +282,61 @@ function Router(env) {
             var controller  = new Controller(options);                        
             controller.name = options.control;            
             controller.setOptions(request, response, next, options);
-            if ( /http\/2/.test(conf.server.protocol) ) { 
+            
+            if ( /http\/2/.test(conf.server.protocol) && !local.isXMLRequest) { 
                 
-                serverInstance._referrer = local.request.url;
-                
+                serverInstance._referrer        = local.request.url;
+                serverInstance._options         = options;
+                serverInstance._isXMLRequest    = local.isXMLRequest;
+                                
                 if ( !serverInstance._http2streamEventInitalized ) {
                     serverInstance._http2streamEventInitalized = true;
-                    serverInstance.on('stream', function onHttp2Strem(stream, headers) {                        
-                        controller.onHttp2Stream(this._referrer, stream, headers);
+                    serverInstance.on('stream', function onHttp2Strem(stream, headers) {        
+                        if (!this._isXMLRequest)                
+                            controller.onHttp2Stream(this._referrer, stream, headers);
                     });
                 }               
             }
             
             
 
-            if (hasSetup) { // adding setup
-                controller.setup = function(request, response, next) {
-                    if (!this._setupDone) {
-                        this._setupDone = true;
-                        return function (request, response, next) { // getting rid of the controller context
-                            var Setup = require(_(setupFile, true));
-
-                            // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
-                            // inheriting SuperController functions & objects
-
-                            // exporting config & common methods
-                            Setup.engine                = controller.engine;
-                            Setup.getConfig             = controller.getConfig;
-                            Setup.getLocales            = controller.getLocales;
-                            Setup.getFormsRules         = controller.getFormsRules;
-                            Setup.throwError            = controller.throwError;
-                            Setup.redirect              = controller.redirect;
-                            Setup.render                = controller.render;
-                            Setup.renderJSON            = controller.renderJSON;
-                            Setup.renderWithoutLayout   = controller.renderWithoutLayout
-                            Setup.isXMLRequest          = controller.isXMLRequest;
-                            Setup.isWithCredentials     = controller.isWithCredentials,
-                            Setup.isCacheless           = controller.isCacheless;
-
-                            Setup.apply(Setup, arguments);
-
-                            return Setup;
-                        }(request, response, next)
-                    }
-                }
+            if (hasSetup && isSetupRequired(params.param.control) ) { // adding setup
+                
+                // if ( !isSetupRequired(params.param.control) ) {
+                //     controller.setup = function() { this._setupDone = true;  return };                                      
+                // } else {
+                    controller.setup = function(request, response, next) {
+                        if (!this._setupDone) {
+                            this._setupDone = true;
+                            return function (request, response, next) { // getting rid of the controller context
+                                var Setup = require(_(setupFile, true));
+    
+                                // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
+                                // inheriting SuperController functions & objects
+    
+                                // exporting config & common methods
+                                Setup.engine                = controller.engine;
+                                Setup.getConfig             = controller.getConfig;
+                                Setup.getLocales            = controller.getLocales;
+                                Setup.getFormsRules         = controller.getFormsRules;
+                                Setup.throwError            = serverInstance.throwError;
+                                Setup.redirect              = controller.redirect;
+                                Setup.render                = controller.render;
+                                Setup.renderJSON            = controller.renderJSON;
+                                Setup.renderWithoutLayout   = controller.renderWithoutLayout
+                                Setup.isXMLRequest          = controller.isXMLRequest;
+                                Setup.isWithCredentials     = controller.isWithCredentials,
+                                Setup.isCacheless           = controller.isCacheless;
+    
+                                Setup.apply(Setup, arguments);
+    
+                                return Setup;
+                            }(request, response, next)
+                        }
+                    }    
+                //} 
+            } else {
+                controller.setup = function() { return };
             }
 
 
@@ -361,18 +398,24 @@ function Router(env) {
                         controller = new RequiredController();
                     }
                     
-                    if ( /http\/2/.test(conf.server.protocol) ) {                
-                        controller.once('http2streamEventInitalized', function onHttp2streamEventInitalized(initialized){
-                            serverInstance._http2streamEventInitalized = initialized
-                        });
-                        controller.serverOn = serverInstance.on;
-                        controller._http2streamEventInitalized = serverInstance._http2streamEventInitalized;                        
+                    if ( /http\/2/.test(conf.server.protocol) ) { 
+                
+                        serverInstance._referrer = local.request.url;
+                        serverInstance._options = options;
+                                        
+                        if ( !serverInstance._http2streamEventInitalized ) {
+                            serverInstance._http2streamEventInitalized = true;
+                            serverInstance.on('stream', function onHttp2Strem(stream, headers) {        
+                                                
+                                controller.onHttp2Stream(this._referrer, stream, headers);
+                            });
+                        }               
                     }
                     
                     return controller
 
                 } catch (err) {
-                    throwError(response, 500, err );
+                    serverInstance.throwError(response, 500, err );
                 }
             }
 
@@ -392,9 +435,9 @@ function Router(env) {
                             var superController = new SuperController(options);
                             superController.setOptions(request, response, next, options);
                             if (typeof (controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
-                                superController.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);
+                                serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);
                             } else {
-                                superController.throwError(response, 500, err.stack);
+                                serverInstance.throwError(response, 500, err.stack);
                             }
                         }
 
@@ -413,17 +456,17 @@ function Router(env) {
 
         } catch (err) {
             if ( typeof(controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
-                throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);
+                serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);
             } else {
-                throwError(response, 500, err.stack);
+                serverInstance.throwError(response, 500, err.stack);
             }
 
             // var superController = new SuperController(options);
             // superController.setOptions(request, response, next, options);
             // if ( typeof(controller) != 'undefined' && typeof(controller[action]) == 'undefined') {
-            //     superController.throwError(response, 500, (new Error('control not found: `'+ action+'`. Please, check your routing.json or the related control in your `'+controllerFile+'`.')).stack);
+            //     serverInstance.throwError(response, 500, (new Error('control not found: `'+ action+'`. Please, check your routing.json or the related control in your `'+controllerFile+'`.')).stack);
             // } else {
-            //     superController.throwError(response, 500, err.stack);
+            //     serverInstance.throwError(response, 500, err.stack);
             // }
         }
 
@@ -449,12 +492,12 @@ function Router(env) {
                 filename = _(filename +'/'+ middleware + '/index.js');
                 if ( /*!/^middlewares\.express\./.test(filename) &&*/ !fs.existsSync( filename ) ) {
                     // no middleware found with this alias
-                    throwError(res, 501, new Error('middleware not found '+ middleware).stack);
+                    serverInstance.throwError(res, 501, new Error('middleware not found '+ middleware).stack);
                 }
                 
                 if (local.cacheless) delete require.cache[require.resolve(_(filename, true))];
 
-                var MiddlewareClass = function() {
+                var MiddlewareClass = function(req, res, next) {
 
                     return function () { // getting rid of the middleware context
 
@@ -478,14 +521,14 @@ function Router(env) {
                         Middleware.prototype.isCacheless            = controller.isCacheless;
 
                         return Middleware;
-                    }()
-                }();
+                    }(req, res, next)
+                }(req, res, next);
 
                 middleware = new MiddlewareClass();
 
 
                 if ( !middleware[constructor] ) {
-                    throwError(res, 501, new Error('contructor [ '+constructor+' ] not found @'+ middlewares[m]).stack);
+                    serverInstance.throwError(res, 501, new Error('contructor [ '+constructor+' ] not found @'+ middlewares[m]).stack);
                 }
 
                 if ( typeof(middleware[constructor]) != 'undefined') {
@@ -514,62 +557,62 @@ function Router(env) {
         return local.routeHasViews;
     };
 
-    var throwError = function(res, code, msg) {
-        if (arguments.length < 3) {
-            var msg     = code || null
-                , code  = res || 500
-                , res   = local.res;
-        }
+    // var throwError = function(res, code, msg) {
+    //     if (arguments.length < 3) {
+    //         var msg     = code || null
+    //             , code  = res || 500
+    //             , res   = local.res;
+    //     }
 
-        if (!res.headersSent) {
-            res.headersSent = true;
+    //     if (!res.headersSent) {
+    //         res.headersSent = true;
 
-            if (local.isXMLRequest || !hasViews() || !local.isUsingTemplate) {
-                // Internet Explorer override
-                if ( /msie/i.test(local.request.headers['user-agent']) ) {
-                    res.writeHead(code, "Content-Type", "text/plain")
-                } else {
-                    res.writeHead(code, { 'Content-Type': 'application/json'} )
-                }
+    //         if (local.isXMLRequest || !hasViews() || !local.isUsingTemplate) {
+    //             // Internet Explorer override
+    //             if ( /msie/i.test(local.request.headers['user-agent']) ) {
+    //                 res.writeHead(code, "Content-Type", "text/plain")
+    //             } else {
+    //                 res.writeHead(code, { 'Content-Type': 'application/json'} )
+    //             }
 
                 
-                var err = null;
+    //             var err = null;
 
-                if ( typeof(msg) == 'object' ) {
-                    err = {
-                        status: code,
-                        message: msg
-                    }
-                } else {
-                    err = {
-                        status: code,
-                        message : msg.message,
-                        stack: msg.stack || msg || null
-                    }
-                }
+    //             if ( typeof(msg) == 'object' ) {
+    //                 err = {
+    //                     status: code,
+    //                     message: msg
+    //                 }
+    //             } else {
+    //                 err = {
+    //                     status: code,
+    //                     message : msg.message,
+    //                     stack: msg.stack || msg || null
+    //                 }
+    //             }
 
 
-                if ( !err.stack ) {
-                    delete err.stack
-                }
+    //             if ( !err.stack ) {
+    //                 delete err.stack
+    //             }
                 
                 
 
-                res.end(JSON.stringify(err))
-            } else {
-                res.writeHead(code, { 'Content-Type': 'text/html'} );
-                //console.error('[ ROUTER ] '+ res.req.method +' [ '+code+' ] '+ res.req.url);
-                res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
-            }
+    //             res.end(JSON.stringify(err))
+    //         } else {
+    //             res.writeHead(code, { 'Content-Type': 'text/html'} );
+    //             //console.error('[ ROUTER ] '+ res.req.method +' [ '+code+' ] '+ res.req.url);
+    //             res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
+    //         }
             
-            console.error('[ ROUTER ] ' + local.request.method + ' [ ' + code + ' ] ' + local.request.url + '\n'+ (msg.stack || msg.message || msg) /**routing.getRouteByUrl(res.req.url).toUrl()*/ );
-        } else {
-            if (typeof(local.next) != 'undefined')
-                return local.next();
-            else
-                return;
-        }
-    };
+    //         console.error('[ ROUTER ] ' + local.request.method + ' [ ' + code + ' ] ' + local.request.url + '\n'+ (msg.stack || msg.message || msg) /**routing.getRouteByUrl(res.req.url).toUrl()*/ );
+    //     } else {
+    //         if (typeof(local.next) != 'undefined')
+    //             return local.next();
+    //         else
+    //             return;
+    //     }
+    // };
 
     init()
 };
