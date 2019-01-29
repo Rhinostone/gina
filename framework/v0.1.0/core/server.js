@@ -731,7 +731,10 @@ function Server(options) {
             
             // handle resources from public with webroot in url
             if ( staticProps.isStaticFilename && self.conf[self.appName][self.env].server.webroot != '/' && staticProps.firstLevel == self.conf[self.appName][self.env].server.webroot ) {
-                staticProps.firstLevel = self.conf[self.appName][self.env].server.webroot + request.url.replace(self.conf[self.appName][self.env].server.webroot, '').match(/[A-Za-z0-9_-]+\/?/)[0]
+                var matchedFirstInUrl = request.url.replace(self.conf[self.appName][self.env].server.webroot, '').match(/[A-Za-z0-9_-]+\/?/);
+                if ( matchedFirstInUrl && matchedFirstInUrl.length > 0 ) {
+                    staticProps.firstLevel = self.conf[self.appName][self.env].server.webroot + matchedFirstInUrl[0]
+                }                
             }
             
             if ( 
@@ -742,7 +745,10 @@ function Server(options) {
                 handleStatics(staticProps, request, response, next);
                 
             } else { // none statics
-                request.body    = {};
+                
+                
+                
+                request.body    = ( typeof(request.body) != 'undefined' ) ? request.body : {};
                 request.get     = {};
                 request.post    = {};
                 request.put     = {};
@@ -1069,6 +1075,10 @@ function Server(options) {
                         })
                     })*/
                 } else {
+                    
+                    if ( /^http\/2/.test(self.conf[self.appName][self.env].server.protocol) ) {
+                        return  processRequestData(request, response, next);
+                    }
 
                     request.on('data', function(chunk){ // for this to work, don't forget the name attr for you form elements
                         if ( typeof(request.body) == 'object') {
@@ -1077,181 +1087,8 @@ function Server(options) {
                         request.body += chunk.toString()
                     });
 
-                    request.on('end', function onEnd() {
-                            // to compare with /core/controller/controller.js -> getParams()
-                            switch( request.method.toLowerCase() ) {
-                                case 'post':
-                                    var obj = {}, configuring = false;
-                                    if ( typeof(request.body) == 'string' ) {
-                                        // get rid of encoding issues
-                                        try {
-                                            if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                                                if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
-                                                    request.body = request.body.replace(/\+/g, ' ');
-                                                }
-
-                                                if ( request.body.substr(0,1) == '?')
-                                                    request.body = request.body.substr(1);
-
-                                                // false & true case
-                                                if ( /(\"false\"|\"true\"|\"on\")/.test(request.body) )
-                                                    request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-
-                                                obj = parseBody(request.body);
-                                                if (obj.count() == 0 && request.body.length > 1) {
-                                                    try {
-                                                        request.post = JSON.parse(request.body);
-                                                    } catch (err) {}
-                                                }
-                                            }
-
-                                        } catch (err) {
-                                            var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
-                                            console.warn(msg);
-                                        }
-
-                                    } else {
-                                        // 2016-05-19: fix to handle requests from swagger/express
-                                        if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
-                                            request.body = request.query
-                                        }
-                                        var bodyStr = JSON.stringify(request.body);
-                                        // false & true case
-                                        if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
-                                            bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-
-                                        obj = JSON.parse(bodyStr)
-                                    }
-
-                                    if ( obj.count() > 0 ) {
-                                        // still need this to allow compatibility with express & connect middlewares
-                                        request.body = request.post = obj;
-                                    }
-
-                                    // see.: https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#POST
-                                    //     Responses to this method are not cacheable,
-                                    //     unless the response includes appropriate Cache-Control or Expires header fields.
-                                    //     However, the 303 (See Other) response can be used to direct the user agent to retrieve a cacheable resource.
-                                    response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-                                    response.setHeader('Pragma', 'no-cache');
-                                    response.setHeader('Expires', '0');
-
-                                    // cleaning
-                                    request.query   = undefined;
-                                    request.get     = undefined;
-                                    request.put     = undefined;
-                                    request.delete  = undefined;
-                                    break;
-
-                                case 'get':
-                                    if ( typeof(request.query) != 'undefined' && request.query.count() > 0 ) {
-                                        request.get = request.query;
-                                    }
-                                    // else, wilol be matching route params against url context instead once route is identified
-
-
-                                    // cleaning
-                                    request.query   = undefined;
-                                    request.post    = undefined;
-                                    request.put     = undefined;
-                                    request.delete  = undefined;
-                                    break;
-
-                                case 'put':
-                                    // eg.: PUT /user/set/1
-                                    var obj = {};
-                                    if ( typeof(request.body) == 'string' ) {
-                                        // get rid of encoding issues
-                                        try {
-                                            if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                                                if ( !/application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
-                                                    request.body = request.body.replace(/\+/g, ' ');
-                                                }
-
-                                                if ( request.body.substr(0,1) == '?')
-                                                    request.body = request.body.substr(1);
-
-                                                // false & true case
-                                                if ( /(\"false\"|\"true\"|\"on\")/.test(request.body) )
-                                                    request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-
-                                                obj = parseBody(request.body);
-
-                                                if ( typeof(obj) != 'undefined' && obj.count() == 0 && request.body.length > 1 ) {
-                                                    try {
-                                                        request.put = merge(request.put, JSON.parse(request.body));
-                                                    } catch (err) {
-                                                        console.log('Case `put` #0 [ merge error ]: ' + (err.stack||err.message))
-                                                    }
-                                                }
-                                            }
-
-                                        } catch (err) {
-                                            var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
-                                            console.error(msg);
-                                            throwError(response, 500, msg);
-                                        }
-
-                                    } else {
-                                        // 2016-05-19: fix to handle requests from swagger/express
-                                        if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
-                                            request.body = request.query
-                                        }
-                                        var bodyStr = JSON.stringify(request.body);
-                                        // false & true case
-                                        if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
-                                            bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-
-                                        obj = JSON.parse(bodyStr)
-                                    }
-
-                                    if ( obj && typeof(obj) != 'undefined' && obj.count() > 0 ) {
-                                        // still need this to allow compatibility with express & connect middlewares
-                                        request.body = request.put = merge(request.put, obj);
-                                    }
-
-
-                                    request.query   = undefined; // added on september 13 2016
-                                    request.post    = undefined;
-                                    request.delete  = undefined;
-                                    request.get     = undefined;
-                                    break;
-
-
-                                case 'delete':
-                                    if ( request.query.count() > 0 ) {
-                                        request.delete = request.query;
-
-                                    }
-                                    // else, matching route params against url context instead once route is identified
-
-                                    request.post    = undefined;
-                                    request.put     = undefined;
-                                    request.get     = undefined;
-                                    break
-
-
-                            };
-
-                            loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
-                                if (!req.handled) {
-                                    req.handled = true;
-                                    if (err) {
-                                        if (!res.headersSent)
-                                            throwError(response, 500, 'Internal server error\n' + err.stack, next)
-                                    } else {                                    
-                                        handle(req, res, next, bundle, pathname, config)                                                                       
-                                    }
-                                } else {
-                                    if (typeof(next) != 'undefined')
-                                        return next();
-                                    else
-                                        return;
-                                }
-                                
-                                return;
-                            })
-
+                    request.on('end', function onEnd() {                                                
+                        processRequestData(request, response, next)
                     });
 
                     if (request.end) request.end();
@@ -1266,6 +1103,183 @@ function Server(options) {
         self.instance.listen(self.conf[self.appName][self.env].server.port);//By Default 3100
 
         self.emit('started', self.conf[self.appName][self.env], true);
+    }
+    
+    var processRequestData = function(request, response, next) {
+        
+        // to compare with /core/controller/controller.js -> getParams()
+        switch( request.method.toLowerCase() ) {
+            case 'post':
+                var obj = {}, configuring = false;
+                if ( typeof(request.body) == 'string' ) {
+                    // get rid of encoding issues
+                    try {
+                        if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
+                                request.body = request.body.replace(/\+/g, ' ');
+                            }
+
+                            if ( request.body.substr(0,1) == '?')
+                                request.body = request.body.substr(1);
+
+                            // false & true case
+                            if ( /(\"false\"|\"true\"|\"on\")/.test(request.body) )
+                                request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+
+                            obj = parseBody(request.body);
+                            if (obj.count() == 0 && request.body.length > 1) {
+                                try {
+                                    request.post = JSON.parse(request.body);
+                                } catch (err) {}
+                            }
+                        }
+
+                    } catch (err) {
+                        var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
+                        console.warn(msg);
+                    }
+
+                } else {
+                    // 2016-05-19: fix to handle requests from swagger/express
+                    if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
+                        request.body = request.query
+                    }
+                    var bodyStr = JSON.stringify(request.body);
+                    // false & true case
+                    if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                        bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+
+                    obj = JSON.parse(bodyStr)
+                }
+
+                if ( obj.count() > 0 ) {
+                    // still need this to allow compatibility with express & connect middlewares
+                    request.body = request.post = obj;
+                }
+
+                // see.: https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#POST
+                //     Responses to this method are not cacheable,
+                //     unless the response includes appropriate Cache-Control or Expires header fields.
+                //     However, the 303 (See Other) response can be used to direct the user agent to retrieve a cacheable resource.
+                response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                response.setHeader('Pragma', 'no-cache');
+                response.setHeader('Expires', '0');
+
+                // cleaning
+                request.query   = undefined;
+                request.get     = undefined;
+                request.put     = undefined;
+                request.delete  = undefined;
+                break;
+
+            case 'get':
+                if ( typeof(request.query) != 'undefined' && request.query.count() > 0 ) {
+                    request.get = request.query;
+                }
+                // else, wilol be matching route params against url context instead once route is identified
+
+
+                // cleaning
+                request.query   = undefined;
+                request.post    = undefined;
+                request.put     = undefined;
+                request.delete  = undefined;
+                break;
+
+            case 'put':
+                // eg.: PUT /user/set/1
+                var obj = {};
+                if ( typeof(request.body) == 'string' ) {
+                    // get rid of encoding issues
+                    try {
+                        if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                            if ( !/application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
+                                request.body = request.body.replace(/\+/g, ' ');
+                            }
+
+                            if ( request.body.substr(0,1) == '?')
+                                request.body = request.body.substr(1);
+
+                            // false & true case
+                            if ( /(\"false\"|\"true\"|\"on\")/.test(request.body) )
+                                request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+
+                            obj = parseBody(request.body);
+
+                            if ( typeof(obj) != 'undefined' && obj.count() == 0 && request.body.length > 1 ) {
+                                try {
+                                    request.put = merge(request.put, JSON.parse(request.body));
+                                } catch (err) {
+                                    console.log('Case `put` #0 [ merge error ]: ' + (err.stack||err.message))
+                                }
+                            }
+                        }
+
+                    } catch (err) {
+                        var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
+                        console.error(msg);
+                        throwError(response, 500, msg);
+                    }
+
+                } else {
+                    // 2016-05-19: fix to handle requests from swagger/express
+                    if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
+                        request.body = request.query
+                    }
+                    var bodyStr = JSON.stringify(request.body);
+                    // false & true case
+                    if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                        bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+
+                    obj = JSON.parse(bodyStr)
+                }
+
+                if ( obj && typeof(obj) != 'undefined' && obj.count() > 0 ) {
+                    // still need this to allow compatibility with express & connect middlewares
+                    request.body = request.put = merge(request.put, obj);
+                }
+
+
+                request.query   = undefined; // added on september 13 2016
+                request.post    = undefined;
+                request.delete  = undefined;
+                request.get     = undefined;
+                break;
+
+
+            case 'delete':
+                if ( request.query.count() > 0 ) {
+                    request.delete = request.query;
+
+                }
+                // else, matching route params against url context instead once route is identified
+
+                request.post    = undefined;
+                request.put     = undefined;
+                request.get     = undefined;
+                break
+
+
+        };
+
+        loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
+            if (!req.handled) {
+                req.handled = true;
+                if (err) {
+                    if (!res.headersSent)
+                        throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                } else {                                    
+                    handle(req, res, next, bundle, pathname, config)                                                                       
+                }
+            } else {
+                if (typeof(next) != 'undefined')
+                    return next();
+                else
+                    return;
+            }
+            
+            return;
+        })
     }
 
     var getHead = function(file) {

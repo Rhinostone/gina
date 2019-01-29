@@ -355,7 +355,8 @@ function Routing() {
                 if ( typeof(params) != 'undefined' && typeof(params[variable]) != 'undefined' ) {
                     regex = new RegExp('(:'+variable+'/|:'+variable+'$)', 'g');
                     
-                    route.url = route.url.replace( regex, '/'+ params[variable] );
+                    //route.url = route.url.replace( regex, '/'+ params[variable] );
+                    route.url = route.url.replace( regex, params[variable] );
 
                     if ( typeof(route.param.path) != 'undefined' && /:/.test(route.param.path) ) {
                         route.param.path = route.param.path.replace( regex, params[variable]);
@@ -387,7 +388,7 @@ function Routing() {
 
             this.url = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '') : path;
 
-            return conf.hostname + path
+            return conf.hostname + this.url
         };
 
         return route
