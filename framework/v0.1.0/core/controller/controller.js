@@ -1722,6 +1722,7 @@ function SuperController(options) {
         var routing = conf.content.routing;
         var route   = '', rte = '';
         var ignoreWebRoot = null;
+        
 
         if ( typeof(req) === 'string' ) {
 
@@ -2399,20 +2400,23 @@ function SuperController(options) {
         if( !/\:$/.test(options.scheme) )
             options.scheme += ':';
         
-        try {            
+        try {        
+            options.queryData = queryData;    
             var protocolVersion = ~~options.protocol.match(/\/(.*)$/)[1].replace(/\.\d+/, '');
             var httpLib =  options.protocol.match(/^(.*)\//)[1] + ( (protocolVersion >= 2) ? protocolVersion : '' );
             if ( !/http2/.test(httpLib) && /https/.test(options.scheme) ) {
                 httpLib += 's';
             }
             //delete options.protocol;
-            browser = require(''+ httpLib);   
-            if ( /http2/.test(httpLib) ) {                
-                options.queryData = queryData;
+            browser = require(''+ httpLib);               
+            
+            if ( /http2/.test(httpLib) ) {               
+                
                 return handleHTTP2ClientRequest(browser, options, callback);
             } else {
                 return handleHTTP1ClientRequest(browser, options, callback);                
-            }         
+            }  
+                               
             
         } catch(err) {
             //throw err;
@@ -2583,7 +2587,7 @@ function SuperController(options) {
 
 
         if (req) { // don't touch this please
-            if (req.write) req.write(queryData);
+            if (req.write) req.write(options.queryData);
             if (req.end) req.end();
         }
 
@@ -2658,18 +2662,17 @@ function SuperController(options) {
         } else {
             console.warn('[ CONTROLLER ][ HTTP/2.0#query ] options.ca not found !');
         }
+                
         
         var body = Buffer.from(options.queryData);
         options.headers['content-length'] = body.length;
+        options.headers.body = body;
+        
         delete options.queryData;
         
-        // merging undefined query headers with previeous
-        for (var h in local.req.headers) {
-            if ( typeof(options.headers[h]) == 'undefined' )
-                options.headers[h] = local.req.headers[h]
-        }
+        
                 
-        const client = browser.connect(options.hostname, options);
+        const client = browser.connect(options.hostname, options);        
         
         client.on('error', (err) => {
             
@@ -2697,13 +2700,37 @@ function SuperController(options) {
             HTTP2_HEADER_STATUS
           } = browser.constants;
 
-        const req = client.request( merge({ 
+        // merging undefined query headers with previeous
+        // for (var h in local.req.headers) {
+        //     if ( typeof(options.headers[h]) == 'undefined' )
+        //         options.headers[h] = local.req.headers[h]
+        // }
+        
+        if ( typeof(local.req.headers.cookie) != 'undefined' ) {
+            options.headers.cookie = local.req.headers.cookie
+        }
+        
+        if ( typeof(local.req.headers['x-requested-with']) != 'undefined' ) {
+            options.headers['x-requested-with'] = local.req.headers['x-requested-with']
+        }
+        
+        if ( typeof(local.req.headers['access-control-allow-credentials']) != 'undefined' ) {
+            options.headers['access-control-allow-credentials'] = local.req.headers['access-control-allow-credentials']
+        }
+        
+        if ( typeof(local.req.headers['content-type']) != 'undefined' && local.req.headers['content-type'] != options.headers['content-type'] ) {
+            options.headers['content-type'] = local.req.headers['content-type']
+        }
+        
+        var newOptions = merge({ 
             [HTTP2_HEADER_METHOD]: options[':method'],
             [HTTP2_HEADER_PATH]: options[':path'] 
-        }, options.headers) );
+        }, options.headers);
+        
+        const req = client.request( newOptions );
         
 
-        req.setEncoding('utf8');
+        //req.setEncoding('utf8');
         let data = '';
         req.on('response', (headers, flags) => {   });
         
@@ -2807,11 +2834,8 @@ function SuperController(options) {
             
         });
                
-        if ( typeof(body) != 'undefined' && body != '' ) {
-            req.end(body);
-        } else {
-            req.end();
-        } 
+        //req.end(options.queryData);
+
         
         return {
             onComplete  : function(cb) {

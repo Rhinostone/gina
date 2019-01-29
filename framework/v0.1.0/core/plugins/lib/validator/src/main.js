@@ -663,7 +663,7 @@ function ValidatorPlugin(rules, data, formId) {
                             
 
                             
-                            if ( /json$/.test( contentType ) ) {
+                            if ( /\/json/.test( contentType ) ) {
                                 result = JSON.parse(xhr.responseText);
                                 
                                 if ( typeof(result.status) == 'undefined' )
