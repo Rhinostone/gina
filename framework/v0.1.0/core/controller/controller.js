@@ -193,16 +193,9 @@ function SuperController(options) {
                 set('page.view.title', rule.replace(new RegExp('@' + options.conf.bundle), ''));
                 set('page.view.namespace', namespace);
     
-                //TODO - detect when to use swig
-                var dir = self.templates || local.options.template.templates;
-                var swigOptions = {
-                    autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape: false,
-                    loader: swig.loaders.fs(dir),
-                    cache: (local.options.cacheless) ? false : 'memory'
-                };
-                swig.setDefaults(swigOptions);
-                self.engine = swig;
-            }
+                
+            }            
+            
 
             var ctx = getContext('gina');
             // new declaration && overrides
@@ -289,6 +282,23 @@ function SuperController(options) {
             set('page.view.locale', options.conf.locale);
             set('page.view.lang', userCulture);
         }
+        
+        //TODO - detect when to use swig
+        var dir = null;
+        if (local.options.template || self.templates) {
+            dir = self.templates || local.options.template.templates
+        }
+        
+        var swigOptions = {
+            autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape: false,
+            //loader: swig.loaders.fs(dir),
+            cache: (local.options.cacheless) ? false : 'memory'
+        };
+        if (dir) {
+            swigOptions.loader = swig.loaders.fs(dir)
+        }
+        swig.setDefaults(swigOptions);
+        self.engine = swig;
 
         
     }
@@ -509,7 +519,7 @@ function SuperController(options) {
                         if ( typeof(base) != 'undefined' ) {
 
                             // if base is not an URL, must be a bundle
-                            if ( !/^http\:/.test(base) ) {
+                            if ( !/^(http|https)\:/.test(base) ) {
                                 var mainConf = getContext('gina').Config.instance;
                                 // is real bundle ?
                                 if ( mainConf.allBundles.indexOf(base) > -1 ) {
@@ -519,8 +529,8 @@ function SuperController(options) {
                                     // retrieve hostname, webroot & routing
                                     hostname        = config.hostname;
                                     // rewrite hostname vs local.req.headers.host
-                                    if ( typeof(local.req.headers.host) != 'undefined' && !/\:d+/.test(local.req.headers.host) ) {
-                                        hostname = hostname.replace(/\:\d+/, '');
+                                    if ( hostname.replace(/\:\d+/, '') == local.req.headers.host ) {
+                                        hostname = local.req.headers.host;
                                     }
                                     routing         = config.content.routing;
                                     wroot           = config.server.webroot;
@@ -536,7 +546,7 @@ function SuperController(options) {
                         }
 
                         // is path ?
-                        if (/\//.test(route)) {
+                        if (/^\//.test(route)) {
 
                             if (route.substr(0,1) == '/')
                                 route = route.substr(1);
@@ -545,7 +555,7 @@ function SuperController(options) {
                             if (wroot.length == 1)
                                 wroot = '';
 
-                            return hostname + wroot +'/'+ route;
+                            return (route.length > 0) ? hostname + wroot +'/'+ route : hostname + wroot;
                         }
 
                         // rules are now unique per bundle : rule@bundle
@@ -554,53 +564,52 @@ function SuperController(options) {
 
                         if ( typeof(routing[rule]) != 'undefined' ) { //found
                             url = routing[rule].url;
+                            
                             if ( typeof(routing[rule].requirements) != 'undefined' ) {
+                                var urls    = null
+                                    , i     = 0
+                                    , len   = null
+                                    , p     = null
+                                ;
                                 
-                                for (var p in routing[rule].requirements) {
-                                    if ( Array.isArray(url) ) {
-                                        for (var i= 0, len = url.length; i< len; ++i) {
-                                            if ( params && /:/.test(url[i]) ) {
-                                                urlStr = url[i].replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]+'$1');
+                                for (p in routing[rule].requirements) {
+                                    
+                                    if ( /\,/.test(url) ) {
+                                        urls = url.split(/\,/g);
+                                        i = 0; len = urls.length;
+                                        for (; i< len; ++i) {
+                                            if ( params && /:/.test(urls[i]) ) {
+                                                urlStr = urls[i].replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]+'$1');
                                                 break
                                             }
                                         }
 
-                                        if (urlStr != null) {
-                                            url = urlStr
-                                        } else { // just take the first one by default
-                                            url = url[0]
-                                        }
+                                        url = (urlStr != null) ? urlStr : urls[0];
                                     } else {
                                         try {
                                             url = url.replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]+'$1')
                                         } catch (err) {
-                                            self.throwError(local.res, 500, new Error('template compilation exception encoutered: [ '+path+' ]\nsounds like you are having troubles with the following call `{{ "'+route+'" | getUrl() }}` where `'+p+'` parameter is expected according to your `routing.json`'  +'\n'+ (err.stack||err.message)));
+                                            self.throwError(local.res, 500, new Error('template compilation exception encoutered: [ '+ path +' ]\nsounds like you are having troubles with the following call `{{ "'+route+'" | getUrl() }}` where `'+p+'` parameter is expected according to your `routing.json`'  +'\n'+ (err.stack||err.message)));
                                         }
-
                                     }
                                 }
                             } else {
-                                if ( Array.isArray(url) ) {
-                                    url = url[0] || url[1] // just taking the default one: using the first element unless it is empty.
+                                if ( /\,/.test(url) ) {
+                                    url = url.split(/\,/g)[0] || null; // just taking the default one: using the first element unless it is empty.
                                     if (!url) {
-                                        self.throwError(local.res, 500, new Error('please check your `routing.json` at the defined rule `'+rule+'` : `url` attribute cannot be empty').stack)
+                                        self.throwError(local.res, 500, new Error('please check your `routing.json` at the defined rule `'+ rule +'` : `url` attribute cannot be empty').stack)
                                     }
                                 }
                             }
 
-                            if ( /^\//.test(url) )
-                                url = hostname + url;
-                            else
-                                url = hostname +'/'+ url;
+                            url = ( /^\//.test(url) ) ? hostname + url : hostname +'/'+ url;
 
                         } else {
-                            if ( typeof(routing['404']) != 'undefined' && typeof(routing['404'].url) != 'undefined' ) {
-                                if (routing["404"].url.substr(0,1) == '/')
-                                    routing["404"].url = routing["404"].url.substr(1);
-
-                                url = hostname + wroot +'/'+ routing["404"].url
+                            if ( typeof(routing['404@'+ config.bundle]) != 'undefined' && typeof(routing['404@'+ config.bundle].url) != 'undefined' ) {
+                              
+                                url = ( /^\//.test(routing['404@'+ config.bundle].url) ) ? hostname + wroot + routing['404@'+ config.bundle].url.substr(1) : hostname + wroot + routing['404@'+ config.bundle].url;
                             } else {
-                                url = hostname + wroot +'/404.html'
+                                url = hostname + wroot +'404.html'
                             }
                         }
 
@@ -900,6 +909,11 @@ function SuperController(options) {
                 
         if (!stream.pushAllowed) { 
             stream.respond({ ':status': 200 });
+            stream.end();
+            return; 
+        }
+        
+        if ( !this._options.template ) {
             stream.end();
             return; 
         }
@@ -1721,7 +1735,7 @@ function SuperController(options) {
         var wroot   = conf.server.webroot;
         var routing = conf.content.routing;
         var route   = '', rte = '';
-        var ignoreWebRoot = null;
+        var ignoreWebRoot = null, isRelative = false;
         
 
         if ( typeof(req) === 'string' ) {
@@ -1746,26 +1760,29 @@ function SuperController(options) {
                 //     wroot = wroot.substr(wroot.length-1,1).replace('/', '')
                 // }
                 
-                if ( /^\//.test(req) )
+                if ( /^\//.test(req) && !ignoreWebRoot )
                     req = req.substr(1);
                 
-                rte     = ( ignoreWebRoot != null && ignoreWebRoot) ? req : wroot + req;
-                req     = local.req;
-                res     = local.res;
-                next    = local.next;
-                var isRelative = true;
+                rte         = ( ignoreWebRoot != null && ignoreWebRoot) ? req : wroot + req;
+                req         = local.req;
+                res         = local.res;
+                next        = local.next;
+                isRelative  = true;
+                
                 req.routing.param.path = rte
             } else if ( isValidURL(req) ) { // might be an URL
                 rte     = req;
                 req     = local.req;
                 res     = local.res;
                 next    = local.next;
+                
                 req.routing.param.url = rte
             } else { // is by default a route name
                 rte = route = ( new RegExp('^/'+conf.bundle+'-$').test(req) ) ? req : wroot.match(/[^/]/g).join('') +'-'+ req;
                 req     = local.req;
                 res     = local.res;
                 next    = local.next;
+                
                 req.routing.param.route = routing[rte]
             }
         } else {
@@ -1807,22 +1824,23 @@ function SuperController(options) {
             // nothing to do, just ignoring
             //} else {
             } else if ( !path && typeof(isRelative) ==  'undefined' ) {
-                //path = conf.server.scheme + '://' +conf.hostname + path
-                path = conf.hostname + path
+                
+                //path = conf.hostname + path
+                path = local.req.headers.host + path
             }
             
             
             // rewrite path vs local.req.headers.host
-            if ( typeof(local.req.headers.host) != 'undefined' && !/\:d+/.test(local.req.headers.host) ) {
-                path = path.replace(/\:\d+/, '');
-            }
+            // if ( typeof(local.req.headers.host) != 'undefined' && !/\:d+/.test(local.req.headers.host) ) {
+            //     path = path.replace(/\:\d+/, '');
+            // }
             
-            if (req.headersSent) {
-                if (typeof(next) != 'undefined')
-                    return next();
-                else
-                    return;
-            }
+            // if (req.headersSent) {
+            //     if (typeof(next) != 'undefined')
+            //         return next();
+            //     else
+            //         return;
+            // }
             
             // retrieve original request cookie
             // if ( 
@@ -1842,27 +1860,35 @@ function SuperController(options) {
             //     res.setHeader('Set-Cookie', cookieValue);
             // }
 
-            if (GINA_ENV_IS_DEV) {
-                res.writeHead(code, {
-                    'Location': path,
-                    'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
-                    'Pragma': 'no-cache',
-                    'Expires': '0'
-                })
-            } else {
-                res.writeHead(code, { 'Location': path })
+            if (!local.res.headersSent) {
+                if (GINA_ENV_IS_DEV) {
+                    res.writeHead(code, {
+                        'Location': path,
+                        'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    })
+                } else {
+                    res.writeHead(code, { 'Location': path })
+                }
+    
+    
+                console.info(local.req.method +' ['+local.res.statusCode +'] '+ path);
+                res.end();
+                local.res.headersSent = true;// done for the render() method
+                
+                if ( typeof(next) != 'undefined' )
+                    next();
+                else
+                    return;
             }
-
-
-            console.info(local.req.method +' ['+local.res.statusCode +'] '+ path);
-            res.end();
-            local.res.headersSent = true;// done for the render() method
+            
         }
         
-        if ( typeof(next) != 'undefined' )
-            next();
-        else
-            return;
+        // if ( typeof(next) != 'undefined' )
+        //     next();
+        // else
+        //     return;
     }
 
     /**
@@ -2576,12 +2602,12 @@ function SuperController(options) {
                 callback(err)
 
             } else {
-                var data = {
+                var error = {
                     status    : 500,
                     error     : err.stack || err.message
                 };
 
-                self.emit('query#complete', data)
+                self.emit('query#complete', error)
             }
         });
 
@@ -2665,8 +2691,7 @@ function SuperController(options) {
                 
         
         var body = Buffer.from(options.queryData);
-        options.headers['content-length'] = body.length;
-        options.headers.body = body;
+        options.headers['content-length'] = options.queryData.length;
         
         delete options.queryData;
         
@@ -2727,13 +2752,15 @@ function SuperController(options) {
             [HTTP2_HEADER_PATH]: options[':path'] 
         }, options.headers);
         
+        //newOptions.endStream = false;
         const req = client.request( newOptions );
         
 
-        //req.setEncoding('utf8');
-        let data = '';
+        
         req.on('response', (headers, flags) => {   });
         
+        req.setEncoding('utf8');
+        let data = '';
         req.on('data', (chunk) => { 
             data += chunk; 
         });
@@ -2759,21 +2786,23 @@ function SuperController(options) {
             //  - you are trying to query using: `enctype="multipart/form-data"`
             //  -
             if ( typeof(callback) != 'undefined' ) {
-
+                
                 callback(err)
 
             } else {
-                var data = {
+                var error = {
                     status    : 500,
                     error     : err.stack || err.message
                 };
 
-                self.emit('query#complete', data)
+                self.emit('query#complete', error)
             }
+            
+            return;
         });
         
         req.on('end', () => {   
-            
+            client.close();
             // exceptions filter
             if ( typeof(data) == 'string' && /^Unknown ALPN Protocol/.test(data) ) {
                 var err = {
@@ -2787,7 +2816,7 @@ function SuperController(options) {
                     self.emit('query#complete', err)
                 }
                 
-                client.close();         
+                //client.close();         
                 return
             }
             
@@ -2803,13 +2832,13 @@ function SuperController(options) {
                         }
                     }
                 }
-
+                
                 if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
                     callback(data)
                 } else {
                     callback( false, data )
                 }
-
+                
             } else {
                 if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
                     try {
@@ -2828,17 +2857,17 @@ function SuperController(options) {
                 } else {
                     self.emit('query#complete', false, data)
                 }
-            }
-            
-            client.close();
-            
+            }            
         });
                
         //req.end(options.queryData);
-
+        if (!/GET/i.test(options[':method']))
+            req.end(body);
+        
         
         return {
             onComplete  : function(cb) {
+                
                 self.once('query#complete', function(err, data){
                     client.close();  
                     if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
@@ -3178,6 +3207,8 @@ function SuperController(options) {
             if (typeof(next) != 'undefined')
                 next();
         }
+        
+        return;
     }
 
     // converting references to objects

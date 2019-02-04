@@ -64,12 +64,7 @@ function Server(options) {
             self.conf[self.appName] = {};
             self.conf[self.appName][self.env] = options.conf[self.appName][self.env];
             self.conf[self.appName][self.env].bundlesPath = options.conf[self.appName][self.env].bundlesPath;
-            self.conf[self.appName][self.env].modelsPath =  options.conf[self.appName][self.env].modelsPath;
-            // if (!self.conf[self.appName][self.env].server.request) {
-            //     self.conf[self.appName][self.env].server.request = {
-            //         isXMLRequest: false
-            //     }
-            // }
+            self.conf[self.appName][self.env].modelsPath =  options.conf[self.appName][self.env].modelsPath;            
         } else {
 
             //console.log("Running mode not handled yet..", self.appName, " VS ", self.bundles);
@@ -79,38 +74,10 @@ function Server(options) {
                 self.conf[apps[i]] = {};
                 self.conf[apps[i]][self.env] = options.conf[apps[i]][self.env];
                 self.conf[apps[i]][self.env].bundlesPath = options.conf[apps[i]][self.env].bundlesPath;
-                self.conf[apps[i]][self.env].modelsPath = options.conf[apps[i]][self.env].modelsPath;
-                // if (!self.conf[apps[i]][self.env].server.request) {
-                //     self.conf[apps[i]][self.env].server.request = {
-                //         isXMLRequest: false
-                //     }
-                // }
+                self.conf[apps[i]][self.env].modelsPath = options.conf[apps[i]][self.env].modelsPath;                
             }
         }
-
-        // getting server core config
-        // var statusCodes = null
-        //     , mime      = null;
-
-        // try {
-        //     var corePath = getPath('gina').core;
-        //     statusCodes = fs.readFileSync( _( corePath + '/status.codes') ).toString();
-        //     statusCodes = JSON.parse(statusCodes);
-        //     if ( typeof(statusCodes['_comment']) != 'undefined' )
-        //         delete statusCodes['_comment'];
-
-        //     mime  = fs.readFileSync(corePath + '/mime.types').toString();
-        //     mime  = JSON.parse(mime);
-        //     if ( typeof(mime['_comment']) != 'undefined' )
-        //         delete mime['_comment'];
-
-        //     self.conf.core.statusCodes  = statusCodes;
-        //     self.conf.core.mime         = mime
-
-        // } catch(err) {
-        //     console.error(err.stack||err.message);
-        //     process.exit(1)
-        // }
+        
 
         try {
             
@@ -182,24 +149,8 @@ function Server(options) {
             router.setServerInstance(instance);
         }
         
-        // var config                  = new Config()
-        //     , conf                  = config.getInstance(self.appName)
-        //     , serverCoreConf        = self.conf.core
-        // ;
-        
+
         onRequest()
-
-        // onRoutesLoaded( function(err) {//load all registered routes in routing.json
-        //     console.debug('[ ROUTING ][ '+ self.appName +' ] Routing loaded' /**+ '\n'+ JSON.stringify(self.routing, null, '\t')*/);
-
-        //     if ( hasViews(self.appName) ) {
-        //         lib.url(self.conf[self.appName][self.env], self.routing)
-        //     }
-
-        //     if (!err) {
-        //         onRequest()
-        //     }
-        // });
     }
 
 
@@ -665,7 +616,8 @@ function Server(options) {
                             if (cacheless) {
                                 // source maps integration for javascript & css
                                 if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') ) {
-                                    response.setHeader("X-SourceMap", pathname +'.map')
+                                    pathname = pathname +'.map'
+                                    response.setHeader("X-SourceMap", pathname)
                                 }
 
                                 // serve without cache
@@ -680,7 +632,8 @@ function Server(options) {
                             }
 
                             response.write(file, 'binary');
-                            response.end()
+                            response.end();
+                            console.info(request.method +' [200] '+ pathname);
                         } catch(err) {
                             throwError(response, 500, err.stack)
                         }
@@ -701,6 +654,7 @@ function Server(options) {
 
         // catch all (request urls)
         self.instance.all('*', function onInstance(request, response, next) {
+            
             
             request.setEncoding(self.conf[self.appName][self.env].encoding);  
             
@@ -1075,10 +1029,7 @@ function Server(options) {
                         })
                     })*/
                 } else {
-                    
-                    if ( /^http\/2/.test(self.conf[self.appName][self.env].server.protocol) ) {
-                        return  processRequestData(request, response, next);
-                    }
+                                       
 
                     request.on('data', function(chunk){ // for this to work, don't forget the name attr for you form elements
                         if ( typeof(request.body) == 'object') {
@@ -1091,7 +1042,8 @@ function Server(options) {
                         processRequestData(request, response, next)
                     });
 
-                    if (request.end) request.end();
+                    if (request.end) request.end();                    
+                    
 
                 } //EO if multipart
             }           
@@ -1176,7 +1128,7 @@ function Server(options) {
                 if ( typeof(request.query) != 'undefined' && request.query.count() > 0 ) {
                     request.get = request.query;
                 }
-                // else, wilol be matching route params against url context instead once route is identified
+                // else, will be matching route params against url context instead once route is identified
 
 
                 // cleaning
@@ -1285,14 +1237,13 @@ function Server(options) {
     var getHead = function(file) {
         var s       = file.split(/\./);
         var ext     = s[s.length-1];
-        var type    = undefined;
+        var type    = null;
         var mime    = self.conf[self.appName][self.env].server.coreConfiguration.mime;
 
-        if( typeof(mime[ext]) != 'undefiend' ) {
+        if( typeof(mime[ext]) != 'undefined' ) {
             type = mime[ext];
-            if (!type) {
-                console.warn('[ '+file+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Replacing with `plain/text` ')
-            }
+        } else {
+            console.warn('[ '+file+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Replacing with `plain/text` ')
         }
         return type || 'plain/text'
     }
@@ -1306,7 +1257,8 @@ function Server(options) {
             self.conf = conf;
         }
 
-        var pathname    = url.parse(req.url, true).pathname;
+        //var pathname    = url.parse(req.url, true).pathname;
+        var pathname    = req.url;
         var bundle      = self.appName; // by default
 
         // finding bundle
@@ -1436,7 +1388,7 @@ function Server(options) {
         } catch (err) {
             throwError(res, 500, err.stack, next)
         }
-                
+        var isMethodAllowed = null;        
         out:
             for (var name in routing) {
                 if (typeof(routing[name]['param']) == 'undefined')
@@ -1444,7 +1396,7 @@ function Server(options) {
 
                 if (routing[name].bundle != bundle) continue;
                 // method filter    
-                method = routing[name].method;             
+                method = routing[name].method;
                 if ( /\,/.test( method ) && reMethod.test(method) ) {
                     method = req.method
                 }               
@@ -1458,43 +1410,30 @@ function Server(options) {
                     url                 : unescape(pathname), /// avoid %20
                     rule                : routing[name].originalRule || name,
                     param               : JSON.parse(JSON.stringify(routing[name].param)),
-                    middleware          : routing[name].middleware,
+                    middleware          : JSON.parse(JSON.stringify(routing[name].middleware)),
                     bundle              : routing[name].bundle,
                     isXMLRequest        : req.isXMLRequest,
                     isWithCredentials   : req.isWithCredentials
                 };
 
                 //Parsing for the right url.
-                try {
+                try {                    
                     isRoute = routingUtils.compareUrls(params, routing[name].url, req);
+                        
                 } catch (err) {
                     throwError(res, 500, 'Rule [ '+name+' ] needs your attention.\n'+ err.stack);
                     break;
                 }
 
-                if (pathname == routing[name].url || isRoute.past) {
+                if ( pathname == routing[name].url || isRoute.past ) {
 
-                    //console.debug('Server is about to route to '+ pathname);                    
-                    //_routing[name] = JSON.parse(JSON.stringify(routing[name]));    
-                    _routing = req.routing;                
-                    if (!_routing.method && req.method) { // setting client request method if no method is defined in routing
-                        _routing.method  = req.method
-                    } else if (!_routing.method) { // by default
-                        _routing.method = 'GET'
-                    }
-
-                    var allowed = (typeof(_routing.method) == 'undefined' || _routing.method.length > 0 || _routing.method.indexOf(req.method) != -1)
-                    if (!allowed) {
-                        throwError(res, 405, 'Method Not Allowed for [' + params.bundle + '] => ' + req.url);
+                    _routing = req.routing;      
+                    // comparing routing method VS request.url method
+                    isMethodAllowed = reMethod.test(_routing.method);
+                    if (!isMethodAllowed) {
+                        throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.url+'` is expecting `' + _routing.method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
                         break;
                     } else {
-
-
-                        // comparing routing method VS request.url method
-                        if ( _routing.method.toLowerCase() != req.method.toLowerCase() ) {
-                            throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.url+'` is expecting `' + _routing.method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
-                            break
-                        }
 
                         // handling GET method exception - if no param found
                         var methods = ['get', 'delete'], method = req.method.toLowerCase();
@@ -1502,7 +1441,6 @@ function Server(options) {
                         if (
                             methods.indexOf(method) > -1 && typeof(req.query) != 'undefined' && req.query.count() == 0
                             || methods.indexOf(method) > -1 && typeof(req.query) == 'undefined' && typeof(req.params) != 'undefined' && req.params.count() > 1
-                            //|| methods.indexOf(method) > -1 && typeof(req.query) == 'undefined' && typeof(req.params) != 'undefined' && req.params.count() > 0
                         ) {
                             p = 0;
                             for (var parameter in req.params) {
@@ -1586,255 +1524,11 @@ function Server(options) {
         } else {
             throwError(res, 404, 'Page not found: \n' + pathname, next)
         }
-            
-        /**
-        if (!matched) {
-            // find targeted bundle
-            var allowed     = null
-                , conf      = null
-                , uri       = ''
-                , score     = 0
-                , tmpKey    = ''
-                , key       = ''
-                , filename  = ''
-                , conf      = self.conf[bundle][self.env]
-                , wroot     = conf.server.webroot;
-
-            //webroot test
-            if (wroot != '/') {
-                uri = (pathname.replace(wroot, '')).split('/');
-                for (var s in conf.content.statics) {
-                    s = (s.substr(0,1) == '/') ? s.substr(1) : s;
-                    if ( (new RegExp('^/'+s)).test( pathname ) ) {
-                        score = s.length;
-                        if ( score > 0 && score > tmpKey.length) {
-                            tmpKey = s;
-                            break; // added on 2018, december 30th
-                        }
-                    }
-                }
-
-                if ( typeof(conf.content.statics) == 'undefined' || typeof(conf.content.statics[tmpKey]) != 'undefined' ) {
-                    key = tmpKey
-                } else {
-                    key = pathname
-                }
-
-                // we add it into statics
-                if ( withViews && typeof(conf.content.statics[key]) == 'undefined' && conf.content.templates._common.templates != conf.content.templates._common.html) {
-                    conf.content.statics[key] = conf.content.templates._common.templates +'/'+ uri.join('/')
-                } else if (withViews && typeof(conf.content.statics[key]) == 'undefined') {
-                    conf.content.statics[key] = conf.content.templates._common.html +'/'+ uri.join('/') // normal case
-                }
-
-                uri = pathname.split('/');                
-
-            } else {
-
-                for (var s in conf.content.statics) {
-                    s = (s.substr(0,1) == '/') ? s.substr(1) : s;
-                    if ( (new RegExp('^/'+s)).test( pathname ) ) {
-                        score = s.length;
-                        if ( score > 0 && score > tmpKey.length) {
-                            tmpKey = s;
-                            break; // added on 2018, december 30th
-                        }
-                    }
-                }
-                uri = pathname.split('/');
-
-                if ( typeof(conf.content.statics) == 'undefined' || typeof(conf.content.statics[tmpKey]) != 'undefined' ) {
-                    key = tmpKey
-                } else {
-                    uri.splice(0, 1);
-                    key = tmpKey + '/'+ uri.join('/')
-                }
-            }
-
-            //static filter
-            if ( typeof(conf.content.statics) != 'undefined'
-                && typeof(conf.content.statics[key]) != 'undefined'
-                && typeof(key) != 'undefined'
-                && req.url === wroot + req.url.replace(wroot, '')
-            ) {
-                // No sessions for statics
-                if (req.session) {
-                    delete req['session']
-                }
-
-                uri = uri.join('/');
-                //if ( !/\.(.*)$/.test(key) ) {
-                if ( /\/$/.test(key) ) {
-                    filename = _(path.join(conf.content.statics[key]), true)
-                } else {
-
-                    if ( /\//.test(key) ) {
-                        filename = _(path.join(conf.content.statics[key], uri.replace((new RegExp('(/'+key+'|'+key +')')), '')), true)
-                    } else {
-                        // !!! this is adding a slash in the end .. not good !
-                        filename = _(path.join(conf.content.statics[key], uri.replace(key, '')), true)
-                        if (filename.substr(filename.length-1, 1) == '/' ) {
-                            filename = filename.substr(0, filename.length-1)
-                        }
-                    }
-                }
-
-                fs.exists(filename, function(exists) {
-
-                    if (exists) {
-
-                        if (fs.statSync(filename).isDirectory()) filename += '/index.html';
-
-                        if (cacheless) {
-                            delete require.cache[require.resolve(filename)]
-                        }
-
-                        fs.readFile(filename, "binary", function(err, file) {
-                            if (err) {
-                                throwError(res, 404, 'Page not found: \n' + filename, next);
-                                return
-                            }
-                            if (!res.headersSent) {
-                                try {
-                                    res.setHeader("Content-Type", getHead(filename));
-                                    // adding handler `gina.ready(...)` wrapper
-                                    var conf            = getContext('gina').config
-                                        , hanlersPath   = self.conf[conf.bundle][conf.env].content.statics.handlers
-                                    ;
-
-                                    if ( new RegExp('^'+ hanlersPath).test(filename) ) {
-                                        file = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));'
-                                    }
-
-                                    if (cacheless) {
-                                        // source maps integration for javascript & css
-                                        if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') ) {
-                                            res.setHeader("X-SourceMap", pathname +'.map')
-                                        }
-
-                                        // serve without cache
-                                        res.writeHead(200, {
-                                            'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
-                                            'Pragma': 'no-cache',
-                                            'Expires': '0'
-                                        });
-
-                                    } else {
-                                        res.writeHead(200)
-                                    }
-
-                                    res.write(file, 'binary');
-                                    res.end()
-                                } catch(err) {
-                                    throwError(res, 500, err.stack)
-                                }
-                            }
-                        });
-                    } else {
-                        // else
-                        if (wroot.substr(wroot.length-1,1) == '/') {
-                            wroot = wroot.substr(wroot.length-1,1).replace('/', '')
-                        }
-                        // web services case ... when you hit from a web browser
-                        if (pathname === wroot + '/favicon.ico' && !withViews && !res.headersSent ) {
-                            res.writeHead(200, {'Content-Type': 'image/x-icon'} );
-                            res.end()
-                        }
-
-                        if (!res.headersSent)
-                            throwError(res, 404, 'Page not found: \n' + pathname, next)
-
-                    }//EO exists
-                })//EO static filter
-
-            } else if ( // might be rendering an existing static html page
-                /\.html$/.test(key)
-                && req.url === wroot + req.url.replace(wroot, '')
-            ) {
-                uri = uri.join('/');
-                // publishing from views
-                if ( /\//.test(key) ) {
-                    filename = _(path.join(conf.content.statics['html'], uri.replace((new RegExp('(/'+key+'|'+key +')')), '')), true)
-                } else {
-                    filename = _(path.join(conf.content.statics['html'], uri.replace(key, '')), true)
-                }
-
-                fs.exists(filename, function(exists) {
-
-                    if(exists) {
-
-                        if (fs.statSync(filename).isDirectory()) filename += 'index.html';
-
-                        if (cacheless) {
-                            delete require.cache[require.resolve(filename)]
-                        }
-
-                        fs.readFile(filename, "binary", function(err, file) {
-                            if (err) {
-                                throwError(res, 404, 'Page not found: \n' + filename, next);
-                                return
-                            }
-                            if (!res.headersSent) {
-                                try {
-                                    res.setHeader("Content-Type", getHead(filename));
-                                    if (cacheless) {
-                                        // serve without cache
-                                        res.writeHead(200, {
-                                            'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
-                                            'Pragma': 'no-cache',
-                                            'Expires': '0'
-                                        });
-
-                                    } else {
-                                        res.writeHead(200)
-                                    }
-
-                                    res.write(file, 'binary');
-                                    res.end()
-                                } catch(err) {
-                                    throwError(res, 500, err.stack)
-                                }
-                            }
-                        });
-                    } else {
-                        // else
-                        if (wroot.substr(wroot.length-1,1) == '/') {
-                            wroot = wroot.substr(wroot.length-1,1).replace('/', '')
-                        }
-                        // web services case ... when you hit from a web browser
-                        if (pathname === wroot + '/favicon.ico' && !withViews && !res.headersSent ) {
-                            res.writeHead(200, {'Content-Type': 'image/x-icon'} );
-                            res.end()
-                        }
-
-                        if (!res.headersSent)
-                            throwError(res, 404, 'Page not found: \n' + pathname, next)
-
-                    }//EO exists
-                })//EO static filter
-
-            } else {
-                // else
-                if (wroot.substr(wroot.length-1,1) == '/') {
-                    wroot = wroot.substr(wroot.length-1,1).replace('/', '')
-                }
-
-                if (pathname === wroot + '/favicon.ico' && !withViews && !res.headersSent ) {
-                    res.writeHead(200, {'Content-Type': 'image/x-icon'} );
-                    res.end()
-                }
-                if (!res.headersSent)
-                    throwError(res, 404, 'Page not found: \n' + pathname, next)
-            }
-
-        } // EO No match
-        */
     }
 
     var throwError = function(res, code, msg, next) {
         var withViews       = local.hasViews[self.appName] || hasViews(self.appName);
         var isUsingTemplate = self.conf[self.appName][self.env].template;
-        //var isXMLRequest    = self.conf[self.appName][self.env].server.request.isXMLRequest;
         var isXMLRequest    = local.request.isXMLRequest;
         
         var err = null;

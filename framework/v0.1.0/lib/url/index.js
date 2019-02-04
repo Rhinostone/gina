@@ -1,3 +1,4 @@
+// Deprecated
 function Url(env, routes) {
     var self = this;
 

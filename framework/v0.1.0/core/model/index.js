@@ -122,7 +122,7 @@ function Model(namespace, _config) {
             var connectorPath   = local.connectorPath = _(GINA_FRAMEWORK_DIR +'/core/connectors/'+ self.connector);
             var modelPath       = local.modelPath = _(conf.path + '/' + modelDirName);
             var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
-            console.debug('[ MODEL ][ ' + model +' ] Scanning model entities: ', entitiesPath +' (existing path ? '+ fs.existsSync(entitiesPath) );
+            console.debug('[ MODEL ][ ' + model +' ] Scanning model entities: ', entitiesPath +' - Existing path ? '+ fs.existsSync(entitiesPath) );
             if (!fs.existsSync(entitiesPath)) {
                 fs.mkdirSync(entitiesPath) // creating empty path
             }
