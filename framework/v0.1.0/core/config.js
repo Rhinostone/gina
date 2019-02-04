@@ -894,25 +894,51 @@ function Config(opt) {
         if (cacheless || typeof(reload) != 'undefined' && reload) {
                         
             //setting app param
-            var r = null, rLen = null;
+            var r = null, rLen = null, urls = null;
+            // creating default rule for auto redirect: / => /webroot
+            if (
+                hasWebRoot 
+                && webrootAutoredirect 
+                && wroot != '/'
+                && typeof(routing['webroot@'+ bundle]) == 'undefined'
+            ) {                
+                routing['webroot@'+ bundle] = {
+                    //url: wroot +','+ wroot.substring(0, wroot.length-1),
+                    url: '/,'+ wroot.substring(0, wroot.length-1),
+                    method: 'GET, POST, PUT, DELETE, HEAD',
+                    middleware: [],
+                    param: {
+                        control: "redirect",
+                        ignoreWebRoot: true,
+                        path: wroot,
+                        code: 302
+                    },
+                    bundle: bundle
+                }
+            } else if (
+                hasWebRoot 
+                && !webrootAutoredirect 
+                && wroot != '/'
+                && typeof(routing['webroot@'+ bundle]) == 'undefined'
+            ) {
+                routing['webroot@'+ bundle] = {
+                    //url: wroot +','+ wroot.substring(0, wroot.length-1),
+                    url: wroot.substring(0, wroot.length-1),
+                    method: 'GET, POST, PUT, DELETE, HEAD',
+                    middleware: [],
+                    param: {
+                        control: "redirect",
+                        ignoreWebRoot: true,
+                        path: wroot,
+                        code: 302
+                    },
+                    bundle: bundle
+                }
+            }
+
             for (var rule in routing) {
                 
-                if ( typeof(routing[rule].method) == 'undefined' || !routing[rule].method )
-                    routing[rule].method = 'GET';
-                                
-                routing[rule +'@'+ bundle] = routing[rule];
-                delete routing[rule];
-                
-                
-                
-                // link route & template if hasViews
-                if ( hasViews && /get/i.test(routing[rule +'@'+ bundle].method) && typeof(files['templates'][rule]) == 'undefined' ) {
-                    files['templates'][rule] = {}
-                }
-
-                
-                file        = rule;
-                rule        = rule +'@'+ bundle;
+                if (rule == 'webroot@'+ bundle) continue;
                 
                 localWroot  = wroot; // by default   
                       
@@ -928,9 +954,46 @@ function Config(opt) {
                     }
                      
                     conf[routing[rule].bundle][env].server.webroot = localWroot               
+                } else {
+                    routing[rule].bundle =  bundle;
                 }
-                localHasWebRoot = (localWroot.length >1) ? true : false;       
-               
+                localHasWebRoot = (localWroot.length >1) ? true : false;     
+                
+                // default method
+                if ( typeof(routing[rule].method) == 'undefined' || !routing[rule].method )
+                    routing[rule].method = 'GET';
+                
+                if ( /\,/.test(routing[rule].method) )
+                    routing[rule].method = routing[rule].method.replace(/\s+/g, '');     
+                    
+                // default middleware
+                if ( typeof(routing[rule].middleware) == 'undefined' || !routing[rule].middleware )
+                    routing[rule].middleware = [];
+                
+                // default url
+                if ( typeof(routing[rule].url) == 'undefined' || !routing[rule].url )
+                    routing[rule].url = '/'+ rule;
+                 
+                try {
+                    if ( /\,/.test(routing[rule].url) )
+                        routing[rule].url = routing[rule].url.replace(/\s+/g, '');
+                    
+                } catch (err) {
+                    throw new Error('[ ROUTING ] Error found in your route description: \nbundle: `'+ routing[rule].bundle +'`\nroute: `'+ rule +'`\nurl: `'+ routing[rule].url +'`.\nPlease check your routing configuration: `'+ routing[rule].bundle +'/config/'+ name+'.json` or `'+ routing[rule].bundle +'/config/'+ name+'.'+ env +'.json`');    
+                }                   
+                                                
+                // link route & template if hasViews - inly for GET methods
+                if ( hasViews && /get/i.test(routing[rule].method) && typeof(files['templates'][rule]) == 'undefined' ) {
+                    files['templates'][rule] = {}
+                }
+
+                routing[rule +'@'+ bundle] = routing[rule];
+                delete routing[rule];
+                
+                // default file name
+                file        = rule;
+                rule        = rule +'@'+ bundle;                
+                  
 
                 routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse lookup
                 // route file
@@ -945,16 +1008,27 @@ function Config(opt) {
                     routing[rule].param.path = localWroot + ( /^\//.test(routing[rule].param.path) ) ? routing[rule].param.path.substr(1) : routing[rule].param.path
                 }
                 
-                if ( /string/.test( typeof(routing[rule].url) ) ) {
+                //if ( /string/.test( typeof(routing[rule].url) ) ) {
                     
-                    if ( !routing[rule].url.length || routing[rule].url.length == 1) {// adding localWroot if url is missing
-                        routing[rule].url = localWroot
-                    } else {
-                        routing[rule].url = localWroot + ( /^\//.test(routing[rule].url) ) ? routing[rule].url.substr(1) : routing[rule].url
-                    }
-                    // ignoreWebRoot test
+                    // if ( !routing[rule].url.length || routing[rule].url.length == 1) {// adding localWroot if url is missing
+                    //     routing[rule].url = localWroot
+                    // } else {
+                    //     routing[rule].url = localWroot + ( /^\//.test(routing[rule].url) ) ? routing[rule].url.substr(1) : routing[rule].url
+                    // }
+                    // ignoreWebRoot test to rewrite url webroot
                     if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
-                        routing[rule].url = (routing[rule].url.length > 1) ? localWroot + routing[rule].url : routing[rule].url
+                        //routing[rule].url = (routing[rule].url.length > 1) ? localWroot + routing[rule].url : routing[rule].url;
+                        if ( /\,/.test(routing[rule].url) ) {
+                            urls = routing[rule].url.split(/\,/g);                    
+                            r = 0; rLen = urls.length;
+                            for (; r < rLen; ++r) {                        
+                                //urls[r] = (urls[r].length > 1) ? localWroot + urls[r].substr(1) : urls[r];
+                                urls[r] = ( localHasWebRoot && urls[r].length > 1) ? localWroot + urls[r].substr(1) : ((localHasWebRoot && urls[r].length == 1) ? localWroot : urls[r]);
+                            }
+                            routing[rule].url = urls.join(',');                            
+                        } else {                 
+                            routing[rule].url = ( localHasWebRoot && routing[rule].url.length > 1) ? localWroot + routing[rule].url.substr(1) : ((localHasWebRoot && routing[rule].url.length == 1) ? localWroot : routing[rule].url);
+                        }
                     }
                         
                     if (routing[rule].bundle != bundle) { // allowing to override bundle name in routing.json
@@ -981,25 +1055,25 @@ function Config(opt) {
                             routing[rule].url += '/'
                     }*/
 
-                } else {
-                    r = 0;
-                    rLen = routing[rule].url.length;
-                    for (; r < rLen; ++r) {
-                        if (routing[rule].url[r].length > 1 && routing[rule].url[r].substr(0,1) != '/') {
-                            routing[rule].url[r] = '/' + routing[rule].url[r]
-                        } else {
-                            if (localWroot.substr(localWroot.length-1,1) == '/') {
-                                localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
-                            }
-                        }
+                // } else {
+                //     r = 0;
+                //     rLen = routing[rule].url.length;
+                //     for (; r < rLen; ++r) {
+                //         if (routing[rule].url[r].length > 1 && routing[rule].url[r].substr(0,1) != '/') {
+                //             routing[rule].url[r] = '/' + routing[rule].url[r]
+                //         } else {
+                //             if (localWroot.substr(localWroot.length-1,1) == '/') {
+                //                 localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
+                //             }
+                //         }
 
-                        if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
-                            routing[rule].url[r] = localWroot + routing[rule].url[r]
-                        } else if (!routing[rule].url.length) {
-                            routing[rule].url += '/'
-                        }
-                    }
-                }
+                //         if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
+                //             routing[rule].url[r] = localWroot + routing[rule].url[r]
+                //         } else if (!routing[rule].url.length) {
+                //             routing[rule].url += '/'
+                //         }
+                //     }
+                // }
             }
 
             files[name] = collectedRules = merge(collectedRules, ((isStandalone && bundle != self.startingApp ) ? standaloneRouting : routing), true);
@@ -1010,32 +1084,29 @@ function Config(opt) {
             for (; r < rLen; ++r) { // for each rule ( originalRules[r] )
                 files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
             }
-            // creating rule for auto redirect: / => /webroot
-            if (localHasWebRoot && webrootAutoredirect && localHasWebRoot != '/') {
-                files[name]["redirect@webroot"] = {
-                    url: "/",
-                    method: "GET",
-                    param: {
-                        control: "redirect",
-                        path: localWroot,
-                        code: 302
-                    },
-                    bundle: (files[name].bundle) ? files[name].bundle : bundle
-                }
-            }
-
+            
             self.setRouting(bundle, env, files[name]);
             // reverse routing
             for (var rule in files[name]) {
-                if ( typeof(files[name][rule].url) != 'object' ) {
-                    reverseRouting[files[name][rule].url] = rule
-                } else {
-                    r = 0;
-                    rLen = files[name][rule].url.length;
-                    for (; r < rLen; ++r) {
-                        reverseRouting[files[name][rule].url[r]] = rule
+                                
+                if ( /\,/.test(files[name][rule].url) ) { 
+                    urls = files[name][rule].url.split(/\,/g);                    
+                    r = 0; rLen = urls.length;
+                    for (; r < rLen; ++r) {                        
+                        reverseRouting[ files[name][rule][urls[r]] ] = rule
                     }
+                } else {
+                    reverseRouting[ files[name][rule].url ] = rule
                 }
+                // if ( typeof(files[name][rule].url) != 'object' ) {
+                //     reverseRouting[files[name][rule].url] = rule
+                // } else {
+                //     r = 0;
+                //     rLen = files[name][rule].url.length;
+                //     for (; r < rLen; ++r) {
+                //         reverseRouting[files[name][rule].url[r]] = rule
+                //     }
+                // }
             }
             self.setReverseRouting(bundle, env, reverseRouting);            
         }
@@ -1624,7 +1695,10 @@ function Config(opt) {
         self.envConf[bundle][env].content.routing = routing;
     }
 
-    this.getRouting = function(bundle, env) {        
+    this.getRouting = function(bundle, env) { 
+        if (typeof(env) == 'undefined') {
+            env = self.env || self.Env.get() 
+        }       
         var routing = self.envConf[bundle][env].content.routing;
 
         return routing;

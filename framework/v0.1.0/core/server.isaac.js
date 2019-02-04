@@ -139,15 +139,6 @@ function ServerEngineClass(options) {
             if (GINA_ENV_IS_DEV) {
                 refreshCore()
             }
-            
-            if ( typeof(request.headers.body) != 'undefined' ) {
-                
-                try {
-                    request.body =  JSON.parse(decodeURIComponent(request.headers.body));                    
-                } catch (err) {
-                    console.error(err)
-                }
-            }
                                       
             if (/^\*$/.test(path) || path == request.url) {
                 request.params  = {};
@@ -182,7 +173,8 @@ function ServerEngineClass(options) {
                             a[1] = ( /^(true|on)$/i.test(a[1]) ) ? true : false;
                         
                         request.query[ a[0] ] = a[1]                        
-                    }                  
+                    }
+                    request.url = request.url.replace(/\?.*/, '')                  
                 } else {
                     request.params[0] = request.url
                 }

@@ -39,7 +39,9 @@ window['onGinaLoaded']  = function(gina) {
             /**@js_externs version*/
             version : '{{ page.environment.version }}',
             /**@js_externs webroot*/
-            'webroot' : '{{ page.environment.webroot }}'
+            'webroot' : '{{ page.environment.webroot }}',
+            /**@js_externs protocol*/
+            'protocol' : '{{ page.environment.protocol }}'
         };
 
         

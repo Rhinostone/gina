@@ -123,9 +123,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var $el     = null, name = null;
             var url     = null;
             var proceed = null, evt = null;
+            var i = null, len = null;
 
-
-            for (var i = 0, len = $els.length; i < len; ++i) {
+            i = 0; len = $els.length;
+            for (;i < len; ++i) {
                 $el     = $els[i];
                 name    = $el.getAttribute(attr);
                 if ( $el.tagName == 'A' ) {
@@ -200,8 +201,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                     // }
                                     
                                     popinBind(e);
-                                    if (!$popin.isOpen);
+                                    if (!$popin.isOpen) {                                        
                                         popinOpen($popin.name);
+                                    }
+                                        
                                 }
                             });
 
@@ -213,11 +216,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                         // bind child elements
                         var childNodes = $el.childNodes;
-
-                        if (childNodes.length > 0) {
-                            for (var n = 0, nLen = childNodes.length; n < nLen; ++n) {
-                                if (typeof (childNodes[n].tagName) != 'undefined') {
-                                    proxyClick(childNodes[n], $el, evt)
+                        var l = 0; lLen = childNodes.length;
+                        if (lLen > 0) {
+                            for(; l < lLen; ++l) {
+                                if (typeof (childNodes[l].tagName) != 'undefined') {
+                                    proxyClick(childNodes[l], $el, evt)
                                 }
                             }
                         }
@@ -344,6 +347,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     
             };
             
+            var i       = null
+                , b     = null
+                , len   = null
+            ;
             // bind overlay on click
             if (!$popin.isOpen) {                
                 var $overlay = instance.target.childNodes[0];
@@ -356,33 +363,46 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         removeListener(gina, event.target, 'click');
         
                         // binding popin close
-                        var $close = [], $buttonsTMP = [];
-        
+                        var $close          = []
+                            , $buttonsTMP   = []                            
+                        ;
+                        
+                        i = 0;        
                         $buttonsTMP = $el.getElementsByTagName('button');
-                        if ( $buttonsTMP.length > 0 ) {
-                            for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                                if ( /gina-popin-close/.test($buttonsTMP[b].className) )
-                                    $close.push($buttonsTMP[b])
+                        b = 0; len = $buttonsTMP.length;
+                        if ( len > 0 ) {
+                            for(; b < len; ++b) {
+                                if ( /gina-popin-close/.test($buttonsTMP[b].className) ) {
+                                    $close[i] = $buttonsTMP[b];
+                                    ++i
+                                }   
                             }
                         }
         
                         $buttonsTMP = $el.getElementsByTagName('div');
-                        if ( $buttonsTMP.length > 0 ) {
-                            for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                                if ( /gina-popin-close/.test($buttonsTMP[b].className) )
-                                    $close.push($buttonsTMP[b])
+                        b = 0; len = $buttonsTMP.length;
+                        if ( len > 0 ) {
+                            for(; b < len; ++b) {
+                                if ( /gina-popin-close/.test($buttonsTMP[b].className) ) {
+                                    $close[i] = $buttonsTMP[b];
+                                    ++i
+                                }                                    
                             }
                         }
         
                         $buttonsTMP = $el.getElementsByTagName('a');
-                        if ( $buttonsTMP.length > 0 ) {
-                            for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                                if ( /gina-popin-close/.test($buttonsTMP[b].className) )
-                                    $close.push($buttonsTMP[b])
+                        b = 0; len = $buttonsTMP.length;
+                        if ( len > 0 ) {
+                            for(; b < len; ++b) {
+                                if ( /gina-popin-close/.test($buttonsTMP[b].className) ) {
+                                    $close[i] = $buttonsTMP[b];
+                                    ++i
+                                }   
                             }
                         }
         
-                        for (var b = 0, len = $close.length; b < len; ++b) {
+                        b = 0; len = $close.length;
+                        for (; b < len; ++b) {
                             removeListener(gina, $close[b], $close[b].getAttribute('id') )
                         }
         
@@ -396,7 +416,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             if ( /<form/i.test($el.innerHTML) && typeof($validator) != 'undefined' ) {
                 var _id = null;
                 var $forms = $el.getElementsByTagName('form');
-                for (var i = 0, len = $forms.length; i < len; ++i) {
+                i = 0; len = $forms.length;
+                for(; i < len; ++i) {
 
                     if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
                         _id = $forms[i].getAttribute('id') || 'form.' + uuid.v4();
@@ -420,29 +441,38 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             // binding popin close & links (& its target attributes)
             var $close          = []
                 , $buttonsTMP   = []
-                , $link         = [];
+                , $link         = []
+            ;
 
             $buttonsTMP = $el.getElementsByTagName('button');
+            i = 0; b = 0; len = $buttonsTMP.length;
             if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ( /gina-popin-close/.test($buttonsTMP[b].className) )
-                        $close.push($buttonsTMP[b])
+                for(; b < len; ++b) {
+                    if ( /gina-popin-close/.test($buttonsTMP[b].className) ) {
+                        $close[i] = $buttonsTMP[b];
+                        ++i
+                    }                        
                 }
             }
 
             $buttonsTMP = $el.getElementsByTagName('div');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ( /gina-popin-close/.test($buttonsTMP[b].className) )
-                        $close.push($buttonsTMP[b])
+            b = 0; len = $buttonsTMP.length;
+            if ( len > 0 ) {
+                for(; b < len; ++b) {
+                    if ( /gina-popin-close/.test($buttonsTMP[b].className) ) {
+                        $close[i] = $buttonsTMP[b];
+                        ++i;
+                    }                        
                 }
             }
 
             $buttonsTMP = $el.getElementsByTagName('a');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+            b = 0; len = $buttonsTMP.length;
+            if ( len > 0 ) {
+                for(; b < len; ++b) {
                     if ( /gina-popin-close/.test($buttonsTMP[b].className) ) {
-                        $close.push($buttonsTMP[b]);
+                        $close[i] = $buttonsTMP[b];
+                        ++i;
                         continue
                     }
                     
@@ -455,7 +485,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             
             var onclickAttribute = null, evt = null;
             // close events
-            for (var b = 0, len = $close.length; b < len; ++b) {
+            b = 0; len = $close.length;
+            for (; b < len; ++b) {
                 if ($close[b].tagName == 'A') {
                     onclickAttribute = $close[b].getAttribute('onclick');
                 }
@@ -487,13 +518,14 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             }
             
             // link events
-            for (var l = 0, lLen = $link.length; l < lLen; ++l) {
+            i = 0; len = $link.length;
+            for(; i < len; ++i) {
                 
-                // onclickAttribute = $link[l].getAttribute('onclick');
+                // onclickAttribute = $link[i].getAttribute('onclick');
 
-                // if ( !onclickAttribute && !$link[l].target ) {
-                //     $link[l].setAttribute('onclick', 'return false;')
-                // } else if ( typeof(onclickAttribute) != 'undefined' && !$link[l].target && !/return false/.test(onclickAttribute)) {
+                // if ( !onclickAttribute && !$link[i].target ) {
+                //     $link[i].setAttribute('onclick', 'return false;')
+                // } else if ( typeof(onclickAttribute) != 'undefined' && !$link[i].target && !/return false/.test(onclickAttribute)) {
                 //     if ( /\;$/.test(onclickAttribute) ) {
                 //         onclickAttribute += 'return false;'
                 //     } else {
@@ -501,19 +533,19 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 //     }
                 // }
 
-                if (!$link[l]['id']) {
+                if (!$link[i]['id']) {
 
                     evt = 'popin.link.'+ uuid.v4();
-                    $link[l]['id'] = evt;
-                    $link[l].setAttribute( 'id', evt);
+                    $link[i]['id'] = evt;
+                    $link[i].setAttribute( 'id', evt);
 
                 } else {
-                    evt = $link[l]['id'];
+                    evt = $link[i]['id'];
                 }               
 
 
-                if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $link[l].id ) {
-                    register('link', evt, $link[l])
+                if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $link[i].id ) {
+                    register('link', evt, $link[i])
                 }
             }
             
@@ -522,7 +554,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         function updateToolbar(result, resultIsObject) {
             // update toolbar errors
             
-            if ( gina && typeof(window.ginaToolbar) == "object" && typeof(result) != 'undefined' && typeof(resultIsObject) != 'undefined' && result ) {
+            if ( gina && typeof(window.ginaToolbar) == 'object' && typeof(result) != 'undefined' && typeof(resultIsObject) != 'undefined' && result ) {
                 
                 var XHRData = result;
                 
@@ -548,7 +580,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     }
                         
                     XHRData.isXHRViewData = true;
-                    ginaToolbar.update("data-xhr", XHRData )
+                    ginaToolbar.update('data-xhr', XHRData )
                 } catch (err) {
                     throw err
                 }
@@ -561,20 +593,19 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var XHRData = null;            
             if ( typeof(result) == 'string' && /\<(.*)\>/.test(result) ) {
                 // converting Element to DOM object
-                XHRData = new DOMParser().parseFromString(result, "text/html").getElementById('gina-without-layout-xhr-data');               
+                XHRData = new DOMParser().parseFromString(result, 'text/html').getElementById('gina-without-layout-xhr-data');               
             } else {
                 XHRData = document.getElementById('gina-without-layout-xhr-data');
             }
             
-            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+            if ( gina && typeof(window.ginaToolbar) == 'object' && XHRData ) {
                 try {
 
                     if ( typeof(XHRData.value) != 'undefined' && XHRData.value ) {
                         XHRData = JSON.parse( decodeURIComponent( XHRData.value ) );
                         // reset data-xhr
-                        //ginaToolbar.update("data-xhr", null);
                         XHRData.isXHRViewData = true;
-                        ginaToolbar.update("data-xhr", XHRData);
+                        ginaToolbar.update('data-xhr', XHRData);
                     }
 
                 } catch (err) {
@@ -586,12 +617,12 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var XHRView = null;
             if ( typeof(result) == 'string' && /\<(.*)\>/.test(result) ) {                
                 // converting Element to DOM object
-                XHRView = new DOMParser().parseFromString(result, "text/html").getElementById('gina-without-layout-xhr-view');                
+                XHRView = new DOMParser().parseFromString(result, 'text/html').getElementById('gina-without-layout-xhr-view');                
             } else {
                 XHRView = document.getElementById('gina-without-layout-xhr-view');
             }
             
-            if ( gina && typeof(window.ginaToolbar) == "object" && XHRView ) {
+            if ( gina && typeof(window.ginaToolbar) == 'object' && XHRView ) {
                 try {
 
                     if ( typeof(XHRView.value) != 'undefined' && XHRView.value ) {
@@ -599,11 +630,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         XHRView = JSON.parse( decodeURIComponent( XHRView.value ) );                        
                         // reset data-xhr
                         //ginaToolbar.update("view-xhr", null);
-                        ginaToolbar.update("view-xhr", XHRView);
+                        ginaToolbar.update('view-xhr', XHRView);
                     }
 
                     // popin content
-                    ginaToolbar.update("el-xhr", $popin.id);
+                    ginaToolbar.update('el-xhr', $popin.id);
 
                 } catch (err) {
                     throw err

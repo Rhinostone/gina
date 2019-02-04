@@ -563,7 +563,7 @@ function ValidatorPlugin(rules, data, formId) {
         options.url     = url;
 
         // to upload, use `multipart/form-data` for `enctype`
-        var enctype = $target.getAttribute('enctype');
+        var enctype = $target.getAttribute('enctype') || options.headers['Content-Type'];
                 
 
         if ( options.withCredentials ) {
@@ -603,7 +603,7 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
 
-        // setting up headers -    all but Content-Type ; it will be set right before .send() si called
+        // setting up headers -    all but Content-Type ; it will be set right before .send() is called
         for (var hearder in options.headers) {
              //if ( hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '') {
              //    options.headers[hearder] = enctype

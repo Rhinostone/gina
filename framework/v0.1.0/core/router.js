@@ -8,14 +8,13 @@
 
 
 //Imports.
-
-var url                 = require('url')
-    , fs                = require('fs')
+var fs                = require('fs')
     
     , lib               = require('./../lib')
     , console           = lib.logger
     , inherits          = lib.inherits
     , merge             = lib.merge
+    
     , SuperController   = require('./controller')
     , Config            = require('./config')
     
@@ -435,7 +434,7 @@ function Router(env) {
                             var superController = new SuperController(options);
                             superController.setOptions(request, response, next, options);
                             if (typeof (controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
-                                serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);
+                                serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json ('+ options.rule +') or the related control in your `' + controllerFile + '`.')).stack);
                             } else {
                                 serverInstance.throwError(response, 500, err.stack);
                             }
@@ -450,8 +449,15 @@ function Router(env) {
                         controller[reservedActions[e]](request, response, next)
                     }
                 }
-
-                controller[action](request, response, next)
+                try {
+                    controller[action](request, response, next)
+                } catch (err) {
+                    if ( typeof(controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
+                        serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);
+                    } else {
+                        serverInstance.throwError(response, 500, err.stack);
+                    }
+                }                
             }
 
         } catch (err) {
