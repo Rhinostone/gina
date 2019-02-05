@@ -208,13 +208,14 @@ function SuperController(options) {
             };
 
             set('page.environment.gina', version.number);
+            set('page.environment.gina pid', Collection(process.list).findOne({name: 'gina'}).pid);
             set('page.environment.nodejs', version.nodejs +' '+ version.platform +' '+ version.arch);
             set('page.environment.engine', options.conf.server.engine);//version.middleware
             set('page.environment.env', GINA_ENV);
             set('page.environment.envIsDev', GINA_ENV_IS_DEV);
             
-            //console.debug('hostname is ', ctx.config.envConf[options.conf.bundle][GINA_ENV].hostname);
-            set('page.environment.routing', escape(JSON.stringify(options.conf.content.routing))); // export for GFF
+            var routing = local.options.conf.routing = ctx.config.envConf.routing; // alll routes
+            set('page.environment.routing', escape(JSON.stringify(routing))); // export for GFF
             set('page.environment.hostname', ctx.config.envConf[options.conf.bundle][GINA_ENV].hostname);
             set('page.environment.webroot', options.conf.server.webroot);
             set('page.environment.bundle', options.conf.bundle);
@@ -513,7 +514,7 @@ function SuperController(options) {
 
                         isStandalone    = (config.bundles.length > 1) ? true : false;
                         isMaster        = (config.bundles[0] === config.bundle) ? true : false;
-                        routing         = config.content.routing;
+                        routing         = config.routing;
                         isWithoutLayout = (local.options.isWithoutLayout) ? true : false;
 
                         if ( typeof(base) != 'undefined' ) {
@@ -532,8 +533,8 @@ function SuperController(options) {
                                     if ( hostname.replace(/\:\d+/, '') == local.req.headers.host ) {
                                         hostname = local.req.headers.host;
                                     }
-                                    routing         = config.content.routing;
-                                    wroot           = config.server.webroot;
+                                    //routing         = config.content.routing;
+                                    //wroot           = config.server.webroot;
 
                                     config.bundle   = base;
                                     isStandalone    = (mainConf.bundles.length > 1) ? true : false;
@@ -1732,8 +1733,10 @@ function SuperController(options) {
      * */
     this.redirect = function(req, res, next) {
         var conf    = self.getConfig();
+        var bundle  = conf.bundle;
+        var env     = conf.env;
         var wroot   = conf.server.webroot;
-        var routing = conf.content.routing;
+        var routing = conf.routing;
         var route   = '', rte = '';
         var ignoreWebRoot = null, isRelative = false;
         
@@ -1778,7 +1781,22 @@ function SuperController(options) {
                 
                 req.routing.param.url = rte
             } else { // is by default a route name
-                rte = route = ( new RegExp('^/'+conf.bundle+'-$').test(req) ) ? req : wroot.match(/[^/]/g).join('') +'-'+ req;
+                
+                if ( /\@/.test(req) ) {
+                    var rteArr = req.split(/\//);
+                    if ( typeof(rteArr[1]) != 'undefined' )
+                        env = rteArr[1];
+                        
+                    rte = route = rteArr[0];
+                    rteArr = rteArr[0].split(/\@/);
+                      
+                    bundle = rteArr[1];
+                                                         
+                } else {
+                    rte = route = ( new RegExp('^/'+conf.bundle+'-$').test(req) ) ? req : wroot.match(/[^/]/g).join('') +'-'+ req;
+                }
+                
+                
                 req     = local.req;
                 res     = local.res;
                 next    = local.next;
@@ -1809,9 +1827,22 @@ function SuperController(options) {
 
 
             if (route) { // will go with route first
-                path = (ignoreWebRoot) ? routing[route].url.replace(wroot, '') : routing[route].url;
-                if (path instanceof Array) {
-                    path = path[0] //if it is an array, we just take the first one
+                
+                if ( /\,/.test(routing[route].url) ) {
+                    var paths = routing[route].url.split(/\,/g);
+                    path = (ignoreWebRoot) ? paths[0].replace(wroot, '') : paths[0];
+                } else {
+                    path = (ignoreWebRoot) ? routing[route].url.replace(wroot, '') : routing[route].url;
+                }
+                
+                if (bundle != conf.bundle) {
+                    
+                    var hostname = getContext('gina').config.envConf[bundle][env].hostname;
+                    
+                    if ( !/\:\d+$/.test(req.headers.host) )
+                        hostname = hostname.replace(/\:\d+$/, '');
+                                        
+                    path = hostname + path;
                 }
             } else if (url && !path) {
                 path = ( (/\:\/\//).test(url) ) ? url : req.scheme + '://' + url;
@@ -1828,37 +1859,8 @@ function SuperController(options) {
                 //path = conf.hostname + path
                 path = local.req.headers.host + path
             }
+                       
             
-            
-            // rewrite path vs local.req.headers.host
-            // if ( typeof(local.req.headers.host) != 'undefined' && !/\:d+/.test(local.req.headers.host) ) {
-            //     path = path.replace(/\:\d+/, '');
-            // }
-            
-            // if (req.headersSent) {
-            //     if (typeof(next) != 'undefined')
-            //         return next();
-            //     else
-            //         return;
-            // }
-            
-            // retrieve original request cookie
-            // if ( 
-            //     typeof(res._headers['set-cookie']) == 'undefined' 
-            //     && typeof(req.headers.cookie) != 'undefined' 
-            //     && typeof(req.session) != 'undefined'
-            //     && typeof(req.session.cookie) != 'undefined'
-            //     //&& typeof(local.req.sessionID) != 'undefined'
-            // ) {
-            //     var reqCookie = req.headers.cookie.split(/\;/);                    
-            //     var cookieOpt = JSON.parse(reqCookie[0]), cookieValue = reqCookie[1];
-                
-            //     for (var cKey in cookieOpt ) {
-            //         cookieValue += '; '+ cKey +'='+ cookieOpt[cKey]
-            //     }
-            //     console.debug('[ Controller::query() ][ responseCookie ] '+ cookieValue);
-            //     res.setHeader('Set-Cookie', cookieValue);
-            // }
 
             if (!local.res.headersSent) {
                 if (GINA_ENV_IS_DEV) {
@@ -2458,7 +2460,7 @@ function SuperController(options) {
         
         altOpt.protocol = options.scheme;
         altOpt.hostname = options.host;
-        altOpt.port     = 443;
+        altOpt.port     = options.port;
         if ( typeof(altOpt.encKey) != 'undefined' ) {
             try {
                 altOpt.encKey = fs.readFileSync(options.encKey);

@@ -416,6 +416,7 @@ function Config(opt) {
             env             = self.Env.get(),
             appsPath        = '',
             modelsPath      = '',
+            projectPath     = '',
             ctx             = getContext('gina'),
             projectConf     = ctx.project,
             portsReverse    = ctx.portsReverse;
@@ -479,7 +480,10 @@ function Config(opt) {
                 modelsPath = (typeof(content[app][env]['modelsPath']) != 'undefined')
                     ?  content[app][env].modelsPath
                     :  template["{bundle}"]["{env}"].modelsPath;
-
+                    
+                projectPath = (typeof(content[app][env]['projectPath']) != 'undefined')
+                    ?  content[app][env].projectPath
+                    :  template["{bundle}"]["{env}"].projectPath;
            
                 
                 if ( typeof(content[app][env].server ) != 'undefined' ) {
@@ -527,8 +531,7 @@ function Config(opt) {
                 }
                 //I had to for this one...
                 appsPath = appsPath.replace(/\{executionPath\}/g, root);
-                //modelsPath = modelsPath.replace(/\{executionPath\}/g, mPath);
-
+                
                 //console.log("My env ", env, self.executionPath, JSON.stringify(template, null, '\t') );
                 //Existing app and port sharing => != isStandalone.
                 if ( !fs.existsSync(appsPath) ) {
@@ -572,6 +575,7 @@ function Config(opt) {
                 var reps = {
                     "frameworkDir"  : GINA_FRAMEWORK_DIR,
                     "executionPath" : root,
+                    "projectPath"   : projectPath,
                     "bundlesPath" : appsPath,
                     "modelsPath" : modelsPath,
                     "env" : env,
@@ -1008,105 +1012,57 @@ function Config(opt) {
                     routing[rule].param.path = localWroot + ( /^\//.test(routing[rule].param.path) ) ? routing[rule].param.path.substr(1) : routing[rule].param.path
                 }
                 
-                //if ( /string/.test( typeof(routing[rule].url) ) ) {
                     
-                    // if ( !routing[rule].url.length || routing[rule].url.length == 1) {// adding localWroot if url is missing
-                    //     routing[rule].url = localWroot
-                    // } else {
-                    //     routing[rule].url = localWroot + ( /^\//.test(routing[rule].url) ) ? routing[rule].url.substr(1) : routing[rule].url
-                    // }
-                    // ignoreWebRoot test to rewrite url webroot
-                    if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
-                        //routing[rule].url = (routing[rule].url.length > 1) ? localWroot + routing[rule].url : routing[rule].url;
-                        if ( /\,/.test(routing[rule].url) ) {
-                            urls = routing[rule].url.split(/\,/g);                    
-                            r = 0; rLen = urls.length;
-                            for (; r < rLen; ++r) {                        
-                                //urls[r] = (urls[r].length > 1) ? localWroot + urls[r].substr(1) : urls[r];
-                                urls[r] = ( localHasWebRoot && urls[r].length > 1) ? localWroot + urls[r].substr(1) : ((localHasWebRoot && urls[r].length == 1) ? localWroot : urls[r]);
-                            }
-                            routing[rule].url = urls.join(',');                            
-                        } else {                 
-                            routing[rule].url = ( localHasWebRoot && routing[rule].url.length > 1) ? localWroot + routing[rule].url.substr(1) : ((localHasWebRoot && routing[rule].url.length == 1) ? localWroot : routing[rule].url);
-                        }
-                    }
-                        
-                    if (routing[rule].bundle != bundle) { // allowing to override bundle name in routing.json
-                        // originalRule is used to facilitate cross bundles (hypertext)linking
-                        originalRules[oRuleCount] = ( isStandalone && routing[rule] && bundle != self.startingApp) ? bundle + '-' + rule : rule;
-                        ++oRuleCount;
-
-                        // if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
-                        //     routing[rule].url = localWroot + routing[rule].url
-                        // standalone setup
-                        // if ( isStandalone && routing[rule].bundle != self.startingApp && localWroot == '/') {
-                        //     localWroot = '/'+ routing[rule].bundle;
-                        //     conf[routing[rule].bundle][env].server.webroot = localWroot
-                        // }
-                        // if (localWroot.substr(localWroot.length-1,1) == '/') {
-                        //     localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
-                        // }
-                        // if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
-                        //     routing[rule].url = localWroot + routing[rule].url
-                    }/** else {
-                        if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot )
-                            routing[rule].url = wroot + routing[rule].url
-                        else if (!routing[rule].url.length)
-                            routing[rule].url += '/'
-                    }*/
-
+                // if ( !routing[rule].url.length || routing[rule].url.length == 1) {// adding localWroot if url is missing
+                //     routing[rule].url = localWroot
                 // } else {
-                //     r = 0;
-                //     rLen = routing[rule].url.length;
-                //     for (; r < rLen; ++r) {
-                //         if (routing[rule].url[r].length > 1 && routing[rule].url[r].substr(0,1) != '/') {
-                //             routing[rule].url[r] = '/' + routing[rule].url[r]
-                //         } else {
-                //             if (localWroot.substr(localWroot.length-1,1) == '/') {
-                //                 localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
-                //             }
-                //         }
-
-                //         if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
-                //             routing[rule].url[r] = localWroot + routing[rule].url[r]
-                //         } else if (!routing[rule].url.length) {
-                //             routing[rule].url += '/'
-                //         }
-                //     }
+                //     routing[rule].url = localWroot + ( /^\//.test(routing[rule].url) ) ? routing[rule].url.substr(1) : routing[rule].url
                 // }
+                // ignoreWebRoot test to rewrite url webroot
+                if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
+                    //routing[rule].url = (routing[rule].url.length > 1) ? localWroot + routing[rule].url : routing[rule].url;
+                    if ( /\,/.test(routing[rule].url) ) {
+                        urls = routing[rule].url.split(/\,/g);                    
+                        r = 0; rLen = urls.length;
+                        for (; r < rLen; ++r) {                        
+                            urls[r] = ( localHasWebRoot && urls[r].length > 1) ? localWroot + urls[r].substr(1) : ((localHasWebRoot && urls[r].length == 1) ? localWroot : urls[r]);
+                        }
+                        routing[rule].url = urls.join(',');                            
+                    } else {                 
+                        routing[rule].url = ( localHasWebRoot && routing[rule].url.length > 1) ? localWroot + routing[rule].url.substr(1) : ((localHasWebRoot && routing[rule].url.length == 1) ? localWroot : routing[rule].url);
+                    }
+                }
+                    
+                // if (routing[rule].bundle != bundle) { // allowing to override bundle name in routing.json
+                //     // originalRule is used to facilitate cross bundles (hypertext)linking
+                //     originalRules[oRuleCount] = ( isStandalone && routing[rule] && bundle != self.startingApp) ? bundle + '-' + rule : rule;
+                //     ++oRuleCount;
+                // }
+                
             }
 
-            files[name] = collectedRules = merge(collectedRules, ((isStandalone && bundle != self.startingApp ) ? standaloneRouting : routing), true);
+            //files[name] = collectedRules = merge(collectedRules, ((isStandalone && bundle != self.startingApp ) ? standaloneRouting : routing), true);
 
             // originalRule is used to facilitate cross bundles (hypertext)linking
-            r = 0;
-            rLen = originalRules.length;
-            for (; r < rLen; ++r) { // for each rule ( originalRules[r] )
-                files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
-            }
+            // r = 0;
+            // rLen = originalRules.length;
+            // for (; r < rLen; ++r) { // for each rule ( originalRules[r] )
+            //     files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
+            // }
             
-            self.setRouting(bundle, env, files[name]);
+            self.setRouting(bundle, env, routing);
             // reverse routing
-            for (var rule in files[name]) {
+            for (var rule in routing) {
                                 
-                if ( /\,/.test(files[name][rule].url) ) { 
-                    urls = files[name][rule].url.split(/\,/g);                    
+                if ( /\,/.test(routing[rule].url) ) { 
+                    urls = routing[rule].url.split(/\,/g);                    
                     r = 0; rLen = urls.length;
                     for (; r < rLen; ++r) {                        
-                        reverseRouting[ files[name][rule][urls[r]] ] = rule
+                        reverseRouting[ routing[rule][urls[r]] ] = rule
                     }
                 } else {
-                    reverseRouting[ files[name][rule].url ] = rule
+                    reverseRouting[ routing[rule].url ] = rule
                 }
-                // if ( typeof(files[name][rule].url) != 'object' ) {
-                //     reverseRouting[files[name][rule].url] = rule
-                // } else {
-                //     r = 0;
-                //     rLen = files[name][rule].url.length;
-                //     for (; r < rLen; ++r) {
-                //         reverseRouting[files[name][rule].url[r]] = rule
-                //     }
-                // }
             }
             self.setReverseRouting(bundle, env, reverseRouting);            
         }
@@ -1120,13 +1076,18 @@ function Config(opt) {
             "root"          : conf[bundle][env].executionPath,
             "env"           : env,
             "project"       : getPath('project'),
+            "source"        : conf[bundle][env].sources,
             "executionPath" : conf[bundle][env].executionPath,
+            "projectPath"   : conf[bundle][env].projectPath,
             "bundlesPath"   : conf[bundle][env].bundlesPath,
             "mountPath"     : conf[bundle][env].mountPath,
             "bundlePath"    : conf[bundle][env].bundlePath,
             "templatesPath" : conf[bundle][env].templatesPath,
             "publicPath"    : conf[bundle][env].publicPath,
             "modelsPath"    : conf[bundle][env].modelsPath,
+            "libPath"       : conf[bundle][env].libPath,
+            "handlersPath"  : conf[bundle][env].handlersPath,
+            "sharedPath"    : conf[bundle][env].sharedPath,
             "logsPath"      : conf[bundle][env].logsPath,
             "tmpPath"       : conf[bundle][env].tmpPath,
             "bundle"        : bundle,
@@ -1689,23 +1650,47 @@ function Config(opt) {
      * @param {object} routing
      * */
     this.setRouting = function(bundle, env, routing) {
+        
+        if (!self.envConf.routing)
+            self.envConf.routing = {};
+        
         if (!self.envConf[bundle][env].content)
             self.envConf[bundle][env].content = {};
 
         self.envConf[bundle][env].content.routing = routing;
+        self.envConf.routing = merge(self.envConf.routing, routing);
     }
 
-    this.getRouting = function(bundle, env) { 
+    /**
+     * Get routing
+     * 
+     * @param {string} [bundle]
+     * @param {string} [env]
+     * 
+     */
+    this.getRouting = function(bundle, env) {         
+        
         if (typeof(env) == 'undefined') {
             env = self.env || self.Env.get() 
-        }       
-        var routing = self.envConf[bundle][env].content.routing;
+        }
+        
+        if ( typeof(bundle) != 'undefined' ) {
+            return self.envConf[bundle][env].content.routing
+        }
 
-        return routing;
+        return self.envConf.routing;
     }
 
     this.setReverseRouting = function(bundle, env, reverseRouting) {
-        self.envConf[bundle][env].content.reverseRouting = reverseRouting
+        
+        if (!self.envConf.reverseRouting)
+            self.envConf.reverseRouting = {};
+        
+        if (!self.envConf[bundle][env].content)
+            self.envConf[bundle][env].content = {};
+
+        self.envConf[bundle][env].content.reverseRouting = reverseRouting;
+        self.envConf.reverseRouting = merge(self.envConf.reverseRouting, reverseRouting);
     }
 
 
