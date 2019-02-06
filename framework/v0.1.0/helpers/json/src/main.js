@@ -23,16 +23,32 @@ module.exports = function(){
      *
      * @return {string} filename - path
      * */
-    requireJSON = function(filename){
+    requireJSON = function(filename){        
         
-        var i                   = null
+        console.debug('[ Helpers ][ requireJSON ] ', filename);
+        
+        var i                       = null
             , len                   = null
-            , jsonStr               = fs.readFileSync(filename).toString()
-            /** block style comments */
-            , jsonStr   = jsonStr.replace(/(\/\*([^*]|[\r\n]|(\*+([^*\/]|[\r\n])))*\*+\/)/g, '')
-            // line style comments
-            , comments_with_slashes = jsonStr.match(/\/\/(.*)?/g)
-        ; 
+            , comments_with_slashes = null
+            , jsonStr               = null
+        ;
+        
+        try {
+            jsonStr = fs.readFileSync(filename).toString();
+        } catch (err) {
+            throw err
+        }
+        
+        var replacement = function(str) {
+            console.log('found ', str);
+        }
+        /** block style comments */
+        if ( /\/\*\*/.test(jsonStr) ) {
+            jsonStr   = jsonStr.replace(/(\/\*([^*]|[\r\n]|(\*+([^*\/]|[\r\n])))*\*+\/)/g, '');
+        }
+        
+        // line style comments
+        comments_with_slashes = jsonStr.match(/\/\/(.*)?/g);        
                 
         len = ( comments_with_slashes) ? comments_with_slashes.length : 0;
         if (comments_with_slashes && len > 0) {
@@ -46,12 +62,11 @@ module.exports = function(){
             }
         }        
         
-        try {
-            return JSON.parse(jsonStr) 
-        } catch (err) {
-            throw new Error('[ requireJSON ] could not parse `'+ filename +'`:\n\r' + fs.readFileSync(filename).toString() +'\n\rVS\n\r<strong style="color:red">"</strong>'+jsonStr+'<strong style="color:red">"</strong>');            
-        }
-               
+        try {      
+            return JSON.parse(jsonStr)
+        } catch (err) {         
+            throw new Error('[ requireJSON ] could not parse `'+ filename +'`:\n\r' + fs.readFileSync(filename).toString() +'\n\rVS\n\r<strong style="color:red">"</strong>'+jsonStr+'<strong style="color:red">"</strong>');       
+        }               
     };
    
 

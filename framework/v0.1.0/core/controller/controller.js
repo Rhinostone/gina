@@ -2862,7 +2862,7 @@ function SuperController(options) {
             }            
         });
                
-        //req.end(options.queryData);
+        
         if (!/GET/i.test(options[':method']))
             req.end(body);
         

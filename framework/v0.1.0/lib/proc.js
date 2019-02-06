@@ -404,7 +404,7 @@ function Proc(bundle, proc, usePidFile){
     self.register = function(bundle, pid) {
 
         if ( bundle == 'gina' || bundle != 'gina' && self.bundles.indexOf(bundle) == -1 ) {
-
+            
             var list = {};
 
             var processRegistration = function () {
@@ -412,7 +412,6 @@ function Proc(bundle, proc, usePidFile){
                 if (bundle != 'gina') {
                     self.bundles.push(bundle);
                 }
-
 
                 list['pid']     = pid;
                 list['name']    = bundle;

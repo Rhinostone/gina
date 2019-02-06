@@ -707,7 +707,7 @@ function Config(opt) {
             , conf          = self.envConf // env conf
         ;
         console.debug('[ CONFIG ] loading `'+ bundle +'/'+ env +'` configuration, please wait ...');
-        
+                      
         
         self.setServerCoreConf(bundle, env, conf.core);
         
@@ -789,6 +789,8 @@ function Config(opt) {
         var configFiles = fs.readdirSync(_(appPath + '/config'))
             , c         = 0
             , cLen      = configFiles.length
+            , jsonFile  = null
+            , e         = null
         ;
         for (; c < cLen; ++c) {
 
@@ -827,7 +829,8 @@ function Config(opt) {
 
                     if (exists) {
                         foundDevVersion = true;
-                        fileContent = merge(require(_(filename, true)), fileContent);
+                        jsonFile = requireJSON(_(filename, true));
+                        fileContent = merge(jsonFile, fileContent);
                     }
 
                 } catch (_err) {
@@ -850,15 +853,16 @@ function Config(opt) {
                     delete require.cache[require.resolve(_(filename, true))];
                 }
 
-                if (exists) {                    
-                    fileContent = merge(fileContent, requireJSON(_(filename, true)));
+                if (exists) {      
+                    jsonFile = requireJSON(_(filename, true));              
+                    fileContent = merge(fileContent, jsonFile);
                 } else {
                     console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
                 }
             } catch (_err) {
 
                 if (fs.existsSync(filename)) {
-                    var e = '[ ' + filename + ' ] is malformed !!\n\r' + (_err.stack || _err.message);
+                    e = '[ ' + filename + ' ] is malformed !!\n\r' + (_err.stack || _err.message);
                     console.error(e);
                     callback(new Error(e))
                 } else {
@@ -871,8 +875,16 @@ function Config(opt) {
                 if ( typeof(files[nameArr[0]]) == 'undefined')
                     files[nameArr[0]] = {};
                 
-                files = parseFileConf(files, nameArr, files, nameArr.length, 0, fileContent);
-                continue;
+                try {
+                    files = parseFileConf(files, nameArr, files, nameArr.length, 0, fileContent);
+                    continue;
+                } catch (_err) {
+                    e = '[ ' + nameArr + ' ] could not parse file conf !!\n\r' + (_err.stack || _err.message);
+                    console.error(e);
+                    callback(new Error(e))
+                }
+                
+                
             } else {
                 files[name] = fileContent;
             }
@@ -962,6 +974,19 @@ function Config(opt) {
                     routing[rule].bundle =  bundle;
                 }
                 localHasWebRoot = (localWroot.length >1) ? true : false;     
+                
+                
+                // default hostname
+                if ( 
+                    typeof(routing[rule].hostname) == 'undefined' && !/^redirect$/.test(routing[rule].param.control)  
+                    || !routing[rule].hostname && !/^redirect$/.test(routing[rule].param.control)
+                ) {
+                    routing[rule].host      = conf[routing[rule].bundle][env].host
+                    routing[rule].hostname  = conf[routing[rule].bundle][env].server.scheme +'://'+ routing[rule].host +':'+ conf[routing[rule].bundle][env].port[conf[routing[rule].bundle][env].server.protocol][conf[routing[rule].bundle][env].server.scheme];
+                    // default webroot
+                    routing[rule].webroot   = localWroot;
+                }
+                    
                 
                 // default method
                 if ( typeof(routing[rule].method) == 'undefined' || !routing[rule].method )
