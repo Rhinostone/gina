@@ -4,8 +4,8 @@
     "proxy": {
         "coreAPI": {
             "_comment": "this is the targeted host to send API queries: pointing to coreAPI env",            
-            // testing *
-            "ca": "{projectPath}/ssl/server/*.freelancer-app.fr.local.pem",
+            // testing * bloc comments
+            "ca": "{projectPath}/ssl/server/*.domain.com.local.pem",
             "hostname" : "coreAPI@freelancer",            
             "_protocol": "https",            
             "port": "coreAPI@freelancer",   
@@ -13,7 +13,7 @@
         },
         "dashboard": {
           "_comment": "this is the targeted host to send Dashboard queries: pointing to Dashboard env",
-          "ca": "{projectPath}/ssl/server/*.freelancer-app.fr.local.pem",
+          "ca": "{projectPath}/ssl/server/*.domain.com.local.pem",
           "hostname" : "dashboard@freelancer",
           "port": "dashboard@freelancer",
           "path": "/"
@@ -22,7 +22,7 @@
 
     "apis": {
         "googleFonts": {
-            "apiKey": "AIzaSyAWtaz2cecDQ0hRuaXDqgVnvWBFojvn6s4"
+            "apiKey": "xxxXafazgzegzegzerggze"
         }
     },
     

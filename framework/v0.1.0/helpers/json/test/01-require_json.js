@@ -32,9 +32,9 @@ exports['requireJSON: app.json case'] = function(test) {
         "name": "coreAPI",
         "_comment": "`version` is the current API version: to link to the new documentation, change this value",
         "version": "0.0.1",
-        "fonts": "//fonts.gstatic.com/s/trirong/v3/7r3BqXNgp8wxdOdOn44QfahB4g.ttf",
+        "fonts": "//fonts.gstatic.com/s/trirong/v3/gzxgezrghzh.ttf",
         "session": {
-          "secret": "84fzf3p593c&m9cnk7rah8n!$((4yls9#v@%#$8af!8%f!q%cn(iwi%n267",
+          "secret": "864xxxxg6egc&xxxk7rah8n!$((4yls9#v@%#$8af!8%f!xxn(iwi%n267",
           "expire": "60000*120"
         },
       
@@ -47,7 +47,7 @@ exports['requireJSON: app.json case'] = function(test) {
         },
       
         "scrypt": {
-          "key": "yls9#v@9igltyok2v4z8zy78p&=q21h*4d$+_dzf%vng82uvpt6#^b)475vj_%o#_2^7",
+          "key": "xxxyls9#v@9igltxx^x4z8zy7x+_dzf%dppdsong82uvpt6#^b)475vj_%o#_9^7",
           "maxtime": {
             "N": 1,
             "r": 1,
@@ -145,7 +145,7 @@ exports['requireJSON: app2.json case'] = function(test) {
         "proxy": {
             "coreAPI": {
                 "_comment": "this is the targeted host to send API queries: pointing to coreAPI env",            
-                "ca": "{projectPath}/ssl/server/*.freelancer-app.fr.local.pem",
+                "ca": "{projectPath}/ssl/server/*.domain.com.local.pem",
                 "hostname" : "coreAPI@freelancer",            
                 "_protocol": "https",            
                 "port": "coreAPI@freelancer",   
@@ -153,7 +153,7 @@ exports['requireJSON: app2.json case'] = function(test) {
             },
             "dashboard": {
               "_comment": "this is the targeted host to send Dashboard queries: pointing to Dashboard env",
-              "ca": "{projectPath}/ssl/server/*.freelancer-app.fr.local.pem",
+              "ca": "{projectPath}/ssl/server/*.domain.com.local.pem",
               "hostname" : "dashboard@freelancer",
               "port": "dashboard@freelancer",
               "path": "/"
@@ -162,7 +162,7 @@ exports['requireJSON: app2.json case'] = function(test) {
     
         "apis": {
             "googleFonts": {
-                "apiKey": "AIzaSyAWtaz2cecDQ0hRuaXDqgVnvWBFojvn6s4"
+                "apiKey": "xxxXafazgzegzegzerggze"
             }
         },
         
@@ -632,7 +632,7 @@ exports['requireJSON: crons.json case'] = function(test) {
         "tmp": "{tmpPath}/google.fonts.json",
         "target": "{bundlePath}/config/google.fonts.json",
         "url": "https://www.googleapis.com/webfonts/v1/webfonts",
-        "apiKey": "PIzDyAX3CVWtaecD50hRuaXDKRDZgVg65gervn6s4"
+        "apiKey": "wxxxzgfGEZGZgzefz"
     },
     "robot": {
         "active": false,

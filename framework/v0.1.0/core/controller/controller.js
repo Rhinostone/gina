@@ -2863,8 +2863,10 @@ function SuperController(options) {
         });
                
         
-        if (!/GET/i.test(options[':method']))
+        if (!/GET|DELETE/i.test(options[':method']))
             req.end(body);
+        else
+            req.end()
         
         
         return {
