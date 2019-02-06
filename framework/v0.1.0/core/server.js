@@ -1388,12 +1388,21 @@ function Server(options) {
         } catch (err) {
             throwError(res, 500, err.stack, next)
         }
-        var isMethodAllowed = null;        
+        var isMethodAllowed = null, hostname = null;        
         out:
             for (var name in routing) {
                 if (typeof(routing[name]['param']) == 'undefined')
                     break;
-
+                
+                // updating hostname
+                // if ( 
+                //     typeof(routing[name].hostname) == 'undefined' && !/^redirect$/.test(routing[name].param.control)  
+                //     || !routing[name].hostname && !/^redirect$/.test(routing[name].param.control)
+                // ) {
+                //     hostname = self.conf[routing[name].bundle][self.env].hostname;
+                //     routing[name].hostname = self.conf.routing[name].hostname = hostname;                     
+                // }
+                
                 if (routing[name].bundle != bundle) continue;
                 // method filter    
                 method = routing[name].method;

@@ -220,8 +220,13 @@ if (!isPath) {
 
 
 // Todo - load from env.json or locals  or project.json ??
-
-var abort = function(err) {
+/**
+ * abort
+ * 
+ * @param {string|object} err
+ * @param {string} [bunlde]
+ */
+var abort = function(err, bundle) {
     if (
         process.argv[2] == '-s' && isLoadedThroughCLI
         || process.argv[2] == '--start' && isLoadedThroughCLI
@@ -230,18 +235,22 @@ var abort = function(err) {
 
     ) {
         if (isPath && !isLoadedThroughCLI) {
-            console.debug('[ FRAMEWORK ] You are trying to load gina by hand: just make sure that your env ['+env+'] matches the given path ['+ path +']\n'+ err);
+            console.emerg('[ FRAMEWORK ] You are trying to load gina by hand: just make sure that your env ['+env+'] matches the given path ['+ path +']\n'+ (err.stack||err));
         } else if ( typeof(err.stack) != 'undefined' ) {
-            console.debug('[ FRAMEWORK ] Gina could not determine which bundle to load: ' + err +' ['+env+']' + '\n' + err.stack);
+            console.emerg('[ FRAMEWORK ] Gina could not determine which bundle to load: ' + err +' ['+env+']' + '\n' + err.stack);
         } else {
-            console.debug('[ FRAMEWORK ] Gina could not determine which bundle to load: ' + err +' ['+env+']');
-        }
-        process.exit(1);
+            console.emerg('[ FRAMEWORK ] Gina could not determine which bundle to load: ' + err +' ['+env+']');
+        }        
+    } else {
+        console.emerg(err.stack||err);
     }
+    
+    process.exit(1);
 };
 
 
 gna.emit = e.emit;
+gna.started = false;
 
 /**
  * Get project conf from project.json
@@ -387,7 +396,6 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
     if (err) console.error(err.stack);
 
-    
 
     /**
      * On middleware initialization
@@ -604,7 +612,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
      * Start server
      *
      * @param {string} [executionPath]
-     * */
+     * */    
     gna.start = process.start = function() { //TODO - Add protocol in arguments
 
         var core    = gna.core;
@@ -617,9 +625,9 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
             var projectName = getContext('projectName')
         }
 
-        //console.log('[ FRAMEWORK ] appName ', appName);
+        
         core.projectName        = projectName;
-        core.startingApp        = appName;
+        core.startingApp        = appName; // bundleName
         core.executionPath      = root;
         core.ginaPath           = ginaPath;
 

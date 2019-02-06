@@ -95,7 +95,8 @@ cmd.onExec = function(client, isFromFramework, opt) {
         if (opt.task.action == 'start') {
             init.onComplete( function done(err, run){
                 console.debug('loading task ',  opt.task.action);
-                //Setting master process with its own PID file.
+                
+                //Setting master process with its own PID file.                
                 cmd.proc = new Proc('gina', process);
                 cmd.proc.setMaster(process.pid);
 
@@ -125,7 +126,19 @@ cmd.onExec = function(client, isFromFramework, opt) {
         }
         opt.task.topic  = arr[0];
         opt.task.action = arr[1];
+        
+        console.debug('[ FRAMEWORK ] is starting conline CLI '+ arr[0] +':'+arr[1]);
+        // var hasCmdStarted = false;                    
+        // var interval = 1000; // will abort after 5 sec timeout
 
+        // var taskTimeoutId = setInterval(function onTimeout(){
+        //     console.debug('[ FRAMEWORK ] has `'+ arr[0] +':'+arr[1] +'` started ? '+ hasCmdStarted);
+        //     // if (!gna.started) {
+        //     //     abort(new Error('[ FRAMEWORK ] Gina encountered an error when trying to start `'+ (appName || getContext('bunlde')) +'`'))
+        //     // }
+        // }, interval);  
+        // console.debug('[ FRAMEWORK ] starting `'+ arr[0] +':'+arr[1] +'` interval check: #'+ taskTimeoutId);
+        
         var init = require('./framework/init')(opt);
         init.onListen( function done(err, run, opt){            
             run(opt, cmd)
