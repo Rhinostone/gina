@@ -100,7 +100,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         }
         
         var popinGetContainer = function () {
-            //instance.id         = gina.popinContainer
             instance.target     = document.getElementById(gina.popinContainer);
             instance.on         = on;
         }
@@ -121,7 +120,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var attr    = 'data-gina-popin-name';
             var $els    = getElementsByAttribute(attr);
             var $el     = null, name = null;
-            var url     = null;
+            var url     = null;            
             var proceed = null, evt = null;
             var i = null, len = null;
 
@@ -161,7 +160,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     
                     if (!gina.events[evt]) {
                     
-                        // attach submit events
+                        // attach click events
                         addListener(gina, $el, evt, function(e) {
                             cancelEvent(e);
 
@@ -476,7 +475,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         continue
                     }
                     
-                    if ( typeof($buttonsTMP[b]) != 'undefined' && !/\#$/.test($buttonsTMP[b].href) ) {
+                    if ( 
+                        typeof($buttonsTMP[b]) != 'undefined' 
+                        && !/\#$/.test($buttonsTMP[b].href) // ignore href="#"                        
+                        && !$buttonsTMP[b].id // ignore href already bindded byr formValidator or the user
+                    ) {
                         $link.push($buttonsTMP[b]);
                         continue
                     }
@@ -520,18 +523,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             // link events
             i = 0; len = $link.length;
             for(; i < len; ++i) {
-                
-                // onclickAttribute = $link[i].getAttribute('onclick');
-
-                // if ( !onclickAttribute && !$link[i].target ) {
-                //     $link[i].setAttribute('onclick', 'return false;')
-                // } else if ( typeof(onclickAttribute) != 'undefined' && !$link[i].target && !/return false/.test(onclickAttribute)) {
-                //     if ( /\;$/.test(onclickAttribute) ) {
-                //         onclickAttribute += 'return false;'
-                //     } else {
-                //         onclickAttribute += '; return false;'
-                //     }
-                // }
 
                 if (!$link[i]['id']) {
 
@@ -541,8 +532,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                 } else {
                     evt = $link[i]['id'];
-                }               
-
+                }
 
                 if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $link[i].id ) {
                     register('link', evt, $link[i])
@@ -1049,27 +1039,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             $el = $popin.target;
 
             if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
-                popinUnbind(name);
-            //     instance.target.firstChild.className  = instance.target.firstChild.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
-            //     $el.className           = $el.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
-            //     $el.innerHTML = '';
-
-            //     // removing from FormValidator instance
-            //     var i = 0, formsLength = $popin['$forms'].length;
-            //     if ($validator['$forms'] && formsLength > 0) {
-            //         for (; i < formsLength; ++i) {
-            //             if ( typeof($validator['$forms'][ $popin['$forms'][i] ]) != 'undefined' )
-            //                 $validator['$forms'][ $popin['$forms'][i] ].destroy();
-
-            //             $popin['$forms'].splice( i, 1);
-            //         }
-            //     }
-            //     // remove listeners
-            //     removeListener(gina, $popin.target, 'loaded.' + $popin.id);
-
-
-
-
+                
+                popinUnbind(name);            
                 $popin.isOpen = false;
                 gina.popinIsBindinded = false;
 

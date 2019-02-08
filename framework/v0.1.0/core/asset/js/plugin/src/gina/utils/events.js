@@ -133,7 +133,7 @@ function removeListener(target, element, name, callback) {
     }
 
     if ( typeof(gina.events[name]) != 'undefined' ) {
-        //console.log('------> [removed] ' + name);
+        // removed ------> [name];
         delete gina.events[name]
     }
 }
