@@ -345,14 +345,16 @@ function SuperController(options) {
         
         local.options.debugMode = (typeof(displayToolbar) != 'undefined' ) ? displayToolbar : undefined; // only active for dev env
 
+        var data            = null
+        , template          = null
+        , file              = null
+        , path              = null
+        , plugin            = null
+        , isWithoutLayout   = (local.options.isWithoutLayout) ? true : false
+    ;
         try {
-            var data        = getData()
-                , template  = null
-                , file      = null
-                , path      = null
-                , plugin    = null
-            ;
-
+            data = getData();
+            
             if (!userData) {
                 userData = { page: { view: {}}}
             } else if ( userData && !userData['page']) {
@@ -487,18 +489,18 @@ function SuperController(options) {
                         , wroot             = null
                         , isStandalone      = null
                         , isMaster          = null
-                        , routing           = null
-                        , isWithoutLayout   = null
+                        , routing           = null                        
                         , rule              = null
                         , url               = NaN
                         , urlStr            = null
+                        //, route             = null
                     ;
 
 
                     swig.setFilter('getUrl', function (route, params, base) {
                         // if no route, returns current route
-                        if ( typeof(route) == 'undefined') {
-                            var route = local.options.rule
+                        if ( !route || typeof(route) == 'undefined') {
+                            route = local.options.rule
                         }
 
                         if (/\@/.test(route) && typeof(base) == 'undefined') {
@@ -511,11 +513,10 @@ function SuperController(options) {
                         config          = local.options.conf;
                         hostname        = '';
                         wroot           = config.server.webroot;
-
                         isStandalone    = (config.bundles.length > 1) ? true : false;
                         isMaster        = (config.bundles[0] === config.bundle) ? true : false;
                         routing         = config.routing;
-                        isWithoutLayout = (local.options.isWithoutLayout) ? true : false;
+                        
 
                         if ( typeof(base) != 'undefined' ) {
 
@@ -627,26 +628,34 @@ function SuperController(options) {
 
                 dic['page.content'] = content;
                 
-                var layoutPath = null;
+                var layoutPath              = null
+                    , assets                = null
+                    , mapping               = null
+                    , XHRData               = null
+                    , XHRView               = null
+                    , isDeferModeEnabled    = null
+                    , viewInfos             = null
+                    , filename              = null
+                ;
                 
-                if ( local.options.isWithoutLayout || !local.options.isWithoutLayout && typeof(local.options.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout) ) {
-                    layoutPath = (local.options.isWithoutLayout) ? local.options.template.noLayout : local.options.template.layout;
+                if ( isWithoutLayout || !isWithoutLayout && typeof(local.options.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout) ) {
+                    layoutPath = (isWithoutLayout) ? local.options.template.noLayout : local.options.template.layout;
                 } else {
-                    var layoutRoot = ( typeof(local.options.namespace) != 'undefined' && local.options.namespace != '') ? local.options.template.templates + '/'+ local.options.namespace  : local.options.template.templates;
+                    layoutRoot = ( typeof(local.options.namespace) != 'undefined' && local.options.namespace != '') ? local.options.template.templates + '/'+ local.options.namespace  : local.options.template.templates;
                     layoutPath = layoutRoot +'/'+ local.options.file + local.options.template.ext;    
-                }                
-                
+                }
                 
                 fs.readFile(layoutPath, function onLoadingLayout(err, layout) {
 
                     if (err) {
                         self.throwError(local.res, 500, err);
                     } else {
-                        var assets = {assets:"${assets}"}, XHRData = null;                        
-                        var mapping = { filename: local.options.template.layout };         
                         
-                        var isDeferModeEnabled = local.options.template.javascriptsDeferEnabled;
-                        layout = layout.toString();
+                        assets  = {assets:"${assets}"};                        
+                        mapping = { filename: local.options.template.layout };         
+                        layout  = layout.toString();
+                        
+                        isDeferModeEnabled = local.options.template.javascriptsDeferEnabled;                        
                         
                         // adding stylesheets
                         if (data.page.view.stylesheets && !/\{\{\s+(page\.view\.stylesheets)\s+\}\}/.test(layout) ) {
@@ -655,8 +664,7 @@ function SuperController(options) {
                                               
 
                         // adding plugins
-                        if (hasViews() && GINA_ENV_IS_DEV && !local.options.isWithoutLayout || hasViews() && local.options.debugMode ) {
-                            
+                        if (hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout || hasViews() && local.options.debugMode ) {                            
 
                             layout = ''
                                 + '{%- set ginaDataInspector                    = JSON.parse(JSON.stringify(page)) -%}'
@@ -665,8 +673,6 @@ function SuperController(options) {
                                 + '{%- set ginaDataInspector.view.stylesheets   = "ignored-by-toolbar" -%}'
                                 + layout
                             ;
-                            
-                            
                                 
                             plugin = '\t'
                                 + '{# Gina Toolbar #}'
@@ -675,21 +681,11 @@ function SuperController(options) {
                                 + '{%- set userDataInspector.view.stylesheets   = "ignored-by-toolbar"  -%}'
                                 + '{%- set userDataInspector.view.assets        = '+ JSON.stringify(assets) +' -%}'
                                 + '{%- include "'+ getPath('gina').core +'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector } -%}'
-                                + '{# END Gina Toolbar #}'
-
-                                // + '\n\t<script type="text/javascript">'
-                                // + ' \n<!--'
-                                // + '\n' + local.options.template.pluginLoader.toString()
-                                // + '\t\t//-->'
-                                // + '\n\t\t</script>'
-
-                                //+ '\n\t\t<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
-
-                                //+ '\t\t{{ page.view.scripts }}'                              
+                                + '{# END Gina Toolbar #}'                                                           
                             ;
                                                         
 
-                            if (local.options.isWithoutLayout && local.options.debugMode == true || local.options.debugMode == true ) {
+                            if (isWithoutLayout && local.options.debugMode == true || local.options.debugMode == true ) {
 
                                 XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
                                 
@@ -713,15 +709,18 @@ function SuperController(options) {
                             
 
                         } else if ( hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() ) {
-
+                            
+                            if (isWithoutLayout) {
+                                delete data.page.view.scripts;
+                                delete data.page.view.stylesheets;                                
+                            }
                             // means that we don't want GFF context or we already have it loaded
-                            var viewInfos  = JSON.parse(JSON.stringify(data.page.view));
-                            viewInfos.assets = assets;
-                            //viewInfos.scripts       = userScripts.split(/,/g);
-                            //viewInfos.stylesheets   = userStylesheets.split(/,/g);
+                            viewInfos = JSON.parse(JSON.stringify(data.page.view));
+                            if ( !isWithoutLayout )
+                                viewInfos.assets = assets;
 
                             XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
-                            var XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(viewInfos)) +'">';
+                            XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(viewInfos)) +'">';
 
 
                             layout += XHRData + XHRView;
@@ -748,22 +747,20 @@ function SuperController(options) {
 
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
                         
-                        
-                        try {
-                            
-                            // special case for template without layout in debug mode - dev only
-                            if ( hasViews() && local.options.debugMode == true  && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
-                                
+                        // special case for template without layout in debug mode - dev only
+                        if ( hasViews() && local.options.debugMode == true  && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
+                            try {                            
                                 layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
                                 layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
                                 layout = swig.compile(layout, mapping)(data);
-                            }
 
-                        } catch (err) {
-                            var filename = local.options.template.html;
-                            filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
-                            self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)))
-                        }
+                            } catch (err) {
+                                filename = local.options.template.html;
+                                filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
+                                self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)))
+                            }
+                        }                        
+                        
 
                         if ( !local.res.headersSent ) {
                             local.res.statusCode = ( typeof(local.options.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
@@ -782,90 +779,9 @@ function SuperController(options) {
                             }
 
                             local.res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime['html'] + '; charset='+ local.options.conf.encoding );
-
                             
-                            
-                            // var aCount = 0, aLen = assets.count();
-                            // for (var asset in assets) {
-                            //     local.res.stream.pushStream({':path': asset}, function onStreamPush(err, pushStream, headers) {
-                            //         ++aCount;
-                            //         if (err) {
-                            //             self.throwError(local.res, 500, err)
-                            //         }
-                                    
-                            //         if ( assets[asset].filename != 404 )
-                            //             pushStream.respondWithFile( assets[asset].filename );
-                            //         //pushStream.respond({ ':status': 200 });
-                            //         // if (aCount == aLen) {
-                            //         //     pushStream.end(); 
-                            //         //     local.res.end(layout);
-                            //         // }                                    
-                            //     });
-                            // }
-                            
-                            /**
-                            // avoiding multiple binding for the same event when using cacheless env
-                            if ( typeof(self.serverOn) != 'undefined' && !self._http2streamEventInitalized ) {
-                                
-                                self.emit('http2streamEventInitalized', true);
-                                
-                                self.serverOn('stream', function onHttp2Stream(stream, headers){
-                                    
-                                    if (!stream.pushAllowed) { 
-                                        stream.respond({ ':status': 200 });
-                                        stream.end();
-                                        return; 
-                                    }
-                                    
-                                    stream.on('closed', (isClosed) => {
-                                        
-                                        console.debug('http2 closed: '+ isClosed);
-                                    });
-                                    
-                                                          
-                                    
-                                    
-                                    
-                                    var asset = headers[':path'];
-                                    // if (asset == local.req.url) {
-                                    //     stream.respond({
-                                    //         'content-type': local.options.conf.server.coreConfiguration.mime['html'],
-                                    //         ':status': 200
-                                    //     });
-                                    //     stream.write(layout);
-                                    //     stream.end();
-                                    // }
-                                    
-                                    if ( asset != local.req.url && typeof(assets[ asset ]) != 'undefined' && !/404/.test(assets[asset].filename) ) {      
-                                        stream.pushStream({ ':path': asset }, function onPushStream(err, pushStream, headers){
-                                            
-                                            if ( err ) {
-                                                //throw err;
-                                                if (err.code === 'ENOENT') {
-                                                    stream.respond({ ':status': 404 });
-                                                } else {
-                                                    stream.respond({ ':status': 500 });
-                                                }
-                                                
-                                                stream.end();
-                                            }
-                                            console.debug('h2 push: '+ headers[':path'] + ' -> '+ assets[ headers[':path'] ].filename);
-                                            pushStream.respondWithFile( 
-                                                assets[ headers[':path'] ].filename
-                                                , { 'content-type': assets[ headers[':path'] ].mime }
-                                                //, { onError }
-                                            );
-                                            
-                                        });
-                                    }  
-                                    
-                                    
-                                                            
-                                        
-                                });    
-                            }*/
                             layout = swig.compile(layout, mapping)(data);
-                            
+                            // Only available for http/2.0 for now
                             if ( !self.isXMLRequest() && /http\/2/.test(local.options.conf.server.protocol) ) {
                                 try {
                                     // TODO - button in toolbar to empty url assets cache    
@@ -877,26 +793,25 @@ function SuperController(options) {
                                     
                                     //  only for toolbar - TODO hasToolbar()
                                     if (
-                                        GINA_ENV_IS_DEV && hasViews() && !local.options.isWithoutLayout
+                                        GINA_ENV_IS_DEV && hasViews() && !isWithoutLayout
                                         || hasViews() && local.options.debugMode
                                         || GINA_ENV_IS_DEV && hasViews() && self.isXMLRequest() 
                                     ) {                                
-                                        layout = layout.replace('{"assets":"${assets}"}',  assets ); 
+                                        layout = layout.replace('{"assets":"${assets}"}', assets ); 
                                     }
                                     
                                 } catch (err) {
                                     self.throwError(local.res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
                                 }
-                            }                                
+                            }                             
                             
                             local.res.end(layout);
                             console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
                                                         
+                        } else if (typeof(local.next) != 'undefined') {                            
+                            local.next();
                         } else {
-                            if (typeof(local.next) != 'undefined')
-                                local.next();
-                            else
-                                return;
+                            return;
                         }
                     }
                 })
@@ -942,40 +857,36 @@ function SuperController(options) {
                 asset.file = '(gina.ready(function onGinaReady($){\n'+ asset.file + '\n},window["originalContext"]));'
             }
             stream.pushStream({ ':path': headers[':path'] }, function onPushStream(err, pushStream, headers){
-                                   
+                
+                var header = { 
+                    ':status': 200
+                };
                 if ( err ) {
+                    header[':status'] = 500;
                     if (err.code === 'ENOENT') {
-                        stream.respond({ ':status': 404 });
-                    } else {
-                        stream.respond({ ':status': 500 });
-                    }
+                        header[':status'] = 404;
+                    } 
                     
+                    stream.respond(header);
                     stream.end();
                 }
                 console.debug('h2 pushing: '+ headers[':path'] + ' -> '+ asset.filename);
                 
+                header['content-type'] = asset.mime + '; charset='+ asset.encoding;
+                                                
                 if (!asset.isHandler) {
                     pushStream.respondWithFile( 
-                        asset.filename,
-                        { 
-                            ':status': 200,
-                            'content-type': asset.mime + '; charset='+ asset.encoding 
-                        }
+                        asset.filename
+                        , header
                         //, { onError }
                     );
                 } else {
-                    pushStream.respond(
-                        { 
-                            ':status': 200,
-                            'content-type': asset.mime + '; charset='+ asset.encoding 
-                        }                        
-                    );
+                    pushStream.respond(header);
                     pushStream.end(asset.file);
                 }     
                            
             });
-        }
-        //console.debug('h2 push detected: '+' [ '+url+' ] '+ headers[':path']);        
+        }       
     }
 
     this.isXMLRequest = function() {
@@ -2703,7 +2614,7 @@ function SuperController(options) {
         
         client.on('error', (err) => {
             
-            console.error(err.stack||err.message);
+            console.error( '`'+ options[':path']+ '` : '+ err.stack||err.message);
            
             if ( typeof(callback) != 'undefined' ) {
 
@@ -2804,7 +2715,7 @@ function SuperController(options) {
         });
         
         req.on('end', () => {   
-            client.close();
+            
             // exceptions filter
             if ( typeof(data) == 'string' && /^Unknown ALPN Protocol/.test(data) ) {
                 var err = {
@@ -2834,9 +2745,9 @@ function SuperController(options) {
                         }
                     }
                 }
-                
+                //console.debug(options[':method']+ ' ['+ (data.status || 200) +'] '+ options[':path']);
                 if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
-                    callback(data)
+                    callback(false, data)
                 } else {
                     callback( false, data )
                 }
@@ -2859,21 +2770,21 @@ function SuperController(options) {
                 } else {
                     self.emit('query#complete', false, data)
                 }
-            }            
+            }      
+            
+            client.close();
         });
                
         
         if (!/GET|DELETE/i.test(options[':method']))
             req.end(body);
-        else
-            req.end()
-        
+       
         
         return {
             onComplete  : function(cb) {
                 
                 self.once('query#complete', function(err, data){
-                    client.close();  
+                    //client.close();  
                     if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
                         try {
                             data = JSON.parse(data)
@@ -2890,6 +2801,7 @@ function SuperController(options) {
                     } else {
                         cb(err, data)
                     }
+                    client.close();  
                 })
             }
         }

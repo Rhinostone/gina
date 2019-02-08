@@ -1158,7 +1158,7 @@ function ValidatorPlugin(rules, data, formId) {
             $elTMP = $form.target.getElementsByTagName('a');
             if ( $elTMP.length > 0 ) {
                 for(var i = 0, len = $elTMP.length; i < len; ++i) {
-                    if ( $elTMP[i].attributes.getNamedItem('data-gina-form-submit') || /^click\./.test( $elTMP[i].attributes.getNamedItem('id') ) )
+                    if ( $elTMP[i].attributes.getNamedItem('data-gina-form-submit') || /^click\./.test( $elTMP[i].attributes.getNamedItem('id') ) || /^link\./.test( $elTMP[i].attributes.getNamedItem('id') ) )
                         $els.push($elTMP[i])
                 }
             }
@@ -2025,27 +2025,19 @@ function ValidatorPlugin(rules, data, formId) {
 
 
                     var result = event['detail'] || $form.eventData.validation;
-                    //console.log('$form[ '+_id+' ] validation done !!!\n isValid ? ', result['isValid'](), '\nErrors -> ', result['errors'], '\nData -> ', result['data']);
-
+                    
                     handleErrorsDisplay(event['target'], result['errors'], result['data']);
 
                     var _id = event.target.getAttribute('id');
 
                     if ( result['isValid']() ) { // send if valid
                         // now sending to server
-                        // TODO - remove comments, or replace 'submit' by 'submit.' + _id
-                        //if ( $form.withUserBindings && /validate\./.test(event.type) && typeof(gina.events[event.type]) != 'undefined' ) {
-                        //    triggerEvent(gina, event.target, 'submit', result)
-                        //} else {
-
-                            if (instance.$forms[_id]) {
-                                instance.$forms[_id].send(result['data']);
-                            } else if ($form) { // just in case the form is being destroyed
-                                $form.send(result['data']);
-                            }
-                        //}
+                        if (instance.$forms[_id]) {
+                            instance.$forms[_id].send(result['data']);
+                        } else if ($form) { // just in case the form is being destroyed
+                            $form.send(result['data']);
+                        }
                     }
-
                 })
             }
 
@@ -2054,7 +2046,6 @@ function ValidatorPlugin(rules, data, formId) {
             } else {
                 procced()
             }
-
 
 
             var proccedToSubmit = function (evt, $submit) {
@@ -2132,10 +2123,6 @@ function ValidatorPlugin(rules, data, formId) {
                         ++fields['_length']
                     }
 
-                    //console.log('$fields =>\n' + $fields);
-
-                    //instance.$forms[ $target.getAttribute('id') ].sent = false;
-
                     if ( fields['_length'] == 0 ) { // nothing to validate
                         delete fields['_length'];
                         var result = {
@@ -2158,21 +2145,21 @@ function ValidatorPlugin(rules, data, formId) {
                             rule = gina.validator.$forms[ _id ].rules;
                         }
 
-                        //console.log('testing rule [ '+_id.replace(/\-/g, '.') +' ]\n'+ JSON.stringify(rule, null, 4));
-                        //console.log('validating ', $form, fields, rule);
                         validate($target, fields, $fields, rule, function onValidation(result){
-                            //console.log('validation result ', 'validate.' + _id, JSON.stringify(result.data, null, 2));
-                            //console.log('events ', 'validate.' + _id, self.events )
                             triggerEvent(gina, $target, 'validate.' + _id, result)
                         })
                     }
-
                 });
             }
 
 
             // binding submit button
-            var $submit = null, $buttons = [], $buttonsTMP = [], buttonId = null;
+            var $submit         = null
+                , $buttons      = []
+                , $buttonsTMP   = []
+                , linkId        = null 
+                , buttonId      = null
+            ;
             $buttonsTMP = $target.getElementsByTagName('button');
             if ( $buttonsTMP.length > 0 ) {
                 for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
@@ -2182,11 +2169,18 @@ function ValidatorPlugin(rules, data, formId) {
             }
 
             // binding links
-            $buttonsTMP = $target.getElementsByTagName('a');
+            $buttonsTMP = $target.getElementsByTagName('a');            
             if ( $buttonsTMP.length > 0 ) {
                 for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ( $buttonsTMP[b].attributes.getNamedItem('data-gina-form-submit'))
+                    if ( $buttonsTMP[b].attributes.getNamedItem('data-gina-form-submit') ) {
                         $buttons.push($buttonsTMP[b])
+                    } else if ( 
+                        !$buttonsTMP[b].getAttribute('id') 
+                        && !/gina\-popin/.test($buttonsTMP[b].className) 
+                    ) { // will not be binded but will receive an id if not existing
+                        linkId = 'link.'+ uuid.v4();
+                        $buttonsTMP[b].id = linkId;
+                    }
                 }
             }
 
