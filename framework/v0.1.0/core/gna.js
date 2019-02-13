@@ -303,7 +303,8 @@ gna.getProjectConfiguration = function (callback){
             var bundle = getContext('bundle');
             var bundlePath = getPath('project') + '/';
             bundlePath += ( GINA_ENV_IS_DEV ) ? project.bundles[ bundle ].src : project.bundles[ bundle ].release.link;
-
+            
+            
             for (var b in project.bundles) {
                 bundles.push(b)
             }
@@ -339,8 +340,16 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
         var callback = type;
         type = 'dir';
     }
+    
+    
     //creating folders.
     //use junction when using Win XP os.release == '5.1.2600'
+    var mountingPath = getPath('project') + '/bundles';
+    console.debug('mounting path: ', mountingPath);
+    if ( !fs.existsSync(mountingPath) ) {
+        new _(mountingPath).mkdirSync();
+    }
+    
     var exists = fs.existsSync(source);
     console.debug('[ FRAMEWORK ][ MOUNT ] Source: ', source);
     console.debug('[ FRAMEWORK ][ MOUNT ]checking before mounting ', target, fs.existsSync(target), bundlesPath);
