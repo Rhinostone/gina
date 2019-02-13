@@ -349,6 +349,11 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
     if ( !fs.existsSync(mountingPath) ) {
         new _(mountingPath).mkdirSync();
     }
+    var tmpPath = getPath('project') + '/tmp';
+    console.debug('tmp path: ', tmpPath);
+    if ( !fs.existsSync(tmpPath) ) {
+        new _(tmpPath).mkdirSync();
+    }
     
     var exists = fs.existsSync(source);
     console.debug('[ FRAMEWORK ][ MOUNT ] Source: ', source);

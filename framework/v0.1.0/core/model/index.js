@@ -124,7 +124,8 @@ function Model(namespace, _config) {
             var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
             console.debug('[ MODEL ][ ' + model +' ] Scanning model entities: ', entitiesPath +' - Existing path ? '+ fs.existsSync(entitiesPath) );
             if (!fs.existsSync(entitiesPath)) {
-                fs.mkdirSync(entitiesPath) // creating empty path
+                //fs.mkdirSync(entitiesPath) // creating empty path
+                new _(entitiesPath).mkdirSync();
             }
 
             var connectorPath   = _(connectorPath + '/lib/connector.js');
