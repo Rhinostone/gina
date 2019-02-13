@@ -219,7 +219,7 @@ function Config(opt) {
 
         var configuration = Config.instance.envConf;
 
-        var env = self.env;
+        var env = self.env || Config.instance.env;
 
         Config.instance.Env.parent = Config.instance;
 
@@ -282,6 +282,9 @@ function Config(opt) {
         load : function(callback) {
             loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
                 self.envConf = envConf;
+                envConf.env = self.env;
+                envConf.isStandalone = self.isStandalone;
+                
                 callback(false, envConf);
             });
         },

@@ -25,7 +25,7 @@ module.exports = function(){
      * */
     requireJSON = function(filename){        
         
-        console.debug('[ Helpers ][ requireJSON ] ', filename);
+        //console.debug('[ Helpers ][ requireJSON ] ', filename);
         
         var i                       = null
             , len                   = null
@@ -39,9 +39,7 @@ module.exports = function(){
             throw err
         }
         
-        var replacement = function(str) {
-            console.log('found ', str);
-        }
+        
         /** block style comments */
         if ( /\/\*\*/.test(jsonStr) ) {
             jsonStr   = jsonStr.replace(/(\/\*([^*]|[\r\n]|(\*+([^*\/]|[\r\n])))*\*+\/)/g, '');

@@ -29,7 +29,8 @@ var params = argv.split(/\s+/g);
 if ( params.length > 0 ) {
     for (var p = 0, len = params.length; p < len; ++p) {
         if ( /^\-\-(inspect|debug)/.test(params[p]) ) {
-            debugPort = params[p]
+            debugPort = params[p];
+            process.argv.splice(p,1);   
         }
     }
 }
@@ -42,5 +43,5 @@ exec('node ' + debugPort +' '+ __dirname +'/cli ' + argv, (error, stdout, stderr
         return;
     }
     console.log(`${stdout}`);
-    console.error(`${stderr}`);
+    //console.error(`${stderr}`);
 });

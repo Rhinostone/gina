@@ -14,13 +14,13 @@ var console = lib.logger;
  * */
 function List(opt, cmd) {
 
-    // self will be pre filled if you call `new CmdHelper(self, opt.client)`
+    // self will be pre filled if you call `new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled })`
     var self = {}, local = {};
 
     var init = function() {
 
         // import CMD helpers
-        new CmdHelper(self, opt.client);
+        new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 
         // check CMD configuration
         if (!isCmdConfigured()) return false;

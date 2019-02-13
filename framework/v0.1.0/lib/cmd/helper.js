@@ -1,7 +1,7 @@
 var fs          = require('fs');
 var console     = lib.logger;
 var merge       = lib.merge;
-
+var helpers     = require( getPath('gina').helpers);
 /**
  * CmdHelper
  *
@@ -9,7 +9,7 @@ var merge       = lib.merge;
  * @author      Rhinostone <gina@rhinostone.com>
  * @api public
  * */
-function CmdHelper(cmd, client) {
+function CmdHelper(cmd, client, debug) {
     
     var conf = {
         main: null,
@@ -29,6 +29,8 @@ function CmdHelper(cmd, client) {
         // CMD params list ( starting with --) {object}
         params : {}, //
         nodeParams : [],
+        debugPort: debug.port,
+        debugBrkEnabled: debug.brkEnabled,
         // project name {string}
         projectName : null, // defined by filterArgs()
         projectLocation: null,
@@ -87,6 +89,19 @@ function CmdHelper(cmd, client) {
         }
 
         var arr = [];
+        
+        // retieving debug infos
+        var debugOption = null;
+        if ( cmd.debugPort ) {
+            debugOption = '--inspect=' + cmd.debugPort;     
+                   
+            if (cmd.debugBrkEnabled) {
+                debugOption = debugOption.replace(/\-\-inspect/, '--inspect-brk')
+            }
+            
+            cmd.nodeParams.push(debugOption)
+        }
+        
 
         for (var a in process.argv) {
 
@@ -118,6 +133,8 @@ function CmdHelper(cmd, client) {
                     cmd.nodeParams.push(process.argv[a]);
             }
         }
+        
+        //console.log('nodeParams ', cmd.nodeParams)
     }
 
     /**
@@ -359,49 +376,61 @@ function CmdHelper(cmd, client) {
             var re = null;
             //console.debug('[ ConfigAssetsLoaderHelper ] Loaded bundles list\n'+ JSON.stringify(cmd.bundles, null, 4));
             // // protocols & schemes list: for the bundle
-            if (cmd.bundles.length > 0 && typeof (cmd.projects[cmd.projectName]) != 'undefined') { 
+            // if (cmd.bundles.length > 0 && typeof (cmd.projects[cmd.projectName]) != 'undefined') { 
                 
-                for (var b = 0, bLen = cmd.bundles.length; b < bLen; ++b) {
+            //     if ( typeof(cmd.bundlesByProject[cmd.projectName]) == 'undefined' ) {
+            //         cmd.bundlesByProject[cmd.projectName] = {}
+            //     }
+                
+            //     cmd.bundlesByProject[cmd.projectName].protocols = [];
+            //     cmd.bundlesByProject[cmd.projectName].schemes = [];
+                
+            //     for (var b = 0, bLen = cmd.bundles.length; b < bLen; ++b) {
                     
-                    re = new RegExp('^' + cmd.bundles[b] +'\@', '');
-                    reProjectProtoScheme = new RegExp('\@'+ cmd.projectName +'$', '');
-                    reProtoScheme = new RegExp('^' + cmd.bundles[b] +'\@'+ cmd.projectName, '');
-                    for (var protocol in ports) {
-                        if ( typeof(cmd.portsData[protocol]) == 'undefined')
-                            cmd.portsData[protocol] = {};
+            //         re = new RegExp('^' + cmd.bundles[b] +'\@', '');
+            //         reProjectProtoScheme = new RegExp('\@'+ cmd.projectName +'$', '');
+            //         reProtoScheme = new RegExp('^' + cmd.bundles[b] +'\@'+ cmd.projectName, '');
+            //         for (var protocol in ports) {
+            //             if ( typeof(cmd.portsData[protocol]) == 'undefined')
+            //                 cmd.portsData[protocol] = {};
                             
-                        for (var scheme in ports[protocol]) {
-                            if ( typeof(cmd.portsData[protocol][scheme]) == 'undefined')
-                                cmd.portsData[protocol][scheme] = {};   
+            //             for (var scheme in ports[protocol]) {
+            //                 if ( typeof(cmd.portsData[protocol][scheme]) == 'undefined')
+            //                     cmd.portsData[protocol][scheme] = {};   
                                                          
-                            for (var port in ports[protocol][scheme]) {
+            //                 for (var port in ports[protocol][scheme]) {
                                 
-                                if (cmd.protocols.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
-                                    //cmd.protocols.push(protocol);
-                                    if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
-                                        cmd.portsData[protocol][scheme][port] = {}
-                                }
+            //                     if (cmd.protocols.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
+            //                         //cmd.protocols.push(protocol);
+            //                         if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
+            //                             cmd.portsData[protocol][scheme][port] = {}
+            //                     }
                                 
-                                // updating schemes list
-                                if (cmd.schemes.indexOf(scheme) < 0 && re.test(ports[protocol][scheme][port])) {
-                                    //cmd.schemes.push(scheme);
-                                    if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
-                                        cmd.portsData[protocol][scheme][port] = {}
-                                }
+            //                     // updating schemes list
+            //                     if (cmd.schemes.indexOf(scheme) < 0 && re.test(ports[protocol][scheme][port])) {
+            //                         //cmd.schemes.push(scheme);
+            //                         if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
+            //                             cmd.portsData[protocol][scheme][port] = {}
+            //                     }
 
-                                // updating port list
-                                if (cmd.portsList.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
-                                    cmd.portsList.push(~~port);
-                                    cmd.portsData[protocol][scheme][port] = ports[protocol][scheme][port];                                    
-                                }
-                            }
-                        }                            
-                    }
-                }
+            //                     // updating port list
+            //                     if (cmd.portsList.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
+            //                         cmd.portsList.push(~~port);
+            //                         cmd.portsData[protocol][scheme][port] = ports[protocol][scheme][port];        
+                                    
+            //                         // if ( reProtoScheme.test(ports[protocol][scheme][port]) ) {
+            //                         //     if (cmd.bundlesByProject[cmd.projectName].protocols.indexOf(protocol) < 0)
+            //                         //         cmd.bundlesByProject[cmd.projectName].protocols.push(protocol);
+            //                         // }
+            //                     }
+            //                 }
+            //             }                            
+            //         }
+            //     }
 
 
 
-            } else {
+            // } else {
                 
                 // protocols & schemes list: for the project
                 re = new RegExp('\@' + cmd.projectName, '');
@@ -445,7 +474,7 @@ function CmdHelper(cmd, client) {
             cmd.protocols.sort();
             cmd.schemes.sort();
 
-        }
+        //}
 
         // getting defautl envs list
         cmd.envs = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined') ? cmd.projects[cmd.projectName]['envs'] : cmd.mainConfig['envs'][ GINA_SHORT_VERSION ];
@@ -548,7 +577,7 @@ function CmdHelper(cmd, client) {
         }
         
         
-        var bundleConfigPath = null;
+        var bundleConfigPath = null, settings = null;
         for (var project in cmd.bundlesByProject) { // for each project
             
             for (var bundle in cmd.bundlesByProject[project]) { // for each bundle
@@ -557,17 +586,57 @@ function CmdHelper(cmd, client) {
                     cmd.bundles.push(bundle);
                 }            
                 
+                if ( typeof(cmd.bundlesByProject[project][bundle].protocols) == 'undefined' ) {
+                    cmd.bundlesByProject[project][bundle].protocols = []
+                }
+                if ( typeof(cmd.bundlesByProject[project][bundle].schemes) == 'undefined' ) {
+                    cmd.bundlesByProject[project][bundle].schemes = []
+                }
+                
                 // bundle default environment inherits project's default environement
                 cmd.bundlesByProject[project][bundle].defaultEnv = cmd.projects[project].def_env;
                 
+                // adding project available protocols & schemes to the bundle
+                cmd.bundlesByProject[project][bundle].protocols = cmd.projects[project].protocols;
+                cmd.bundlesByProject[project][bundle].def_protocol = cmd.defaultProtocol;
+                
+                cmd.bundlesByProject[project][bundle].schemes   = cmd.projects[project].schemes;
+                cmd.bundlesByProject[project][bundle].def_scheme = cmd.defaultScheme;
+                
                 if ( fs.existsSync(_(cmd.projectLocation + '/'+ cmd.bundlesByProject[project][bundle].src )) ) {
                     cmd.bundlesByProject[project][bundle].exists = true;                    
-                    // adding configurations
-                    // settings cmd.projects[cmd.projectName].def_env
+                    // adding configurations                    
                     bundleConfigPath = _(cmd.projectLocation + '/'+ cmd.bundlesByProject[project][bundle].src +'/config' );
                     cmd.bundlesByProject[project][bundle].configPaths = {
                         settings: _(bundleConfigPath +'/settings.json')
                     };
+                    // adding protocol & scheme found in the bunble settings
+                    if ( fs.existsSync(cmd.bundlesByProject[project][bundle].configPaths.settings) ) {
+                        
+                        settings = requireJSON(cmd.bundlesByProject[project][bundle].configPaths.settings);
+                        if ( 
+                            typeof(settings.server) != 'undefined' 
+                            && typeof(settings.server.protocol) != 'undefined'                     
+                        ) {
+                            // adding in case of bad configuration : exists in bundle, but not listed in available/global settings
+                            if (cmd.bundlesByProject[project][bundle].protocols.indexOf(settings.server.protocol) < 0)
+                                cmd.bundlesByProject[project][bundle].protocols.push(settings.server.protocol);
+                                
+                            cmd.bundlesByProject[project][bundle].def_protocol = settings.server.protocol
+                        }
+                        
+                        if ( 
+                            typeof(settings.server) != 'undefined' 
+                            && typeof(settings.server.scheme) != 'undefined'                      
+                        ) {
+                            // adding in case of bad configuration : exists in bundle, but not listed in available/global settings
+                            if (cmd.bundlesByProject[project][bundle].schemes.indexOf(settings.server.scheme) < 0)
+                                cmd.bundlesByProject[project][bundle].schemes.push(settings.server.scheme);
+                                
+                            cmd.bundlesByProject[project][bundle].def_scheme = settings.server.scheme
+                        }
+                    }
+                        
                     
                 } else {
                     cmd.bundlesByProject[project][bundle].exists = false;
@@ -665,8 +734,13 @@ function CmdHelper(cmd, client) {
         // CMD Client exit
         if ( typeof(errorMessage) != 'undefined' ) {
             client.write(errorMessage + '\n');
-            client.end();
         }
+        client.end();
+        if (errorMessage) {
+            process.exit(1)
+        } else {
+            process.exit()
+        }        
     }
 };
 

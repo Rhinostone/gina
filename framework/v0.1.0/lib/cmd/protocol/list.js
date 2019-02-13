@@ -13,25 +13,25 @@ var console = lib.logger;
  *
  * */
 function List(opt, cmd) {
-
-    // self will be pre filled if you call `new CmdHelper(self, opt.client)`
+    
+    // self will be pre filled if you call `new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled })`
     var self = {}, local = {};
 
-    var init = function() {
-
+    var init = function() {      
+        //debugger;  
         // import CMD helpers
-        new CmdHelper(self, opt.client);
+        new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 
         // check CMD configuration
         if (!isCmdConfigured()) return false;
 
 
         if (!self.name && !self.projectName) {
-            listAll()
+            listAllByProject()
         } else if (self.projectName && isDefined(self.projectName) && !self.name) {
-            listProjectOnly()
+            listByBundle()
         } else if (typeof (self.name) != 'undefined' && isValidName(self.name) ) {
-            listBundleOnly()
+            listByBundle(self.name)
         } else {
             console.error('[ ' + self.name + ' ] is not a valid project name.');
             process.exit(1)
@@ -55,16 +55,21 @@ function List(opt, cmd) {
     }
 
 
-    var listAll = function() {
-        var protocols = null
-            , schemes = null
-            , projects = self.projects
-            , list = []
-            , p = ''
-            , str = ''
-            , strArr = []
-            , schemeStr = ''
-            , protocolStr = '';
+    var listAllByProject = function() {
+        
+        var protocols       = null
+            , schemes       = null
+            , projects      = self.projects
+            , list          = []
+            , p             = null
+            , i             = null
+            , len           = null
+            , str           = ''
+            , schemeStr     = ''
+            , protocolStr   = ''
+            , indexObj      = null
+            , index         = null
+        ;
 
         for (p in projects) {
             list.push(p)
@@ -88,8 +93,9 @@ function List(opt, cmd) {
             str += '      Protocol(s)        Scheme(s)\n\r';
             
             
-            var indexObj = {}, index = 2;
-            for (var i = 0, len = protocols.length; i < len; ++i) {
+            indexObj = {}; index = 2;
+            i = 0; len = protocols.length;
+            for (; i < len; ++i) {
                 protocolStr = '';               
                 if (self.defaultProtocol == protocols[i]) {
                     protocolStr += '[ * ] ' + protocols[i]
@@ -105,12 +111,13 @@ function List(opt, cmd) {
             
             
             index = 3;
-            for (var s = 0, sLen = schemes.length; s < sLen; ++s) {
+            i = 0; len = schemes.length;
+            for (; i < len; ++i) {
                 schemeStr = '';
-                if (self.defaultScheme == schemes[s]) {
-                    schemeStr += '           [ * ] ' + schemes[s]
+                if (self.defaultScheme == schemes[i]) {
+                    schemeStr += '           [ * ] ' + schemes[i]
                 } else {
-                    schemeStr += '           [   ] ' + schemes[s]
+                    schemeStr += '           [   ] ' + schemes[i]
                 }
                       
                 if ( (index % 2) != 0 ){
@@ -119,73 +126,110 @@ function List(opt, cmd) {
                 }                   
             }
             
-            for (var k in indexObj) {
-                str += indexObj[k];
-                if ( (~~k % 3) == 0 ){
+            i = null;
+            for (i in indexObj) {
+                str += indexObj[i];
+                if ( (~~i % 3) == 0 ){
                     str += '\n\r'
-                }
-                
-            }
-            
-            //str += strArr.join('');
+                }                
+            }            
             
             str += '\n\r'
         }
-        console.debug(JSON.stringify(indexObj, null, 4));
+        
         console.log(str)
     }
 
-    var listProjectOnly = function() {
+    var listByBundle = function(bundleName) {
         
-        var protocols   = self.protocols//self.projects[self.projectName].protocols
-            , str       = '';
-
-        for (var i = 0, len = protocols.length; i < len; ++i) {
-            if (self.defaultProtocol == protocols[i]) {
-                str += '[ * ] ' + protocols[i]
-            } else {
-                str += '[   ] ' + protocols[i]
+        var protocols       = null
+            , schemes       = null
+            , bundles       = self.bundlesByProject[self.projectName]
+            , list          = []
+            , p             = null
+            , i             = null
+            , len           = null
+            , str           = ''
+            , schemeStr     = ''
+            , protocolStr   = ''
+            , indexObj      = null
+            , index         = null
+        ;
+        
+        if ( typeof(bundleName) != 'undefined' ) {
+            list.push(bundleName)
+        } else {
+            for (p in bundles) {
+                list.push(p)
             }
+            list.sort();
+        }
+
+        
+
+        p = 0;
+        for (; p < list.length; ++p) {
+                        
+            
+            str += '------------------------------------\n\r';
+            if (!bundles[list[p]].exists) {
+                str += '?! '
+            }
+            str += list[p] + '\n\r';
+            str += '------------------------------------\n\r';
+            
+            protocols = bundles[list[p]].protocols;
+            schemes = bundles[list[p]].schemes;            
+            if (!protocols || protocols.length == 0) continue;
+            
+            
+            str += '      Protocol(s)        Scheme(s)\n\r';
+            
+            
+            indexObj = {}; index = 2;
+            i = 0; len = protocols.length;
+            for (; i < len; ++i) {
+                protocolStr = '';               
+                if (bundles[list[p]].def_protocol == protocols[i]) {
+                    protocolStr += '[ * ] ' + protocols[i]
+                } else {
+                    protocolStr += '[   ] ' + protocols[i]
+                }                
+                
+                if ( (index % 2) == 0 ){
+                    indexObj[index] = protocolStr;
+                    index += 2
+                }
+            }
+            
+            
+            index = 3;
+            i = 0; len = schemes.length;
+            for (; i < len; ++i) {
+                schemeStr = '';
+                if (bundles[list[p]].def_scheme == schemes[i]) {
+                    schemeStr += '           [ * ] ' + schemes[i]
+                } else {
+                    schemeStr += '           [   ] ' + schemes[i]
+                }
+                      
+                if ( (index % 2) != 0 ){
+                    indexObj[index] = schemeStr;
+                    index += 2               
+                }                   
+            }
+            
+            i = null;
+            for (i in indexObj) {
+                str += indexObj[i];
+                if ( (~~i % 3) == 0 ){
+                    str += '\n\r'
+                }                
+            }            
+            
             str += '\n\r'
         }
-
-        console.log(str)
-    };
-
-    var listBundleOnly = function() {
-
-        var protocols = self.protocols
-            // inherits project's protocol if none is set in /config/settings.json
-            , defaultProtocol = self.defaultProtocol 
-            , str = '';
         
-        var bundleConfig = self.bundlesByProject[self.projectName][self.name];
-        var env = bundleConfig.defaultEnv;
-        var settingsPath = _(bundleConfig.configPaths.settings, true);
-        var settings = {};
-        
-        if ( fs.existsSync(settingsPath) ) {
-            settings = require(settingsPath);
-        }
-        
-        if ( 
-            typeof(settings.server) != 'undefined' 
-            && typeof(settings.server.protocol) != 'undefined' 
-        ) {
-            defaultProtocol = settings.server.protocol;
-        }
-        
-        
-        for (var i = 0, len = protocols.length; i < len; ++i) {
-            if (defaultProtocol == protocols[i]) {
-                str += '[ * ] ' + protocols[i];
-            } else {
-                str += '[   ] ' + protocols[i]
-            }
-            str += '\n\r'
-        }
-    
-
         console.log(str)
     };
 

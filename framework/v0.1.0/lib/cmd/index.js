@@ -45,8 +45,9 @@ cmd.getString = function() {
     var cmd = process.argv
         .toString()
         .replace(/,/g,' ')
-        .replace(/node/g, 'gina');
-
+        .replace(/node\s/g, 'gina ');
+        //.replace(/node/g, 'gina');    
+    
     var cmdArr = cmd.split('/');
     cmd = cmdArr[cmdArr.length-1];
     return cmd
@@ -70,8 +71,10 @@ cmd.getOptions = function() {
 
 
 cmd.onExec = function(client, isFromFramework, opt) {
-    cmd.option = opt;
+    
     var console = lib.logger;
+    cmd.option = opt;
+        
     var Proc = require( getPath('gina').lib + '/proc');
     var self = {};
 
@@ -90,6 +93,7 @@ cmd.onExec = function(client, isFromFramework, opt) {
 
 
     if (self.isFromFramework) {
+        
         var init = require('./framework/init')(opt);
         //Framework CMD.
         if (opt.task.action == 'start') {
@@ -115,6 +119,7 @@ cmd.onExec = function(client, isFromFramework, opt) {
             })
         } else { // Offline CMD
             init.onComplete( function done(err, run, opt){
+                
                 run(opt)
             })
         }

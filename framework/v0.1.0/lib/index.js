@@ -44,7 +44,7 @@ function Lib() {
         Shell       : _require('./shell'),
         logger      : _require('./logger'),
         math        : _require('./math'),
-        url         : _require('./url'),
+        //url         : _require('./url'),
         routing     : _require('./routing'),
         cmd         : _require('./cmd')
     };
@@ -72,7 +72,7 @@ lib = new Lib();
 
 // Needed for by the daemon
 lib.cmd.load = function(opt){
-
+    
     process.argv = opt.argv;
 
     //Set gina paths.
@@ -102,9 +102,9 @@ lib.cmd.load = function(opt){
         {
             'name' : 'homedir',
             'content' : opt.homedir
-        },
+        }
     ]);
-
+    
     var isFromFramework = ( typeof(opt.isFromFramework) != 'undefined') ? true : false;
     lib.cmd.onExec(opt.client, isFromFramework, opt)
 };

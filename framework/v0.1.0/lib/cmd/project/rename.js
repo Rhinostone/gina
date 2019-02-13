@@ -18,7 +18,7 @@ function Rename(opt, cmd) {
     var init = function() {
 
         // import CMD helpers
-        new CmdHelper(self, opt.client);
+        new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
