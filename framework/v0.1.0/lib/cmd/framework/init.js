@@ -9,9 +9,9 @@ var help            = require(ginaPath + '/utils/helper');
 var aliases = require( getPath('gina').lib + '/cmd/aliases.json' );
 
 function Initialize(opt) {
-
+    
     var self = {};
-    var init = function(opt) {
+    var init = function(opt) {        
         self.opt = opt;
         begin()
     }
@@ -53,7 +53,7 @@ function Initialize(opt) {
         return task
     }
 
-    var run = function(opt, cmd) {
+    var run = function(opt, cmd) {        
         opt.task = checkForAliases(opt.task);
         var filename ='/cmd/' + opt.task.topic + '/' + opt.task.action + '.js'
         var path = getPath('gina').lib + filename;
@@ -325,14 +325,14 @@ function Initialize(opt) {
         }
     }
 
-    self.setLoggers = function() {
-        //var terminal = lib.logger('terminal', require() );
-    }
+    // self.setLoggers = function() {
+    //     //var terminal = lib.logger('terminal', require() );
+    // }
 
 
-    self.checkFrameworkLocals = function() {
+    // self.checkFrameworkLocals = function() {
 
-    }
+    // }
 
     self.end = function() {
         //getDefined() to list it all

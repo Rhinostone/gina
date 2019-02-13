@@ -122,7 +122,7 @@ function Router(env) {
         local.request       = request;
         local.next          = next;
         local.conf          = conf;
-        local.isStandalone  = conf.server.isStandalone;        
+        local.isStandalone  = conf.isStandalone;     
         
         if (cacheless) {
             refreshCoreDependencies()
@@ -203,9 +203,9 @@ function Router(env) {
         var filename = '';
         if (namespace) {
             filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.'+ namespace +'.js';
-            if ( !fs.existsSync(filename) ) {
+            if ( !fs.existsSync(filename) ) {                
+                console.warn('namespace `'+ namespace +'` found, but no `'+filename+'` to load: just ignore this message if this is ok with you');
                 filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
-                console.warn('namespace found, but no `'+filename+'` to load: just ignore this message if this is ok with you')
             }
         } else {
             filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
@@ -280,22 +280,23 @@ function Router(env) {
             
             var controller  = new Controller(options);                        
             controller.name = options.control;            
+            controller.serverInstance = serverInstance;
             controller.setOptions(request, response, next, options);
             
-            if ( /http\/2/.test(conf.server.protocol) && !local.isXMLRequest) { 
+            // if ( /http\/2/.test(conf.server.protocol) && !local.isXMLRequest) { 
                 
-                serverInstance._referrer        = local.request.url;
-                serverInstance._options         = options;
-                serverInstance._isXMLRequest    = local.isXMLRequest;
+            //     serverInstance._referrer        = local.request.url;
+            //     serverInstance._options         = options;
+            //     serverInstance._isXMLRequest    = local.isXMLRequest;
                                 
-                if ( !serverInstance._http2streamEventInitalized ) {
-                    serverInstance._http2streamEventInitalized = true;
-                    serverInstance.on('stream', function onHttp2Strem(stream, headers) {        
-                        if (!this._isXMLRequest)                
-                            controller.onHttp2Stream(this._referrer, stream, headers);
-                    });
-                }               
-            }
+            //     if ( !serverInstance._http2streamEventInitalized ) {
+            //         serverInstance._http2streamEventInitalized = true;
+            //         serverInstance.on('stream', function onHttp2Strem(stream, headers) {        
+            //             if (!this._isXMLRequest)                
+            //                 controller.onHttp2Stream(this._referrer, stream, headers);
+            //         });
+            //     }               
+            // }
             
             
 
@@ -397,19 +398,20 @@ function Router(env) {
                         controller = new RequiredController();
                     }
                     
-                    if ( /http\/2/.test(conf.server.protocol) ) { 
+                    controller.serverInstance = serverInstance;                    
+                    // if ( /http\/2/.test(conf.server.protocol) ) { 
                 
-                        serverInstance._referrer = local.request.url;
-                        serverInstance._options = options;
+                    //     serverInstance._referrer = local.request.url;
+                    //     serverInstance._options = options;
                                         
-                        if ( !serverInstance._http2streamEventInitalized ) {
-                            serverInstance._http2streamEventInitalized = true;
-                            serverInstance.on('stream', function onHttp2Strem(stream, headers) {        
+                    //     if ( !serverInstance._http2streamEventInitalized ) {
+                    //         serverInstance._http2streamEventInitalized = true;
+                    //         serverInstance.on('stream', function onHttp2Strem(stream, headers) {        
                                                 
-                                controller.onHttp2Stream(this._referrer, stream, headers);
-                            });
-                        }               
-                    }
+                    //             controller.onHttp2Stream(this._referrer, stream, headers);
+                    //         });
+                    //     }               
+                    // }
                     
                     return controller
 

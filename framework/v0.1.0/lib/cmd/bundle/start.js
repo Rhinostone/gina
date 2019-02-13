@@ -18,10 +18,9 @@ function Start(opt, cmd) {
     };
 
     var init = function(opt, cmd) {
-
         // import CMD helpers
-        new CmdHelper(self, opt.client);
-
+        new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
+        
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
         
@@ -38,7 +37,13 @@ function Start(opt, cmd) {
 
         } else {
 
-            var isStarting = false;
+            var isStarting  = false
+                , params    = null
+                , index     = null
+                , i         = null
+                , len       = null
+            ;
+            
             isRealApp(bundle, function(err, appPath){
 
                 if (err) {
@@ -53,7 +58,7 @@ function Start(opt, cmd) {
                     setContext('processList', process.list);
                     setContext('ginaProcess', process.pid);
 
-                    var params = [
+                    params = [
                         // node arguments will be passed by gina
                         appPath,
                         JSON.stringify(getContext()), //Passing context to child.
@@ -62,22 +67,20 @@ function Start(opt, cmd) {
                     ];
 
                     // injecting node arguments
-                    var index = 0;
-                    if (self.nodeParams.length > 0) {
-                        for (var p = 0, pLen = self.nodeParams.length; p < pLen; ++p) {
-                            params.splice(index, 0, self.nodeParams[p]);
+                    index = 0; i = 0; len = self.nodeParams.length;
+                    if (len > 0) {
+                        for (; i < len; ++i) {
+                            params.splice(index, 0, self.nodeParams[i]);
                             ++index
                         }
                     }
 
-
-
-                    for (var i = 0; i < params.length; ++i) {
+                    i = 0; len = params.length;
+                    for (; i < len; ++i) {
                         if (params[i] == '') {
                             params.splice(i, 1);
                         }
                     }
-
                     
                     
                     var child = spawn(opt.argv[0], params,
@@ -85,8 +88,6 @@ function Start(opt, cmd) {
                             detached: true
                         }
                     );
-                    
-
 
                     child.stdout.setEncoding('utf8');//Set encoding.
                     child.stdout.on('data', function(data) {
@@ -148,9 +149,8 @@ function Start(opt, cmd) {
             , root          = self.projects[self.projectName].path
             , bundleDir     = null
             , bundlesPath   = null
-            , bundleInit    = null;
-
-
+            , bundleInit    = null
+        ;
 
         try {
             //This is mostly for dev.

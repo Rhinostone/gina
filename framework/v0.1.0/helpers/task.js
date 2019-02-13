@@ -19,6 +19,7 @@ module.exports = function () {
      *
      * */
 	run = function(cmdline, opt) {
+        
 		var pathArr = (new _(__dirname).toUnixStyle().split(/\//g));
 		var root =  pathArr.splice(0, pathArr.length-6).join('/');
 

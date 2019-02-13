@@ -573,8 +573,8 @@ function MainHelper(opt) {
         }
 
         var newArgv = {};
-        for (var a in process.argv) {
-            if ( process.argv[a].indexOf('--') > -1 && process.argv[a].indexOf('=') > -1) {
+        for (var a in process.argv) {            
+            if ( /\-\-/.test(process.argv[a]) && process.argv[a].indexOf('=') > -1 ) {
                 evar = ( (process.argv[a].replace(/--/, ''))
                     .replace(/-/, '_') )
                     .split(/=/);

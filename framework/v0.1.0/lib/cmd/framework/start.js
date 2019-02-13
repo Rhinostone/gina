@@ -31,6 +31,7 @@ function Start(opt){
     var init = function(opt){
 
         self.pid        = opt.pid;
+        setEnvVar('GINA_PID', opt.pid);
         self.projects   = require(GINA_HOMEDIR + '/projects.json');
         self.services   = [];
         self.bundles    = [];

@@ -9,14 +9,17 @@ function Cmd(opt, runOffine) {
 
     var local = {};
     var lib = {};
-
+    
     var init = function(opt, runOffine) {
-        local.port          = opt.port;
-        local.binPath       = opt.binPath;
-        local.pack          = opt.pack;
-        local.ginaPath      = opt.ginaPath;
-        local.homedir       = opt.homedir;
-        local.frameworkPath = opt.frameworkPath;
+        
+        local.port              = opt.port;
+        local.debugPort         = opt.debugPort;
+        local.debugBrkEnabled   = opt.debugBrkEnabled;
+        local.binPath           = opt.binPath;
+        local.pack              = opt.pack;
+        local.ginaPath          = opt.ginaPath;
+        local.homedir           = opt.homedir;
+        local.frameworkPath     = opt.frameworkPath;
 
         lib = require(local.frameworkPath + "/lib");
 
@@ -55,7 +58,9 @@ function Cmd(opt, runOffine) {
                     pack : local.pack,
                     argv : argv,
                     client : conn,
-                    homedir : local.homedir
+                    homedir : local.homedir,
+                    debugPort : local.debugPort,
+                    debugBrkEnabled : local.debugBrkEnabled
                 })
             })
         });
@@ -100,6 +105,8 @@ function Cmd(opt, runOffine) {
                 client : process.stdout,
                 isFromFramework : true,
                 homedir : local.homedir,
+                debugPort : local.debugPort,
+                debugBrkEnabled : local.debugBrkEnabled,
                 task : {
                     topic : "framework",
                     action : "start"
@@ -109,10 +116,11 @@ function Cmd(opt, runOffine) {
     };
 
     var launchCmd = function() {
-        var cmd = process.argv[2].split(':')
-            , topic = cmd[0]
-            , action = cmd[1];
-
+        
+        var cmd         = process.argv[2].split(':')
+            , topic     = cmd[0]
+            , action    = cmd[1]
+        ;
 
         lib.cmd.load({
             ginaPath : local.ginaPath,
@@ -122,6 +130,8 @@ function Cmd(opt, runOffine) {
             client : process.stdout,
             isFromFramework : true,
             homedir : local.homedir,
+            debugPort : local.debugPort,
+            debugBrkEnabled : local.debugBrkEnabled,
             task : {
                 topic : topic,
                 action : action

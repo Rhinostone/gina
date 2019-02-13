@@ -142,10 +142,13 @@ function Server(options) {
     this.start = function(instance) {
 
         if (instance) {            
-            self.instance   = instance;
+            self.instance       = instance;            
             //Router configuration.
             var router      = local.router;
             instance.throwError = throwError;
+            instance.getAssets  = getAssets;
+            //instancence.getAssetFilenameFromUrl = getAssetFilenameFromUrl;
+            
             router.setServerInstance(instance);
         }
         
@@ -531,6 +534,479 @@ function Server(options) {
         return obj;
     }
     
+    var getAssetFilenameFromUrl = function(bundleConf, url) {        
+        
+        var staticsArr  = bundleConf.publicResources;
+        var staticProps = {
+            firstLevel  : '/'+ url.split(/\//g)[1] + '/',
+            isFile      :  /^\/[A-Za-z0-9_-]+\.(.*)$/.test(url)
+        };
+        var notFound = '404.html'
+        
+        var filename = null, path = null;
+        if ( 
+            staticProps.isFile && staticsArr.indexOf(url) > -1 
+            || staticsArr.indexOf(staticProps.firstLevel) > -1
+        ) {            
+            
+            // by default
+            path = url.replace(url.substr(url.lastIndexOf('/')+1), '');
+            // catch `statics.json` defined paths || bundleConf.staticResources.indexOf(url.replace(url.substr(url.lastIndexOf('/')+1), '')) > -1
+            if (  bundleConf.staticResources.indexOf(path) > -1 || bundleConf.staticResources.indexOf(staticProps.firstLevel) > -1 ) {
+                
+                filename = (bundleConf.staticResources.indexOf(path) > -1) ? bundleConf.content.statics[path] + url.replace(path, '/') : bundleConf.content.statics[staticProps.firstLevel] + url.replace(staticProps.firstLevel, '/');
+                
+            } else {
+                filename = ( bundleConf.staticResources.indexOf(url) > -1 ) ? bundleConf.content.statics[url] : bundleConf.publicPath + url;
+            }
+            
+        
+            if ( !fs.existsSync(filename) )
+                return notFound;
+                
+            return filename
+            
+        } else {
+            return notFound
+        }
+    }
+    
+    /**
+     * Get Assets
+     * 
+     * @param {object} bundleConf
+     * @param {string} layoutStr
+     * @param {object} [swig] - when called from controller
+     * @param {object} [data] - when called from controller
+     */
+    var getAssets = function (bundleConf, layoutStr, swig, data) {
+        
+        // layout search for <link|script|img>
+        var layoutAssets        = layoutStr.match(/<link .*?<\/link>|<link .*?(rel\=\"(stylesheet|icon|manifest|(.*)\-icon))(.*)|<script.*?<\/script>|<img .*?(.*)/g) || [];
+        
+        var assets      = {}
+            , cssFiles  = []
+            , aCount    = 0
+            , i         = 0
+            , len       = 0
+            , domain    = null
+            , key       = null // [ code ] url
+            , ext       = null
+            , url       = null
+            , filename  = null
+        ;
+        
+        // user's defineds assets
+        var layoutClasses     = [];
+                       
+        // layout assets
+        i   = 0;
+        len = layoutAssets.length;         
+        var type            = null
+            , isAvailable   = null
+            , tag           = null
+            , properties    = null
+            , p             = 0
+            , pArr          = []            
+        ;
+        for (; i < len; ++i) {
+            
+            if ( 
+                !/(\<img|\<link|\<script)/g.test(layoutAssets[i])
+                || /\<img/.test(layoutAssets[i]) &&  /srcset/.test(layoutAssets[i]) // not able to handle this case for now
+            ) {
+                continue;
+            }                
+            
+            if ( /\<img/.test(layoutAssets[i]) ) {
+                type    = 'image';
+                tag     = 'img'; 
+            }
+            
+            if ( /\<script/.test(layoutAssets[i]) ) {
+                type    = 'javascript';
+                tag     = 'script'; 
+            }
+            
+            if ( /\<link/.test(layoutAssets[i]) ) {
+                if ( /rel\=\"stylesheet/.test(layoutAssets[i]) ) {
+                    type    = 'stylesheet';
+                } else if ( /rel\=\"(icon|(.*)\-icon)/.test(layoutAssets[i]) ) {
+                    type    = 'image';
+                } else {
+                    type = 'file';
+                }
+                
+                tag     = 'link'; 
+            }
+            
+            domain  = null;
+            try {
+                url     = layoutAssets[i].match(/(src|href)\=(\".*?\"|\'.*?\')/)[0];
+            } catch (err) {
+                console.warn('Problem with this asset ('+ i +'/'+ len +'): '+ layoutAssets[i].substr(0, 80) +'...');
+                continue;
+            }
+            
+            
+            if ( /data\:/.test(url) ) { // ignoring "data:..."
+                continue
+            }
+            url = url.replace(/((src|href)\=\"|(src|href)\=\'|\"|\')/g, '');
+            if (swig && /^\{\{/.test(url) )
+                url = swig.compile(url)(data);
+            
+            if (!/(\:\/\/|^\/\/)/.test(url) ) {
+                filename = getAssetFilenameFromUrl(bundleConf, url);
+            } else {
+                domain      = url.match(/^.*:\/\/[a-z0-9._-]+\/?/);
+                url         = url.replace(domain, '/');
+                filename    = url
+            }
+            //key =  (( /404/.test(filename) ) ? '[404]' : '[200]') +' '+ url;
+            key         = url;
+            isAvailable =  ( /404/.test(filename) ) ? false : true;
+            if ( isAvailable ) {
+                try {
+                    ext         = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];
+                } catch(err) {
+                    
+                    console.warn('No extension found for `'+ filename +'`\n'+ err.stack );
+                    ext = null
+                }
+            }
+            
+            
+            assets[key] = {
+                type        : type,
+                url         : url,
+                ext         : ext,
+                mime        : (!ext) ? 'NA' : (bundleConf.server.coreConfiguration.mime[ext.substr(1)] || 'NA'),
+                filename    : ( /404/.test(filename) ) ? 'not found' : filename,
+                isAvailable : isAvailable
+            };
+            
+            if (domain)
+                assets[key].domain = domain;
+            
+            if ( type == 'stylesheet' && !/not found/.test(assets[key].filename) ) {
+                cssFiles.push(assets[key].filename)
+            }
+            
+            properties = layoutAssets[i].replace( new RegExp('(\<'+ tag +'\\s+|\>|\/\>|\<\/'+ tag +'\>)', 'g'), '').replace(/[A-Za-z]+\s+/, '$&="true" ').split(/\"\s+/g);
+            p = 0;
+            
+            for (; p < properties.length; ++p ) {
+                
+                pArr = properties[p].split(/\=/g);
+                if ( /(src|href)/.test(pArr[0]) )
+                    continue;
+                    
+                assets[key][pArr[0]] = (pArr[1]) ? pArr[1].replace(/\"/g, '') : pArr[1];            
+            }            
+            //++aCount            
+        }
+        
+        // getting layout css classes in order to retrieve active css assets from <asset>.css
+        var classesArr = layoutStr.match(/class=\"([A-Za-z0-9_-\s+]+)\"?/g);
+        
+        if ( classesArr ) {
+            var cCount      = 0
+                , cArr      = null
+                , cArrI     = null
+                , cArrLen   = null
+            ;
+            i = 0;
+            len = classesArr.length;
+            for (; i < len; ++i) {
+                classesArr[i] = classesArr[i].replace(/(\"|class\=)/g, '').trim();
+                
+                if ( /\s+/g.test(classesArr[i]) ) {
+                    cArrI   = 0;                
+                    cArr    = classesArr[i].replace(/\s+/g, ',').split(/\,/g);
+                    //cArr    = classesArr[i].split(/\s+/g);
+                    cArrLen = cArr.length;
+                    
+                    for (; cArrI < cArrLen; ++cArrI) {
+                        
+                        if ( layoutClasses.indexOf( cArr[cArrI] ) < 0) {
+                            layoutClasses[cCount] = cArr[cArrI];
+                            
+                            ++cCount
+                        }
+                    }
+                    continue;
+                }
+                
+                if ( layoutClasses.indexOf( classesArr[i] ) < 0) {
+                    layoutClasses[cCount] = classesArr[i];
+                    ++cCount
+                }            
+            }
+            assets._classes = { 
+                total: layoutClasses.length,
+                list: layoutClasses.join(', ')
+            };
+            
+            // parsing css files
+            i = 0, len = cssFiles.length;
+            var cssContent = null
+                , hasUrls   = null
+                , definition = null
+                , defName   = null
+                , d = null
+                , dLen = null
+            ;
+            var cssArr = null, classNames = null, assetsInClassFound = {};
+            for (; i < len; ++i) {
+                cssContent = fs.readFileSync(cssFiles[i], bundleConf.encoding).toString();
+                hasUrls = ( /(url\(|url\s+\()/.test(cssContent) ) ? true : false;
+                if (!hasUrls) continue;
+                
+                cssArr = cssContent.split(/}/g);
+                for (let c = 0; c < cssArr.length; ++c) {
+                    
+                    if ( /(\@media|\@font-face)/.test(cssArr[c]) ) { // one day maybe !
+                        continue
+                    }
+                    
+                    if ( /(url\(|url\s+\()/.test(cssArr[c]) && !/data\:|\@font-face/.test(cssArr[c]) ) {
+                        
+                        url = cssArr[c].match(/((background\:url|url)+\()([A-Za-z0-9-_.,:"'%/\s+]+).*?\)+/g)[0].replace(/((background\:url|url)+\(|\))/g, '').trim();                    
+                        if ( typeof(assetsInClassFound[url]) != 'undefined') continue; // already defined
+                        
+                        definition = cssArr[c].match(/((\.[A-Za-z0-9-_.,;:"'%\s+]+)(\s+\{|{))/)[0].replace(/\{/g, '');
+                        
+                        classNames = definition.replace(/\./g, '').split(/\s+/);
+                                        
+                        
+                        for( let clss = 0; clss < classNames.length; ++clss) {
+                            // this asset is in use
+                            if ( layoutClasses.indexOf(classNames[clss] < 0 && typeof(assetsInClassFound[url]) == 'undefined') ) {
+                                //console.debug(' found -> (' +  url +')');
+                                assetsInClassFound[url] = true;
+                                // assetsInClassFound[url] = {
+                                //     cssFile: cssFiles[i],
+                                //     definition: definition,
+                                //     url: url
+                                // }     
+                                if (!/(\:\/\/|^\/\/)/.test(url) ) {
+                                    filename = getAssetFilenameFromUrl(bundleConf, url);
+                                } else {
+                                    domain      = url.match(/^.*:\/\/[a-z0-9._-]+\/?/);
+                                    url         = url.replace(domain, '/');
+                                    filename    = url
+                                }
+                                
+                                //key =  (( /404/.test(filename) ) ? '[404]' : '[200]') +' '+ url;
+                                key         = url;
+                                isAvailable =  ( /404/.test(filename) ) ? false : true;
+                                ext         = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];
+                                assets[key] = {
+                                    referrer    : cssFiles[i],
+                                    definition  : definition,
+                                    type        : type,
+                                    url         : url,
+                                    ext         : ext,
+                                    mime        : bundleConf.server.coreConfiguration.mime[ext.substr(1)] || 'NA',
+                                    filename    : ( /404/.test(filename) ) ? 'not found' : filename
+                                };  
+                                
+                                if (domain)
+                                    assets[key].domain = domain;
+                                
+                                break;                    
+                            }
+                        }
+                    }
+                    //font-family: source-sans-pro, sans-serif;
+                    
+                    
+                }
+                
+                // match all definitions .xxx {}
+                //definitions = cssContent.match(/((\.[A-Za-z0-9-_.\s+]+)+(\s+\{|{))([A-Za-z0-9-@'"/._:;()\s+]+)\}/g);
+                //definitions = cssContent.match(/((\.[A-Za-z0-9-_.\s+]+)+(\s+\{|{))?/g);
+                // d = 0, dLen = definitions.length;
+                // for (; d < dLen; ++d) {
+                //     if ( definitions[d] )
+                // }
+                
+                // fonts, images, background - attention required to relative paths !!
+                //var inSourceAssets = cssContent.match(/((background\:url|url)+\()([A-Za-z0-9-_."']+).*?\)+/g);
+            }
+            
+            assets._cssassets = assetsInClassFound.count();
+        } // EO if (classesArr) {
+        
+            
+        
+        // TODO - report
+        /**
+         * assets._report = {
+         *      total   : ${int: aCount}, // assets count
+         *      warning : [
+         *          {
+         *              message: "too many requests",
+         *              hint: "you should lower this"
+         *          },
+         *          {...}
+         *      ],
+         *      error: [
+         *          {
+         *              message: "${int: eCount} asset(s) not found",
+         *              hint: "check your assets location"
+         *          },
+         *          {
+         *              
+         *          }
+         *      ]
+         * }
+         */
+        
+        if (swig) {
+            var assetsStr = JSON.stringify(assets);        
+            assets = swig.compile( assetsStr.substring(1, assetsStr.length-1) )(data);
+            return '{'+ assets +'}'
+        } else {
+            return assets
+        }
+    }
+    
+    this.onHttp2Stream = function(stream, headers) {
+                
+        if (!stream.pushAllowed) { 
+            stream.respond({ ':status': 200 });
+            stream.end();
+            return; 
+        }
+        
+        if (stream.headersSent) return;
+        
+        if ( !this._options.template ) {
+            console.info(headers[':method'] +' [500] '+ headers[':path'] + '\nNo template found');
+            stream.respond({ ':status': 500 });
+            stream.end();
+            return; 
+        }
+        
+        var header = null, isWebroot = false, pathname = null;
+        if ( 
+            headers[':path'] == '/'
+            || headers[':path'] == this._options.conf.server.webroot      
+        ) {
+            
+            if (
+                this._options.conf.server.webroot != headers[':path']
+                && this._options.conf.server.webrootAutoredirect 
+                || headers[':path'] == this._options.conf.server.webroot
+                    && this._options.conf.server.webrootAutoredirect 
+            ) {
+                                
+                header = {
+                    ':status': 301
+                };
+                
+                if (cacheless) {
+                    header['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+                    header['Pragma'] = 'no-cache';
+                    header['Expires'] = '0';  
+                }
+                header['Location'] = this._options.conf.server.webroot;
+                
+                stream.respond(header);
+                stream.end();
+                return;  
+            } else {
+                isWebroot = true;
+            }                    
+        }
+        
+        if ( 
+            typeof(this._options.template.assets) != 'undefined'
+            && typeof(this._options.template.assets[ headers[':path'] ]) != 'undefined' 
+            && this._options.template.assets[ headers[':path'] ].isAvailable             
+            || isWebroot   
+        ) {
+            // by default
+            header = { 
+                ':status': 200
+            };
+            var url = (isWebroot) ? this._referrer : headers[':path'];
+            var assets = this._options.template.assets;
+            var conf = this._options.conf;
+            var asset = {
+                    filename    : assets[ url ].filename,
+                    file        : null,
+                    mime        : assets[ url ].mime,
+                    encoding    : conf.encoding,
+                    isHandler   : false
+                }
+                , cacheless = conf.cacheless
+            ;
+            
+            console.debug('h2 pushing: '+ headers[':path'] + ' -> '+ asset.filename);
+            
+            // adding handler `gina.ready(...)` wrapper
+            if ( new RegExp('^'+ conf.handlersPath).test(asset.filename) ) {
+                
+                if ( !fs.existsSync(asset.filename) )
+                    stream.respond({ ':status': 404 });
+                
+                asset.isHandler = true;
+                asset.file      = fs.readFileSync(asset.filename, asset.encoding).toString();                
+                asset.file      = '(gina.ready(function onGinaReady($){\n'+ asset.file + '\n},window["originalContext"]));';
+                
+                stream.respond(header);
+                stream.end(asset.file);
+                
+                return;                
+            }
+            
+            stream.pushStream({ ':path': headers[':path'] }, function onPushStream(err, pushStream, headers){
+                
+                
+                if ( err ) {
+                    header[':status'] = 500;
+                    if (err.code === 'ENOENT') {
+                        header[':status'] = 404;
+                    } 
+                    console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack|err.message|err));
+                    stream.respond(header);
+                    stream.end();
+                    return;
+                }
+                
+                
+                header['content-type'] = ( !/charset/.test(asset.mime ) ) ? asset.mime + '; charset='+ asset.encoding : asset.mime;
+                
+                if (cacheless) {
+                    // source maps integration for javascript & css
+                    if ( /(.js|.css)$/.test(asset.filename) && fs.existsSync(asset.filename +'.map') ) {
+                        pathname = asset.filename +'.map';
+                        // serve without cache
+                        header['X-SourceMap'] = pathname;
+                        header['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+                        header['Pragma'] = 'no-cache';
+                        header['Expires'] = '0';
+                    }    
+                }                       
+                
+                pushStream.respondWithFile( 
+                    asset.filename
+                    , header
+                    //, { onError }
+                );            
+                                           
+            });
+        } else {
+            console.info(headers[':method'] +' [404] '+ headers[':path']);
+            stream.respond({ ':status': 404 });
+            stream.end();
+            return;        
+        }       
+    }
+    
     /**
      * Default http/1.x statics handler - For http/2.x check the SuperController
      * @param {object} staticProps - Expected : .isStaticFilename & .firstLevel
@@ -546,11 +1022,36 @@ function Server(options) {
             , re            = new RegExp('^'+ webroot)
             , pathname      = ( webroot.length > 1 && re.test(request.url) ) ? request.url.replace(re, '/') : request.url
             , contentType   = null
+            , stream        = null
+            , header        = null
         ;
+        
+        if ( /http\/2/.test(bundleConf.server.protocol) ) {
+            
+            stream = response.stream;
+            
+            if ( typeof(self._options) == 'undefined') {
+                self._options       = {
+                    template: {
+                        assets: {}                                           
+                    },
+                    conf: bundleConf
+                }
+            }
+            
+            self._options.conf = bundleConf
+        }
+        
+        
         
         var cacheless       = bundleConf.cacheless;  
         // by default
         var filename        = bundleConf.publicPath + pathname;
+        var isFilenameDir   = null
+            , dirname       = null
+            , isBinary      = null
+            , hanlersPath   = null
+        ;
         
         // catch `statics.json` defined paths
         var staticIndex     = bundleConf.staticResources.indexOf(pathname);
@@ -574,66 +1075,252 @@ function Server(options) {
                 throwError(response, 404, 'Page not found: \n' + pathname, next);
             } else {
                 
-                if ( fs.statSync(filename).isDirectory() ) {
+                isFilenameDir = fs.statSync(filename).isDirectory();
+                if ( isFilenameDir ) {
+                    dirname = request.url;
                     filename += 'index.html';
-                    
+                    request.url += 'index.html';
                     if ( !fs.existsSync(filename) ) {
-                        throwError(response, 403, 'Forbidden: \n' + pathname, next);  
-                        return;
+                        if ( /http\/2/.test(bundleConf.server.protocol) ) {
+                            stream.respond({':status': 403});
+                            stream.end();
+                        } else {
+                            throwError(response, 403, 'Forbidden: \n' + pathname, next);                              
+                        }
+                    } else {
+                        if ( /http\/2/.test(bundleConf.server.protocol) ) {
+                            header = {
+                                ':status': 301,
+                                'Location': request.url
+                            };
+                            
+                            if (cacheless) {
+                                header['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+                                header['Pragma'] = 'no-cache';
+                                header['Expires'] = '0';  
+                            }
+                            
+                            
+                            stream.respond(header);
+                            stream.end();
+                        } else {
+                            response.setHeader('Location', request.url)
+                            if (cacheless) {
+                                response.writeHead(301, {                                    
+                                    'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
+                                    'Pragma': 'no-cache',
+                                    'Expires': '0'
+                                });
+                            }                            
+                            response.end()                                                        
+                        }
                     }
+                    return;
                 }
                     
 
                 if (cacheless)
                     delete require.cache[require.resolve(filename)];
                 
-
-                fs.readFile(filename, 'binary', function(err, file) {
+                
+                fs.readFile(filename, bundleConf.encoding, function(err, file) {
                     if (err) {
-                        throwError(response, 404, 'Page not found: \n' + pathname, next);                        
+                        if ( /http\/2/.test(bundleConf.server.protocol) ) {
+                            stream.respond({':status': 404});
+                            stream.end();
+                        } else {
+                            throwError(response, 404, 'Page not found: \n' + pathname, next); 
+                        }
+                                               
                     } else if (!response.headersSent) {
+                        isBinary = true;
                         try {
-                            contentType = getHead(filename);
-                            response.setHeader("Content-Type", contentType +'; charset='+ bundleConf.encoding);
+                            contentType = getHead(response, filename);
+                            
                             
                             // adding gina loader
                             if (/text\/html/i.test(contentType) && GINA_ENV_IS_DEV) {
+                                isBinary = false;
                                 // javascriptsDeferEnabled
                                 if  (bundleConf.content.templates._common.javascriptsDeferEnabled ) {
                                     file = file.replace(/\<\/head\>/i, '\t'+ bundleConf.content.templates._common.ginaLoader +'\n</head>');
                                 } else {
                                     file = file.replace(/\<\/body\>/i, '\t'+ bundleConf.content.templates._common.ginaLoader +'\n</body>');
-                                }
+                                }                                
+                                
+                            } else {
+                                // adding handler `gina.ready(...)` wrapper
+                                hanlersPath = bundleConf.handlersPath;
+
+                                if ( new RegExp('^'+ hanlersPath).test(filename) ) {
+                                    isBinary = false;
+                                    file = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));'
+                                }                                  
                             }
                             
-                            // adding handler `gina.ready(...)` wrapper
-                            var hanlersPath   = bundleConf.handlersPath;
+                            if ( /http\/2/.test(bundleConf.server.protocol) ) {
+                                self._isStatic      = true;
+                                self._referrer      = request.url;
+                                self._options.template.assets = getAssets(bundleConf, file);
+                                                                                                
+                                if ( 
+                                    typeof(self._options.template.assets[request.url]) == 'undefined' 
+                                ) {
+                                                                        
+                                    self._options.template.assets[request.url] = {
+                                        ext: request.url.match(/\.([A-Za-z0-9]+)$/)[0],
+                                        isAvailable: true,
+                                        mime: contentType,
+                                        url: request.url,
+                                        filename: filename
+                                    }
+                                }
+                                
+                                self.instance._isXMLRequest    = request.isXMLRequest;
+                                self.instance._getAssetFilenameFromUrl = getAssetFilenameFromUrl;
+                                
+                                var isPathMatchingUrl = null;
+                                if ( !self.instance._http2streamEventInitalized ) {
+                                    self.instance._http2streamEventInitalized = true;
+                                    self.instance.on('stream', function onHttp2Strem(stream, headers) { 
+                                        if (!self._isStatic) return;       
+                                        if (!this._isXMLRequest) {
+                                            isPathMatchingUrl = true;
+                                            if (headers[':path'] != request.url) {
+                                                request.url = headers[':path'];
+                                                isPathMatchingUrl = false;
+                                            }
+                                            
+                                            // for new requests
+                                            if (!isPathMatchingUrl) {
+                                                pathname = ( webroot.length > 1 && re.test(request.url) ) ? request.url.replace(re, '/') : request.url;
+                                                //filename = bundleConf.publicPath + pathname;
+                                                filename = this._getAssetFilenameFromUrl(bundleConf, pathname);
+                                                contentType = getHead(response, filename);
+                                                contentType = contentType +'; charset='+ bundleConf.encoding;                                             
+                                                
+                                                
+                                                if ( !fs.existsSync(filename) ) {
+                                                    stream.respond({':status': 404});
+                                                    stream.end();
+                                                    return;
+                                                }
+                                                
+                                                isFilenameDir = fs.statSync(filename).isDirectory();
+                                                if ( isFilenameDir ) {
+                                                    dirname = request.url;
+                                                    filename += 'index.html';
+                                                    request.url += 'index.html';
+                                                    if ( !fs.existsSync(filename) ) {
+                                                        stream.respond({':status': 403});
+                                                        stream.end();
+                                                        return;
+                                                    } else {
+                                                        header = {
+                                                            ':status': 301,
+                                                            'Location': request.url
+                                                        };
+                                                        
+                                                        if (cacheless) {
+                                                            header['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+                                                            header['Pragma'] = 'no-cache';
+                                                            header['Expires'] = '0';  
+                                                        }
+                                                        
+                                                        
+                                                        stream.respond(header);
+                                                        stream.end();
+                                                    }
+                                                }
+                                            }
+                                                        
+                                            if ( 
+                                                !isPathMatchingUrl
+                                                && typeof(self._options.template.assets[request.url]) == 'undefined'                                                 
+                                            ) {                                               
+                                                self._options.template.assets[request.url] = {
+                                                    ext: request.url.match(/\.([A-Za-z0-9]+)$/)[0],
+                                                    isAvailable: true,
+                                                    mime: contentType,
+                                                    url: request.url,
+                                                    filename: filename
+                                                }
+                                            }/** else if ( typeof(self._options.template.assets[request.url]) == 'undefined' ) {
+                                                self._options.template.assets[request.url] = {
+                                                    ext: request.url.match(/\.([A-Za-z0-9]+)$/)[0],
+                                                    isAvailable: true,
+                                                    mime: contentType,
+                                                    url: request.url,
+                                                    filename: filename
+                                                }
+                                            }*/
+                                                                                                                                   
+                                            
+                                            self.onHttp2Stream(stream, headers);
+                                        }              
+                                            
+                                    });
+                                    
+                                } 
+                                
+                                
+                                header = {
+                                    ':status': 200,
+                                    'content-type': contentType + '; charset='+ bundleConf.encoding
+                                };
+                                
+                                if (cacheless) {
+                                    // source maps integration for javascript & css
+                                    if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') ) {
+                                        pathname = pathname +'.map';
+                                        // serve without cache
+                                        header['X-SourceMap'] = pathname;
+                                        header['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+                                        header['Pragma'] = 'no-cache';
+                                        header['Expires'] = '0';
+                                    }    
+                                }
+                                
+                                if (isBinary) {
+                                    stream.respondWithFile(filename, header)
+                                } else {
+                                    stream.respond(header);
+                                    stream.end(file);
+                                }
+                                
+                                return;
+                            } else {
+                                
+                                response.setHeader('Content-Type', contentType +'; charset='+ bundleConf.encoding);  
+                                
+                                if (isBinary) {
+                                    response.setHeader('Content-Length', fs.statSync(filename).size);                              
+                                }
+                                
+                                if (cacheless) {
+                                    // source maps integration for javascript & css
+                                    if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') ) {
+                                        pathname = pathname +'.map'
+                                        response.setHeader("X-SourceMap", pathname)
+                                    }
 
-                            if ( new RegExp('^'+ hanlersPath).test(filename) ) {
-                                file = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));'
-                            }
+                                    // serve without cache
+                                    response.writeHead(200, {
+                                        'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
+                                        'Pragma': 'no-cache',
+                                        'Expires': '0'
+                                    });
 
-                            if (cacheless) {
-                                // source maps integration for javascript & css
-                                if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') ) {
-                                    pathname = pathname +'.map'
-                                    response.setHeader("X-SourceMap", pathname)
+                                } else {
+                                    response.writeHead(200)
                                 }
 
-                                // serve without cache
-                                response.writeHead(200, {
-                                    'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
-                                    'Pragma': 'no-cache',
-                                    'Expires': '0'
-                                });
-
-                            } else {
-                                response.writeHead(200)
+                                response.write(file, bundleConf.encoding);
+                                response.end();
+                                console.info(request.method +' [200] '+ pathname);
+                                return;
                             }
-
-                            response.write(file, 'binary');
-                            response.end();
-                            console.info(request.method +' [200] '+ pathname);
+                                                        
                         } catch(err) {
                             throwError(response, 500, err.stack)
                         }
@@ -642,6 +1329,8 @@ function Server(options) {
                     return
                     
                 });
+                
+
             }
         })
     }
@@ -656,11 +1345,27 @@ function Server(options) {
         self.instance.all('*', function onInstance(request, response, next) {
             
             
-            request.setEncoding(self.conf[self.appName][self.env].encoding);  
+            request.setEncoding(self.conf[self.appName][self.env].encoding);
+            // be carfull, if you are using jQuery + cross domain, you have to set the header manually in your $.ajax query -> headers: {'X-Requested-With': 'XMLHttpRequest'}
+            request.isXMLRequest       = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
+
+            // Passing credentials :
+            //      - if you are using jQuery + cross domain, you have to set the `xhrFields` in your $.ajax query -> xhrFields: { withCredentials: true }
+            //      - if you are using another solution or doing it by hand, make sure to properly set the header: headers: {'Access-Control-Allow-Credentials': true }
+            /**
+             * NB.: jQuery
+             * The `withCredentials` property will include any cookies from the remote domain in the request,
+             * and it will also set any cookies from the remote domain.
+             * Note that these cookies still honor same-origin policies, so your JavaScript code can’t access the cookies
+             * from document.cookie or the response headers.
+             * They can only be controlled/produced by the remote domain.
+             * */
+            request.isWithCredentials  = ( request.headers['access-control-allow-credentials'] && request.headers['access-control-allow-credentials'] == true ) ? true : false;
+                 
             
             local.request = request;
                         
-            response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );
+            response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );                     
             
             
             
@@ -673,6 +1378,8 @@ function Server(options) {
             // ) {
             //     request.url = self.conf[self.appName][self.env].server.webroot
             // }
+            
+            
             
             // priority to statics
             var staticsArr = self.conf[self.appName][self.env].publicResources;
@@ -695,12 +1402,12 @@ function Server(options) {
                 staticProps.isStaticFilename && staticsArr.indexOf(request.url) > -1 
                 || staticProps.isStaticFilename && staticsArr.indexOf(staticProps.firstLevel) > -1
             ) {
-                //local['handle'+ self.conf[self.appName][self.env].server.protocolShort +'Statics'](staticProps, request, response, next);
-                handleStatics(staticProps, request, response, next);
+                self._isStatic  = true;
+                self._referrer  = request.url;
+                handleStatics(staticProps, request, response, next);                                
                 
-            } else { // none statics
-                
-                
+            } else { // not a static request                
+                self._isStatic  = false;
                 
                 request.body    = ( typeof(request.body) != 'undefined' ) ? request.body : {};
                 request.get     = {};
@@ -711,22 +1418,7 @@ function Server(options) {
                 //request.patch = {}; ???
                 //request.cookies = {}; // ???
                 
-                // be carfull, if you are using jQuery + cross domain, you have to set the header manually in your $.ajax query -> headers: {'X-Requested-With': 'XMLHttpRequest'}
-                request.isXMLRequest       = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
-
-                // Passing credentials :
-                //      - if you are using jQuery + cross domain, you have to set the `xhrFields` in your $.ajax query -> xhrFields: { withCredentials: true }
-                //      - if you are using another solution or doing it by hand, make sure to properly set the header: headers: {'Access-Control-Allow-Credentials': true }
-                /**
-                 * NB.: jQuery
-                 * The `withCredentials` property will include any cookies from the remote domain in the request,
-                 * and it will also set any cookies from the remote domain.
-                 * Note that these cookies still honor same-origin policies, so your JavaScript code can’t access the cookies
-                 * from document.cookie or the response headers.
-                 * They can only be controlled/produced by the remote domain.
-                 * */
-                request.isWithCredentials  = ( request.headers['access-control-allow-credentials'] && request.headers['access-control-allow-credentials'] == true ) ? true : false;
-                            
+                         
                 
                 // multipart wrapper for uploads
                 // files are available from your controller or any middlewares:
@@ -1234,18 +1926,24 @@ function Server(options) {
         })
     }
 
-    var getHead = function(file) {
-        var s       = file.split(/\./);
-        var ext     = s[s.length-1];
-        var type    = null;
-        var mime    = self.conf[self.appName][self.env].server.coreConfiguration.mime;
+    var getHead = function(response, file) {
+        try {
+            var s       = file.split(/\./);
+            var ext     = s[s.length-1];
+            var type    = null;
+            var mime    = self.conf[self.appName][self.env].server.coreConfiguration.mime;
 
-        if( typeof(mime[ext]) != 'undefined' ) {
-            type = mime[ext];
-        } else {
-            console.warn('[ '+file+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Replacing with `plain/text` ')
+            if( typeof(mime[ext]) != 'undefined' ) {
+                type = mime[ext];
+            } else {
+                console.warn('[ '+file+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Replacing with `plain/text` ')
+            }
+            return type || 'plain/text'
+        } catch (err) {
+            console.error('Error while trying to getHead('+ file +') extention. Replacing with `plain/text` '+ err.stack);
+            return 'plain/text'
         }
-        return type || 'plain/text'
+        
     }
 
     var loadBundleConfiguration = function(req, res, next, callback) {
@@ -1568,7 +2266,7 @@ function Server(options) {
                     res.writeHead(code, { 'Content-Type': 'application/json'} )
                 }
 
-                console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
+                console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url +'\n'+ msg);
                 return res.end(JSON.stringify({
                     status: code,
                     error: msg
