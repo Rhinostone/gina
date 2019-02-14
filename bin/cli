@@ -88,6 +88,7 @@ setEnvVar('GINA_IS_WIN32', isWin32, true);
  * Framework port
  * */
 var port = 8124;
+
 // |-> framework/{version}/lib/cmd
 var allowedOffline = [
     'dev:',
@@ -207,9 +208,9 @@ if (
         } else {
             console.log('[ gina ] not started, try to start framework with :\n$ sudo gina start')
         }
-        if ( getEnvVar('GINA_ENV_IS_DEV') ) {
+        //if ( getEnvVar('GINA_ENV_IS_DEV') ) {
             console.debug(err.stack||err)
-        }
+        //}
         
         process.exit(1)
     });    
