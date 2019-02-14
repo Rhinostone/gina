@@ -919,8 +919,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             if ( !/gina-popin-is-active/.test(instance.target.firstChild.className) )
                 instance.target.firstChild.className += ' gina-popin-is-active';    
 
-            if ( /gina-popin-is-active/.test(event.target.className) ) {
-                removeListener(gina, event.target, event.target.getAttribute('id'))
+            if ( /gina-popin-is-active/.test(instance.target.firstChild.className) ) {
+                //removeListener(gina, event.target, event.target.getAttribute('id'))
+                removeListener(gina, instance.target, 'open.'+ $popin.id)
             }
 
             $popin.isOpen = true;

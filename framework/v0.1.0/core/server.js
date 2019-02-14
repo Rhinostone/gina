@@ -1271,7 +1271,7 @@ function Server(options) {
                                 
                                 if (cacheless) {
                                     // source maps integration for javascript & css
-                                    if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') ) {
+                                    if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') && !/sourceMappingURL/.test(file) ) {
                                         pathname = pathname +'.map';
                                         // serve without cache
                                         header['X-SourceMap'] = pathname;
@@ -1292,14 +1292,16 @@ function Server(options) {
                             } else {
                                 
                                 response.setHeader('Content-Type', contentType +'; charset='+ bundleConf.encoding);  
-                                
+                                // if (/\.(woff|woff2)$/i.test(filename) )  {
+                                //     response.setHeader("Transfer-Encoding", 'Identity')
+                                // }
                                 if (isBinary) {
-                                    response.setHeader('Content-Length', fs.statSync(filename).size);                              
+                                    response.setHeader('Content-Length', fs.statSync(filename).size); 
                                 }
                                 
                                 if (cacheless) {
                                     // source maps integration for javascript & css
-                                    if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') ) {
+                                    if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') && !/sourceMappingURL/.test(file) ) {
                                         pathname = pathname +'.map'
                                         response.setHeader("X-SourceMap", pathname)
                                     }
@@ -1314,9 +1316,10 @@ function Server(options) {
                                 } else {
                                     response.writeHead(200)
                                 }
-
+                                
                                 response.write(file, bundleConf.encoding);
-                                response.end();
+                                response.end();                                
+                                
                                 console.info(request.method +' [200] '+ pathname);
                                 return;
                             }
