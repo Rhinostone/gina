@@ -206,6 +206,10 @@ if (
         } else {
             console.log('[ gina ] not started, try to start framework with :\n$ sudo gina start')
         }
+        if (GINA_ENV_IS_DEV) {
+            console.debug(err.stack||err)
+        }
+        
         process.exit(1)
     })
 }
