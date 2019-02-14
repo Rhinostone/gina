@@ -1196,9 +1196,6 @@ function Server(options) {
                                                 pathname = ( webroot.length > 1 && re.test(request.url) ) ? request.url.replace(re, '/') : request.url;
                                                 //filename = bundleConf.publicPath + pathname;
                                                 filename = this._getAssetFilenameFromUrl(bundleConf, pathname);
-                                                contentType = getHead(response, filename);
-                                                contentType = contentType +'; charset='+ bundleConf.encoding;                                             
-                                                
                                                 
                                                 if ( !fs.existsSync(filename) ) {
                                                     stream.respond({':status': 404});
@@ -1231,8 +1228,11 @@ function Server(options) {
                                                         stream.respond(header);
                                                         stream.end();
                                                     }
-                                                }
+                                                }                                                
                                             }
+                                            
+                                            contentType = getHead(response, filename);
+                                            contentType = contentType +'; charset='+ bundleConf.encoding;   
                                                         
                                             if ( 
                                                 !isPathMatchingUrl

@@ -1553,6 +1553,29 @@ function Config(opt) {
             callback(err, files, collectedRules)
         }
     }
+    
+    // Todo - browseDirectory -> returns a collection of files & folders paths
+    // Will be useful to generate cache
+    // var browseDirectory = function(filename, list, i, len) {
+        
+    //     var name = filename.substring(filename.lastIndexOf('/') +1)
+    //         , location = filename.replace( new RegExp(name+'$'))
+    //         , obj = { 
+    //             name: name,
+    //             location: location,
+    //             isDir: fs.statSync(filename).isDirectory()
+    //         }
+    //         , list = (typeof(list) != 'undefined') ? list : []
+    //         , i = (typeof(i) != 'undefined') ? i : 0
+    //         , len = (typeof(len) != 'undefined') ? len : 0
+    //     ;
+        
+    //     if (i == 0 && obj.isDir) { //root
+    //         var files = fs.readdirSync(filename);
+    //         len = files.length;            
+    //     }
+        
+    // }
 
     var loadForms = function(formsDir) {
         var forms = { rules: {}}, cacheless = self.isCacheless(), root = '';
