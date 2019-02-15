@@ -19,15 +19,28 @@ function Stop(opt, cmd) {
         };
 
     var init = function(opt, cmd) {
-
+        
         // import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 
         // check CMD configuration
         if (!isCmdConfigured()) return false;
+        
+        // start all bundles   
+        opt.offlineCount = 0;   
+        opt.notStopped = [];  
+        
+        if (!self.name) {
+            stop(opt, cmd, 0);
+        } else {
+            stop(opt, cmd);
+        }  
+    }
+    
+    var stop = function(opt, cmd, bundleIndex) {
 
-
-        var bundle = self.bundles[0];
+        var isBulkStop = (typeof(bundleIndex) != 'undefined') ? true : false;
+        var bundle = (isBulkStop) ? self.bundles[bundleIndex] : self.name;
 
         var msg = null;
         if (!isDefined('bundle', bundle)) {
@@ -43,8 +56,6 @@ function Stop(opt, cmd) {
 
                 if (err) {
                     console.error(err.stack || err.message)
-                } else {
-
                 }
 
                 //console.info('Trying to stop bundle [ ' + bundle + '@' + self.projectName + ' ]');
@@ -54,7 +65,9 @@ function Stop(opt, cmd) {
                     if (err) {
                         error = err.toString();
                         opt.write(error);
-                        process.exit(1)
+                        opt.notStopped.push(bundle + '@' + self.projectName);
+                        end(opt, cmd, isBulkStop, bundleIndex, true)
+                        //process.exit(1)
                     }
 
                     var row = data.split(/\n/g)
@@ -72,15 +85,18 @@ function Stop(opt, cmd) {
 
                         exec('kill -TERM ' + proc, function(err, data) {
                             if (!err) {
+                                ++opt.offlineCount;
                                 console.info('Bundle [ ' + bundle + '@' + self.projectName + ' ] with PID [ ' + proc + ' ] stopped !');
-                                process.exit(0)
+                                end(opt, cmd, isBulkStop, bundleIndex)
                             } else {
                                 console.error( err.toString())
                             }
                         })
                     } else { // not running
                         console.info('Bundle `' + bundle + '@' + self.projectName + '` is not running');
-                        process.exit(0)
+                        ++opt.offlineCount;
+                        opt.notStopped.push(bundle + '@' + self.projectName);
+                        end(opt, cmd, isBulkStop, bundleIndex)
                     }
                     
 
@@ -90,6 +106,32 @@ function Stop(opt, cmd) {
 
             })//EO isRealApp
         }
+    }
+    
+    var end = function (opt, cmd, isBulkStop, i, error) {
+        if (isBulkStop) {            
+            ++i;            
+            if ( typeof(self.bundles[i]) != 'undefined' ) {
+                stop(opt, cmd, i)
+            } else {
+                opt.client.write('\n\r[ Offline ] '+ opt.offlineCount +'/'+ self.bundles.length);
+                var notStoppedMsg = '\nCould not stop: \n - '+ opt.notStopped.join('\n - ') + '\n\r';
+                opt.client.write(notStoppedMsg);
+                
+                if ( typeof(error) != 'undefined') {
+                    process.exit(1);
+                    return;
+                }
+                if (!opt.client.destroyed)
+                    opt.client.emit('end');
+                    
+                    process.exit(0);
+            }
+        } else {
+            if (!opt.client.destroyed)
+                opt.client.emit('end');                
+        }
+        
     }
 
 

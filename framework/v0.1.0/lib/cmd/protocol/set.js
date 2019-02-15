@@ -392,8 +392,13 @@ function Set(opt, cmd) {
                                 }
                                 
                                 if (bundleSettingsUpdate) {
-                                    if (/https/.test(scheme) && /http\/2/.test(protocol) ) {
+                                    // updating bundle internal config/settings            
+                                    bundleSettings.server.protocol    = protocol;
+                                    bundleSettings.server.scheme      = scheme;
+                                    if ( /http\/2/.test(protocol) && typeof(bundleSettings.server.allowHTTP1) == 'undefined' ) {
                                         bundleSettings.server.allowHTTP1 = true;
+                                    } else if ( typeof(bundleSettings.server.allowHTTP1) != 'undefined' ) {
+                                        delete bundleSettings.server.allowHTTP1
                                     }
                                     lib.generator.createFileFromDataSync(bundleSettings, settingsPath);
                                 }
@@ -556,6 +561,8 @@ function Set(opt, cmd) {
         settings.server.scheme      = scheme;
         if ( /http\/2/.test(protocol) && typeof(settings.server.allowHTTP1) == 'undefined' ) {
             settings.server.allowHTTP1 = true;
+        } else if ( typeof(settings.server.allowHTTP1) != 'undefined' ) {
+            delete settings.server.allowHTTP1
         }
         // save to bundle's /config/settings.json
         lib.generator.createFileFromDataSync(settings, settingsPath);

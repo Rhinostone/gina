@@ -714,10 +714,13 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                             next()
                                         }
                                     })
-                                }
+                                }                                
+                                
 
-
-                                console.info('[ FRAMEWORK ] Bundle started !',
+                                e.emit('server#started', conf);
+                                
+                                setTimeout( function onStarted() {
+                                    console.info('[ FRAMEWORK ] Bundle started !',
                                     '\nbundle: [ ' + conf.bundle +' ]',
                                     '\nenv: [ '+ conf.env +' ]',
                                     '\nengine: ' + conf.server.engine,
@@ -726,9 +729,8 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                     '\nport: ' + conf.server.port,
                                     '\npid: ' + process.pid,
                                     '\nThis way please -> '+ conf.hostname + conf.server.webroot
-                                );
-
-                                e.emit('server#started', conf)
+                                    )
+                                }, 1000);
 
                             });
 

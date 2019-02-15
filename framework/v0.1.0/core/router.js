@@ -164,26 +164,50 @@ function Router(env) {
         local.routeHasViews     = routeHasViews;
         local.isUsingTemplate   = isUsingTemplate;
         
-        
-
-                
+                       
         
         //Middleware Filters when declared.
         var resHeaders = conf.server.response.header;
-        //TODO - to test
+        // Access-Control-Allow-Origin settings
         if ( resHeaders.count() > 0 ) {
             // authority by default if no Access Control Allow Origin set
-            var authority = (typeof(request.headers.referer) != 'undefined') ? local.conf.server.scheme +'://'+ request.headers.referer.match(/:\/\/(.[^\/]+)(.*)/)[1] : (request.headers[':authority'] || request.headers.host || null);
+            var authority = (typeof(request.headers.referer) != 'undefined') ? local.conf.server.scheme +'://'+ request.headers.referer.match(/:\/\/(.[^\/]+)(.*)/)[1] : (request.headers[':scheme'] +'://'+request.headers[':authority'] || local.conf.server.scheme +'://'+request.headers.host || null);
             var re = new RegExp(authority);
-            var origin = ( typeof(conf.server.response.header['Access-Control-Allow-Origin']) != 'undefined' && conf.server.response.header['Access-Control-Allow-Origin'] != '' ) ? conf.server.response.header['Access-Control-Allow-Origin'] : authority;
+            var allowedOrigin = ( typeof(conf.server.response.header['Access-Control-Allow-Origin']) != 'undefined' && conf.server.response.header['Access-Control-Allow-Origin'] != '' ) ? conf.server.response.header['Access-Control-Allow-Origin'] : authority;
+            var found = null, origin = null, origins = null; // to handles multiple origins
+            var originHostReplacement = function(name) {
+                name = name.split(/\@/);
+                var bundle      = name[0]
+                    , project   = name[1]
+                    , arr       = null
+                ;
+                var env     = config.env; // current env by default
+                if ( /\//.test(name[1]) ) {
+                    arr     = name[1].split(/\//);
+                    project = arr[0];
+                    env     = arr[1];
+                }        
+                
+                return config[bundle][env].hostname
+            }
+            
             for (var h in resHeaders) {                
                 if (!response.headersSent) {
                     // handles multiple origins
-                if ( /Access\-Control\-Allow\-Origin/.test(h) ) { // re.test(resHeaders[h]                    
-                        if ( /\,/.test(origin) ) {
-                            origin = origin.split(/\,/g);
+                    if ( /Access\-Control\-Allow\-Origin/.test(h) ) { // re.test(resHeaders[h]                                                         
+                        if ( /\,/.test(allowedOrigin) ) {
+                            origins = allowedOrigin.replace(/\s+/g, '').replace(/([a-z0-9_-]+\@[a-z0-9_-]+|[a-z0-9_-]+\@[a-z0-9_-]+\/[a-z0-9_-]+\@[a-z0-9_-]+)/ig, originHostReplacement).split(/\,/g);
+                            
+                            found = ( origins.indexOf(authority) > -1 ) ? origins[origins.indexOf(authority)] : false;
+                            if ( found != false ) {
+                                origin = found
+                            }
+                        } else {
+                            origin = allowedOrigin
                         }
-                        response.setHeader(h, origin)
+                        
+                        if (origin)
+                            response.setHeader(h, origin)
                     } else {
                         response.setHeader(h, resHeaders[h])
                     }

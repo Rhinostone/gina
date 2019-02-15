@@ -14,7 +14,7 @@ var console     = lib.logger;
 function Start(opt, cmd) {
     var self    = {}
     , local     = {
-        bundle : null
+        bundle      : null        
     };
 
     var init = function(opt, cmd) {
@@ -22,10 +22,23 @@ function Start(opt, cmd) {
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
         
         // check CMD configuration
-        if ( !isCmdConfigured() ) return false;
+        if (!isCmdConfigured()) return false;
         
-
-        var bundle = self.bundles[0];
+              
+        // start all bundles   
+        opt.onlineCount = 0;   
+        opt.notStarted = [];  
+        if (!self.name) {
+            start(opt, cmd, 0);
+        } else {
+            start(opt, cmd);
+        }        
+    }
+    
+    var start = function(opt, cmd, bundleIndex) {
+       
+        var isBulkStart = (typeof(bundleIndex) != 'undefined') ? true : false;
+        var bundle = (isBulkStart) ? self.bundles[bundleIndex] : self.name;
 
         var msg = null;
         if ( !isDefined('bundle', bundle) ) {
@@ -42,6 +55,7 @@ function Start(opt, cmd) {
                 , index     = null
                 , i         = null
                 , len       = null
+                , msg       = null
             ;
             
             isRealApp(bundle, function(err, appPath){
@@ -53,7 +67,10 @@ function Start(opt, cmd) {
                     if (isStarting)
                         return;
                     
-                    console.info('starting bundle [ ' + bundle + '@' + self.projectName + ' ]');
+                    msg = 'Trying to start bundle [ ' + bundle + '@' + self.projectName + ' ]';
+                    console.info(msg);
+                    opt.client.write(msg);
+                    
                     process.list = (process.list == undefined) ? [] : process.list;
                     setContext('processList', process.list);
                     setContext('ginaProcess', process.pid);
@@ -90,14 +107,70 @@ function Start(opt, cmd) {
                     );
 
                     child.stdout.setEncoding('utf8');//Set encoding.
-                    child.stdout.on('data', function(data) {
-
-                        console.log(data);
-
-                        if (!opt.client.destroyed && !isStarting) {
-                            isStarting = true;
-                            opt.client.write('bundle [ ' + bundle + '@' + self.projectName + ' ] started !');
+                    
+                    // CMD Auto Exit
+                    var retry = 0;
+                    var timerId = setInterval(function() {
+                        if (!isStarting ) {
+                            ++retry;
+                            //opt.client.write('what is wrong ? '+ retry);
+                        } else {
+                            clearInterval(timerId);
                         }
+                         
+                        if (retry > 10) {
+                            clearInterval(timerId);
+                            opt.client.write('Sorry my friend, this is taking too long ! Terminating. Check your logs.');
+                            child.kill('SIGKILL'); 
+                            if (!opt.client.destroyed)
+                                opt.client.emit('end');                                                        
+                        }
+                    }, 2000)
+                    
+                    var checkCaseCount = 2, checkCaseRe = new RegExp('('+bundle + '@' + self.projectName + ' mounted !|Bundle started !)', 'i');
+                    var port = '', errorFound = false;                    
+                    child.stdout.on('data', function(data) {
+                        
+                        console.log(data);
+                        // handle errors
+                        if (/EADDRINUSE.*port/i.test(data) && !errorFound ) {
+                            errorFound = true;
+                            //opt.client.write(data);                              
+                            try {
+                                port = ' #'+ data.match(/port\":\s+\d+/)[0].split(/\:/)[1].trim() +' ';                                
+                                opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] has already been started, or port'+ port+'might be busy'); 
+                                                                
+                            } catch(_err) {
+                                opt.client.write(_err);                                
+                            }  
+                            
+                            ++opt.onlineCount;
+                            end(opt, cmd, isBulkStart, bundleIndex);   
+                            clearInterval(timerId);
+                            child.kill('SIGKILL'); 
+                        }
+                        
+                        if (/\[ emerg \]/.test(data) ) {
+                            opt.notStarted.push(bundle + '@' + self.projectName);
+                            opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] aborted :( \n  => Check your logs to see why.');
+                            end(opt, cmd, isBulkStart, bundleIndex);   
+                            clearInterval(timerId);
+                        }
+                        
+                        if ( checkCaseRe.test(data) ) {                            
+                            --checkCaseCount;
+                            //opt.client.write('bundle '+bundle+':'+ checkCaseCount);
+                        }
+                        
+                        if (!opt.client.destroyed && !isStarting && !checkCaseCount) {                            
+                            isStarting = true;
+                            clearInterval(timerId);
+                            ++opt.onlineCount;                            
+                            opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] started :D');
+                            
+                            end(opt, cmd, isBulkStart, bundleIndex);
+                            return;
+                        }                        
                     });
 
                     //when an exception is thrown, it is sent to the client
@@ -105,7 +178,8 @@ function Start(opt, cmd) {
                     var error = null;
                     child.stderr.on('data', function(err) {
 
-                        error = err.toString();
+                        error = err.toString();                        
+                        
                         if (/Debugger listening|Debugger attached|Warning/.test(error)) {
                             console.warn(error);
 
@@ -116,9 +190,10 @@ function Start(opt, cmd) {
                         } else {
                             console.error(error);
                         }
+                        
                     });
 
-                    child.on('exit', function(code, signal) {
+                    child.on('exit', function(code, signal) {                        
                         // handles only signals that cannot be cannot be caught or ignored
                         // ref.: `framework/<version>/lib/proc.js`
                         if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
@@ -128,13 +203,29 @@ function Start(opt, cmd) {
 
                     });
 
-                    // CMD exit
-                    setTimeout(function() {
-                        opt.client.emit('end');
-                    }, 1000)
+                    
                 }
                 
             })//EO isRealApp
+        }
+    }
+    
+    
+    var end = function (opt, cmd, isBulkStart, i) {
+        if (isBulkStart) {            
+            ++i;            
+            if ( typeof(self.bundles[i]) != 'undefined' ) {
+                start(opt, cmd, i)
+            } else {
+                opt.client.write('\n\r[ Online ] '+ opt.onlineCount +'/'+ self.bundles.length);
+                var notStartedMsg = '\nCould not start: \n  - '+ opt.notStarted.join('\n');
+                opt.client.write(notStartedMsg);
+                if (!opt.client.destroyed)
+                    opt.client.emit('end');
+            }
+        } else {
+            if (!opt.client.destroyed)
+                opt.client.emit('end');                
         }
     }
 
@@ -218,8 +309,7 @@ function Start(opt, cmd) {
             }
         })
     }
-
-
+    
 
     init(opt, cmd)
 };
