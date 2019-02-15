@@ -49,10 +49,19 @@ function ServerEngineClass(options) {
         
     
     // openssl req -x509 -newkey rsa:2048 -nodes -sha256 -subj "/CN=localhost" -keyout localhost-privkey.pem -out localhost-cert.pem
-    const credentials = {
-        key: fs.readFileSync(options.credentials.privateKey),
-        cert: fs.readFileSync(options.credentials.certificate)
-    };
+    var credentials = {};
+    if ( /https/.test(options.scheme) ) {
+        try {
+            credentials = {
+                key: fs.readFileSync(options.credentials.privateKey),
+                cert: fs.readFileSync(options.credentials.certificate)
+            };
+        } catch(err) {
+            console.emerg('You are trying to start a secured server (https) wihtout suficient credentials: check your `server settings`\n'+ err.stack);
+            process.exit(1)
+        }
+    }
+    
     
     var allowHTTP1 = true; // by default
     if (typeof (options.allowHTTP1) != 'undefined' && options.allowHTTP1 != '' ) {        

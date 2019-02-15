@@ -2179,46 +2179,46 @@ function SuperController(options) {
         }, options.headers);
         
         //newOptions.endStream = false;
-        const req = client.request( newOptions );
+        var req = client.request( newOptions );
         
 
         
-        req.on('response', (headers, flags) => {   });
+        req.on('response', function onQueryResponse(headers, flags) {   
+            
+        });
         
         req.setEncoding('utf8');
-        let data = '';
-        req.on('data', (chunk) => { 
+        var data = '';
+        req.on('data', function onQueryDataChunk(chunk) { 
             data += chunk; 
         });
         
-        req.on('error', (err) => {
-                
-            //if ( /(127\.0\.0\.1|localhost|127\.0\.0\.2)/.test(err.address) ) {
+        req.on('error', function onQueryError(error) {
+
             if ( 
-                typeof(err.cause) != 'undefined' && typeof(err.cause.code) != 'undefined' && /ECONNREFUSED|ECONNRESET/.test(err.cause.code) 
-                || /ECONNREFUSED|ECONNRESET/.test(err.code) 
+                typeof(error.cause) != 'undefined' && typeof(error.cause.code) != 'undefined' && /ECONNREFUSED|ECONNRESET/.test(error.cause.code) 
+                || /ECONNREFUSED|ECONNRESET/.test(error.code) 
             ) {
                 
-                var port = getContext('gina').ports[options.protocol][options.scheme.replace(/\:/, '')][ options.port ];//err.port || err.cause.port 
+                var port = getContext('gina').ports[options.protocol][options.scheme.replace(/\:/, '')][ options.port ];
                 if ( typeof(port) != 'undefined' ) {
-                    err.accessPoint = port;
-                    err.message = 'Could not connect to [ ' + err.accessPoint + ' ].\n' + err.message;
+                    error.accessPoint = port;
+                    error.message = 'Could not connect to [ ' + error.accessPoint + ' ].\n' + error.message;
                 }                    
             }
 
 
-            console.error(err.stack||err.message);
+            console.error(error.stack||error.message);
             // you can get here if :
             //  - you are trying to query using: `enctype="multipart/form-data"`
-            //  -
             if ( typeof(callback) != 'undefined' ) {
                 
-                callback(err)
+                callback(error)
 
             } else {
-                var error = {
+                error = {
                     status    : 500,
-                    error     : err.stack || err.message
+                    error     : error.stack ||error.message
                 };
 
                 self.emit('query#complete', error)
@@ -2227,7 +2227,7 @@ function SuperController(options) {
             return;
         });
         
-        req.on('end', () => {   
+        req.on('end', function onEnd() {   
             
             // exceptions filter
             if ( typeof(data) == 'string' && /^Unknown ALPN Protocol/.test(data) ) {
