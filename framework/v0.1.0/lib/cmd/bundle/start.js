@@ -8,7 +8,9 @@ var console     = lib.logger;
  *
  * e.g.
  *  gina bundle:start <bundle_name> @<project_name>
- *  gina bundle:start --all
+ *  
+ * // start all bundles within the project
+ *  gina bundle:start @<project_name>
  *
  * */
 function Start(opt, cmd) {
@@ -42,7 +44,7 @@ function Start(opt, cmd) {
 
         var msg = null;
         if ( !isDefined('bundle', bundle) ) {
-            var msg = 'Bundle [ '+ bundle +' ] is not registered inside `@'+ self.projectName +'`';
+            msg = 'Bundle [ '+ bundle +' ] is not registered inside `@'+ self.projectName +'`';
             console.error(msg);
             opt.client.write(msg);
             // CMD exit

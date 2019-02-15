@@ -1,5 +1,4 @@
 var fs = require('fs');
-var spawn = require('child_process').spawn;
 var exec = require('child_process').exec;
 
 var CmdHelper = require('./../helper');
@@ -9,6 +8,8 @@ var console = lib.logger;
  *
  * e.g.
  *  gina bundle:stop <bundle_name> @<project_name>
+ * 
+ *  // stop all bundles within the project
  *  gina bundle:stop @<project_name>
  *
  * */
@@ -44,11 +45,10 @@ function Stop(opt, cmd) {
 
         var msg = null;
         if (!isDefined('bundle', bundle)) {
-            var msg = 'Bundle [ ' + bundle + ' ] is not registered inside `@' + self.projectName + '`';
+            msg = 'Bundle [ ' + bundle + ' ] is not registered inside `@' + self.projectName + '`';
             console.error(msg);
             opt.client.write(msg);
-            // CMD exit
-            opt.client.emit('end');
+            end(opt, cmd, isBulkStop, bundleIndex, true)
 
         } else {
 
@@ -64,7 +64,7 @@ function Stop(opt, cmd) {
 
                     if (err) {
                         error = err.toString();
-                        opt.write(error);
+                        console.error(error);
                         opt.notStopped.push(bundle + '@' + self.projectName);
                         end(opt, cmd, isBulkStop, bundleIndex, true)
                         //process.exit(1)
@@ -125,13 +125,19 @@ function Stop(opt, cmd) {
                 if (!opt.client.destroyed)
                     opt.client.emit('end');
                     
-                    process.exit(0);
+                process.exit(0);
             }
         } else {
+            if ( typeof(error) != 'undefined') {
+                process.exit(1);
+                return;
+            }
+            
             if (!opt.client.destroyed)
-                opt.client.emit('end');                
-        }
-        
+                opt.client.emit('end');        
+                
+            process.exit(0);
+        }        
     }
 
 
