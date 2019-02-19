@@ -1113,7 +1113,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                     formMethod  = ( typeof(attributes['method']) != 'undefined' ) ? attributes['method'].nodeValue : undefined;                   
                     routeObj    = routing.getRouteByUrl(val, formMethod);
 
-                    if ( typeof(routeObj) == 'undefined' ) {
+                    if ( typeof(routeObj) == 'undefined' || !routeObj ) {
                         routeObj = {
                             name: 'not found',
                             namespace: 'not found',

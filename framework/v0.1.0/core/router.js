@@ -164,57 +164,7 @@ function Router(env) {
         local.routeHasViews     = routeHasViews;
         local.isUsingTemplate   = isUsingTemplate;
         
-                       
-        
-        //Middleware Filters when declared.
-        var resHeaders = conf.server.response.header;
-        // Access-Control-Allow-Origin settings
-        if ( resHeaders.count() > 0 ) {
-            // authority by default if no Access Control Allow Origin set
-            var authority = (typeof(request.headers.referer) != 'undefined') ? local.conf.server.scheme +'://'+ request.headers.referer.match(/:\/\/(.[^\/]+)(.*)/)[1] : (request.headers[':scheme'] +'://'+request.headers[':authority'] || local.conf.server.scheme +'://'+request.headers.host || null);
-            var re = new RegExp(authority);
-            var allowedOrigin = ( typeof(conf.server.response.header['Access-Control-Allow-Origin']) != 'undefined' && conf.server.response.header['Access-Control-Allow-Origin'] != '' ) ? conf.server.response.header['Access-Control-Allow-Origin'] : authority;
-            var found = null, origin = null, origins = null; // to handles multiple origins
-            var originHostReplacement = function(name) {
-                name = name.split(/\@/);
-                var bundle      = name[0]
-                    , project   = name[1]
-                    , arr       = null
-                ;
-                var env     = config.env; // current env by default
-                if ( /\//.test(name[1]) ) {
-                    arr     = name[1].split(/\//);
-                    project = arr[0];
-                    env     = arr[1];
-                }        
-                
-                return config[bundle][env].hostname
-            }
             
-            for (var h in resHeaders) {                
-                if (!response.headersSent) {
-                    // handles multiple origins
-                    if ( /Access\-Control\-Allow\-Origin/.test(h) ) { // re.test(resHeaders[h]                                                         
-                        if ( /\,/.test(allowedOrigin) ) {
-                            origins = allowedOrigin.replace(/\s+/g, '').replace(/([a-z0-9_-]+\@[a-z0-9_-]+|[a-z0-9_-]+\@[a-z0-9_-]+\/[a-z0-9_-]+\@[a-z0-9_-]+)/ig, originHostReplacement).split(/\,/g);
-                            
-                            found = ( origins.indexOf(authority) > -1 ) ? origins[origins.indexOf(authority)] : false;
-                            if ( found != false ) {
-                                origin = found
-                            }
-                        } else {
-                            origin = allowedOrigin
-                        }
-                        
-                        if (origin)
-                            response.setHeader(h, origin)
-                    } else {
-                        response.setHeader(h, resHeaders[h])
-                    }
-                }                    
-            }
-        }
-
         //Getting superCleasses & extending it with super Models.
         var controllerFile         = {}
             , setupFile            = {}
@@ -306,23 +256,7 @@ function Router(env) {
             controller.name = options.control;            
             controller.serverInstance = serverInstance;
             controller.setOptions(request, response, next, options);
-            
-            // if ( /http\/2/.test(conf.server.protocol) && !local.isXMLRequest) { 
-                
-            //     serverInstance._referrer        = local.request.url;
-            //     serverInstance._options         = options;
-            //     serverInstance._isXMLRequest    = local.isXMLRequest;
-                                
-            //     if ( !serverInstance._http2streamEventInitalized ) {
-            //         serverInstance._http2streamEventInitalized = true;
-            //         serverInstance.on('stream', function onHttp2Strem(stream, headers) {        
-            //             if (!this._isXMLRequest)                
-            //                 controller.onHttp2Stream(this._referrer, stream, headers);
-            //         });
-            //     }               
-            // }
-            
-            
+                       
 
             if (hasSetup && isSetupRequired(params.param.control) ) { // adding setup
                 
@@ -423,20 +357,7 @@ function Router(env) {
                     }
                     
                     controller.serverInstance = serverInstance;                    
-                    // if ( /http\/2/.test(conf.server.protocol) ) { 
-                
-                    //     serverInstance._referrer = local.request.url;
-                    //     serverInstance._options = options;
                                         
-                    //     if ( !serverInstance._http2streamEventInitalized ) {
-                    //         serverInstance._http2streamEventInitalized = true;
-                    //         serverInstance.on('stream', function onHttp2Strem(stream, headers) {        
-                                                
-                    //             controller.onHttp2Stream(this._referrer, stream, headers);
-                    //         });
-                    //     }               
-                    // }
-                    
                     return controller
 
                 } catch (err) {

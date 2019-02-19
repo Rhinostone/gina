@@ -144,10 +144,11 @@ function Server(options) {
         if (instance) {            
             self.instance       = instance;            
             //Router configuration.
-            var router      = local.router;
-            instance.throwError = throwError;
-            instance.getAssets  = getAssets;
-            //instancence.getAssetFilenameFromUrl = getAssetFilenameFromUrl;
+            var router = local.router;
+            
+            instance.throwError         = throwError;
+            instance.getAssets          = getAssets;
+            instance.completeHeaders    = completeHeaders;
             
             router.setServerInstance(instance);
         }
@@ -873,9 +874,122 @@ function Server(options) {
         }
     }
     
+    var completeHeaders = function(request, response, responseHeader) {
+        
+        var resHeaders      = null
+            , referer       = null
+            , authority     = null
+            , method        = null
+            , scheme        = null
+            , re            = null
+            , allowedOrigin = null
+            , sameOrigin    = false
+            , conf          = self.conf[self.appName][self.env]
+        ; 
+        
+        resHeaders  = conf.server.response.header;
+        resHeaders['access-control-allow-methods'] = request.routing.method.replace(/(\,\s+|\,)/g, ', ').toUpperCase();                                            
+        
+                                                    
+        if ( typeof(request.headers.origin) != 'undefined' ) {
+            authority = request.headers.origin;
+        } else if (request.headers.referer) {
+            referer = request.headers.referer.match(/[^http://|^https://|][a-z0-9-_.:]+\//)[0];
+            referer = request.headers.referer.match(/^(http|https)\:\/\/?/)[0] + referer.substring(0, referer.length-1);
+        }
+        
+        // access-control-allow-origin settings
+        if ( resHeaders.count() > 0 ) {
+            // authority by default if no Access Control Allow Origin set
+            //authority = ( typeof(referer) != 'undefined') ? conf.server.scheme +'://'+ request.headers.referer.match(/:\/\/(.[^\/]+)(.*)/)[1] : (request.headers[':scheme'] +'://'+request.headers[':authority'] || conf.server.scheme +'://'+request.headers.host || null);
+            if (!authority) {
+                if (!referer) {
+                    if ( /http\/2/.test(conf.server.protocol) ) {
+                        authority   = request.headers[':authority'];
+                        scheme      = request.headers[':scheme'];                                                    
+                    } else {
+                        authority   = request.headers.host;
+                        scheme      = ( new RegExp(authority).test(referer) ) ? referer.match(/^http(.*)\:\/\//)[0].replace(/\:\/\//, '') : conf.server.scheme;
+                    }
+                    authority = scheme +'://'+ authority;
+                } else {
+                    authority   = referer;
+                    sameOrigin  = authority;
+                }  
+            }                                             
+            
+            re = new RegExp(authority);
+            allowedOrigin = ( typeof(conf.server.response.header['access-control-allow-origin']) != 'undefined' && conf.server.response.header['access-control-allow-origin'] != '' ) ? conf.server.response.header['access-control-allow-origin'] : authority;
+            var found = null, origin = null, origins = null; // to handles multiple origins
+            var originHostReplacement = function(name) {
+                name = name.split(/\@/);
+                var bundle      = name[0]
+                    , project   = name[1]
+                    , arr       = null
+                    , domain    = null
+                ;
+                var env     = conf.env; // current env by default
+                if ( /\//.test(name[1]) ) {
+                    arr     = name[1].split(/\//);
+                    project = arr[0];
+                    env     = (arr[1]) ? arr[1] : env;
+                }        
+                
+                domain      = ( !/^http/.test(self.conf[bundle][env].hostname) || /^\/\//.test(self.conf[bundle][env].hostname) ) ? scheme +'://'+ self.conf[bundle][env].hostname.replace(/^\/\//, '') : self.conf[bundle][env].hostname;
+                sameOrigin  = (domain == self.conf[bundle][env].hostname) ? self.conf[bundle][env].hostname : false; 
+                
+                return domain
+            }
+            
+            for (var h in resHeaders) {                
+                if (!response.headersSent) {
+                    // handles multiple origins
+                    if ( /access\-control\-allow\-origin/i.test(h) ) { // re.test(resHeaders[h]    
+                        if (sameOrigin) {
+                            origin = sameOrigin
+                        } else {
+                            if ( /\,/.test(allowedOrigin) ) {
+                                origins = allowedOrigin.replace(/\s+/g, '').replace(/([a-z0-9_-]+\@[a-z0-9_-]+|[a-z0-9_-]+\@[a-z0-9_-]+\/[a-z0-9_-]+\@[a-z0-9_-]+)/ig, originHostReplacement).split(/\,/g);                                                                
+                                
+                                found = ( origins.indexOf(authority) > -1 ) ? origins[origins.indexOf(authority)] : false;
+                                if ( found != false ) {
+                                    origin = found
+                                }
+                            } else {
+                                origin = allowedOrigin
+                            }
+                        }
+                        
+                        if (origin || sameOrigin) {
+                            if (!origin && sameOrigin)
+                                origin = sameOrigin;
+                            
+                            if (responseHeader) {
+                                responseHeader[h] = origin
+                            } else {
+                                response.setHeader(h, origin);  
+                            }                                                                                          
+                        }                                 
+                        sameOrigin = false;                               
+                    } else {
+                        if (responseHeader) {
+                            responseHeader[h] = resHeaders[h]
+                        } else {
+                            response.setHeader(h, resHeaders[h])
+                        }                        
+                    }
+                }                    
+            }
+        } 
+        
+        if (responseHeader)
+            return responseHeader;
+    }
+    
     this.onHttp2Stream = function(stream, headers) {
                 
         if (!stream.pushAllowed) { 
+            //header = merge({ ':status': 200 }, response.getHeaders());
             stream.respond({ ':status': 200 });
             stream.end();
             return; 
@@ -908,11 +1022,11 @@ function Server(options) {
                 };
                 
                 if (cacheless) {
-                    header['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-                    header['Pragma'] = 'no-cache';
-                    header['Expires'] = '0';  
+                    header['cache-control'] = 'no-cache, no-store, must-revalidate';
+                    header['pragma'] = 'no-cache';
+                    header['expires'] = '0';  
                 }
-                header['Location'] = this._options.conf.server.webroot;
+                header['location'] = this._options.conf.server.webroot;
                 
                 stream.respond(header);
                 stream.end();
@@ -934,6 +1048,7 @@ function Server(options) {
             };
             var url = (isWebroot) ? this._referrer : headers[':path'];
             var assets = this._options.template.assets;
+            var responseHeaders = ( typeof(this._responseHeaders) != 'undefined') ? this._responseHeaders : null;
             var conf = this._options.conf;
             var asset = {
                     filename    : assets[ url ].filename,
@@ -986,11 +1101,15 @@ function Server(options) {
                         pathname = asset.filename +'.map';
                         // serve without cache
                         header['X-SourceMap'] = pathname;
-                        header['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-                        header['Pragma'] = 'no-cache';
-                        header['Expires'] = '0';
+                        header['cache-control'] = 'no-cache, no-store, must-revalidate';
+                        header['pragma'] = 'no-cache';
+                        header['expires'] = '0';
                     }    
                 }                       
+                
+                if (responseHeaders) {
+                    header = merge(header, responseHeaders);
+                }
                 
                 pushStream.respondWithFile( 
                     asset.filename
@@ -1015,6 +1134,8 @@ function Server(options) {
      * @param {*} next 
      */
     var handleStatics = function(staticProps, request, response, next) {        
+        
+        //self._responseHeaders = response.getHeaders();
         
         var conf            = self.conf
             , bundleConf    = conf[self.appName][self.env]
@@ -1088,28 +1209,34 @@ function Server(options) {
                             throwError(response, 403, 'Forbidden: \n' + pathname, next);                              
                         }
                     } else {
+                        var ext = 'html';
                         if ( /http\/2/.test(bundleConf.server.protocol) ) {
                             header = {
                                 ':status': 301,
-                                'Location': request.url
+                                'location': request.url,
+                                'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
                             };
                             
                             if (cacheless) {
-                                header['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-                                header['Pragma'] = 'no-cache';
-                                header['Expires'] = '0';  
+                                header['cache-control'] = 'no-cache, no-store, must-revalidate';
+                                header['pragma'] = 'no-cache';
+                                header['expires'] = '0';  
                             }
-                            
+                            request = checkPreflightRequest(request);
+                            header  = completeHeaders(request, response, header);
                             
                             stream.respond(header);
                             stream.end();
                         } else {
-                            response.setHeader('Location', request.url)
+                            response.setHeader('location', request.url);
+                            request = checkPreflightRequest(request);
+                            completeHeaders(request, response);
                             if (cacheless) {
                                 response.writeHead(301, {                                    
-                                    'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
-                                    'Pragma': 'no-cache',
-                                    'Expires': '0'
+                                    'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
+                                    'pragma': 'no-cache',
+                                    'expires': '0',
+                                    'content-type': bundleConf.server.coreConfiguration.mime[ext]
                                 });
                             }                            
                             response.end()                                                        
@@ -1161,6 +1288,8 @@ function Server(options) {
                             if ( /http\/2/.test(bundleConf.server.protocol) ) {
                                 self._isStatic      = true;
                                 self._referrer      = request.url;
+                                
+                                self._responseHeaders         = response.getHeaders();
                                 self._options.template.assets = getAssets(bundleConf, file);
                                                                                                 
                                 if ( 
@@ -1215,13 +1344,13 @@ function Server(options) {
                                                     } else {
                                                         header = {
                                                             ':status': 301,
-                                                            'Location': request.url
+                                                            'location': request.url
                                                         };
                                                         
                                                         if (cacheless) {
-                                                            header['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-                                                            header['Pragma'] = 'no-cache';
-                                                            header['Expires'] = '0';  
+                                                            header['cache-control'] = 'no-cache, no-store, must-revalidate';
+                                                            header['pragma'] = 'no-cache';
+                                                            header['expires'] = '0';  
                                                         }
                                                         
                                                         
@@ -1275,12 +1404,15 @@ function Server(options) {
                                         pathname = pathname +'.map';
                                         // serve without cache
                                         header['X-SourceMap'] = pathname;
-                                        header['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-                                        header['Pragma'] = 'no-cache';
-                                        header['Expires'] = '0';
+                                        header['cache-control'] = 'no-cache, no-store, must-revalidate';
+                                        header['pragma'] = 'no-cache';
+                                        header['expires'] = '0';
                                     }    
                                 }
                                 
+                                //header = merge(header, response.getHeaders());
+                                //request = checkPreflightRequest(request);
+                                header  = completeHeaders(request, response, header);
                                 if (isBinary) {
                                     stream.respondWithFile(filename, header)
                                 } else {
@@ -1291,12 +1423,13 @@ function Server(options) {
                                 return;
                             } else {
                                 
-                                response.setHeader('Content-Type', contentType +'; charset='+ bundleConf.encoding);  
+                                completeHeaders(request, response);                                
+                                response.setHeader('content-type', contentType +'; charset='+ bundleConf.encoding);  
                                 // if (/\.(woff|woff2)$/i.test(filename) )  {
                                 //     response.setHeader("Transfer-Encoding", 'Identity')
                                 // }
                                 if (isBinary) {
-                                    response.setHeader('Content-Length', fs.statSync(filename).size); 
+                                    response.setHeader('content-length', fs.statSync(filename).size); 
                                 }
                                 
                                 if (cacheless) {
@@ -1308,9 +1441,9 @@ function Server(options) {
 
                                     // serve without cache
                                     response.writeHead(200, {
-                                        'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
-                                        'Pragma': 'no-cache',
-                                        'Expires': '0'
+                                        'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
+                                        'pragma': 'no-cache',
+                                        'expires': '0'
                                     });
 
                                 } else {
@@ -1328,6 +1461,14 @@ function Server(options) {
                             throwError(response, 500, err.stack)
                         }
                     }
+                    
+                    // setTimeout(function onTimeout(){
+                    //     if ( /http\/2/.test(bundleConf.server.protocol) ) {
+                    //         stream.end();
+                    //     } else {
+                    //         response.end();  
+                    //     }
+                    // }, 500);
                     
                     return
                     
@@ -1354,7 +1495,7 @@ function Server(options) {
 
             // Passing credentials :
             //      - if you are using jQuery + cross domain, you have to set the `xhrFields` in your $.ajax query -> xhrFields: { withCredentials: true }
-            //      - if you are using another solution or doing it by hand, make sure to properly set the header: headers: {'Access-Control-Allow-Credentials': true }
+            //      - if you are using another solution or doing it by hand, make sure to properly set the header: headers: {'access-control-allow-credentials': true }
             /**
              * NB.: jQuery
              * The `withCredentials` property will include any cookies from the remote domain in the request,
@@ -1368,7 +1509,7 @@ function Server(options) {
             
             local.request = request;
                         
-            response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );                     
+            response.setHeader('x-powered-by', 'Gina/'+ GINA_VERSION );                     
             
             
             
@@ -1406,8 +1547,29 @@ function Server(options) {
                 || staticProps.isStaticFilename && staticsArr.indexOf(staticProps.firstLevel) > -1
             ) {
                 self._isStatic  = true;
-                self._referrer  = request.url;
-                handleStatics(staticProps, request, response, next);                                
+                self._referrer  = request.url;                
+                // by default - used in `composeHeadersMiddleware`: see Default Global Middlewares (gna.js)
+                request.routing = {
+                    'url': request.url,
+                    'method': 'GET'
+                };
+                request = checkPreflightRequest(request);
+                // filtered to handle only html for now
+                if ( /text\/html/.test(request.headers['accept']) &&  /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0 || request.isPreflightRequest && /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0 ) {                           
+                    
+                    nextExpressMiddleware._index        = 0;
+                    nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
+                    nextExpressMiddleware._request      = request;
+                    nextExpressMiddleware._response     = response;
+                    nextExpressMiddleware._next         = next;
+                    nextExpressMiddleware._nextAction   = 'handleStatics';
+                    nextExpressMiddleware._staticProps  = staticProps;
+                    
+                    
+                    nextExpressMiddleware()
+                } else {
+                    handleStatics(staticProps, request, response, next);  
+                }                         
                 
             } else { // not a static request                
                 self._isStatic  = false;
@@ -1806,11 +1968,11 @@ function Server(options) {
 
                 // see.: https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#POST
                 //     Responses to this method are not cacheable,
-                //     unless the response includes appropriate Cache-Control or Expires header fields.
+                //     unless the response includes appropriate cache-control or expires header fields.
                 //     However, the 303 (See Other) response can be used to direct the user agent to retrieve a cacheable resource.
-                response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-                response.setHeader('Pragma', 'no-cache');
-                response.setHeader('Expires', '0');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                response.setHeader('pragma', 'no-cache');
+                response.setHeader('expires', '0');
 
                 // cleaning
                 request.query   = undefined;
@@ -2036,21 +2198,33 @@ function Server(options) {
         var expressMiddlewares  = self.instance._expressMiddlewares;
         
         if (err) {
-            throwError(nextExpressMiddleware._response, 500, (err.stack|err.message|err), nextExpressMiddleware._next)
+            throwError(nextExpressMiddleware._response, 500, (err.stack|err.message|err), nextExpressMiddleware._next, nextExpressMiddleware._nextAction)
         }
         
-        expressMiddlewares[nextExpressMiddleware._index](nextExpressMiddleware._request, nextExpressMiddleware._response, function onNext(err) {
+        expressMiddlewares[nextExpressMiddleware._index](nextExpressMiddleware._request, nextExpressMiddleware._response, function onNext(err, request, response) {
             ++nextExpressMiddleware._index;  
             
             if (err) {
-                throwError(nextExpressMiddleware._response, 500, (err.stack||err.message||err), nextExpressMiddleware._next)
+                throwError(nextExpressMiddleware._response, 500, (err.stack||err.message||err), nextExpressMiddleware._next, nextExpressMiddleware._nextAction)
             }
             
-                     
+            if (request)
+                nextExpressMiddleware._request  = request;
             
-            if (nextExpressMiddleware._index > nextExpressMiddleware._count) {    
-                router._server = self.instance;            
-                router.route(nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next, nextExpressMiddleware._request.routing)
+            if (response)
+                nextExpressMiddleware._response = response;         
+            
+            if (nextExpressMiddleware._index > nextExpressMiddleware._count) { 
+                
+                if ( nextExpressMiddleware._nextAction == 'route' ) {
+                    
+                    router._server = self.instance;            
+                    router.route(nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next, nextExpressMiddleware._request.routing)
+                
+                } else { // handle statics        
+                    self._responseHeaders = nextExpressMiddleware._response.getHeaders();             
+                    handleStatics(nextExpressMiddleware._staticProps, nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next);
+                }
                 
                 //handle(nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next, nextExpressMiddleware._bundle, nextExpressMiddleware._pathname, nextExpressMiddleware._config)
             } else {
@@ -2059,7 +2233,50 @@ function Server(options) {
         });        
     };
     
-    
+    var checkPreflightRequest = function(request) {
+        // See https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
+        var config                          = self.conf[self.appName][self.env]
+            , method                        = ( /http\/2/.test(config.server.protocol) ) ? request.headers[':method'] : request.method
+            , reMethod                      = new RegExp(method, 'i')
+            // preflight support - conditions required
+            , isPreflightRequest            = ( 
+                    // must meet all the following conditions
+                    /OPTIONS/i.test(method) 
+                    && typeof(request.headers['access-control-request-method']) != 'undefined'
+                    && /(GET|POST|HEAD)/i.test(request.headers['access-control-request-method']) 
+                    && typeof(request.headers['access-control-request-headers']) != 'undefined'       
+                ) ? true : false
+            , accessControlRequestHeaders   = null
+            , serverResponseHeaders         = config.server.response.header//config.envConf[self.appName][self.env].server.response.header
+        ;
+        
+        // additional checks
+        // /(application\/x\-www\-form\-urlencoded|multipart\/form\-data|text\/plain)/i.test(request.headers['accept']) 
+        
+        request.isPreflightRequest  = isPreflightRequest;        
+        if (isPreflightRequest) { // update request/response                   
+            method                      = request.headers['access-control-request-method'];
+            // updating to avoid conflict with requested route
+            if ( /http\/2/.test(config.server.protocol) ) {
+                request.headers[':method'] = method;
+            } else {
+                request.method = method
+            }            
+            accessControlRequestHeaders = ( typeof(request.headers['access-control-request-headers']) != 'undefined' ) ? request.headers['access-control-request-headers'] : '';
+            if ( typeof(request.headers['access-control-request-credentials']) != 'undefined' && typeof(serverResponseHeaders['access-control-allow-credentials']) != 'undefined' ) {
+                request.isWithCredentials = true;
+            }
+            if (accessControlRequestHeaders.length > 0) {
+                for (var h in accessControlRequestHeaders) {
+                    if ( /x\-requested\-with/i.test(h) && /x\-requested\-with/i.test(serverResponseHeaders['access-control-allow-headers']) ) {                            
+                        request.isXMLRequest = true;
+                    }                        
+                }
+            }
+        }   
+        
+        return request
+    }
 
     var handle = function(req, res, next, bundle, pathname, config) {
         
@@ -2071,14 +2288,18 @@ function Server(options) {
             , wroot             = null
         ;
 
-    
+        //matched = routingUtils.getRouteByUrl(req.url, bundle, (req.method||req[':method']), req);
+        
+        /***/
+        req = checkPreflightRequest(req);
         var params      = {}
             , _routing  = {}
-            , reMethod  = new RegExp(req.method, 'i')
-            , method    = null
+            , method    = ( /http\/2/.test(self.conf[self.appName][self.env].server.protocol) ) ? req.headers[':method'] : req.method
+            , reMethod  = new RegExp(method, 'i')
         ;
-        try {
+        try {            
             
+                    
             var routing   = config.getRouting(bundle, self.env);
 
             if ( routing == null || routing.count() == 0 ) {
@@ -2109,7 +2330,8 @@ function Server(options) {
                 method = routing[name].method;
                 if ( /\,/.test( method ) && reMethod.test(method) ) {
                     method = req.method
-                }               
+                }       
+                       
                 //if (method != req.method) continue;
                 
                 //Preparing params to relay to the router.
@@ -2127,7 +2349,7 @@ function Server(options) {
                 };
 
                 //Parsing for the right url.
-                try {                    
+                try {     
                     isRoute = routingUtils.compareUrls(params, routing[name].url, req);
                         
                 } catch (err) {
@@ -2137,7 +2359,8 @@ function Server(options) {
 
                 if ( pathname == routing[name].url || isRoute.past ) {
 
-                    _routing = req.routing;      
+                    _routing = req.routing;                     
+                    
                     // comparing routing method VS request.url method
                     isMethodAllowed = reMethod.test(_routing.method);
                     if (!isMethodAllowed) {
@@ -2191,10 +2414,12 @@ function Server(options) {
                     //break;
                 }
             }
+        /***/
             
             
 
         if (matched) {
+            
             if ( cacheless ) {
                 // config.refreshModels(params.bundle, self.env, function onModelRefreshed(err){
                 //     if (err) {
@@ -2202,11 +2427,12 @@ function Server(options) {
                 //     } else {
                         
                         if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
-                            nextExpressMiddleware._index = 0;
-                            nextExpressMiddleware._count = self.instance._expressMiddlewares.length-1;
-                            nextExpressMiddleware._request = req;
-                            nextExpressMiddleware._response = res;
-                            nextExpressMiddleware._next = next;
+                            nextExpressMiddleware._index        = 0;
+                            nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
+                            nextExpressMiddleware._request      = req;
+                            nextExpressMiddleware._response     = res;
+                            nextExpressMiddleware._next         = next;
+                            nextExpressMiddleware._nextAction   = 'route'
                             
                             nextExpressMiddleware()
                         } else {
@@ -2219,11 +2445,12 @@ function Server(options) {
             } else {                                
                 
                 if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
-                    nextExpressMiddleware._index = 0;
-                    nextExpressMiddleware._count = self.instance._expressMiddlewares.length-1;
-                    nextExpressMiddleware._request = req;
-                    nextExpressMiddleware._response = res;
-                    nextExpressMiddleware._next = next;
+                    nextExpressMiddleware._index        = 0;
+                    nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
+                    nextExpressMiddleware._request      = req;
+                    nextExpressMiddleware._response     = res;
+                    nextExpressMiddleware._next         = next;
+                    nextExpressMiddleware._nextAction   = 'route'
                     
                     nextExpressMiddleware()
                 } else {
@@ -2264,9 +2491,9 @@ function Server(options) {
 
                 // Internet Explorer override
                 if ( /msie/i.test(local.request.headers['user-agent']) ) {
-                    res.writeHead(code, "Content-Type", "text/plain")
+                    res.writeHead(code, "content-type", "text/plain")
                 } else {
-                    res.writeHead(code, { 'Content-Type': 'application/json'} )
+                    res.writeHead(code, { 'content-type': 'application/json'} )
                 }
 
                 console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url +'\n'+ msg);
@@ -2276,7 +2503,7 @@ function Server(options) {
                 }));
                 //res.headersSent = true
             } else {
-                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.writeHead(code, { 'content-type': 'text/html'} );
                 console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
                 return res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
                 //res.headersSent = true

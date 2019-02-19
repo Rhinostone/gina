@@ -72,8 +72,8 @@ window['onGinaLoaded']  = function(gina) {
         };
 
         // globals
-        window['GINA_ENV']          = '{{ GINA_ENV }}';
-        window['GINA_ENV_IS_DEV']   = '{{ GINA_ENV_IS_DEV }}';
+        window['GINA_ENV']              = '{{ GINA_ENV }}';
+        window['GINA_ENV_IS_DEV']       = '{{ GINA_ENV_IS_DEV }}';
 
         gina["isFrameworkLoaded"]       = true;
         gina["setOptions"](options);

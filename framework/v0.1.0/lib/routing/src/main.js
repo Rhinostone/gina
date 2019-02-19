@@ -468,11 +468,12 @@ function Routing() {
      * @param {string} url e.g.: /bundle/some/url/path or http
      * @param {string} [bundle] targeted bundle
      * @param {string} [method] request method (GET|PUT|PUT|DELETE) - GET is set by default
+     * @param {object} [request] 
      *
-     * @return {object} route
+     * @return {object|boolean} route - when route is found; `false` when not found
      * */
     
-    self.getRouteByUrl = function (url, bundle, method) {
+    self.getRouteByUrl = function (url, bundle, method, request) {
         
         if (
             arguments.length == 2 && typeof(arguments[1]) != 'undefined' && self.allowedMethods.indexOf(arguments[1].toLowerCase()) > -1 
@@ -493,7 +494,6 @@ function Routing() {
             , foundRoute    = null
             , route         = null
             , routeObj      = null
-            , isXMLRequest  = null
         ;
 
         if (isGFFCtx) {
@@ -501,12 +501,20 @@ function Routing() {
             bundle          = (typeof (bundle) != 'undefined') ? bundle : config.bundle;
             env             = config.env;
             routing         = config.getRouting(bundle);
-            isXMLRequest    = false; // TODO - retrieve the right value
+            isXMLRequest    = ( typeof(isXMLRequest) != 'undefined' ) ? isXMLRequest : false; // TODO - retrieve the right value
 
             hostname        = config.hostname;
             webroot         = config.webroot;
             prefix          = hostname + webroot;
 
+            request = {
+                routing: {
+                    path: unescape(pathname)
+                },
+                method: method,
+                params: {},
+                url: url
+            };
         } else {
 
             var gnaCtx      = getContext('gina');
@@ -515,7 +523,7 @@ function Routing() {
             bundle          = (typeof (bundle) != 'undefined') ? bundle : config.bundle;
             env             = config.env;
             routing         = config.getRouting(bundle);
-            isXMLRequest    = getContext().router.isProcessingXMLRequest;
+            isXMLRequest    = request.isXMLRequest;
 
             hostname        = config.envConf[bundle][env].hostname;
             webroot         = config.envConf[bundle][env].server.webroot;
@@ -528,14 +536,7 @@ function Routing() {
         //  getting params
         params = {};
         
-        var request = {
-            routing: {
-                path: unescape(pathname)
-            },
-            method: method,
-            params: {},
-            url: url
-        };
+        
 
         var paramsList = null;
         var re = new RegExp(method, 'i');
@@ -594,11 +595,12 @@ function Routing() {
         if (!matched) {
             if (isGFFCtx) {
                 console.warn('[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route not found for url: `' + url + '` !');
-                return undefined
+                return false
             }
 
-            throw new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route not found for url: `' + url + '` !')
-
+            console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route not found for url: `' + url + '` !').stack )
+            
+            return false;
         } else {
             return route
         }
