@@ -111,7 +111,7 @@ function Start(opt, cmd) {
                     child.stdout.setEncoding('utf8');//Set encoding.
                     
                     // CMD Auto Exit
-                    var retry = 0;
+                    var retry = 0, maxRetry = 15;
                     var timerId = setInterval(function() {
                         if (!isStarting ) {
                             ++retry;
@@ -120,7 +120,7 @@ function Start(opt, cmd) {
                             clearInterval(timerId);
                         }
                          
-                        if (retry > 10) {
+                        if (retry > maxRetry) {
                             clearInterval(timerId);
                             opt.client.write('Sorry my friend, this is taking too long ! Terminating. Check your logs.');
                             child.kill('SIGKILL'); 

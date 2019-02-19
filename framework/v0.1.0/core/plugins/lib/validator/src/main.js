@@ -413,7 +413,7 @@ function ValidatorPlugin(rules, data, formId) {
         if (gina && typeof (window.ginaToolbar) == "object" && data) {
             try {
                 // update toolbar
-                ginaToolbar.update('data-xhr', data);
+                window.ginaToolbar.update('data-xhr', data);
 
             } catch (err) {
                 throw err
@@ -669,6 +669,62 @@ function ValidatorPlugin(rules, data, formId) {
                                 if ( typeof(result.status) == 'undefined' )
                                     result.status = xhr.status;
                             }
+                            
+                            if ( /\/html/.test( contentType ) ) {
+                                
+                                result = {
+                                    contentType : contentType,
+                                    content     : xhr.responseText
+                                };
+                                
+                                if ( typeof(result.status) == 'undefined' )
+                                    result.status = xhr.status;
+                                    
+                                // if hasPopinHandler & popinIsBinded
+                                if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler && gina.popinIsBinded ) {
+                                    
+                                    // select popin by id
+                                    var $popin = gina.popin.getActivePopin();
+                                    
+                                    if ($popin) {
+                                                     
+                                        XHRData = {};
+                                        // update toolbar
+                                            
+                                        try {
+                                            XHRData = new DOMParser().parseFromString(result.content, 'text/html').getElementById('gina-without-layout-xhr-data');
+                                            XHRData = JSON.parse(decodeURIComponent(XHRData.value));
+                                            
+                                            XHRView = new DOMParser().parseFromString(result.content, 'text/html').getElementById('gina-without-layout-xhr-view');      
+                                            XHRView = JSON.parse(decodeURIComponent(XHRView.value));
+                                            
+                                            // update data tab                                                
+                                            if ( gina && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
+                                                window.ginaToolbar.update("data-xhr", XHRData);
+                                            }
+                                            
+                                            // update view tab
+                                            
+                                            if ( gina && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
+                                                window.ginaToolbar.update("view-xhr", XHRView);
+                                            }   
+
+                                        } catch (err) {
+                                            throw err
+                                        }
+                                        
+                                        
+                                        $popin.loadContent(result.content);
+                                                                                
+                                        result = XHRData;
+                                        triggerEvent(gina, $target, 'success.' + id, result);
+                                        
+                                        return;
+                                    }
+                                    
+                                    
+                                }
+                            }
 
                             $form.eventData.success = result;
 
@@ -676,8 +732,8 @@ function ValidatorPlugin(rules, data, formId) {
                             // update toolbar
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
-
-                                    if ( typeof(XHRData) != 'undefined' ) {
+                                    // don't refresh for html datas
+                                    if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
                                         window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
@@ -689,7 +745,7 @@ function ValidatorPlugin(rules, data, formId) {
                             triggerEvent(gina, $target, 'success.' + id, result);
                             if (hFormIsRequired)
                                 triggerEvent(gina, $target, 'success.' + id + '.hform', result);
-
+                            
                         } catch (err) {
 
                             result = {
@@ -720,6 +776,20 @@ function ValidatorPlugin(rules, data, formId) {
                             if (hFormIsRequired)
                                 triggerEvent(gina, $target, 'error.' + id + '.hform', result);
                         }
+                        
+                        // handle redirect
+                        if ( typeof(result) != 'undefined' && typeof(result.location) != 'undefined' ) {                        
+                            window.location.hash = ''; //removing hashtag 
+                              
+                            // if ( window.location.host == gina.config.hostname && /^(http|https)\:\/\//.test(result.location) ) { // same origin
+                            //     result.location = result.location.replace( new RegExp(gina.config.hostname), '' );
+                            // } else { // external - need to remove `X-Requested-With` from `options.headers`
+                                result.location = (!/^http/.test(result.location) && !/^\//.test(result.location) ) ? location.protocol +'//' + result.location : result.location;
+                            //}                        
+                            
+                            window.location.href = result.location;
+                            return;                        
+                        }
 
                     } else if ( xhr.status != 0) {
 
@@ -742,7 +812,7 @@ function ValidatorPlugin(rules, data, formId) {
                         $form.eventData.error = result;
 
                         // forward appplication errors to forms.errors when available
-                        if (typeof (result) != 'undefined' && typeof (result.error) != 'undefined' &&  result.error.fields && typeof (result.error.fields) == 'object') {
+                        if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
                             var formsErrors = {}, errCount = 0;
                             for (var f in result.error.fields) {
                                 ++errCount;
@@ -759,7 +829,7 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                             try {
                                 // update toolbar
-                                ginaToolbar.update('data-xhr', XHRData );
+                                window.ginaToolbar.update('data-xhr', XHRData );
 
                             } catch (err) {
                                 throw err
@@ -769,6 +839,14 @@ function ValidatorPlugin(rules, data, formId) {
                         triggerEvent(gina, $target, 'error.' + id, result);
                         if (hFormIsRequired)
                             triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                            
+                        // handle redirect
+                        // if ( typeof(result) != 'undefined' && typeof(result.location) != 'undefined' ) {                        
+                        //     window.location.hash = ''; //removing hashtag                            
+                        //     result.location = (!/^http/.test(result.location) && !/^\//.test(result.location) ) ? location.protocol +'//' + result.location : result.location;
+                        //     window.location.href = result.location;
+                        //     return;                        
+                        // }
                     }
                 }
             };
@@ -2177,6 +2255,7 @@ function ValidatorPlugin(rules, data, formId) {
                     } else if ( 
                         !$buttonsTMP[b].getAttribute('id') 
                         && !/gina\-popin/.test($buttonsTMP[b].className) 
+                        && !gina.popinIsBinded
                     ) { // will not be binded but will receive an id if not existing
                         linkId = 'link.'+ uuid.v4();
                         $buttonsTMP[b].id = linkId;

@@ -29,14 +29,17 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         };
 
         var instance        = {
-            plugin      : this.plugin,
-            id          : 'gina-popins-' + uuid.v4(),
-            on          : on,
-            eventData   : {},
+            plugin          : this.plugin,
+            id              : 'gina-popins-' + uuid.v4(),
+            on              : on,
+            eventData       : {},
 
-            target      : document, // by default
-            isReady     : false,
-            initialized : false
+            '$popins'       : {},
+            activePopinId   : null, 
+            getActivePopin  : null, // returns the active $popin
+            target          : document, // by default
+            isReady         : false,
+            initialized     : false
         };
 
         // popin proto
@@ -46,13 +49,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             'eventData'         : {},
             'target'            : document, // by default
 
-            'name'          : null,
-            'load'          : null,
-            'loadContent'   : null,
-            'open'          : null,
-            'isOpen'        : false,
-            'close'         : null,
-            '$forms'        : []
+            'name'              : null,
+            'load'              : null,
+            'loadContent'       : null,
+            'open'              : null,
+            'isOpen'            : false,
+            'close'             : null,
+            '$forms'            : []
         };
 
         var $validator      = null; // validator instance
@@ -96,7 +99,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             instance.on         = on;
 
             gina.popinContainer  = instance.id;
-            gina.hasPopinHandler = true;
+            //gina.hasPopinHandler = true;
         }
         
         var popinGetContainer = function () {
@@ -112,8 +115,40 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 triggerEvent(gina, $el, evt);
             });
         }
+        
+        var getPopinById = function(id) {            
+            return ( typeof(instance.$popins[id]) != 'undefined' ) ? instance.$popins[id] : null;
+        }
+        
+        var getPopinByName = function(name) {
+            
+            var $popin = null;
+            
+            for (var p in instance.$popins) {
+                if ( instance.$popins[p].name === name ) {
+                    $popin = instance.$popins[p];
+                    break;
+                }
+            }
+            
+            return $popin;
+        }  
+         
+        function getActivePopin() {            
+            var $popin = null;
+            
+            for (var p in gina.popin.$popins) {
+                if ( typeof(gina.popin.$popins[p].isOpen) != 'undefined' && gina.popin.$popins[p].isOpen ) {
+                    $popin = gina.popin.$popins[p];
+                    break;
+                }
+            }
+            
+            return $popin;
+        }     
+        
 
-        var bindOpen = function(isRouting) {
+        var bindOpen = function($popin, isRouting) {
             
             isRouting = ( typeof(isRouting) != 'undefined' ) ? isRouting : false;
             
@@ -199,7 +234,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                     //     }
                                     // }
                                     
-                                    popinBind(e);
+                                    popinBind(e, $popin);
                                     if (!$popin.isOpen) {                                        
                                         popinOpen($popin.name);
                                     }
@@ -258,11 +293,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 }
             });
 
-            gina.popinIsBindinded = true
+            gina.popinIsBinded = false
         }
         
         
-        function popinBind(e) {
+        function popinBind(e, $popin) {
             
             var $el = e.target;
             var eventType = e.type;
@@ -288,7 +323,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                                 if (!fired) {
                                     fired = true;                                                                        
-                                    popinLoadContent($popin.target, e.detail);   
+                                    popinLoadContent(e.detail);   
                                 }
                             });
                         }
@@ -345,6 +380,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 });
                     
             };
+            
+            gina.popinIsBinded = true;
             
             var i       = null
                 , b     = null
@@ -543,6 +580,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         
         function updateToolbar(result, resultIsObject) {
             // update toolbar errors
+            var $popin = getActivePopin();
             
             if ( gina && typeof(window.ginaToolbar) == 'object' && typeof(result) != 'undefined' && typeof(resultIsObject) != 'undefined' && result ) {
                 
@@ -577,6 +615,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             }
             
             // update toolbar
+            var $popin = getPopinById(instance.activePopinId);
             var $el = $popin.target;
             
             // XHRData
@@ -658,14 +697,17 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
          * */
         function popinLoad(name, url, options) {
 
-            var id          = 'gina-popin-' + instance.id +'-'+ name;
-
+            // popin object
+            var $popin      = getPopinByName(name);
+            var id          = $popin.id;
+            
+            
             // popin element
             var $el         = document.getElementById(id) || null;
 
             if ( $el == null ) {
 
-                var className   = self.options.class +' '+ id;
+                var className   = $popin.options.class +' '+ id;
                 $el             = document.createElement('div');
                 $el.setAttribute('id', id);
                 $el.setAttribute('class', className);
@@ -677,14 +719,24 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             } else {
                 options = merge(options, xhrOptions);
             }
-            // proxy external urls
-            // TODO - instead of using `cors.io`, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
-            if ( /^(http|https)\:/.test(url) && !new RegExp('^' + window.location.protocol + '//'+ window.location.host).test(url) ) {                
-                url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url
+            
+            if ( /^(http|https)\:/.test(url) && !new RegExp('^' + window.location.protocol + '//'+ window.location.host).test(url) ) {
+                // is request from same domain ?
+                //options.headers['Origin']   = window.protocol+'//'+window.location.host;
+                //options.headers['Origin']   = '*';
+                //options.headers['Host']     = 'https://freelancer-app.fr.local:3154';
+                var isSameDomain = ( new RegExp(window.location.hostname).test(url) ) ? true : false;
+                if (!isSameDomain) {
+                    // proxy external urls
+                    // TODO - instead of using `cors.io`, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
+                    url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
+                    
+                    //delete options.headers['X-Requested-With']
+                }   
             }
             options.url     = url;
             // updating popin options
-            $popin.options  = options;
+            $popin.options  = merge(options, $popin.options);
 
 
             if ( options.withCredentials ) { // Preflighted requests               
@@ -719,14 +771,26 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             if (xhr) {
                 // setting up headers
                 xhr.withCredentials = ( typeof(options.withCredentials) != 'undefined' ) ? options.withCredentials : false;
+                                
+                xhr.onerror = function(event, err) {
                     
-                for (var hearder in options.headers) {
-                    xhr.setRequestHeader(hearder, options.headers[hearder]);
+                    var error = 'Transaction error: might be due to the server CORS settings.\nPlease, check the console for more details.';
+                    var result = {
+                        'status':  xhr.status, //500,
+                        'error' : error
+                    };                    
+                    
+                    var resultIsObject = true;
+                    instance.eventData.error = result;                                
+                    updateToolbar(result, resultIsObject);
+                    triggerEvent(gina, $el, 'error.' + id, result)
                 }
                 
-                xhr.onerror = function(event, err) {
-                    console.log('error found ', err);
+                
+                for (var header in options.headers) {
+                    xhr.setRequestHeader(header, options.headers[header]);
                 }
+                
                 
                 // catching ready state cb
                 xhr.onreadystatechange = function (event) {
@@ -864,8 +928,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                             if (!fired) {
                                 fired = true;
-
-                                popinBind(e);
+                                
+                                instance.activePopinId = $popin.id;
+                                popinBind(e, $popin);
                                 popinOpen($popin.name);
                             }
                         });
@@ -876,14 +941,22 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
         }
 
-        function popinLoadContent($el, $content) {
+        /**
+         * popinLoadContent
+         * 
+         * @param {string} html - plain/text
+         * @param {object} [data] - 
+         */
+        function popinLoadContent(stringContent) {
             
+            var $popin = getActivePopin(); 
             if ( !$popin.isOpen )
                 throw new Error('Popin `'+$popin.name+'` is not open !');
-                
-            $el.innerHTML = $content.trim(); 
+            
+            var $el = $popin.target;
+            $el.innerHTML = stringContent.trim(); 
             popinUnbind($popin.name, true);          
-            popinBind({ target: $el, type: 'loaded.' + $popin.id });
+            popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
             
             triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
         }
@@ -900,25 +973,23 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         function popinOpen(name) {
 
             var id = null, $el = null;
-            if ( typeof(name) == 'string' && name != '' ) {
-                id = 'gina-popin-' + instance.id +'-'+ name;
-                if (id !== $popin.id)
-                    throw new Error('Popin `'+name+'` not found !')
-            } else if ( typeof(name) == 'undefined' ) {
-                id = $popin.id
-            }
-            
+            var $popin = ( typeof(name) != 'undefined') ? getPopinByName(name) : getPopinById(this.id);
+            if ( !$popin ) {
+                throw new Error('Popin name `'+name+'` not found !')
+            } 
+            id = $popin.id;
             $el = document.getElementById(id);
             
-            popinBind({ target: $el, type: 'loaded.' + $popin.id });
+            popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
                        
 
             if ( !/gina-popin-is-active/.test($el.className) )
                 $el.className += ' gina-popin-is-active';
 
+            // overlay
             if ( !/gina-popin-is-active/.test(instance.target.firstChild.className) )
                 instance.target.firstChild.className += ' gina-popin-is-active';    
-
+            // overlay
             if ( /gina-popin-is-active/.test(instance.target.firstChild.className) ) {
                 //removeListener(gina, event.target, event.target.getAttribute('id'))
                 removeListener(gina, instance.target, 'open.'+ $popin.id)
@@ -927,6 +998,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             $popin.isOpen = true;
             // so it can be forwarded to the handler who is listening
             $popin.target = $el;
+            
+            instance.activePopinId = $popin.id;
 
             // update toolbar
             updateToolbar();
@@ -980,23 +1053,21 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
          * */
         function popinUnbind(name, isRouting) {
             
-            var id = null, $el = null;
-            if ( typeof(name) == 'string' && name != '' ) {
-                if (name !== $popin.name)
-                    throw new Error('Popin `'+name+'` not found !');
+            var $popin = getPopinByName(name);
+            var $el = null;
+            if ( !$popin ) {
+                throw new Error('Popin `'+name+'` not found !');
             }
             // by default
-            //id  = $popin.id;
+            $el = $popin.target;
             
             isRouting = ( typeof(isRouting) != 'undefined' ) ? isRouting : false;
-            
-            $el = $popin.target;
 
             if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
                 if (!isRouting) {
-                    instance.target.firstChild.className  = instance.target.firstChild.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
-                    $el.className           = $el.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
-                    $el.innerHTML = '';
+                    instance.target.firstChild.className    = instance.target.firstChild.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
+                    $el.className                           = $el.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
+                    $el.innerHTML                           = '';
                 }                    
 
                 // removing from FormValidator instance
@@ -1010,7 +1081,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     }
                 }
                 
-                gina.popinIsBindinded = false;
+                gina.popinIsBinded = false;
                 
                 // remove listeners
                 removeListener(gina, $popin.target, 'loaded.' + $popin.id);
@@ -1028,27 +1099,26 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
          * */
         function popinClose(name) {
             
-            var id = null, $el = null;
-            if ( typeof(name) == 'string' && name != '' ) {
-                if (name !== $popin.name)
-                    throw new Error('Popin `'+name+'` not found !');
+            var $popin = ( typeof(name) != 'undefined') ? getPopinByName(name) : getActivePopin();
+            var $el = null;
+            if ( !$popin) {
+               throw new Error('Popin `'+name+'` not found !');
             }
             
-            
             // by default
-            //id = $popin.id;
             $el = $popin.target;
 
             if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
                 
                 popinUnbind(name);            
-                $popin.isOpen = false;
-                gina.popinIsBindinded = false;
+                $popin.isOpen           = false;
+                gina.popinIsBinded      = false;                
 
                 // restore toolbar
                 if ( gina && typeof(window.ginaToolbar) == "object" )
                     ginaToolbar.restore();
 
+                instance.activePopinId  = null;
                 triggerEvent(gina, $popin.target, 'close.'+ $popin.id, $popin);
             }
         }
@@ -1062,49 +1132,55 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
          *
          * */
         function popinDestroy(name) {
+            
+            var $popin = ( typeof(name) != 'undefined') ? getPopinByName(name) : getActivePopin();
             var id = null, $el = null;
-            if ( typeof(name) == 'string' && name != '' ) {
-                id = 'gina-popin-' + instance.id +'-'+ name;
-                if (id !== $popin.id)
-                    throw new Error('Popin `'+name+'` not found !')
-            } else if ( typeof(name) == 'undefined' ) {
-                id = $popin.id
+            if ( !$popin ) {
+                throw new Error('Popin `'+name+'` not found !')
             }
+            
+            id = $popin.id;
         }
+        
+        function registerPopin($popin, options) {
+            
+            if ( typeof(options) != 'object' ) {
+                throw new Error('`options` must be an object')
+            }
+            
+            $popin.options = merge(options, self.options);
+            $popin.id = 'gina-popin-' + instance.id +'-'+ $popin.options['name'];
+            
+            if ( typeof(instance.$popins[$popin.id]) == 'undefined' ) {               
 
-        var init = function(options) {
-
-            instance.on('init', function(event) {
-
-                if ( typeof(options) != 'object' ) {
-                    throw new Error('`options` must be an object')
-                }
-
-                self.options    = merge(options, self.options);
-
-                if ( typeof(self.options['name']) != 'string' || self.options['name'] == '' ) {
+                if ( typeof($popin.options['name']) != 'string' || $popin.options['name'] == '' ) {
                     throw new Error('`options.name` can not be left `empty` or `undefined`')
                 }
 
-                if ( registeredPopins.indexOf(self.options['name']) > -1 ) {
-                    throw new Error('`popin '+self.options['name']+'` already exists !')
+                if ( registeredPopins.indexOf($popin.options['name']) > -1 ) {
+                    throw new Error('`popin '+$popin.options['name']+'` already exists !')
                 }
 
-                if ( typeof(self.options['validator']) != 'undefined' ) {
-                    $validator = self.options['validator']
-                }
-
-                self.options['class'] = 'gina-popin-container ' + self.options['class'];
-
-                $popin.id           = 'gina-popin-' + instance.id +'-'+ self.options['name'];
-                $popin.name         = self.options['name'];
-                $popin.load         = popinLoad;
-                $popin.loadContent  = popinLoadContent;
-                $popin.open         = popinOpen;
-                $popin.close        = popinClose;
-
-                if ( typeof($validator) != 'undefined' )
+                if ( typeof($popin.options['validator']) != 'undefined' ) {
+                    $validator = $popin.options['validator'];
                     $popin.validateFormById = $validator.validateFormById;
+                }
+
+                $popin.options['class'] = 'gina-popin-container ' + $popin.options['class'];
+
+                
+                $popin.name             = $popin.options['name'];        
+                $popin.target           = instance.target;  
+                $popin.load             = popinLoad;
+                $popin.loadContent      = popinLoadContent;
+                $popin.open             = popinOpen;
+                $popin.close            = popinClose;
+                $popin.updateToolbar    = updateToolbar;  
+                
+                instance.$popins[$popin.id] = $popin;
+
+                // if ( typeof($validator) != 'undefined' )
+                //     $popin.validateFormById = $validator.validateFormById;
 
                 // setting up AJAX
                 if (window.XMLHttpRequest) { // Mozilla, Safari, ...
@@ -1119,21 +1195,52 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         catch (e) {}
                     }
                 }
+                
+                
+                
+                bindOpen($popin);                
+            }
+        }
 
-                bindOpen();
+        var init = function(options) {
+            
+            setupInstanceProto();
+            instance.on('init', function(event) {
+                
+                
+                //var $newPopin = merge({}, $popin);  
+                //registerPopin($newPopin, options);
+                var $newPopin = null;
+                var popinId = 'gina-popin-' + instance.id +'-'+ options['name'];
+                if ( typeof(instance.$popins[popinId]) == 'undefined' ) {               
+                    var $newPopin = merge({}, $popin);  
+                    registerPopin($newPopin, options);
+                }
 
                 instance.isReady = true;
-
-                // trigger validator ready event
-                triggerEvent(gina, instance.target, 'ready.' + instance.id, $popin);
+                gina.hasPopinHandler = true;
+                gina.popin = merge(gina.popin, instance);
+                // trigger popin ready event
+                triggerEvent(gina, instance.target, 'ready.' + instance.id, $newPopin);
             });
+
+            
+                
 
             instance.initialized = true;
 
             return instance
         }
+        
+        var setupInstanceProto = function() {
 
-
+            instance.load           = popinLoad;
+            instance.loadContent    = popinLoadContent;
+            instance.getActivePopin = getActivePopin;
+            instance.open           = popinOpen;
+            instance.close          = popinClose;
+        }
+        
 
         if ( !gina.hasPopinHandler ) {
             popinCreateContainer();

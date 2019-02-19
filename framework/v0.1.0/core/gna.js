@@ -697,22 +697,85 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
                             server.on('started', function (conf) {
 
-                                // catching unhandled errors
-                                if ( /** /^express/.test(instance.engine) && */typeof(instance.use) == 'function' ) {
-                                    instance.use( function onUnhandledError(err, req, res, next){
+                                // setting default global middlewares
+                                if ( typeof(instance.use) == 'function' ) {
+                                    
+                                    // catching unhandled errors
+                                    instance.use( function cathUnhandledErrorMiddlewar(error, request, response, next){
                                         
                                         if (arguments.length < 4) {
-                                            next = res;
-                                            res = req;
-                                            req = err;
-                                            err = false ;
+                                            next        = response;
+                                            response    = request;
+                                            request     = error;
+                                            error       = false ;
                                         }
                                         
-                                        if (err) {
-                                            e.emit('error', err, req, res, next)
+                                        if (error) {
+                                            e.emit('error', error, request, response, next)
                                         } else {
                                             next()
                                         }
+                                    });
+                                    
+                                                                        
+                                    instance.use( function composeHeadersMiddleware(error, request, response, next) {
+                                        
+                                        if (arguments.length < 4) {
+                                            next        = response;
+                                            response    = request;
+                                            request     = error;
+                                            error       = false ;
+                                        }
+                                        
+                                        if (error) {
+                                            e.emit('error', error, request, response, next)
+                                        } else {
+                                            
+                                            instance.completeHeaders(request, response);                                            
+                                            
+                                            if ( typeof(request.isPreflightRequest) != 'undefined' && request.isPreflightRequest ) {
+                                                
+                                                // var url     = request.url
+                                                //     , ext   = null
+                                                //     , mime  = 'text/plain' // by default
+                                                // ;
+                                                
+                                                // // check if url has an extension
+                                                // if ( /\/([a-z0-9-_]+)\.[a-z0-9]+$/i.test(url) ) {//
+                                                //     ext = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];
+                                                // } else if ( typeof(request.routing.ext) != 'undefined') { // if not, check route
+                                                //     url = 'https://freelancer-app.fr.local:3154/api/documentation/ '; 
+                                                // } else { // without extension - folder ?
+                                                    
+                                                // }
+                                                // var mime = 
+                                                // /text\/html/.test(request.headers.accept)
+                                                
+                                                // if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['access-control-request-headers']) ) {
+                                                    
+                                                //     // Internet Explorer override
+                                                //     if ( /msie/i.test(request.headers['user-agent']) ) {
+                                                //         response.setHeader('content-type', 'text/plain' + '; charset='+ conf.encoding)
+                                                //     } else {
+                                                //         response.setHeader('content-type', conf.server.coreConfiguration.mime['json'] + '; charset='+ conf.encoding)
+                                                //     }
+                                                // }
+                                                var ext = 'html';
+                                                var headers = {    
+                                                    // Responses to the OPTIONS method are not cacheable. - https://tools.ietf.org/html/rfc7231#section-4.3.7
+                                                    //'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
+                                                    'cache-control': 'no-cache',
+                                                    'pragma': 'no-cache',
+                                                    'expires': '0',
+                                                    'content-type': conf.server.coreConfiguration.mime[ext]
+                                                };                                                
+                                                response.writeHead(200, headers);
+                                                
+                                                response.end();
+                                            } else {
+                                                next(false, request, response)
+                                            }
+                                        }                                            
                                     })
                                 }                                
                                 

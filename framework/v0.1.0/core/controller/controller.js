@@ -233,6 +233,7 @@ function SuperController(options) {
             }            
             set('page.view.method', local.options.method);
             set('page.view.namespace', namespace); // by default
+            set('page.view.url', req.url);
             set('page.view.html.properties.mode.javascriptsDeferEnabled', local.options.template.javascriptsDeferEnabled);
             set('page.view.html.properties.mode.routeNameAsFilenameEnabled', local.options.template.routeNameAsFilenameEnabled);
             
@@ -652,7 +653,8 @@ function SuperController(options) {
                     } else {
                         
                         assets  = {assets:"${assets}"};                        
-                        mapping = { filename: local.options.template.layout };         
+                        //mapping = { filename: local.options.template.layout };         
+                        mapping = { filename: layoutPath }; 
                         layout  = layout.toString();
                         
                         isDeferModeEnabled = local.options.template.javascriptsDeferEnabled;                        
@@ -1154,13 +1156,14 @@ function SuperController(options) {
      * @param {object} [params] TODO
      *
      * @callback [ next ]
-     * */
+     * */    
     this.redirect = function(req, res, next) {
         var conf    = self.getConfig();
         var bundle  = conf.bundle;
         var env     = conf.env;
         var wroot   = conf.server.webroot;
-        var routing = conf.routing;
+        var ctx     = getContext('gina');
+        var routing = ctx.config.getRouting();//conf.content.routing;
         var route   = '', rte = '';
         var ignoreWebRoot = null, isRelative = false;
         
@@ -1228,8 +1231,12 @@ function SuperController(options) {
                 req.routing.param.route = routing[rte]
             }
         } else {
-            route = req.routing.param.route;
+            route = req.routing.param.route;            
         }
+        
+        // if ( !/GET/i.test(req.method) ) {
+        //     local.req.method = req.method = 'GET' // Always for redirect !!!!
+        // }
 
         var path        = req.routing.param.path || '';
         var url         = req.routing.param.url;
@@ -1261,7 +1268,7 @@ function SuperController(options) {
                 
                 if (bundle != conf.bundle) {
                     
-                    var hostname = getContext('gina').config.envConf[bundle][env].hostname;
+                    var hostname = ctx.config.envConf[bundle][env].hostname;
                     
                     if ( !/\:\d+$/.test(req.headers.host) )
                         hostname = hostname.replace(/\:\d+$/, '');
@@ -1287,21 +1294,43 @@ function SuperController(options) {
             
 
             if (!local.res.headersSent) {
-                if (GINA_ENV_IS_DEV) {
-                    res.writeHead(code, {
-                        'Location': path,
-                        'Cache-Control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
-                        'Pragma': 'no-cache',
-                        'Expires': '0'
-                    })
-                } else {
-                    res.writeHead(code, { 'Location': path })
-                }
-    
-    
-                console.info(local.req.method +' ['+local.res.statusCode +'] '+ path);
-                res.end();
-                local.res.headersSent = true;// done for the render() method
+                
+                if ( !/GET/i.test(req.method) ) { // trying to redirect using the wrong method ?
+                    
+                    //self.throwError(local.res, 501, new Error('Your are trying to redirect with the wrong method: `'+ req.method+'`.\nA rediection is not permited in this scenario.\nInstead, you should try to somthing like self.renderJSON({ location: "'+ path +'"}), then catch it with a frontend script.\n').stack);
+                    console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA rediection is not permited in this scenario.\nSwitching rendering mode: calling self.renderJSON({ location: "'+ path +'"})\nFrom now, you just need to catch the response with a frontend script.\n').message);
+                    //self.renderJSON({ location: path });   
+                    code = 303;
+                    // res.writeHead(code, {
+                    //     'location': path,
+                    //     'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
+                    //     'pragma': 'no-cache',
+                    //     'expires': '0'
+                    // });
+                    // res.end();
+                    // local.res.headersSent = true;// done for the render() method
+                    // console.info(local.req.method +' ['+code+'] '+ path);
+                                     
+                }// else { // regular scenario
+                    
+                    var ext = 'html';
+                    res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime[ext]);
+                    
+                    if (GINA_ENV_IS_DEV) {
+                        res.writeHead(code, {
+                            'location': path,
+                            'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
+                            'pragma': 'no-cache',
+                            'expires': '0'
+                        })
+                    } else {
+                        res.writeHead(code, { 'location': path })
+                    }
+                        
+                    res.end();
+                    local.res.headersSent = true;// done for the render() method
+                    console.info(local.req.method +' ['+code+'] '+ path);
+                //}
                 
                 if ( typeof(next) != 'undefined' )
                     next();
@@ -1941,7 +1970,7 @@ function SuperController(options) {
                 //         cookieValue += '; '+ cKey +'='+ cookieOpt[cKey]
                 //     }
                 //     console.debug('[ Controller::query() ][ responseCookie ] '+ cookieValue);
-                //     local.res.setHeader('Set-Cookie', cookieValue);
+                //     local.res.setHeader('set-cookie', cookieValue);
                 // }
                 
                 // exceptions filter

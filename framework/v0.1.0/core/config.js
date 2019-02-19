@@ -765,6 +765,7 @@ function Config(opt) {
             , oRuleCount        = 0
             , routing           = {}
             , reverseRouting    = {}
+            , allowPreflight
         ;
         
         
