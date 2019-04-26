@@ -591,7 +591,7 @@ function ValidatorPlugin(rules, data, formId) {
             if ( typeof(options.responseType) != 'undefined' ) {
                 xhr.responseType = options.responseType;
             } else {
-                xhr.responseType = "";
+                xhr.responseType = '';
             }
 
             xhr.withCredentials = true;
@@ -792,61 +792,134 @@ function ValidatorPlugin(rules, data, formId) {
                         }
 
                     } else if ( xhr.status != 0) {
-
-                        result = { 'status': xhr.status };
-
-                        if ( /^(\{|\[).test( xhr.responseText ) /) {
-
-                            try {
-                                result = merge( result, JSON.parse(xhr.responseText) )
-                            } catch (err) {
-                                result = merge(result, err)
-                            }
-
-                        } else if ( typeof(xhr.responseText) == 'object' ) {
-                            result = merge(result, xhr.responseText)
-                        } else {
-                            result.message = xhr.responseText
-                        }
-
-                        $form.eventData.error = result;
-
-                        // forward appplication errors to forms.errors when available
-                        if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
-                            var formsErrors = {}, errCount = 0;
-                            for (var f in result.error.fields) {
-                                ++errCount;
-                                formsErrors[f] = { isApplicationValidationError: result.error.fields[f] };
-                            }
-
-                            if (errCount > 0) {
-                                handleErrorsDisplay($form.target, formsErrors);
-                            }
-                        }
-
-                        // update toolbar
-                        XHRData = result;
-                        if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
-                            try {
-                                // update toolbar
-                                window.ginaToolbar.update('data-xhr', XHRData );
-
-                            } catch (err) {
-                                throw err
-                            }
-                        }
-
-                        triggerEvent(gina, $target, 'error.' + id, result);
-                        if (hFormIsRequired)
-                            triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                        
+                        result = { 'status': xhr.status, 'message': '' };
+                        // handling blob xhr error
+                        if ( /blob/.test(xhr.responseType) ) {
+                                                        
+                            var blob = new Blob([this.response], { type: 'text/plain' });
                             
-                        // handle redirect
-                        // if ( typeof(result) != 'undefined' && typeof(result.location) != 'undefined' ) {                        
-                        //     window.location.hash = ''; //removing hashtag                            
-                        //     result.location = (!/^http/.test(result.location) && !/^\//.test(result.location) ) ? location.protocol +'//' + result.location : result.location;
-                        //     window.location.href = result.location;
-                        //     return;                        
-                        // }
+                            var reader = new FileReader(), blobError = '';
+                            
+                            // This fires after the blob has been read/loaded.
+                            reader.addEventListener('loadend', (e) => {
+                                
+                                blobError = e.srcElement.result;
+                                
+                                if ( /string/i.test(typeof(blobError)) && /^(\{|\[).test( blobError ) /) {
+
+                                    try {
+                                        result = merge( result, JSON.parse(blobError) )
+                                    } catch (err) {
+                                        result = merge(result, err)
+                                    }
+    
+                                } else if ( typeof(blobError) == 'object' ) {
+                                    result = merge(result, blobError)
+                                } else {
+                                    result.message += blobError
+                                }
+                                
+                                // once ready
+                                if ( /2/.test(reader.readyState) ) {
+                                
+                                    
+                                    $form.eventData.error = result;
+
+                                    // forward appplication errors to forms.errors when available
+                                    if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
+                                        var formsErrors = {}, errCount = 0;
+                                        for (var f in result.error.fields) {
+                                            ++errCount;
+                                            formsErrors[f] = { isApplicationValidationError: result.error.fields[f] };
+                                        }
+
+                                        if (errCount > 0) {
+                                            handleErrorsDisplay($form.target, formsErrors);
+                                        }
+                                    }
+
+                                    // update toolbar
+                                    XHRData = result;
+                                    if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                                        try {
+                                            // update toolbar
+                                            window.ginaToolbar.update('data-xhr', XHRData );
+
+                                        } catch (err) {
+                                            throw err
+                                        }
+                                    }
+
+                                    triggerEvent(gina, $target, 'error.' + id, result);
+                                    if (hFormIsRequired)
+                                        triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                                }
+                                
+                                    
+                            });
+
+                            // Start reading the blob as text.
+                            reader.readAsText(blob);
+                            
+                        } else { // normal case
+                            
+                            if ( /^(\{|\[).test( xhr.responseText ) /) {
+
+                                try {
+                                    result = merge( result, JSON.parse(xhr.responseText) )
+                                } catch (err) {
+                                    result = merge(result, err)
+                                }
+
+                            } else if ( typeof(xhr.responseText) == 'object' ) {
+                                result = merge(result, xhr.responseText)
+                            } else {
+                                result.message = xhr.responseText
+                            }
+
+                            $form.eventData.error = result;
+
+                            // forward appplication errors to forms.errors when available
+                            if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
+                                var formsErrors = {}, errCount = 0;
+                                for (var f in result.error.fields) {
+                                    ++errCount;
+                                    formsErrors[f] = { isApplicationValidationError: result.error.fields[f] };
+                                }
+
+                                if (errCount > 0) {
+                                    handleErrorsDisplay($form.target, formsErrors);
+                                }
+                            }
+
+                            // update toolbar
+                            XHRData = result;
+                            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                                try {
+                                    // update toolbar
+                                    window.ginaToolbar.update('data-xhr', XHRData );
+
+                                } catch (err) {
+                                    throw err
+                                }
+                            }
+
+                            triggerEvent(gina, $target, 'error.' + id, result);
+                            if (hFormIsRequired)
+                                triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                                
+                            // handle redirect
+                            // if ( typeof(result) != 'undefined' && typeof(result.location) != 'undefined' ) {                        
+                            //     window.location.hash = ''; //removing hashtag                            
+                            //     result.location = (!/^http/.test(result.location) && !/^\//.test(result.location) ) ? location.protocol +'//' + result.location : result.location;
+                            //     window.location.href = result.location;
+                            //     return;                        
+                            // }
+                                                         
+                        }
+
+                            
                     }
                 }
             };
@@ -2438,158 +2511,162 @@ function ValidatorPlugin(rules, data, formId) {
         var re = null, flags = null;
 
         var forEachField = function($form, fields, $fields, rules, cb, i) {
+            
+            
+            
             var hasCase = false, conditions = null;
             var caseValue = null, caseType = null;
             var localRules = null;
 
             //console.log('parsing ', fields, $fields, rules);
-
-            for (var field in fields) {
-                
-                // $fields[field].tagName getAttribute('type')
-                //if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
-                if ($fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test($fields[field].getAttribute('type')) && !$fields[field].checked ) {
-                    //if ( typeof(rules[field]) == 'undefined' && !$fields[field].checked || typeof(rules[field]) != 'undefined' && typeof(rules[field]['isRequired']) != 'undefined' && /(false)/.test(rules[field]['isRequired']) )
-                        continue;
-                }
-
-                hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
-
-
-
-                if (!hasCase) {
-                    if (typeof (rules[field]) == 'undefined') continue;
-
-
-                    // check each field against rule
-                    for (var rule in rules[field]) {
-                        // check for rule params
-                        try {
-
-                            if (Array.isArray(rules[field][rule])) { // has args
-                                //convert array to arguments
-                                args = rules[field][rule];
-                                d[field][rule].apply(d[field], args);
-                            } else {
-                                d[field][rule](rules[field][rule]);
-                            }
-
-                            delete fields[field];
-
-                        } catch (err) {
-                            if (rule == 'conditions') {
-                                throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
-                            } else {
-                                throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
-                            }
-                        }
-
-                    }
-                } else {
-                    ++i; // add sub level
-                    conditions = rules['_case_' + field]['conditions'];
-
-                    if ( !conditions ) {
-                        throw new Error('[ ginaFormValidator ] case `_case_'+field+'` found without `condition(s)` !');
+            if ( typeof(rules) != 'undefined' ) { // means that no rule is set or found
+                for (var field in fields) {
+                    
+                    // $fields[field].tagName getAttribute('type')
+                    //if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
+                    if ($fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test($fields[field].getAttribute('type')) && !$fields[field].checked ) {
+                        //if ( typeof(rules[field]) == 'undefined' && !$fields[field].checked || typeof(rules[field]) != 'undefined' && typeof(rules[field]['isRequired']) != 'undefined' && /(false)/.test(rules[field]['isRequired']) )
+                            continue;
                     }
 
-                    for (var c = 0, cLen = conditions.length; c<cLen; ++c) {
+                    hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
 
-                        caseValue = fields[field];
 
-                        if (isGFFCtx) {
-                            if (fields[field] == "true")
-                                caseValue = true;
-                            else if (fields[field] == "false")
-                                caseValue = false;
-                        }
 
-                        //console.log(caseValue +' VS '+ conditions[c]['case'], "->", (caseValue == conditions[c]['case'] || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1) );
-                        if ( conditions[c]['case'] === caseValue || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1 || /^\//.test(conditions[c]['case']) ) {
+                    if (!hasCase) {
+                        if (typeof (rules[field]) == 'undefined') continue;
 
-                            //console.log('[fields ] ' + JSON.stringify(fields, null, 4));
-                            localRules = {};
-                             
-                            for (var f in conditions[c]['rules']) {
-                                //console.log('F: ', f, '\nrule: '+ JSON.stringify(conditions[c]['rules'][f], null, 2));
-                                if ( /^\//.test(f) ) { // RegExp found
 
-                                    re      = f.match(/\/(.*)\//).pop();
-                                    flags   = f.replace('/'+ re +'/', '');
-                                    re      = new RegExp(re, flags);
+                        // check each field against rule
+                        for (var rule in rules[field]) {
+                            // check for rule params
+                            try {
 
-                                    for (var localField in $fields) {
-                                        if ( re.test(localField) ) {
-                                            if ( /^\//.test(conditions[c]['case']) ) {
-                                                re      = conditions[c]['case'].match(/\/(.*)\//).pop();
-                                                flags   = conditions[c]['case'].replace('/'+ re +'/', '');
-                                                re      = new RegExp(re, flags);
-
-                                                if ( re.test(caseValue) ) {
-                                                    localRules[localField] = conditions[c]['rules'][f]
-                                                }
-
-                                            } else {
-                                                localRules[localField] = conditions[c]['rules'][f]
-                                            }
-                                        }
-                                    }
-
+                                if (Array.isArray(rules[field][rule])) { // has args
+                                    //convert array to arguments
+                                    args = rules[field][rule];
+                                    d[field][rule].apply(d[field], args);
                                 } else {
-                                    if ( /^\//.test(conditions[c]['case']) ) {
-                                        
-                                        re      = conditions[c]['case'].match(/\/(.*)\//).pop();
-                                        flags   = conditions[c]['case'].replace('/'+ re +'/', '');
+                                    d[field][rule](rules[field][rule]);
+                                }
+
+                                delete fields[field];
+
+                            } catch (err) {
+                                if (rule == 'conditions') {
+                                    throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
+                                } else {
+                                    throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
+                                }
+                            }
+
+                        }
+                    } else {
+                        ++i; // add sub level
+                        conditions = rules['_case_' + field]['conditions'];
+
+                        if ( !conditions ) {
+                            throw new Error('[ ginaFormValidator ] case `_case_'+field+'` found without `condition(s)` !');
+                        }
+
+                        for (var c = 0, cLen = conditions.length; c<cLen; ++c) {
+
+                            caseValue = fields[field];
+
+                            if (isGFFCtx) {
+                                if (fields[field] == "true")
+                                    caseValue = true;
+                                else if (fields[field] == "false")
+                                    caseValue = false;
+                            }
+
+                            //console.log(caseValue +' VS '+ conditions[c]['case'], "->", (caseValue == conditions[c]['case'] || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1) );
+                            if ( conditions[c]['case'] === caseValue || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1 || /^\//.test(conditions[c]['case']) ) {
+
+                                //console.log('[fields ] ' + JSON.stringify(fields, null, 4));
+                                localRules = {};
+                                
+                                for (var f in conditions[c]['rules']) {
+                                    //console.log('F: ', f, '\nrule: '+ JSON.stringify(conditions[c]['rules'][f], null, 2));
+                                    if ( /^\//.test(f) ) { // RegExp found
+
+                                        re      = f.match(/\/(.*)\//).pop();
+                                        flags   = f.replace('/'+ re +'/', '');
                                         re      = new RegExp(re, flags);
 
-                                        if ( re.test(caseValue) ) {
-                                            localRules[f] = conditions[c]['rules'][f]
+                                        for (var localField in $fields) {
+                                            if ( re.test(localField) ) {
+                                                if ( /^\//.test(conditions[c]['case']) ) {
+                                                    re      = conditions[c]['case'].match(/\/(.*)\//).pop();
+                                                    flags   = conditions[c]['case'].replace('/'+ re +'/', '');
+                                                    re      = new RegExp(re, flags);
+
+                                                    if ( re.test(caseValue) ) {
+                                                        localRules[localField] = conditions[c]['rules'][f]
+                                                    }
+
+                                                } else {
+                                                    localRules[localField] = conditions[c]['rules'][f]
+                                                }
+                                            }
                                         }
 
                                     } else {
-                                        localRules[f] = conditions[c]['rules'][f]
+                                        if ( /^\//.test(conditions[c]['case']) ) {
+                                            
+                                            re      = conditions[c]['case'].match(/\/(.*)\//).pop();
+                                            flags   = conditions[c]['case'].replace('/'+ re +'/', '');
+                                            re      = new RegExp(re, flags);
+
+                                            if ( re.test(caseValue) ) {
+                                                localRules[f] = conditions[c]['rules'][f]
+                                            }
+
+                                        } else {
+                                            localRules[f] = conditions[c]['rules'][f]
+                                        }
                                     }
                                 }
+                                
+                                ++subLevelRules; // add sub level
+                                if (isGFFCtx)
+                                    forEachField($form, fields, $fields, localRules, cb, i);
+                                else
+                                    return forEachField($form, fields, $fields, localRules, cb, i);
                             }
                             
-                            ++subLevelRules; // add sub level
-                            if (isGFFCtx)
-                                forEachField($form, fields, $fields, localRules, cb, i);
-                            else
-                                return forEachField($form, fields, $fields, localRules, cb, i);
                         }
-                        
+                        --i;
                     }
-                    --i;
-                }
 
-                // if ( typeof(rules[field]) == 'undefined' ) continue;
+                    // if ( typeof(rules[field]) == 'undefined' ) continue;
 
 
-                // // check each field against rule
-                // for (var rule in rules[field]) {
-                //     // check for rule params
-                //     try {
+                    // // check each field against rule
+                    // for (var rule in rules[field]) {
+                    //     // check for rule params
+                    //     try {
 
-                //         if ( Array.isArray(rules[field][rule]) ) { // has args
-                //             //convert array to arguments
-                //             args = rules[field][rule];
-                //             d[field][rule].apply(d[field], args);
-                //         } else {
-                //             d[field][rule](rules[field][rule]);
-                //         }
+                    //         if ( Array.isArray(rules[field][rule]) ) { // has args
+                    //             //convert array to arguments
+                    //             args = rules[field][rule];
+                    //             d[field][rule].apply(d[field], args);
+                    //         } else {
+                    //             d[field][rule](rules[field][rule]);
+                    //         }
 
-                //     } catch (err) {
-                //         if (rule == 'conditions') {
-                //             throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()` where `conditions` must be a `collection` (Array)\nStack:\n'+ (err.stack|err.message))
-                //         } else {
-                //             throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()`\nStack:\n'+ (err.stack|err.message))
-                //         }
-                //     }
+                    //     } catch (err) {
+                    //         if (rule == 'conditions') {
+                    //             throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()` where `conditions` must be a `collection` (Array)\nStack:\n'+ (err.stack|err.message))
+                    //         } else {
+                    //             throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()`\nStack:\n'+ (err.stack|err.message))
+                    //         }
+                    //     }
 
-                // }
-            }
-
+                    // }
+                } // EO for
+            } 
+            
             --subLevelRules;
 
             if (i <= 0 && subLevelRules < 0) {

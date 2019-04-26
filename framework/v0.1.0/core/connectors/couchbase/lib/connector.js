@@ -253,7 +253,7 @@ function Connector(dbString) {
                 clearInterval(self.pingId )
             }
 
-            var interval    = interval || options.pingInterval; // for a minute
+            interval    = interval || options.pingInterval; // for a minute
             var value       = interval.match(/\d+/);
             var unit        = null; // will be seconds by default
             try {

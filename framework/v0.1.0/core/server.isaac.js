@@ -177,11 +177,27 @@ function ServerEngineClass(options) {
                         } 
                     } else {
                         a = queryParams[1].split(/\=/);
-                        // false & true case
-                        if ( /^(false|true|on)$/i.test(a[1]) )
-                            a[1] = ( /^(true|on)$/i.test(a[1]) ) ? true : false;
                         
-                        request.query[ a[0] ] = a[1]                        
+                        if (a.length > 1) {
+                            // false & true case
+                            if ( /^(false|true|on)$/i.test(a[1]) )
+                                a[1] = ( /^(true|on)$/i.test(a[1]) ) ? true : false;
+                            
+                            request.query[ a[0] ] = a[1]  
+                        } else { // for redirection purposes or when passing `?encodedJsonObject`
+                            try {
+                                if ( a[0].indexOf('%') > -1 ) { // encoded URI Component
+                                    a[0] = decodeURIComponent(a[0])
+                                }
+                                
+                                request.query = JSON.parse(a[0]);
+                            } catch(err) {
+                                console.error(err.stack)
+                            }
+                                
+                            //request.query = {};
+                        }                      
+                                                  
                     }
                     request.url = request.url.replace(/\?.*/, '')                  
                 } else {

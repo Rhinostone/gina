@@ -781,8 +781,12 @@ function SuperController(options) {
                             }
 
                             local.res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime['html'] + '; charset='+ local.options.conf.encoding );
+                            try {
+                                layout = swig.compile(layout, mapping)(data);
+                            } catch (err) {
+                                self.throwError(local.res, 500, new Error('Controller::render(...) compilation error\n' + (err.stack||err.message||err) ));
+                            }
                             
-                            layout = swig.compile(layout, mapping)(data);
                             // Only available for http/2.0 for now
                             if ( !self.isXMLRequest() && /http\/2/.test(local.options.conf.server.protocol) ) {
                                 try {
@@ -1101,12 +1105,42 @@ function SuperController(options) {
         var re = /(http|ftp|https|sftp):\/\/[\w-]+(\.[\w-]+)+([\w.,@?^=%&amp;:\/~+#-]*[\w@?^=%&amp;\/~+#-])?/;
         return (re.test(url)) ? true : false
     }
+    
+    /**
+     * Set method - Override current method 
+     * E.g.: in case of redirect, to force PUT to GET
+     * 
+     * @param {string} requestMethod - GET, POST, PUT, DELETE
+     */
+    var localRequestMethod = null, localRequestMethodParams = null;
+    this.setRequestMethod = function(requestMethod) {
+        localRequestMethod = local.req.method = local.req.routing.method = requestMethod.toUpperCase();
+        local.res.setHeader('access-control-allow-methods', localRequestMethod);
+        
+        return localRequestMethod;      
+    }
+    
+    this.getRequestMethod = function() {
+        return localRequestMethod;
+    }
+    
+    this.setRequestMethodParams = function(params) {
+        localRequestMethodParams = local.req[local.req.method.toLowerCase()] = localRequestMethodParams = params
+    }
+    
+    this.getRequestMethodParams = function() {
+        return (localRequestMethodParams) ? localRequestMethodParams : local.req[local.req.method.toLowerCase()]
+    }
 
     /**
      * redirect
      *
      * TODO - improve redirect based on `utils.routing`
      * e.g.: self.redirect('project-get', { companyId: companyId, clientId: clientId, id: projectId }, true)
+     * 
+     * How to avoid redirect inside popin context
+     * N.B.: When you are in a popin context, add an `id` to your template tag so it can be ignored by the default PopinHandler
+     *    E.g.: id="delete-link" -> <a href="#" id="delete-link">delete</a>
      *
      * You have to ways of using this method
      *
@@ -1166,7 +1200,7 @@ function SuperController(options) {
         var routing = ctx.config.getRouting();//conf.content.routing;
         var route   = '', rte = '';
         var ignoreWebRoot = null, isRelative = false;
-        
+        var originalUrl = null;
 
         if ( typeof(req) === 'string' ) {
 
@@ -1193,15 +1227,23 @@ function SuperController(options) {
                 if ( /^\//.test(req) && !ignoreWebRoot )
                     req = req.substr(1);
                 
-                rte         = ( ignoreWebRoot != null && ignoreWebRoot) ? req : wroot + req;
-                req         = local.req;
-                res         = local.res;
-                next        = local.next;
-                isRelative  = true;
+                rte             = ( ignoreWebRoot != null && ignoreWebRoot) ? req : wroot + req;
+                // cleaning url in case of ?param=value
+                originalUrl     = rte; 
+                rte             = rte.replace(/\?(.*)/, '');
+                
+                req             = local.req;
+                req.routing     = lib.routing.getRouteByUrl(rte, bundle, req.method, req);
+                res             = local.res;
+                next            = local.next;
+                isRelative      = true;
                 
                 req.routing.param.path = rte
             } else if ( isValidURL(req) ) { // might be an URL
-                rte     = req;
+                rte             = req;
+                originalUrl     = rte; 
+                rte             = rte.replace(/\?(.*)/, '');
+                
                 req     = local.req;
                 res     = local.res;
                 next    = local.next;
@@ -1238,7 +1280,7 @@ function SuperController(options) {
         //     local.req.method = req.method = 'GET' // Always for redirect !!!!
         // }
 
-        var path        = req.routing.param.path || '';
+        var path        = originalUrl || req.routing.param.path || '';
         var url         = req.routing.param.url;
         var code        = req.routing.param.code || 301;
 
@@ -1297,40 +1339,46 @@ function SuperController(options) {
                 
                 if ( !/GET/i.test(req.method) ) { // trying to redirect using the wrong method ?
                     
-                    //self.throwError(local.res, 501, new Error('Your are trying to redirect with the wrong method: `'+ req.method+'`.\nA rediection is not permited in this scenario.\nInstead, you should try to somthing like self.renderJSON({ location: "'+ path +'"}), then catch it with a frontend script.\n').stack);
-                    console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA rediection is not permited in this scenario.\nSwitching rendering mode: calling self.renderJSON({ location: "'+ path +'"})\nFrom now, you just need to catch the response with a frontend script.\n').message);
-                    //self.renderJSON({ location: path });   
+                    
+                    //console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA rediection is not permited in this scenario.\nSwitching rendering mode: calling self.renderJSON({ location: "'+ path +'"})\nFrom now, you just need to catch the response with a frontend script.\n').message);
+                    console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA rediection is not permited in this scenario.\nSwitching request method to `GET` method instead.\n').message);
+                    
                     code = 303;
-                    // res.writeHead(code, {
-                    //     'location': path,
-                    //     'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
-                    //     'pragma': 'no-cache',
-                    //     'expires': '0'
-                    // });
-                    // res.end();
-                    // local.res.headersSent = true;// done for the render() method
-                    // console.info(local.req.method +' ['+code+'] '+ path);
-                                     
-                }// else { // regular scenario
                     
-                    var ext = 'html';
-                    res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime[ext]);
+                    //var method = local.req.method.toUpperCase();
+                    method = local.req.method = self.setRequestMethod('GET'); ;
+                    // if ( typeof(local.res._headers['access-control-allow-methods']) != 'undefined' && local.res._headers['access-control-allow-methods'] != method ) {
+                    //     res.setHeader('access-control-allow-methods', method);
+                    // }                    
                     
-                    if (GINA_ENV_IS_DEV) {
-                        res.writeHead(code, {
-                            'location': path,
-                            'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
-                            'pragma': 'no-cache',
-                            'expires': '0'
-                        })
-                    } else {
-                        res.writeHead(code, { 'location': path })
-                    }
-                        
-                    res.end();
-                    local.res.headersSent = true;// done for the render() method
-                    console.info(local.req.method +' ['+code+'] '+ path);
-                //}
+                    path += '?'+ encodeURIComponent(JSON.stringify(local.req[method.toLowerCase()]));                 
+                }
+                    
+                var ext = 'html';
+                res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime[ext]);
+                
+                if ( typeof(local.res._headers['access-control-allow-methods']) != 'undefined' && local.res._headers['access-control-allow-methods'] != req.method ) {
+                    res.setHeader('access-control-allow-methods', req.method);
+                }
+                //path += '?query='+ JSON.stringify(self.getRequestMethodParams());
+                local.req[req.method.toLowerCase()] = self.getRequestMethodParams() || {};
+                
+                
+                if (GINA_ENV_IS_DEV) {
+                    res.writeHead(code, {
+                        'location': path,
+                        'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
+                        'pragma': 'no-cache',
+                        'expires': '0'
+                    })
+                } else {
+                    res.writeHead(code, { 'location': path })
+                }
+                    
+                res.end();
+                local.res.headersSent = true;// done for the render() method
+                console.info(local.req.method +' ['+code+'] '+ path);
+                
                 
                 if ( typeof(next) != 'undefined' )
                     next();
@@ -1834,7 +1882,8 @@ function SuperController(options) {
 
         var ctx         = getContext()
             , protocol  = null
-            , scheme    = null;
+            , scheme    = null
+        ;
         
         // if (/\:\/\//.test(options.hostname)) {
         //     var hArr = options.host.split('://');
@@ -2094,6 +2143,7 @@ function SuperController(options) {
                     }
                 })
             }
+            
         }
     }
     
@@ -2289,7 +2339,7 @@ function SuperController(options) {
                 }
                 //console.debug(options[':method']+ ' ['+ (data.status || 200) +'] '+ options[':path']);
                 if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
-                    callback(false, data)
+                    callback(data)
                 } else {
                     callback( false, data )
                 }
