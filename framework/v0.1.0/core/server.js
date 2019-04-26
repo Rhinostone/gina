@@ -1920,11 +1920,12 @@ function Server(options) {
         switch( request.method.toLowerCase() ) {
             case 'post':
                 var obj = {}, configuring = false;
+                
                 if ( typeof(request.body) == 'string' ) {
                     // get rid of encoding issues
                     try {
                         if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
+                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
                                 request.body = request.body.replace(/\+/g, ' ');
                             }
 

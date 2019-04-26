@@ -30,7 +30,6 @@ var modelUtil   = new lib.Model();
 
 
 
-
 gna.initialized = process.initialized = false;
 gna.routed      = process.routed = false;
 
@@ -79,7 +78,7 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
             tmp[2].processList = importedContext.processList;
             tmp[2].ginaProcess = importedContext.ginaProcess;
 
-            tmp[3] = importedContext.project;
+            tmp[3] = importedContext.project || importedContext.config.projectName;
             tmp[4] = importedContext.bundle;
 
             setContext('env', importedContext.env);
@@ -167,6 +166,7 @@ if ( typeof(getEnvVar) == 'undefined') {
     console.debug('[ FRAMEWORK ][PROCESS ARGV] Process ARGV error ' + process.argv);
 }
 //console.debug('[ FRAMEWORK ] GINA_HOMEDIR ' + getEnvVar('GINA_HOMEDIR') );
+
 var projects    = require( _(GINA_HOMEDIR + '/projects.json') );
 var root        = projects[projectName].path;
 

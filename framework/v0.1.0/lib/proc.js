@@ -278,6 +278,9 @@ function Proc(bundle, proc, usePidFile){
             ;
 
             for (var p in process.list) {
+                if ( typeof(process.list[p]) == 'undefined' )
+                    continue;
+                    
                 if ( process.list[p].pid == pid && process.list[p].name != 'gina' ) {
                     index       = p;
                     pidPath     = _(GINA_RUNDIR + '/gina/' + process.list[p].pid);

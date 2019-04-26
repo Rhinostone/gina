@@ -63,7 +63,7 @@ module.exports = function(){
         try {      
             return JSON.parse(jsonStr)
         } catch (err) {         
-            throw new Error('[ requireJSON ] could not parse `'+ filename +'`:\n\r' + fs.readFileSync(filename).toString() +'\n\rVS\n\r<strong style="color:red">"</strong>'+jsonStr+'<strong style="color:red">"</strong>');       
+            throw new Error('[ requireJSON ] could not parse `'+ filename +'`:\n\r' /*+ fs.readFileSync(filename).toString()*/ +'\n\rSomething is wrong arround this portion:\n\r<strong style="color:red">'+err.stack+'</strong><br>'+jsonStr+'<strong style="color:red">"</strong>'+ '\n');       
         }               
     };
    

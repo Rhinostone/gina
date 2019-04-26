@@ -317,7 +317,7 @@ function Router(env) {
                 var env         = config.env;
                 var bundleConf  = config.Env.getConf(bundle, env);
 
-                var controllerFile  = ( typeof(namespace) != 'undefined' && namespace != '' && namespace != 'null' && namespace != null ) ? 'controller.'+ namespace : namespace;
+                var controllerFile  = ( typeof(namespace) != 'undefined' && namespace != '' && namespace != 'null' && namespace != null ) ? 'controller.'+ namespace : 'controller';
                 var filename        = _(bundleConf.bundlesPath + '/' + bundle + '/controllers/' + controllerFile + '.js', true);
 
                 if (typeof (options.controlRequired) == 'undefined')

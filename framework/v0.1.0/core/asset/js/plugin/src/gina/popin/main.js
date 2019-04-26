@@ -514,7 +514,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     
                     if ( 
                         typeof($buttonsTMP[b]) != 'undefined' 
-                        && !/\#$/.test($buttonsTMP[b].href) // ignore href="#"                        
+                        && !/(\#|\#.*)$/.test($buttonsTMP[b].href) // ignore href="#"                        
                         && !$buttonsTMP[b].id // ignore href already bindded byr formValidator or the user
                     ) {
                         $link.push($buttonsTMP[b]);
@@ -564,7 +564,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 if (!$link[i]['id']) {
 
                     evt = 'popin.link.'+ uuid.v4();
-                    $link[i]['id'] = evt;
+                    $link[i]['id'] =  $link[i].getAttribute('id') || evt;
                     $link[i].setAttribute( 'id', evt);
 
                 } else {
@@ -1053,39 +1053,42 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
          * */
         function popinUnbind(name, isRouting) {
             
-            var $popin = getPopinByName(name);
+            var $popin = ( typeof(name) != 'undefined') ? getPopinByName(name) : getActivePopin();
             var $el = null;
-            if ( !$popin ) {
+            if ( !$popin && typeof(name) != 'undefined' ) {
                 throw new Error('Popin `'+name+'` not found !');
             }
-            // by default
-            $el = $popin.target;
             
-            isRouting = ( typeof(isRouting) != 'undefined' ) ? isRouting : false;
+            // by default
+            if ( typeof($popin) != 'undefined' && $popin != null ) {
+                $el = $popin.target;
+                
+                isRouting = ( typeof(isRouting) != 'undefined' ) ? isRouting : false;
 
-            if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
-                if (!isRouting) {
-                    instance.target.firstChild.className    = instance.target.firstChild.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
-                    $el.className                           = $el.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
-                    $el.innerHTML                           = '';
-                }                    
+                if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
+                    if (!isRouting) {
+                        instance.target.firstChild.className    = instance.target.firstChild.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
+                        $el.className                           = $el.className.replace(/\sgina-popin-is-active|gina-popin-is-active|gina-popin-is-active\s/, '');
+                        $el.innerHTML                           = '';
+                    }                    
 
-                // removing from FormValidator instance
-                var i = 0, formsLength = $popin['$forms'].length;
-                if ($validator['$forms'] && formsLength > 0) {
-                    for (; i < formsLength; ++i) {
-                        if ( typeof($validator['$forms'][ $popin['$forms'][i] ]) != 'undefined' )
-                            $validator['$forms'][ $popin['$forms'][i] ].destroy();
+                    // removing from FormValidator instance
+                    var i = 0, formsLength = $popin['$forms'].length;
+                    if ($validator['$forms'] && formsLength > 0) {
+                        for (; i < formsLength; ++i) {
+                            if ( typeof($validator['$forms'][ $popin['$forms'][i] ]) != 'undefined' )
+                                $validator['$forms'][ $popin['$forms'][i] ].destroy();
 
-                        $popin['$forms'].splice( i, 1);
+                            $popin['$forms'].splice( i, 1);
+                        }
                     }
+                    
+                    gina.popinIsBinded = false;
+                    
+                    // remove listeners
+                    removeListener(gina, $popin.target, 'loaded.' + $popin.id);
                 }
-                
-                gina.popinIsBinded = false;
-                
-                // remove listeners
-                removeListener(gina, $popin.target, 'loaded.' + $popin.id);
-            }
+            }                
         }
         
 
@@ -1101,26 +1104,28 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             
             var $popin = ( typeof(name) != 'undefined') ? getPopinByName(name) : getActivePopin();
             var $el = null;
-            if ( !$popin) {
+            if ( !$popin && typeof(name) != 'undefined' ) {
                throw new Error('Popin `'+name+'` not found !');
             }
             
             // by default
-            $el = $popin.target;
+            if ( typeof($popin) != 'undefined' && $popin != null ) {
+                $el = $popin.target;
 
-            if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
-                
-                popinUnbind(name);            
-                $popin.isOpen           = false;
-                gina.popinIsBinded      = false;                
+                if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
+                    
+                    popinUnbind(name);            
+                    $popin.isOpen           = false;
+                    gina.popinIsBinded      = false;                
 
-                // restore toolbar
-                if ( gina && typeof(window.ginaToolbar) == "object" )
-                    ginaToolbar.restore();
+                    // restore toolbar
+                    if ( gina && typeof(window.ginaToolbar) == "object" )
+                        ginaToolbar.restore();
 
-                instance.activePopinId  = null;
-                triggerEvent(gina, $popin.target, 'close.'+ $popin.id, $popin);
-            }
+                    instance.activePopinId  = null;
+                    triggerEvent(gina, $popin.target, 'close.'+ $popin.id, $popin);
+                }
+            }            
         }
 
         /**
@@ -1135,8 +1140,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             
             var $popin = ( typeof(name) != 'undefined') ? getPopinByName(name) : getActivePopin();
             var id = null, $el = null;
-            if ( !$popin ) {
-                throw new Error('Popin `'+name+'` not found !')
+            if ( !$popin && typeof(name) != 'undefined' ) {
+                throw new Error('Popin `'+name+'` not found !');
             }
             
             id = $popin.id;

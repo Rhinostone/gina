@@ -10,6 +10,5 @@
  */
 function N1QLEntity() {
     var n1ql       = this.getConnection();
-
 };
 module.exports = N1QLEntity

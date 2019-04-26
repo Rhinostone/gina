@@ -175,6 +175,8 @@ function Couchbase(conn, infos) {
                 entities[entityName].prototype[name] = function() {
                     var key     = null
                         , index = null
+                        , i     = null
+                        , len   = null
                         , args  = Array.prototype.slice.call(arguments);
 
                     if (params && params.length != args.length) {
@@ -193,7 +195,8 @@ function Couchbase(conn, infos) {
                             
                         
                         if (foundSpecialCase) {
-                            for (var i = 0, len = args.length; i < len; ++i) {
+                            i = 0; len = args.length;
+                            for (; i < len; ++i) {
                                 key = inl.indexOf(params[i]);
 
                                 re = new RegExp('(.*)\\.'+ inl[key].replace(/([$%]+)/, '\\$1'));
@@ -207,8 +210,8 @@ function Couchbase(conn, infos) {
 
                             queryString = qStr;
 
-                            var index = 0;
-                            for (var i = 0, len = p.length; i < len; ++i) {
+                            index = 0; i = 0; len = p.length;
+                            for (; i < len; ++i) {
                                 if ( typeof(p[i]) != 'undefined' ) {
                                     queryParams[index] = p[i];
                                     ++index;
@@ -275,15 +278,20 @@ function Couchbase(conn, infos) {
                         }
 
                         if (!err && meta && typeof(meta.errors) != 'undefined' ) {
-                            var err = new Error('[ '+source+' ]\n'+meta.errors[0].msg);
+                            err = new Error('[ '+source+' ]\n'+meta.errors[0].msg);
                             err.status = 403;
                         } else if (err) {
                             err.status  = 500;
                             err.message = '[ '+source+' ]\n'+ err.message;
                             err.stack   = '[ '+source+' ]\n'+ err.stack;
                         }
-
-                        if ( returnType && returnType == 'object' ) {
+                        
+                        // handle return type
+                        if ( returnType && returnType == 'boolean' ) {
+                            
+                            data = ( Array.isArray(data) && typeof(data.length) != 'undefined' && data.length > 0 || /string|number/i.test( typeof(data) && /true/i.test(data) ) ) ? true : false;
+                            
+                        } else if ( returnType && returnType == 'object' ) {
 
                             data = (data) ? data[0] : data
 
@@ -294,7 +302,6 @@ function Couchbase(conn, infos) {
                             returnVariable = queryString.match(re)[re.lastIndex];
 
                             data = ( typeof(returnVariable) != 'undefined' ) ? data[0][returnVariable] : data[0];
-
                         }
 
                         self.emit(trigger, err, data, meta);
