@@ -1509,9 +1509,10 @@ function SuperController(options) {
         if ( opt.contentDisposition == 'attachment')
             opt.contentDisposition += '; filename=' + filename;
         
-        var ext         = filename.match(/\.\w+$/)[0].substr(1)
-        , contentType   = null
-        , tmp           = _(GINA_TMPDIR +'/'+ filename, true);
+        var ext             = filename.match(/\.\w+$/)[0].substr(1)
+            , contentType   = null
+            , tmp           = _(GINA_TMPDIR +'/'+ filename, true)
+        ;
         
         if ( typeof(local.options.conf.server.coreConfiguration.mime[ext]) != 'undefined' ) {
 
@@ -1528,13 +1529,24 @@ function SuperController(options) {
         //'content-type': 'application/json',
         //var file = fs.createWriteStream(tmp);
         var browser = require(''+ scheme);
-        console.debug('requestOptions: \n', JSON.stringify(requestOptions, null, 4));
+        //console.debug('requestOptions: \n', JSON.stringify(requestOptions, null, 4));
         browser.get(requestOptions, function(response) {
 
             local.res.setHeader('content-type', contentType + '; charset='+ local.options.conf.encoding);
             local.res.setHeader('content-disposition', opt.contentDisposition);  
+            //local.res.setHeader('content-length', dataLength);  
             response.pipe(local.res);
-               
+            response.on('end', function onResponsePipeEnd(){
+                local.res.end({ status: 200 });
+                local.res.headersSent = true;       
+                
+                if ( typeof(local.next) != 'undefined')
+                    local.next();
+                else
+                    return;
+            });
+            
+            
             /**
             var data = '', dataLength = 0;
             
@@ -1603,7 +1615,7 @@ function SuperController(options) {
         //     self.throwError(local.res, 500, err);
         });
         
-        
+        return;
 
     }
 
