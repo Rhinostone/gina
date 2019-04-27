@@ -572,6 +572,13 @@ function Server(options) {
         }
     }
     
+    var readFromUrl = function(url, encoding) {
+        return new (require('httpclient').HttpClient)({
+            method: 'GET',
+              url: url
+            }).finish().body.read().decodeToString();
+    }
+    
     /**
      * Get Assets
      * 
@@ -661,6 +668,12 @@ function Server(options) {
                 filename = getAssetFilenameFromUrl(bundleConf, url);
             } else {
                 domain      = url.match(/^.*:\/\/[a-z0-9._-]+\/?/);
+                //url         = ( new RegExp('/'+ bundleConf.host +'/' ).test(domain) ) ? url.replace(domain, '/') : url;
+                
+                if ( ! new RegExp('/'+ bundleConf.host +'/' ).test(domain) ) {
+                    continue;
+                }
+                
                 url         = url.replace(domain, '/');
                 filename    = url
             }
@@ -760,7 +773,12 @@ function Server(options) {
             ;
             var cssArr = null, classNames = null, assetsInClassFound = {};
             for (; i < len; ++i) {
-                cssContent = fs.readFileSync(cssFiles[i], bundleConf.encoding).toString();
+                //if ( /^(http|https)\:/.test(cssFiles[i]) ) {
+                //    cssContent = readFromUrl(cssFiles[i], bundleConf.encoding);
+                //} else {
+                    cssContent = fs.readFileSync(cssFiles[i], bundleConf.encoding).toString();
+                //}
+                
                 hasUrls = ( /(url\(|url\s+\()/.test(cssContent) ) ? true : false;
                 if (!hasUrls) continue;
                 
@@ -916,7 +934,11 @@ function Server(options) {
                     authority   = referer;
                     sameOrigin  = authority;
                 }  
-            }                                             
+            }  
+            
+            if (!sameOrigin && conf.hostname == authority) {
+                sameOrigin = authority
+            }
             
             re = new RegExp(authority);
             allowedOrigin = ( typeof(conf.server.response.header['access-control-allow-origin']) != 'undefined' && conf.server.response.header['access-control-allow-origin'] != '' ) ? conf.server.response.header['access-control-allow-origin'] : authority;
@@ -1145,11 +1167,15 @@ function Server(options) {
             , contentType   = null
             , stream        = null
             , header        = null
+            , protocol      = 'http/'+ request.httpVersion // by default in case you are using a reverse proxy not sending `h2` requests
         ;
         
-        if ( /http\/2/.test(bundleConf.server.protocol) ) {
+        
+        // switching protocol to h2 when ppossible
+        if ( /http\/2/.test(bundleConf.server.protocol) && response.stream ) {
             
-            stream = response.stream;
+            protocol    = bundleConf.server.protocol;
+            stream      = response.stream;
             
             if ( typeof(self._options) == 'undefined') {
                 self._options       = {
@@ -1202,7 +1228,7 @@ function Server(options) {
                     filename += 'index.html';
                     request.url += 'index.html';
                     if ( !fs.existsSync(filename) ) {
-                        if ( /http\/2/.test(bundleConf.server.protocol) ) {
+                        if ( /http\/2/.test(protocol)) {
                             stream.respond({':status': 403});
                             stream.end();
                         } else {
@@ -1210,7 +1236,7 @@ function Server(options) {
                         }
                     } else {
                         var ext = 'html';
-                        if ( /http\/2/.test(bundleConf.server.protocol) ) {
+                        if ( /http\/2/.test(protocol)) {
                             header = {
                                 ':status': 301,
                                 'location': request.url,
@@ -1252,7 +1278,7 @@ function Server(options) {
                 
                 fs.readFile(filename, bundleConf.encoding, function(err, file) {
                     if (err) {
-                        if ( /http\/2/.test(bundleConf.server.protocol) ) {
+                        if ( /http\/2/.test(protocol)) {
                             stream.respond({':status': 404});
                             stream.end();
                         } else {
@@ -1285,7 +1311,7 @@ function Server(options) {
                                 }                                  
                             }
                             
-                            if ( /http\/2/.test(bundleConf.server.protocol) ) {
+                            if ( /http\/2/.test(protocol) ) {
                                 self._isStatic      = true;
                                 self._referrer      = request.url;
                                 
@@ -1312,7 +1338,9 @@ function Server(options) {
                                 if ( !self.instance._http2streamEventInitalized ) {
                                     self.instance._http2streamEventInitalized = true;
                                     self.instance.on('stream', function onHttp2Strem(stream, headers) { 
-                                        if (!self._isStatic) return;       
+                                                                                
+                                        if (!self._isStatic) return;  
+                                             
                                         if (!this._isXMLRequest) {
                                             isPathMatchingUrl = true;
                                             if (headers[':path'] != request.url) {
@@ -1448,12 +1476,21 @@ function Server(options) {
 
                                 } else {
                                     response.writeHead(200)
+                                }                                
+                                
+                                
+                                if (isBinary) { // images, javascript, pdf ....                                    
+                                    fs.createReadStream(filename)
+                                        .on('end', function onResponse(){
+                                            console.info(request.method +' [200] '+ pathname);
+                                        })
+                                        .pipe(response);
+                                } else {
+                                    response.write(file, bundleConf.encoding);
+                                    response.end();      
+                                    console.info(request.method +' [200] '+ pathname);
                                 }
                                 
-                                response.write(file, bundleConf.encoding);
-                                response.end();                                
-                                
-                                console.info(request.method +' [200] '+ pathname);
                                 return;
                             }
                                                         
@@ -1462,18 +1499,8 @@ function Server(options) {
                         }
                     }
                     
-                    // setTimeout(function onTimeout(){
-                    //     if ( /http\/2/.test(bundleConf.server.protocol) ) {
-                    //         stream.end();
-                    //     } else {
-                    //         response.end();  
-                    //     }
-                    // }, 500);
-                    
-                    return
-                    
-                });
-                
+                    return                    
+                });               
 
             }
         })
@@ -1544,6 +1571,7 @@ function Server(options) {
             
             if ( 
                 staticProps.isStaticFilename && staticsArr.indexOf(request.url) > -1 
+                || staticProps.isStaticFilename && staticsArr.indexOf( request.url.replace(request.url.substr(request.url.lastIndexOf('/')+1), '') ) > -1 
                 || staticProps.isStaticFilename && staticsArr.indexOf(staticProps.firstLevel) > -1
             ) {
                 self._isStatic  = true;
