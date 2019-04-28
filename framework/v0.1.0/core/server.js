@@ -936,7 +936,7 @@ function Server(options) {
                 }  
             }  
             
-            if (!sameOrigin && conf.hostname == authority) {
+            if (!sameOrigin && conf.hostname == authority || !sameOrigin && conf.hostname.replace(/\:\d+$/, '') == authority) {
                 sameOrigin = authority
             }
             
@@ -1157,7 +1157,6 @@ function Server(options) {
      */
     var handleStatics = function(staticProps, request, response, next) {        
         
-        //self._responseHeaders = response.getHeaders();
         
         var conf            = self.conf
             , bundleConf    = conf[self.appName][self.env]
@@ -1167,7 +1166,7 @@ function Server(options) {
             , contentType   = null
             , stream        = null
             , header        = null
-            , protocol      = 'http/'+ request.httpVersion // by default in case you are using a reverse proxy not sending `h2` requests
+            , protocol      = 'http/'+ request.httpVersion // inheriting request protocol version by default
         ;
         
         
@@ -1552,11 +1551,10 @@ function Server(options) {
             
             
             
-            // priority to statics
+            // priority to statics - this portion of code has been duplicated to SuperController : see `isStaticRoute` method
             var staticsArr = self.conf[self.appName][self.env].publicResources;
             var staticProps = {
                 firstLevel          : '/' + request.url.split(/\//g)[1] + '/',
-                //isFile      :  /^\/[A-Za-z0-9_-]+\.(.*)$/.test(request.url)
                 // to be considered as a stativ content, url must content at least 2 caracters after last `.`: .js, .html are ok
                 isStaticFilename    : /(\.([A-Za-z0-9]+){2}|\/)$/.test(request.url)
             };  

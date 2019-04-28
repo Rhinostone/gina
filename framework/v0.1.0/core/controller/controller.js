@@ -1031,16 +1031,23 @@ function SuperController(options) {
         if (!viewConf) {
             self.throwError(500, new Error('No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: gina bundle:add-view '+ options.conf.bundle +' @'+ options.conf.projectName))
         }
+        
+        var authority = ( typeof(local.req.headers['x-forwarded-proto']) != 'undefined' ) ? local.req.headers['x-forwarded-proto'] : local.options.conf.server.scheme;
+        authority += '://'+ local.req.headers.host;
+        useWebroot = false;
+        if ( !/^\/$/.test(local.options.conf.server.webroot) && local.options.conf.server.webroot.length > 0 && local.options.conf.hostname.replace(/\:\d+$/, '') == authority ) {
+            useWebroot = true
+        }
 
         var cssStr = '', jsStr = '';
         
         //Get css
         if( viewConf.stylesheets ) {
-            cssStr  = getNodeRes('css', viewConf.stylesheets)
+            cssStr  = getNodeRes('css', viewConf.stylesheets, useWebroot)
         }
         //Get js
         if( viewConf.javascripts ) {            
-            jsStr   = getNodeRes('js', viewConf.javascripts)
+            jsStr   = getNodeRes('js', viewConf.javascripts, useWebroot)
         }
 
         set('page.view.stylesheets', cssStr);
@@ -1059,7 +1066,7 @@ function SuperController(options) {
      *
      * @private
      * */
-    var getNodeRes = function(type, resArr) {
+    var getNodeRes = function(type, resArr, useWebroot) {
         
         var r       = 0
             , rLen  = resArr.length
@@ -1070,6 +1077,9 @@ function SuperController(options) {
             case 'css':
                 for (; r < rLen; ++r) { 
                     obj = resArr[r];
+                    if (useWebroot && !new RegExp('^'+ local.options.conf.server.webroot).test(obj.url) )
+                        obj.url = local.options.conf.server.webroot + obj.url.substr(1);
+                        
                     str += '\n\t\t<link href="'+ obj.url +'" media="'+ obj.media +'" rel="'+ obj.rel +'" type="'+ obj.type +'">';                    
                 }
                 
@@ -1081,6 +1091,9 @@ function SuperController(options) {
                 
                 for (; r < rLen; ++r) {
                     obj = resArr[r];
+                    if (useWebroot && !new RegExp('^'+ local.options.conf.server.webroot).test(obj.url) )
+                        obj.url = local.options.conf.server.webroot + obj.url.substr(1);
+                        
                     str += '\n\t\t<script'+ deferMode +' type="'+ obj.type +'" src="'+ obj.url +'"></script>'                    
                 }
                 
@@ -1130,6 +1143,49 @@ function SuperController(options) {
     
     this.getRequestMethodParams = function() {
         return (localRequestMethodParams) ? localRequestMethodParams : local.req[local.req.method.toLowerCase()]
+    }
+    
+    /**
+     * isStaticRoute
+     * Trying to determine if url is a `statics` ressource
+     * 
+     * @param {string} url
+     * @param {string} method
+     * 
+     * @returns {boolean} isStaticRoute
+     */
+    var isStaticRoute = function(url, method, bundle, env, conf) {
+        
+        if ( !/get/i.test(method) ) {
+            return false
+        }
+        
+        // priority to statics - this portion of code has been duplicated to Server.js
+        
+        var staticsArr = conf[bundle][env].publicResources;
+        var staticProps = {
+            firstLevel          : '/' + url.split(/\//g)[1] + '/',
+            // to be considered as a stativ content, url must content at least 2 caracters after last `.`: .js, .html are ok
+            isStaticFilename    : /(\.([A-Za-z0-9]+){2}|\/)$/.test(url)
+        }; 
+        
+        // handle resources from public with webroot in url
+        if ( staticProps.isStaticFilename && conf[bundle][env].server.webroot != '/' && staticProps.firstLevel == conf[bundle][env].server.webroot ) {
+            var matchedFirstInUrl = url.replace(conf[bundle][env].server.webroot, '').match(/[A-Za-z0-9_-]+\/?/);
+            if ( matchedFirstInUrl && matchedFirstInUrl.length > 0 ) {
+                staticProps.firstLevel = conf[bundle][env].server.webroot + matchedFirstInUrl[0]
+            }                
+        }
+        
+        if ( 
+            staticProps.isStaticFilename && staticsArr.indexOf(url) > -1 
+            || staticProps.isStaticFilename && staticsArr.indexOf( url.replace(url.substr(url.lastIndexOf('/')+1), '') ) > -1 
+            || staticProps.isStaticFilename && staticsArr.indexOf(staticProps.firstLevel) > -1
+        ) {
+            return true
+        }
+        
+        return false;
     }
 
     /**
@@ -1233,7 +1289,17 @@ function SuperController(options) {
                 rte             = rte.replace(/\?(.*)/, '');
                 
                 req             = local.req;
-                req.routing     = lib.routing.getRouteByUrl(rte, bundle, req.method, req);
+                console.debug('trying to get route: ', rte, bundle, req.method);
+                if ( !isStaticRoute(rte, req.method, bundle, env, ctx.config.envConf) ) {
+                    req.routing     = lib.routing.getRouteByUrl(rte, bundle, req.method, req);
+                } else {
+                    req.routing = {
+                        param : {
+                            url: rte
+                        }
+                    }
+                }
+                
                 res             = local.res;
                 next            = local.next;
                 isRelative      = true;
