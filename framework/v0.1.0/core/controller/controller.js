@@ -344,7 +344,11 @@ function SuperController(options) {
             return false
         }
         
-        local.options.debugMode = (typeof(displayToolbar) != 'undefined' ) ? displayToolbar : undefined; // only active for dev env
+        local.options.debugMode = ( typeof(displayToolbar) == 'undefined' ) ? undefined : ( (/true/.test(displayToolbar)) ? true : false ); // only active for dev env
+        
+        // if ( local.options.debugMode == undefined ) {
+        //     local.options.debugMode = ( hasViews() && GINA_ENV_IS_DEV ) ? true : false;
+        // }
 
         var data            = null
         , template          = null
@@ -666,7 +670,7 @@ function SuperController(options) {
                                               
 
                         // adding plugins
-                        if (hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout || hasViews() && local.options.debugMode ) {                            
+                        if (hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout && local.options.debugMode || hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout && typeof(local.options.debugMode) == 'undefined' || hasViews() && local.options.debugMode ) {                            
 
                             layout = ''
                                 + '{%- set ginaDataInspector                    = JSON.parse(JSON.stringify(page)) -%}'
@@ -687,14 +691,14 @@ function SuperController(options) {
                             ;
                                                         
 
-                            if (isWithoutLayout && local.options.debugMode == true || local.options.debugMode == true ) {
+                            if (isWithoutLayout && local.options.debugMode || local.options.debugMode ) {
 
                                 XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
                                 
                                 layout = layout.replace(/<\/body>/i, XHRData + '\n\t</body>');
                             }
                             
-                            if (GINA_ENV_IS_DEV || local.options.debugMode == true ) {
+                            if (GINA_ENV_IS_DEV || local.options.debugMode ) {
                                 layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
                             }
                             
@@ -750,7 +754,7 @@ function SuperController(options) {
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
                         
                         // special case for template without layout in debug mode - dev only
-                        if ( hasViews() && local.options.debugMode == true  && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
+                        if ( hasViews() && local.options.debugMode && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
                             try {                            
                                 layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
                                 layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
@@ -1038,16 +1042,18 @@ function SuperController(options) {
         if ( !/^\/$/.test(local.options.conf.server.webroot) && local.options.conf.server.webroot.length > 0 && local.options.conf.hostname.replace(/\:\d+$/, '') == authority ) {
             useWebroot = true
         }
+        
+        var reURL = new RegExp('^'+ local.options.conf.server.webroot);
 
         var cssStr = '', jsStr = '';
         
         //Get css
         if( viewConf.stylesheets ) {
-            cssStr  = getNodeRes('css', viewConf.stylesheets, useWebroot)
+            cssStr  = getNodeRes('css', viewConf.stylesheets, useWebroot, reURL)
         }
         //Get js
         if( viewConf.javascripts ) {            
-            jsStr   = getNodeRes('js', viewConf.javascripts, useWebroot)
+            jsStr   = getNodeRes('js', viewConf.javascripts, useWebroot, reURL)
         }
 
         set('page.view.stylesheets', cssStr);
@@ -1066,7 +1072,7 @@ function SuperController(options) {
      *
      * @private
      * */
-    var getNodeRes = function(type, resArr, useWebroot) {
+    var getNodeRes = function(type, resArr, useWebroot, reURL) {
         
         var r       = 0
             , rLen  = resArr.length
@@ -1077,7 +1083,7 @@ function SuperController(options) {
             case 'css':
                 for (; r < rLen; ++r) { 
                     obj = resArr[r];
-                    if (useWebroot && !new RegExp('^'+ local.options.conf.server.webroot).test(obj.url) )
+                    if (useWebroot && !reURL.test(obj.url) )
                         obj.url = local.options.conf.server.webroot + obj.url.substr(1);
                         
                     str += '\n\t\t<link href="'+ obj.url +'" media="'+ obj.media +'" rel="'+ obj.rel +'" type="'+ obj.type +'">';                    
@@ -1091,7 +1097,7 @@ function SuperController(options) {
                 
                 for (; r < rLen; ++r) {
                     obj = resArr[r];
-                    if (useWebroot && !new RegExp('^'+ local.options.conf.server.webroot).test(obj.url) )
+                    if (useWebroot && !reURL.test(obj.url) )
                         obj.url = local.options.conf.server.webroot + obj.url.substr(1);
                         
                     str += '\n\t\t<script'+ deferMode +' type="'+ obj.type +'" src="'+ obj.url +'"></script>'                    
