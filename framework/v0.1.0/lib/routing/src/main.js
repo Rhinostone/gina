@@ -598,7 +598,7 @@ function Routing() {
                 return false
             }
 
-            console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route not found for url: `' + url + '` !').stack )
+            console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method, request]) ] : route not found for url: `' + url + '` !').stack )
             
             return false;
         } else {

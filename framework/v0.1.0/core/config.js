@@ -1220,6 +1220,19 @@ function Config(opt) {
                     }
                     ++d
                 }
+                
+                if (hasWebRoot) {
+                    var staticToPublicPath = null;
+                    for (var p in files['statics']) {
+                        staticToPublicPath =  wroot + p.replace( new RegExp('^'+ wroot), '/');
+                        
+                        if ( !/\./.test(staticToPublicPath.substr(staticToPublicPath.lastIndexOf('/') )) && !/\/$/.test(staticToPublicPath) )
+                            staticToPublicPath += '/';
+                        
+                        if ( publicResources.indexOf(staticToPublicPath) < 0 )
+                            publicResources.push( staticToPublicPath )
+                    }
+                }
 
                 // if (hasWebRoot) {
                 //     var wrootKey = wroot.substr(1);
