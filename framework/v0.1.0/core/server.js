@@ -923,8 +923,8 @@ function Server(options) {
             if (!authority) {
                 if (!referer) {
                     if ( /http\/2/.test(conf.server.protocol) ) {
-                        authority   = request.headers[':authority'];
-                        scheme      = request.headers[':scheme'];                                                    
+                        authority   = request.headers[':authority'] || request.headers.host;
+                        scheme      = request.headers[':scheme'] || request.headers['x-forwarded-proto'] || conf.server.scheme;                                                    
                     } else {
                         authority   = request.headers.host;
                         scheme      = ( new RegExp(authority).test(referer) ) ? referer.match(/^http(.*)\:\/\//)[0].replace(/\:\/\//, '') : conf.server.scheme;
