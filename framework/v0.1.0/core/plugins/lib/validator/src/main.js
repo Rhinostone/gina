@@ -548,6 +548,7 @@ function ValidatorPlugin(rules, data, formId) {
         var result  = null;
         var XHRData = null;
         var hFormIsRequired = null;
+        var isAttachment = null; // handle download
         
         // forward callback to HTML data event attribute through `hform` status
         hFormIsRequired = ( $target.getAttribute('data-gina-form-event-on-submit-success') || $target.getAttribute('data-gina-form-event-on-submit-error') ) ? true : false;
@@ -617,19 +618,27 @@ function ValidatorPlugin(rules, data, formId) {
         if (xhr) {
             // catching ready state cb
             xhr.onreadystatechange = function (event) {
+                
+                if (xhr.readyState == 2) { // responseType interception
+                    isAttachment    = ( /^attachment\;/.test( xhr.getResponseHeader("Content-Disposition") ) ) ? true : false; 
+                    // force blob response type
+                    if ( !xhr.responseType && isAttachment ) {
+                        xhr.responseType = 'blob';
+                    }
+                }
 
                 if (xhr.readyState == 4) {
-                    var blob = null;
+                    var blob            = null;
+                    var contentType     = xhr.getResponseHeader("Content-Type");     
+                       
                     // 200, 201, 201' etc ...
                     if( /^2/.test(xhr.status) ) {
 
                         try {
                             
-                            var contentType = xhr.getResponseHeader("Content-Type");                           
-                            
                             
                             // handling blob xhr download
-                            if ( /blob/.test(xhr.responseType) /**&& xhr.readyState == 4*/ ) {
+                            if ( /blob/.test(xhr.responseType) || isAttachment ) {
                                 if ( typeof(contentType) == 'undefined' || contentType == null) {
                                     contentType = 'application/octet-stream';
                                 }
@@ -653,11 +662,11 @@ function ValidatorPlugin(rules, data, formId) {
                                 result = {
                                     status : xhr.status,
                                     statusText: xhr.statusText,
-                                    responseType: xhr.responseType,
-                                    type : xhr.response.type,
-                                    size : xhr.response.size 
+                                    responseType: blob.type,
+                                    type : blob.type,
+                                    size : blob.size 
                                 }
-                                //return;
+                                
                             } else { // normal case
                                 result = xhr.responseText;                                
                             }
@@ -1470,8 +1479,9 @@ function ValidatorPlugin(rules, data, formId) {
                         if (customRule) {
                             customRule = customRule.replace(/\-/g, '.');
                             if ( typeof(instance.rules[customRule]) == 'undefined' ) {
-                                customRule = null;
-                                throw new Error('['+$allForms[f].id+'] no rule found with key: `'+customRule+'`');                                
+                                
+                                throw new Error('['+$allForms[f].id+'] no rule found with key: `'+customRule+'`. Please check if json is not malformed @ /forms/rules/' + customRule.replace(/\./g, '/') +'.json');   
+                                customRule = null;                             
                             } else {
                                 customRule = instance.rules[customRule]
                             }

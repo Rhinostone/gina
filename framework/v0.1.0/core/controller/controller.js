@@ -660,6 +660,11 @@ function SuperController(options) {
                         //mapping = { filename: local.options.template.layout };         
                         mapping = { filename: layoutPath }; 
                         layout  = layout.toString();
+                        // precompie in case of extends
+                        if ( /\{\%(\s+extends|extends)/.test(layout) ) {
+                            layout = swig.compile(layout, mapping)(data);
+                        }
+                            
                         
                         isDeferModeEnabled = local.options.template.javascriptsDeferEnabled;                        
                         
@@ -1529,6 +1534,7 @@ function SuperController(options) {
             agent: false,
             // set to false to ignore certificate verification
             rejectUnauthorized: true,
+            //responseType: 'blob',
             port: 80,
             method: 'GET',
             keepAlive: true,
@@ -1578,8 +1584,10 @@ function SuperController(options) {
         if ( !/\.\w+$/.test(filename) )
                 self.throwError(local.res, 500, new Error('[ '+ filename +' ] Extension not found.'));
         
-        if ( opt.contentDisposition == 'attachment')
+        if ( opt.contentDisposition == 'attachment') {
             opt.contentDisposition += '; filename=' + filename;
+        }
+            
         
         var ext             = filename.match(/\.\w+$/)[0].substr(1)
             , contentType   = null
@@ -1597,26 +1605,30 @@ function SuperController(options) {
         // defining responseType
         requestOptions.headers['content-type'] = contentType;
         requestOptions.headers['content-disposition'] = opt.contentDisposition;
-        
-        //'content-type': 'application/json',
-        //var file = fs.createWriteStream(tmp);
+                 
         var browser = require(''+ scheme);
         //console.debug('requestOptions: \n', JSON.stringify(requestOptions, null, 4));
+        
         browser.get(requestOptions, function(response) {
 
             local.res.setHeader('content-type', contentType + '; charset='+ local.options.conf.encoding);
-            local.res.setHeader('content-disposition', opt.contentDisposition);  
+            local.res.setHeader('content-disposition', opt.contentDisposition); 
             //local.res.setHeader('content-length', dataLength);  
-            response.pipe(local.res);
-            response.on('end', function onResponsePipeEnd(){
-                local.res.end({ status: 200 });
-                local.res.headersSent = true;       
+            
+            // response.on('end', function onResponsePipeEnd(){
                 
-                if ( typeof(local.next) != 'undefined')
-                    local.next();
-                else
-                    return;
-            });
+                
+            //     //local.res.end( Buffer.from(data) );
+            //     local.res.headersSent = true;       
+                
+            //     if ( typeof(local.next) != 'undefined')
+            //         local.next();
+            //     else
+            //         return;
+            // });
+            
+            response.pipe(local.res);
+            return;
             
             
             /**
@@ -1701,9 +1713,10 @@ function SuperController(options) {
      **/
     this.downloadFromLocal = function(filename) {
         
-        var file        = filename.split(/\//g).pop(); 
-        var ext         = file.split(/\./g).pop()
-        , contentType   = null;
+        var file            = filename.split(/\//g).pop(); 
+        var ext             = file.split(/\./g).pop()
+            , contentType   = null
+        ;
         
         if ( typeof(local.options.conf.server.coreConfiguration.mime[ext]) != 'undefined' ) {
 
@@ -1716,8 +1729,7 @@ function SuperController(options) {
 
         } else { // extension not supported
             self.throwError(local.res, 500, new Error('[ '+ ext +' ] Extension not supported. Ref.: gina/core mime.types'));
-        }
-        
+        }        
     }
 
 
