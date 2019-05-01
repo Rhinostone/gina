@@ -457,11 +457,17 @@ function SuperController(options) {
                         }
                     });
 
+                    var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers.host != local.options.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
 
                     // Allows you to get a bundle web root
                     swig.setFilter('getWebroot', function (input, obj) {
-                        var prop = options.envObj.getConf(obj, options.conf.env),
+                        var url = null, prop = options.envObj.getConf(obj, options.conf.env);
+                        if ( isProxyHost ) {
+                            url = prop.server.scheme + '://'+ prop.host;
+                        } else {
                             url = prop.server.scheme + '://'+ prop.host +':'+ prop.port[prop.server.protocol][prop.server.scheme];
+                        }
+                            
                         if ( typeof(prop.server['webroot']) != 'undefined') {
                             url += prop.server['webroot']
                         }
@@ -492,17 +498,19 @@ function SuperController(options) {
                     var config              = null
                         , hostname          = null
                         , wroot             = null
+                        , wrootRe           = null
                         , isStandalone      = null
                         , isMaster          = null
                         , routing           = null                        
                         , rule              = null
                         , url               = NaN
                         , urlStr            = null
-                        //, route             = null
                     ;
 
 
                     swig.setFilter('getUrl', function (route, params, base) {
+                        
+            
                         // if no route, returns current route
                         if ( !route || typeof(route) == 'undefined') {
                             route = local.options.rule
@@ -534,13 +542,11 @@ function SuperController(options) {
                                     config          = mainConf.Env.getConf(base, mainConf.env);
                                     
                                     // retrieve hostname, webroot & routing
-                                    hostname        = config.hostname;
+                                    hostname        = config.hostname + config.server.webroot;
                                     // rewrite hostname vs local.req.headers.host
-                                    if ( hostname.replace(/\:\d+/, '') == local.req.headers.host ) {
-                                        hostname = local.req.headers.host;
+                                    if ( isProxyHost ) {
+                                        hostname = hostname.replace(/\:\d+/, '');
                                     }
-                                    //routing         = config.content.routing;
-                                    //wroot           = config.server.webroot;
 
                                     config.bundle   = base;
                                     isStandalone    = (mainConf.bundles.length > 1) ? true : false;
@@ -551,18 +557,20 @@ function SuperController(options) {
                                 }
                             }
                         }
+                        
+                        wrootRe = new RegExp('^'+ config.server.webroot);
 
                         // is path ?
                         if (/^\//.test(route)) {
+                            
+                            if ( !wrootRe.test(route) ) {
+                                route = config.server.webroot + route.substr(1);
+                                hostname = hostname.replace(new RegExp( config.server.webroot +'$'), '')
+                            } else {
+                                route = route.substr(1)
+                            }                          
 
-                            if (route.substr(0,1) == '/')
-                                route = route.substr(1);
-
-
-                            if (wroot.length == 1)
-                                wroot = '';
-
-                            return (route.length > 0) ? hostname + wroot +'/'+ route : hostname + wroot;
+                            return hostname + route;
                         }
 
                         // rules are now unique per bundle : rule@bundle
@@ -608,16 +616,35 @@ function SuperController(options) {
                                     }
                                 }
                             }
-
-                            url = ( /^\//.test(url) ) ? hostname + url : hostname +'/'+ url;
+                            
+                            
+                            if (hostname.length > 0) {
+                                url = url.replace(wrootRe, '');
+                            }                            
+                            url = hostname + url;
 
                         } else {
-                            if ( typeof(routing['404@'+ config.bundle]) != 'undefined' && typeof(routing['404@'+ config.bundle].url) != 'undefined' ) {
-                              
-                                url = ( /^\//.test(routing['404@'+ config.bundle].url) ) ? hostname + wroot + routing['404@'+ config.bundle].url.substr(1) : hostname + wroot + routing['404@'+ config.bundle].url;
+                            
+                            if ( typeof(routing['404@'+ config.bundle]) != 'undefined' && typeof(routing['404@'+ config.bundle].url) != 'undefined' ) {                              
+                                //url = ( /^\//.test(routing['404@'+ config.bundle].url) ) ? hostname + routing['404@'+ config.bundle].url.substr(1) : hostname + routing['404@'+ config.bundle].url;
+                                url = routing['404@'+ config.bundle].url.replace(wrootRe, '');
+                                if (hostname.length > 0) {
+                                    url = url.replace(wrootRe, '');
+                                }  
+                                url = hostname + url;
                             } else {
-                                url = hostname + wroot +'404.html'
+                                url = '/404.html';
+                                if (hostname.length > 0) {
+                                    url = url.substr(1);
+                                } 
+                                url = hostname + url
                             }
+                            
+                            //url = route;
+                            // if (hostname.length > 0 && /^\//.test(url) ) {
+                            //     url = url.substr(1);
+                            // } 
+                            // url = hostname + url
                         }
 
                         return url
@@ -1371,10 +1398,11 @@ function SuperController(options) {
 
         if ( !self.forward404Unless(condition, req, res) ) { // forward to 404 if bad route
 
-            // if (wroot.substr(wroot.length-1,1) == '/') {
-            //     wroot = wroot.substr(wroot.length-1,1).replace('/', '')
-            // }
-
+            var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers.host != local.options.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
+            var hostname = (isProxyHost) ? ctx.config.envConf[bundle][env].hostname.replace(/\:\d+$/, '') : ctx.config.envConf[bundle][env].hostname;
+            
+            // if ( !/\:\d+$/.test(req.headers.host) )
+            //     hostname = hostname.replace(/\:\d+$/, '');
 
             if (route) { // will go with route first
                 
@@ -1385,13 +1413,7 @@ function SuperController(options) {
                     path = (ignoreWebRoot) ? routing[route].url.replace(wroot, '') : routing[route].url;
                 }
                 
-                if (bundle != conf.bundle) {
-                    
-                    var hostname = ctx.config.envConf[bundle][env].hostname;
-                    
-                    if ( !/\:\d+$/.test(req.headers.host) )
-                        hostname = hostname.replace(/\:\d+$/, '');
-                                        
+                if (bundle != conf.bundle) {                    
                     path = hostname + path;
                 }
             } else if (url && !path) {
@@ -1406,8 +1428,8 @@ function SuperController(options) {
             //} else {
             } else if ( !path && typeof(isRelative) ==  'undefined' ) {
                 
-                //path = conf.hostname + path
-                path = local.req.headers.host + path
+                path = hostname + path
+                //path = local.req.headers.host + path
             }
                        
             
@@ -1434,7 +1456,7 @@ function SuperController(options) {
                 var ext = 'html';
                 res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime[ext]);
                 
-                if ( typeof(local.res._headers['access-control-allow-methods']) != 'undefined' && local.res._headers['access-control-allow-methods'] != req.method ) {
+                if ( typeof(local.res._headers) != 'undefined' && typeof(local.res._headers['access-control-allow-methods']) != 'undefined' && local.res._headers['access-control-allow-methods'] != req.method ) {
                     res.setHeader('access-control-allow-methods', req.method);
                 }
                 //path += '?query='+ JSON.stringify(self.getRequestMethodParams());
