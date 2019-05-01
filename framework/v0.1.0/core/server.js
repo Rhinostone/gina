@@ -1019,11 +1019,8 @@ function Server(options) {
         
         if (stream.headersSent) return;
         
-        if ( !this._options.template ) {
-            console.info(headers[':method'] +' [500] '+ headers[':path'] + '\nNo template found');
-            stream.respond({ ':status': 500 });
-            stream.end();
-            return; 
+        if ( !this._options.template ) {            
+            throwError(response, 500, 'Internal server error\n' + headers[':path'] + '\nNo template found');
         }
         
         var header = null, isWebroot = false, pathname = null;
@@ -1073,8 +1070,10 @@ function Server(options) {
             var responseHeaders = ( typeof(this._responseHeaders) != 'undefined') ? this._responseHeaders : null;
             var conf = this._options.conf;
             var asset = {
+                    url         : url,
                     filename    : assets[ url ].filename,
                     file        : null,
+                    isAvailable : assets[ url ].isAvailable,
                     mime        : assets[ url ].mime,
                     encoding    : conf.encoding,
                     isHandler   : false
@@ -1087,9 +1086,14 @@ function Server(options) {
             // adding handler `gina.ready(...)` wrapper
             if ( new RegExp('^'+ conf.handlersPath).test(asset.filename) ) {
                 
-                if ( !fs.existsSync(asset.filename) )
-                    stream.respond({ ':status': 404 });
-                
+                if ( !fs.existsSync(asset.filename) ) {
+                    throwError(response, 404, 'Page not found: \n' + headers[':path']);   
+                    // header[':status'] = 404;
+                    // //console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack|err.message|err));
+                    // stream.respond(header);
+                    // stream.end()
+                }
+                    
                 asset.isHandler = true;
                 asset.file      = fs.readFileSync(asset.filename, asset.encoding).toString();                
                 asset.file      = '(gina.ready(function onGinaReady($){\n'+ asset.file + '\n},window["originalContext"]));';
@@ -1105,13 +1109,15 @@ function Server(options) {
                 
                 if ( err ) {
                     header[':status'] = 500;
-                    if (err.code === 'ENOENT') {
+                    if (err.code === 'ENOENT' || !asset.isAvailable ) {
                         header[':status'] = 404;
                     } 
-                    console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack|err.message|err));
-                    stream.respond(header);
-                    stream.end();
-                    return;
+                    //console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack|err.message|err));
+                    var msg = ( header[':status'] == 404 ) ? 'Page not found: \n' + asset.url :  'Internal server error\n' + (err.stack|err.message|err)
+                    throwError(response, header[':status'], msg);   
+                    // stream.respond(header);
+                    // stream.end();
+                    // return;
                 }
                 
                 
@@ -1141,11 +1147,23 @@ function Server(options) {
                                            
             });
         } else {
-            console.info(headers[':method'] +' [404] '+ headers[':path']);
-            stream.respond({ ':status': 404 });
-            stream.end();
-            return;        
+            //console.info(headers[':method'] +' [404] '+ headers[':path']);
+            throwError(response, 404, 'Page not found: \n' + headers[':path']);      
         }       
+    }
+    
+    
+    
+    var getResponseProtocol = function (response) {
+        
+        var protocol    = 'http/'+ local.request.httpVersion; // inheriting request protocol version by default
+        var bundleConf  = self.conf[self.appName][self.env];
+        // switching protocol to h2 when possible
+        if ( /http\/2/.test(bundleConf.server.protocol) && response.stream ) {            
+            protocol    = bundleConf.server.protocol;                       
+        }
+        
+        return protocol;
     }
     
     /**
@@ -1162,19 +1180,19 @@ function Server(options) {
             , bundleConf    = conf[self.appName][self.env]
             , webroot       = bundleConf.server.webroot
             , re            = new RegExp('^'+ webroot)
+            , publicPathRe  = new RegExp('^'+ bundleConf.publicPath)
             , pathname      = ( webroot.length > 1 && re.test(request.url) ) ? request.url.replace(re, '/') : request.url
             , contentType   = null
             , stream        = null
             , header        = null
-            , protocol      = 'http/'+ request.httpVersion // inheriting request protocol version by default
+            , protocol      = getResponseProtocol(response)
         ;
         
         
-        // switching protocol to h2 when ppossible
-        if ( /http\/2/.test(bundleConf.server.protocol) && response.stream ) {
+        // h2 protocol response option
+        if ( /http\/2/.test(protocol) ) {
             
-            protocol    = bundleConf.server.protocol;
-            stream      = response.stream;
+            stream = response.stream;            
             
             if ( typeof(self._options) == 'undefined') {
                 self._options       = {
@@ -1187,9 +1205,7 @@ function Server(options) {
             
             self._options.conf = bundleConf
         }
-        
-        
-        
+                
         var cacheless       = bundleConf.cacheless;  
         // by default
         var filename        = bundleConf.publicPath + pathname;
@@ -1226,16 +1242,12 @@ function Server(options) {
                     dirname = request.url;
                     filename += 'index.html';
                     request.url += 'index.html';
+                    
                     if ( !fs.existsSync(filename) ) {
-                        if ( /http\/2/.test(protocol)) {
-                            stream.respond({':status': 403});
-                            stream.end();
-                        } else {
-                            throwError(response, 403, 'Forbidden: \n' + pathname, next);                              
-                        }
+                        throwError(response, 403, 'Forbidden: \n' + pathname, next);      
                     } else {
                         var ext = 'html';
-                        if ( /http\/2/.test(protocol)) {
+                        if ( /http\/2/.test(protocol) ) {
                             header = {
                                 ':status': 301,
                                 'location': request.url,
@@ -1250,8 +1262,11 @@ function Server(options) {
                             request = checkPreflightRequest(request);
                             header  = completeHeaders(request, response, header);
                             
-                            stream.respond(header);
-                            stream.end();
+                            if (!stream.destroyed) {
+                                stream.respond(header);
+                                stream.end();
+                            }                            
+                            
                         } else {
                             response.setHeader('location', request.url);
                             request = checkPreflightRequest(request);
@@ -1277,18 +1292,13 @@ function Server(options) {
                 
                 fs.readFile(filename, bundleConf.encoding, function(err, file) {
                     if (err) {
-                        if ( /http\/2/.test(protocol)) {
-                            stream.respond({':status': 404});
-                            stream.end();
-                        } else {
-                            throwError(response, 404, 'Page not found: \n' + pathname, next); 
-                        }
-                                               
+                        throwError(response, 404, 'Page not found: \n' + pathname, next);                                               
                     } else if (!response.headersSent) {
+                        
                         isBinary = true;
+                        
                         try {
-                            contentType = getHead(response, filename);
-                            
+                            contentType = getHead(response, filename);                           
                             
                             // adding gina loader
                             if (/text\/html/i.test(contentType) && GINA_ENV_IS_DEV) {
@@ -1342,7 +1352,9 @@ function Server(options) {
                                              
                                         if (!this._isXMLRequest) {
                                             isPathMatchingUrl = true;
+                                            //request.url = request.url.replace(publicPathRe, '');
                                             if (headers[':path'] != request.url) {
+                                                //request.url = pathname =  headers[':path'] = headers[':path'].replace(publicPathRe, '');
                                                 request.url = headers[':path'];
                                                 isPathMatchingUrl = false;
                                             }
@@ -1351,23 +1363,33 @@ function Server(options) {
                                             if (!isPathMatchingUrl) {
                                                 pathname = ( webroot.length > 1 && re.test(request.url) ) ? request.url.replace(re, '/') : request.url;
                                                 //filename = bundleConf.publicPath + pathname;
-                                                filename = this._getAssetFilenameFromUrl(bundleConf, pathname);
                                                 
-                                                if ( !fs.existsSync(filename) ) {
-                                                    stream.respond({':status': 404});
-                                                    stream.end();
-                                                    return;
+                                                isFilenameDir = (webroot == request.url) ? true: false;
+                                                
+                                                if ( !isFilenameDir && !/404\.html/.test(filename) )
+                                                    isFilenameDir = fs.statSync(filename).isDirectory();
+                                                    //isFilenameDir = ( !/404\.html/.test(request.url) ) ? fs.statSync(filename).isDirectory() : false;
+                                                
+                                                if (!isFilenameDir) {
+                                                    filename = this._getAssetFilenameFromUrl(bundleConf, pathname);
+                                                    //if (!/404\.html/.test(filename))
+                                                    //    isFilenameDir = fs.statSync(filename).isDirectory();
+                                                        
                                                 }
+                                                    
+                                                if ( !isFilenameDir && !fs.existsSync(filename) ) {
+                                                    throwError(response, 404, 'Page not found: \n' + pathname, next);
+                                                    return;
+                                                }    
+                                                                                                                                                
                                                 
-                                                isFilenameDir = fs.statSync(filename).isDirectory();
                                                 if ( isFilenameDir ) {
-                                                    dirname = request.url;
-                                                    filename += 'index.html';
+                                                    //dirname = request.url;
+                                                    dirname = bundleConf.publicPath + pathname;
+                                                    filename =  dirname + 'index.html';
                                                     request.url += 'index.html';
                                                     if ( !fs.existsSync(filename) ) {
-                                                        stream.respond({':status': 403});
-                                                        stream.end();
-                                                        return;
+                                                        throwError(response, 403, 'Forbidden: \n' + pathname, next);
                                                     } else {
                                                         header = {
                                                             ':status': 301,
@@ -1384,7 +1406,9 @@ function Server(options) {
                                                         stream.respond(header);
                                                         stream.end();
                                                     }
-                                                }                                                
+                                                }// else {
+                                                //    throwError(response, 404, 'Page not found: \n' + pathname, next);
+                                                //}                                              
                                             }
                                             
                                             contentType = getHead(response, filename);
@@ -1396,7 +1420,8 @@ function Server(options) {
                                             ) {                                               
                                                 self._options.template.assets[request.url] = {
                                                     ext: request.url.match(/\.([A-Za-z0-9]+)$/)[0],
-                                                    isAvailable: true,
+                                                    //isAvailable: true,
+                                                    isAvailable: (!/404\.html/.test(filename)) ? true : false,
                                                     mime: contentType,
                                                     url: request.url,
                                                     filename: filename
@@ -1411,6 +1436,7 @@ function Server(options) {
                                                 }
                                             }*/
                                                                                                                                    
+                                            if (!fs.existsSync(filename)) return;
                                             
                                             self.onHttp2Stream(stream, headers);
                                         }              
@@ -1549,16 +1575,23 @@ function Server(options) {
             //     request.url = self.conf[self.appName][self.env].server.webroot
             // }
             
-            
+            // webroot filter
+            var isWebrootHandledByRouting = ( self.conf[self.appName][self.env].server.webroot == request.url && !fs.existsSync( _(self.conf[self.appName][self.env].publicPath +'/index.html', true) ) ) ? true : false;
             
             // priority to statics - this portion of code has been duplicated to SuperController : see `isStaticRoute` method
-            var staticsArr = self.conf[self.appName][self.env].publicResources;
+            var staticsArr  = self.conf[self.appName][self.env].publicResources; 
             var staticProps = {
-                firstLevel          : '/' + request.url.split(/\//g)[1] + '/',
+                isStaticFilename: false
+            };
+            if (!isWebrootHandledByRouting) {
+                
+                staticProps.firstLevel          = '/' + request.url.split(/\//g)[1] + '/';
                 // to be considered as a stativ content, url must content at least 2 caracters after last `.`: .js, .html are ok
-                isStaticFilename    : /(\.([A-Za-z0-9]+){2}|\/)$/.test(request.url)
-            };  
+                staticProps.isStaticFilename    = /(\.([A-Za-z0-9]+){2}|\/)$/.test(request.url);
+            }
             
+                 
+                
             // handle resources from public with webroot in url
             if ( staticProps.isStaticFilename && self.conf[self.appName][self.env].server.webroot != '/' && staticProps.firstLevel == self.conf[self.appName][self.env].server.webroot ) {
                 var matchedFirstInUrl = request.url.replace(self.conf[self.appName][self.env].server.webroot, '').match(/[A-Za-z0-9_-]+\/?/);
@@ -1570,7 +1603,9 @@ function Server(options) {
             if ( 
                 staticProps.isStaticFilename && staticsArr.indexOf(request.url) > -1 
                 || staticProps.isStaticFilename && staticsArr.indexOf( request.url.replace(request.url.substr(request.url.lastIndexOf('/')+1), '') ) > -1 
-                || staticProps.isStaticFilename && staticsArr.indexOf(staticProps.firstLevel) > -1
+                //|| staticProps.isStaticFilename && staticsArr.indexOf(staticProps.firstLevel) > -1
+                // take ^/dir/sub/*
+                || staticProps.isStaticFilename && new RegExp('^'+ staticProps.firstLevel).test(request.url)
             ) {
                 self._isStatic  = true;
                 self._referrer  = request.url;                
@@ -2208,7 +2243,7 @@ function Server(options) {
         } else {
             // config.refresh(bundle, function(err, routing) {
             //     if (err) {
-            //         throwError(res, 500, 'Internal Server Error: \n' + (err.stack||err), next)
+            //         throwError(res, 500, 'Internal server error: \n' + (err.stack||err), next)
             //     } else {
                     //refreshing routing at the same time.
             //        self.routing = routing;
@@ -2380,7 +2415,7 @@ function Server(options) {
                     isRoute = routingUtils.compareUrls(params, routing[name].url, req);
                         
                 } catch (err) {
-                    throwError(res, 500, 'Rule [ '+name+' ] needs your attention.\n'+ err.stack);
+                    throwError(res, 500, 'Internal server error.\nRule [ '+name+' ] needs your attention.\n'+ err.stack);
                     break;
                 }
 
@@ -2491,11 +2526,17 @@ function Server(options) {
     }
 
     var throwError = function(res, code, msg, next) {
+        
+        
         var withViews       = local.hasViews[self.appName] || hasViews(self.appName);
         var isUsingTemplate = self.conf[self.appName][self.env].template;
         var isXMLRequest    = local.request.isXMLRequest;
+        var protocol        = getResponseProtocol(res);
+        var stream          = ( /http\/2/.test(protocol) ) ? res.stream : null;
+        var header          = ( /http\/2/.test(protocol) ) ? {} : null;        
+        var err             = null;
+        var bundleConf      = self.conf[self.appName][self.env];
         
-        var err = null;
         if ( typeof(msg) != 'object' ) {
             err = {
                 code: code,
@@ -2507,7 +2548,7 @@ function Server(options) {
         
         if (!res.headersSent) {
             res.headersSent = true;
-            
+                        
             if (isXMLRequest || !withViews || !isUsingTemplate ) {
                 // allowing this.throwError(err)
                 
@@ -2518,26 +2559,61 @@ function Server(options) {
 
                 // Internet Explorer override
                 if ( /msie/i.test(local.request.headers['user-agent']) ) {
-                    res.writeHead(code, "content-type", "text/plain")
+                    if ( /http\/2/.test(protocol) ) {
+                        header = {
+                            ':status': code,
+                            'content-type': 'text/plain; charset='+ bundleConf.encoding
+                            //'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
+                        };
+                    } else {
+                        res.writeHead(code, 'content-type', 'text/plain; charset='+ bundleConf.encoding)
+                    }
+                    
                 } else {
-                    res.writeHead(code, { 'content-type': 'application/json'} )
+                    if ( /http\/2/.test(protocol) ) {
+                        header = {
+                            ':status': code,
+                            'content-type': 'application/json; charset='+ bundleConf.encoding
+                        };
+                    } else {
+                        res.writeHead(code, { 'content-type': 'application/json; charset='+ bundleConf.encoding } )
+                    }
                 }
 
                 console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url +'\n'+ msg);
-                return res.end(JSON.stringify({
-                    status: code,
-                    error: msg
-                }));
-                //res.headersSent = true
+                
+                if ( /http\/2/.test(protocol) ) {
+                    stream.respond(header);
+                    stream.end(msg);
+                    return;
+                } else {
+                    return res.end(JSON.stringify({
+                        status: code,
+                        error: msg
+                    }));
+                }
+                
+                
             } else {
-                res.writeHead(code, { 'content-type': 'text/html'} );
-                console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
-                return res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
-                //res.headersSent = true
-            }
-        } else {
-                        
-            if (typeof(next) != 'undefined')
+                
+                //console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);                
+                console.error(local.request.method +' [ '+code+' ] '+ local.request.url);  
+                if ( /http\/2/.test(protocol) ) {
+                    stream.respond({
+                        ':status': code,
+                        'content-type': 'text/html; charset='+ bundleConf.encoding
+                        //'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
+                    });
+                    stream.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                    return;
+                } else {
+                    res.writeHead(code, { 'content-type': 'text/html; charset='+ bundleConf.encoding } )
+                    return res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                }
+            }            
+            
+        } else {                        
+            if ( typeof(next) != 'undefined' )
                 return next();
             else
                 return;
