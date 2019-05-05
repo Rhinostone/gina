@@ -88,6 +88,18 @@ function SuperController(options) {
     var hasViews = function() {
         return ( typeof(local.options.template) != 'undefined' ) ? true : false;
     }
+    
+    this.getRequestObject = function() {
+        return local.req;
+    }
+    
+    this.getResponseObject = function() {
+        return local.res;
+    }
+    
+    this.getNextCallback = function() {
+        return local.next;
+    }
 
     /**
      * Check if env is running cacheless
@@ -1639,86 +1651,18 @@ function SuperController(options) {
             
             // response.on('end', function onResponsePipeEnd(){
                 
-                
+            //     //self.renderJSON({ url: url});
             //     //local.res.end( Buffer.from(data) );
-            //     local.res.headersSent = true;       
+            //     //local.res.headersSent = true;       
                 
-            //     if ( typeof(local.next) != 'undefined')
-            //         local.next();
-            //     else
-            //         return;
+            //     // if ( typeof(local.next) != 'undefined')
+            //     //     local.next();
+            //     // else
+            //     //     return;
             // });
             
             response.pipe(local.res);
             return;
-            
-            
-            /**
-            var data = '', dataLength = 0;
-            
-            
-            response.on('data', (chunk) => {
-                data += chunk;
-                dataLength += chunk.length;
-            });
-            
-            response.on('end', () => {
-                
-                local.res.setHeader('content-type', contentType);
-                local.res.setHeader('content-Disposition', opt.contentDisposition);     
-                local.res.setHeader('content-length', dataLength);  
-                
-                // var data = 'toto la menace';
-                // local.res.setHeader('content-type', 'text/plain');
-                // //local.res.setHeader('content-length', data.length);  
-                // local.res.setHeader('content-disposition', 'attachment; filename=test.txt');          
-                
-                local.res.end( Buffer.from(data) );
-                
-                local.res.headersSent = true;       
-                
-                if ( typeof(local.next) != 'undefined')
-                    local.next();
-                else
-                    return;
-            });*/
-            
-            
-            
-        //     response.pipe(file);
-
-        //     file
-        //         .on('finish', function() {
-        //             file.close( function onDownloaded(){
-                        
-                    
-        //             local.res.setHeader('content-type', contentType);
-        //             local.res.setHeader('content-disposition', opt.contentDisposition);            
-                    
-        //             local.res.end(  )
-        //             // var filestream = fs.createReadStream(filename);
-        //             // filestream.pipe(local.res);
-
-                    
-        //             // if (fs.existsSync(target))
-        //             //     fs.unlinkSync(target);
-
-        //             // fs.writeFile(target, JSON.stringify(newFonts), function onWrite(err) {
-        //             //     if (err) {
-        //             //         console.error('[ controller ] [ downloadFromURL ] ' + err.stack);
-        //             //     } else {
-        //             //         fs.unlinkSync(tmp);
-        //             //         console.info('[ controller ] [ downloadFromURL ] Fonts download complete');  
-        //             //     }
-        //             // })
-
-        //         });
-        //     });
-        // })
-        // .on('error', function(err) {
-        //     console.error('[ controller ] [ downloadFromURL ] '+ err.stack );
-        //     fs.unlinkSync(tmp);
-        //     self.throwError(local.res, 500, err);
         });
         
         return;

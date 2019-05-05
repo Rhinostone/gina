@@ -80,7 +80,7 @@ window['onGinaLoaded']  = function(gina) {
         gina["forms"]                   = JSON.parse('{{ JSON.stringify(page.forms) }}');
 
         // making adding css to the head
-        var link        = null, cssPath = "js/vendor/gina/gina.min.css";
+        var link        = null, cssPath = "css/vendor/gina/gina.min.css";
         
         // check if css has not been added yet
         var links       = document.head.getElementsByTagName('link')
@@ -99,7 +99,7 @@ window['onGinaLoaded']  = function(gina) {
         
         if (!found) { // add css           
             link            = document.createElement('link');
-            link.href       = ((options['webroot'] !== '/') ? options['webroot'] + '/' : options['webroot']) + cssPath;
+            link.href       = options['webroot'] + cssPath;
             link.media      = "screen";
             link.rel        = "stylesheet";
             link.type       = "text/css";

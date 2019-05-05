@@ -339,7 +339,7 @@ function Couchbase(conn, infos) {
             var queryString = 'INSERT INTO '+ this.database +' (KEY, VALUE)';
             for (var id in rec) {
                 if ( typeof(rec[id].values) == 'undefined' )
-                    throw new Error('rec["'+ id +'"].values not found !');
+                    throw new Error('rec["'+ id +'"].values not found ! Please inspect your record root: type must be an Array.');
 
                 if ( typeof(rec[id].values.id) == 'undefined' )
                     rec[id].values.id = id;

@@ -18,7 +18,7 @@
         "media"   : "screen",
         "rel"     : "stylesheet",
         "type"    : "text/css",
-        "url"     : "/js/vendor/gina/gina.min.css"
+        "url"     : "/css/vendor/gina/gina.min.css"
       }
     ],
     "javascriptsDeferEnabled": true, // will place scripts in defer mode in the head by default. If false, will place in the footer
