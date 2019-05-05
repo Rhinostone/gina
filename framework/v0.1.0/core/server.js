@@ -1126,7 +1126,8 @@ function Server(options) {
                 if (cacheless) {
                     // source maps integration for javascript & css
                     if ( /(.js|.css)$/.test(asset.filename) && fs.existsSync(asset.filename +'.map') ) {
-                        pathname = asset.filename +'.map';
+                        //pathname = asset.filename +'.map';
+                        pathname = headers[':path'] +'.map';    
                         // serve without cache
                         header['X-SourceMap'] = pathname;
                         header['cache-control'] = 'no-cache, no-store, must-revalidate';
@@ -1454,7 +1455,8 @@ function Server(options) {
                                 if (cacheless) {
                                     // source maps integration for javascript & css
                                     if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') && !/sourceMappingURL/.test(file) ) {
-                                        pathname = pathname +'.map';
+                                        //pathname = pathname +'.map';
+                                        pathname = webroot + pathname.substr(1) +'.map';
                                         // serve without cache
                                         header['X-SourceMap'] = pathname;
                                         header['cache-control'] = 'no-cache, no-store, must-revalidate';
@@ -1488,7 +1490,8 @@ function Server(options) {
                                 if (cacheless) {
                                     // source maps integration for javascript & css
                                     if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') && !/sourceMappingURL/.test(file) ) {
-                                        pathname = pathname +'.map'
+                                        //pathname = pathname +'.map'
+                                        pathname = webroot + pathname.substr(1) +'.map';
                                         response.setHeader("X-SourceMap", pathname)
                                     }
 

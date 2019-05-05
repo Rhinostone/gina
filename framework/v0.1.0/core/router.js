@@ -256,48 +256,7 @@ function Router(env) {
             controller.name = options.control;            
             controller.serverInstance = serverInstance;
             controller.setOptions(request, response, next, options);
-                       
-
-            if (hasSetup && isSetupRequired(params.param.control) ) { // adding setup
-                
-                // if ( !isSetupRequired(params.param.control) ) {
-                //     controller.setup = function() { this._setupDone = true;  return };                                      
-                // } else {
-                    controller.setup = function(request, response, next) {
-                        if (!this._setupDone) {
-                            this._setupDone = true;
-                            return function (request, response, next) { // getting rid of the controller context
-                                var Setup = require(_(setupFile, true));
-    
-                                // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
-                                // inheriting SuperController functions & objects
-    
-                                // exporting config & common methods
-                                Setup.engine                = controller.engine;
-                                Setup.getConfig             = controller.getConfig;
-                                Setup.getLocales            = controller.getLocales;
-                                Setup.getFormsRules         = controller.getFormsRules;
-                                Setup.throwError            = serverInstance.throwError;
-                                Setup.redirect              = controller.redirect;
-                                Setup.render                = controller.render;
-                                Setup.renderJSON            = controller.renderJSON;
-                                Setup.renderWithoutLayout   = controller.renderWithoutLayout
-                                Setup.isXMLRequest          = controller.isXMLRequest;
-                                Setup.isWithCredentials     = controller.isWithCredentials,
-                                Setup.isCacheless           = controller.isCacheless;
-    
-                                Setup.apply(Setup, arguments);
-    
-                                return Setup;
-                            }(request, response, next)
-                        }
-                    }    
-                //} 
-            } else {
-                controller.setup = function() { return };
-            }
-
-
+            
             /**
              * requireController
              * Allowing another controller (public methods) to be required inside the current controller
@@ -307,8 +266,8 @@ function Router(env) {
              *
              * @return {object} controllerInstance
              * */
-
-            controller.requireController = function (namespace, options) {
+            
+            var requireController = function (namespace, options) {
 
                 var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
                 var corePath    = getPath('gina').core;
@@ -356,7 +315,9 @@ function Router(env) {
                         controller = new RequiredController();
                     }
                     
-                    controller.serverInstance = serverInstance;                    
+                    controller.serverInstance = serverInstance;       
+                    
+                    controller.requireController = requireController;
                                         
                     return controller
 
@@ -364,6 +325,50 @@ function Router(env) {
                     serverInstance.throwError(response, 500, err );
                 }
             }
+            
+            controller.requireController = requireController;
+
+            if (hasSetup && isSetupRequired(params.param.control) ) { // adding setup
+                
+                // if ( !isSetupRequired(params.param.control) ) {
+                //     controller.setup = function() { this._setupDone = true;  return };                                      
+                // } else {
+                    controller.setup = function(request, response, next) {
+                        if (!this._setupDone) {
+                            this._setupDone = true;
+                            return function (request, response, next) { // getting rid of the controller context
+                                var Setup = require(_(setupFile, true));
+    
+                                // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
+                                // inheriting SuperController functions & objects
+    
+                                // exporting config & common methods
+                                Setup.engine                = controller.engine;
+                                Setup.getConfig             = controller.getConfig;
+                                Setup.getLocales            = controller.getLocales;
+                                Setup.getFormsRules         = controller.getFormsRules;
+                                Setup.throwError            = serverInstance.throwError;
+                                Setup.redirect              = controller.redirect;
+                                Setup.render                = controller.render;
+                                Setup.renderJSON            = controller.renderJSON;
+                                Setup.renderWithoutLayout   = controller.renderWithoutLayout
+                                Setup.isXMLRequest          = controller.isXMLRequest;
+                                Setup.isWithCredentials     = controller.isWithCredentials,
+                                Setup.isCacheless           = controller.isCacheless;
+                                Setup.requireController     = controller.requireController;
+    
+                                Setup.apply(Setup, arguments);
+    
+                                return Setup;
+                            }(request, response, next)
+                        }
+                    }    
+                //} 
+            } else {
+                controller.setup = function() { return };
+            }
+
+
 
             if (middleware.length > 0) {
                 processMiddlewares(middleware, controller, action, request, response, next,
@@ -472,6 +477,7 @@ function Router(env) {
                         Middleware.prototype.isXMLRequest           = controller.isXMLRequest;
                         Middleware.prototype.isWithCredentials      = controller.isWithCredentials;
                         Middleware.prototype.isCacheless            = controller.isCacheless;
+                        Middleware.prototype.requireController      = controller.requireController;
 
                         return Middleware;
                     }(req, res, next)

@@ -38,7 +38,7 @@ Locate `/node_modules/gina/core/asset/js/plugin/gina`.
 N.B.: replace ${project} by your project path.
 
 ```tty
-$ cd /usr/local/node_modules/gina/node_modules/gina/core/asset/js/plugin
+$ cd /usr/local/node_modules/gina/node_modules/gina/framework/v.0.1.0/core/asset/js/plugin
 ```
 
 You should see at this point a file named `build.json`.
@@ -65,7 +65,7 @@ sass --no-cache --update sass/toolbar.sass:css/toolbar.css css/toolbar.css;css/t
 
 ### Building CSS assets
 
-> ** N.B.: ** The <LINK> `/js/vendor/gina/gina.min.css` will be added through the 
+> ** N.B.: ** The <LINK> `/css/vendor/gina/gina.min.css` will be added through the 
  `gina.onload` <event>.
  For more this topic, checkout `gina/core/asset/js/plugin/src/loader/main.js`
 
@@ -92,7 +92,7 @@ You can add to your layout the following tag :
 <script type="text/javascript" src="{{ '/js/vendor/gina.min.js' | getUrl() }}"></script>
 ```
 
-Or you can add to you `/config/views.json` the library path.
+Or you can add to you `/config/templates.json` the library path.
 
 GFF will be made available on load through the global variable `gina`.
 
