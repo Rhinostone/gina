@@ -1866,7 +1866,7 @@ function SuperController(options) {
         if (local.options.renderingStack.length > 1) {
             return false
         }
-
+       
         var queryData           = {}
             , defaultOptions    = local.query.options
             , path              = options.path
@@ -2319,6 +2319,13 @@ function SuperController(options) {
             [HTTP2_HEADER_METHOD]: options[':method'],
             [HTTP2_HEADER_PATH]: options[':path'] 
         }, options.headers);
+        
+        // merging with user options
+        for (var o in options) {
+            if (!/^\:/.test(o) && !/headers/.test(o) && typeof(newOptions[o]) == 'undefined' ) {
+                newOptions[o] = options[o]
+            }
+        }
         
         //newOptions.endStream = false;
         var req = client.request( newOptions );
