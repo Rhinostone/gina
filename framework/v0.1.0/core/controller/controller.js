@@ -1807,8 +1807,10 @@ function SuperController(options) {
         method  : 'GET', // POST | GET | PUT | DELETE
         keepAlive: true,
         auth: undefined, // use `"username:password"` for basic authentification
+
         // set to false to ignore certificate verification when requesting on https (443)
         rejectUnauthorized: true,
+
         headers: {
             'content-type': 'application/json',
             'content-length': local.query.data.length
@@ -2218,6 +2220,7 @@ function SuperController(options) {
         } else {
             options[':authority'] = options.hostname;
         }*/
+        debugger;
         options[':authority'] = options.hostname;
         
         delete options.host;
