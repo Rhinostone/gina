@@ -2220,7 +2220,7 @@ function SuperController(options) {
         } else {
             options[':authority'] = options.hostname;
         }*/
-        debugger;
+        
         options[':authority'] = options.hostname;
         
         delete options.host;
