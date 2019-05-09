@@ -1865,6 +1865,9 @@ function ValidatorPlugin(rules, data, formId) {
             , $inputs   = $target.getElementsByTagName('input')
             // select
             , $select   = $target.getElementsByTagName('select')
+            , formElementGroup = {}
+            , formElementGroupTmp = null
+            , formElementGroupItems = {}
         ;
 
         var elId = null;
@@ -1880,6 +1883,32 @@ function ValidatorPlugin(rules, data, formId) {
                     id: elId,
                     name: $inputs[f].name || null,
                     value: $inputs[f].value || null
+                }
+            }
+            
+            formElementGroupTmp = $inputs[f].getAttribute('data-gina-form-element-group');
+            if (formElementGroupTmp) {
+                formElementGroup[ $inputs[f].name ] = new RegExp('^'+formElementGroupTmp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+                if (withRules) {
+                    if ( typeof($form.rules[ $inputs[f].name ]) == 'undefined') {
+                        $form.rules[ $inputs[f].name ] = {}
+                    }
+                    $form.rules[ $inputs[f].name ].exclude = true;
+                }
+            }
+            
+            if ( formElementGroup.count() > 0 ) {
+                for ( var g in formElementGroup ) {
+                    if ($inputs[f].name == g) continue;
+                    
+                    if ( formElementGroup[g].test($inputs[f].name) ) {
+                        
+                        $inputs[f].disabled = true;
+                        if ( typeof(formElementGroupItems[ g ]) == 'undefined' ) {
+                            formElementGroupItems[ g ] = {}
+                        }
+                        formElementGroupItems[ g ][ $inputs[f].name ] = $inputs[f];
+                    }
                 }
             }
         }
@@ -1959,6 +1988,28 @@ function ValidatorPlugin(rules, data, formId) {
                     $el.setAttribute('data-value', 'true');
                     
             }
+            
+            // group dependencies handling
+            if ( $el.getAttribute('data-gina-form-element-group') ) {
+                var elGroup = formElementGroupItems[$el.name];
+                for ( var item in elGroup ) {  
+                    if (withRules && typeof($form.rule[item]) == 'undefined' ) { 
+                        $form.rule[item] = {}
+                    }                  
+                    if ( /^true$/.test($el.value) ) {
+                        elGroup[item].disabled = false;
+                        if (withRules) {
+                            $form.rules[item].exclude = false;
+                        }
+                    } else {
+                        elGroup[item].disabled = true;
+                        if (withRules) {
+                            $form.rules[item].exclude = true;
+                        }
+                    }
+                }
+            }
+            
         };
 
         var radioGroup = null;

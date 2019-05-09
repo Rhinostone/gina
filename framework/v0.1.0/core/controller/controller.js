@@ -1807,7 +1807,8 @@ function SuperController(options) {
         method  : 'GET', // POST | GET | PUT | DELETE
         keepAlive: true,
         auth: undefined, // use `"username:password"` for basic authentification
-        rejectUnauthorized: null, // false to ignore verification when requesting on https (443)
+        // set to false to ignore certificate verification when requesting on https (443)
+        rejectUnauthorized: true,
         headers: {
             'content-type': 'application/json',
             'content-length': local.query.data.length
