@@ -278,7 +278,7 @@ function Proc(bundle, proc, usePidFile){
             ;
 
             for (var p in process.list) {
-                if ( typeof(process.list[p]) == 'undefined' )
+                if ( typeof(process.list[p]) == 'undefined' || process.list[p] == null )
                     continue;
                     
                 if ( process.list[p].pid == pid && process.list[p].name != 'gina' ) {
