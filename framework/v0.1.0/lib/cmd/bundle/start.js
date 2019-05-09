@@ -127,7 +127,7 @@ function Start(opt, cmd) {
                             if (!opt.client.destroyed)
                                 opt.client.emit('end');                                                        
                         }
-                    }, 2000)
+                    }, 4000)
                     
                     var checkCaseCount = 2, checkCaseRe = new RegExp('('+bundle + '@' + self.projectName + ' mounted !|Bundle started !)', 'i');
                     var port = '', errorFound = false;                    
