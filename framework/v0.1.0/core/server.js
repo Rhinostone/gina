@@ -1586,11 +1586,24 @@ function Server(options) {
             var staticProps = {
                 isStaticFilename: false
             };
+            
             if (!isWebrootHandledByRouting) {
                 
                 staticProps.firstLevel          = '/' + request.url.split(/\//g)[1] + '/';
+                
                 // to be considered as a stativ content, url must content at least 2 caracters after last `.`: .js, .html are ok
-                staticProps.isStaticFilename    = /(\.([A-Za-z0-9]+){2}|\/)$/.test(request.url);
+                var ext = request.url.match(/(\.([A-Za-z0-9]+){2}|\/)$/);                
+                if ( 
+                    ext != null 
+                    // and must not be an email
+                    && !/^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(request.url)
+                    // and must be handled by mime.types
+                    &&  typeof(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext[0].substr(1)]) != 'undefined' 
+                ) {                    
+                    staticProps.isStaticFilename = true
+                }
+                
+                //staticProps.isStaticFilename    = /(\.([A-Za-z0-9]+){2}|\/)$/.test(request.url);
             }
             
                  

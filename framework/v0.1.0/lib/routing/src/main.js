@@ -35,6 +35,14 @@ function Routing() {
     self.allowedMethods         = ['get', 'post', 'put', 'delete'];
     self.allowedMethodsString   = self.allowedMethods.join(',');
     
+    // loading plugins
+    var plugins = null, Validator = null;
+    if (!isGFFCtx) {
+        plugins = require(__dirname+'/../../../core/plugins') || getContext('gina').plugins;
+        Validator = plugins.Validator;
+    }
+    
+    
     /**
      * Load bundle routing configuration
      * 
@@ -188,7 +196,7 @@ function Routing() {
      * @private
      * */
     var fitsWithRequirements = function(urlVar, urlVal, params, request) {
-        
+        //var isValid = new Validator('routing', { email: "m.etouman@wics"}, null, {email: {isEmail: true}} ).isEmail().valid;
         var matched     = -1
             , _param    = urlVar.match(/\:\w+/g)
             , regex     = new RegExp(urlVar, 'g')
@@ -196,8 +204,16 @@ function Routing() {
             , re        = null
             , flags     = null
             , key       = null
-            , tested    = false;
-
+            , tested    = false
+            
+            , _validator    = null
+            , _data         = null
+            , _ruleObj      = null
+            , _rule         = null
+            , rule          = null
+            , str           = null
+        ;
+        
         if (!_param.length) return false;
 
         //  if custom path, path rewrite
@@ -216,7 +232,22 @@ function Routing() {
         }
 
         if (_param.length == 1) {// fast one
+            
+            re = new RegExp( _param[0]);
             matched = (_param.indexOf(urlVar) > -1) ? _param.indexOf(urlVar) : false;
+            
+            if (matched === false ) {
+                // In order to support rules defined like :
+                //      { params.url }  => `/section/:name/page:number`
+                //      { request.url } => `/section/plante/page4`
+                //
+                //      with keys = [ ":name", ":number" ]
+                
+                if ( urlVar.match(re) ) {
+                    matched = 0;
+                }
+            }
+            
 
             if (matched === false) return matched;
             // filter on method
@@ -230,6 +261,30 @@ function Routing() {
                 flags   = regex.replace('/' + re + '/', '');                
 
                 tested  = new RegExp(re, flags).test(urlVal)
+            } else if ( /^validator\:\:/.test(regex) ) {
+                /**
+                 * "requirements" : {
+                 *      "id" : "/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i",
+                 *      "email": "validator::{ isEmail: true, isString: [7] }"
+                 *  }
+                 * 
+                 * e.g.: tested = new Validator('routing', _data, null, {email: {isEmail: true}} ).isEmail().valid;
+                 */ 
+                _data = {}; _ruleObj = {}; _rule = {}; str = '';                
+                urlVar.replace( new RegExp('[^'+ key +']','g'), function(){ str += arguments[0]  });                
+                _data[key]  = urlVal.replace( new RegExp(str, 'g'), '');
+                _ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));       
+                _rule[key]  = _ruleObj;                
+                _validator  = new Validator('routing', _data, null, _rule );
+                
+                for (rule in _ruleObj) {
+                    if (Array.isArray(_ruleObj[rule])) { // has args
+                        _validator[key][rule].apply(_validator[key], _ruleObj[rule])
+                    } else {
+                        _validator[key][rule](_ruleObj[rule])
+                    }                    
+                }
+                tested = _validator.isValid();
             } else {
                 tested = new RegExp(params.requirements[key]).test(urlVal)
             }
@@ -280,8 +335,32 @@ function Routing() {
 
                         tested = new RegExp(re, flags).test(urlVal)
 
+                    } else if ( /^validator\:\:/.test(regex) ) {
+                        /**
+                         * "requirements" : {
+                         *      "id" : "/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i",
+                         *      "email": "validator::{ isEmail: true, isString: [7] }"
+                         *  }
+                         * 
+                         * e.g.: tested = new Validator('routing', _data, null, {email: {isEmail: true}} ).isEmail().valid;
+                         */ 
+                        _data = {}; _ruleObj = {}; _rule = {}; str = '';                
+                        urlVar.replace( new RegExp('[^'+ key[0] +']','g'), function(){ str += arguments[0]  });                
+                        _data[key[0]]  = urlVal.replace( new RegExp(str, 'g'), '');
+                        _ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));       
+                        _rule[key[0]]  = _ruleObj;                
+                        _validator  = new Validator('routing', _data, null, _rule );
+                        
+                        for (rule in _ruleObj) {
+                            if (Array.isArray(_ruleObj[rule])) { // has args
+                                _validator[key[0]][rule].apply(_validator[key[0]], _ruleObj[rule])
+                            } else {
+                                _validator[key[0]][rule](_ruleObj[rule])
+                            }                    
+                        }
+                        tested = _validator.isValid();
                     } else {
-                        tested = new RegExp(params.requirements[key]).test(urlVal)
+                        tested = new RegExp(params.requirements[key[0]]).test(urlVal)
                     }
 
                     if (tested) {

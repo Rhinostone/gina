@@ -265,8 +265,7 @@ function FormValidatorUtil(data, $fields) {
                 , isMaxLength   = true
                 , errors        = {}
                 ;
-
-
+            
             // test if val is a number
             try {
                 // if val is a string replaces comas by points
