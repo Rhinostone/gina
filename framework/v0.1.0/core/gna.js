@@ -25,7 +25,7 @@ var lib         = require('./../lib');
 var console     = lib.logger;
 var Proc        = lib.Proc;
 var locales     = require('./locales');
-var plugins     = lib.plugins;
+var plugins     = require('./../core/plugins');
 var modelUtil   = new lib.Model();
 
 

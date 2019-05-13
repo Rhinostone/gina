@@ -125,7 +125,7 @@ function ValidatorPlugin(rules, data, formId) {
 
         var $form = ( typeof(formId) != 'undefined' ) ? { 'id': formId } : null;
         var fields = {};
-
+        
         for (var field in data) {
             fields[field] = data[field]
         }
@@ -386,7 +386,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             triggerEvent(gina, $form, 'error.' + id, errors)
 
-            if ( typeof(window.ginaToolbar) == 'object' ) {
+            if ( isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
                 // update toolbar
                 if (!gina.forms.errors)
                     gina.forms.errors = {};
@@ -398,7 +398,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 window.ginaToolbar.update('forms', objCallback);
             }
-        } else if (typeof (window.ginaToolbar) == 'object') { // reset toolbar form errors
+        } else if ( isGFFCtx && typeof(window.ginaToolbar) == 'object') { // reset toolbar form errors
             if (!gina.forms.errors)
                 gina.forms.errors = {};
 
@@ -406,11 +406,11 @@ function ValidatorPlugin(rules, data, formId) {
                 id: id,
                 errors: {}
             };
-
-            window.ginaToolbar.update('forms', objCallback);
+            if (isGFFCtx)
+                window.ginaToolbar.update('forms', objCallback);
         }
 
-        if (gina && typeof (window.ginaToolbar) == "object" && data) {
+        if (gina && isGFFCtx && typeof(window.ginaToolbar) == "object" && data) {
             try {
                 // update toolbar
                 window.ginaToolbar.update('data-xhr', data);
@@ -2762,7 +2762,7 @@ function ValidatorPlugin(rules, data, formId) {
                 try {
                     data = formatData( d['toData']() );
 
-                    if ( typeof(window.ginaToolbar) == 'object' ) {
+                    if ( isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
                         // update toolbar
                         if (!gina.forms.sent)
                             gina.forms.sent = {};

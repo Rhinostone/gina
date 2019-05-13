@@ -47,7 +47,6 @@ function Stop(opt, cmd) {
         if (!isDefined('bundle', bundle)) {
             msg = 'Bundle [ ' + bundle + ' ] is not registered inside `@' + self.projectName + '`';
             console.error(msg);
-            opt.client.write(msg);
             end(opt, cmd, isBulkStop, bundleIndex, true)
 
         } else {
