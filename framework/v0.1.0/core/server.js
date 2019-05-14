@@ -1020,7 +1020,7 @@ function Server(options) {
         if (stream.headersSent) return;
         
         if ( !this._options.template ) {            
-            throwError(response, 500, 'Internal server error\n' + headers[':path'] + '\nNo template found');
+            throwError({stream: stream}, 500, 'Internal server error\n' + headers[':path'] + '\nNo template found');
         }
         
         var header = null, isWebroot = false, pathname = null;
@@ -1087,7 +1087,7 @@ function Server(options) {
             if ( new RegExp('^'+ conf.handlersPath).test(asset.filename) ) {
                 
                 if ( !fs.existsSync(asset.filename) ) {
-                    throwError(response, 404, 'Page not found: \n' + headers[':path']);   
+                    throwError({stream: stream}, 404, 'Page not found: \n' + headers[':path']);   
                     // header[':status'] = 404;
                     // //console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack|err.message|err));
                     // stream.respond(header);
@@ -1114,7 +1114,7 @@ function Server(options) {
                     } 
                     //console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack|err.message|err));
                     var msg = ( header[':status'] == 404 ) ? 'Page not found: \n' + asset.url :  'Internal server error\n' + (err.stack|err.message|err)
-                    throwError(response, header[':status'], msg);   
+                    throwError({stream: pushStream}, header[':status'], msg);   
                     // stream.respond(header);
                     // stream.end();
                     // return;
@@ -1149,7 +1149,7 @@ function Server(options) {
             });
         } else {
             //console.info(headers[':method'] +' [404] '+ headers[':path']);
-            throwError(response, 404, 'Page not found: \n' + headers[':path']);      
+            throwError({stream: stream}, 404, 'Page not found: \n' + headers[':path']);      
         }       
     }
     
