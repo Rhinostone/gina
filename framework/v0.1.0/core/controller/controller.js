@@ -237,6 +237,7 @@ function SuperController(options) {
             set('page.environment.port', options.conf.server.port);
             set('page.environment.pid', process.pid);
 
+            set('page.view.layout', local.options.template.layout);
             set('page.view.ext', ext);
             set('page.view.control', action);
             set('page.view.controller', local.options.controller.replace(options.conf.bundlesPath, ''), true);
@@ -2002,11 +2003,10 @@ function SuperController(options) {
             if ( !/http2/.test(httpLib) && /https/.test(options.scheme) ) {
                 httpLib += 's';
             }
-            //delete options.protocol;
+            
             browser = require(''+ httpLib);               
             
-            if ( /http2/.test(httpLib) ) {               
-                
+            if ( /http2/.test(httpLib) ) {
                 return handleHTTP2ClientRequest(browser, options, callback);
             } else {
                 return handleHTTP1ClientRequest(browser, options, callback);                
@@ -2214,13 +2214,7 @@ function SuperController(options) {
     
     var handleHTTP2ClientRequest = function(browser, options, callback) {
         
-        //cleanup
-        /**if ( typeof(options[':authority']) == 'undefined' && typeof(options.host) != 'undefined' ) {
-            options[':authority'] = options.host;            
-        } else {
-            options[':authority'] = options.hostname;
-        }*/
-        
+        //cleanup        
         options[':authority'] = options.hostname;
         
         delete options.host;
@@ -2262,8 +2256,8 @@ function SuperController(options) {
                 
         
         var body = Buffer.from(options.queryData);
-        options.headers['content-length'] = options.queryData.length;
-        
+        //options.headers['content-length'] = options.queryData.length;
+        options.headers['content-length'] = body.length;        
         delete options.queryData;
         
         
@@ -2289,7 +2283,8 @@ function SuperController(options) {
         });
         
         const {
-            HTTP2_HEADER_SCHEME,
+            HTTP2_HEADER_PROTOCOL,
+            HTTP2_HEADER_SCHEME,            
             HTTP2_HEADER_AUTHORITY,
             HTTP2_HEADER_PATH,
             HTTP2_HEADER_METHOD,
@@ -2318,25 +2313,39 @@ function SuperController(options) {
             options.headers['content-type'] = local.req.headers['content-type']
         }
         
-        var newOptions = merge({ 
+        var headers = merge({ 
             [HTTP2_HEADER_METHOD]: options[':method'],
             [HTTP2_HEADER_PATH]: options[':path'] 
         }, options.headers);
         
         // merging with user options
         for (var o in options) {
-            if (!/^\:/.test(o) && !/headers/.test(o) && typeof(newOptions[o]) == 'undefined' ) {
-                newOptions[o] = options[o]
+            if (!/^\:/.test(o) && !/headers/.test(o) && typeof(headers[o]) == 'undefined' ) {
+                headers[o] = options[o]
             }
         }
         
-        //newOptions.endStream = false;
-        var req = client.request( newOptions );
+        /**
+         * sessionOptions
+         * endStream <boolean> true if the Http2Stream writable side should be closed initially, such as when sending a GET request that should not expect a payload body.
+         * exclusive <boolean> When true and parent identifies a parent Stream, the created stream is made the sole direct dependency of the parent, with all other existing dependents made a dependent of the newly created stream. Default: false.
+         * parent <number> Specifies the numeric identifier of a stream the newly created stream is dependent on.
+         * weight <number> Specifies the relative dependency of a stream in relation to other streams with the same parent. The value is a number between 1 and 256 (inclusive).
+         * waitForTrailers <boolean> When true, the Http2Stream will emit the 'wantTrailers' event after the final DATA frame has been sent.
+         */
+        var sessionOptions = {}, endStream = true;
+        if (body.length > 0) {
+            endStream = false;
+            sessionOptions.endStream = endStream;
+        }
         
-
+        var req = client.request( headers, sessionOptions );
+        
         
         req.on('response', function onQueryResponse(headers, flags) {   
-            
+            for (const name in headers) {
+                console.debug(`${name}: ${headers[name]}`);
+            }
         });
         
         req.setEncoding('utf8');
@@ -2393,8 +2402,7 @@ function SuperController(options) {
                 } else {
                     self.emit('query#complete', err)
                 }
-                
-                //client.close();         
+                       
                 return
             }
             
@@ -2441,15 +2449,21 @@ function SuperController(options) {
         });
                
         
-        if (!/GET|DELETE/i.test(options[':method']))
+        // if (!/GET|DELETE/i.test(options[':method'])) {
+        //     req.end(body);
+        // }
+        
+        if (!endStream) {
             req.end(body);
+        }
+            
        
         
         return {
             onComplete  : function(cb) {
                 
                 self.once('query#complete', function(err, data){
-                    //client.close();  
+                     
                     if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
                         try {
                             data = JSON.parse(data)
@@ -2466,7 +2480,6 @@ function SuperController(options) {
                     } else {
                         cb(err, data)
                     }
-                    client.close();  
                 })
             }
         }

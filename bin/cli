@@ -44,7 +44,7 @@ try {
 
 // catching debug|inspect arg
 var debugPort           = null
-    , debugBrkEnabled   = null
+    , debugBrkEnabled   = false
     , params            = process.argv
 ;
 if ( params.length > 0 ) {
@@ -57,6 +57,7 @@ if ( params.length > 0 ) {
         }
     }
 }
+
 filterArgs();
 //check for $HOME path, alert if empty.
 var home = getUserHome();
@@ -134,7 +135,8 @@ if (
         debugPort       : debugPort,
         debugBrkEnabled : debugBrkEnabled,
         pack            : pack
-    })
+    });
+    
 
 } else if (
     typeof(process.argv[2]) != 'undefined'
@@ -148,6 +150,7 @@ if (
     //     process.argv[0] = process.argv[0].replace(/node$/, function(str){ return str+' --inspect-brk='+ debugPort });
     //     console.log('arg 0', process.argv[0]);
     // }
+    
     require(binPath + '/cmd')({
         binPath         : binPath,
         ginaPath        : ginaPath,

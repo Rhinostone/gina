@@ -1120,7 +1120,6 @@ function Config(opt) {
             "logsPath"      : conf[bundle][env].logsPath,
             "tmpPath"       : conf[bundle][env].tmpPath,
             "bundle"        : bundle,
-            //"host"          : conf[bundle][env].host,
             "version"       : getContext('gina').version
         };
         
@@ -1287,7 +1286,7 @@ function Config(opt) {
                     , url   = null
                 ;                   
                 for (var section in files['templates']) {
-                                                                                
+                                                                                                      
                     // updating javascripts & css order                        
                     noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.parse(JSON.stringify(files['templates'][section].javascripts)) : [];  
                     noneDefaultCss  = (files['templates'][section].stylesheets) ? JSON.parse(JSON.stringify(files['templates'][section].stylesheets)) : [];                                       
@@ -1383,8 +1382,9 @@ function Config(opt) {
                                 excludedType.push(ref);
                                 continue;
                             }
-                                                        
-                            files['templates'][section][ref] = files['templates']._common[ref];
+                            
+                            if ( typeof(files['templates'][section][ref]) == 'undefined' )
+                                files['templates'][section][ref] = files['templates']._common[ref];
                         }
                         
                         // removes common definitions from the common definitions from the current section

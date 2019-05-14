@@ -212,6 +212,15 @@ function ServerEngineClass(options) {
         });  
         
     }
+    
+    // server.on('stream', (stream, headers) => {
+    //     // stream is a Duplex
+    //     stream.respond({
+    //       'content-type': 'text/html',
+    //       ':status': 200
+    //     });
+    //     stream.end('<h1>Hello World</h1>');
+    //   });
 
     // All paths allowed
     server.all = function(path, cb) {

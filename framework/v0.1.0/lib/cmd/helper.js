@@ -18,6 +18,7 @@ function CmdHelper(cmd, client, debug) {
         reversePorts: null,
         projects: null
     };
+        
 
     // cmd properties list
     var self = {
@@ -104,6 +105,11 @@ function CmdHelper(cmd, client, debug) {
         
 
         for (var a in process.argv) {
+            
+             
+            if ( /^\-\-(inspect|debug)\-brk/.test(process.argv[a]) ) {
+                cmd.debugBrkEnabled = debug.brkEnabled = true;
+            }
 
             if ( process.argv[a].indexOf('--') > -1 && process.argv[a].indexOf('=') > -1) {
 
@@ -125,12 +131,14 @@ function CmdHelper(cmd, client, debug) {
                 else
                     cmd.nodeParams.push('--' + arr[0] +'='+ arr[1]);
 
+                
             } else if ( process.argv[a].indexOf('--') > -1 ) {
 
                 if ( cmdArguments.indexOf(process.argv[a]) > -1 )
                     cmd.params[ process.argv[a] ] = true;
                 else
-                    cmd.nodeParams.push(process.argv[a]);
+                    cmd.nodeParams.push(process.argv[a]);                    
+                
             }
         }
         

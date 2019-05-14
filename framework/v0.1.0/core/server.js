@@ -1622,6 +1622,7 @@ function Server(options) {
                 //|| staticProps.isStaticFilename && staticsArr.indexOf(staticProps.firstLevel) > -1
                 // take ^/dir/sub/*
                 || staticProps.isStaticFilename && new RegExp('^'+ staticProps.firstLevel).test(request.url)
+                || /\/$/.test(request.url) && !isWebrootHandledByRouting
             ) {
                 self._isStatic  = true;
                 self._referrer  = request.url;                

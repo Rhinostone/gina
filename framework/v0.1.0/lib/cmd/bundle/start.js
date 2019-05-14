@@ -18,14 +18,16 @@ function Start(opt, cmd) {
     , local     = {
         bundle      : null        
     };
+    
 
     var init = function(opt, cmd) {
+        
         // import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
         
+                
         // check CMD configuration
         if (!isCmdConfigured()) return false;
-        
               
         // start all bundles   
         opt.onlineCount = 0;   
@@ -111,7 +113,7 @@ function Start(opt, cmd) {
                     child.stdout.setEncoding('utf8');//Set encoding.
                     
                     // CMD Auto Exit
-                    var retry = 0, maxRetry = 15;
+                    var retry = 0, maxRetry = 15, maxTimeout = (self.debugBrkEnabled) ? 1200000 : 4000;
                     var timerId = setInterval(function() {
                         if (!isStarting ) {
                             ++retry;
@@ -127,7 +129,7 @@ function Start(opt, cmd) {
                             if (!opt.client.destroyed)
                                 opt.client.emit('end');                                                        
                         }
-                    }, 4000)
+                    }, maxTimeout);
                     
                     var checkCaseCount = 2, checkCaseRe = new RegExp('('+bundle + '@' + self.projectName + ' mounted !|Bundle started !)', 'i');
                     var port = '', errorFound = false;                    
