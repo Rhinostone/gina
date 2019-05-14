@@ -118,8 +118,7 @@ cmd.onExec = function(client, isFromFramework, opt) {
                 })
             })
         } else { // Offline CMD
-            init.onComplete( function done(err, run, opt){
-                
+            init.onComplete( function done(err, run, opt){                
                 run(opt)
             })
         }
