@@ -193,7 +193,7 @@ function Couchbase(conn, infos) {
                             , re                = null
                             , foundSpecialCase  = /\w+\.(\$|\%)/.test(queryString);
                             
-                        
+                        // e.g.: c.documentNextId.$2 = $3
                         if (foundSpecialCase) {
                             i = 0; len = args.length;
                             for (; i < len; ++i) {
@@ -201,6 +201,7 @@ function Couchbase(conn, infos) {
 
                                 re = new RegExp('(.*)\\.'+ inl[key].replace(/([$%]+)/, '\\$1'));
                                 if ( re.test(qStr) ) {
+                                    p[key] = args[i];
                                     qStr = qStr.replace( new RegExp('(.*)\\.'+ params[i].replace(/([$%]+)/, '\\$1')), '$1\.'+args[i]);
                                     inl.splice(key, 1);
                                 } else {
@@ -212,10 +213,10 @@ function Couchbase(conn, infos) {
 
                             index = 0; i = 0; len = p.length;
                             for (; i < len; ++i) {
-                                if ( typeof(p[i]) != 'undefined' ) {
+                                //if ( typeof(p[i]) != 'undefined' ) {
                                     queryParams[index] = p[i];
                                     ++index;
-                                }
+                                //}
                             }
 
                         } else { // normal case
