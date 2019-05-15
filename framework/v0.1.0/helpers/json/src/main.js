@@ -7,6 +7,7 @@
  */
 
  var fs = require('fs');
+ var console = require('./../../../lib/logger');
 /**
  * TextHelper
  *
@@ -36,7 +37,8 @@ module.exports = function(){
         try {
             jsonStr = fs.readFileSync(filename).toString();
         } catch (err) {
-            throw err
+            console.emerg(err.stack);
+            process.exit(1);
         }
         
         
@@ -62,8 +64,14 @@ module.exports = function(){
         
         try {      
             return JSON.parse(jsonStr)
-        } catch (err) {         
-            throw new Error('[ requireJSON ] could not parse `'+ filename +'`:\n\r' /*+ fs.readFileSync(filename).toString()*/ +'\n\rSomething is wrong arround this portion:\n\r<strong style="color:red">'+err.stack+'</strong><br>'+jsonStr+'<strong style="color:red">"</strong>\nPlease check your file: `'+ filename +'`'+ '\n');       
+        } catch (err) {        
+            var pos = err.stack.match(/position(\s|\s+)\d+/)[0].replace(/[^\d+]/g, '');            
+            jsonStr = jsonStr.substr(0, pos) + '--(ERROR !)--\n' + jsonStr.substr(pos);
+            var msg = (jsonStr.length > 400) ?  '...'+ jsonStr.substr(pos-200, 300) +'...' : jsonStr;
+            
+            var error = new Error('[ requireJSON ] could not parse `'+ filename +'`:' +'\n\rSomething is wrong arround this portion:\n\r'+msg+'<strong style="color:red">"</strong>\n\rPlease check your file: `'+ filename +'`'+ '\n\r<strong style="color:red">'+err.stack+'</strong>\n');       
+            console.emerg(error.message);
+            process.exit(1);
         }               
     };
    

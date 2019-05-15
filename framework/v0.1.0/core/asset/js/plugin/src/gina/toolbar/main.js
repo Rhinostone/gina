@@ -965,16 +965,28 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                 } else if ( Array.isArray(obj[i]) ) { // parse collection
 
                     
+                    
                     $parent = $('#gina-toolbar-view-' + id.substr(0, id.length - 1));
+                    
                     hasParent = ( $parent.length ) ? true : false;
-
+                    
                     if ( !hasParent || /^html/.test(id) ) {                        
-                        id = id + i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
-                        $root
-                            .find('.gina-toolbar-properties')
-                            .append('<li class="gina-toolbar-collection"><a class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i.replace(/[^A-Za-z0-9_-]/g, '_'), id.substr(0, id.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $root.find('.gina-toolbar-properties'), section) +'</ul></li>');
+                        
+                        $parent = $('.' + id);
+                        parentId = id + i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
 
+                        $parent
+                            //.find('ul.'+ id.substr(0, id.length - 1))
+                            .append('<li class="gina-toolbar-collection"><a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i.replace(/[^A-Za-z0-9_-]/g, '_'), parentId.substr(0, parentId.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul> '+ parseCollection(obj[i], ginaObj[i], parentId, $parent.find('li ul.'+ id.substr(0, id.length - 1)), section )+'</ul></li>');
 
+                        
+                        //parentId = parentId.substr(0, parentId.length - 1)+ '-';
+                        //parentId = id.substr(0, id.length - i.length - 1);     
+                        //parseView(obj[i], ginaObj[i], parentId, elIsXHR, $parent.find('ul.'+ parentId.substr(0, parentId.length - 1)), $root );
+
+                        //id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
+                        //$parent = $('#gina-toolbar-view-' + id.substr(0, id.length - 1));
+                        id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
                     } else {                       
                         
                         
@@ -985,7 +997,28 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                             .append('<li class="gina-toolbar-collection"><a class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i.replace(/[^A-Za-z0-9_-]/g, '_'), parentId.substr(0, parentId.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $parent.find('li ul.'+ id.substr(0, id.length - 1)), section ) +'</ul></li>');
 
                         id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
+                        
                     }
+                    
+
+                    // if ( !hasParent || /^html/.test(id) ) {                        
+                    //     id = id + i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
+                    //     $root
+                    //         .find('.gina-toolbar-properties')
+                    //         .append('<li class="gina-toolbar-collection"><a class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i.replace(/[^A-Za-z0-9_-]/g, '_'), id.substr(0, id.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $root.find('.gina-toolbar-properties'), section) +'</ul></li>');
+
+
+                    // } else {                       
+                        
+                        
+                    //     parentId = id + i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
+
+                    //     $parent
+                    //         .find('li.'+ id.substr(0, id.length - 1) +' ul')
+                    //         .append('<li class="gina-toolbar-collection"><a class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i.replace(/[^A-Za-z0-9_-]/g, '_'), parentId.substr(0, parentId.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $parent.find('li ul.'+ id.substr(0, id.length - 1)), section ) +'</ul></li>');
+
+                    //     id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
+                    // }
 
                     // clear one level
                     id = id.substr(0, id.length - i.length - 1);
