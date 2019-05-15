@@ -528,7 +528,8 @@ function SuperController(options) {
                         if ( !route || typeof(route) == 'undefined') {
                             route = local.options.rule
                         }
-
+                        
+                        config = {};
                         if (/\@/.test(route) && typeof(base) == 'undefined') {
                             var r = route.split(/\@/);
                             route = r[0];
@@ -536,12 +537,14 @@ function SuperController(options) {
                         }
 
                         // setting default config
-                        config          = local.options.conf;
+                        config          = merge(config,local.options.conf);
                         hostname        = '';
                         wroot           = config.server.webroot;
                         isStandalone    = (config.bundles.length > 1) ? true : false;
                         isMaster        = (config.bundles[0] === config.bundle) ? true : false;
                         routing         = config.routing;
+                        
+                        
                         
 
                         if ( typeof(base) != 'undefined' ) {
@@ -1559,6 +1562,8 @@ function SuperController(options) {
     this.downloadFromURL = function(url, options) {
         
         var defaultOptions = { 
+            // file name i  you want to rename the file
+            file: null,
             // only if you want to store locally the downloaded file
             toLocalDir: false, // this option will disable attachment download
             // content-disposition (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Disposition)
@@ -1580,7 +1585,7 @@ function SuperController(options) {
         
         var requestOptions = {};
         for (var o in opt) {
-            if ( !/(toLocalDir|contentDisposition|contentType)/.test(o) )
+            if ( !/(toLocalDir|contentDisposition|contentType|file)/.test(o) )
                 requestOptions[o] = opt[o];
         }
 
@@ -1619,10 +1624,13 @@ function SuperController(options) {
         if ( !/\.\w+$/.test(filename) )
                 self.throwError(local.res, 500, new Error('[ '+ filename +' ] Extension not found.'));
         
+        // filename renaming
+        if (opt.file)
+            filename = opt.file;
+        
         if ( opt.contentDisposition == 'attachment') {
             opt.contentDisposition += '; filename=' + filename;
         }
-            
         
         var ext             = filename.match(/\.\w+$/)[0].substr(1)
             , contentType   = null
