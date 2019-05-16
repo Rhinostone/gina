@@ -54,7 +54,8 @@ function FormValidatorUtil(data, $fields) {
         'isString': 'Must be a string',
         'isStringLength': 'Must have %s characters',
         'isStringMinLength': 'Should be at least %s characters',
-        'isStringMaxLength': 'Should not be more than %s characters'
+        'isStringMaxLength': 'Should not be more than %s characters',
+        'isJsonWebToken': 'Must be a valid JSON Web Token'
     };
 
     if (!data) {
@@ -206,6 +207,31 @@ function FormValidatorUtil(data, $fields) {
             return self[this['name']]
         }
 
+        self[el]['isJsonWebToken'] = function() {
+
+
+            this.value      = local['data'][this.name] = this.value.toLowerCase();
+
+            var rgx         = /^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$/;
+            var isValid     = rgx.test(this['value']) ? true : false;
+            var errors      = self[this['name']]['errors'] || {};
+
+            if ( !errors['isRequired'] && this.value == '' ) {
+                isValid = true;
+            }
+
+            if (!isValid) {
+                errors['isJsonWebToken'] = replace(this['error'] || local.errorLabels['isJsonWebToken'], this)
+            }
+
+            this.valid = isValid;
+
+            if ( errors.count() > 0 )
+                this['errors'] = errors;
+
+            return self[this['name']]
+        }
+        
         /**
          * Check if boolean and convert to `true/false` booloean if value is a string or a number
          * Will include `false` value if isRequired

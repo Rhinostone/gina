@@ -2271,24 +2271,7 @@ function SuperController(options) {
         
                 
         const client = browser.connect(options.hostname, options);        
-        
-        client.on('error', (err) => {
-            
-            console.error( '`'+ options[':path']+ '` : '+ err.stack||err.message);
-           
-            if ( typeof(callback) != 'undefined' ) {
-
-                callback(err)
-
-            } else {
-                var data = {
-                    status    : 500,
-                    error     : err.stack || err.message
-                };
-
-                self.emit('query#complete', data)
-            }
-        });
+                
         
         const {
             HTTP2_HEADER_PROTOCOL,
@@ -2347,23 +2330,10 @@ function SuperController(options) {
             sessionOptions.endStream = endStream;
         }
         
-        var req = client.request( headers, sessionOptions );
         
-        
-        req.on('response', function onQueryResponse(headers, flags) {   
-            for (const name in headers) {
-                console.debug(`${name}: ${headers[name]}`);
-            }
-        });
-        
-        req.setEncoding('utf8');
-        var data = '';
-        req.on('data', function onQueryDataChunk(chunk) { 
-            data += chunk; 
-        });
-        
-        req.on('error', function onQueryError(error) {
-
+        client.on('error', (error) => {
+            
+            console.error( '`'+ options[':path']+ '` : '+ error.stack||error.message);
             if ( 
                 typeof(error.cause) != 'undefined' && typeof(error.cause.code) != 'undefined' && /ECONNREFUSED|ECONNRESET/.test(error.cause.code) 
                 || /ECONNREFUSED|ECONNRESET/.test(error.code) 
@@ -2372,100 +2342,133 @@ function SuperController(options) {
                 var port = getContext('gina').ports[options.protocol][options.scheme.replace(/\:/, '')][ options.port ];
                 if ( typeof(port) != 'undefined' ) {
                     error.accessPoint = port;
-                    error.message = 'Could not connect to [ ' + error.accessPoint + ' ].\n' + error.message;
+                    error.message = 'Could not connect to [ ' + error.accessPoint + ' ].\nThe `'+port.split(/\@/)[0]+'` bundle is offline.\n';
                 }                    
             }
-
-
-            console.error(error.stack||error.message);
-            // you can get here if :
-            //  - you are trying to query using: `enctype="multipart/form-data"`
-            if ( typeof(callback) != 'undefined' ) {
-                
-                callback(error)
-
-            } else {
-                error = {
-                    status    : 500,
-                    error     : error.stack ||error.message
-                };
-
-                self.emit('query#complete', error)
-            }
-            
-            return;
+            self.throwError(error)
         });
         
-        req.on('end', function onEnd() {   
+        client.on('connect', () => {
             
-            // exceptions filter
-            if ( typeof(data) == 'string' && /^Unknown ALPN Protocol/.test(data) ) {
-                var err = {
-                    status: 500,
-                    error: new Error(data)
-                };
-                
+            var req = client.request( headers, sessionOptions );
+            
+            
+            req.on('response', function onQueryResponse(headers, flags) {   
+                for (const name in headers) {
+                    console.debug(`${name}: ${headers[name]}`);
+                }
+            });
+            
+            req.setEncoding('utf8');
+            var data = '';
+            req.on('data', function onQueryDataChunk(chunk) { 
+                data += chunk; 
+            });
+            
+            req.on('error', function onQueryError(error) {
+
+                if ( 
+                    typeof(error.cause) != 'undefined' && typeof(error.cause.code) != 'undefined' && /ECONNREFUSED|ECONNRESET/.test(error.cause.code) 
+                    || /ECONNREFUSED|ECONNRESET/.test(error.code) 
+                ) {
+                    
+                    var port = getContext('gina').ports[options.protocol][options.scheme.replace(/\:/, '')][ options.port ];
+                    if ( typeof(port) != 'undefined' ) {
+                        error.accessPoint = port;
+                        error.message = 'Could not connect to [ ' + error.accessPoint + ' ].\n' + error.message;
+                    }                    
+                }
+
+
+                console.error(error.stack||error.message);
+                // you can get here if :
+                //  - you are trying to query using: `enctype="multipart/form-data"`
                 if ( typeof(callback) != 'undefined' ) {
-                    callback(err)
+                    
+                    callback(error)
+
                 } else {
-                    self.emit('query#complete', err)
-                }
-                       
-                return
-            }
-            
-            //Only when needed.
-            if ( typeof(callback) != 'undefined' ) {
-                if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
-                    try {
-                        data = JSON.parse(data)
-                    } catch (err) {
-                        data = {
-                            status    : 500,
-                            error     : data
-                        }
-                    }
-                }
-                //console.debug(options[':method']+ ' ['+ (data.status || 200) +'] '+ options[':path']);
-                if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
-                    callback(data)
-                } else {
-                    callback( false, data )
+                    error = {
+                        status    : 500,
+                        error     : error.stack ||error.message
+                    };
+
+                    self.emit('query#complete', error)
                 }
                 
-            } else {
-                if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
-                    try {
-                        data = JSON.parse(data)
-                    } catch (err) {
-                        data = {
-                            status    : 500,
-                            error     : data
-                        }
-                        self.emit('query#complete', data)
+                return;
+            });
+            
+            req.on('end', function onEnd() {   
+                
+                // exceptions filter
+                if ( typeof(data) == 'string' && /^Unknown ALPN Protocol/.test(data) ) {
+                    var err = {
+                        status: 500,
+                        error: new Error(data)
+                    };
+                    
+                    if ( typeof(callback) != 'undefined' ) {
+                        callback(err)
+                    } else {
+                        self.emit('query#complete', err)
                     }
+                        
+                    return
                 }
-
-                if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
-                    self.emit('query#complete', data)
+                
+                //Only when needed.
+                if ( typeof(callback) != 'undefined' ) {
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
+                        try {
+                            data = JSON.parse(data)
+                        } catch (err) {
+                            data = {
+                                status    : 500,
+                                error     : data
+                            }
+                        }
+                    }
+                    //console.debug(options[':method']+ ' ['+ (data.status || 200) +'] '+ options[':path']);
+                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
+                        callback(data)
+                    } else {
+                        callback( false, data )
+                    }
+                    
                 } else {
-                    self.emit('query#complete', false, data)
-                }
-            }      
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
+                        try {
+                            data = JSON.parse(data)
+                        } catch (err) {
+                            data = {
+                                status    : 500,
+                                error     : data
+                            }
+                            self.emit('query#complete', data)
+                        }
+                    }
+
+                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
+                        self.emit('query#complete', data)
+                    } else {
+                        self.emit('query#complete', false, data)
+                    }
+                }      
+                
+                client.close();
+            });
+                
             
-            client.close();
+            // if (!/GET|DELETE/i.test(options[':method'])) {
+            //     req.end(body);
+            // }
+            
+            if (!endStream) {
+                req.end(body);
+            }
         });
-               
         
-        // if (!/GET|DELETE/i.test(options[':method'])) {
-        //     req.end(body);
-        // }
-        
-        if (!endStream) {
-            req.end(body);
-        }
-            
-       
         
         return {
             onComplete  : function(cb) {
