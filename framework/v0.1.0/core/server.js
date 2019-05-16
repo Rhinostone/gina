@@ -1599,6 +1599,10 @@ function Server(options) {
                     && !/^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(request.url)
                     // and must be handled by mime.types
                     &&  typeof(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext[0].substr(1)]) != 'undefined' 
+                    ||
+                    ext != null 
+                    && typeof(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext[0].substr(1)]) != 'undefined' 
+                    
                 ) {                    
                     staticProps.isStaticFilename = true
                 }
@@ -1625,6 +1629,8 @@ function Server(options) {
                 || /\/$/.test(request.url) && !isWebrootHandledByRouting
             ) {
                 self._isStatic  = true;
+                
+                
                 self._referrer  = request.url;                
                 // by default - used in `composeHeadersMiddleware`: see Default Global Middlewares (gna.js)
                 request.routing = {
