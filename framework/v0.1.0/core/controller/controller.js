@@ -2353,11 +2353,11 @@ function SuperController(options) {
             var req = client.request( headers, sessionOptions );
             
             
-            req.on('response', function onQueryResponse(headers, flags) {   
-                for (const name in headers) {
-                    console.debug(`${name}: ${headers[name]}`);
-                }
-            });
+            // req.on('response', function onQueryResponse(headers, flags) {   
+            //     for (const name in headers) {
+            //         console.debug(`${name}: ${headers[name]}`);
+            //     }
+            // });
             
             req.setEncoding('utf8');
             var data = '';
