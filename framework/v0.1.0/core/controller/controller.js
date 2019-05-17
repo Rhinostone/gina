@@ -688,6 +688,8 @@ function SuperController(options) {
                 
                 if ( isWithoutLayout || !isWithoutLayout && typeof(local.options.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout) ) {
                     layoutPath = (isWithoutLayout) ? local.options.template.noLayout : local.options.template.layout;
+                    if (isWithoutLayout)
+                        data.page.view.layout = layoutPath;
                 } else {
                     layoutRoot = ( typeof(local.options.namespace) != 'undefined' && local.options.namespace != '') ? local.options.template.templates + '/'+ local.options.namespace  : local.options.template.templates;
                     layoutPath = layoutRoot +'/'+ local.options.file + local.options.template.ext;    
@@ -2124,11 +2126,19 @@ function SuperController(options) {
                         }
                     }
 
-                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
-                        callback(data)
-                    } else {
-                        callback( false, data )
-                    }
+                    try {
+                        if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
+                            callback(data)
+                        } else {
+                            callback( false, data )
+                        }
+                    } catch (e) {
+                        var infos = local.options, controllerName = infos.controller.substr(infos.controller.lastIndexOf('/'));
+                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\rCheck logs for more details';
+                        var exception = new Error(msg);
+                        exception.status = 500;
+                        self.throwError(exception)
+                    }                        
 
                 } else {
                     if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
@@ -2209,11 +2219,19 @@ function SuperController(options) {
                         }
                     }
 
-                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
-                        cb(data)
-                    } else {
-                        cb(err, data)
-                    }
+                    try {
+                        if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
+                            cb(data)
+                        } else {
+                            cb(err, data)
+                        }
+                    } catch (e) {
+                        var infos = local.options, controllerName = infos.controller.substr(infos.controller.lastIndexOf('/'));
+                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\rCheck logs for more details';
+                        var exception = new Error(msg);
+                        exception.status = 500;
+                        self.throwError(exception)
+                    }  
                 })
             }
             
@@ -2430,17 +2448,25 @@ function SuperController(options) {
                         }
                     }
                     //console.debug(options[':method']+ ' ['+ (data.status || 200) +'] '+ options[':path']);
-                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
-                        callback(data)
-                    } else {
-                        callback( false, data )
-                    }
+                    try {
+                        if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
+                            callback(data)
+                        } else {
+                            callback( false, data )
+                        }
+                    } catch (e) {
+                        var infos = local.options, controllerName = infos.controller.substr(infos.controller.lastIndexOf('/'));
+                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\rCheck logs for more details';
+                        var exception = new Error(msg);
+                        exception.status = 500;
+                        self.throwError(exception)
+                    }                        
                     
                 } else {
                     if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
                         try {
                             data = JSON.parse(data)
-                        } catch (err) {
+                        } catch (e) {
                             data = {
                                 status    : 500,
                                 error     : data
@@ -2485,12 +2511,20 @@ function SuperController(options) {
                             }
                         }
                     }
-
-                    if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
-                        cb(data)
-                    } else {
-                        cb(err, data)
-                    }
+                    
+                    try {
+                        if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
+                            cb(data)
+                        } else {
+                            cb(err, data)
+                        }
+                    } catch (e) {
+                        var infos = local.options, controllerName = infos.controller.substr(infos.controller.lastIndexOf('/'));
+                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\rCheck logs for more details';
+                        var exception = new Error(msg);
+                        exception.status = 500;
+                        self.throwError(exception)
+                    }                          
                 })
             }
         }
