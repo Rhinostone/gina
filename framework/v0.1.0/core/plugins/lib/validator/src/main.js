@@ -2295,16 +2295,27 @@ function ValidatorPlugin(rules, data, formId) {
 
                         // TODO - add switch cases against tagName (checkbox/radio)
                         if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
-
+                            
+                            
+                            
                             if ( 
                                 $target[i].checked 
+                                || typeof (rules[name]) == 'undefined'
+                                    && $target[i].value != 'undefined'
+                                    && /^(true|false)$/.test($target[i].value)
                                 || !$target[i].checked
-                                && typeof (rules[name]) != 'undefined'
-                                && typeof (rules[name].isBoolean) != 'undefined' && /^true$/.test(rules[name].isBoolean)
-                                && typeof (rules[name].isRequired) != 'undefined' && /^true$/.test(rules[name].isRequired)
+                                    && typeof (rules[name]) != 'undefined'
+                                    && typeof (rules[name].isBoolean) != 'undefined' && /^true$/.test(rules[name].isBoolean)
+                                    && typeof (rules[name].isRequired) != 'undefined' && /^true$/.test(rules[name].isRequired)
                             ) {
                                 // if is boolean
                                 if ( /^(true|false)$/.test($target[i].value) ) {
+                                    
+                                    if ( typeof(rules[name]) == 'undefined' ) {
+                                        rules[name] = { isBoolean: true };
+                                    } else if ( typeof(rules[name]) != 'undefined' && typeof(rules[name].isBoolean) == 'undefined' ) {
+                                        rules[name].isBoolean = true;
+                                    }
 
                                     if ($target[i].type == 'radio') {
                                         if ( typeof(rules[name]) == 'undefined' )
