@@ -538,7 +538,7 @@ function Collection(content, option) {
                 , matched = 0
                 , fullFiltersMatched = 0
             ;
-            if ( uuidSearchModeEnabled && currentResult[c].hasOwnProperty(key) ) {
+            if ( uuidSearchModeEnabled && typeof(currentResult[c]) != 'undefined' && currentResult[c].hasOwnProperty(key) ) {
                 // for every single result found        
                 for (; r < rLen; ++r) {
                     
@@ -546,14 +546,17 @@ function Collection(content, option) {
                     
                     onRemoved:
                     for (; c < cLen; ++c) {
-                        // when matched, we want to remove those not in current result
-                        
-                        if (typeof (currentResult[c]) != 'undefined' && currentResult[c].hasOwnProperty(key) && currentResult[c][key] === foundResults[r][key]) {
+                        // when matched, we want to remove those not in current result                        
+                        if (currentResult[c][key] === foundResults[r][key]) {
                             currentResult.splice(c,1);
                             break onRemoved;
                         }
                     }
                 }
+            } else if ( typeof(currentResult[c]) == 'undefined' ) { //empty source case
+                // means that since we don't have a source to compare, current === found
+                currentResult = JSON.parse(JSON.stringify(foundResults));                
+                
             } else { // search based on provided filters
                 // for every single result found        
                 for (; r < rLen; ++r) {
