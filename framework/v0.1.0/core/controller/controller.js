@@ -2134,7 +2134,7 @@ function SuperController(options) {
                         }
                     } catch (e) {
                         var infos = local.options, controllerName = infos.controller.substr(infos.controller.lastIndexOf('/'));
-                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\rCheck logs for more details';
+                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
                         var exception = new Error(msg);
                         exception.status = 500;
                         self.throwError(exception)
@@ -2227,7 +2227,7 @@ function SuperController(options) {
                         }
                     } catch (e) {
                         var infos = local.options, controllerName = infos.controller.substr(infos.controller.lastIndexOf('/'));
-                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\rCheck logs for more details';
+                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
                         var exception = new Error(msg);
                         exception.status = 500;
                         self.throwError(exception)
@@ -2456,7 +2456,7 @@ function SuperController(options) {
                         }
                     } catch (e) {
                         var infos = local.options, controllerName = infos.controller.substr(infos.controller.lastIndexOf('/'));
-                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\rCheck logs for more details';
+                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
                         var exception = new Error(msg);
                         exception.status = 500;
                         self.throwError(exception)
@@ -2520,7 +2520,7 @@ function SuperController(options) {
                         }
                     } catch (e) {
                         var infos = local.options, controllerName = infos.controller.substr(infos.controller.lastIndexOf('/'));
-                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\rCheck logs for more details';
+                        var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
                         var exception = new Error(msg);
                         exception.status = 500;
                         self.throwError(exception)
