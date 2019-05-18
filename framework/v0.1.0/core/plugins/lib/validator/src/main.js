@@ -2101,14 +2101,21 @@ function ValidatorPlugin(rules, data, formId) {
                 
                 var $el = event.target;
                 
-                if (/(label)/i.test(event.target.tagName) && typeof(event.target.control) != 'undefined' && event.target.control != null && /(checkbox|radio)/i.test(event.target.control.type) ) {                    
+                if (
+                    /(label)/i.test(event.target.tagName) && typeof(event.target.control) != 'undefined' && event.target.control != null && /(checkbox|radio)/i.test(event.target.control.type) 
+                    || /(label)/i.test(event.target.parentNode.tagName) && typeof(event.target.parentNode.control) != 'undefined' && event.target.parentNode.control != null && /(checkbox|radio)/i.test(event.target.parentNode.control.type) 
+                ) {                    
                     // if `event.target.control` not working on all browser,
                     // try to detect `for` attribute OR check if on of the label's event.target.children is an input & type == (checkbox|radio)
-                    $el = event.target.control;
-                    if ( /(checkbox|radio)/i.test($el.type) ) {
+                    $el = event.target.control || event.target.parentNode.control;
+                    if ( !$el.disabled && /(checkbox|radio)/i.test($el.type) ) {
                         // apply checked choice : if true -> set to false, and if false -> set to true
-                        $el.checked = ($el.checked) ?  false : true;
+                        //$el.checked = ($el.checked) ?  false : true;
+                        $el.checked = /true|on/.test(value) ? true : false;
+                        updateCheckBox($el);
+                        return;
                     }
+                    
                 }
                 
                 // include only these elements for the binding
