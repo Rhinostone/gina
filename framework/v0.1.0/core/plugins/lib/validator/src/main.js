@@ -2109,13 +2109,13 @@ function ValidatorPlugin(rules, data, formId) {
                     // try to detect `for` attribute OR check if on of the label's event.target.children is an input & type == (checkbox|radio)
                     $el = event.target.control || event.target.parentNode.control;
                     if ( !$el.disabled && /(checkbox|radio)/i.test($el.type) ) {
-                        // apply checked choice : if true -> set to false, and if false -> set to true
-                        //$el.checked = ($el.checked) ?  false : true;
-                        $el.checked = /true|on/.test(value) ? true : false;
-                        updateCheckBox($el);
-                        return;
-                    }
-                    
+                        // apply checked choice : if true -> set to false, and if false -> set to true                        
+                        if ( /checkbox/i.test($el.type) ) {
+                            return updateCheckBox($el);
+                        } else {
+                            return updateRadio($el);
+                        }
+                    }                    
                 }
                 
                 // include only these elements for the binding
