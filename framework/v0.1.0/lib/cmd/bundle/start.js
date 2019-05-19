@@ -155,8 +155,15 @@ function Start(opt, cmd) {
                         }
                         
                         if (/\[ emerg \]/.test(data) ) {
+                            
+                            
                             opt.notStarted.push(bundle + '@' + self.projectName);
                             opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] aborted :( \n  => Check your logs to see why.');
+                            // var msg = null;
+                            // if ( /\[ error \]/.test(data) ) {
+                            //     msg = data.substr(data.lastIndexOf('[ error ]'), 300) +'...';
+                            //     opt.client.write(msg)
+                            // }
                             end(opt, cmd, isBulkStart, bundleIndex);   
                             clearInterval(timerId);
                         }
