@@ -511,7 +511,7 @@ function EntitySuper(conn, caller) {
 
         var ntt = entity;
         entity = entity.substr(0,1).toUpperCase() + entity.substr(1);
-
+        
         if ( !/Entity$/.test(entity) ) {
             entity = entity + 'Entity'
         }
@@ -536,7 +536,8 @@ function EntitySuper(conn, caller) {
                     if ( typeof(modelUtil.entities[self.bundle][self.model][entity]) != 'function' ) {
                         throw new Error('Model entity not found: `'+ entity + '` while trying to call '+ callerName +'Entity.getEntity('+ entity +')');
                     }
-                    new modelUtil.entities[self.bundle][self.model][entity](self.getConnection(), callerName);
+                    // fixed on May 2019, 21st : need for `this.getEntity(...)` inside the model
+                    EntitySuper[callerName].instance._relations[entityName] = new modelUtil.entities[self.bundle][self.model][entity](self.getConnection(), callerName);
                     return EntitySuper[callerName].instance._relations[entityName]
                 }
             }
