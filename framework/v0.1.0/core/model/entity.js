@@ -42,6 +42,10 @@ function EntitySuper(conn, caller) {
         if (!EntitySuper[self.name]) {
             EntitySuper[self.name] = {}
         }
+        
+        if ( !EntitySuper[self.name]._conn ) {
+            EntitySuper[self.name]._conn = conn;
+        }
 
         if ( !EntitySuper[self.name].instance ) {
             return setListeners(caller)
@@ -503,7 +507,7 @@ function EntitySuper(conn, caller) {
      * Get connection from entity
      * */
     this.getConnection = function() {
-        var conn =  local.conn ;
+        var conn =  local.conn || self._conn;
         return ( typeof(conn) != 'undefined' ) ? conn : null;
     }
 
@@ -511,6 +515,7 @@ function EntitySuper(conn, caller) {
 
         var ntt = entity;
         entity = entity.substr(0,1).toUpperCase() + entity.substr(1);
+        var nttName = entity;
         
         if ( !/Entity$/.test(entity) ) {
             entity = entity + 'Entity'
@@ -536,15 +541,25 @@ function EntitySuper(conn, caller) {
                     if ( typeof(modelUtil.entities[self.bundle][self.model][entity]) != 'function' ) {
                         throw new Error('Model entity not found: `'+ entity + '` while trying to call '+ callerName +'Entity.getEntity('+ entity +')');
                     }
+                    
                     // fixed on May 2019, 21st : need for `this.getEntity(...)` inside the model
-                    EntitySuper[callerName].instance._relations[entityName] = new modelUtil.entities[self.bundle][self.model][entity](self.getConnection(), callerName);
-                    return EntitySuper[callerName].instance._relations[entityName]
+                    if (  typeof(EntitySuper[callerName].instance._relations[entityName]) == 'undefined' ) {
+                        
+                        if ( typeof(EntitySuper[entityName]) != 'undefined' && typeof(EntitySuper[entityName].instance) != 'undefined' ) {
+                            
+                            EntitySuper[callerName].instance._relations[entityName] = new modelUtil.entities[self.bundle][self.model][entity](self.getConnection(), callerName)
+                        } else { // regular case
+                            new modelUtil.entities[self.bundle][self.model][entity](self.getConnection(), callerName);    
+                        }                        
+                    }
+                    
+                     
+                    return EntitySuper[callerName].instance._relations[entityName]                   
                 }
             }
 
         } catch (err) {
             throw err;
-            return null
         }
     }
 

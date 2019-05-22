@@ -367,7 +367,7 @@ function Couchbase(conn, infos) {
                 }
 
                 if (!err && meta && typeof(meta.errors) != 'undefined' ) {
-                    var err = new Error('`GenericN1QLError::bulkInsert`\n'+meta.errors[0].msg);
+                    err = new Error('`GenericN1QLError::bulkInsert`\n'+meta.errors[0].msg);
                     err.status = 403;
                 } else if (err) {
                     err.status  = 500;
