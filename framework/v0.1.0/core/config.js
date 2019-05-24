@@ -1304,11 +1304,20 @@ function Config(opt) {
                             noneDefaultJs[t].name   = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');                            
                         }                
                     }
-                    if ( /^_common$/.test(section) ) {
-                        noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);    
-                    } else {
-                        noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs);
+                    
+                    if (!files['templates'][section].javascriptsExcluded) {
+                        if ( /^_common$/.test(section) ) {
+                            noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);    
+                        } else {
+                            noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs);
+                        }
+                    } else if ( 
+                        typeof(files['templates'][section].javascriptsExcluded) != 'undefined' 
+                        && files['templates'][section].javascriptsExcluded == '*' 
+                    ) {
+                        noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);  
                     }
+                    
                     
                     // force js rechecking on `name` & `url`
                     t = 0;
@@ -1316,9 +1325,8 @@ function Config(opt) {
                     
                     for (; t < tLen; ++t) {
                         
-                        if (!noneDefaultJs[t].url /**|| reUrl.test(noneDefaultJs[t].url)*/ ) continue;
-                        
-                        //url = ( !reWebroot.test(noneDefaultJs[t].url) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(noneDefaultJs[t].url) ) ? noneDefaultJs[t].url.substr(1) : noneDefaultJs[t].url) : noneDefaultJs[t].url;
+                        if (!noneDefaultJs[t].url) continue;
+                       
                         url = noneDefaultJs[t].url;                        
                         if ( typeof(noneDefaultJs[t].name) == 'undefined' || noneDefaultJs[t].name == '' ) {                                
                             noneDefaultJs[t].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');                                
@@ -1334,12 +1342,11 @@ function Config(opt) {
                         tLen    = tTmp.length;
                         noneDefaultCss = [];
                         for (; t < tLen; ++t) {
-                            noneDefaultCss[t]       = JSON.parse(JSON.stringify(css));
-                            //url                     = ( !reWebroot.test(tTmp[t]) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(tTmp[t]) ) ? tTmp[t].substr(1) : tTmp[t] ) : tTmp[t];                               
-                            url                     = tTmp[t];
-                            noneDefaultCss[t].url   = url;                                
-                            noneDefaultCss[t].name  = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
-                            noneDefaultCss[t].isCommon = ( /^_common$/.test(section) ) ? true : false;
+                            noneDefaultCss[t]           = JSON.parse(JSON.stringify(css));                            
+                            url                         = tTmp[t];
+                            noneDefaultCss[t].url       = url;                                
+                            noneDefaultCss[t].name      = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
+                            noneDefaultCss[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;
                         }                
                     }
                     
@@ -1353,19 +1360,17 @@ function Config(opt) {
                     t = 0;
                     tLen = noneDefaultCss.length;
                     for (; t < tLen; ++t) {
-                        if (!noneDefaultCss[t].url /**|| reUrl.test(noneDefaultCss[t].url)*/ ) continue;
+                        if (!noneDefaultCss[t].url) continue;
                         
-                        // ?? with webroot in path 
-                        //url = ( !reWebroot.test(noneDefaultCss[t].url) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(noneDefaultCss[t].url) ) ? noneDefaultCss[t].url.substr(1) : noneDefaultCss[t].url) : noneDefaultCss[t].url;
                         url = noneDefaultCss[t].url;
                         if ( typeof(noneDefaultCss[t].name) == 'undefined' || noneDefaultCss[t].name == '' ) {                                
                             noneDefaultCss[t].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');                                
                         }
                         
                         
-                        noneDefaultCss[t].rel   = ( typeof(noneDefaultCss[t].rel) != 'undefined' ) ? noneDefaultCss[t].rel : css.rel;
-                        noneDefaultCss[t].type  = ( typeof(noneDefaultCss[t].type) != 'undefined' ) ? noneDefaultCss[t].type : css.type;
-                        noneDefaultCss[t].isCommon = ( typeof(noneDefaultCss[t].isCommon) != 'undefined' ) ? noneDefaultCss[t].isCommon : ( ( /^_common$/.test(section) ) ? true : false );
+                        noneDefaultCss[t].rel       = ( typeof(noneDefaultCss[t].rel) != 'undefined' ) ? noneDefaultCss[t].rel : css.rel;
+                        noneDefaultCss[t].type      = ( typeof(noneDefaultCss[t].type) != 'undefined' ) ? noneDefaultCss[t].type : css.type;
+                        noneDefaultCss[t].isCommon  = ( typeof(noneDefaultCss[t].isCommon) != 'undefined' ) ? noneDefaultCss[t].isCommon : ( ( /^_common$/.test(section) ) ? true : false );
                     }
                     
                     files['templates'][section].javascripts = noneDefaultJs;

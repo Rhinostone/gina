@@ -115,8 +115,7 @@ function ServerEngineClass(options) {
                 break;
         }
     }
-                
-    
+                    
     const middleware = function(path, cb) {
         
         // if (request.path === path) {
@@ -128,9 +127,8 @@ function ServerEngineClass(options) {
         //     });
         //     stream.end('<h1>404</h1>');
         // }
-    };
+    }   
     
-       
     const onPath = function(path, cb, allowAll) {
         
         var queryParams = null
@@ -194,8 +192,6 @@ function ServerEngineClass(options) {
                             } catch(err) {
                                 console.error(err.stack)
                             }
-                                
-                            //request.query = {};
                         }                      
                                                   
                     }
@@ -213,14 +209,6 @@ function ServerEngineClass(options) {
         
     }
     
-    // server.on('stream', (stream, headers) => {
-    //     // stream is a Duplex
-    //     stream.respond({
-    //       'content-type': 'text/html',
-    //       ':status': 200
-    //     });
-    //     stream.end('<h1>Hello World</h1>');
-    //   });
 
     // All paths allowed
     server.all = function(path, cb) {
