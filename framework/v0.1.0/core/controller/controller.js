@@ -357,12 +357,8 @@ function SuperController(options) {
             return false
         }
         
-        local.options.debugMode = ( typeof(displayToolbar) == 'undefined' ) ? undefined : ( (/true/.test(displayToolbar)) ? true : false ); // only active for dev env
+        local.options.debugMode = ( typeof(displayToolbar) == 'undefined' ) ? undefined : ( (/true/i.test(displayToolbar)) ? true : false ); // only active for dev env
         
-        // if ( local.options.debugMode == undefined ) {
-        //     local.options.debugMode = ( hasViews() && GINA_ENV_IS_DEV ) ? true : false;
-        // }
-
         var data            = null
         , template          = null
         , file              = null
@@ -717,7 +713,22 @@ function SuperController(options) {
                         if (data.page.view.stylesheets && !/\{\{\s+(page\.view\.stylesheets)\s+\}\}/.test(layout) ) {
                             layout = layout.replace(/\<\/head\>/i, '\n{{ page.view.stylesheets }}\n</head>')
                         }
-                                              
+                                        
+                        if (hasViews() && isWithoutLayout) {
+                            // $.getScript(...)
+                            //var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers.host != local.options.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
+                            //var hostname = (isProxyHost) ? local.options.conf.hostname.replace(/\:\d+$/, '') : local.options.conf.hostname;
+                            var webroot = data.page.environment.webroot;
+                            var scripts = data.page.view.scripts;
+                            scripts = scripts
+                                        //.replace(/(defer\s)/g, '')
+                                        //.replace(/\s+\<script/g, '\n<script async')
+                                        .replace(/\s+\<script/g, '\n<script')
+                                        .replace(/src\=\"\/(.*)\"/g, 'src="'+ webroot +'$1"')
+                            ;
+                            
+                            layout += scripts;                              
+                        }
 
                         // adding plugins
                         if (hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout && local.options.debugMode || hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout && typeof(local.options.debugMode) == 'undefined' || hasViews() && local.options.debugMode ) {                            
@@ -766,7 +777,7 @@ function SuperController(options) {
 
                         } else if ( hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() ) {
                             
-                            if (isWithoutLayout) {
+                            if (isWithoutLayout) {                                
                                 delete data.page.view.scripts;
                                 delete data.page.view.stylesheets;                                
                             }

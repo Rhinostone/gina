@@ -305,6 +305,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             if ( typeof(e.detail) != 'undefined' )
                 $el.innerHTML = e.detail.trim();
             
+               
+            
+            
             var register = function (type, evt, $element) {
                 // attach submit events
                 addListener(gina, $element, evt, function(event) {
@@ -388,7 +391,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 , len   = null
             ;
             // bind overlay on click
-            if (!$popin.isOpen) {                
+            if (!$popin.isOpen) {                         
+                     
                 var $overlay = instance.target.childNodes[0];
                 addListener(gina, $overlay, 'click', function(event) {
 
@@ -803,7 +807,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                 if ( /json$/.test( xhr.getResponseHeader("Content-Type") ) ) {
                                     result = JSON.parse(xhr.responseText)
                                 }
-
+                                
 
                                 instance.eventData.success = result;
                                 
@@ -956,12 +960,29 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var $el = $popin.target;
             $el.innerHTML = stringContent.trim(); 
             popinUnbind($popin.name, true);          
-            popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
+            popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);            
             
             triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
         }
                
-
+        function getScript(source, callback) {
+            var script = document.createElement('script');
+            var prior = document.getElementsByTagName('script')[0];
+            script.async = 0;
+        
+            script.onload = script.onreadystatechange = function( _, isAbort ) {
+                if(isAbort || !script.readyState || /loaded|complete/.test(script.readyState) ) {
+                    script.onload = script.onreadystatechange = null;
+                    script = undefined;
+        
+                    if(!isAbort && callback) setTimeout(callback, 0);
+                }
+            };
+        
+            script.src = source;
+            prior.parentNode.insertBefore(script, prior);
+        }
+        
         /**
          * popinOpen
          *
@@ -979,6 +1000,12 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             } 
             id = $popin.id;
             $el = document.getElementById(id);
+            
+            // load external ressources
+            var scripts = $el.getElementsByTagName('script');
+            for (var i = 0, len = scripts.length; i < len; ++i) {
+                getScript(scripts[i].src);               
+            }  
             
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
                        
@@ -1111,6 +1138,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             // by default
             if ( typeof($popin) != 'undefined' && $popin != null ) {
                 $el = $popin.target;
+                
+                removeListener(gina, event.target, 'ready.' + instance.id);
+                
 
                 if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
                     
