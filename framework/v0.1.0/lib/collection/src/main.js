@@ -40,25 +40,42 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  *      rasult.toRaw() will give result without chaining & _uuid
  *
  * */
-function Collection(content, option) {
+function Collection(content, options) {
 
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
     var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
     var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../lib/merge');
 
-    var defaultOptions = {
-        'useLocalStorage': false,
-        'locale': 'en' // get settigs.region, or user.region
+    // defined search option rules
+    var searchOptionRules = {
+        isCaseSensitive: {
+            false: {
+                re: '^%s$',
+                modifiers: 'i'
+            },
+            true: {
+                re: '^%s$'
+            }
+        }
     };
+    
+    
+    var localSearchOptions  = null;
+    
+    var defaultOptions = {
+        useLocalStorage: false,
+        locale: 'en', // TODO - get settigs.region, or user.region
+        searchOptionRules: searchOptionRules
+    };
+    
+    
+    
+    
+    content = (content) ? JSON.parse(JSON.stringify(content)) : []; // original content -> not to be touched
+    options = (typeof(options) == 'object') ? merge(options, defaultOptions) : defaultOptions;
 
-    var content     = (content) ? JSON.parse(JSON.stringify(content)) : [] // original content -> not to be touched
-        , options   = (typeof(options) == 'object') ? merge(options, defaultOptions) : defaultOptions
-        , keywords  = ['not null'] // TODO - null, exists (`true` if property is defined)
-        ;
-    ;
-
-    var tryEval = function(condition) {
-
+    var keywords    = ['not null']; // TODO - null, exists (`true` if property is defined)
+    var tryEval     = function(condition) {
         try {
             return eval(condition)
         } catch(err) {
@@ -69,7 +86,7 @@ function Collection(content, option) {
    
 
     if ( !Array.isArray(content) )
-        throw new Error('`new Collection([content] [, option] )`: `content` argument must me an Array !');
+        throw new Error('`new Collection([content] [, options] )`: `content` argument must me an Array !');
 
     // Indexing : uuids are generated for each entry
     for (var entry = 0, entryLen = content.length; entry < entryLen; ++entry) {
@@ -80,11 +97,84 @@ function Collection(content, option) {
     }
 
     var instance = content;
+    //instance._options = options;
+    
+    /**
+     * Set local search option for the current collection method call
+     * 
+     * eg.: 
+     *  var recCollection = new Collection(arrayCollection);
+     *  var rec =  recCollection
+     *                  .setSearchOption('name', 'isCaseSensitive', false)
+     *                  .find({ city: 'cap Town' });
+     * 
+     * eg.:
+     *  var recCollection = new Collection(arrayCollection);
+     *  var searchOptions = {
+     *      name: {
+     *          isCaseSensitive: false
+     *      }
+     *  };
+     *  var rec =  recCollection
+     *                  .setSearchOption(searchOptions)
+     *                  .find({ city: 'cap Town' });     * 
+     * 
+     * @param {object|string} searchOptionObject or searchOptionTargetedProperty
+     * @param {string} [searchRule]
+     * @param {boolean} [searchRuleValue] - true to enable, false to disabled
+     * 
+     * @return {object} instance with local search options
+     */
+    instance['setSearchOption'] = function() {
+        
+        if (!arguments.length)
+            throw new Error('searchOption cannot be left blank');
+            
+        if (arguments.length > 3 || arguments.length < 3 && arguments.length > 1)
+            throw new Error('argument length mismatch');
+        
+        var i = 0
+            , len = arguments.length
+        ;
+        
+        if (arguments.length == 1) {
+            if ( typeof(arguments[0]) != 'object' )
+                throw new Error('searchOption must be an object');
+                
+            for (var prop in arguments[0]) {
+                if ( typeof(searchOptionRules[prop]) == 'undefined' )
+                    throw new Error(arguments[1] + ' is not an allowed searchOption !');
+            }
+            
+            localSearchOptions = arguments[0];
+        } else {
+            
+            if ( !localSearchOptions )
+                localSearchOptions = {};
+            
+            for (; i < len; ++i) {                
+                if ( typeof(searchOptionRules[arguments[1]]) == 'undefined' )
+                    throw new Error(arguments[1] + ' is not an allowed searchOption !');
+                
+                if (typeof(localSearchOptions[arguments[0]]) == 'undefined')
+                    localSearchOptions[arguments[0]] = {};
+                
+                if ( /true|false/i.test(arguments[2]) ) {
+                    localSearchOptions[arguments[0]][arguments[1]] = /true/i.test(arguments[2]) ? true : false
+                } else {
+                    localSearchOptions[arguments[0]][arguments[1]] = arguments[2]
+                }                
+            }
+        }    
+        
+        return instance
+    }
 
     
     instance['find'] = function() {
 
         var withOrClause = false;
+        
         if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
             withOrClause = arguments[arguments.length-1];
             delete arguments[arguments.length-1];
@@ -110,25 +200,48 @@ function Collection(content, option) {
                 , field             = null
                 , fieldWithin       = null
                 , value             = null
-                ;
+                , searchOptions     = localSearchOptions
+                , searchOptionRules = options.searchOptionRules
+                //, searchOptionRules = this._options.searchOptionRules
+            ;
 
             var matched = null
                 , filterIsArray = null
                 , searchResult = null;
-
-            var search = function(filter, field, _content, matched) {
-
+            
+            /**
+             *  Regular Search
+             * @param {object} filter 
+             * @param {string} field 
+             * @param {strine|number|date} _content 
+             * @param {number} matched 
+             */
+            var search = function(filter, field, _content, matched, searchOptionRules) {
+                
                 if (filter === null && _content === null) { // null case
 
                     ++matched;
 
-                } else if (filter && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof (_content) != 'undefined' && typeof (_content) !== 'object' && _content != 'null' && _content != 'undefined') {
+                } else if (
+                    filter 
+                    && keywords.indexOf(localeLowerCase) > -1 
+                    && localeLowerCase == 'not null' 
+                    && typeof(_content) != 'undefined' 
+                    && typeof(_content) !== 'object' 
+                    && _content != 'null' 
+                    && _content != 'undefined'
+                ) {
                     
                     if (result.indexOf(_content) < 0) {
                         ++matched;
                     }
 
-                } else if ( typeof(_content) != 'undefined' && typeof (_content) !== 'object' && /(<|>|=)/.test(filter) && !/undefined|function/.test(typeof (_content))) { // with operations
+                } else if ( 
+                    typeof(_content) != 'undefined' 
+                    && typeof(_content) !== 'object' 
+                    && /(<|>|=)/.test(filter) 
+                    && !/undefined|function/.test(typeof(_content))
+                ) { // with operations
                     // looking for a datetime ?
                     if (
                         /(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/.test(_content)
@@ -136,7 +249,6 @@ function Collection(content, option) {
                     ) {
 
                         if (tryEval(_content.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")') + filter.replace(/(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/, 'new Date("$&")'))) {
-
                             ++matched;
                         }
 
@@ -144,9 +256,45 @@ function Collection(content, option) {
                         ++matched;
                     }
 
-                } else if ( typeof (_content) != 'undefined' && typeof (_content) !== 'object' && _content === filter ) {
+                } else if ( 
+                    typeof(_content) != 'undefined' 
+                    && typeof(_content) !== 'object' 
+                    && _content === filter
+                    && !searchOptions
+                    ||
+                    typeof(_content) != 'undefined' 
+                    && typeof(_content) !== 'object' 
+                    && _content === filter
+                    && typeof(searchOptions[field]) == 'undefined'
+                ) {
 
                     ++matched;
+                } else if ( 
+                    typeof(_content) != 'undefined' 
+                    && typeof(_content) !== 'object' 
+                    && searchOptions
+                    && typeof(searchOptions[field]) != 'undefined'
+                ) {
+                    
+                    reValidCount    = 0;
+                    searchOptCount  = searchOptions[field].count();
+                    for ( var rule in searchOptions[field]) {
+                        searchOptionRules[rule][searchOptions[field][rule]].re = searchOptionRules[rule][searchOptions[field][rule]].re.replace(/\%s/, filter);
+                        
+                        if (searchOptionRules[rule][searchOptions[field][rule]].modifiers) {
+                            re = new RegExp(searchOptionRules[rule][searchOptions[field][rule]].re, searchOptionRules[rule][searchOptions[field][rule]].modifiers);   
+                        } else {
+                            re = new RegExp(searchOptionRules[rule][searchOptions[field][rule]].re);
+                        }
+                        
+                        if ( re.test(_content) ) {
+                            ++reValidCount
+                        }
+                    }
+                    
+                    if (reValidCount == searchOptCount) {
+                        ++matched;    
+                    }
                 }
 
                 return {
@@ -227,7 +375,7 @@ function Collection(content, option) {
 
                         } else { // normal case
 
-                            searchResult = search(filter, field, collection[c], subMatched);
+                            searchResult = search(filter, field, collection[c], subMatched, searchOptionRules);
                             subMatched = searchResult.matched;
                         }
 
@@ -277,7 +425,7 @@ function Collection(content, option) {
 
                             } else { // normal case
 
-                                searchResult = search(filter[f], f, tmpContent[o][f], matched);
+                                searchResult = search(filter[f], f, tmpContent[o][f], matched, searchOptionRules);
                                 matched = searchResult.matched;
                             }
                         }
@@ -295,6 +443,8 @@ function Collection(content, option) {
             result = content
         }
 
+        // reset localSearchOptions for nest calls
+        localSearchOptions = null;
         
         // TODO - remove this
         if (withOrClause) {
@@ -303,20 +453,168 @@ function Collection(content, option) {
         }
 
         // chaining
-        result.insert   = instance.insert;
-        result.notIn    = instance.notIn;
-        result.find     = this.find;
-        result.update   = instance.update;
-        result.replace  = instance.replace;
-        result.or       = instance.or;
-        result.findOne  = instance.findOne;
-        result.limit    = instance.limit;
-        result.orderBy  = instance.orderBy;
-        result.delete   = instance.delete;
-        result.toRaw    = instance.toRaw;
+        //result._options         = instance._options;
+        //result.setSearchOption  = instance.setSearchOption;
+        
+        result.insert           = instance.insert;
+        result.notIn            = instance.notIn;
+        result.find             = this.find;
+        result.update           = instance.update;
+        result.replace          = instance.replace;
+        result.or               = instance.or;
+        result.findOne          = instance.findOne;
+        result.limit            = instance.limit;
+        result.orderBy          = instance.orderBy;
+        result.delete           = instance.delete;
+        result.toRaw            = instance.toRaw;
 
         return result
     }
+    
+    /** 
+     * findOne
+     * 
+     * E.g.: 
+     *  - new Collection(projects).findOne({name: 'My Project'})
+     *  - new Collection(projects)
+     *              .setSearchOption({name: { isCaseSensitive: false }})
+     *              .findOne({name: 'my project'})
+     * 
+     * 
+     * Available options :
+     *  isCaseSensitive: [true|false] - set to true by default
+     * 
+     * @param {object} filter
+     * 
+     * @return {object} result
+     * 
+    */
+   instance['findOne'] = function() {
+    var key         = null // comparison key
+        , result    = null
+        , filters   = null
+        //, uuidSearchModeEnabled = true
+    ;
+
+    if ( typeof(arguments[arguments.length-1]) == 'string' ) {
+        key = arguments[arguments.length - 1];
+        delete arguments[arguments.length - 1];
+    }
+    
+    // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
+    //     uuidSearchModeEnabled = arguments[arguments.length - 1]
+    //     delete arguments[arguments.length - 1];
+    // }
+    
+    if (arguments.length > 0) {
+        filters = arguments;
+    }
+    
+
+    if ( typeof(filters) == 'undefined' || !filters || typeof(filters) != 'object' ) {
+        throw new Error('[ Collection ][ findOne ] `filters` argument must be defined: Array or Filter Object(s) expected');
+    }
+
+    // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
+    //var currentResult = JSON.parse(JSON.stringify((Array.isArray(this)) ? this : content));
+    var currentResult = null;
+    var foundResults = null;
+    if ( Array.isArray(arguments[0]) ) {
+        foundResults = arguments[0];
+    } else {
+        foundResults = instance.find.apply(this, arguments) || [];
+    }
+    
+    if (foundResults.length > 0) {
+        currentResult = foundResults.limit(1).toRaw()[0];            
+    }
+
+    result          = currentResult;
+    return result
+}
+// instance['findOne'] = function(filter, options) {
+    
+//     if ( typeof(filter) !== 'object' ) {
+//         throw new Error('filter must be an object');
+//     } else {
+        
+//         var condition = filter.count()
+//             , i                 = 0
+//             , tmpContent        = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content))
+//             , result            = []
+//             , localeLowerCase   = '';
+
+//         var re          = null
+//         , reValidCount  = null
+//         , searchOptCount = null;
+
+//         var optionsRules = {
+//             isCaseSensitive: {
+//                 false: {
+//                     re: '^%s$',
+//                     modifiers: 'i'
+//                 },
+//                 true: {
+//                     re: '^%s$'
+//                 }
+//             }
+//         }
+
+//         if (condition == 0) return null;
+
+//         for (var o in tmpContent) {
+//             for (var f in filter) {
+//                 if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
+
+//                 localeLowerCase = ( !/(boolean|number)/.test(typeof(filter[f])) ) ? filter[f].toLocaleLowerCase() : filter[f];
+//                 // NOT NULL case
+//                 if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] === filter[f] && tmpContent[o][f] != 'null' && tmpContent[o][f] != 'undefined' ) {
+//                     if (result.indexOf(tmpContent[o][f]) < 0 ) {
+//                         ++i;
+//                         if (i === condition) result = tmpContent[o]
+//                     }
+
+//                 } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' ) {
+                    
+//                     if ( typeof(options) != 'undefined' && typeof(options[f]) != 'undefined'  ) {
+//                         reValidCount    = 0;
+//                         searchOptCount  = options[f].count();
+                        
+//                         for (var opt in options[f]) {
+//                             optionsRules[opt][options[f][opt]].re = optionsRules[opt][options[f][opt]].re.replace(/\%s/, filter[f]);
+
+//                             if (optionsRules[opt][options[f][opt]].modifiers) {
+//                                 re = new RegExp(optionsRules[opt][options[f][opt]].re, optionsRules[opt][options[f][opt]].modifiers);   
+//                             } else {
+//                                 re = new RegExp(optionsRules[opt][options[f][opt]].re);
+//                             }
+                            
+//                             if ( re.test(tmpContent[o][f]) ) {
+//                                 ++reValidCount
+//                             }
+//                         }
+
+//                         if (reValidCount == searchOptCount) {
+//                             ++i;
+//                             if (i === condition) result = tmpContent[o]
+//                         }
+//                     } else if ( tmpContent[o][f] === filter[f] ) { // normal case
+//                         ++i;
+//                         if (i === condition) result = tmpContent[o]
+//                     }
+                    
+//                 } else if ( filter[f] === null && tmpContent[o][f] === null ) { // NULL case
+//                     ++i;
+//                     if (i === condition) result = tmpContent[o]
+//                 }
+//             }
+//         }
+//     }
+
+//     result.toRaw = instance.toRaw;
+
+//     return ( Array.isArray(result) && !result.length ) ? null : result
+// }
 
     instance['or'] = function () {
         arguments[arguments.length] = true;
@@ -347,110 +645,7 @@ function Collection(content, option) {
 
         return result
     }
-
-    /** 
-     * findOne
-     * 
-     * E.g.: 
-     *  - new Collection(projects).findOne({name: 'My Project'})
-     *  - new Collection(projects).findOne({name: 'my project'}, {name: { isCaseSensitive: false }})
-     * 
-     * 
-     * Available options :
-     *  isCaseSensitive: [true|false] - set to true by default
-     * 
-     * @param {object} filter
-     * @param {object} [options]
-     * 
-     * @return {object} result
-     * 
-    */
-    instance['findOne'] = function(filter, options) {
-        
-        if ( typeof(filter) !== 'object' ) {
-            throw new Error('filter must be an object');
-        } else {
-            
-            var condition = filter.count()
-                , i                 = 0
-                , tmpContent        = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content))
-                , result            = []
-                , localeLowerCase   = '';
-
-            var re          = null
-            , reValidCount  = null
-            , searchOptCount = null;
-
-            var optionsRules = {
-                isCaseSensitive: {
-                    false: {
-                        re: '^%s$',
-                        modifiers: 'i'
-                    },
-                    true: {
-                        re: '^%s$'
-                    }
-                }
-            }
-
-            if (condition == 0) return null;
-
-            for (var o in tmpContent) {
-                for (var f in filter) {
-                    if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
-
-                    localeLowerCase = ( !/(boolean|number)/.test(typeof(filter[f])) ) ? filter[f].toLocaleLowerCase() : filter[f];
-                    // NOT NULL case
-                    if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] === filter[f] && tmpContent[o][f] != 'null' && tmpContent[o][f] != 'undefined' ) {
-                        if (result.indexOf(tmpContent[o][f]) < 0 ) {
-                            ++i;
-                            if (i === condition) result = tmpContent[o]
-                        }
-
-                    } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' ) {
-                        
-                        if ( typeof(options) != 'undefined' && typeof(options[f]) != 'undefined'  ) {
-                            reValidCount    = 0;
-                            searchOptCount  = options[f].count();
-                            
-                            for (var opt in options[f]) {
-                                optionsRules[opt][options[f][opt]].re = optionsRules[opt][options[f][opt]].re.replace(/\%s/, filter[f]);
-
-                                if (optionsRules[opt][options[f][opt]].modifiers) {
-                                    re = new RegExp(optionsRules[opt][options[f][opt]].re, optionsRules[opt][options[f][opt]].modifiers);   
-                                } else {
-                                    re = new RegExp(optionsRules[opt][options[f][opt]].re);
-                                }
-                                
-                                if ( re.test(tmpContent[o][f]) ) {
-                                    ++reValidCount
-                                }
-                            }
-
-                            if (reValidCount == searchOptCount) {
-                                ++i;
-                                if (i === condition) result = tmpContent[o]
-                            }
-                        } else if ( tmpContent[o][f] === filter[f] ) { // normal case
-                            ++i;
-                            if (i === condition) result = tmpContent[o]
-                        }
-                        
-                    } else if ( filter[f] === null && tmpContent[o][f] === null ) { // NULL case
-                        ++i;
-                        if (i === condition) result = tmpContent[o]
-                    }
-                }
-            }
-        }
-
-        result.toRaw = instance.toRaw;
-
-        return ( Array.isArray(result) && !result.length ) ? null : result
-    }
-
-
-
+    
     /** 
      * notIn
      * Works like a filter to match results by `excluding` through given `filters` !!
@@ -479,10 +674,10 @@ function Collection(content, option) {
     */
     instance['notIn'] =  function(){
 
-        var key         = null // comparison key
-            , result    = null
-            , filters   = null
-            , uuidSearchModeEnabled = true;
+        var key                     = null // comparison key
+            , result                = null
+            , filters               = null
+            , uuidSearchModeEnabled = true
         ;
 
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
@@ -790,7 +985,7 @@ function Collection(content, option) {
         }
 
         var variableContent = (Array.isArray(this)) ? this : JSON.parse(JSON.stringify(content));
-        return sortResult(filter, variableContent)
+        return sortResult(filter, variableContent.toRaw())
     }
 
     /**
@@ -834,9 +1029,19 @@ function Collection(content, option) {
 
             return content.sort(function onAscSort(a, b) {
                 
-                if (typeof (a) == 'string' && a != '' ) {
+                // handle booleans
+                if ( /^(true|false)$/i.test(a) ) {
+                    a = ( /true/i.test(a) ) ? true : false;
+                }
+                
+                if ( /^(true|false)$/i.test(b) ) {
+                    b = ( /true/i.test(b) ) ? true : false;
+                }
+                    
+                
+                if ( typeof(a) == 'string' && a != '' ) {
 
-                    return a.localeCompare(b)
+                    return a.localeCompare(b, undefined, {sensitivity: 'case', caseFirst: 'upper'})
 
                 } else if ( typeof(a) == 'boolean' || typeof(b) == 'boolean' ) {
 
@@ -857,9 +1062,9 @@ function Collection(content, option) {
                     // a must be equal to b
                     return 0;
 
-                } else if (typeof (a) == 'number') { 
+                } else if ( typeof(a) == 'number' ) { 
 
-                    return ''+a.localeCompare(''+b, { numeric: true })
+                    return (''+a).localeCompare((''+b), undefined, { numeric: true })
                 
                 } else if ( typeof(a) == 'object' ) {
                     try {
@@ -868,9 +1073,9 @@ function Collection(content, option) {
                         //if ( /\[object Date\]/.test(Object.prototype.toString.call(a[prop])) ) {
                             
                         if (typeof (a[prop]) == 'number') {
-                            return ''+a[prop].localeCompare(''+b[prop], { numeric: true })
+                            return (''+a[prop]).localeCompare((''+b[prop]), undefined, { numeric: true })
                         } else {
-                            return a[prop].localeCompare(b[prop])
+                            return a[prop].localeCompare(b[prop], undefined, {sensitivity: 'case', caseFirst: 'upper'})                            
                         }
 
                         
@@ -927,7 +1132,7 @@ function Collection(content, option) {
 
                 } else if (typeof (a[columns[index]]) == 'number' || typeof(b[columns[index]]) == 'number' ) {
 
-                    res = '' + a[columns[index]].localeCompare('' + b[columns[index]], { numeric: true });
+                    res = (''+ a[columns[index]]).localeCompare((''+ b[columns[index]]), undefined, { numeric: true });
 
                     if (direction == 0 && res != 0) {
                         return res < 0 ? -1 : 1
