@@ -35,4 +35,4 @@ exports['[ notIn from empty source ] Hotel WHERE country === `France`\n    [ li
 
 // for debug purpose
 if (reporter)
-    reporter.run(['test/01-find.js']);
+    reporter.run(['test/02-notIn.js']);
