@@ -1002,8 +1002,24 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             $el = document.getElementById(id);
             
             // load external ressources
+            var globalScriptsList = document.getElementsByTagName('script');
+            var ignoreList  = [], s = 0;
+            var i = 0, len = globalScriptsList.length;
             var scripts = $el.getElementsByTagName('script');
-            for (var i = 0, len = scripts.length; i < len; ++i) {
+            for (;i < len; ++i) {
+                if ( !globalScriptsList[i].src || /gina(\.min\.js|\.js)$/.test(globalScriptsList[i].src) )
+                    continue;    
+                    
+                ignoreList[s] = globalScriptsList[i].src;
+                ++s
+            }
+                        
+            i = 0; len = scripts.length;
+            for (;i < len; ++i) {
+                // don't load if already in the global context
+                if ( ignoreList.indexOf(scripts[i].src) > -1 )
+                    continue;
+                
                 getScript(scripts[i].src);               
             }  
             

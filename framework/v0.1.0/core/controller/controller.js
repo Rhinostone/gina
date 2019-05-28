@@ -1634,8 +1634,11 @@ function SuperController(options) {
         
         // extension and mime
         var filename    = url.split(/\//g).pop(); 
+        if (!filename)
+            self.throwError(local.res, 500, new Error('Filename not found in url: `'+ url +'`'));
+        
         if ( !/\.\w+$/.test(filename) )
-                self.throwError(local.res, 500, new Error('[ '+ filename +' ] Extension not found.'));
+                self.throwError(local.res, 500, new Error('[ '+ filename +' ] extension not found.'));
         
         // filename renaming
         if (opt.file)
