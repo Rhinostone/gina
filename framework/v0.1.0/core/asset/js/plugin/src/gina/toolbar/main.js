@@ -227,6 +227,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                 // filtering before
                 delete jsonObject.environment.routing;
                 delete ginaJsonObject.environment.routing;
+                delete jsonObject.environment.forms;
+                delete ginaJsonObject.environment.forms;
                 $htmlConfigurationEnvironment.html(parseObject(jsonObject.environment, ginaJsonObject.environment));
 
 

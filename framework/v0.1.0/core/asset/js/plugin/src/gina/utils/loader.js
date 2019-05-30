@@ -36,6 +36,8 @@ window['onGinaLoaded']  = function(gina) {
             'hostname': '{{ page.environment.hostname }}',
             /**@js_externs routing*/
             'routing': JSON.parse(unescape('{{ page.environment.routing }}')),
+            /**@js_externs forms*/
+            //'forms': JSON.parse(unescape('{{ page.environment.forms }}')),
             /**@js_externs version*/
             version : '{{ page.environment.version }}',
             /**@js_externs webroot*/
@@ -62,8 +64,8 @@ window['onGinaLoaded']  = function(gina) {
             var routing     = gina['config']['routing'];
             var re = new RegExp("\\@" + bundle + String.fromCharCode(36)); // Closure compiler requirements: $ -> String.fromCharCode(36)
             
-            for (var route in routing) {
-                
+            var route       = null;
+            for (route in routing) {                
                 if ( re.test(route) )
                    routes[route] = routing[route]
             }
@@ -77,7 +79,13 @@ window['onGinaLoaded']  = function(gina) {
 
         gina["isFrameworkLoaded"]       = true;
         gina["setOptions"](options);
-        gina["forms"]                   = JSON.parse('{{ JSON.stringify(page.forms) }}');
+        
+        try {
+            gina["forms"]               = JSON.parse(unescape('{{ page.environment.forms }}'));
+        } catch (err) {
+            throw err
+        }
+        
 
         // making adding css to the head
         var link        = null, cssPath = "css/vendor/gina/gina.min.css";

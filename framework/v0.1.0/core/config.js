@@ -1624,11 +1624,11 @@ function Config(opt) {
                             try {
 
                                 if (cacheless) {
-                                    delete require.cache[require.resolve(filename)];
+                                    delete require.cache[require.resolve(_(filename, true))];
                                 }
 
                                 k = key.split(/\//g);
-                                forms[ k[k.length-1] ] = require(filename)
+                                forms[ k[k.length-1] ] = requireJSON(_(filename, true))
 
                             } catch(err) {
                                 throw new Error('[ ' +filename + ' ] is malformed !!')

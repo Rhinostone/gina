@@ -226,8 +226,13 @@ function SuperController(options) {
             set('page.environment.env', GINA_ENV);
             set('page.environment.envIsDev', GINA_ENV_IS_DEV);
             
-            var routing = local.options.conf.routing = ctx.config.envConf.routing; // alll routes
+            var routing = local.options.conf.routing = ctx.config.envConf.routing; // all routes
             set('page.environment.routing', escape(JSON.stringify(routing))); // export for GFF
+            
+            var forms = local.options.conf.forms = options.conf.content.forms // all forms
+            set('page.environment.forms', escape(JSON.stringify(forms))); // export for GFF
+            set('page.forms', options.conf.content.forms);
+            
             set('page.environment.hostname', ctx.config.envConf[options.conf.bundle][GINA_ENV].hostname);
             set('page.environment.webroot', options.conf.server.webroot);
             set('page.environment.bundle', options.conf.bundle);
@@ -263,7 +268,8 @@ function SuperController(options) {
 
             set('page.view.route', rule);
 
-            set('page.forms', options.conf.content.forms);
+            
+            
             
             var acceptLanguage = 'en-US'; // by default
             if ( typeof(req.headers['accept-language']) != 'undefined' ) {
@@ -2728,11 +2734,16 @@ function SuperController(options) {
                 try {
                     formId = formId.replace(/\-/g, '.');
                     return JSON.parse(JSON.stringify(local.options.conf.content.forms)).rules[formId]
-                } catch (err) {
-                    self.throwError(err)
+                } catch (ruleErr) {
+                    self.throwError(ruleErr)
                 }
             } else {
-                return JSON.parse(JSON.stringify(local.options.conf.content.forms)).rules
+                try {
+                    return JSON.parse(JSON.stringify(local.options.conf.content.forms)).rules
+                } catch ( ruleErr ) {
+                    self.throwError(ruleErr)
+                }
+                
             }
 
         } catch (err) {
