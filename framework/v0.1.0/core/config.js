@@ -1612,6 +1612,11 @@ function Config(opt) {
                         filename = _(dir + '/' + files[i], true);
 
                         if ( fs.statSync(filename).isDirectory() ) {
+                            // ignore users validators
+                            if ( /validators$/i.test(filename) ) {
+                                continue;
+                            }
+                            
                             key += dir.replace(root, '') +'/'+ files[i] + '/';
                             k = key.split(/\//g);
                             forms[k[k.length-2]] = {};
