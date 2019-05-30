@@ -105,8 +105,12 @@ function ValidatorPlugin(rules, data, formId) {
     var setCustomRules = function (customRules) {
         // parsing rules
         if ( typeof(customRule) != 'undefined' ) {
-            parseRules(customRule, '');
-            checkForRulesImports(customRule);
+            try {
+                parseRules(customRule, '');
+                checkForRulesImports(customRule);
+            } catch (err) {
+                throw err
+            }
         }
     }
 
@@ -133,8 +137,13 @@ function ValidatorPlugin(rules, data, formId) {
 
         // parsing rules
         if ( typeof(rules) != 'undefined' && rules.count() > 0 ) {
-            parseRules(rules, '');
-            checkForRulesImports(rules);
+            
+            try {
+                parseRules(rules, '');
+                checkForRulesImports(rules);
+            } catch (err) {
+                throw err
+            }
 
             backendProto.rules = instance.rules;
 
@@ -1409,6 +1418,7 @@ function ValidatorPlugin(rules, data, formId) {
                 instance.rules = {}
             }
 
+            
             rules = JSON.parse(rulesStr);
             parseRules(rules, '');
 
@@ -1431,9 +1441,15 @@ function ValidatorPlugin(rules, data, formId) {
             instance.on('init', function(event) {
                 // parsing rules
                 if ( typeof(rules) != 'undefined' && rules.count() ) {
-                    gina.forms.rules = JSON.parse(JSON.stringify(rules));// making copy
-                    parseRules(rules, '');
-                    checkForRulesImports(rules);
+                    try {
+                        // making copy
+                        gina.forms.rules = JSON.parse(JSON.stringify(rules));
+                        
+                        parseRules(rules, '');
+                        checkForRulesImports(rules);
+                    } catch (err) {
+                        throw (err)
+                    }
                 }
 
                 $validator.setOptions           = setOptions;
