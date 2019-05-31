@@ -724,14 +724,16 @@ function SuperController(options) {
                             // $.getScript(...)
                             //var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers.host != local.options.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
                             //var hostname = (isProxyHost) ? local.options.conf.hostname.replace(/\:\d+$/, '') : local.options.conf.hostname;
-                            var webroot = data.page.environment.webroot;
+                            
                             var scripts = data.page.view.scripts;
                             scripts = scripts
                                         //.replace(/(defer\s)/g, '')
                                         //.replace(/\s+\<script/g, '\n<script async')
-                                        .replace(/\s+\<script/g, '\n<script')
-                                        .replace(/src\=\"\/(.*)\"/g, 'src="'+ webroot +'$1"')
-                            ;
+                                        .replace(/\s+\<script/g, '\n<script');
+                            if (!isProxyHost) {
+                                var webroot = data.page.environment.webroot;
+                                scripts = scripts.replace(/src\=\"\/(.*)\"/g, 'src="'+ webroot +'$1"')
+                            }
                             
                             layout += scripts;                              
                         }
