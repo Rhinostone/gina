@@ -1612,7 +1612,7 @@ function Config(opt) {
                         filename = _(dir + '/' + files[i], true);
 
                         if ( fs.statSync(filename).isDirectory() ) {
-                            // ignore users validators
+                            // ignore users validators/* directories
                             if ( /validators$/i.test(filename) ) {
                                 continue;
                             }
