@@ -326,9 +326,30 @@ function Couchbase(conn, infos) {
 
     }
 
-    var bulkInsert = function(rec) {
+    /**
+     * bulkInsert
+     * 
+     * Supported options
+     *  - adhoc : [ true | false ]
+     *  // scan consistency level - default is 1
+     *  - consistency : [ 1 | 2 | 3 ] where 1 = NOT_BOUNDED, 2 = REQUEST_PLUS, 3 = STATEMENT_PLUS
+     * 
+     * @param {array} rec collection
+     * @param {object} [options] e.g: { consistency: 3 }
+     * 
+     */
+    var bulkInsert = function(rec, options) {
 
         try {
+            
+            var queryOptions = {
+                adhoc: false,
+                consistency: 1
+            };
+            
+            if ( typeof(options) != 'undefined' ) {
+                queryOptions = merge(options, queryOptions)
+            }
 
             var name = 'bulkInsert';
 
@@ -354,7 +375,11 @@ function Couchbase(conn, infos) {
             queryString += '\nRETURNING '+ this.database +'.*;';
 
             // prepared statement
-            var query = N1qlQuery.fromString(queryString).adhoc(false);
+            var query = N1qlQuery
+                            .fromString(queryString)
+                            .adhoc(queryOptions.adhoc)
+                            .consistency(queryOptions.consistency)
+            ;
 
             // trick to set event on the fly
             var trigger = 'N1QL:'+ this.name.toLowerCase()+ '#'+ name;

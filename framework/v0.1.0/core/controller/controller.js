@@ -388,7 +388,14 @@ function SuperController(options) {
             }
 
             template = local.options.rule.replace('\@'+ local.options.bundle, '');
-            setResources(local.options.template);
+            var localTemplateConf = local.options.template;
+            if ( isWithoutLayout ) {
+                localTemplateConf = JSON.parse(JSON.stringify(local.options.template));
+                localTemplateConf.javascripts = new Collection(localTemplateConf.javascripts).find({ isCommon: false}, { isCommon: true, name: 'gina' });
+                localTemplateConf.stylesheets = new Collection(localTemplateConf.stylesheets).find({ isCommon: false}, { isCommon: true, name: 'gina' }); 
+            }
+            setResources(localTemplateConf);
+            
             
             var file = data.page.view.file;
 
@@ -2137,7 +2144,7 @@ function SuperController(options) {
                 
                 //Only when needed.
                 if ( typeof(callback) != 'undefined' ) {
-                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
                         try {
                             data = JSON.parse(data)
                         } catch (err) {
@@ -2163,7 +2170,7 @@ function SuperController(options) {
                     }                        
 
                 } else {
-                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
                         try {
                             data = JSON.parse(data)
                         } catch (err) {
@@ -2230,7 +2237,7 @@ function SuperController(options) {
             onComplete  : function(cb) {
                 self.once('query#complete', function(err, data){
 
-                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
                         try {
                             data = JSON.parse(data)
                         } catch (err) {
@@ -2459,7 +2466,7 @@ function SuperController(options) {
                 
                 //Only when needed.
                 if ( typeof(callback) != 'undefined' ) {
-                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
                         try {
                             data = JSON.parse(data)
                         } catch (err) {
@@ -2485,7 +2492,7 @@ function SuperController(options) {
                     }                        
                     
                 } else {
-                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
                         try {
                             data = JSON.parse(data)
                         } catch (e) {
@@ -2523,7 +2530,7 @@ function SuperController(options) {
                 
                 self.once('query#complete', function(err, data){
                      
-                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)/.test(data) ) {
+                    if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
                         try {
                             data = JSON.parse(data)
                         } catch (err) {

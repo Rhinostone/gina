@@ -68,10 +68,8 @@ function Collection(content, options) {
         searchOptionRules: searchOptionRules
     };
     
+        
     
-    
-    
-    content = (content) ? JSON.parse(JSON.stringify(content)) : []; // original content -> not to be touched
     options = (typeof(options) == 'object') ? merge(options, defaultOptions) : defaultOptions;
 
     var keywords    = ['not null']; // TODO - null, exists (`true` if property is defined)
@@ -83,11 +81,14 @@ function Collection(content, options) {
         }
     }
 
-   
+    if (typeof(content) == 'undefined' || content == '' || content == null)
+        content = [];
 
     if ( !Array.isArray(content) )
-        throw new Error('`new Collection([content] [, options] )`: `content` argument must me an Array !');
+        throw new Error('`new Collection([content] [, options] )`: `content` argument must be an Array !');
 
+    content = (content) ? JSON.parse(JSON.stringify(content)) : []; // original content -> not to be touched
+        
     // Indexing : uuids are generated for each entry
     for (var entry = 0, entryLen = content.length; entry < entryLen; ++entry) {
         if (!content[entry]) {
