@@ -591,14 +591,14 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 var XHRData = result;
                 
                 try {                    
-                    
+                    var XHRDataNew = null;
                     if ( !resultIsObject && XHRData.error && /^(\{|\[)/.test(XHRData.error) )
                         XHRData.error = JSON.parse(XHRData.error);
-
+                    
                     // bad .. should not happen
                     if ( typeof(XHRData.error) != 'undefined' && typeof(XHRData.error) == 'object' && typeof(XHRData.error) == 'object' ) {
                         // by default
-                        var XHRDataNew = { 'status' : XHRData.status };
+                        XHRDataNew = { 'status' : XHRData.status };
                         // existing will be overriden by user
                         for (xErr in XHRData.error) {
                             if ( !/^error$/.test(xErr ) ) {
@@ -609,18 +609,26 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         XHRDataNew.error = XHRData.error.error;
 
                         XHRData = result = XHRDataNew
+                    } else if ( typeof(XHRData.error) != 'undefined' && typeof(XHRData.error) == 'string' ) {
+                        XHRData = result;
                     }
                         
                     XHRData.isXHRViewData = true;
-                    ginaToolbar.update('data-xhr', XHRData )
+                    ginaToolbar.update('data-xhr', XHRData );
+                    return;
                 } catch (err) {
                     throw err
                 }
             }
             
             // update toolbar
-            var $popin = getPopinById(instance.activePopinId);
-            var $el = $popin.target;
+            try {
+                var $popin = getPopinById(instance.activePopinId);
+                var $el = $popin.target;
+            } catch (err) {
+                ginaToolbar.update('data-xhr', err );
+            }
+            
             
             // XHRData
             var XHRData = null;            
@@ -1006,19 +1014,19 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var ignoreList  = [], s = 0;
             var i = 0, len = globalScriptsList.length;
             var scripts = $el.getElementsByTagName('script');
-            for (;i < len; ++i) {
-                if ( !globalScriptsList[i].src || /gina(\.min\.js|\.js)$/.test(globalScriptsList[i].src) )
-                    continue;    
+            // for (;i < len; ++i) {
+            //     if ( !globalScriptsList[i].src || /gina(\.min\.js|\.js)$/.test(globalScriptsList[i].src) )
+            //         continue;    
                     
-                ignoreList[s] = globalScriptsList[i].src;
-                ++s
-            }
+            //     ignoreList[s] = globalScriptsList[i].src;
+            //     ++s
+            // }
                         
             i = 0; len = scripts.length;
             for (;i < len; ++i) {
                 // don't load if already in the global context
-                if ( ignoreList.indexOf(scripts[i].src) > -1 )
-                    continue;
+                // if ( ignoreList.indexOf(scripts[i].src) > -1 )
+                //     continue;
                 
                 getScript(scripts[i].src);               
             }  

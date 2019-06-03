@@ -1267,7 +1267,8 @@ function Config(opt) {
                     js      = {
                         name    : '',
                         type    : 'text/javascript',
-                        url     : ''
+                        url     : '',
+                        isCommon : false
                     }
                 ;
                 
@@ -1301,7 +1302,8 @@ function Config(opt) {
                             //url                     = ( !reWebroot.test(tTmp[t]) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(tTmp[t]) ) ? tTmp[t].substr(1) : tTmp[t] ) : tTmp[t];                               
                             url                     = tTmp[t];
                             noneDefaultJs[t].url    = url;                                
-                            noneDefaultJs[t].name   = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');                            
+                            noneDefaultJs[t].name   = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');    
+                            noneDefaultJs[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;                        
                         }                
                     }
                     
@@ -1333,6 +1335,7 @@ function Config(opt) {
                         }
                         
                         noneDefaultJs[t].type  = ( typeof(noneDefaultJs[t].type) != 'undefined' ) ? noneDefaultJs[t].type : js.type;
+                        noneDefaultJs[t].isCommon  = ( typeof(noneDefaultJs[t].isCommon) != 'undefined' ) ? noneDefaultJs[t].isCommon : ( ( /^_common$/.test(section) ) ? true : false );
                     }
                     
                     
