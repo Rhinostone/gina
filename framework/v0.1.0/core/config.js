@@ -1306,12 +1306,15 @@ function Config(opt) {
                             noneDefaultJs[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;                        
                         }                
                     }
-                    
+                    if ( section == 'document-send') {
+                        console.debug('document-send debug');
+                    }
                     if (!files['templates'][section].javascriptsExcluded) {
                         if ( /^_common$/.test(section) ) {
                             noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);    
                         } else {
-                            noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs);
+                            // filter when a common script url is redeclared in the current section : isCommon `true` -> `false`
+                            noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
                         }
                     } else if ( 
                         typeof(files['templates'][section].javascriptsExcluded) != 'undefined' 
@@ -1335,7 +1338,7 @@ function Config(opt) {
                         }
                         
                         noneDefaultJs[t].type  = ( typeof(noneDefaultJs[t].type) != 'undefined' ) ? noneDefaultJs[t].type : js.type;
-                        noneDefaultJs[t].isCommon  = ( typeof(noneDefaultJs[t].isCommon) != 'undefined' ) ? noneDefaultJs[t].isCommon : ( ( /^_common$/.test(section) ) ? true : false );
+                        noneDefaultJs[t].isCommon  = ( typeof(noneDefaultJs[t].isCommon) != 'undefined' ) ? noneDefaultJs[t].isCommon : ( ( /^_common$/.test(section) ) ? true : false );                        
                     }
                     
                     
@@ -1395,7 +1398,7 @@ function Config(opt) {
                                 files['templates'][section][ref] = files['templates']._common[ref];
                         }
                         
-                        // removes common definitions from the common definitions from the current section
+                        // removes common definitions from the common definitions of the current section
                         r = 0;
                         rLen = excludedType.length;
                         if (rLen > 0) {

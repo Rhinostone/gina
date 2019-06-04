@@ -230,7 +230,7 @@ function Merge() {
                 && typeof(target[0]) == 'object' && typeof(target[0][keyComparison]) != 'undefined'
             ) {
 
-                newTarget = [];
+                newTarget = JSON.parse(JSON.stringify(target));
                 
                 var _options    = JSON.parse(JSON.stringify(options));
                 
