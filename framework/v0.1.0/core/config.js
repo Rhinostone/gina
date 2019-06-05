@@ -1314,7 +1314,10 @@ function Config(opt) {
                             noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);    
                         } else {
                             // filter when a common script url is redeclared in the current section : isCommon `true` -> `false`
-                            noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
+                            if ( noneDefaultJs.length > 0 )
+                                noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
+                            else
+                            noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs);
                         }
                     } else if ( 
                         typeof(files['templates'][section].javascriptsExcluded) != 'undefined' 
