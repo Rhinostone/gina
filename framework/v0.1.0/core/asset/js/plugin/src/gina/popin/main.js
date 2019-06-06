@@ -857,7 +857,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                 resultIsObject = true
                             }
 
-                            instance.eventData.error = result;
+                            instance.eventData.error = result;                            
+                            
 
                             // update toolbar
                             updateToolbar(result, resultIsObject);
