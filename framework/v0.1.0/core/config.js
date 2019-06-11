@@ -281,9 +281,9 @@ function Config(opt) {
         template : require('./template/conf/env.json'),
         load : function(callback) {
             loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
-                self.envConf = envConf;
-                envConf.env = self.env;
-                envConf.isStandalone = self.isStandalone;
+                self.envConf            = envConf;
+                envConf.env             = self.env;
+                envConf.isStandalone    = self.isStandalone;
                 
                 callback(false, envConf);
             });
@@ -422,15 +422,19 @@ function Config(opt) {
             projectPath     = '',
             ctx             = getContext('gina'),
             projectConf     = ctx.project,
-            portsReverse    = ctx.portsReverse;
+            portsReverse    = ctx.portsReverse
+        ;
 
+        if (!self.projectName) {            
+            self.projectName = ctx.config.projectName
+        }
         
         //Pushing default app first.        
         self.bundles.push(self.startingApp);//This is a JSON.push.
         var root = new _(self.executionPath).toUnixStyle();
         try {
             var pkg     = require(_(root + '/project.json')).bundles;
-            // by default but may be overriden
+            // by default but may be overriden           
             masterPort = portsReverse[self.startingApp+'@'+self.projectName][env][projectConf.def_protocol][projectConf.def_scheme]
         } catch (err) {
             console.error(err.stack);

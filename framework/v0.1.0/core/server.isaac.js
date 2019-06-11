@@ -6,6 +6,7 @@
 
 const fs                    = require('fs');
 const {EventEmitter}        = require('events');
+const Eio                   = require('engine.io');
 
 const lib               = require('./../lib');
 const inherits          = lib.inherits;
@@ -79,7 +80,7 @@ function ServerEngineClass(options) {
     if (typeof (options.credentials.passphrase) != 'undefined' && options.credentials.passphrase != '' )
         credentials.passphrase = options.credentials.passphrase;
     
-    var server = null, http = null;
+    var server = null, http = null, ioServer = null;
             
     if ( /^http\/2/.test(options.protocol) ) {
         var http2   = require('http2');
@@ -89,7 +90,7 @@ function ServerEngineClass(options) {
                 break;
                 
             case 'https':                
-                server      = http2.createSecureServer(credentials);
+                server      = http2.createSecureServer(credentials);                
                 break;
         
             default:
@@ -115,6 +116,7 @@ function ServerEngineClass(options) {
                 break;
         }
     }
+    
                     
     const middleware = function(path, cb) {
         
@@ -127,7 +129,87 @@ function ServerEngineClass(options) {
         //     });
         //     stream.end('<h1>404</h1>');
         // }
-    }   
+    }  
+    
+    if ( typeof(options.ioServer) != 'undefined' && typeof(options.ioServer.integrationMode) != 'undefined' && /^attach$/.test(options.ioServer.integrationMode) ) {
+        console.info('[IO SERVER ] `eio` found using `attach` integration mode');
+        delete options.ioServer.integrationMode;
+        
+        ioServer = new Eio(server, options.ioServer);        
+        
+        ioServer.getClientsBySessionId = function(sessionId) {
+            
+            if (this.clients.count() == 0)
+                return null;
+            
+            var clients = null;
+            
+            for (var id in this.clients) {
+                
+                if ( typeof(this.clients[id].sessionId) == 'undefined' )
+                    continue;
+                
+                if (!clients) clients = {};
+                
+                clients[id] = this.clients[id];
+            }
+            
+            if (clients) {
+                // allowing to send for each client found sharing the same request session
+                clients.send = function(payload, option, callback) {
+                    for ( var id in this) {
+                        if ( typeof(this[id].sessionId) == 'undefined')
+                            continue;
+                            
+                        this[id].send(payload, option, callback)
+                    }
+                }
+            }
+                
+            
+            return clients;
+        }
+        
+        server.eio = ioServer;
+        
+        ioServer.on('connection', function (socket) {
+            
+            socket.send(JSON.stringify({
+                id: socket.id,
+                notification: 'Welcomed to `'+ options.bundle +'` main socket !'
+            }));
+            
+            socket.on('message', function(payload){ 
+                
+                try {
+                    console.debug('[IO SERVER ] receiving '+ payload);
+                    payload = JSON.parse(payload);
+                    // bind to session ID
+                    if ( typeof(payload.session) != 'undefined' ) {
+                        this.sessionId = payload.session.id;
+                    }
+                } catch(err) {
+                    console.error(err.stack||err.message|| err)
+                }
+                
+            });
+            
+            socket.on('close', function(){ 
+                console.debug('[IO SERVER ] closed socket #'+ this.id);
+            });
+        });
+        
+        server.on('upgrade', function(req, socket, head){            
+            ioServer.handleUpgrade(req, socket, head);
+        });
+        // httpServer.on('request', function(req, res){
+        //     ioServer.handleRequest(req, res);
+        // });
+        
+        
+    }
+    
+        
     
     const onPath = function(path, cb, allowAll) {
         
@@ -145,6 +227,10 @@ function ServerEngineClass(options) {
             
             if (GINA_ENV_IS_DEV) {
                 refreshCore()
+            }
+            
+            if ( /engine.io/.test(request.url)) {
+                console.debug('io request');
             }
                                       
             if (/^\*$/.test(path) || path == request.url) {
@@ -257,6 +343,9 @@ function ServerEngineClass(options) {
         
         return this;
     }
+    
+    
+    
 
     server.on('error', (err) => {
         console.error(err)

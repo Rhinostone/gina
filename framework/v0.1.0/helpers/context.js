@@ -197,7 +197,12 @@ function ContextHelper(contexts) {
             if (!ctx.gina) {
                 ctx.gina = {
                     Config : require('./../core/config')
-                }
+                };
+                
+                ctx.gina.config = merge(ctx.config, ctx.gina.Config);
+            }
+            for (var name in ctx) {
+                setContext(name, ctx[name], false)
             }
                 
         } else {
@@ -241,7 +246,7 @@ function ContextHelper(contexts) {
             }
         }
 
-        var env = GINA_ENV;
+        var env = ctx.env || GINA_ENV;
         var cacheless = GINA_ENV_IS_DEV;
         var Config = ctx.gina.Config;
         var conf = null;
@@ -274,6 +279,12 @@ function ContextHelper(contexts) {
                 conf.bundlesConfiguration.conf.env = env;
                 conf.bundlesConfiguration.conf.projectName = getContext('projectName');
                 conf.bundlesConfiguration.conf.bundles = getContext('bundles');
+                
+                if ( typeof(ctxFilename) != 'undefined' ) {
+                    //process.stdout.write('TYPEOF ' + typeof( conf.getRouting ) ) 
+                    setContext('gina.config', conf, true);
+                    //process.stdout.write('TYPEOF ' + typeof( getContext('gina').config.getRouting ) ) 
+                }
 
                 return conf.bundlesConfiguration.conf
             } catch (err) {
