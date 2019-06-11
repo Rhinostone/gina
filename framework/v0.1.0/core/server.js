@@ -4,9 +4,8 @@ var os              = require('os');
 var path            = require('path');
 var EventEmitter    = require('events').EventEmitter;
 var Busboy          = require('busboy');
-const Stream        = require('stream')
+const Stream        = require('stream');
 var zlib            = require('zlib'); // gzip / deflate
-var url             = require('url');
 var util            = require('util');
 var Config          = require('./config');
 var Router          = require('./router');
@@ -82,7 +81,13 @@ function Server(options) {
         try {
             
             // updating server protocol
-            var serverOpt = {};            
+            var serverOpt = {};
+            var ioServerOpt = null;
+            if ( typeof(options.conf[self.appName][self.env].content.settings.ioServer) != 'undefined' ) {
+                ioServerOpt = JSON.parse(JSON.stringify(options.conf[self.appName][self.env].content.settings.ioServer)) 
+            }
+                    
+               
             if ( 
                 typeof(options.conf[self.appName][self.env].content.settings.server) != 'undefined' 
                 && options.conf[self.appName][self.env].content.settings.server != ''
@@ -91,11 +96,17 @@ function Server(options) {
                 serverOpt = options.conf[self.appName][self.env].content.settings.server;
             }
             
-            serverOpt = merge(serverOpt, {
-                engine: options.conf[self.appName][self.env].server.engine,
-                protocol: options.conf[self.appName][self.env].server.protocol,
-                scheme: options.conf[self.appName][self.env].server.scheme
-            });
+            serverOpt = merge({
+                        bundle  : self.appName,
+                        env     : self.env
+                    }, 
+                    serverOpt, 
+                    {
+                        engine: options.conf[self.appName][self.env].server.engine,
+                        protocol: options.conf[self.appName][self.env].server.protocol,
+                        scheme: options.conf[self.appName][self.env].server.scheme
+                    }
+            );
             
             self.engine = serverOpt.engine;
             console.debug('[ BUNDLE ][ server ][ init ] Initializing [ '+ self.appName +' ] server with `'+ serverOpt.engine +'`engine');
@@ -113,7 +124,11 @@ function Server(options) {
             self.conf[self.appName][self.env].server.engine = serverOpt.engine;
             
             serverOpt.port      = self.conf[self.appName][self.env].server.port = portsReverse[ self.appName +'@'+ self.projectName ][self.env][serverOpt.protocol][serverOpt.scheme];
-                       
+            
+            // engin.io options
+            if ( ioServerOpt ) {
+                serverOpt.ioServer = ioServerOpt
+            }
 
             Engine = require('./server.' + ((typeof (serverOpt.engine) != 'undefined' && serverOpt.engine != '') ? serverOpt.engine : 'express'));
             var engine = new Engine(serverOpt);
@@ -1626,7 +1641,7 @@ function Server(options) {
                 //|| staticProps.isStaticFilename && staticsArr.indexOf(staticProps.firstLevel) > -1
                 // take ^/dir/sub/*
                 || staticProps.isStaticFilename && new RegExp('^'+ staticProps.firstLevel).test(request.url)
-                || /\/$/.test(request.url) && !isWebrootHandledByRouting
+                || /\/$/.test(request.url) && !isWebrootHandledByRouting && !/\/engine\.io\//.test(request.url)
             ) {
                 self._isStatic  = true;
                 
@@ -1657,7 +1672,7 @@ function Server(options) {
                 
             } else { // not a static request                
                 self._isStatic  = false;
-                
+                                                
                 request.body    = ( typeof(request.body) != 'undefined' ) ? request.body : {};
                 request.get     = {};
                 request.post    = {};

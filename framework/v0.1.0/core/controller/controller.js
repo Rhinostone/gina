@@ -2759,6 +2759,44 @@ function SuperController(options) {
             self.throwError(local.res, 500, err)
         }
     }
+    
+    this.push = function(payload) {
+        
+        var req = local.req, res = local.res;
+        var method  = req.method.toLowerCase();
+        // if no session defined, will push to all active clients
+        var sessionId = ( typeof(req[method].sessionID) != 'undefined' ) ? req[method].sessionID : null;
+        
+        if (!payload) {           
+            payload     = null;
+            
+            if ( typeof(req[method]) != 'undefined' && typeof(req[method].payload) != 'undefined' ) {
+                payload = decodeURIComponent(req[method].payload)
+            }
+        } else if ( typeof(payload) == 'object') {
+            payload = JSON.stringify(payload)
+        }           
+        
+        try {
+            var clients = null;
+            if (sessionId) {
+                clients = self.serverInstance.eio.getClientsBySessionId(sessionId);
+                if (clients)
+                    clients.send(payload);
+            } else {
+                clients = self.serverInstance.eio.clients;
+                
+                for (var id in clients) {
+                    clients[id].send(payload)
+                }
+            }
+                
+            res.end();
+            
+        } catch(err) {
+            self.throwError(err)
+        } 
+    }
 
     /**
      * Throw error
