@@ -2768,12 +2768,15 @@ function SuperController(options) {
         var sessionId = ( typeof(req[method].sessionID) != 'undefined' ) ? req[method].sessionID : null;
         
         if (!payload) {           
-            payload     = null;
-            
+            payload     = null;            
             if ( typeof(req[method]) != 'undefined' && typeof(req[method].payload) != 'undefined' ) {
-                payload = decodeURIComponent(req[method].payload)
+                if ( typeof(payload) == 'string' ) {
+                    payload = decodeURIComponent(req[method].payload)
+                } else {
+                    payload =  JSON.stringify(req[method].payload)
+                }                
             }
-        } else if ( typeof(payload) == 'object') {
+        } else if ( typeof(payload) == 'object' ) {
             payload = JSON.stringify(payload)
         }           
         
