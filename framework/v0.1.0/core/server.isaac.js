@@ -176,7 +176,7 @@ function ServerEngineClass(options) {
             
             socket.send(JSON.stringify({
                 id: socket.id,
-                notification: 'Welcomed to `'+ options.bundle +'` main socket !'
+                handshake: 'Welcomed to `'+ options.bundle +'` main socket !'
             }));
             
             socket.on('message', function(payload){ 

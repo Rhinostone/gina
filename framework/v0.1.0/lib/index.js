@@ -44,8 +44,8 @@ function Lib() {
         Shell       : _require('./shell'),
         logger      : _require('./logger'),
         math        : _require('./math'),
-        //url         : _require('./url'),
         routing     : _require('./routing'),
+        archiver    : _require('./archiver'),
         cmd         : _require('./cmd')
     };
 
