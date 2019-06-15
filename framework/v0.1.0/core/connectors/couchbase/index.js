@@ -1,5 +1,6 @@
 // Imports.
 var fs              = require('fs');
+//var promisify       = require('util').promisify;
 var lib             = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var inherits        = lib.inherits;
 var merge           = lib.merge;
@@ -171,16 +172,21 @@ function Couchbase(conn, infos) {
                     entities[entityName].prototype._collection    = entityName;
                     entities[entityName].prototype._filename      = _( __dirname + '/lib/n1ql.js', true );
                 }
-
+                
+                
                 entities[entityName].prototype[name] = function() {
                     var key     = null
                         , index = null
                         , i     = null
                         , len   = null
-                        , args  = Array.prototype.slice.call(arguments);
+                        , args  = Array.prototype.slice.call(arguments)
+                        , _mainCallback = null;
 
-                    if (params && params.length != args.length) {
+                    if ( params && params.length != args.length && !/function/.test(typeof(args[args.length-1])) ) {
                         throw new Error('[ N1QL:' + entityName+'#'+name+'() ] arguments must match parameters length. Please refer to [ '+ source +' ]\nFound in param list: ('+ params.join(', ') +') !')
+                    } else if ( /function/.test( typeof(args[args.length-1]) ) ) {
+                        // to hande Nodejs Util.promisify
+                        _mainCallback = args[args.length-1]
                     }
 
 
@@ -305,19 +311,38 @@ function Couchbase(conn, infos) {
                             data = ( typeof(returnVariable) != 'undefined' ) ? data[0][returnVariable] : data[0];
                         }
 
-                        self.emit(trigger, err, data, meta);
+                        try {
+                            if ( _mainCallback != null ) {
+                                _mainCallback(err, data, meta)
+                            } else {
+                                self.emit(trigger, err, data, meta);
+                            }
+                            
+                        } catch (_err) {
+                            if ( _mainCallback != null ) {
+                                _mainCallback(err, data, meta)
+                            } else {
+                                throw new Error('[ Couchbase ][ Core Entity Exception] '+ trigger + '\n'+ _err.stack)
+                            }                            
+                        }
+                        
 
                     });
 
-                    return {
-                        onComplete : function(cb) {
-                            self.once(trigger, function(err, data, meta){
-                                cb(err, data, meta)
-                            })
+                    if ( _mainCallback == null ) {
+                    
+                        return {
+                            onComplete : function(cb) {
+                                self.once(trigger, function(err, data, meta){
+                                    cb(err, data, meta)
+                                })
+                            }
                         }
                     }
 
                 }
+                
+                
 
             } catch (err) {
                 console.error(err.stack);
