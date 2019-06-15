@@ -8,12 +8,12 @@
 // nodejs dependencies
 if ( typeof(module) !== 'undefined' && module.exports) {
     
-    var fs      = require('fs');
-    var zlib    = require('zlib');
-    var JSZip   = require('./dep/jszip.min.js');
-    var Emitter = require('events').EventEmitter;
-    var helpers = require('../../../helpers/index');
-    var inherits = require('../../../lib/inherits');
+    var fs          = require('fs');
+    var zlib        = require('zlib');
+    var JSZip       = require('./dep/jszip.min.js');
+    var Emitter     = require('events').EventEmitter;
+    var helpers     = require('../../../helpers/index');
+    var inherits    = require('../../../lib/inherits');
 }
 
 
@@ -41,7 +41,7 @@ function Archiver() {
     var self        = this;    
     var isGFFCtx    = ((typeof (module) !== 'undefined') && module.exports) ? false :  true;
     var merge       = (isGFFCtx) ? require('utils/merge') : require('../../../lib/merge');
-    var zip         = new JSZip();
+    var zip         = null;
     
     
     // var fs = null, zlib = null, Emitter = null;
@@ -57,16 +57,32 @@ function Archiver() {
         tmp         : null,
         method      : 'gzip', // gzip (Gzip/Gunzip) | br (Brotli) | deflate (Deflate/Inflate)
         unlinkSrc   : false,
-        // Zli class options : https://nodejs.org/api/zlib.html#zlib_class_options
+        name        : 'default',
+        // Zlib class options : https://nodejs.org/api/zlib.html#zlib_class_options
         level       : 9   // compression level 
     };
+    
+    var local = {};
     
     
     
     /**
      * compress
      * 
-     * @param {string|array} src - filename or array of filenames e.g: `/usr/local/data/dump.sql`
+     * @param {string|array} src - filename, dirname or array of filenames & dirnames e.g: `/usr/local/data/dump.sql`
+     * 
+     * Array must be a collection e.g.:
+     *  [
+     *      {
+     *          input: '/usr/loca/data/img/favicon.ico'
+     *          ouput: 'img/favicon.ico
+     *      },
+     *      {
+     *          input: '/usr/local/backup/mysql/dump.sql',
+     *          ouput: 'dump/my-db.sql'
+     *      }
+     *  ]
+     * 
      * @param {string} output pathname - e.g: `/var/backup/mysql/`
      * @param {object} [options] you can also pass Zlib class options, see: https://nodejs.org/api/zlib.html#zlib_class_options
      *  {
@@ -84,6 +100,10 @@ function Archiver() {
             options.unlinkSrc = true;
         }
         
+        if ( !/\/$/.test(target) ) {
+            target += '/'
+        }
+        
         // if ( /\.(zip|gz)$/.test(target) ) {
         //     options.method = 'gzip';
         // }
@@ -91,73 +111,205 @@ function Archiver() {
         if ( self.allowedCompressionMethods.indexOf(options.method.toLowerCase()) < 0 ) {
             throw new Error('compression methode `'+ options.method +'` not supported !');
         }
+        local.options = options;
+        zip = new JSZip(); // zipInstance
         
-        compressWith[options.method](src, target, options);
+        compress(options.method, src, target, zip, options);
         
         return {
             onComplete: function onCompressionCompleted(cb) {
-                self.once('archiver#complete', function(err, target){
+                self.once('archiver-'+ options.method +'#complete', function(err, target){
+                    zip = null;
                     cb(err, target)
                 })
-            }
+            }//,
+            //addSignature : selt.addSignature
         }
     }
     
-    var compressWith = {};
 
-    compressWith.gzip = function(src, target, options) {        
+    var compress = function(method, src, target, zipInstance, options) {        
         
-
-        // compress file or folder
-        if ( typeof(src) == 'string' ) {
+        var stats = null;
+        
+        var processSrc = function(method, src, target, zipInstance, options, cb) {
+            
             if ( !fs.existsSync(src) ) {
-                self.emit('archiver#complete', new Error('file not found `'+ src +'`'));
+                self.emit('archiver-'+ method +'#complete', new Error('file not found `'+ src +'`'));
                 
                 return;
-            }                              
+            }        
             
+            stats = fs.statSync(src); 
             
-            var stats = fs.statSync(src); 
+            var isBatchProcessing = ( typeof(cb) != 'undefined' ) ? true : false;
             
             if ( stats.isFile() ) { // single file compression
-                // targeted filename  
-                if ( typeof(options.name) != 'undefined' ) {
-                    target += options.name+ '.zip';
-                } else {
-                    target += src.substr(src.lastIndexOf('/')+1) +'.zip';
-                }  
+                    
             
-                var input   = fs.createReadStream(src);
-                var output  = fs.createWriteStream(target);
+                var input   = null;
+                var output  = null;
+                
+                if ( isBatchProcessing ) {
+                    input   = src;
+                    output  = target
+                } else {
+                    // targeted filename  
+                    if ( typeof(options.name) != 'undefined' && options.name != 'default') {
+                        target += options.name;
+                    } else {
+                        target += src.substr(src.lastIndexOf('/')+1);
+                    }  
+                    
+                    input   = fs.createReadStream(src);
+                    output  = fs.createWriteStream(target +'.zip');
+                }
                         
-                compressFile(options.method, input, output, function(err, target) {
-                    self.emit('archiver#complete', err, target)
+                compressFile(method, input, output, zipInstance, isBatchProcessing, function(err, target, zipInstance) {
+                    if ( isBatchProcessing ) {
+                        cb(err, zipInstance);
+                    } else {
+                        self.emit('archiver-'+ method +'#complete', err, target)
+                    }
+                    
                 });
-            } else { // might be a fodler
+            } else if ( stats.isDirectory() ) { // might be a fodler
+                
+                /**
                 // targeted filename  
-                if ( typeof(options.name) != 'undefined' ) {
+                if ( typeof(options.name) != 'undefined' && options.name != 'default') {
                     target += options.name;
                 } else {
                     target += src.substr(src.lastIndexOf('/')+1);
-                }  
+                }  */
                 
-                browse(options.method, src, target, [], [], 0, null, function(err, target) {
-                    self.emit('archiver#complete', err, target);
+                if ( !isBatchProcessing ) {
+                    // targeted filename  
+                    if ( typeof(options.name) != 'undefined' && options.name != 'default') {
+                        options.root = './'+ options.name +'/';
+                        target += options.name;
+                    } else {
+                        options.root = './'+ src.substr(src.lastIndexOf('/')+1) +'/';
+                        target += src.substr(src.lastIndexOf('/')+1);
+                    }                     
+                }
+                               
+                browse(method, src, target, zipInstance, options, [], [], 0, null, isBatchProcessing, function(err, target, zipInstance) {
+                    if ( isBatchProcessing ) {
+                        cb(err, zipInstance);
+                    } else {
+                        self.emit('archiver-'+ method +'#complete', err, target);
+                    }                    
                 });
+            } else {
+                var err = new Error('[ lib/archiver ] only supporting real `filename` & `dirname` as `src` input at for now');
+                err.status = 500;
+                if ( isBatchProcessing ) {
+                    cb(err, zipInstance);
+                } else {
+                    self.emit('archiver-'+ method +'#complete', err, null)
+                }                
             }
-            
+        }
+        
+        // compress single file or scan an entire directory
+        if ( typeof(src) == 'string' ) {            
+            processSrc(method, src, target, zipInstance, options)
+                        
         } else if ( Array.isArray(src) ) { // compress from a list of files & folders
             
-        } else {
+            // main zip dir
+            var mainFolder  = target + options.name;    
+            options.root    = '.'+ mainFolder.substr(mainFolder.lastIndexOf('/')) +'/'; 
             
+            var output = mainFolder +'.zip';
+            if ( fs.existsSync(output)) {
+                fs.unlinkSync(output);
+            }
+            
+            outputStream = fs.createWriteStream(output);
+                        
+            
+            var i = 0, len = src.length;            
+            var processList = function(method, files, target, zipInstance, options, i, len, err) {
+                
+                if (i >= len || err) {
+                    
+                    if (!err && zipInstance) {
+                                               
+                        zipInstance
+                            .generateNodeStream({ compression: 'DEFLATE', compressionOptions : {level: options.level } })     
+                            .pipe(outputStream); 
+                            
+                        outputStream
+                            .on('err', function(){   
+                                outputStream.close();            
+                                self.emit('archiver-'+ method +'#complete', err, null);
+                            })
+                            .on('finish', function(){             
+                                outputStream.close();
+                                self.emit('archiver-'+ method +'#complete', false, this.path);
+                            })
+                            
+                    } else {
+                        self.emit('archiver-'+ method +'#complete', err, null);
+                    }
+                    
+                    return
+                }
+                
+                
+                if ( typeof(files[i]) == 'undefined' ) {
+                    console.warn('[ lib/archiver ] undefined file found: cannot process index `'+ i +'`, skipping to next index');
+                    return processList(method, files, target, zipInstance, options, i+1, len, err);                    
+                }
+                
+                if ( !fs.existsSync(files[i].input) ) {
+                    console.warn('[ lib/archiver ] src `'+ files[i].input +'` not found at index `'+ i +'`: skipping to next src');
+                    return processList(method, files, target, zipInstance, options, i+1, len, err);
+                }
+                           
+                // check if src is inside directory
+                if ( /\//.test(files[i].output) && fs.statSync(files[i].input).isFile() ) {
+                    //var newFolder = options.root + files[i].output.substr( 0, files[i].output.lastIndexOf('/')+1).replace(/^(\.\/|\/)/, '');
+                    var newFolder = files[i].output.substr( 0, files[i].output.lastIndexOf('/')+1).replace(/^(\.\/|\/)/, '');
+                    zipInstance.folder( newFolder )
+                }
+                
+                if ( fs.statSync(files[i].input).isDirectory() ) {
+                    files[i].output = options.root + files[i].output;
+                }
+                
+                processSrc(method, files[i].input, files[i].output, zipInstance, options, function onSrcProcessed(err, zipInstance){
+                    processList(method, src, target, zipInstance, options, i+1, len, err);
+                });
+                
+                return
+                
+            }
+            
+            processList(method, src, target, zipInstance, options, i, len, false);
+            
+        } else {
+            var err = new Error('[ lib/archiver ] `src` must be a `string` or an `array`');
+            err.status = 500;
+            self.emit('archiver-'+ method +'#complete', err, null)
         }
         
     }
     
-    var compressFile = function(method, input, output, cb, isPackage) {
+    var compressFile = function(method, input, output, zipInstance, isBatchProcessing, cb, isPackage) {
         
         var methodObject = null;
         isPackage = ( typeof(isPackage) == 'undefined' ) ? false: isPackage;
+        
+        if ( isBatchProcessing ) {
+            
+            zipInstance.file(output, fs.createReadStream(input));
+            
+            cb(false, output, zipInstance);
+            return
+        }
         
         switch (method) {
             case 'gzip':
@@ -171,8 +323,7 @@ function Archiver() {
         
         
         if ( /\/\.(.*)$/.test(input.path) ) {
-            // input
-            //     .pipe(output); 
+           
             if (isPackage) {
                 cb(false, input)
             } else {
@@ -192,40 +343,43 @@ function Archiver() {
             })
             .on('finish', function onCompressionFinished(){
                 if (isPackage) {
-                    cb(false, this)
+                    cb(false, this, zipInstance)
                 } else {
-                    cb(false, this.path)
+                    cb(false, this.path, zipInstance)
                 }                
             });            
         
     }
     
-    var browse = function(method, dir, target, files, outFiles, i, mainOutput, cb) {
+    var browse = function(method, dir, target, zipInstance, options, files, outFiles, i, mainOutput, isBatchProcessing, cb) {
         
         var input  = null, output = null;
         var f = null, fLen = null;
         if (files.length == 0) {
             files.push(dir);
-                        
+            
             outFiles.push(target +'.zip');
-            if ( fs.existsSync(outFiles[0])) {
-                fs.unlinkSync(outFiles[0]);
+            
+            if (!isBatchProcessing) {
+                if ( fs.existsSync(outFiles[0])) {
+                    fs.unlinkSync(outFiles[0]);
+                }
+                
+                mainOutput = fs.createWriteStream(outFiles[0]);
+                
+                // main zip dir
+                target = zipFolder =  '.'+ dir.substr(dir.lastIndexOf('/')) + '/';            
+                zipInstance.folder(zipFolder);
             }
-            
-            mainOutput = fs.createWriteStream(outFiles[0]);
-            
-            // main zip dir
-            target =  '.'+ dir.substr(dir.lastIndexOf('/'));            
-            zip.folder(target);
-            
-            
+                    
+                        
             var list = fs.readdirSync(dir);
             f = 1; fLen = list.length;
             for (; f < fLen; ++f) {
                 // input list
                 files.push(dir +'/'+ list[f]);
                 // output lis
-                outFiles.push(target+ '/'+ list[f])
+                outFiles.push(target + list[f])
             }
             ++i
         }
@@ -233,23 +387,29 @@ function Archiver() {
         var filename  = files[i];
         
         if ( /^(\.|\.\.)$/.test(filename) ) {// ignore this
-            browse(method, dir, target, files, outFiles, i+1, mainOutput, cb)
+            browse(method, dir, target, zipInstance, options, files, outFiles, i+1, mainOutput, isBatchProcessing, cb)
         }
         
         
         
-        // completed
-        if ( typeof(filename) == 'undefined' ) {               
+        // scan completed
+        if ( typeof(filename) == 'undefined' ) {
             
-            zip
-                .generateNodeStream()
-                .pipe(mainOutput);
-                
+            if ( isBatchProcessing ) {                
+                cb(false, null, zipInstance) 
+                return
+            }
+                        
+            zipInstance
+                .generateNodeStream({ compression: 'DEFLATE', compressionOptions : {level: local.options.level } })     
+                .pipe(mainOutput);   
+                    
             mainOutput
-                .on('err', function(){                    
+                .on('err', function(){   
+                    mainOutput.close();            
                     cb(err, null); 
                 })
-                .on('finish', function(){
+                .on('finish', function(){             
                     mainOutput.close();
                     cb(false, this.path); 
                 })
@@ -264,28 +424,30 @@ function Archiver() {
             
             if ( stats.isFile() ) {
                 
+                input   = fs.createReadStream(filename);
+                // output  = fs.createWriteStream(outFiles[i]);  
                 
-                zip.file(outFiles[i], fs.readFileSync(filename).toString());
-                browse(method, dir, target, files, outFiles, i+1, mainOutput, cb)
+                zipInstance.file(outFiles[i], input);
+                browse(method, dir, target, zipInstance, options, files, outFiles, i+1, mainOutput, isBatchProcessing, cb);
                 
-                // input   = fs.createReadStream(filename);
-                // output  = fs.createWriteStream(outFiles[i]);                
-                
-                // compressFile(method, input, output, function(err, output) {
+                // ------------------------------------ once we get a method to retrieve the archive headers
+                // compressFile(method, input, output, zipInstance, isBatchProcessing, function(err, output) {
                 //     if (err) {
                 //         cb(err, null)
                 //     } else {
-                //         zip.file(outFiles[i], fs.readFileSync(output.path).toString());
-                //         browse(method, dir, target, files, outFiles, i+1, mainOutput, cb)
+                //         zipInstance.file(outFiles[i], input);
+                //         browse(method, dir, target, zipInstance, options, files, outFiles, i+1, mainOutput, isBatchProcessing, cb)
                 //     }
                 // }, true);
                         
             } else {
-                var newDir = filename;
-                var moreFiles = fs.readdirSync(newDir);
-                
-                var newTarget =  '.'+ newDir.substr(newDir.lastIndexOf(target.substr(1)));            
-                zip.folder(newTarget);
+                var newDir      = filename;
+                var moreFiles   = fs.readdirSync(newDir);
+                var newTarget   = (isBatchProcessing) 
+                                    ? newDir.substr( newDir.lastIndexOf( '/'+target.substr(1).replace(options.root.substr(1), '') ) ) +'/'
+                                    : '.'+ newDir.substr( newDir.lastIndexOf(options.root.substr(1))) +'/'
+                ;
+                zipInstance.folder(newTarget);         
             
                 var index = i+1;
                 f = 0; fLen = moreFiles.length;
@@ -293,12 +455,12 @@ function Archiver() {
                     // update input list
                     files.splice(index, 0, newDir +'/'+ moreFiles[f]);
                     // update output list
-                    outFiles.splice(index, 0, newTarget +'/'+ moreFiles[f]);
+                    outFiles.splice(index, 0, newTarget + moreFiles[f]);
                     
                     ++index;
                 }
                 
-                browse(method, newDir, target, files, outFiles, i+1, mainOutput, cb)
+                browse(method, newDir, target, zipInstance, options, files, outFiles, i+1, mainOutput, isBatchProcessing, cb)
             }  
         }           
                                   
@@ -310,17 +472,18 @@ function Archiver() {
         
     }
     
-    this.compressFromData = function(data, target, options) {
+    this.compressFromStream = function(readStream, target, options) {
         
     }
     
-    this.compressHttpResponse = function(request, response) {
+    this.compressHttpResponse = function(request, response, options) {
         
     }
     
+    this.addSignature = function(filename, options) {
+        
+    }
     
-
-    //return self
 }
 
 if ( typeof(module) !== 'undefined' && module.exports ) {
