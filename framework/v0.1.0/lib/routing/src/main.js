@@ -441,6 +441,10 @@ function Routing() {
             , scheme    = null
             , bundle    = config.bundle // by default, takes the current bundle
         ;
+        
+        if ( !/\@/.test(rule) && typeof(bundle) != 'undefined' && bundle != null) {
+            rule += '@' + bundle
+        }
 
         if ( /\@/.test(rule) ) {
 
