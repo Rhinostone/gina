@@ -111,6 +111,7 @@ exports['[ compress from array of filenames & dirnames ] `'+ dirname +'` using [
 }
 
 
+
 // for debug purpose
 if (reporter)
     reporter.run(['test/01-gzip.js']);

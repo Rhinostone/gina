@@ -403,12 +403,12 @@ function ContextHelper(contexts) {
                 }
 
             } catch (err) {
-                console.error(err.stack||err.message||err);
+                //console.error(err.stack||err.message||err);
                 throwError(500, err);
                 return undefined
             }
         } else {
-            console.error( new Error("no `lib` found"));
+            //console.error( new Error("no `lib` found"));
             throwError(500, new Error("`lib` [ "+name+" ] not found"))
             return undefined
         }

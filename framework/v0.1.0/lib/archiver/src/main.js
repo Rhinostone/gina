@@ -104,6 +104,9 @@ function Archiver() {
             target += '/'
         }
         
+        if ( !fs.existsSync(target))
+            new _(target).mkdirSync();
+        
         // if ( /\.(zip|gz)$/.test(target) ) {
         //     options.method = 'gzip';
         // }
