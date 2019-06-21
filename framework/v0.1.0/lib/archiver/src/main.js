@@ -245,11 +245,11 @@ function Archiver() {
                             .pipe(outputStream); 
                             
                         outputStream
-                            .on('err', function(){   
+                            .once('err', function(){   
                                 outputStream.close();            
                                 self.emit('archiver-'+ method +'#complete', err, null);
                             })
-                            .on('finish', function(){             
+                            .once('finish', function(){             
                                 outputStream.close();
                                 self.emit('archiver-'+ method +'#complete', false, this.path);
                             })
@@ -341,10 +341,10 @@ function Archiver() {
             
             
         output
-            .on('error', function onCompressionError(err) {
+            .once('error', function onCompressionError(err) {
                 cb(err, null)
             })
-            .on('finish', function onCompressionFinished(){
+            .once('finish', function onCompressionFinished(){
                 if (isPackage) {
                     cb(false, this, zipInstance)
                 } else {
@@ -408,11 +408,11 @@ function Archiver() {
                 .pipe(mainOutput);   
                     
             mainOutput
-                .on('err', function(){   
+                .once('err', function(){   
                     mainOutput.close();            
                     cb(err, null); 
                 })
-                .on('finish', function(){             
+                .once('finish', function(){             
                     mainOutput.close();
                     cb(false, this.path); 
                 })

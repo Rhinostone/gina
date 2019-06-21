@@ -166,7 +166,7 @@ function EntitySuper(conn, caller) {
         var eventName = '';
         for (var prop in entity) {
             eventName = shortName +'#'+ prop;
-            if ( typeof(entity[prop]) == 'function' && new RegExp('(' + eventName + '\'|' + eventName + '\"|' + eventName + '$)').test(entity[prop].toString()) ) {
+            if (self._methods.indexOf(prop) < 0 && typeof(entity[prop]) == 'function' && new RegExp('(' + eventName + '\'|' + eventName + '\"|' + eventName + '$)').test(entity[prop].toString()) ) {
                 self._methods.push(prop)
             }
         }
@@ -186,15 +186,22 @@ function EntitySuper(conn, caller) {
                 typeof(entity[methods[f]]) == 'function'
                 && f != 'onComplete'
             ) {
+                
+                if ( triggers.indexOf(shortName + '#' + methods[f]) < 0 ) {
+                    events[i] = {
+                        index: i,
+                        shortName: shortName + '#' + methods[f],
+                        method: methods[f],
+                        entityName: entityName
+                    };
 
-                events[i] = {
-                    shortName: shortName + '#' + methods[f],
-                    method: methods[f],
-                    entityName: entityName
-                };
+                    
+                    triggers.push(shortName + '#' + methods[f]);
+                    
+                    ++i;
+                }
 
-                triggers.push(shortName + '#' + methods[f]);
-                ++i;
+                    
             }
         }
 
@@ -210,7 +217,7 @@ function EntitySuper(conn, caller) {
 
         for (var i = 0; i < events.length; ++i) {
 
-            entity.removeAllListeners(events[i].shortName); // added on october 1st to prevent adding new listners on each new querie
+            entity.removeAllListeners(events[i].shortName); // added to prevent adding new listners on each new querie
             //console.debug('placing event: '+ events[i].shortName +'\n');
             f       = events[i].method;
             fSource = entity[f].toString();
@@ -237,28 +244,43 @@ function EntitySuper(conn, caller) {
                         // retrieving local arguments, & binding it to the event callback
 
                         cached.apply(this[m], arguments);
-
+                        
+                        
                         this[m].onComplete = function (cb) {
 
-                            console.debug('[ MODEL ][ ENTITY ] Setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
-
-                            //Setting local listener : normal case
+                            //Setting local listener : normal case                            
                             if (entity._triggers.indexOf(events[i].shortName) > -1) {
-
+                                console.debug('[ MODEL ][ ENTITY ] Setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
+                                
                                 if (typeof(entity._arguments) == 'undefined' || typeof(entity._arguments) != 'undefined' && typeof(entity._arguments[events[i].shortName]) == 'undefined') {
+                                    
+                                    if (entity.listenerCount(events[i].shortName) > 0) {
+                                        entity.removeAllListeners([events[i].shortName])
+                                    }
+                                        
                                     entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
-                                        // check if not already fired
-                                        if (entity._callbacks[events[i].shortName])
+                                        // check if not already fired                                        
+                                        if (entity._callbacks[events[i].shortName]) {
+                                            
+                                            entity.removeAllListeners([events[i].shortName]);
+                                            console.log('\nFIRING #1 ' + events[i].shortName +'('+ events[i].index  +')');
                                             cb.apply(this[m], arguments);
+                                            //cb.apply(this, arguments);
+                                        }
+                                            
                                     });
+                                        
 
                                     // backing up callback
                                     entity._callbacks[events[i].shortName] = cb;
                                 } else { // in case the event is not ready yet
+                                    console.log('\nFIRING #2 ' + events[i].shortName);
                                     cb.apply(entity[m], entity._arguments[events[i].shortName])
                                 }
                             }
                         }
+                        
+                            
 
                         return this[m] // chaining event & method
                     };
@@ -340,25 +362,43 @@ function EntitySuper(conn, caller) {
 
                 if ( self._triggers.indexOf(events[i].shortName) > -1 ) {
                     // reusable event
-                    self.on(events[i].shortName, function () {
-                        //debugger;
-                        this._callbacks[trigger.replace(/[0-9]/g, '')].apply(this[method], arguments);
-                        delete self._callbacks[trigger];
-                    })
+                    self
+                        //.off(events[i].shortName, function(){ delete self._callbacks[trigger]; })
+                        .on(events[i].shortName, function () {
+                            console.log('\nFIRING #3 ' + trigger);
+                            this._callbacks[trigger.replace(/[0-9]/g, '')].apply(this[method], arguments);
+                            delete self._callbacks[trigger];                     
+                        })
                 }
 
             } else {
                 if ( typeof(self._callbacks[trigger]) != 'undefined' ) {
+                    console.log('\nFIRING #4 ' + trigger);
                     self._callbacks[trigger].apply(this, args);
                     delete self._callbacks[trigger];
                 } else {
-                    self.once(trigger, function () {// patched for Air Liquide: case when emit occurs before listener is ready
-                        if (!this._arguments) {
-                            this._arguments = {}
-                        }
-                        // retrieving local arguments, & binding it to the event callback
-                        this._arguments[trigger] = arguments;
-                    })
+                    self
+                        // .off(trigger, function(){
+                        //     if (!this._arguments) {
+                        //         this._arguments = {}
+                        //     }
+                            
+                        //     if ( typeof(this._arguments[trigger]) != 'undefined' ) {
+                        //         delete this._arguments[trigger];
+                        //     }
+                        // })
+                        .once(trigger, function () {// patched for Air Liquide: case when emit occurs before listener is ready
+                            if (!this._arguments) {
+                                this._arguments = {}
+                            }
+                            
+                            // retrieving local arguments, & binding it to the event callback
+                            if ( typeof(this._arguments[trigger]) == 'undefined' ) {
+                                console.log('\nFIRING #5 ' + trigger);
+                                this._arguments[trigger] = arguments;
+                            }
+                            
+                        })
                 }
             }
         }
