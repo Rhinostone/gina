@@ -1164,7 +1164,7 @@ function Server(options) {
             });
         } else {
             //console.info(headers[':method'] +' [404] '+ headers[':path']);
-            throwError({stream: stream}, 404, 'Page not found: \n' + headers[':path']);      
+            return throwError({stream: stream}, 404, 'Page not found: \n' + headers[':path']);      
         }       
     }
     
@@ -1341,10 +1341,12 @@ function Server(options) {
                                 self._referrer      = request.url;
                                 
                                 self._responseHeaders         = response.getHeaders();
-                                self._options.template.assets = getAssets(bundleConf, file);
+                                if (!isBinary && typeof(self._options.template.assets[request.url]) == 'undefined')
+                                    self._options.template.assets = getAssets(bundleConf, file);
                                                                                                 
                                 if ( 
-                                    typeof(self._options.template.assets[request.url]) == 'undefined' 
+                                    typeof(self._options.template.assets[request.url]) == 'undefined'
+                                    || isBinary
                                 ) {
                                                                         
                                     self._options.template.assets[request.url] = {
@@ -1453,7 +1455,17 @@ function Server(options) {
                                             }*/
                                                                                                                                    
                                             if (!fs.existsSync(filename)) return;
-                                            
+                                            isBinary = ( /text\/html/i.test(contentType) ) ? false : true;
+                                            if ( isBinary ) {
+                                                // override                                    
+                                                self._options.template.assets[request.url] = {
+                                                    ext: request.url.match(/\.([A-Za-z0-9]+)$/)[0],
+                                                    isAvailable: true,
+                                                    mime: contentType,
+                                                    url: request.url,
+                                                    filename: filename
+                                                }
+                                            }
                                             self.onHttp2Stream(stream, headers);
                                         }              
                                             
