@@ -936,7 +936,10 @@ function SuperController(options) {
         var request     = local.req;
         var response    = local.res;
         var next        = local.next;
-
+        // var stream      = null;
+        // if ( /http\/2/.test(local.options.conf.server.protocol) ) {            
+        //     stream = response.stream;  
+        // }
 
         if (!jsonObj) {
             var jsonObj = {}
@@ -991,16 +994,23 @@ function SuperController(options) {
                     }
 
                     response.setHeader("content-length", len);
+                    
+                    
+                    // if (stream && !stream.destroyed) {
+                    //     //stream.respond(header);
+                    //     stream.end(data);
+                    // } else {
+                        response.write(data);
+                        
+                        // required to close connection
+                        setTimeout(function () {
+                            response.end();
+                            response.headersSent = true;
+                        }, 200);
 
-                    response.write(data);
-                    response.headersSent = true;
-
-                    // required to close connection
-                    setTimeout(function () {
-                        response.end()
-                    }, 200);
-
-                    return // force completion
+                        return // force completion
+                    // }
+                        
 
                 } else { // normal case
                     response.end(JSON.stringify(jsonObj));
@@ -1912,11 +1922,12 @@ function SuperController(options) {
         var queryData           = {}
             , defaultOptions    = local.query.options
             , path              = options.path
-            , browser           = null
-            // options must be used as a copy in case of multiple calls of self.query(options, ...)
-            , options           = merge(JSON.parse(JSON.stringify(options)), defaultOptions)
+            , browser           = null            
         ;
 
+        // options must be used as a copy in case of multiple calls of self.query(options, ...)
+        options = merge(JSON.parse(JSON.stringify(options)), defaultOptions);
+        
         for (var o in options) {//cleaning
             if ( typeof(options[o]) == 'undefined' || options[o] == undefined) {
                 delete options[o]
@@ -2301,7 +2312,12 @@ function SuperController(options) {
             try {
                 options.ca = fs.readFileSync(options.ca);
             } catch(err) {
-                self.emit('query#complete', err);
+                if ( typeof(callback) != 'undefined' ) {
+                    callback(err)
+                } else {
+                    self.emit('query#complete', err);
+                }
+                
                 return;
             }
             
@@ -2372,7 +2388,7 @@ function SuperController(options) {
          * waitForTrailers <boolean> When true, the Http2Stream will emit the 'wantTrailers' event after the final DATA frame has been sent.
          */
         var sessionOptions = {}, endStream = true;
-        if (body.length > 0) {
+        if ( body.length > 0 || options.headers['x-requested-with'] ) {
             endStream = false;
             sessionOptions.endStream = endStream;
         }
@@ -2474,6 +2490,11 @@ function SuperController(options) {
                                 status    : 500,
                                 error     : data
                             }
+                        }
+                    } else if ( !data && this.aborted && this.destroyed) {
+                        data = {
+                            status    : 500,
+                            error     : new Error('request aborted')
                         }
                     }
                     //console.debug(options[':method']+ ' ['+ (data.status || 200) +'] '+ options[':path']);

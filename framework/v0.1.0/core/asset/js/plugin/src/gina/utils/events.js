@@ -117,6 +117,489 @@ function cancelEvent(event) {
     }
 }
 
+
+/**
+ * handleXhr
+ * 
+ * @param {object} xhr - instance
+ * @param {object} $el - dom objet element 
+ * @param {object} options 
+ */    
+function handleXhr(xhr, $el, options, require) {
+    
+    if (!xhr)
+        throw new Error('No `xhr` object initiated');
+    
+    var merge   = require('utils/merge');
+    
+    var blob            = null
+        , isAttachment  = null // handle download
+        , contentType   = null
+        , result        = null   
+        , id            = null
+        , $link         = options.$link || null
+        , $form         = options.$form || null
+        , $target       = null
+    ;
+    delete options.$link;
+    delete options.$form;
+    
+    if ($form || $link) {
+        if ($link) {
+            // not the link element but the link elements collection : like for popins main container
+            $link.target = document.getElementById($link.id);
+            $target     = gina.link.target;
+            id          = gina.link.id;
+            
+            // copy $el attributes to $target
+            // for (var prop in $link) {
+            //     if ( !$target[prop] )
+            //         $target[prop] = $link[prop];
+            // }
+        } else { // forms
+            $target = $form.target;
+            id      = $target.getAttribute('id');
+        }                
+    } else {
+        $target = $el;
+        id      = $target.getAttribute('id');
+    }
+    
+    // forward callback to HTML data event attribute through `hform` status
+    var hLinkIsRequired = ( $link && $el.getAttribute('data-gina-link-event-on-success') || $link && $el.getAttribute('data-gina-link-event-on-error') ) ? true : false;        
+    // if (hLinkIsRequired && $link)
+    //     listenToXhrEvents($link, 'link');
+        
+    // forward callback to HTML data event attribute through `hform` status
+    var hFormIsRequired = ( $form && $target.getAttribute('data-gina-form-event-on-submit-success') || $form && $target.getAttribute('data-gina-form-event-on-submit-error') ) ? true : false;
+    // success -> data-gina-form-event-on-submit-success
+    // error -> data-gina-form-event-on-submit-error
+    if (hFormIsRequired && $form)
+        listenToXhrEvents($form, 'form');
+        
+    
+    // to upload, use `multipart/form-data` for `enctype`
+    var enctype = $el.getAttribute('enctype') || options.headers['Content-Type'];
+    
+    // setting up headers -    all but Content-Type ; it will be set right before .send() is called
+    for (var hearder in options.headers) {
+        //if ( hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '') {
+        //    options.headers[hearder] = enctype
+        //}
+        if (hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '')
+            continue;
+
+        xhr.setRequestHeader(hearder, options.headers[hearder]);
+    }       
+    xhr.withCredentials = ( typeof(options.withCredentials) != 'undefined' ) ? options.withCredentials : false;
+    
+    
+    // catching errors
+    xhr.onerror = function(event, err) {
+                    
+        var error = 'Transaction error: might be due to the server CORS settings.\nPlease, check the console for more details.';
+        var result = {
+            'status':  xhr.status || 500, //500,
+            'error' : error
+        };                    
+        
+        var resultIsObject = true;
+        if ($form)
+            $form.eventData.error = result;
+            
+        if ($link)
+            $link.eventData.error = result;
+                                       
+        //updateToolbar(result, resultIsObject);
+        window.ginaToolbar.update('data-xhr', result, resultIsObject);
+        
+        triggerEvent(gina, $target, 'error.' + id, result);
+        
+        if (hFormIsRequired)
+            triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+            
+        if (hLinkIsRequired)
+            triggerEvent(gina, $target, 'error.' + id + '.hlink', result);
+    }
+    
+    // catching ready state cb
+    xhr.onreadystatechange = function (event) {
+            
+        if (xhr.readyState == 2) { // responseType interception
+            isAttachment    = ( /^attachment\;/.test( xhr.getResponseHeader('Content-Disposition') ) ) ? true : false; 
+            // force blob response type
+            if ( !xhr.responseType && isAttachment ) {
+                xhr.responseType = 'blob';
+            }
+        }
+
+        if (xhr.readyState == 4) {
+            blob            = null;
+            contentType     = xhr.getResponseHeader('Content-Type');     
+                
+            // 200, 201, 201' etc ...
+            if( /^2/.test(xhr.status) ) {
+
+                try {                       
+                    
+                    // handling blob xhr download
+                    if ( /blob/.test(xhr.responseType) || isAttachment ) {
+                        if ( typeof(contentType) == 'undefined' || contentType == null) {
+                            contentType = 'application/octet-stream';
+                        }
+                        
+                        blob = new Blob([this.response], { type: contentType });
+                        
+                        //Create a link element, hide it, direct it towards the blob, and then 'click' it programatically
+                        var a = document.createElement('a');
+                        a.style = 'display: none';
+                        document.body.appendChild(a);
+                        //Create a DOMString representing the blob and point the link element towards it
+                        var url = window.URL.createObjectURL(blob);
+                        a.href = url;
+                        var contentDisposition = xhr.getResponseHeader('Content-Disposition');
+                        a.download = contentDisposition.match('\=(.*)')[0].substr(1);
+                        //programatically click the link to trigger the download
+                        a.click();
+                        //release the reference to the file by revoking the Object URL
+                        window.URL.revokeObjectURL(url);
+                        
+                        result = {
+                            status          : xhr.status,
+                            statusText      : xhr.statusText,
+                            responseType    : blob.type,
+                            type            : blob.type,
+                            size            : blob.size 
+                        }
+                        
+                    }                        
+
+                    
+                    if ( !result && /\/json/.test( contentType ) ) {
+                        result = JSON.parse(xhr.responseText);
+                        
+                        if ( typeof(result.status) == 'undefined' )
+                            result.status = xhr.status || 200;
+                    }
+                    
+                    if ( !result && /\/html/.test( contentType ) ) {
+                        
+                        result = {
+                            contentType : contentType,
+                            content     : xhr.responseText
+                        };
+                        
+                        if ( typeof(result.status) == 'undefined' )
+                            result.status = xhr.status;
+                            
+                        // if hasPopinHandler & popinIsBinded
+                        if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler ) {
+                            
+                            // select popin by id
+                            var $popin = gina.popin.getActivePopin();
+                            
+                            if ($popin) {
+                                                
+                                XHRData = {};
+                                // update toolbar
+                                    
+                                try {
+                                    XHRData = new DOMParser().parseFromString(result.content, 'text/html').getElementById('gina-without-layout-xhr-data');
+                                    XHRData = JSON.parse(decodeURIComponent(XHRData.value));
+                                    
+                                    XHRView = new DOMParser().parseFromString(result.content, 'text/html').getElementById('gina-without-layout-xhr-view');      
+                                    XHRView = JSON.parse(decodeURIComponent(XHRView.value));
+                                    
+                                    // update data tab                                                
+                                    if ( gina && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
+                                        window.ginaToolbar.update('data-xhr', XHRData);
+                                    }
+                                    
+                                    // update view tab                                        
+                                    if ( gina && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
+                                        window.ginaToolbar.update('view-xhr', XHRView);
+                                    }   
+
+                                } catch (err) {
+                                    throw err
+                                }                                    
+                                
+                                $popin.loadContent(result.content);
+                                                                        
+                                result = XHRData;
+                                triggerEvent(gina, $target, 'success.' + id, result);
+                                
+                                return;
+                            }                               
+                            
+                        }
+                    }
+                    
+                    if (!result) { // normal case
+                        result = xhr.responseText;                                
+                    }
+                    
+                    if ($form)
+                        $form.eventData.success = result;
+
+                    XHRData = result;
+                    // update toolbar
+                    if ( gina && typeof(window.ginaToolbar) == 'object' && XHRData ) {
+                        try {
+                            // don't refresh for html datas
+                            if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+                                window.ginaToolbar.update('data-xhr', XHRData);
+                            }
+
+                        } catch (err) {
+                            throw err
+                        }
+                    }
+
+                    triggerEvent(gina, $target, 'success.' + id, result);
+                    
+                    if (hFormIsRequired)
+                        triggerEvent(gina, $target, 'success.' + id + '.hform', result);
+                        
+                    if (hLinkIsRequired)
+                        triggerEvent(gina, $target, 'success.' + id + '.hlink', result);
+                    
+                } catch (err) {
+
+                    result = {
+                        status:  422,
+                        error : err.message,
+                        stack : err.stack
+
+                    };
+                    
+                    if ($form)
+                        $form.eventData.error = result;
+                    
+
+                    XHRData = result;                            
+                    // update toolbar
+                    if ( gina && typeof(window.ginaToolbar) == 'object' && XHRData ) {
+                        try {
+
+                            if ( typeof(XHRData) != 'undefined' ) {
+                                window.ginaToolbar.update('data-xhr', XHRData);
+                            }
+
+                        } catch (err) {
+                            throw err
+                        }
+                    }
+
+                    triggerEvent(gina, $target, 'error.' + id, result);
+                    if (hFormIsRequired)
+                        triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                        
+                    if (hLinkIsRequired)
+                        triggerEvent(gina, $target, 'error.' + id + '.hlink', result);
+                }
+                
+                // handle redirect
+                if ( typeof(result) != 'undefined' && typeof(result.location) != 'undefined' ) {                        
+                    window.location.hash = ''; //removing hashtag 
+                        
+                    // if ( window.location.host == gina.config.hostname && /^(http|https)\:\/\//.test(result.location) ) { // same origin
+                    //     result.location = result.location.replace( new RegExp(gina.config.hostname), '' );
+                    // } else { // external - need to remove `X-Requested-With` from `options.headers`
+                        result.location = (!/^http/.test(result.location) && !/^\//.test(result.location) ) ? location.protocol +'//' + result.location : result.location;
+                    //}                        
+                    
+                    window.location.href = result.location;
+                    return;                        
+                }
+
+            } else if ( xhr.status != 0) {
+                
+                result = { 'status': xhr.status, 'message': '' };
+                // handling blob xhr error
+                if ( /blob/.test(xhr.responseType) ) {
+                                                
+                    blob = new Blob([this.response], { type: 'text/plain' });
+                    
+                    var reader = new FileReader(), blobError = '';
+                    
+                    // This fires after the blob has been read/loaded.
+                    reader.addEventListener('loadend', (e) => {
+                        
+                        if ( /string/i.test(typeof(e.srcElement.result)) ) {
+                            blobError += e.srcElement.result;
+                        } else if ( typeof(e.srcElement.result) == 'object' ) {
+                            result = merge(result, e.srcElement.result)
+                        } else {
+                            result.message += e.srcElement.result
+                        }
+                        
+                        // once ready
+                        if ( /^2/.test(reader.readyState) ) {
+                            
+                            if ( /^(\{|\[)/.test( blobError ) ) {
+                                try {
+                                    result = merge( result, JSON.parse(blobError) )
+                                } catch(err) {
+                                    result = merge(result, err)
+                                }                                        
+                            }
+                            
+                            if (!result.message)
+                                delete result.message;
+                            
+                            if ($form)
+                                $form.eventData.error = result;
+
+                            // forward appplication errors to forms.errors when available
+                            if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
+                                var formsErrors = {}, errCount = 0;
+                                for (var f in result.error.fields) {
+                                    ++errCount;
+                                    formsErrors[f] = { isApplicationValidationError: result.error.fields[f] };
+                                }
+
+                                if (errCount > 0) {
+                                    handleErrorsDisplay($form.target, formsErrors);
+                                }
+                            }
+
+                            // update toolbar
+                            XHRData = result;
+                            if ( gina && typeof(window.ginaToolbar) == 'object' && XHRData ) {
+                                try {
+                                    // update toolbar
+                                    window.ginaToolbar.update('data-xhr', XHRData );
+
+                                } catch (err) {
+                                    throw err
+                                }
+                            }
+
+                            triggerEvent(gina, $target, 'error.' + id, result);
+                            
+                            if (hFormIsRequired)
+                                triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                                
+                            if (hLinkIsRequired)
+                                triggerEvent(gina, $target, 'error.' + id + '.hlink', result);
+                        }
+                        return;
+                        
+                            
+                    });
+
+                    // Start reading the blob as text.
+                    reader.readAsText(blob);
+                    
+                } else { // normal case
+                    
+                    if ( /^(\{|\[).test( xhr.responseText ) /) {
+
+                        try {
+                            result = merge( result, JSON.parse(xhr.responseText) )
+                        } catch (err) {
+                            result = merge(result, err)
+                        }
+
+                    } else if ( typeof(xhr.responseText) == 'object' ) {
+                        result = merge(result, xhr.responseText)
+                    } else {
+                        result.message = xhr.responseText
+                    }
+
+                    if ($form)
+                        $form.eventData.error = result;
+
+                    // forward appplication errors to forms.errors when available
+                    if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
+                        var formsErrors = {}, errCount = 0;
+                        for (var f in result.error.fields) {
+                            ++errCount;
+                            formsErrors[f] = { isApplicationValidationError: result.error.fields[f] };
+                        }
+
+                        if (errCount > 0) {
+                            handleErrorsDisplay($form.target, formsErrors);
+                        }
+                    }
+
+                    // update toolbar
+                    XHRData = result;
+                    if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                        try {
+                            // update toolbar
+                            window.ginaToolbar.update('data-xhr', XHRData );
+
+                        } catch (err) {
+                            throw err
+                        }
+                    }
+
+                    triggerEvent(gina, $target, 'error.' + id, result);
+                    
+                    if (hFormIsRequired)
+                        triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                        
+                    if (hLinkIsRequired)
+                        triggerEvent(gina, $target, 'error.' + id + '.hlink', result);                                                                            
+                }
+                
+                return;
+
+                    
+            }
+        }
+    };
+    
+    // catching request progress
+    xhr.onprogress = function(event) {
+            
+        var percentComplete = '0';
+        if (event.lengthComputable) {
+            percentComplete = event.loaded / event.total;
+            percentComplete = parseInt(percentComplete * 100);
+
+        }
+
+        //var percentComplete = (event.position / event.totalSize)*100;
+        var result = {
+            'status': 100,
+            'progress': percentComplete
+        };
+
+        if ($form)
+            $form.eventData.onprogress = result;
+
+        triggerEvent(gina, $target, 'progress.' + id, result);
+        return;
+    };
+
+    // catching timeout
+    xhr.ontimeout = function (event) {
+        result = {
+            'status': 408,
+            'error': 'Request Timeout'
+        };
+
+        if ($form)
+            $form.eventData.ontimeout = result;
+
+        triggerEvent(gina, $target, 'error.' + id, result);
+        
+        if (hFormIsRequired)
+            triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+            
+        if (hLinkIsRequired)
+            triggerEvent(gina, $target, 'error.' + id + '.hlink', result);
+            
+        return;
+    };
+    
+    
+    //return xhr;
+}
+
 function removeListener(target, element, name, callback) {
     if (typeof(target.event) != 'undefined' && target.event.isTouchSupported && /^(click|mouseout|mouseover)/.test(name) && target.event[name].indexOf(element) != -1) {
         target.event[name].splice(target.event[name].indexOf(element), 1)
@@ -138,13 +621,15 @@ function removeListener(target, element, name, callback) {
     }
 }
 
+
+
 function on(event, cb) {
 
     if (!this.plugin) throw new Error('No `plugin` reference found for this event: `'+ event);
 
     var events = gina.registeredEvents[this.plugin];
 
-    if ( events.indexOf(event) < 0 && !/^init$/.test(event) && !/\.hform$/.test(event) ) {
+    if ( events.indexOf(event) < 0 && !/^init$/.test(event) && !/\.hform$/.test(event) && !/\.hlink$/.test(event) ) {
         cb(new Error('Event `'+ event +'` not handled by ginaEventHandler'))
     } else {
         var $target = null, id = null;
@@ -165,8 +650,8 @@ function on(event, cb) {
         if ( this.eventData && !$target.eventData)
             $target.eventData = this.eventData
 
-        if ( /\.hform$/.test(event) ) {
-            event = event.replace(/\.hform$/, '.' + id + '.hform');
+        if ( /\.(hform|hlink)$/.test(event) ) {            
+            event = ( /\.hform$/.test(event) ) ? event.replace(/\.hform$/, '.' + id + '.hform') : event.replace(/\.hlink$/, '.' + id + '.hlink');
         } else { // normal case
             event += '.' + id;
         }
@@ -201,5 +686,33 @@ function on(event, cb) {
         }
 
         return this
+    }
+    
+    // Nothing can be added after on()    
+        
+    
+    var listenToXhrEvents = function($el, type) {
+
+
+        //data-gina-{type}-event-on-success
+        var htmlSuccesEventCallback =  $el.target.getAttribute('data-gina-'+ type +'-event-on-success') || null;
+        if (htmlSuccesEventCallback != null) {
+
+            if ( /\((.*)\)/.test(htmlSuccesEventCallback) ) {
+                eval(htmlSuccesEventCallback)
+            } else {
+                $el.on('success.h'+ type,  window[htmlSuccesEventCallback])
+            }
+        }
+
+        //data-gina-{type}-event-on-error
+        var htmlErrorEventCallback =  $el.target.getAttribute('data-gina-'+ type +'-event-on-error') || null;
+        if (htmlErrorEventCallback != null) {
+            if ( /\((.*)\)/.test(htmlErrorEventCallback) ) {
+                eval(htmlErrorEventCallback)
+            } else {
+                $el.on('error.h'+ type, window[htmlErrorEventCallback])
+            }
+        }
     }
 }
