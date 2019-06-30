@@ -159,6 +159,7 @@ require([
     "core",
 
     // plugins
+    "gina/link",
     "gina/validator",
     "gina/popin",
     "gina/storage",

@@ -11,6 +11,7 @@
     "gina"                  : "gina/main",
     "gina/toolbar"          : "gina/toolbar/main",
     "gina/popin"            : "gina/popin/main",
+    "gina/link"             : "gina/link/main",
     "gina/storage"          : "../../../../plugins/lib/storage/src/main",
     "gina/validator"        : "../../../../plugins/lib/validator/src/main",
     "utils/events"          : "gina/utils/events",

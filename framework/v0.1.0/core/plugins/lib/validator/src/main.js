@@ -553,11 +553,12 @@ function ValidatorPlugin(rules, data, formId) {
 
         var $target = this.target , id = $target.getAttribute('id');
         var $form   = instance.$forms[id] || this;
-        var options = (typeof (options) != 'undefined') ? merge(options, xhrOptions) : xhrOptions;
         var result  = null;
         var XHRData = null;
-        var hFormIsRequired = null;
         var isAttachment = null; // handle download
+        var hFormIsRequired = null;
+        
+        options = (typeof (options) != 'undefined') ? merge(options, xhrOptions) : xhrOptions;
         
         // forward callback to HTML data event attribute through `hform` status
         hFormIsRequired = ( $target.getAttribute('data-gina-form-event-on-submit-success') || $target.getAttribute('data-gina-form-event-on-submit-error') ) ? true : false;
@@ -1828,7 +1829,7 @@ function ValidatorPlugin(rules, data, formId) {
     /**
      * bindForm
      *
-     * @param {object} target - DOM element
+     * @param {object} $target - DOM element
      * @param {object} [customRule]
      * */
     var bindForm = function($target, customRule) {
@@ -2154,7 +2155,7 @@ function ValidatorPlugin(rules, data, formId) {
     
                         if (!_evt) return false;
     
-                        if ( ! /^click\./.test(_evt) ) {
+                        if ( !/^click\./.test(_evt) ) {
                             _evt = $el.id
                         }
     
@@ -2433,6 +2434,7 @@ function ValidatorPlugin(rules, data, formId) {
                         !$buttonsTMP[b].getAttribute('id') 
                         && !/gina\-popin/.test($buttonsTMP[b].className) 
                         && !gina.popinIsBinded
+                        && !/gina\-link/.test($buttonsTMP[b].className) 
                     ) { // will not be binded but will receive an id if not existing
                         linkId = 'link.'+ uuid.v4();
                         $buttonsTMP[b].id = linkId;
