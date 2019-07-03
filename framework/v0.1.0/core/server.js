@@ -1338,7 +1338,9 @@ function Server(options) {
                             
                             if ( /http\/2/.test(protocol) ) {
                                 self._isStatic      = true;
-                                self._referrer      = request.url;
+                                self._referrer      = request.url;                                
+                                var ext = request.url.match(/\.([A-Za-z0-9]+)$/);
+                                request.url = ( ext != null && typeof(ext[0]) != 'undefined' ) ? request.url : request.url + 'index.html';
                                 
                                 self._responseHeaders         = response.getHeaders();
                                 if (!isBinary && typeof(self._options.template.assets[request.url]) == 'undefined')
@@ -1350,7 +1352,7 @@ function Server(options) {
                                 ) {
                                                                         
                                     self._options.template.assets[request.url] = {
-                                        ext: request.url.match(/\.([A-Za-z0-9]+)$/)[0],
+                                        ext: ( ext != null && typeof(ext[0]) != 'undefined' ) ? ext[0] : null,
                                         isAvailable: true,
                                         mime: contentType,
                                         url: request.url,
@@ -1431,13 +1433,15 @@ function Server(options) {
                                             
                                             contentType = getHead(response, filename);
                                             contentType = contentType +'; charset='+ bundleConf.encoding;   
-                                                        
+                                            ext = request.url.match(/\.([A-Za-z0-9]+)$/);    
+                                            request.url = ( ext != null && typeof(ext[0]) != 'undefined' ) ? request.url : request.url + 'index.html';          
                                             if ( 
                                                 !isPathMatchingUrl
                                                 && typeof(self._options.template.assets[request.url]) == 'undefined'                                                 
-                                            ) {                                               
+                                            ) {     
+                                                                                         
                                                 self._options.template.assets[request.url] = {
-                                                    ext: request.url.match(/\.([A-Za-z0-9]+)$/)[0],
+                                                    ext: ( ext != null && typeof(ext[0]) != 'undefined' ) ? ext[0] : null,
                                                     //isAvailable: true,
                                                     isAvailable: (!/404\.html/.test(filename)) ? true : false,
                                                     mime: contentType,
@@ -1459,7 +1463,7 @@ function Server(options) {
                                             if ( isBinary ) {
                                                 // override                                    
                                                 self._options.template.assets[request.url] = {
-                                                    ext: request.url.match(/\.([A-Za-z0-9]+)$/)[0],
+                                                    ext: ( ext != null && typeof(ext[0]) != 'undefined' ) ? ext[0] : null,
                                                     isAvailable: true,
                                                     mime: contentType,
                                                     url: request.url,

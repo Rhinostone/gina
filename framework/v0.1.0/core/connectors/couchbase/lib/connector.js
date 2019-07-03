@@ -212,7 +212,8 @@ function Connector(dbString) {
 
                 } else {
                     console.debug('[ CONNECTOR ][ ' + local.bundle +' ] couchbase is alive !!');
-                    self.emit('ready', false, self.instance)
+                    
+                    self.emit('ready', false, self.instance)                    
                 }
             })
         });

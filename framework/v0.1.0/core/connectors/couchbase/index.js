@@ -333,8 +333,12 @@ function Couchbase(conn, infos) {
                     
                         return {
                             onComplete : function(cb) {
-                                self.once(trigger, function(err, data, meta){
-                                    cb(err, data, meta)
+                                self.once(trigger, function onComplete(err, data, meta){
+                                    try {
+                                        cb(err, data, meta)
+                                    } catch (onCompleteError) {
+                                        cb(onCompleteError)
+                                    }                                    
                                 })
                             }
                         }
