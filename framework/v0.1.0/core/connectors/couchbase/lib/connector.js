@@ -40,6 +40,105 @@ function Connector(dbString) {
                 pingInterval : "2m"
             }
     };
+    
+    /**
+     * connect
+     *
+     * @param {object} dbString
+     * @callback cb
+     * */
+    this.connect = function(dbString, cb) {
+        // Attention: the connection is lost 5 minutes once the bucket is opened.
+        var conn        = null;
+
+        // version 4.x
+        if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {
+            conn = self.cluster.openBucket(dbString.database, dbString.password);
+        } else {
+            conn = self.cluster.openBucket(dbString.database);
+        }
+
+        self.instance   = conn;
+        
+        
+        
+        conn.on('error', function (err) {
+            delete self.reconnecting;
+            self.reconnected = false;
+            console.error('[ CONNECTOR ][ ' + local.bundle +' ] couchbase could not be reached !!\n'+ ( err.stack || err.message || err ) );
+            
+            // reconnecting
+            console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] trying to reconnect in a few secs...');
+            self.reconnecting = true;
+            
+            setTimeout( function onRetry(){
+                if ( typeof(next) != 'undefined' ) {
+                    self.connect(dbString, next)
+                } else {
+                    self.connect(dbString)
+                }
+            }, 5000)   
+            
+        });
+        
+        conn.once('connect', function(){
+            self.reconnected = true;
+            var options = local.options;
+            // will send heartbeat every 4 minutes if keepAlive == `true`
+            self.ping(options.pingInterval, function(){
+
+                console.debug('[ CONNECTOR ][ ctx ] ', getConfig().bundle, getConfig().env );
+                // updating context
+                // var ctx = getContext()
+                //     , bundle = ctx.bundle
+                //     , env = ctx.env
+                //     , conf = ctx['gina'].config.envConf[bundle][env]
+                //     , name = dbString.database
+                //     //Reload models.
+                //     , modelsPath = _(conf.modelsPath)
+                //     ;
+
+                var ctx = getConfig()
+                    , bundle = ctx.bundle
+                    , env = ctx.env
+                    , conf = ctx[bundle][env]
+                    , name = dbString.database
+                    //Reload models.
+                    , modelsPath = _(conf.modelsPath)
+                    ;
+
+                local.bundle = bundle;
+                local.env = env;
+
+                if ( typeof(cb) != 'undefined' ) { // this portition is not working yet on Mac OS X
+                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connected to couchbase !!');
+
+                    
+                    modelUtil.setConnection(bundle, name, self.instance);
+
+                    if ( fs.existsSync(modelsPath) ) {
+                        modelUtil.setConnection(bundle, name, self.instance);
+                        modelUtil.reloadModels(
+                            conf,
+                            function doneReloadingModel(err) {
+                                self.reconnecting = false;
+                                cb(err)
+                            })
+                    } else {
+                        cb(new Error('[ CONNECTOR ][ ' + local.bundle +' ] '+ modelsPath+ ' not found') )
+                    }
+
+                } else {
+                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ] couchbase is alive !!');
+                    
+                    self.emit('ready', false, self.instance)                    
+                }
+            })
+        });
+
+        
+        return conn
+    }
 
     /**
      * init
@@ -69,7 +168,7 @@ function Connector(dbString) {
                         console.emerg('[ CONNECTOR ][ ' + local.bundle +' ][ '+ dbString.database +' ] Handshake aborted ! PLease check that Couchbase is running.\n',  err.message);                    
                 })
                 .once('connect', function () {
-                    // default driver does not trigger any conn event, so we have to intercept it thu gina
+                    // intercepting conn event thru gina
                     gina.onError(function(err, req, res, next){
                         // (code)   message
                         // (16)     Generic network failure. Enable detailed error codes (via LCB_CNTL_DETAILED_ERRCODES, or via `detailed_errcodes` in the connection string) and/or enable logging to get more information
@@ -138,107 +237,13 @@ function Connector(dbString) {
                     })
                 })
 
-        } catch (err) {
-            console.error(err.stack);
-            self.emit('ready', err, null)
+        } catch (_err) {
+            console.error(_err.stack);
+            self.emit('ready', _err, null)
         }
     }
 
-    /**
-     * connect
-     *
-     * @param {object} dbString
-     * @callback cb
-     * */
-    this.connect = function(dbString, cb) {
-        // Attention: the connection is lost 5 minutes once the bucket is opened.
-        var conn        = null;
-
-        // version 4.x
-        if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {
-            conn = self.cluster.openBucket(dbString.database, dbString.password);
-        } else {
-            conn = self.cluster.openBucket(dbString.database);
-        }
-
-        self.instance   = conn;
-
-        conn.once('connect', function(){
-            self.reconnected = true;
-            var options = local.options;
-            // will send heartbeat every 4 minutes if keepAlive == `true`
-            self.ping(options.pingInterval, function(){
-
-                console.debug('[ CONNECTOR ][ ctx ] ', getConfig().bundle, getConfig().env );
-                // updating context
-                // var ctx = getContext()
-                //     , bundle = ctx.bundle
-                //     , env = ctx.env
-                //     , conf = ctx['gina'].config.envConf[bundle][env]
-                //     , name = dbString.database
-                //     //Reload models.
-                //     , modelsPath = _(conf.modelsPath)
-                //     ;
-
-                var ctx = getConfig()
-                    , bundle = ctx.bundle
-                    , env = ctx.env
-                    , conf = ctx[bundle][env]
-                    , name = dbString.database
-                    //Reload models.
-                    , modelsPath = _(conf.modelsPath)
-                    ;
-
-                local.bundle = bundle;
-                local.env = env;
-
-                if ( typeof(cb) != 'undefined' ) { // this portition is not working yet on Mac OS X
-                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connected to couchbase !!');
-
-                    
-                    modelUtil.setConnection(bundle, name, self.instance);
-
-                    if ( fs.existsSync(modelsPath) ) {
-                        modelUtil.setConnection(bundle, name, self.instance);
-                        modelUtil.reloadModels(
-                            conf,
-                            function doneReloadingModel(err) {
-                                self.reconnecting = false;
-                                cb(err)
-                            })
-                    } else {
-                        cb(new Error('[ CONNECTOR ][ ' + local.bundle +' ] '+ modelsPath+ ' not found') )
-                    }
-
-                } else {
-                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ] couchbase is alive !!');
-                    
-                    self.emit('ready', false, self.instance)                    
-                }
-            })
-        });
-
-        conn.on('error', function (err) {
-            delete self.reconnecting;
-            self.reconnected = false;
-            console.error('[ CONNECTOR ][ ' + local.bundle +' ] couchbase could not be reached !!\n'+ ( err.stack || err.message || err ) );
-            
-            // reconnecting
-            console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] trying to reconnect in a few secs...');
-            self.reconnecting = true;
-            
-            setTimeout( function onRetry(){
-                if ( typeof(next) != 'undefined' ) {
-                    self.connect(dbString, next)
-                } else {
-                    self.connect(dbString)
-                }
-            }, 5000)   
-            
-        });
-
-        return conn
-    }
+    
 
     /**
      * ping

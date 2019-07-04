@@ -53,91 +53,7 @@ function EntitySuper(conn, caller) {
             return EntitySuper[self.name].instance
         }
     }
-
-    // TODO - remove this ...
-    // var loadMembers = function(caller) {
-    //
-    //     var filename    = self._filename
-    //         , imports   = ''
-    //         , str       = fs.readFileSync(filename).toString()
-    //         , source    = str;
-    //
-    //     var first   = source.indexOf('{') + 1
-    //     var last    = source.lastIndexOf('}') -1;
-    //
-    //     // extract imports
-    //     imports = str.substring(0, first)
-    //         .replace(/function(.*)/, '')
-    //         .replace(/require\(/g, 'module.require(')
-    //         .replace(/(\/\*([^*]|[\r\n]|(\*+([^*\/]|[\r\n])))*\*+\/)|(\/\/.*)/g, '');//remove comments
-    //
-    //     // extract function body
-    //     source = source.substring(first, last);
-    //
-    //     source = 'var module = arguments[0];\n\r' + imports + source;
-    //
-    //
-    //
-    //     var EntityOrigin = new Function(source);
-    //     for (var c in self) {
-    //         if (!EntityOrigin[c])
-    //             EntityOrigin.prototype[c] = self[c]
-    //     }
-    //
-    //     var obj = new EntityOrigin(module);
-    //
-    //
-    //
-    //     var methodList      = {}
-    //         , args          = []
-    //         , variables     = ''
-    //         , placeholder   = ''
-    //         , functionBody  = '';
-    //
-    //     obj._methods = [];
-    //     for (var prop in obj) {
-    //         if (typeof(obj[prop]) != 'function') continue;
-    //
-    //         str         = obj[prop].toString();
-    //         variables   = str.match(/\((.*)\)/g)[0];
-    //         args        = [];
-    //
-    //         if (variables.length) {
-    //             variables = variables.replace(/\(|\)/g, '').replace(/\s*/g, '');
-    //             if (variables) args = variables.split(/\,/g);
-    //         }
-    //
-    //         first   = str.indexOf('{') + 1
-    //         last    = str.lastIndexOf('}') - 1;
-    //         str     = str.substring(first, last);
-    //
-    //         if (!self[prop]) {
-    //             if (typeof(obj[prop]) == 'function') {
-    //                 self[prop] = obj[prop];
-    //                 self._methods.push(prop);
-    //             }
-    //         }
-    //     }
-    //
-    //
-    //     if (caller) {
-    //         if ( !EntitySuper[caller].instance ) {
-    //             EntitySuper[caller].instance = {
-    //                 _relations: {}
-    //             }
-    //         }
-    //
-    //     } else {
-    //         if ( !EntitySuper[self.name].instance ) {
-    //             EntitySuper[self.name].instance = {
-    //                 _relations: {}
-    //             }
-    //         }
-    //     }
-    //
-    //     return setListeners(caller)
-    //
-    // }
+    
 
     /**
      * Set all main listenners at once
@@ -181,22 +97,22 @@ function EntitySuper(conn, caller) {
             , methods = self._methods;
 
 
-        for (var f = 0, fLen = methods.length; f < fLen; ++f) {
+        for (var m = 0, mLen = methods.length; m < mLen; ++m) {
             if (
-                typeof(entity[methods[f]]) == 'function'
-                && f != 'onComplete'
+                typeof(entity[methods[m]]) == 'function'
+                && m != 'onComplete'
             ) {
                 
-                if ( triggers.indexOf(shortName + '#' + methods[f]) < 0 ) {
+                if ( triggers.indexOf(shortName + '#' + methods[m]) < 0 ) {
                     events[i] = {
                         index: i,
-                        shortName: shortName + '#' + methods[f],
-                        method: methods[f],
+                        shortName: shortName + '#' + methods[m],
+                        method: methods[m],
                         entityName: entityName
                     };
 
                     
-                    triggers.push(shortName + '#' + methods[f]);
+                    triggers.push(shortName + '#' + methods[m]);
                     
                     ++i;
                 }

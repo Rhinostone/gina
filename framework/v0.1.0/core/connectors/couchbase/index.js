@@ -200,18 +200,18 @@ function Couchbase(conn, infos) {
                             , foundSpecialCase  = /\w+\.(\$|\%)/.test(queryString);
                             
                         // e.g.: c.documentNextId.$2 = $3
+                        // e.g.: n.alertedOn.$1 = true
                         if (foundSpecialCase) {
                             i = 0; len = args.length;
                             for (; i < len; ++i) {
                                 key = inl.indexOf(params[i]);
-
-                                re = new RegExp('(.*)\\.'+ inl[key].replace(/([$%]+)/, '\\$1'));
+                                p[key] = args[key];
+                                
+                                re = new RegExp('(.*)\\.'+ inl[key].replace(/([$%]+)/, '\\$1'));                                
                                 if ( re.test(qStr) ) {
-                                    p[key] = args[i];
+                                    p[key] = args[key];
                                     qStr = qStr.replace( new RegExp('(.*)\\.'+ params[i].replace(/([$%]+)/, '\\$1')), '$1\.'+args[i]);
                                     inl.splice(key, 1);
-                                } else {
-                                    p[key] = args[key];
                                 }
                             }
 
