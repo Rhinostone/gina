@@ -742,6 +742,9 @@ function Collection(content, options) {
                     
                     onRemoved:
                     for (; c < cLen; ++c) {
+                        if ( typeof(currentResult[c]) == 'undefined' || typeof(foundResults[r]) == 'undefined' ) {
+                            continue
+                        }
                         // when matched, we want to remove those not in current result                        
                         if (currentResult[c][key] === foundResults[r][key]) {
                             currentResult.splice(c,1);
