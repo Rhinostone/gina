@@ -2168,7 +2168,7 @@ function SuperController(options) {
 
                     try {
                         if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
-                            callback(data)
+                            self.throwError(data)
                         } else {
                             callback( false, data )
                         }
@@ -2499,8 +2499,8 @@ function SuperController(options) {
                     }
                     //console.debug(options[':method']+ ' ['+ (data.status || 200) +'] '+ options[':path']);
                     try {
-                        if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
-                            callback(data)
+                        if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {                            
+                            self.throwError(data)
                         } else {
                             callback( false, data )
                         }
@@ -2894,7 +2894,8 @@ function SuperController(options) {
                     status: code,
                     error: msg.error || msg,
                     stack: msg.stack
-                }))
+                }));
+                return;
             } else {
                 res.writeHead(code, { 'content-type': 'text/html'} );
                 console.error(req.method +' ['+ res.statusCode +'] '+ req.url);
