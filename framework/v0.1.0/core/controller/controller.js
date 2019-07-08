@@ -1493,8 +1493,8 @@ function SuperController(options) {
                 if ( !/GET/i.test(req.method) ) { // trying to redirect using the wrong method ?
                     
                     
-                    //console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA rediection is not permited in this scenario.\nSwitching rendering mode: calling self.renderJSON({ location: "'+ path +'"})\nFrom now, you just need to catch the response with a frontend script.\n').message);
-                    console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA rediection is not permited in this scenario.\nSwitching request method to `GET` method instead.\n').message);
+                    //console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA redirection is not permitted in this scenario.\nSwitching rendering mode: calling self.renderJSON({ location: "'+ path +'"})\nFrom now, you just need to catch the response with a frontend script.\n').message);
+                    console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA redirection is not permitted in this scenario.\nSwitching request method to `GET` method instead.\n').message);
                     
                     code = 303;
                     
