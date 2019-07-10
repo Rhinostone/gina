@@ -309,11 +309,28 @@ function Collection(content, options) {
                 field = field[field.length - 1];
                 re = new RegExp('("' + field + '":\\w+)');
                 
-                var value = JSON.stringify(_content).match(re);
+                //var value = JSON.stringify(_content).match(re);
+                var value = null;
+                // if (/\[\*\]/.test(f) ) {
+                //     value = JSON.stringify(_content).match(re);
+                // } else {
+                    try {
+                        if ( _content )
+                            value = eval('_content.'+f);
+                    } catch (err) {
+                        // Nothing to do
+                        // means that the field is not availabale in the collection
+                        //throw err
+                        
+                    } 
+                // }
+                
+                                   
 
-                if (value && value.length > 0) {
-                    value = value[1].split(/:/)[1];
-                    //value = value[0].split(/:/)[1];
+                if (value /** && value.length > 0*/) {
+                    if ( Array.isArray(value) || typeof(value) == 'string' && /\:/.test(value) )
+                        value = value[1].split(/:/)[1];
+                    
                     
                     if (/(<|>|=)/.test(filter)) {
 
