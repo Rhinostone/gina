@@ -311,25 +311,24 @@ function Collection(content, options) {
                 
                 //var value = JSON.stringify(_content).match(re);
                 var value = null;
-                // if (/\[\*\]/.test(f) ) {
+                
                 //     value = JSON.stringify(_content).match(re);
-                // } else {
-                    try {
-                        if ( _content )
-                            value = eval('_content.'+f);
-                    } catch (err) {
-                        // Nothing to do
-                        // means that the field is not availabale in the collection
-                        //throw err
-                        
-                    } 
-                // }
+                
+                try {
+                    if ( _content )
+                        value = eval('_content.'+f);
+                } catch (err) {
+                    // Nothing to do
+                    // means that the field is not available in the collection
+                } 
                 
                                    
 
                 if (value /** && value.length > 0*/) {
-                    if ( Array.isArray(value) || typeof(value) == 'string' && /\:/.test(value) )
+                    if ( Array.isArray(value) )
                         value = value[1].split(/:/)[1];
+                    else if ( typeof(value) == 'string' && /\:/.test(value) )
+                        value = value.split(/:/)[1];
                     
                     
                     if (/(<|>|=)/.test(filter)) {

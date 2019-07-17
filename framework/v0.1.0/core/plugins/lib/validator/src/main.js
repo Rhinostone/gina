@@ -493,9 +493,10 @@ function ValidatorPlugin(rules, data, formId) {
 
         if ($form.fieldsSet) {
 
-            var elId        = null
-                , $element  = null
-                , type      = null;
+            var elId            = null
+                , $element      = null
+                , type          = null
+                , defaultValue  = null;
 
             for (var f in $form.fieldsSet) {
 
@@ -505,8 +506,15 @@ function ValidatorPlugin(rules, data, formId) {
                 if (type == 'input') {
                     $element.value = $form.fieldsSet[f].value;
                 } else if ( type == 'select' ) {
-                    $element.options[ $form.fieldsSet[f].value ].selected = true;
-                    $element.setAttribute('data-value',  $element.options[ $form.fieldsSet[f].value ].value);
+                    
+                    defaultValue = $element.getAttribute('data-value') || null;
+                    
+                    if (defaultValue && typeof($element.options[ defaultValue ]) != 'undefined' ) {
+                        $element.options[ defaultValue ].selected = true;
+                    } else {
+                        $element.options[ $form.fieldsSet[f].value ].selected = true;
+                        $element.setAttribute('data-value',  $element.options[ $form.fieldsSet[f].value ].value);    
+                    }
                 }
             }
         }
@@ -1943,18 +1951,27 @@ function ValidatorPlugin(rules, data, formId) {
 
             if ($select[s].options && !$form.fieldsSet[ elId ]) {
                 selectedIndex = 0;
-                selectedValue = $select[s].getAttribute('data-value');
+                selectedValue = $select[s].getAttribute('data-value') || null;
+                if ( selectedValue ) {
+                    for (var o = 0, oLen = $select[s].options.length; o < oLen; ++o ) {
+                        if ( $select[s].options[o].value == selectedValue) {
+                            selectedIndex = o;
+                            $select[s].selectedIndex = selectedIndex;
+                            break
+                        }
+                    }
+                }
                 
                 if ( typeof($select[s].options[$select[s].selectedIndex]) != 'undefined' && $select[s].options[ $select[s].selectedIndex ].index ) {
                     selectedIndex = $select[s].options[ $select[s].selectedIndex ].index
-                } else if ( typeof(selectedValue) != 'undefined' ) {
+                }/** else if ( typeof(selectedValue) != 'undefined' ) {
                     for (var o = 0, oLen = $select[s].options.length; o < oLen; ++o ) {
                         if ( $select[s].options[o].value == selectedValue) {
                             selectedIndex = o;
                             break
                         }
                     }
-                }
+                }*/
 
                 $form.fieldsSet[ elId ] = {
                     id: elId,
