@@ -365,6 +365,11 @@ function SuperController(options) {
         
         local.options.debugMode = ( typeof(displayToolbar) == 'undefined' ) ? undefined : ( (/true/i.test(displayToolbar)) ? true : false ); // only active for dev env
         
+        // specific override
+        if (GINA_ENV_IS_DEV && typeof(local.req[ local.req.method.toLowerCase() ].debug) != 'undefined' ) {
+            local.options.debugMode = ( /true/i.test(local.req[ local.req.method.toLowerCase() ].debug) ) ? true : false;
+        }
+        
         var data            = null
         , template          = null
         , file              = null
@@ -818,11 +823,23 @@ function SuperController(options) {
 
                                 //+ '\n\t<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
                             ;
-
-                            if ( !/page\.view\.scripts/.test(layout) ) {
-                                layout = layout.replace(/<\/body>/i, plugin + '\t{{ page.view.scripts }}\n\t</body>');
-                            } else {
-                                layout = layout.replace(/{{ page.view.scripts }}/i, plugin + '\t{{ page.view.scripts }}');
+                            
+                            
+                            // if ( !/page\.view\.scripts/.test(layout) ) {
+                            //     layout = layout.replace(/<\/body>/i, plugin + '\t{{ page.view.scripts }}\n\t</body>');
+                            // } else {
+                            //     layout = layout.replace(/{{ page.view.scripts }}/i, plugin + '\t{{ page.view.scripts }}');
+                            // }
+                            
+                            // adding javascripts
+                            layout.replace('{{ page.view.scripts }}', '');
+                            if ( isDeferModeEnabled ) { // placed in the HEAD                                
+                                layout = layout.replace(/\<\/head\>/i, '\t'+ local.options.template.ginaLoader +'\n</head>');                                
+                                layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n</head>');
+                                
+                            } else { // placed in the BODY
+                                layout = layout.replace(/\<\/body\>/i, '\t'+ local.options.template.ginaLoader +'\n</body>');                                
+                                layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
                             }
 
                         }
@@ -864,7 +881,9 @@ function SuperController(options) {
                             try {
                                 layout = swig.compile(layout, mapping)(data);
                             } catch (err) {
-                                self.throwError(local.res, 500, new Error('Controller::render(...) compilation error\n' + (err.stack||err.message||err) ));
+                                filename = local.options.template.html;
+                                filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
+                                self.throwError(local.res, 500, new Error('Controller::render(...) compilation error encountered while trying to process template `'+ filename + '`\n' + (err.stack||err.message||err) ));
                             }
                             
                             // Only available for http/2.0 for now
