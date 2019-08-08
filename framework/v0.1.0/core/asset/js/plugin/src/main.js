@@ -22,7 +22,8 @@
  *
  * */
 
-var readyList = [ { name: 'gina', ctx: window['gina'], fn: onGinaLoaded } ];
+ var wContext = ( typeof(onGinaLoaded) == 'undefined') ? window : parent.window; // iframe ?
+var readyList = [ { name: 'gina', ctx: wContext['gina'], fn: wContext.onGinaLoaded } ];
 var readyFired = false;
 var readyEventHandlersInstalled = false;
 

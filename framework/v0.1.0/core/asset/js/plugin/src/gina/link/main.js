@@ -152,8 +152,8 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                 if (!isSameDomain) {
                     // proxy external urls
                     // TODO - instead of using `cors.io`, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
-                    url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
-                    
+                    //url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
+                    url = url.match(/^(https|http)\:/)[0] + '//corsacme.herokuapp.com/?'+ url;
                     //delete options.headers['X-Requested-With']
                 }   
             }
@@ -358,7 +358,13 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                                 
                 
                 elId = $el.getAttribute('id');
-                if ( typeof(elId) == 'undefined' || elId == null || elId == '' ) {
+                if ( typeof(elId) == 'undefined' || elId == null || elId == '' || /popin\.link/.test(elId) ) {
+                    
+                    // unbind popin link
+                    // if ( /popin\.link/.test(elId) ) {
+                        
+                    // }
+                    
                     elId = 'link.click.'+ 'gina-link-' + instance.id +'-'+ uuid.v4();
                 }                
                 $el['id']   = elId;

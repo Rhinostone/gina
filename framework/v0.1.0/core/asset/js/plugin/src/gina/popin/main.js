@@ -242,8 +242,14 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                 }
                             });
 
-                            // loading & binding popin                            
-                            popinLoad($popin.name, e.target.url);
+                            // loading & binding popin       
+                            // Non-Preflighted requests
+                            var options = {                            
+                                isSynchrone: false,
+                                withCredentials: false
+                            };                       
+                            options = merge($popin.options, options);                       
+                            popinLoad($popin.name, e.target.url, options);
                         });
 
 
@@ -336,7 +342,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             isSynchrone: false,
                             withCredentials: false
                         };
-                        options = merge(options, $popin.options);                        
+                        //options = merge(options, $popin.options);                        
+                        options = merge($popin.options, options);   
                         popinLoad($popin.name, $element.href, options);
                     }            
                             
@@ -453,7 +460,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             }
 
             // bind with formValidator if forms are found
-            if ( /<form/i.test($el.innerHTML) && typeof($validator) != 'undefined' ) {
+            if ( /<form/i.test($el.innerHTML) && typeof($validator) != 'undefined' && $validator ) {
                 var _id = null;
                 var $forms = $el.getElementsByTagName('form');
                 i = 0; len = $forms.length;
@@ -741,7 +748,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 if (!isSameDomain) {
                     // proxy external urls
                     // TODO - instead of using `cors.io`, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
-                    url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
+                    //url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
+                    url = url.match(/^(https|http)\:/)[0] + '//corsacme.herokuapp.com/?'+ url;
+                    //url = url.match(/^(https|http)\:/)[0] + '//cors-anywhere.herokuapp.com/' + url;
+                    //url = url.match(/^(https|http)\:/)[0] + '//cors-anywhere.herokuapp.com/' + url;
                     
                     //delete options.headers['X-Requested-With']
                 }   
@@ -793,7 +803,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     };                    
                     
                     var resultIsObject = true;
-                    instance.eventData.error = result;                                
+                    instance.eventData.error = result +'/n'+ err;                                
                     updateToolbar(result, resultIsObject);
                     triggerEvent(gina, $el, 'error.' + id, result)
                 }
@@ -929,6 +939,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
 
                 // sending
+                //var data = JSON.stringify({ sample: 'data'});
                 xhr.send();
                 
 
@@ -1125,13 +1136,15 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     }                    
 
                     // removing from FormValidator instance
-                    var i = 0, formsLength = $popin['$forms'].length;
-                    if ($validator['$forms'] && formsLength > 0) {
-                        for (; i < formsLength; ++i) {
-                            if ( typeof($validator['$forms'][ $popin['$forms'][i] ]) != 'undefined' )
-                                $validator['$forms'][ $popin['$forms'][i] ].destroy();
+                    if ($validator) {
+                        var i = 0, formsLength = $popin['$forms'].length;
+                        if ($validator['$forms'] && formsLength > 0) {
+                            for (; i < formsLength; ++i) {
+                                if ( typeof($validator['$forms'][ $popin['$forms'][i] ]) != 'undefined' )
+                                    $validator['$forms'][ $popin['$forms'][i] ].destroy();
 
-                            $popin['$forms'].splice( i, 1);
+                                $popin['$forms'].splice( i, 1);
+                            }
                         }
                     }
                     

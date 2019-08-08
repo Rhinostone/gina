@@ -663,7 +663,7 @@ function SuperController(options) {
                                 }  
                                 url = hostname + url;
                             } else {
-                                url = '/404.html';
+                                 url = route;
                                 if (hostname.length > 0) {
                                     url = url.substr(1);
                                 } 

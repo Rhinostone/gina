@@ -227,7 +227,15 @@ function CmdHelper(cmd, client, debug) {
 
                         } else if ( typeof(cmd.params.path) == 'undefined' ) {
                             // getting the current path
-                            folder = new _( process.cwd(), true );
+                            try {
+                                folder = new _( process.cwd(), true );
+                            } catch (err) {
+                                errMsg = 'You are trying to run command from a deleted path ! Please move to another location to run this command.';
+                                console.error(errMsg);
+                                exit(errMsg);
+                                return false;
+                            }
+                            
                         }
 
                         if ( folder.isValidPath() ) {
