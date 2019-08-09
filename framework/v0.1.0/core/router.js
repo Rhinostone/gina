@@ -188,6 +188,9 @@ function Router(env) {
 
         
         // default param setting
+        if ( !params.rule ) {
+            params.rule = params.name
+        }
         var templateName = params.rule.replace('\@'+ bundle, '') || '_common';
         
         // inheriting from _common

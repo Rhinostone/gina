@@ -636,7 +636,7 @@ function Routing() {
             bundle          = (typeof (bundle) != 'undefined') ? bundle : config.bundle;
             env             = config.env;
             routing         = config.getRouting(bundle);
-            isXMLRequest    = request.isXMLRequest;
+            isXMLRequest    = (!request) ? false : request.isXMLRequest;
 
             hostname        = config.envConf[bundle][env].hostname;
             webroot         = config.envConf[bundle][env].server.webroot;
