@@ -725,7 +725,12 @@ function SuperController(options) {
                         }
                             
                         
-                        isDeferModeEnabled = local.options.template.javascriptsDeferEnabled;                        
+                        isDeferModeEnabled = local.options.template.javascriptsDeferEnabled;  
+                        
+                        // iframe case - without HTML TAG
+                        if (!self.isXMLRequest() && !/\<html/.test(layout) ) {
+                            layout = '<html>\n\t<head></head>\n\t<body class="gina-iframe-body">\n\t\t'+ layout +'\n\t</body>\n</html>';
+                        }                     
                         
                         // adding stylesheets
                         if (data.page.view.stylesheets && !/\{\{\s+(page\.view\.stylesheets)\s+\}\}/.test(layout) ) {
@@ -737,6 +742,8 @@ function SuperController(options) {
                             //var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers.host != local.options.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
                             //var hostname = (isProxyHost) ? local.options.conf.hostname.replace(/\:\d+$/, '') : local.options.conf.hostname;
                             
+                            
+                            
                             var scripts = data.page.view.scripts;
                             scripts = scripts
                                         //.replace(/(defer\s)/g, '')
@@ -747,7 +754,11 @@ function SuperController(options) {
                                 scripts = scripts.replace(/src\=\"\/(.*)\"/g, 'src="'+ webroot +'$1"')
                             }
                             
-                            layout += scripts;                              
+                            // iframe case - without HTML TAG
+                            if (self.isXMLRequest() || !/\<html/.test(layout) ) {                                
+                                layout += scripts;  
+                            }                            
+                                                                   
                         }
 
                         // adding plugins
@@ -787,7 +798,7 @@ function SuperController(options) {
                             layout.replace('{{ page.view.scripts }}', '');
                             if ( isDeferModeEnabled ) { // placed in the HEAD                                
                                 layout = layout.replace(/\<\/head\>/i, '\t'+ local.options.template.ginaLoader +'\n</head>');                                
-                                layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n</head>');
+                                layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
                                 
                             } else { // placed in the BODY
                                 layout = layout.replace(/\<\/body\>/i, '\t'+ local.options.template.ginaLoader +'\n</body>');                                
@@ -835,7 +846,7 @@ function SuperController(options) {
                             layout.replace('{{ page.view.scripts }}', '');
                             if ( isDeferModeEnabled ) { // placed in the HEAD                                
                                 layout = layout.replace(/\<\/head\>/i, '\t'+ local.options.template.ginaLoader +'\n</head>');                                
-                                layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n</head>');
+                                layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
                                 
                             } else { // placed in the BODY
                                 layout = layout.replace(/\<\/body\>/i, '\t'+ local.options.template.ginaLoader +'\n</body>');                                
@@ -848,10 +859,12 @@ function SuperController(options) {
                         
                         // special case for template without layout in debug mode - dev only
                         if ( hasViews() && local.options.debugMode && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
-                            try {                            
-                                layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
+                            try { 
+                                
+                                layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');                                                                    
                                 layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
                                 layout = swig.compile(layout, mapping)(data);
+                                
 
                             } catch (err) {
                                 filename = local.options.template.html;

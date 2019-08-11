@@ -122,7 +122,12 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
 
             'setOptions'        : setOptions
         };
-
+        
+        // iframe case
+        if ( typeof(parent.window['gina']) != 'undefined' ) {
+            // inheriting from parent frame instance
+            window['gina'] = merge((window['gina'] || {}), parent.window['gina']);
+        }
         $instance = merge( (window['gina'] || {}), $instance);
 
         registerEvents(this.plugin, events);

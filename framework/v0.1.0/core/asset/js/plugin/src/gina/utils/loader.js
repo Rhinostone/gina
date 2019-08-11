@@ -11,8 +11,6 @@
  * */
 
 window['originalContext'] = window['jQuery'];
-
-
 window['ginaToolbar']   = null;
 window['onGinaLoaded']  = function(gina) {
 

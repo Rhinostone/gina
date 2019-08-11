@@ -22,8 +22,8 @@
  *
  * */
 
- var wContext = ( typeof(onGinaLoaded) == 'undefined') ? window : parent.window; // iframe ?
-var readyList = [ { name: 'gina', ctx: wContext['gina'], fn: wContext.onGinaLoaded } ];
+//var wContext = ( typeof(window.onGinaLoaded) == 'undefined') ? window : parent.window; // iframe case
+var readyList = [ { name: 'gina', ctx: window['gina'], fn: window.onGinaLoaded } ];
 var readyFired = false;
 var readyEventHandlersInstalled = false;
 
@@ -45,8 +45,7 @@ function ready() {
                 if (readyList[i].name == 'gina') {
 
                     var scheduler = window.setInterval(function (i, readyList) {
-                        try {
-
+                        try {                            
                             readyList[i].ctx = window.gina;
                             result = readyList[i].fn.call(window, readyList[i].ctx, window.require);
 
@@ -65,9 +64,11 @@ function ready() {
 
 
                 } else { // onEachHandlerReady
-                    
+                    // iframe case
+                    if ( !window.$ && typeof(parent.window.$) != 'undefined' ) {
+                        window.$ = parent.window.$;
+                    }
                     readyList[i].ctx = window.originalContext || $;// passes the user's orignalContext by default; if no orignalContext is set will try users'jQuery
-                    
                     readyList[i].fn.call(window, readyList[i].ctx, window.require);
                     ++i;
                     handleEvent(i, readyList)
