@@ -1177,7 +1177,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             if ( typeof($popin) != 'undefined' && $popin != null ) {
                 $el = $popin.target;
                 
-                removeListener(gina, event.target, 'ready.' + instance.id);
+                removeListener(gina, $popin.target, 'ready.' + instance.id);
                 
 
                 if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
