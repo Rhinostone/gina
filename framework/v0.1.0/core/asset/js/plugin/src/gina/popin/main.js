@@ -311,9 +311,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             if ( typeof(e.detail) != 'undefined' )
                 $el.innerHTML = e.detail.trim();
             
-               
-            
-            
             var register = function (type, evt, $element) {
                 // attach submit events
                 addListener(gina, $element, evt, function(event) {

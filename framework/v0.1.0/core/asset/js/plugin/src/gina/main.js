@@ -131,7 +131,7 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
         $instance = merge( (window['gina'] || {}), $instance);
 
         registerEvents(this.plugin, events);
-
+        
         triggerEvent(gina, proto.target, 'ginaloaded', $instance)
     }
 

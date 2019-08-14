@@ -85,7 +85,7 @@ function ready() {
 }
 
 function readyStateChange() {
-    if ( document.readyState === 'complete' ) {
+    if ( document.readyState === 'complete' ) {        
         gina.ready();
     }
 }
