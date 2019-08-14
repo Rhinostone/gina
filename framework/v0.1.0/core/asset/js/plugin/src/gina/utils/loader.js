@@ -10,9 +10,9 @@
  *
  * */
 
-window['originalContext'] = window['jQuery'];
-window['ginaToolbar']   = null;
-window['onGinaLoaded']  = function(gina) {
+window['originalContext']   = window['jQuery'];
+window['ginaToolbar']       = null;
+window['onGinaLoaded']      = function(gina) {
 
     if (!gina) {
         //console.log('gina not ready yet');
