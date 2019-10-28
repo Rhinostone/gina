@@ -402,7 +402,7 @@ function SuperController(options) {
             setResources(localTemplateConf);
             
             
-            var file = data.page.view.file;
+            file = data.page.view.file;
 
             // pre-compiling variables
             data = merge(data, getData()); // needed !!

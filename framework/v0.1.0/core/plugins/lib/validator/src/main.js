@@ -1401,6 +1401,9 @@ function ValidatorPlugin(rules, data, formId) {
         // check if rules has imports & replace
         var rulesStr = JSON.stringify(rules, null, 4);
         var importedRules = rulesStr.match(/(\"@import\s+[a-z A-Z 0-9/.]+\")/g);
+        if (!instance.rules) {
+            instance.rules = {}
+        }
         if (importedRules && importedRules.length > 0) {
             var ruleArr = [], rule = {}, tmpRule = null;
             for (var r = 0, len = importedRules.length; r<len; ++r) {
@@ -1412,7 +1415,8 @@ function ValidatorPlugin(rules, data, formId) {
                     if ( typeof(instance.rules[ tmpRule ]) != 'undefined' ) {
                         rule = merge(rule, instance.rules[ tmpRule ])
                     } else {
-                        console.warn('[formValidator:rules] <@import error> on `'+importedRules[r]+'`: rule `'+ruleArr[i]+'` not found. Ignoring.')
+                        console.warn('[formValidator:rules] <@import error> on `'+importedRules[r]+'`: rule `'+ruleArr[i]+'` not found. Ignoring.');
+                        continue;
                     }
                 }
                 //console.log('replacing ', importedRules[r]);
@@ -1423,9 +1427,9 @@ function ValidatorPlugin(rules, data, formId) {
 
             }
 
-            if (!instance.rules) {
-                instance.rules = {}
-            }
+            // if (!instance.rules) {
+            //     instance.rules = {}
+            // }
 
             
             rules = JSON.parse(rulesStr);
@@ -1938,6 +1942,13 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
 
+        var updateSelect = function($el) {
+            //var selectedIndex = $el.selectedIndex;
+            //var isBoolean = /^(true|false)$/i.test($el.value);
+            
+            $el.setAttribute('data-value', $el.value);
+        };
+        
         var selectedIndex = null, selectedValue = null;
         for (var s = 0, sLen = $select.length; s < sLen; ++s) {
             elId = $select[s].getAttribute('id');
@@ -1948,6 +1959,14 @@ function ValidatorPlugin(rules, data, formId) {
                 elId = 'select.' + uuid.v4();
                 $select[s].setAttribute('id', elId)
             }
+            
+            addListener(gina, $select[s], 'change', function(event) {
+                var $el = event.target;
+                
+                if (/select/i.test($el.type) ) {                    
+                    updateSelect($el);
+                }                
+            });
 
             if ($select[s].options && !$form.fieldsSet[ elId ]) {
                 selectedIndex = 0;
@@ -1986,7 +2005,7 @@ function ValidatorPlugin(rules, data, formId) {
                 }
 
             }
-        }
+        }        
 
         var updateCheckBox = function($el) {
 
@@ -2126,11 +2145,15 @@ function ValidatorPlugin(rules, data, formId) {
                 $el.value = (/^true$/.test($el.value)) ? true : false
             }
         }
+                               
 
         evt = 'click';
 
         procced = function () {
-            // click proxy
+            
+            
+            
+            // click proxy            
             addListener(gina, $target, 'click', function(event) {
                 
                 var $el = event.target;
@@ -2150,7 +2173,8 @@ function ValidatorPlugin(rules, data, formId) {
                             return updateRadio($el);
                         }
                     }                    
-                }
+                }                        
+                
                 
                 // include only these elements for the binding
                 if ( 
@@ -2637,7 +2661,7 @@ function ValidatorPlugin(rules, data, formId) {
             
             
             
-            var hasCase = false, conditions = null;
+            var hasCase = false, isInCase = null, conditions = null;
             var caseValue = null, caseType = null;
             var localRules = null;
 
@@ -2653,8 +2677,19 @@ function ValidatorPlugin(rules, data, formId) {
                     }
 
                     hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
-
-
+                    isInCase = false;
+                    for (var c in rules) {
+                        if (!/^\_case\_/.test(c) ) continue;
+                        if ( typeof(rules[c].conditions) == 'undefined' ) continue;
+                        if ( typeof(rules[c].conditions[0].rules) == 'undefined' ) continue;
+                        
+                        if ( typeof(rules[c].conditions[0].rules[field]) != 'undefined' ) {
+                            isInCase = true;
+                            break;
+                        }                            
+                    }
+                    
+                    if (isInCase) continue;
 
                     if (!hasCase) {
                         if (typeof (rules[field]) == 'undefined') continue;
