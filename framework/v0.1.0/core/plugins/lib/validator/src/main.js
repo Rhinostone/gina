@@ -2702,8 +2702,15 @@ function ValidatorPlugin(rules, data, formId) {
 
                                 if (Array.isArray(rules[field][rule])) { // has args
                                     //convert array to arguments
-                                    args = rules[field][rule];
+                                    args = JSON.parse(JSON.stringify(rules[field][rule]));
+                                    if ( /\$[\w\[\]]*/.test(args[0]) ) {
+                                        var foundVariables = args[0].match(/\$[\w\[\]]*/g);
+                                        for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
+                                            args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
+                                        }
+                                    }
                                     d[field][rule].apply(d[field], args);
+                                    // .match(/\$[\w\[\]]*/g)
                                 } else {
                                     d[field][rule](rules[field][rule]);
                                 }
