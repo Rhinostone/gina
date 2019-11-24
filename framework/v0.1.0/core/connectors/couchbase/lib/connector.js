@@ -161,13 +161,16 @@ function Connector(dbString) {
             if ( typeof(self.cluster.authenticate) != 'undefined' )
                 self.cluster.authenticate(dbString.username, dbString.password);
 
+            console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ] ...loading dbstring');
             self
                 .connect(dbString)
                 .on('error', function(err){
                     if (!self.reconnecting)
                         console.emerg('[ CONNECTOR ][ ' + local.bundle +' ][ '+ dbString.database +' ] Handshake aborted ! PLease check that Couchbase is running.\n',  err.message);                    
+                   
                 })
                 .once('connect', function () {
+                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ] connected...');
                     // intercepting conn event thru gina
                     gina.onError(function(err, req, res, next){
                         // (code)   message

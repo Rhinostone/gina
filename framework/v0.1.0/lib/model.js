@@ -209,6 +209,7 @@ function ModelUtil() {
     this.loadAllModels = function(bundles, configuration, env, cb) {
 
         var loadModel = function(b, bundles, configuration, env, cb) {
+            
             var modelObject     = getContext('modelUtil').entities[bundles[b]] // to check if already laoded
                 , bundle        = bundles[b]
                 , len           = bundles.length
@@ -222,6 +223,10 @@ function ModelUtil() {
                 var mObj = {};
 
                 var models = connectors;
+                
+                if ( !models || typeof(models) == 'undefined' ) {
+                    console.warn('no models attached to connector '+ connector);
+                }
 
                 var t = 0;
 
@@ -260,6 +265,7 @@ function ModelUtil() {
                                 // step 1: creating entities classes in the context
                                 // must be done only when all models conn are alive because of `cross models/database use cases`
                                 for (var nttClass in entitiesManager) {
+                                    //console.debug('Trying to create NTT: ', nttClass);
                                     if ( !/^[A-Z]/.test( nttClass ) ) {
                                         throw new Error('Entity Class `'+ nttClass +'` should start with an uppercase !');
                                         foundInitError = true

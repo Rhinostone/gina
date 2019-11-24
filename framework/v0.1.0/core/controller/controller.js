@@ -1535,8 +1535,10 @@ function SuperController(options) {
                     // if ( typeof(local.res._headers['access-control-allow-methods']) != 'undefined' && local.res._headers['access-control-allow-methods'] != method ) {
                     //     res.setHeader('access-control-allow-methods', method);
                     // }                    
-                    
-                    path += '?'+ encodeURIComponent(JSON.stringify(local.req[method.toLowerCase()]));                 
+                    var requestParams = local.req[method.toLowerCase()];
+                    if ( typeof(requestParams) != 'undefined' ) {
+                        path += '?'+ encodeURIComponent(JSON.stringify(local.req[method.toLowerCase()]));                 
+                    }                    
                 }
                     
                 var ext = 'html';

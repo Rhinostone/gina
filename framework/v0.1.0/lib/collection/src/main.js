@@ -858,6 +858,14 @@ function Collection(content, options) {
         return result
     }
 
+    /**
+     * update
+     * 
+     * @param {object} filter
+     * @param {object} set
+     * 
+     * @return {objet} instance
+     */
     instance['update'] = function(filter, set) {
         if ( typeof(filter) !== 'object' ) {
             throw new Error('filter must be an object');
@@ -897,7 +905,7 @@ function Collection(content, options) {
         result.orderBy  = instance.orderBy;
         result.notIn    = instance.notIn;
         result.delete   = instance.delete;
-        result.toRaw = instance.toRaw;
+        result.toRaw    = instance.toRaw;
 
         return result
     }
