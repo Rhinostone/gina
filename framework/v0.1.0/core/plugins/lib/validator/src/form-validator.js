@@ -311,7 +311,7 @@ function FormValidatorUtil(data, $fields) {
                 if ( typeof(val) == 'string' && /,/g.test(val) ) {
                     val = this.value = parseFloat( val.replace(/,/g, '.').replace(/\s+/g, '') );
                 } else if ( typeof(val) == 'string' && val != '') {
-                    val = this.value = parseInt( val );
+                    val = this.value = parseInt( val.replace(/\s+/g, '') );
                 }
 
             } catch (err) {
@@ -445,6 +445,11 @@ function FormValidatorUtil(data, $fields) {
         self[el]['toFloat'] = function(decimals) {
             if ( typeof(this.value) == 'string' ) {
                 this.value = this.value.replace(/\s+/g, '');
+                if ( /\,/.test(this.value) && !/\./.test(this.value) ) {
+                    this.value = this.value.replace(/\,/g,'.');
+                } else {
+                    this.value = this.value.replace(/\,/g,'');
+                }
             }
 
             var val = this.value, errors = {}, isValid = true;
