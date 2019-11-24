@@ -2683,7 +2683,8 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( typeof(rules[c].conditions) == 'undefined' ) continue;
                         if ( typeof(rules[c].conditions[0].rules) == 'undefined' ) continue;
                         
-                        if ( typeof(rules[c].conditions[0].rules[field]) != 'undefined' ) {
+                        //if ( typeof(rules[c].conditions[0].rules[field]) != 'undefined' ) {
+                        if ( typeof(rules[c].conditions[0].rules[field]) != 'undefined' && typeof(rules[field]) == 'undefined' ) {
                             isInCase = true;
                             break;
                         }                            
