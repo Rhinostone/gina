@@ -221,6 +221,11 @@ function Routing() {
             params.param.path = params.param.path.replace(regex, urlVal);
         }
         
+        //  if custom namespace, namespace rewrite
+        if (params.param.namespace && regex.test(params.param.namespace)) {            
+            params.param.namespace = params.param.namespace.replace(regex, urlVal);            
+        }
+        
         //  if custom file, file rewrite
         if (params.param.file && regex.test(params.param.file)) {            
             params.param.file = params.param.file.replace(regex, urlVal);            
@@ -499,6 +504,9 @@ function Routing() {
                     }
                     if (typeof (route.param.title) != 'undefined' && /:/.test(route.param.title)) {
                         route.param.title = route.param.title.replace( regex, params[variable]);
+                    }
+                    if (typeof (route.param.namespace) != 'undefined' && /:/.test(route.param.namespace)) {
+                        route.param.namespace = route.param.namespace.replace( regex, params[variable]);
                     }
                     if (typeof (route.param.file) != 'undefined' && /:/.test(route.param.file)) {
                         route.param.file = route.param.file.replace( regex, params[variable]);
