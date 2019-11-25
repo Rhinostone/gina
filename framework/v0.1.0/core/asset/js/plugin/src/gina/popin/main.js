@@ -58,7 +58,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             '$forms'            : []
         };
 
-        var $validator      = null; // validator instance
+        // imopring other plugins
+        var $validatorInstance   = null; // validator instance
 
 
         // XML Request
@@ -210,7 +211,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
 
                                     // bind with formValidator if forms are found
-                                    // if ( /<form/i.test(e.target.innerHTML) && typeof($validator) != 'undefined' ) {
+                                    // if ( /<form/i.test(e.target.innerHTML) && typeof($validatorInstance) != 'undefined' ) {
                                     //     var _id = null;
                                     //     var $forms = e.target.getElementsByTagName('form');
                                     //     for (var i = 0, len = $forms.length; i < len; ++i) {
@@ -228,7 +229,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                     //             $popin['$forms'].push(_id);
 
                                     //         $forms[i].close = popinClose;
-                                    //         $validator.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
+                                    //         $validatorInstance.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
 
                                     //         removeListener(gina, $popin.target, e.type);
                                     //     }
@@ -307,7 +308,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             
             var $el = e.target;
             var eventType = e.type;
-            
+                        
             if ( typeof(e.detail) != 'undefined' )
                 $el.innerHTML = e.detail.trim();
             
@@ -457,7 +458,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             }
 
             // bind with formValidator if forms are found
-            if ( /<form/i.test($el.innerHTML) && typeof($validator) != 'undefined' && $validator ) {
+            if ( /<form/i.test($el.innerHTML) && typeof($validatorInstance) != 'undefined' && $validatorInstance ) {
                 var _id = null;
                 var $forms = $el.getElementsByTagName('form');
                 i = 0; len = $forms.length;
@@ -476,7 +477,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         $popin['$forms'].push(_id);
 
                     $forms[i].close = popinClose;
-                    $validator.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
+                    $validatorInstance.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
 
                     removeListener(gina, $popin.target, eventType);
                 }
@@ -578,11 +579,16 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 } else {
                     evt = $link[i]['id'];
                 }
+                // if is disabled, stop propagation
+                if ( $link[i].getAttribute('disabled') != null ) {
+                    continue;
+                }
 
                 if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $link[i].id ) {
                     register('link', evt, $link[i])
                 }
-            }
+            }          
+            
             
         }
         
@@ -1133,12 +1139,12 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     }                    
 
                     // removing from FormValidator instance
-                    if ($validator) {
+                    if ($validatorInstance) {
                         var i = 0, formsLength = $popin['$forms'].length;
-                        if ($validator['$forms'] && formsLength > 0) {
+                        if ($validatorInstance['$forms'] && formsLength > 0) {
                             for (; i < formsLength; ++i) {
-                                if ( typeof($validator['$forms'][ $popin['$forms'][i] ]) != 'undefined' )
-                                    $validator['$forms'][ $popin['$forms'][i] ].destroy();
+                                if ( typeof($validatorInstance['$forms'][ $popin['$forms'][i] ]) != 'undefined' )
+                                    $validatorInstance['$forms'][ $popin['$forms'][i] ].destroy();
 
                                 $popin['$forms'].splice( i, 1);
                             }
@@ -1231,10 +1237,12 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     throw new Error('`popin '+$popin.options['name']+'` already exists !')
                 }
 
+                // import over plugins
                 if ( typeof($popin.options['validator']) != 'undefined' ) {
-                    $validator = $popin.options['validator'];
-                    $popin.validateFormById = $validator.validateFormById;
+                    $validatorInstance = $popin.options['validator'];
+                    $popin.validateFormById = $validatorInstance.validateFormById;
                 }
+                
 
                 $popin.options['class'] = 'gina-popin-container ' + $popin.options['class'];
 
@@ -1248,9 +1256,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 $popin.updateToolbar    = updateToolbar;  
                 
                 instance.$popins[$popin.id] = $popin;
-
-                // if ( typeof($validator) != 'undefined' )
-                //     $popin.validateFormById = $validator.validateFormById;
 
                 // setting up AJAX
                 if (window.XMLHttpRequest) { // Mozilla, Safari, ...
@@ -1277,9 +1282,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             setupInstanceProto();
             instance.on('init', function(event) {
                 
-                
-                //var $newPopin = merge({}, $popin);  
-                //registerPopin($newPopin, options);
                 var $newPopin = null;
                 var popinId = 'gina-popin-' + instance.id +'-'+ options['name'];
                 if ( typeof(instance.$popins[popinId]) == 'undefined' ) {               

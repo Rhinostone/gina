@@ -445,6 +445,7 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                 if ( typeof(options) == 'undefined' ) {
                     options = {}
                 }
+                instance.options = options;
                 
                 bindLinks(instance.target, options);
                 gina.linkIsBinded = true;
