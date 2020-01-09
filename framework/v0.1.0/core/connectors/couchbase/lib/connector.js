@@ -52,14 +52,19 @@ function Connector(dbString) {
         var conn        = null;
 
         // version 4.x
-        if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {
-            conn = self.cluster.openBucket(dbString.database, dbString.password);
-        } else {
-            conn = self.cluster.openBucket(dbString.database);
-        }
-
-        self.instance   = conn;
         
+        try {
+            if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {
+                conn = self.cluster.openBucket(dbString.database, dbString.password);
+            } else {
+                conn = self.cluster.openBucket(dbString.database);
+            }
+        } catch (err) {
+            console.error('[ CONNECTOR ][ ' + local.bundle +' ] couchbase could not connect to bucket `'+ dbString.database +'`\n'+ (err.stack || err.message || err) );
+        }
+            
+
+        self.instance   = conn;        
         
         
         conn.on('error', function (err) {
@@ -81,11 +86,12 @@ function Connector(dbString) {
             
         });
         
-        conn.once('connect', function(){
+        conn.once('connect', function onConnect(){
+            console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ] connected...');
             self.reconnected = true;
             var options = local.options;
             // will send heartbeat every 4 minutes if keepAlive == `true`
-            self.ping(options.pingInterval, function(){
+            self.ping(options.pingInterval, function onPing(){
 
                 console.debug('[ CONNECTOR ][ ctx ] ', getConfig().bundle, getConfig().env );
                 // updating context
@@ -155,19 +161,27 @@ function Connector(dbString) {
             local.options   = dbString;
             local.bundle    = getConfig().bundle
 
-            console.info('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ] connecting to couchbase cluster');
-            self.cluster = new couchbase.Cluster(dbString.protocol + dbString.host);
-            // version 5.x
-            if ( typeof(self.cluster.authenticate) != 'undefined' )
-                self.cluster.authenticate(dbString.username, dbString.password);
-
-            console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ] ...loading dbstring');
+            console.info('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ][ ' + dbString.database +' ] authenticating to couchbase cluster @'+ dbString.protocol + dbString.host);
+            
+            try {
+                self.cluster = new couchbase.Cluster(dbString.protocol + dbString.host);
+                // version 5.x
+                if ( typeof(self.cluster.authenticate) != 'undefined' )
+                    self.cluster.authenticate(dbString.username, dbString.password);
+            } catch(_err) {
+                console.error('[ CONNECTOR ][ ' + local.bundle +' ] could not authenticate to couchbase @`'+ dbString.protocol + dbString.host +'`\n'+ (_err.stack || _err.message || _err) );
+            }
+                
+            console.info('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ][ ' + dbString.database +' ] connecting to couchbase cluster @'+ dbString.protocol + dbString.host);
+            
             self
                 .connect(dbString)
                 .on('error', function(err){
                     if (!self.reconnecting)
                         console.emerg('[ CONNECTOR ][ ' + local.bundle +' ][ '+ dbString.database +' ] Handshake aborted ! PLease check that Couchbase is running.\n',  err.message);                    
                    
+                    if (err)
+                        console.error(err.stack);
                 })
                 .once('connect', function () {
                     console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ] connected...');
