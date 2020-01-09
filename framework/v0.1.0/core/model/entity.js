@@ -173,7 +173,7 @@ function EntitySuper(conn, caller) {
                          *      });
                          * 
                          */
-                        if ( /**typeof(this[m]) == 'undefined'*/ typeof(this.Promise) != 'undefined' && typeof(arguments[arguments.length-1]) == 'function' ) {
+                        if ( typeof(this[m]) == 'undefined' /*typeof(this.Promise) != 'undefined'*/ && typeof(arguments[arguments.length-1]) == 'function' ) {
                             
                             //this[m] = function() {
                             var promise = function() {
@@ -208,13 +208,14 @@ function EntitySuper(conn, caller) {
                                     }
                                 }
                             }
+                                                        
+                            //this[m] = promise;
                             
                             promise.apply(null, arguments);
                             //this[m].apply(null, arguments);
+                            
                             cached.apply(promise, arguments); 
-                            //cached.apply(this[m], arguments); 
-                            return promise;
-                            //return this[m];
+                            return promise;    
                         } //else is normal case
                         
                         cached.apply(this[m], arguments);                        
