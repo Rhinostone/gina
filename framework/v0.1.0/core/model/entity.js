@@ -158,9 +158,60 @@ function EntitySuper(conn, caller) {
                     return function () {
 
                         // retrieving local arguments, & binding it to the event callback
-
-                        cached.apply(this[m], arguments);
                         
+                        /**
+                         * handle promises with async/await
+                         * 
+                         * e.g.: 
+                         *  var recordJob   = promisify(db.jobEntity.insert);
+                         *  await recordJob(jobObj)
+                         *      .then( function onJob(_jobObj) {                        
+                         *          jobObj = _jobObj;
+                         *      })
+                         *      .catch( function onJobErr(_err) {
+                         *          jobErr = _err;
+                         *      });
+                         * 
+                         */
+                        if ( typeof(this[m]) == 'undefined' && typeof(arguments[1]) == 'function' ) {
+                            
+                            this[m] = function() {
+                                var cb = arguments[arguments.length-1];
+                                if (entity._triggers.indexOf(events[i].shortName) > -1) {
+                                    console.debug('[ MODEL ][ ENTITY ] Setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
+                                    
+                                    if (typeof(entity._arguments) == 'undefined' || typeof(entity._arguments) != 'undefined' && typeof(entity._arguments[events[i].shortName]) == 'undefined') {
+                                        
+                                        if (entity.listenerCount(events[i].shortName) > 0) {
+                                            entity.removeAllListeners([events[i].shortName])
+                                        }
+                                            
+                                        entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
+                                            // check if not already fired                                        
+                                            if (entity._callbacks[events[i].shortName]) {
+                                                
+                                                entity.removeAllListeners([events[i].shortName]);
+                                                console.log('\nFIRING #1 ' + events[i].shortName +'('+ events[i].index  +')');
+                                                cb.apply(this[m], arguments);
+                                                //cb.apply(this, arguments);
+                                            }
+                                                
+                                        });
+                                            
+    
+                                        // backing up callback
+                                        entity._callbacks[events[i].shortName] = cb;
+                                    } else { // in case the event is not ready yet
+                                        console.log('\nFIRING #2 ' + events[i].shortName);
+                                        cb.apply(entity[m], entity._arguments[events[i].shortName])
+                                    }
+                                }
+                            }
+                            
+                            this[m].apply(null, arguments);
+                        } //else is normal case
+                        
+                        cached.apply(this[m], arguments);                        
                         
                         this[m].onComplete = function (cb) {
 
@@ -311,6 +362,7 @@ function EntitySuper(conn, caller) {
                             // retrieving local arguments, & binding it to the event callback
                             if ( typeof(this._arguments[trigger]) == 'undefined' ) {
                                 console.log('\nFIRING #5 ' + trigger);
+                                
                                 this._arguments[trigger] = arguments;
                             }
                             
