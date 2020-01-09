@@ -173,9 +173,10 @@ function EntitySuper(conn, caller) {
                          *      });
                          * 
                          */
-                        if ( typeof(this[m]) == 'undefined' && typeof(arguments[1]) == 'function' ) {
+                        if ( /**typeof(this[m]) == 'undefined'*/ typeof(this.Promise) != 'undefined' && typeof(arguments[arguments.length-1]) == 'function' ) {
                             
-                            this[m] = function() {
+                            //this[m] = function() {
+                            var promise = function() {
                                 var cb = arguments[arguments.length-1];
                                 if (entity._triggers.indexOf(events[i].shortName) > -1) {
                                     console.debug('[ MODEL ][ ENTITY ] Setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
@@ -192,8 +193,8 @@ function EntitySuper(conn, caller) {
                                                 
                                                 entity.removeAllListeners([events[i].shortName]);
                                                 console.log('\nFIRING #1 ' + events[i].shortName +'('+ events[i].index  +')');
-                                                cb.apply(this[m], arguments);
-                                                //cb.apply(this, arguments);
+                                                //cb.apply(promise, arguments);
+                                                cb.apply(this, arguments);
                                             }
                                                 
                                         });
@@ -208,7 +209,12 @@ function EntitySuper(conn, caller) {
                                 }
                             }
                             
-                            this[m].apply(null, arguments);
+                            promise.apply(null, arguments);
+                            //this[m].apply(null, arguments);
+                            cached.apply(promise, arguments); 
+                            //cached.apply(this[m], arguments); 
+                            return promise;
+                            //return this[m];
                         } //else is normal case
                         
                         cached.apply(this[m], arguments);                        
