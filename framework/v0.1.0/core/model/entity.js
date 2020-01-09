@@ -173,9 +173,8 @@ function EntitySuper(conn, caller) {
                          *      });
                          * 
                          */
-                        if ( typeof(this[m]) == 'undefined' /*typeof(this.Promise) != 'undefined'*/ && typeof(arguments[arguments.length-1]) == 'function' ) {
+                        if ( typeof(this[m]) == 'undefined' && typeof(arguments[arguments.length-1]) == 'function' ) {
                             
-                            //this[m] = function() {
                             var promise = function() {
                                 var cb = arguments[arguments.length-1];
                                 if (entity._triggers.indexOf(events[i].shortName) > -1) {
@@ -192,8 +191,7 @@ function EntitySuper(conn, caller) {
                                             if (entity._callbacks[events[i].shortName]) {
                                                 
                                                 entity.removeAllListeners([events[i].shortName]);
-                                                console.log('\nFIRING #1 ' + events[i].shortName +'('+ events[i].index  +')');
-                                                //cb.apply(promise, arguments);
+                                                console.log('\nFIRING #1 - promise ' + events[i].shortName +'('+ events[i].index  +')');                                                
                                                 cb.apply(this, arguments);
                                             }
                                                 
@@ -203,17 +201,13 @@ function EntitySuper(conn, caller) {
                                         // backing up callback
                                         entity._callbacks[events[i].shortName] = cb;
                                     } else { // in case the event is not ready yet
-                                        console.log('\nFIRING #2 ' + events[i].shortName);
+                                        console.log('\nFIRING #2 - promise' + events[i].shortName);
                                         cb.apply(entity[m], entity._arguments[events[i].shortName])
                                     }
                                 }
                             }
-                                                        
-                            //this[m] = promise;
-                            
-                            promise.apply(null, arguments);
-                            //this[m].apply(null, arguments);
-                            
+                                                                                   
+                            promise.apply(null, arguments);                            
                             cached.apply(promise, arguments); 
                             return promise;    
                         } //else is normal case
