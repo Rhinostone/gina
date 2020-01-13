@@ -255,7 +255,9 @@ function ServerEngineClass(options) {
                                 // false & true case
                                 if ( /^(false|true|on)$/i.test(a[1]) )
                                     a[1] = ( /^(true|on)$/i.test(a[1]) ) ? true : false;
-                                
+                                else if (a[1].indexOf('%') > -1)
+                                    a[1] = decodeURIComponent(a[1]);
+                                    
                                 request.query[ a[0] ] = a[1] 
                             }                        
                         } 
