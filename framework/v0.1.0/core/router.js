@@ -110,6 +110,70 @@ function Router(env) {
      * */
     this.route = function(request, response, next, params) {
         
+        /**
+        * BO Passport JS HTTP2 fix : taken from passport/request.js
+        */
+       if ( typeof(request._passport) != 'undefined' && typeof(request.isAuthenticated) == 'undefined' ) {
+            request.isAuthenticated = function() {
+                var property = 'user';
+                if (this._passport && this._passport.instance) {
+                    property = this._passport.instance._userProperty || 'user';
+                }
+                
+                return (this[property]) ? true : false;
+            };
+        }
+        
+        if ( typeof(request._passport) != 'undefined' && (typeof(request.logIn) == 'undefined' || typeof(request.login) == 'undefined') ) {
+            request.login =
+            request.logIn = function(user, options, done) {
+                if (typeof options == 'function') {
+                    done = options;
+                    options = {};
+                }
+                options = options || {};
+                
+                var property = 'user';
+                if (this._passport && this._passport.instance) {
+                    property = this._passport.instance._userProperty || 'user';
+                }
+                var session = (options.session === undefined) ? true : options.session;
+                
+                this[property] = user;
+                if (session) {
+                    if (!this._passport) { throw new Error('passport.initialize() middleware not in use'); }
+                    if (typeof done != 'function') { throw new Error('req#login requires a callback function'); }
+                    
+                    var self = this;
+                    this._passport.instance._sm.logIn(this, user, function(err) {
+                    if (err) { self[property] = null; return done(err); }
+                    done();
+                    });
+                } else {
+                    done && done();
+                }
+            }
+        }
+        
+        if ( typeof(request._passport) != 'undefined' && (typeof(request.logOut) == 'undefined' ||  typeof(request.logout) == 'undefined') ) {
+            request.logout =
+            request.logOut = function() {
+                var property = 'user';
+                if (this._passport && this._passport.instance) {
+                    property = this._passport.instance._userProperty || 'user';
+                }
+                
+                this[property] = null;
+                if (this._passport) {
+                    this._passport.instance._sm.logOut(this);
+                }
+            };
+        }
+        
+        /**
+        * EO Passport JS HTTP2 fix
+        */
+        
         var cacheless           = (process.env.IS_CACHELESS == 'false') ? false : true
             , bundle            = local.bundle = params.bundle
             , config            = new Config().getInstance()
