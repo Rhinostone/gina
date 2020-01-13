@@ -907,7 +907,7 @@ function Server(options) {
         }
     }
     
-    var completeHeaders = function(request, response, responseHeader) {
+    var completeHeaders = function(request, response, responseHeaders) {
         
         var resHeaders      = null
             , referer       = null
@@ -918,7 +918,11 @@ function Server(options) {
             , allowedOrigin = null
             , sameOrigin    = false
             , conf          = self.conf[self.appName][self.env]
-        ; 
+        ;
+        
+        if ( typeof(responseHeaders) == 'undefined' ) {
+            responseHeaders = response.getHeaders();
+        }
         
         resHeaders  = conf.server.response.header;
         resHeaders['access-control-allow-methods'] = request.routing.method.replace(/(\,\s+|\,)/g, ', ').toUpperCase();                                            
@@ -951,7 +955,7 @@ function Server(options) {
                 }  
             }  
             
-            if (!sameOrigin && conf.hostname == authority || !sameOrigin && conf.hostname.replace(/\:\d+$/, '') == authority) {
+            if (!sameOrigin && conf.hostname == authority || !sameOrigin && conf.hostname.replace(/\:\d+$/, '') == authority.replace(/\:\d+$/, '') ) {
                 sameOrigin = authority
             }
             
@@ -1001,26 +1005,18 @@ function Server(options) {
                             if (!origin && sameOrigin)
                                 origin = sameOrigin;
                             
-                            if (responseHeader) {
-                                responseHeader[h] = origin
-                            } else {
-                                response.setHeader(h, origin);  
-                            }                                                                                          
+                            
+                            response.setHeader(h, origin);                                                                                          
                         }                                 
                         sameOrigin = false;                               
-                    } else {
-                        if (responseHeader) {
-                            responseHeader[h] = resHeaders[h]
-                        } else {
-                            response.setHeader(h, resHeaders[h])
-                        }                        
+                    } else {                        
+                        response.setHeader(h, resHeaders[h])                       
                     }
                 }                    
             }
         } 
-        
-        if (responseHeader)
-            return responseHeader;
+                
+        return response.getHeaders();
     }
     
     this.onHttp2Stream = function(stream, headers) {
