@@ -1591,7 +1591,7 @@ function Server(options) {
              * They can only be controlled/produced by the remote domain.
              * */
             request.isWithCredentials  = ( request.headers['access-control-allow-credentials'] && request.headers['access-control-allow-credentials'] == true ) ? true : false;
-                 
+                        
             
             local.request = request;
                         
