@@ -559,19 +559,33 @@ function Server(options) {
         };
         var notFound = '404.html'
         
-        var filename = null, path = null;
+        var filename        = null
+            , path          = null
+            , altConf       = ( typeof(staticProps.firstLevel) != 'undefined') ? self.conf.reverseRouting[staticProps.firstLevel] : false
+            , backedupPath  = null
+        ;
         if ( 
             staticProps.isFile && staticsArr.indexOf(url) > -1 
             || staticsArr.indexOf(staticProps.firstLevel) > -1
+            || typeof(altConf) != 'undefined' && altConf
         ) {            
             
             // by default
             path = url.replace(url.substr(url.lastIndexOf('/')+1), '');
+            if ( typeof(altConf) != 'undefined' && altConf ) {
+                bundleConf = self.conf[altConf.split(/\@/)[1]][bundleConf.env];
+                backedupPath = path;
+                path = path.replace(staticProps.firstLevel, '/');
+            }
+            
+            
             // catch `statics.json` defined paths || bundleConf.staticResources.indexOf(url.replace(url.substr(url.lastIndexOf('/')+1), '')) > -1
             if (  bundleConf.staticResources.indexOf(path) > -1 || bundleConf.staticResources.indexOf(staticProps.firstLevel) > -1 ) {
-                
-                filename = (bundleConf.staticResources.indexOf(path) > -1) ? bundleConf.content.statics[path] + url.replace(path, '/') : bundleConf.content.statics[staticProps.firstLevel] + url.replace(staticProps.firstLevel, '/');
-                
+                if ( typeof(altConf) != 'undefined' && altConf && backedupPath ) {
+                    filename = (bundleConf.staticResources.indexOf(path) > -1) ? bundleConf.content.statics[path] + url.replace(backedupPath, '/') : bundleConf.content.statics[staticProps.firstLevel] + url.replace(staticProps.firstLevel, '/');
+                } else {
+                    filename = (bundleConf.staticResources.indexOf(path) > -1) ? bundleConf.content.statics[path] + url.replace(path, '/') : bundleConf.content.statics[staticProps.firstLevel] + url.replace(staticProps.firstLevel, '/');
+                }
             } else {
                 filename = ( bundleConf.staticResources.indexOf(url) > -1 ) ? bundleConf.content.statics[url] : bundleConf.publicPath + url;
             }
