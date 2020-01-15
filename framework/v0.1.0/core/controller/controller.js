@@ -8,6 +8,7 @@
 
 //Imports.
 var fs              = require('fs');
+var util            = require('util');
 var EventEmitter    = require('events').EventEmitter;
 var zlib            = require('zlib');
 
@@ -1799,7 +1800,7 @@ function SuperController(options) {
      *  @param {array} files
      *
      * */
-    this.store = function(target, cb) {
+    this.store = async function(target, cb) {
 
         var start = function(target, cb) {
             var files = local.req.files, uploadedFiles = [];

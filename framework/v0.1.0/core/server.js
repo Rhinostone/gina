@@ -1396,7 +1396,7 @@ function Server(options) {
                                                 
                                                 isFilenameDir = (webroot == request.url) ? true: false;
                                                 
-                                                if ( !isFilenameDir && !/404\.html/.test(filename) )
+                                                if ( !isFilenameDir && !/404\.html/.test(filename) && fs.existsSync(filename) )
                                                     isFilenameDir = fs.statSync(filename).isDirectory();
                                                     //isFilenameDir = ( !/404\.html/.test(request.url) ) ? fs.statSync(filename).isDirectory() : false;
                                                 
@@ -2198,7 +2198,7 @@ function Server(options) {
 
         };
 
-        loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
+        loadBundleConfiguration(request, response, next, function onLoadBundleConfiguration (err, bundle, pathname, config, req, res, next) {
             if (!req.handled) {
                 req.handled = true;
                 if (err) {
