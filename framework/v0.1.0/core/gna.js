@@ -768,10 +768,21 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                                     'pragma': 'no-cache',
                                                     'expires': '0',
                                                     'content-type': conf.server.coreConfiguration.mime[ext]
-                                                };                                                
-                                                response.writeHead(200, headers);
+                                                };             
                                                 
-                                                response.end();
+                                                // if ( /http\/2/.test(conf.server.protocol) ) {
+                                                //     if (!response.stream.destroyed) {
+                                                //         headers[':status'] = 200;
+                                                //         headers[':authority'] = request.headers[':authority'];
+                                                //         response.stream.respond(headers);
+                                                //         response.stream.end();
+                                                //         return;
+                                                //     } 
+                                                // } else {
+                                                    response.writeHead(200, headers);                                                
+                                                    response.end();
+                                                //}
+                                                    
                                             } else {
                                                 next(false, request, response)
                                             }
