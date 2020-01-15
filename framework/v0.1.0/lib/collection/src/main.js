@@ -1055,8 +1055,14 @@ function Collection(content, options) {
         // asc
         sortOp['asc'] = function (prop, content) {
 
-            return content.sort(function onAscSort(a, b) {
-                
+            var mapped = content.map(function(obj, i) {
+                var _m = {};
+                _m.index = i;
+                _m[prop] = obj[prop];
+                return _m;
+            });
+            
+            mapped.sort(function onAscSort(a, b) {    
                 // handle booleans
                 if ( /^(true|false)$/i.test(a) ) {
                     a = ( /true/i.test(a) ) ? true : false;
@@ -1102,8 +1108,8 @@ function Collection(content, options) {
                             
                         if (typeof (a[prop]) == 'number') {
                             return (''+a[prop]).localeCompare((''+b[prop]), undefined, { numeric: true })
-                        } else {
-                            return a[prop].localeCompare(b[prop], undefined, {sensitivity: 'case', caseFirst: 'upper'})                            
+                        } else {                   
+                            return a[prop].localeCompare(b[prop], undefined, {sensitivity: 'case', caseFirst: 'upper'}) 
                         }
 
                         
@@ -1122,7 +1128,11 @@ function Collection(content, options) {
                     // a must be equal to b
                     return 0;
                 }
-            })
+            });
+            
+            return mapped.map(function(m, index, result){
+                return content[m.index];
+            });
         }
 
         // desc
@@ -1134,10 +1144,21 @@ function Collection(content, options) {
             
             var props = [], keys = [];
             
-            for (var f = 0, fLen = filter.length; f < fLen; ++f) {
-                props[f] = Object.keys(filter[f])[0];
-                keys[f] = filter[f][ props[f]] ;     
+            if ( Array.isArray(filter) ) {
+                for (var f = 0, fLen = filter.length; f < fLen; ++f) {
+                    props[f] = Object.keys(filter[f])[0];
+                    keys[f] = filter[f][ props[f]] ;     
+                }
+            } else {
+                var f = 0;
+                for (var flt in filter) {
+                    props[f] = flt;
+                    keys[f] = filter[flt] ;  
+                    ++f;
+                }
             }
+            
+            
 
             sortRecursive = function(a, b, columns, order_by, index) {
 
@@ -1208,10 +1229,13 @@ function Collection(content, options) {
 
             return content.sort(function onMultiSort(a, b) {
                 return sortRecursive(a, b, props, keys, 0);
-            })
+            });
+            // return mapped.map(function(m, index, result){
+            //     return content[m.index];
+            // });
         }
 
-        if ( Array.isArray(filter) ) {
+        if ( Array.isArray(filter) || filter.count() > 1 ) {
             
             result = multiSortOp(content, filter);
             
