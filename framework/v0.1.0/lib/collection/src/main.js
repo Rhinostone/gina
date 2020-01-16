@@ -866,33 +866,98 @@ function Collection(content, options) {
      * 
      * @return {objet} instance
      */
-    instance['update'] = function(filter, set) {
-        if ( typeof(filter) !== 'object' ) {
-            throw new Error('filter must be an object');
+    // instance['update'] = function(filter, set) {
+    //     if ( typeof(filter) !== 'object' ) {
+    //         throw new Error('filter must be an object');
+    //     } else {
+    //         var condition           = filter.count()
+    //             , i                 = 0
+    //             , localeLowerCase   = ''
+    //             , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+
+    //         for (var o in result) {
+    //             if ( /function/i.test( typeof(result[o]) ) )
+    //                 continue;
+                    
+    //             for (var f in filter) {
+    //                 if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
+
+    //                 localeLowerCase = ( !/(boolean|number)/.test(typeof(filter[f])) ) ? filter[f].toLocaleLowerCase() : filter[f];
+    //                 if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] != 'null' && result[o][f] != 'undefined' ) {
+
+    //                     result[o] = merge(result[o], set, true);
+    //                     //result[o] = merge( set, result[o] );
+
+    //                 } else if ( typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] === filter[f] ) {
+    //                     ++i;
+    //                     if (i === condition) result[o] = merge(result[o], set, true);
+    //                 } else if ( typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] === filter[f]) {
+
+    //                     result[o] = merge(result[o], set, true);
+    //                     //result[o] = merge(set, result[o])
+    //                 }
+    //             }
+    //         }
+    //     }
+    instance['update'] = function() {
+        var key         = null // comparison key
+            , result    = null
+            , filters   = null
+            , set       = null
+            //, uuidSearchModeEnabled = true
+        ;
+
+                
+        if ( typeof(arguments[arguments.length-1]) == 'string' ) {
+            key = arguments[arguments.length - 1];
+            delete arguments[arguments.length - 1];
+        } 
+        
+        if ( typeof(arguments[arguments.length-1]) == 'object' ) {
+            set = arguments[arguments.length - 1];
+            delete arguments[arguments.length - 1];
+        }
+        
+        // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
+        //     uuidSearchModeEnabled = arguments[arguments.length - 1]
+        //     delete arguments[arguments.length - 1];
+        // }
+        
+        if (arguments.length > 0) {
+            filters = arguments;
+        }
+        
+
+        if ( typeof(filters) == 'undefined' || !filters || typeof(filters) != 'object' ) {
+            throw new Error('[ Collection ][ update ] `filters` argument must be defined: Array or Filter Object(s) expected');
+        }
+        
+        if ( typeof(set) == 'undefined' || !set || typeof(set) != 'object' ) {
+            throw new Error('[ Collection ][ update ] `set` argument must be defined: Object expected');
+        }
+
+        // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
+        //var currentResult = JSON.parse(JSON.stringify((Array.isArray(this)) ? this : content));
+        var currentResult = null;
+        var foundResults = null;
+        if ( Array.isArray(arguments[0]) ) {
+            foundResults = arguments[0];
         } else {
-            var condition           = filter.count()
-                , i                 = 0
-                , localeLowerCase   = ''
-                , result            = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
-
-            for (var o in result) {
-                for (var f in filter) {
-                    if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
-
-                    localeLowerCase = ( !/(boolean|number)/.test(typeof(filter[f])) ) ? filter[f].toLocaleLowerCase() : filter[f];
-                    if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] != 'null' && result[o][f] != 'undefined' ) {
-
-                        result[o] = merge(result[o], set, true);
-
-                    } else if ( typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] === filter[f] ) {
-                        ++i;
-                        if (i === condition) result[o] = merge(result[o], set, true);
-                    } else if ( typeof(result[o][f]) != 'undefined' && typeof(result[o][f]) !== 'object' && result[o][f] === filter[f]) {
-
-                        result[o] = merge(result[o], set, true);
+            foundResults = instance.find.apply(this, arguments) || [];
+        }
+        
+        result = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+        if (foundResults.length > 0 ) {          
+            var arr = foundResults.toRaw();
+            for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
+                arr[a] = merge( JSON.parse(JSON.stringify(set) ), arr[a]);
+                for (var r = 0, rLen = result.length; r < rLen; ++r) {
+                    if ( result[r].id == arr[a].id ) {
+                        result[r] = arr[a];
+                        break;
                     }
                 }
-            }
+            }            
         }
 
         // chaining
