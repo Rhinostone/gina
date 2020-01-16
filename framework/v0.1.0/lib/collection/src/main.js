@@ -1128,62 +1128,31 @@ function Collection(content, options) {
             });
             
             mapped.sort(function onAscSort(a, b) {    
-                // handle booleans
-                if ( /^(true|false)$/i.test(a) ) {
-                    a = ( /true/i.test(a) ) ? true : false;
-                }
                 
-                if ( /^(true|false)$/i.test(b) ) {
-                    b = ( /true/i.test(b) ) ? true : false;
-                }
+                
+                var _compare = function(a, b) {
+                    // handle booleans
+                    if ( /^(true|false)$/i.test(a) ) {
+                        a = ( /true/i.test(a) ) ? 1 : 0;
+                    }
                     
-                
-                if ( typeof(a) == 'string' && a != '' ) {
-
-                    return a.localeCompare(b, undefined, {sensitivity: 'case', caseFirst: 'upper'})
-
-                } else if ( typeof(a) == 'boolean' || typeof(b) == 'boolean' ) {
-
-                    if (typeof(a) == 'boolean' ) {
-                        a = (a) ? 1: 0;
+                    if ( /^(true|false)$/i.test(b) ) {
+                        b = ( /true/i.test(b) ) ? 1 : 0;
                     }
-                    if (typeof(b) == 'boolean' ) {
-                        b = (b) ? 1: 0;
-                    }
-
-                    if (a > b) {
-                        return 1;
-                    }
-                    if (a < b) {
-                        return -1;
-                    }
-
-                    // a must be equal to b
-                    return 0;
-
-                } else if ( typeof(a) == 'number' ) { 
-
-                    return (''+a).localeCompare((''+b), undefined, { numeric: true })
-                
-                } else if ( typeof(a) == 'object' ) {
-                    try {
+                    
+                    
+                    if ( typeof(a) == 'string' && a != '' ||  typeof(b) == 'string' ) {
                         
-                        // ?? check if instance of Date ? right now, it seems to be working without ...
-                        //if ( /\[object Date\]/.test(Object.prototype.toString.call(a[prop])) ) {
-                            
-                        if (typeof (a[prop]) == 'number') {
-                            return (''+a[prop]).localeCompare((''+b[prop]), undefined, { numeric: true })
-                        } else {                   
-                            return a[prop].localeCompare(b[prop], undefined, {sensitivity: 'case', caseFirst: 'upper'}) 
-                        }
-
+                        if ( typeof(a) == 'number' ) {
+                            a = ''+a; // cast to string
+                        } 
+                        if ( typeof(b) == 'number' ) {
+                            b = ''+b; // cast to string
+                        } 
                         
-                        
-                    } catch (err) {
-                        return -1
+                        return a.localeCompare(b, undefined, {sensitivity: 'case', caseFirst: 'upper'})
                     }
-
-                } else {
+                    
                     if (a > b) {
                         return 1;
                     }
@@ -1191,8 +1160,16 @@ function Collection(content, options) {
                         return -1;
                     }
                     // a must be equal to b
-                    return 0;
+                    return 0;                    
                 }
+                
+                
+                if ( typeof(a) == 'object' ) {
+                    return _compare(a[prop], b[prop])
+                }
+                
+                return _compare(a, b)
+                    
             });
             
             return mapped.map(function(m, index, result){
