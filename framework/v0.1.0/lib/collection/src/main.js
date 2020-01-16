@@ -691,7 +691,8 @@ function Collection(content, options) {
     */
     instance['notIn'] =  function(){
 
-        var key                     = null // comparison key
+        var arrayToFilter           = null // [] those that we don't want in the result
+            , key                   = null //  string comparison key
             , result                = null
             , filters               = null
             , uuidSearchModeEnabled = true
@@ -717,13 +718,13 @@ function Collection(content, options) {
         }
 
         // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
-        var currentResult = JSON.parse(JSON.stringify((Array.isArray(this)) ? this : content));
+        var currentResult = JSON.parse(JSON.stringify( (Array.isArray(this)) ? this : content) );
         
         var foundResults = null;
         if ( Array.isArray(arguments[0]) ) {
-            foundResults = arguments[0];
+            foundResults    = arguments[0];
         } else {
-            foundResults = instance.find.apply(this, arguments) || [];
+            foundResults    = instance.find.apply(this, arguments) || [];
         }
         
         if (foundResults.length > 0) {
@@ -756,7 +757,7 @@ function Collection(content, options) {
                     
                     if (!currentResult.length) break;
                     
-                    onRemoved:
+                    c = 0; cLen = currentResult.length;
                     for (; c < cLen; ++c) {
                         if ( typeof(currentResult[c]) == 'undefined' || typeof(foundResults[r]) == 'undefined' ) {
                             continue
@@ -764,7 +765,7 @@ function Collection(content, options) {
                         // when matched, we want to remove those not in current result                        
                         if (currentResult[c][key] === foundResults[r][key]) {
                             currentResult.splice(c,1);
-                            break onRemoved;
+                            break;
                         }
                     }
                 }
@@ -775,10 +776,10 @@ function Collection(content, options) {
             } else { // search based on provided filters
                 // for every single result found        
                 for (; r < rLen; ++r) {
-                    if (!currentResult.length) break;
+                    if (!currentResult.length) break;                    
                     
-                    c = 0;
-                    onRemoved:
+                    //onRemoved:
+                    c = 0; cLen = currentResult.length;
                     for (; c < cLen; ++c) { // current results                        
                 
                         if (typeof (currentResult[c]) != 'undefined') {
@@ -803,7 +804,8 @@ function Collection(content, options) {
                             
                             if (fullFiltersMatched) {
                                 currentResult.splice(c,1);
-                                break onRemoved;
+                                //break onRemoved;
+                                break;
                             }
                             
                         }
