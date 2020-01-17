@@ -2154,23 +2154,6 @@ function SuperController(options) {
 
             res.on('end', function onEnd(err) {
                 
-                // retrieve original request cookie
-                // if ( 
-                //     typeof(local.res._headers['set-cookie']) == 'undefined' 
-                //     && typeof(local.req.headers.cookie) != 'undefined' 
-                //     && typeof(local.req.session) != 'undefined'
-                //     && typeof(local.req.session.cookie) != 'undefined'
-                //     //&& typeof(local.req.sessionID) != 'undefined'
-                // ) {
-                //     var reqCookie = local.req.headers.cookie.split(/\;/);                    
-                //     var cookieOpt = JSON.parse(reqCookie[0]), cookieValue = reqCookie[1];
-                    
-                //     for (var cKey in cookieOpt ) {
-                //         cookieValue += '; '+ cKey +'='+ cookieOpt[cKey]
-                //     }
-                //     console.debug('[ Controller::query() ][ responseCookie ] '+ cookieValue);
-                //     local.res.setHeader('set-cookie', cookieValue);
-                // }
                 
                 // exceptions filter
                 if ( typeof(data) == 'string' && /^Unknown ALPN Protocol/.test(data) ) {
@@ -2379,16 +2362,7 @@ function SuperController(options) {
             HTTP2_HEADER_METHOD,
             HTTP2_HEADER_STATUS
           } = browser.constants;
-
-        // merging undefined query headers with previeous
-        // for (var h in local.req.headers) {
-        //     if ( typeof(options.headers[h]) == 'undefined' )
-        //         options.headers[h] = local.req.headers[h]
-        // }
         
-        if ( typeof(local.req.headers.cookie) != 'undefined' ) {
-            options.headers.cookie = local.req.headers.cookie
-        }
         
         if ( typeof(local.req.headers['x-requested-with']) != 'undefined' ) {
             options.headers['x-requested-with'] = local.req.headers['x-requested-with']
