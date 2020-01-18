@@ -561,7 +561,7 @@ function Server(options) {
         
         var filename        = null
             , path          = null
-            , altConf       = ( typeof(staticProps.firstLevel) != 'undefined') ? self.conf.reverseRouting[staticProps.firstLevel] : false
+            , altConf       = ( typeof(staticProps.firstLevel) != 'undefined' && typeof(self.conf.reverseRouting) != 'undefined' ) ? self.conf.reverseRouting[staticProps.firstLevel] : false
             , backedupPath  = null
         ;
         if ( 
