@@ -298,6 +298,7 @@ function Routing() {
                 typeof(params.param[key]) != 'undefined' &&
                 typeof(params.requirements) != 'undefined' &&
                 typeof(params.requirements[key]) != 'undefined' &&
+                typeof(request.params) != 'undefined' &&
                 tested
             ) {                
                 request.params[key] = urlVal;

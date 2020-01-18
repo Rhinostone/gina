@@ -924,7 +924,9 @@ function SuperController(options) {
                                 }
                             }                             
                             
-                            local.res.end(layout);
+                            if ( !local.res.headersSent )
+                                local.res.end(layout);
+                                
                             console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
                                                         
                         } else if (typeof(local.next) != 'undefined') {                            
@@ -2950,9 +2952,9 @@ function SuperController(options) {
             }
         } else {
             if (typeof(next) != 'undefined')
-                next();
+                return next();
         }
-        
+        res.end();
         return;
     }
 
