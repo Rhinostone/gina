@@ -169,6 +169,8 @@ require([
     // utils
     "utils/dom",
     "utils/events",
+    "utils/inherits",
+    "utils/merge",
     "utils/form-validator",
     "utils/collection",
     "utils/routing"
