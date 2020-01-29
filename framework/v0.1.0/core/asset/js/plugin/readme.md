@@ -52,6 +52,8 @@ Then you need to optimize
 ```tty
 $ java -jar /usr/local/lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level SIMPLE_OPTIMIZATIONS --js ./dist/gina.js --create_source_map ./dist/gina.min.js.map --js_output_file ./dist/gina.min.js
 ```
+**Attention:** look into `dist/gina.min.js.map` to modify `./dist/gina.js` to `./gina.js`
+
 
 
 ### Building loader
