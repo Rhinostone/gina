@@ -29,8 +29,8 @@
     "requireLib" 
   ],
   "name": "core",
-  "out": "./dist/gina.min.js",
-  "generateSourceMaps": true,
+  "out": "./dist/gina.js",
+  "generateSourceMaps": false,
   "preserveLicenseComments": false,
   "optimize": "none"
 }
