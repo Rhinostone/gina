@@ -1206,8 +1206,11 @@ function SuperController(options) {
                     obj = resArr[r];
                     if (useWebroot && !reURL.test(obj.url) )
                         obj.url = local.options.conf.server.webroot + obj.url.substr(1);
-                        
-                    str += '\n\t\t<link href="'+ obj.url +'" media="'+ obj.media +'" rel="'+ obj.rel +'" type="'+ obj.type +'">';                    
+                    
+                    if (obj.media)
+                        str += '\n\t\t<link href="'+ obj.url +'" media="'+ obj.media +'" rel="'+ obj.rel +'" type="'+ obj.type +'">';                    
+                    else
+                        str += '\n\t\t<link href="'+ obj.url +'" rel="'+ obj.rel +'" type="'+ obj.type +'">';  
                 }
                 
                 return str;
