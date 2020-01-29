@@ -11,6 +11,7 @@
   "upload": {
     "_comment": "for more details, check out https://github.com/andrewrk/node-multiparty",
     "encoding": "utf8",
+    "tmpPath": "{tmpPath}",
     "maxFieldsSize": "2MB",
     "maxFields": "1000"
   },

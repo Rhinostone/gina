@@ -188,12 +188,13 @@ function ValidatorPlugin(rules, data, formId) {
         if ( typeof(instance['$forms'][_id]) != 'undefined' ) {
             instance['$forms'][_id].withUserBindings = true;
 
-            $form = this.$forms[_id] = instance['$forms'][_id];
-
-            return $form
+            if ( typeof(this.$forms[_id]) == 'undefined') {
+                this.$forms[_id] = instance['$forms'][_id];
+            }
+            $form = this.$forms[_id];
         }
 
-        return null
+        return $form
     }
 
 
