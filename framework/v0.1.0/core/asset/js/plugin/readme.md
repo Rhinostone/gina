@@ -48,6 +48,12 @@ To compile & minify, run the following command line.
 $ r.js -o build.json
 ```
 
+Then you need to optimize
+```tty
+$ java -jar /usr/local/lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level SIMPLE_OPTIMIZATIONS --js ./dist/gina.js --create_source_map ./dist/gina.min.js.map --js_output_file ./dist/gina.min.js
+```
+
+
 ### Building loader
 
 ```tty

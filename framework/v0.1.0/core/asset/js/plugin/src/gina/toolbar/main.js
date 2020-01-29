@@ -1,8 +1,8 @@
-define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'utils/collection', 'utils/routing', 'gina/storage', 'gina/validator' ], function (require) {
+define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 'utils/collection', 'utils/routing', 'gina/storage', 'gina/validator' ], function (require) {
 
     var $           = require('jquery');
     $.noConflict();
-    var merge       = require('utils/merge');
+    //var merge       = require('utils/merge');
     var routing     = require('utils/routing');
     var Collection  = require('utils/collection');
     var Storage     = require('gina/storage');
@@ -300,13 +300,13 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
                     
                     // update data section without erasing old data
                     if (!isXHRViewData && !/^(view-xhr)$/.test(section)) {
-                        //jsonObject[section] = merge(jsonObject[section], jsonObject.data);
+                        
                         // also update original data to handle restore action
                         if ( typeof (jsonObject['el-xhr']) != 'undefined' ) {
                             lastJsonObjectState.data = JSON.parse(JSON.stringify(jsonObject[section]));
                         }
 
-                        //jsonObject[section] = merge(jsonObject[section], jsonObject.data);
+                        
                         
                     }
 
@@ -1425,7 +1425,6 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid', 'utils/merge', 'util
             // get last jsonObject.data state
             if (lastJsonObjectState && typeof (lastJsonObjectState.data) != 'undefined' ) {
                 originalData.jsonObject.data = lastJsonObjectState.data;
-                //originalData.jsonObject.data = merge(originalData.jsonObject.data, lastJsonObjectState.data, true);
             }
 
             loadData('data', originalData.jsonObject, originalData.ginaJsonObject);
