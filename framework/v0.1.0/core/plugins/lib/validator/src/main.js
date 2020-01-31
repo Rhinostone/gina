@@ -236,7 +236,9 @@ function ValidatorPlugin(rules, data, formId) {
             throw new Error('[ FormValidator::validateFormById(formId[, customRule]) ] `formId` should be a `string`');
         }
 
-        if ( typeof(instance['$forms'][_id]) != 'undefined' ) {
+        checkForDuplicateForm(_id);
+        
+        if ( typeof(instance['$forms'][_id]) != 'undefined' ) {            
             $form   = this.$forms[_id] = instance['$forms'][_id];
         } else { // binding a form out of context (outside of the main instance)
             var $target             = document.getElementById(_id);
@@ -269,10 +271,12 @@ function ValidatorPlugin(rules, data, formId) {
                     throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+customRule+'` is not a valid rule')
                 }
             }
-
+            
             if ($target && !$form.binded)
                 bindForm($target, rule);
         }
+        
+        
 
         if (!$form) throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+_id+'` not found');
 
@@ -1836,6 +1840,27 @@ function ValidatorPlugin(rules, data, formId) {
 
         return fields
     }
+    
+    var checkForDuplicateForm = function(id) {
+        // check for duplicate form ids
+        var $allForms = document.getElementsByTagName('form');
+        var dID = null, duplicateFound = {};
+        for (var d = 0, dLen = $allForms.length; d < dLen; ++d) {
+            dID = $allForms[d].getAttribute('id') || null;       
+            if ( typeof(duplicateFound[dID]) == 'undefined'  ) {
+                duplicateFound[dID] = true;
+            } else {
+                if (!instance.$forms[dID].warned) {
+                    if (gina.popinIsBinded) {
+                        console.warn('Popin/Validator::bindForm($target, customRule): `'+ dID +'` is a duplicate form ID. If not fixed, this could lead to an undesirable behaviour.\n Check inside your popin content');    
+                    } else {
+                        console.warn('Validator::bindForm($target, customRule): `'+ dID +'` is a duplicate form ID. If not fixed, this could lead to an undesirable behaviour.');
+                    }
+                    instance.$forms[dID].warned = true;
+                }                    
+            }
+        }
+    }
 
 
     /**
@@ -1866,6 +1891,7 @@ function ValidatorPlugin(rules, data, formId) {
         if ( typeof($form) != 'undefined' && $form.binded) {
             return false
         }
+             
 
         var withRules = false, rule = null, evt = '', procced = null;
 
@@ -1906,6 +1932,8 @@ function ValidatorPlugin(rules, data, formId) {
         ;
 
         var elId = null;
+        
+                
         for (var f = 0, len = $inputs.length; f < len; ++f) {
             elId = $inputs[f].getAttribute('id');
             if (!elId) {

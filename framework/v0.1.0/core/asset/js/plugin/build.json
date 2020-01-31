@@ -30,7 +30,7 @@
   ],
   "name": "core",
   "out": "./dist/gina.js",
-  "generateSourceMaps": false,
+  "generateSourceMaps": true,
   "preserveLicenseComments": false,
   "optimize": "none"
 }
