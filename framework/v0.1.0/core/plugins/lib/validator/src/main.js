@@ -2859,31 +2859,66 @@ function ValidatorPlugin(rules, data, formId) {
             
             var hasCase = false, isInCase = null, conditions = null;
             var caseValue = null, caseType = null;
-            var localRules = null;
+            var localRules = null, caseName = null;
 
             //console.log('parsing ', fields, $fields, rules);
             if ( typeof(rules) != 'undefined' ) { // means that no rule is set or found
+                
                 for (var field in fields) {
                     
                     // $fields[field].tagName getAttribute('type')
                     //if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
-                    if ($fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test($fields[field].getAttribute('type')) && !$fields[field].checked ) {
+                    if (
+                        $fields[field].tagName.toLowerCase() == 'input' 
+                        && /(checkbox)/.test($fields[field].getAttribute('type')) 
+                        && !$fields[field].checked 
+                        && typeof(rules[field]) == 'undefined' // just in case of rules inside cases
+                    ) {
                         //if ( typeof(rules[field]) == 'undefined' && !$fields[field].checked || typeof(rules[field]) != 'undefined' && typeof(rules[field]['isRequired']) != 'undefined' && /(false)/.test(rules[field]['isRequired']) )
                             continue;
                     }
 
                     hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
                     isInCase = false;
+                    
+                    
                     for (var c in rules) {
                         if (!/^\_case\_/.test(c) ) continue;
                         if ( typeof(rules[c].conditions) == 'undefined' ) continue;
                         if ( typeof(rules[c].conditions[0].rules) == 'undefined' ) continue;
                         
-                        //if ( typeof(rules[c].conditions[0].rules[field]) != 'undefined' ) {
-                        if ( typeof(rules[c].conditions[0].rules[field]) != 'undefined' && typeof(rules[field]) == 'undefined' ) {
-                            isInCase = true;
-                            break;
-                        }                            
+                        if ( typeof(rules[c].conditions) != 'undefined' && Array.isArray(rules[c].conditions) ) {
+                            caseName = c.replace('_case_', '');
+                            for (var _c = 0, _cLen = rules[c].conditions.length; _c < _cLen; ++_c) {
+                                
+                                for (var _r in rules[c].conditions[_c].rules) {
+                                    if ( /^\//.test(_r) ) { // RegExp found
+                                        re      = _r.match(/\/(.*)\//).pop();                                        
+                                        flags   = _r.replace('/'+ re +'/', '');
+                                        // fix escaping "[" & "]"
+                                        re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+                                        re      = new RegExp(re, flags);
+                                        if ( re.test(field)  ) {                                                 
+                                            isInCase = true;                                         
+                                            break;
+                                        } 
+                                    } else {
+                                        if ( typeof(rules[c].conditions[_c].rules[_r]) != 'undefined' && typeof(rules[_r]) == 'undefined' ) {
+                                            isInCase = true;
+                                            break;
+                                        }  
+                                    }
+                                }
+                                // if ( typeof(rules[c].conditions[_c].rules[field]) != 'undefined' && typeof(rules[field]) == 'undefined' ) {
+                                //     isInCase = true;
+                                //     break;
+                                // }  
+                            }
+                        }
+                        // if ( typeof(rules[c].conditions[0].rules[field]) != 'undefined' && typeof(rules[field]) == 'undefined' ) {
+                        //     isInCase = true;
+                        //     break;
+                        // }                            
                     }
                     
                     if (isInCase) continue;
@@ -2921,7 +2956,6 @@ function ValidatorPlugin(rules, data, formId) {
                                     throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
                                 }
                             }
-
                         }
                     } else {
                         ++i; // add sub level
@@ -2930,7 +2964,8 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( !conditions ) {
                             throw new Error('[ ginaFormValidator ] case `_case_'+field+'` found without `condition(s)` !');
                         }
-
+                        
+                        
                         for (var c = 0, cLen = conditions.length; c<cLen; ++c) {
 
                             caseValue = fields[field];
@@ -2946,14 +2981,19 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( conditions[c]['case'] === caseValue || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1 || /^\//.test(conditions[c]['case']) ) {
 
                                 //console.log('[fields ] ' + JSON.stringify(fields, null, 4));
-                                localRules = {};
-                                
+                                localRules = {};   
+                                // exclude case field if not declared in rules
+                                if ( typeof(conditions[c]['rules'][field]) == 'undefined' ) {
+                                    conditions[c]['rules'][field] = { exclude: true }            
+                                }                             
                                 for (var f in conditions[c]['rules']) {
                                     //console.log('F: ', f, '\nrule: '+ JSON.stringify(conditions[c]['rules'][f], null, 2));
                                     if ( /^\//.test(f) ) { // RegExp found
 
-                                        re      = f.match(/\/(.*)\//).pop();
+                                        re      = f.match(/\/(.*)\//).pop();                                        
                                         flags   = f.replace('/'+ re +'/', '');
+                                        // fix escaping "[" & "]"
+                                        re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
                                         re      = new RegExp(re, flags);
 
                                         for (var localField in $fields) {
@@ -2964,11 +3004,16 @@ function ValidatorPlugin(rules, data, formId) {
                                                     re      = new RegExp(re, flags);
 
                                                     if ( re.test(caseValue) ) {
-                                                        localRules[localField] = conditions[c]['rules'][f]
+                                                        localRules[localField] = conditions[c]['rules'][f];                                                        
                                                     }
 
                                                 } else {
                                                     localRules[localField] = conditions[c]['rules'][f]
+                                                }
+                                                
+                                                // we need to add it to fields list if not declared
+                                                if ( typeof(fields[localField]) == 'undefined' ) {
+                                                    fields[localField] = caseValue;
                                                 }
                                             }
                                         }
@@ -2976,8 +3021,10 @@ function ValidatorPlugin(rules, data, formId) {
                                     } else {
                                         if ( /^\//.test(conditions[c]['case']) ) {
                                             
-                                            re      = conditions[c]['case'].match(/\/(.*)\//).pop();
+                                            re      = conditions[c]['case'].match(/\/(.*)\//).pop();                                            
                                             flags   = conditions[c]['case'].replace('/'+ re +'/', '');
+                                            // fix escaping "[" & "]"
+                                            re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
                                             re      = new RegExp(re, flags);
 
                                             if ( re.test(caseValue) ) {
@@ -2987,8 +3034,15 @@ function ValidatorPlugin(rules, data, formId) {
                                         } else {
                                             localRules[f] = conditions[c]['rules'][f]
                                         }
-                                    }
+                                        
+                                        // we need to add it to fields list if not declared
+                                        if ( typeof(fields[f]) == 'undefined' ) {
+                                            fields[f] = caseValue;
+                                        }
+                                    }                                    
                                 }
+                                
+                                    
                                 
                                 ++subLevelRules; // add sub level
                                 if (isGFFCtx)
@@ -3001,31 +3055,7 @@ function ValidatorPlugin(rules, data, formId) {
                         --i;
                     }
 
-                    // if ( typeof(rules[field]) == 'undefined' ) continue;
-
-
-                    // // check each field against rule
-                    // for (var rule in rules[field]) {
-                    //     // check for rule params
-                    //     try {
-
-                    //         if ( Array.isArray(rules[field][rule]) ) { // has args
-                    //             //convert array to arguments
-                    //             args = rules[field][rule];
-                    //             d[field][rule].apply(d[field], args);
-                    //         } else {
-                    //             d[field][rule](rules[field][rule]);
-                    //         }
-
-                    //     } catch (err) {
-                    //         if (rule == 'conditions') {
-                    //             throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()` where `conditions` must be a `collection` (Array)\nStack:\n'+ (err.stack|err.message))
-                    //         } else {
-                    //             throw new Error('[ ginaFormValidator ] could not evaluate `'+field+'->'+rule+'()`\nStack:\n'+ (err.stack|err.message))
-                    //         }
-                    //     }
-
-                    // }
+                    
                 } // EO for
             } 
             

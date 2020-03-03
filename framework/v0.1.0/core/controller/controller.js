@@ -1790,11 +1790,12 @@ function SuperController(options) {
 
 
     /**
-     * Store file to a targeted directory - Will create target if new
+     * Store file(s) to a targeted directory - Will create target if new
      * You only need to provide the destination path
      * Use `cb` callback or `onComplete` event
      *
      * @param {string} target is the upload dir destination
+     * @param {array} [files]
      *
      * @callback [cb]
      *  @param {object} error
@@ -1805,10 +1806,20 @@ function SuperController(options) {
      *  @param {array} files
      *
      * */
-    this.store = async function(target, cb) {
+    this.store = async function(target, files, cb) {
 
-        var start = function(target, cb) {
-            var files = local.req.files, uploadedFiles = [];
+        
+        var start = function(target, files, cb) {
+            
+            if (arguments.length == 2 && typeof(arguments[1]) == 'function' ) {
+                var cb = arguments[1];
+            }
+            
+            if ( typeof(files) == 'undefined' || typeof(files) == 'function' ) {
+                files = local.req.files
+            }
+            
+            var uploadedFiles = [];
 
             if ( typeof(files) == 'undefined' || files.count() == 0 ) {
                 if (cb) {
@@ -1830,15 +1841,19 @@ function SuperController(options) {
                         self.emit('uploaded', folder)
                     }
                 } else {
-                    // files list                    
+                    // files list       
+                    var fileName = null;             
                     for (var len = files.length; i < len; ++i ){
+                        
+                        fileName = files[i].filename || files[i].originalFilename
+                        
                         list[i] = {
                             source: files[i].path,
-                            target: _(uploadDir.toString() + '/' + files[i].originalFilename)
+                            target: _(uploadDir.toString() + '/' + fileName)
                         };
                         
                         uploadedFiles[i] = { 
-                            file        : files[i].originalFilename,
+                            file        : fileName,
                             filename    : list[i].target, 
                             size        : files[i].size,
                             type        : files[i].type,
@@ -1871,11 +1886,11 @@ function SuperController(options) {
             return {
                 onComplete : function(cb){
                     self.on('uploaded', cb);
-                    start(target)
+                    start(target, files)
                 }
             }
         } else {
-            start(target, cb)
+            start(target, files, cb)
         }
     }
 
