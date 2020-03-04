@@ -692,7 +692,7 @@ function FormValidatorUtil(data, $fields) {
                 if ( !errors['isRequired'] && this.value == '' ) {
                     isValid = true
                 } else {
-                    errors['isDate'] = replace(this.error || local.errorLabels['isDate'], this);
+                    errors['isDate'] = replace(this.error || local.errorLabels['isDate'], this);
                 }
 
                 this.valid = isValid;

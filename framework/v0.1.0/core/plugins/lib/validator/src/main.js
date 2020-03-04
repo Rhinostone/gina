@@ -2892,6 +2892,10 @@ function ValidatorPlugin(rules, data, formId) {
                             for (var _c = 0, _cLen = rules[c].conditions.length; _c < _cLen; ++_c) {
                                 
                                 for (var _r in rules[c].conditions[_c].rules) {
+                                    
+                                    if (field != _r )
+                                        continue;
+                                    
                                     if ( /^\//.test(_r) ) { // RegExp found
                                         re      = _r.match(/\/(.*)\//).pop();                                        
                                         flags   = _r.replace('/'+ re +'/', '');
@@ -2909,10 +2913,6 @@ function ValidatorPlugin(rules, data, formId) {
                                         }  
                                     }
                                 }
-                                // if ( typeof(rules[c].conditions[_c].rules[field]) != 'undefined' && typeof(rules[field]) == 'undefined' ) {
-                                //     isInCase = true;
-                                //     break;
-                                // }  
                             }
                         }
                         // if ( typeof(rules[c].conditions[0].rules[field]) != 'undefined' && typeof(rules[field]) == 'undefined' ) {
