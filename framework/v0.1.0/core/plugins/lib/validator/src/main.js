@@ -2866,6 +2866,9 @@ function ValidatorPlugin(rules, data, formId) {
                 
                 for (var field in fields) {
                     
+                    if ( typeof($fields[field]) == 'undefined' ) {
+                        throw new Error('field `'+ field +'` found for your form rule ('+ $form.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule.')
+                    }
                     // $fields[field].tagName getAttribute('type')
                     //if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
                     if (
