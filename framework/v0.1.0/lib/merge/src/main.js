@@ -92,7 +92,16 @@ function Merge() {
                                 var createMode = false;
                                 if (copyIsArray) {
                                     copyIsArray = false;
-                                    clone = src && Array.isArray(src) ? src : [];
+                                    //clone = src && Array.isArray(src) ? src : [];
+                                    if ( src && Array.isArray(src) ) {
+                                        clone = src || []
+                                    } else if ( isObject(src) ) {
+                                        clone = src || {};
+                                        target[ name ] = clone;
+                                        continue
+                                    } else {
+                                        clone = []
+                                    }
 
                                     newTarget = clone;
                                     clone = mergeArray(copy, clone, override);
@@ -231,6 +240,9 @@ function Merge() {
             ) {
 
                 newTarget = JSON.parse(JSON.stringify(target));
+                for (var nt = 0, ntLen = newTarget.length; nt < ntLen; ++nt) {
+                    newTargetIds.push(newTarget[nt][keyComparison]);
+                }
                 
                 var _options    = JSON.parse(JSON.stringify(options));
                 
@@ -258,17 +270,19 @@ function Merge() {
                             } else if (newTargetIds.indexOf(_options[a][keyComparison]) == -1) {
 
                                 newTargetIds.push(_options[a][keyComparison]);                                
-                                newTarget.push(_options[a]);
+                                //newTarget.push(_options[a]);
+                                newTarget[index] = _options[a];
+                                ++index
                             }
 
                             break label;
                             
-                        } else if (newTargetIds.indexOf(_options[a][keyComparison]) == -1) {
-                                
+                        } else if (newTargetIds.indexOf(_options[a][keyComparison]) == -1) {                            
+                            
                             newTargetIds.push(_options[a][keyComparison]);
                             newTarget.push(_options[a]);
                         }
-                    }
+                    } // EO For
                 }
 
                 newTargetIds = [];
@@ -280,8 +294,9 @@ function Merge() {
             }
         }
 
-        if ( options.length == 0 &&  target.length > 0) {
+        if ( options.length == 0 &&  target.length > 0 ) {
             newTarget = target;
+            return newTarget
         }
 
         if ( target.length == 0 && options.length > 0) {
@@ -303,7 +318,7 @@ function Merge() {
             
             // if collection, comparison will be done uppon the `id` attribute
             if (
-                typeof (options[0]) != 'undefined' 
+                typeof(options[0]) != 'undefined' 
                 && typeof (options[0]) == 'object' 
                 && options[0] != null 
                 && typeof(options[0][keyComparison]) != 'undefined'

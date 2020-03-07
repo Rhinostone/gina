@@ -1370,6 +1370,14 @@ function SuperController(options) {
      * `ignoreWebRoot` behaves the like set to `false` by default
      *
      * N.B.: Gina will tell browsers not to cache redirections if you are using `dev` environement
+     * 
+     * Trobleshouting:
+     * ---------------
+     * 
+     * Redirecting to a popin from the controller while posting from a form
+     *      If this does not work, like doing a real redirect, this
+     *      only means that the ID you are using for the form might be
+     *      a duplicate one from the the main document !!!
      *
      * @param {object|string} req|rule - Request Object or Rule/Route name
      * @param {object|boolean} res|ignoreWebRoot - Response Object or Ignore WebRoot & start from domain root: /
