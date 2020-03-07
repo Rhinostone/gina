@@ -418,15 +418,18 @@ exports['Merge : B<-C with override'] = function(test) {
             id: 1,
             value: 'green'
         },
-        {
-            id: 4,
-            value: 'yellow'
+	    {
+            id: 2,
+            value: 'orange'
         },
         {
             id: 3,
             value: 'mango'
         },
-        
+        {
+            id: 4,
+            value: 'yellow'
+        },        
         {
             id: 5,
             value: 'lemon',
@@ -868,13 +871,19 @@ exports['Merge : designNew<-design without override'] = function(test) {
 
 exports['Merge : design<-designNew with override'] = function(test) {
     var res = {
-        id: "sys-desing-1",
-        fonts: [
+        "id": "sys-desing-1",
+        "fonts": [
             {
-                id: "font-1",
-                name: "Titles",
-                value: "Open Sans",
-                weight: 300
+                "id": "font-1",
+                "name": "Titles",
+                "value": "Open Sans",
+                "weight": 300
+            },
+            {
+                "id": "font-2",
+                "name": "Text",
+                "value": "Open Sans",
+                "weight": 400
             }
         ]
     };
