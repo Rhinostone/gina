@@ -921,6 +921,24 @@ function Server(options) {
         }
     }
     
+    // var getHeaderFromPseudoHeader = function(header) {
+        
+    //     var htt2Headers = {
+    //         ':status'   : 'status',
+    //         ':method'   : 'method',
+    //         ':authority': 'host',
+    //         ':scheme'   : 'scheme', // not sure
+    //         ':path'     : 'path', // not sure
+    //         ':protocol' : 'protocol' // not sure
+    //     };
+        
+    //     if ( typeof(htt2Headers[header]) != 'undefined' ) {
+    //         return htt2Headers[header]
+    //     }
+        
+    //     return header
+    // }
+    
     var completeHeaders = function(request, response, responseHeaders) {
         
         var resHeaders      = null
@@ -935,10 +953,16 @@ function Server(options) {
         ;
         
         if ( typeof(responseHeaders) == 'undefined' ) {
-            responseHeaders = response.getHeaders();
+            responseHeaders = {};
         }
         
         resHeaders  = conf.server.response.header;
+        if ( typeof(request.routing) == 'undefined' ) {
+            request.routing = {
+                'url': request.url,
+                'method': request.method
+            }
+        }
         resHeaders['access-control-allow-methods'] = request.routing.method.replace(/(\,\s+|\,)/g, ', ').toUpperCase();                                            
         
                                                     
@@ -995,9 +1019,10 @@ function Server(options) {
                 
                 return domain
             }
-            
+                        
+            var headerValue = null;
             for (var h in resHeaders) {                
-                if (!response.headersSent) {
+                if (!response.headersSent) {                    
                     // handles multiple origins
                     if ( /access\-control\-allow\-origin/i.test(h) ) { // re.test(resHeaders[h]    
                         if (sameOrigin) {
@@ -1023,14 +1048,24 @@ function Server(options) {
                             response.setHeader(h, origin);                                                                                          
                         }                                 
                         sameOrigin = false;                               
-                    } else {                        
-                        response.setHeader(h, resHeaders[h])                       
+                    } else { 
+                        headerValue = resHeaders[h]; 
+                        try {
+                            response.setHeader(h, headerValue)                   
+                        } catch (headerError) {
+                            console.error(headerError)
+                        }              
+                                               
                     }
                 }                    
             }
         } 
-                
-        return response.getHeaders();
+        
+        // update response
+        if ( responseHeaders.count() > 0 ) {
+            return merge(responseHeaders, response.getHeaders());
+        }        
+        return response.getHeaders();        
     }
     
     this.onHttp2Stream = function(stream, headers) {
@@ -1173,7 +1208,8 @@ function Server(options) {
                                            
             });
         } else {
-            //console.info(headers[':method'] +' [404] '+ headers[':path']);
+            // var err = new Error(headers[':path']);
+            // err.status = 404;
             return throwError({stream: stream}, 404, 'Page not found: \n' + headers[':path']);      
         }       
     }
@@ -1506,7 +1542,6 @@ function Server(options) {
                                     }    
                                 }
                                 
-                                //header = merge(header, response.getHeaders());
                                 //request = checkPreflightRequest(request);
                                 header  = completeHeaders(request, response, header);
                                 if (isBinary) {
@@ -1679,6 +1714,7 @@ function Server(options) {
                     'method': 'GET'
                 };
                 request = checkPreflightRequest(request);
+                local.request = request; // update request
                 // filtered to handle only html for now
                 if ( /text\/html/.test(request.headers['accept']) &&  /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0 || request.isPreflightRequest && /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0 ) {                           
                     
@@ -1715,7 +1751,7 @@ function Server(options) {
                 //  @param {object} req.files            
                 if ( /multipart\/form-data;/.test(request.headers['content-type']) ) {
                     // TODO - get options from settings.json & settings.{env}.json ...
-                    // -> https://github.com/andrewrk/node-multiparty
+                    // -> https://github.com/mscdex/busboy
                     var opt = self.conf[self.appName][self.env].content.settings.upload;
                     // checking size
                     var maxSize     = parseInt(opt.maxFieldsSize);
@@ -1805,20 +1841,62 @@ function Server(options) {
                     
 
                     var fileObj         = null
+                        , fileCount     = 0
                         , tmpFilename   = null
                         , writeStreams  = []
                         , index         = 0;
 
                     request.files = [];
-
+                    request.routing = {
+                        'url': request.url,
+                        'method': 'POST'
+                    };
                     var busboy = new Busboy({ headers: request.headers });
-                    busboy.on('file', function(fieldname, file, filename, encoding, mimetype) {
+                    
+                    // busboy.on('field', function(fieldname, val, fieldnameTruncated, valTruncated) {
+                    //     console.log('Field [' + fieldname + ']: value: ' + inspect(val));
+                    // });
+                    busboy.on('file', function(fieldname, file, filename, encoding, mimetype, group) {
                         
                         file._dataLen = 0; 
+                        ++fileCount;
+                                                
+                        if ( 
+                            typeof(group) != 'undefined' 
+                            && group != 'untagged' 
+                            && typeof(opt.groups[group]) != 'undefined' 
+                        ) {
+                            // allowed extensions
+                            if ( typeof(opt.groups[group].allowedExtensions) != 'undefined' 
+                                && opt.groups[group].allowedExtensions != '*'
+                            ) {
+                                var ext     = opt.groups[group].allowedExtensions;
+                                var fileExt = filename.substr(filename.lastIndexOf('.')+1)
+                                if ( !Array.isArray(ext) ) {
+                                    ext = [ext]
+                                }
+                                
+                                if ( ext.indexOf(fileExt) < 0 ) {
+                                    throwError(response, 400, '`'+ fileExt +'` is not an allowed extension. See `'+ group +'` upload group definition.');
+                                    return false;
+                                } 
+                            }
+                            
+                            // multiple or single
+                            if ( typeof(opt.groups[group].isMultipleAllowed) != 'undefined' 
+                                && !opt.groups[group].isMultipleAllowed
+                                && fileCount > 1
+                            ) {
+                                throwError(response, 400, 'multiple uploads not allowed. See `'+ group +'` upload group definition.');
+                                return false;
+                            }                                  
+                        }
+                        
+                        
                         // TODO - https://github.com/TooTallNate/node-wav
                         //file._mimetype = mimetype;
                         
-                        
+                        // creating file
                         writeStreams[index] = fs.createWriteStream( _(uploadDir + '/' + filename) );
                         // https://strongloop.com/strongblog/practical-examples-of-the-new-node-js-streams-api/
                         var liner = new require('stream').Transform({objectMode: true});
@@ -1852,6 +1930,7 @@ function Server(options) {
 
                             request.files.push({
                                 name: fieldname,
+                                group: group,
                                 originalFilename: filename,
                                 encoding: encoding,
                                 type: mimetype,
@@ -2613,7 +2692,7 @@ function Server(options) {
         
         if (!res.headersSent) {
             res.headersSent = true;
-                        
+            local.request = checkPreflightRequest(local.request);            
             if (isXMLRequest || !withViews || !isUsingTemplate ) {
                 // allowing this.throwError(err)
                 
@@ -2646,7 +2725,8 @@ function Server(options) {
                 }
 
                 console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url +'\n'+ msg);
-                
+                                
+                header = completeHeaders(local.request, res, header);
                 if ( /http\/2/.test(protocol) ) {
                     stream.respond(header);
                     stream.end(msg);
@@ -2664,15 +2744,23 @@ function Server(options) {
                 //console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);                
                 console.error(local.request.method +' [ '+code+' ] '+ local.request.url);  
                 if ( /http\/2/.test(protocol) ) {
-                    stream.respond({
+                    header = {
                         ':status': code,
                         'content-type': 'text/html; charset='+ bundleConf.encoding
                         //'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
-                    });
+                    };
+                } else {
+                    res.writeHead(code, { 'content-type': 'text/html; charset='+ bundleConf.encoding } );
+                }
+                    
+                    
+                    
+                header = completeHeaders(local.request, res, header);
+                if ( /http\/2/.test(protocol) ) {    
+                    stream.respond(header);
                     stream.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
                     return;
-                } else {
-                    res.writeHead(code, { 'content-type': 'text/html; charset='+ bundleConf.encoding } )
+                } else {                    
                     return res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
                 }
             }            
@@ -2684,9 +2772,6 @@ function Server(options) {
                 return;
         }
     }
-
-
-    //return this
 };
 
 Server = inherits(Server, EventEmitter);
