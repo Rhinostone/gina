@@ -2513,7 +2513,16 @@ function Merge() {
                                 var createMode = false;
                                 if (copyIsArray) {
                                     copyIsArray = false;
-                                    clone = src && Array.isArray(src) ? src : [];
+                                    //clone = src && Array.isArray(src) ? src : [];
+                                    if ( src && Array.isArray(src) ) {
+                                        clone = src || []
+                                    } else if ( isObject(src) ) {
+                                        clone = src || {};
+                                        target[ name ] = clone;
+                                        continue
+                                    } else {
+                                        clone = []
+                                    }
 
                                     newTarget = clone;
                                     clone = mergeArray(copy, clone, override);
@@ -2652,6 +2661,9 @@ function Merge() {
             ) {
 
                 newTarget = JSON.parse(JSON.stringify(target));
+                for (var nt = 0, ntLen = newTarget.length; nt < ntLen; ++nt) {
+                    newTargetIds.push(newTarget[nt][keyComparison]);
+                }
                 
                 var _options    = JSON.parse(JSON.stringify(options));
                 
@@ -2679,17 +2691,19 @@ function Merge() {
                             } else if (newTargetIds.indexOf(_options[a][keyComparison]) == -1) {
 
                                 newTargetIds.push(_options[a][keyComparison]);                                
-                                newTarget.push(_options[a]);
+                                //newTarget.push(_options[a]);
+                                newTarget[index] = _options[a];
+                                ++index
                             }
 
                             break label;
                             
-                        } else if (newTargetIds.indexOf(_options[a][keyComparison]) == -1) {
-                                
+                        } else if (newTargetIds.indexOf(_options[a][keyComparison]) == -1) {                            
+                            
                             newTargetIds.push(_options[a][keyComparison]);
                             newTarget.push(_options[a]);
                         }
-                    }
+                    } // EO For
                 }
 
                 newTargetIds = [];
@@ -2701,8 +2715,9 @@ function Merge() {
             }
         }
 
-        if ( options.length == 0 &&  target.length > 0) {
+        if ( options.length == 0 &&  target.length > 0 ) {
             newTarget = target;
+            return newTarget
         }
 
         if ( target.length == 0 && options.length > 0) {
@@ -2724,7 +2739,7 @@ function Merge() {
             
             // if collection, comparison will be done uppon the `id` attribute
             if (
-                typeof (options[0]) != 'undefined' 
+                typeof(options[0]) != 'undefined' 
                 && typeof (options[0]) == 'object' 
                 && options[0] != null 
                 && typeof(options[0][keyComparison]) != 'undefined'
@@ -8188,7 +8203,7 @@ function ValidatorPlugin(rules, data, formId) {
                             
                         } else { // normal case
                             
-                            if ( /^(\{|\[).test( xhr.responseText ) /) {
+                            if ( /^(\{|\[)/.test( xhr.responseText ) ) {
 
                                 try {
                                     result = merge( result, JSON.parse(xhr.responseText) )
@@ -8232,14 +8247,6 @@ function ValidatorPlugin(rules, data, formId) {
                             triggerEvent(gina, $target, 'error.' + id, result);
                             if (hFormIsRequired)
                                 triggerEvent(gina, $target, 'error.' + id + '.hform', result);
-                                
-                            // handle redirect
-                            // if ( typeof(result) != 'undefined' && typeof(result.location) != 'undefined' ) {                        
-                            //     window.location.hash = ''; //removing hashtag                            
-                            //     result.location = (!/^http/.test(result.location) && !/^\//.test(result.location) ) ? location.protocol +'//' + result.location : result.location;
-                            //     window.location.href = result.location;
-                            //     return;                        
-                            // }
                                                          
                         }
 
@@ -8301,15 +8308,17 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( !(data instanceof FormData) ) {
                             data = JSON.stringify(data)
                         } else {
-                            var newData = {};
+                            var newData     = {}
+                            , uploadGroup   = event.currentTarget.getAttribute('data-gina-form-upload-group') || 'untagged';
                             for (var [key, value] of data.entries()) {
                                 // file upload case
                                 if (value instanceof File) {
                                     if (!hasBinaries)
                                         hasBinaries = true;
-
+                                    
                                     binaries[b] = {
                                         key: key,
+                                        group: uploadGroup, // `untagged` by default
                                         file: value,
                                         bin: ''
                                     };
@@ -8495,6 +8504,9 @@ function ValidatorPlugin(rules, data, formId) {
 
                 // Define the name of the form data
                 + 'name="' + binaries[this.index].key + '"; '
+                
+                // Define the upload group
+                + 'group="' + binaries[this.index].group + '"; '
 
                 // Provide the real name of the file
                 + 'filename="' + binaries[this.index].file.name + '"\r\n';
@@ -9262,8 +9274,15 @@ function ValidatorPlugin(rules, data, formId) {
             // todo : progress bar
             // todo : on('success') -> preview
             if ( /^file$/i.test($inputs[f].type) ) {
+                // trigger is by default you {input.id} + '-trigger' 
+                // e.g.: <input type="file" id="my-upload" name="my-upload">
+                // => <button type="button" id="my-upload-trigger">Choose a file</button>
+                // But you can use atrtibute `data-gina-form-upload-trigger` to override it
                 
                 uploadTriggerId = $inputs[f].getAttribute('data-gina-form-upload-trigger');
+                if (!uploadTriggerId)
+                    uploadTriggerId = $inputs[f].id + '-trigger';
+                    
                 $uploadTrigger = null;
                 // `$htmlTarget` cannot be used if you need to add a listner on the searched element
                 $htmlTarget = new DOMParser().parseFromString($target.innerHTML, 'text/html');
@@ -9307,6 +9326,7 @@ function ValidatorPlugin(rules, data, formId) {
                     var fileId          = name;                    
                     var uploadFormId    = 'gina-upload-' + name.replace(/\[/g, '-').replace(/\]/g, ''); 
                     var eventOnSuccess  = $el.getAttribute('data-gina-form-upload-on-success');
+                    var eventOnError  = $el.getAttribute('data-gina-form-upload-on-error');
                     
                     if (files.length > 0) {
                         // create form if not exists
@@ -9325,6 +9345,11 @@ function ValidatorPlugin(rules, data, formId) {
                                 $uploadForm.setAttribute('data-gina-form-event-on-submit-success', eventOnSuccess);
                             else
                                 $uploadForm.setAttribute('data-gina-form-event-on-submit-success', 'onGenericXhrResponse');
+                                
+                            if (eventOnError)
+                                $uploadForm.setAttribute('data-gina-form-event-on-submit-error', eventOnError);
+                            else
+                                $uploadForm.setAttribute('data-gina-form-event-on-submit-error', 'onGenericXhrResponse');
                             
                             var previewId = $el.getAttribute('data-gina-form-upload-preview') || null;
                             if (previewId)
@@ -9348,9 +9373,9 @@ function ValidatorPlugin(rules, data, formId) {
                             }
                             
                             $uploadFormValidator
-                                .on('error', function(e, result) {
-                                    console.error('[error] ', '\n(e)' + e, '\n(result)' + result)
-                                })
+                                // .on('error', function(e, result) {
+                                //     console.error('[error] ', '\n(e)' + e, '\n(result)' + result)
+                                // })
                                 .on('success', function(e, result){
                                     
                                     var $el = e.target;
@@ -9359,8 +9384,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     if (previewId)
                                         $preview = document.getElementById(previewId);
                                     
-                                    console.log('gina says -> ', e, result);
-                                    
+                                                                        
                                     var files = result.files;
                                     if ($preview) {
                                         $preview.innerHTML = '';
@@ -10150,7 +10174,9 @@ function ValidatorPlugin(rules, data, formId) {
                 for (var field in fields) {
                     
                     if ( typeof($fields[field]) == 'undefined' ) {
-                        throw new Error('field `'+ field +'` found for your form rule ('+ $form.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule.')
+                        //throw new Error('field `'+ field +'` found for your form rule ('+ $form.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule.')
+                        console.warn('field `'+ field +'` found for your form rule ('+ $form.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule if this is a mistake.');
+                        continue;
                     }
                     // $fields[field].tagName getAttribute('type')
                     //if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {

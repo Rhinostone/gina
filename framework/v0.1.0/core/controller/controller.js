@@ -2149,7 +2149,7 @@ function SuperController(options) {
             }
             
         } else {
-            console.warn('[ CONTROLLER ][ HTTP/2.0#query ] options.encKey not found !');
+            console.warn('[ CONTROLLER ][ HTTP/1.0#query ] options.encKey not found !');
         }
         
         if ( typeof(altOpt.encCert) != 'undefined' ) {
@@ -2160,7 +2160,7 @@ function SuperController(options) {
             }
             
         } else {
-            console.warn('[ CONTROLLER ][ HTTP/2.0#query ] options.encCert not found !');
+            console.warn('[ CONTROLLER ][ HTTP/1.0#query ] options.encCert not found !');
         }
         
         altOpt.agent = new browser.Agent(altOpt);

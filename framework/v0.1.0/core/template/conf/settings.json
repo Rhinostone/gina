@@ -9,11 +9,18 @@
     }
   },
   "upload": {
-    "_comment": "for more details, check out https://github.com/andrewrk/node-multiparty",
+    "_comment": "for more details, check out https://github.com/mscdex/busboy",
     "encoding": "utf8",
     "tmpPath": "{tmpPath}",
     "maxFieldsSize": "2MB",
-    "maxFields": "1000"
+    "maxFields": "1000",
+    "groups": {
+      "untagged": {
+        "path": "{tmpPath}",
+        "allowedExtensions": "*",
+        "isMultipleAllowed": false
+      }
+    }
   },
   "cache": {},
   "engine.io": {
