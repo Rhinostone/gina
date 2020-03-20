@@ -8131,6 +8131,7 @@ function ValidatorPlugin(rules, data, formId) {
                             blob = new Blob([this.response], { type: 'text/plain' });
                             
                             var reader = new FileReader(), blobError = '';
+                                                        
                             
                             // This fires after the blob has been read/loaded.
                             reader.addEventListener('loadend', (e) => {
@@ -8270,6 +8271,8 @@ function ValidatorPlugin(rules, data, formId) {
                     'status': 100,
                     'progress': percentComplete
                 };
+                
+                //console.log('xhr progress ', percentComplete);
 
                 $form.eventData.onprogress = result;
 
@@ -8430,7 +8433,7 @@ function ValidatorPlugin(rules, data, formId) {
      * 
      * @return {string} stringBufffer
      */
-    var ab2str = function(buf, byteLength) {
+    var ab2str = function(event, buf, byteLength) {
 
         var str = '';
         var ab = null;
@@ -8478,14 +8481,45 @@ function ValidatorPlugin(rules, data, formId) {
     var processFiles = function(binaries, boundary, data, f, onComplete) {
 
         var reader = new FileReader();
+        
+        // progress
+        // reader.addEventListener('progress', (e) => {
+        //     var percentComplete = '0';
+        //     if (e.lengthComputable) {
+        //         percentComplete = e.loaded / e.total;
+        //         percentComplete = parseInt(percentComplete * 100);
+
+        //     }
+
+        //     // var result = {
+        //     //     'status': 100,
+        //     //     'progress': percentComplete
+        //     // };
+            
+        //     console.log('progress', percentComplete);
+
+        //     //$form.eventData.onprogress = result;
+
+        //     //triggerEvent(gina, $target, 'progress.' + id, result)
+        // });
 
         reader.addEventListener('load', function onReaderLoaded(e) {
 
             e.preventDefault();
+            
+            // var percentComplete = '0';
+            // if (e.lengthComputable) {
+            //     percentComplete = e.loaded / e.total;
+            //     percentComplete = parseInt(percentComplete * 100);
+                
+            //     console.log('progress', percentComplete);
+            // }
+                                    
 
             try {
                 
-                var bin = ab2str(this.result);                
+                var bin = ab2str(e, this.result);
+                ;                
                 binaries[this.index].bin += bin;
 
                 if (!binaries[this.index].file.type) {
@@ -11925,7 +11959,7 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
     
     var eventsHandler   = require('utils/events'); // events handler
     var merge           = require('utils/merge');
-    var dateFormat      = require('helpers/dateFormat')();
+    var dateFormat      = require('helpers/dateFormat')();    
     var uuid            = require('vendor/uuid');
 
 
@@ -16768,6 +16802,97 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ ])
 });
 ;
+function BindingHelper(handlerContext) {
+    
+    var self = {};
+    if ( typeof(handlerContext) != 'undefined' ) {
+        self = handlerContext
+    }
+    
+    /**
+     * process bindings
+     * 
+     * e.g.:
+     * result.bindings = 
+     * [
+     *     // close current popin
+     *     {
+     *         call: 'closeActivePopin'
+     *     },
+     *     // mark notification as read
+     *     {
+     *         call: 'onNotification',
+     *         paypload: {
+     *             id: obj.notificationId,
+     *             action: 'mark-as-read'
+     *         }
+     *     },
+     *     {
+     *         handler: 'DocumentHandler', // targeting another handler
+     *         call: 'notify' // this method must be public
+     *     }
+     * ]
+     * 
+     * @param {array} bindings
+     * @param {number} [len]
+     * @param {number} [i] 
+     */
+    self.process = function(bindings, len, i) {
+        // handle errors first
+        if ( typeof(bindings) == 'undefined' || !Array.isArray(bindings) ) {
+            throw new Error('`bindings` must be a defined array')
+        }
+        if ( typeof(len) == 'undefined' ) {
+            len = bindings.length;
+            i = 0;
+        }
+        
+        if ( !bindings[i] )
+            return;
+        
+        var handleObject = bindings[i];
+        if ( typeof(handleObject.call) == 'undefined' )
+            throw new Error('`bindings.['+ i +'].call` is required !');
+        
+        if ( typeof(self[ handleObject.call ]) != 'function' ) 
+            throw new Error('`bindingContext.'+ handleObject.call +'` is not a function');
+        
+        // process the collection
+        var hCall = handleObject.call;
+        delete handleObject.call;
+        
+        try {
+            
+            // !! targeted handler instance must be exposed to the window object
+            if ( typeof(handleObject.handler) != 'undefined' ) {
+                
+                if ( !window[ handleObject.handler ] )
+                    throw new Error('`'+ handleObject.handler +'` could not be reached. You must expose it to the `window` do object before any call.');
+                
+                var hHandler = handleObject.handler;
+                delete handleObject.handler;
+                
+                window[ hHandler ].apply( this, Object.values(handleObject) );
+                //restore
+                handleObject.handler = hHandler
+            } else { // by default, will go to main handler or the one listening to xhr results
+                self[ hCall ].apply( this, Object.values(handleObject) );
+            }            
+            
+            //restore
+            handleObject.call = hCall;
+        } catch (err) {
+            console.error('BindingHelper encountered error while trying to execute `'+ hCall +'`' + err.stack || err);
+        }
+        
+        self.process(bindings, len, i+1)
+    }
+    
+    
+    return self
+}
+// Publish as AMD module
+define( 'helpers/binding',[],function() { return BindingHelper });
 define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/events' ], function (require) {
 
     var $       = require('jquery');
@@ -18827,12 +18952,15 @@ require.config({
     "packages": ["gina"]
 });
 
+// exporting
 require([
     //vendors
     "vendor/uuid",
     "vendor/engine.io",
 
     "core",
+    // helpers
+    "helpers/binding",
 
     // plugins
     "gina/link",
