@@ -3,7 +3,7 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
     
     var eventsHandler   = require('utils/events'); // events handler
     var merge           = require('utils/merge');
-    var dateFormat      = require('helpers/dateFormat')();
+    var dateFormat      = require('helpers/dateFormat')();    
     var uuid            = require('vendor/uuid');
 
 

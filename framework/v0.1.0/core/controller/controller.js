@@ -418,7 +418,10 @@ function SuperController(options) {
 
             // making path thru [namespace &] file
             if ( typeof(local.options.namespace) != 'undefined' ) {
-                file = ''+ file.replace(local.options.namespace+'-', '');
+                // excepted for custom paths
+                if ( !/^(\.|\/|\\)/.test(file) )
+                    file = ''+ file.replace(local.options.namespace+'-', '');
+                
                 // means that rule name === namespace -> pointing to root namespace dir
                 if (!file || file === local.options.namespace) {
                     file = 'index'
