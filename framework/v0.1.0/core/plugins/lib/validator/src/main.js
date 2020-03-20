@@ -833,6 +833,7 @@ function ValidatorPlugin(rules, data, formId) {
                             blob = new Blob([this.response], { type: 'text/plain' });
                             
                             var reader = new FileReader(), blobError = '';
+                                                        
                             
                             // This fires after the blob has been read/loaded.
                             reader.addEventListener('loadend', (e) => {
@@ -972,6 +973,8 @@ function ValidatorPlugin(rules, data, formId) {
                     'status': 100,
                     'progress': percentComplete
                 };
+                
+                //console.log('xhr progress ', percentComplete);
 
                 $form.eventData.onprogress = result;
 
@@ -1132,7 +1135,7 @@ function ValidatorPlugin(rules, data, formId) {
      * 
      * @return {string} stringBufffer
      */
-    var ab2str = function(buf, byteLength) {
+    var ab2str = function(event, buf, byteLength) {
 
         var str = '';
         var ab = null;
@@ -1180,14 +1183,45 @@ function ValidatorPlugin(rules, data, formId) {
     var processFiles = function(binaries, boundary, data, f, onComplete) {
 
         var reader = new FileReader();
+        
+        // progress
+        // reader.addEventListener('progress', (e) => {
+        //     var percentComplete = '0';
+        //     if (e.lengthComputable) {
+        //         percentComplete = e.loaded / e.total;
+        //         percentComplete = parseInt(percentComplete * 100);
+
+        //     }
+
+        //     // var result = {
+        //     //     'status': 100,
+        //     //     'progress': percentComplete
+        //     // };
+            
+        //     console.log('progress', percentComplete);
+
+        //     //$form.eventData.onprogress = result;
+
+        //     //triggerEvent(gina, $target, 'progress.' + id, result)
+        // });
 
         reader.addEventListener('load', function onReaderLoaded(e) {
 
             e.preventDefault();
+            
+            // var percentComplete = '0';
+            // if (e.lengthComputable) {
+            //     percentComplete = e.loaded / e.total;
+            //     percentComplete = parseInt(percentComplete * 100);
+                
+            //     console.log('progress', percentComplete);
+            // }
+                                    
 
             try {
                 
-                var bin = ab2str(this.result);                
+                var bin = ab2str(e, this.result);
+                ;                
                 binaries[this.index].bin += bin;
 
                 if (!binaries[this.index].file.type) {

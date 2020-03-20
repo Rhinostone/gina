@@ -9,6 +9,9 @@
 
     "core"                  : "main",
     
+    "helpers/binding"      : "gina/helpers/binding",
+    "helpers/dateFormat"    : "../../../../../helpers/dateFormat",
+    
     "utils/events"          : "gina/utils/events",
     "utils/dom"             : "gina/utils/dom",
     "utils/collection"      : "../../../../../lib/collection/src/main",
@@ -16,7 +19,6 @@
     "utils/inherits"        : "../../../../../lib/inherits/src/main",
     "utils/routing"         : "../../../../../lib/routing/src/main",
     "utils/form-validator"  : "../../../../plugins/lib/validator/src/form-validator",
-    "helpers/dateFormat"    : "../../../../../helpers/dateFormat",
     
     "gina"                  : "gina/main",
     "gina/toolbar"          : "gina/toolbar/main",

@@ -153,12 +153,15 @@ require.config({
     "packages": ["gina"]
 });
 
+// exporting
 require([
     //vendors
     "vendor/uuid",
     "vendor/engine.io",
 
     "core",
+    // helpers
+    "helpers/binding",
 
     // plugins
     "gina/link",

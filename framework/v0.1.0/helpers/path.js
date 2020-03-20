@@ -890,7 +890,14 @@ function PathHelper() {
                 mv(self, target)
                     .onComplete( function(err, path){
                         if (p == path && typeof(callback) != 'undefined') {
-                            callback(err)
+                            if ( callback ) {
+                                callback(err)
+                            } else if (!callback && err) {
+                                throw err;
+                            } else {
+                                return
+                            }
+                                
                         }
                     })
             }

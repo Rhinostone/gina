@@ -3,7 +3,7 @@ var fs              = require('fs');
 var os              = require('os');
 var path            = require('path');
 var EventEmitter    = require('events').EventEmitter;
-var Busboy          = require('busboy');
+var Busboy          = require('./deps/busboy');
 const Stream        = require('stream');
 var zlib            = require('zlib'); // gzip / deflate
 var util            = require('util');
@@ -952,7 +952,7 @@ function Server(options) {
             , conf          = self.conf[self.appName][self.env]
         ;
         
-        if ( typeof(responseHeaders) == 'undefined' ) {
+        if ( typeof(responseHeaders) == 'undefined' || !responseHeaders) {
             responseHeaders = {};
         }
         
@@ -1062,7 +1062,7 @@ function Server(options) {
         } 
         
         // update response
-        if ( responseHeaders.count() > 0 ) {
+        if ( responseHeaders && responseHeaders.count() > 0 ) {
             return merge(responseHeaders, response.getHeaders());
         }        
         return response.getHeaders();        
@@ -1292,7 +1292,7 @@ function Server(options) {
             } 
         }
                 
-        
+        filename = decodeURIComponent(filename);
         fs.exists(filename, function onStaticExists(exist) {
             
             if (!exist) {
@@ -1675,15 +1675,13 @@ function Server(options) {
                     && !/^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(request.url)
                     // and must be handled by mime.types
                     &&  typeof(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext[0].substr(1)]) != 'undefined' 
-                    ||
-                    ext != null 
-                    && typeof(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext[0].substr(1)]) != 'undefined' 
+                    //||
+                    //ext != null 
+                    //&& typeof(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext[0].substr(1)]) != 'undefined' 
                     
                 ) {                    
                     staticProps.isStaticFilename = true
                 }
-                
-                //staticProps.isStaticFilename    = /(\.([A-Za-z0-9]+){2}|\/)$/.test(request.url);
             }
             
                  
@@ -1716,7 +1714,14 @@ function Server(options) {
                 request = checkPreflightRequest(request);
                 local.request = request; // update request
                 // filtered to handle only html for now
-                if ( /text\/html/.test(request.headers['accept']) &&  /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0 || request.isPreflightRequest && /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0 ) {                           
+                if ( /text\/html/.test(request.headers['accept']) 
+                    &&  /^isaac/.test(self.engine) 
+                    && self.instance._expressMiddlewares.length > 0 
+                    || 
+                    request.isPreflightRequest 
+                    && /^isaac/.test(self.engine) 
+                    && self.instance._expressMiddlewares.length > 0 
+                ) {                           
                     
                     nextExpressMiddleware._index        = 0;
                     nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
@@ -1945,7 +1950,7 @@ function Server(options) {
                         });
                     });
 
-                    busboy.on('finish', function(params) {
+                    busboy.on('finish', function() {
                         var total = writeStreams.length;
                         for (var ws = 0, wsLen = writeStreams.length; ws < wsLen; ++ws ) {
                             
@@ -2729,7 +2734,10 @@ function Server(options) {
                 header = completeHeaders(local.request, res, header);
                 if ( /http\/2/.test(protocol) ) {
                     stream.respond(header);
-                    stream.end(msg);
+                    stream.end(JSON.stringify({
+                        status: code,
+                        error: msg
+                    }));
                     return;
                 } else {
                     return res.end(JSON.stringify({
