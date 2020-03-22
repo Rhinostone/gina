@@ -13,6 +13,7 @@
     "helpers/dateFormat"    : "../../../../../helpers/dateFormat",
     
     "utils/events"          : "gina/utils/events",
+    "utils/effects"         : "gina/utils/effects",
     "utils/dom"             : "gina/utils/dom",
     "utils/collection"      : "../../../../../lib/collection/src/main",
     "utils/merge"           : "../../../../../lib/merge/src/main",

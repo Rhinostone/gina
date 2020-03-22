@@ -553,6 +553,7 @@ function Server(options) {
     var getAssetFilenameFromUrl = function(bundleConf, url) {        
         
         var staticsArr  = bundleConf.publicResources;
+        url = decodeURIComponent( url );
         var staticProps = {
             firstLevel  : '/'+ url.split(/\//g)[1] + '/',
             isFile      :  /^\/[A-Za-z0-9_-]+\.(.*)$/.test(url)
