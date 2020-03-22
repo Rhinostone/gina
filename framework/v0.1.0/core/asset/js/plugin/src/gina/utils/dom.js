@@ -3,9 +3,7 @@
  * */
 
 function insertAfter(referenceNode, newNode) {
-    //console.log('inserting after ',referenceNode, newNode, referenceNode.nextSibling);
     referenceNode.parentNode.insertBefore(newNode, referenceNode.nextSibling)
-
 }
 
 function getElementsByAttribute(attribute) {

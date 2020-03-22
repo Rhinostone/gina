@@ -28,6 +28,7 @@ function ValidatorPlugin(rules, data, formId) {
         registerEvents(this.plugin, events);
 
         require('utils/dom');
+        require('utils/effects');
 
     } else {
         var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
@@ -776,6 +777,10 @@ function ValidatorPlugin(rules, data, formId) {
                             }
 
                             triggerEvent(gina, $target, 'success.' + id, result);
+                            // intercept upload
+                            if ( /^gina\-upload/i.test(id) )
+                                onUpload(gina, $target, 'success', id, result);
+                                
                             if (hFormIsRequired)
                                 triggerEvent(gina, $target, 'success.' + id + '.hform', result);
                             
@@ -1123,6 +1128,94 @@ function ValidatorPlugin(rules, data, formId) {
             }
 
             $form.sent = true;
+        }
+    }
+    
+    var onUpload = function(gina, $target, status, id, data) {
+                
+        var uploadProperties = $target.uploadProperties || null;
+        // {                                    
+        //     id              : String,
+        //     $form           : $Object,
+        //     mandatoryFields : Array,
+        //     uploadFields    : Collection
+        //     hasPreviewContainer : Boolean,
+        //     previewContainer : $Object
+        // }
+        
+        if ( !uploadProperties )
+            throw new Error('No uploadProperties found !!');
+        // parent form
+        var $mainForm = uploadProperties.$form;
+        var searchArr   = null
+            , name      = null
+            , $previewContainer     = null
+            , files                 = data.files || []
+            , $error                = $mainForm.getElementsByClassName('js-error')[0]
+        ;
+               
+        
+        //reset errors
+        $error.style.display = 'none';
+        if (status != 'success') { // handle errors first
+           // console.error('[ mainUploadError ] ', status, data)
+            var errMsg = data.message || data.error;         
+            
+            $error.innerHTML = '<p>'+ errMsg +'</p>';
+            fadeIn($error);
+        } else {
+            
+            // reset previwContainer
+            if ( uploadProperties.hasPreviewContainer ) {                
+                $previewContainer = document.getElementById(uploadProperties.previewContainer.id);
+                if ($previewContainer)
+                    $previewContainer.innerHTML = '';
+            }
+            
+            var fieldsObjectList = null
+                , $li   = null
+                , $img = null
+                , maxWidth = null
+            ;
+            for (var f = 0, fLen = files.length; f<fLen; ++f) {
+                // fill the fields to be saved ;)                
+                fieldsObjectList = uploadProperties.uploadFields[f];
+                for (var key in fieldsObjectList) {                    
+                    fieldsObjectList[key].value = files[f][key];
+                    // handle preview
+                    if (key == 'preview' ) {
+                        for (var previewKey in files[f][key]) {  
+                            if ( typeof(files[f][key][previewKey]) != 'undefined' && typeof(fieldsObjectList[key][previewKey]) != 'undefined' ) {
+                                fieldsObjectList[key][previewKey].value = files[f][key][previewKey];
+                            }
+                            
+                            // with preview
+                            if ( previewKey == 'tmpUri' && uploadProperties.hasPreviewContainer ) {                                
+                                $img = document.createElement('IMG');
+                                $img.src = files[f][key].tmpUri;
+                                $img.style.display = 'none';
+                                maxWidth = $previewContainer.getAttribute('data-preview-max-width') || null;
+                                if ( maxWidth ) {
+                                    $img.width = maxWidth
+                                }
+                                
+                                if ( /ul/i.test(uploadProperties.previewContainer.tagName) ) {
+                                    $li = document.createElement('LI');
+                                    $li.className = 'item';
+                                    $li.appendChild($img);
+                                    $previewContainer.appendChild($li);                                
+                                } else {
+                                    $previewContainer.appendChild($img);
+                                }
+                                fadeIn($img);
+                            } else if ( previewKey == 'tmpUri' ) { // without preview
+                                
+                            }
+                        }
+                    }                  
+                }
+                
+            }
         }
     }
 
@@ -1960,6 +2053,9 @@ function ValidatorPlugin(rules, data, formId) {
             , $uploadTrigger = null
             , $upload       = null
             , $progress = null
+            // to keep track of file collections
+            , idxArr            = []
+            , idx               = 0
         ;
 
         var elId = null;
@@ -2036,11 +2132,6 @@ function ValidatorPlugin(rules, data, formId) {
                         if (fileElemId)
                             $upload = document.getElementById(fileElemId);
                         
-                            
-                        //$progress = $($(this).parent().find('.progress'));
-                        // reset progress bar
-                        //$progress.text('0%');
-                        //$progress.width('0%');
                         if ($upload) {
                             $upload.value = '';// force reset : != multiple
                             triggerEvent(gina, $upload, 'click', event.detail);  
@@ -2062,20 +2153,186 @@ function ValidatorPlugin(rules, data, formId) {
                     var fileId          = name;                    
                     var uploadFormId    = 'gina-upload-' + name.replace(/\[/g, '-').replace(/\]/g, ''); 
                     var eventOnSuccess  = $el.getAttribute('data-gina-form-upload-on-success');
-                    var eventOnError  = $el.getAttribute('data-gina-form-upload-on-error');
+                    var eventOnError    = $el.getAttribute('data-gina-form-upload-on-error');
                     
                     if (files.length > 0) {
                         // create form if not exists
-                        var $uploadForm = $htmlTarget.getElementById(uploadFormId);
+                        var $activePopin = null;
+                        var $uploadForm = null;
+                        var isPopinContext = false;
+                        if ( gina.hasPopinHandler && gina.popinIsBinded ) {
+                            $activePopin = gina.popin.getActivePopin();
+                        }
+                        
+                        if ( $activePopin && $activePopin.isOpen ) {
+                            isPopinContext = true;
+                            // getting active popin
+                            $activePopin.$target = new DOMParser().parseFromString($activePopin.target.outerHTML, 'text/html');
+                            // binding to DOM
+                            $activePopin.$target.getElementById($activePopin.id).innerHTML = document.getElementById($activePopin.id).innerHTML;
+                            
+                            $uploadForm = $activePopin.$target.getElementById(uploadFormId);                            
+                        } else {
+                            $uploadForm = document.getElementById(uploadFormId);
+                        }
                         
                         if ( !$uploadForm ) {
-                            $uploadForm = document.createElement('form');
+                            $uploadForm = (isPopinContext) ? $activePopin.$target.createElement('form') : document.createElement('form');
 
                             // adding form attributes
                             $uploadForm.id       = uploadFormId;
                             $uploadForm.action   = url;
                             $uploadForm.enctype  = 'multipart/form-data';
                             $uploadForm.method   = 'POST';
+                                                        
+                            
+                            if ( typeof($el.form) != 'undefined' ) {
+                                
+                                // adding virtual fields
+                                var fieldPrefix = 'files'; // by default
+                                var fieldName   = $el.getAttribute('data-gina-form-upload-prefix') || $el.name || $el.getAttribute('name');
+                                var fieldId     = $el.id || $el.getAttribute('id');
+                                
+                                var hasPreviewContainer = false;
+                                var previewContainer = $el.getAttribute('data-gina-form-upload-preview') || fieldId + '-preview';
+                                previewContainer = (isPopinContext)
+                                                        ? $activePopin.$target.getElementById(previewContainer)
+                                                        : document.getElementById(previewContainer); 
+                                                        
+                                if ( typeof(previewContainer) != 'undefined' ) {
+                                    hasPreviewContainer = true;                                                                                                            
+                                }
+                                
+                                if (fieldName) {
+                                    fieldPrefix = fieldName
+                                }
+                                
+                                idx = idxArr.indexOf(fieldPrefix);
+                                if ( idx < 0 ) {
+                                    idx = idxArr.length;
+                                    idxArr[ idx ] = fieldPrefix
+                                } else {
+                                    idxArr[ idx ] = fieldPrefix
+                                }
+                                
+                                var hiddenFields        = []
+                                    , hiddenFieldObject = null                                    
+                                    , mandatoryFields   = [
+                                        'name'
+                                        , 'group'
+                                        , 'originalFilename'
+                                        , 'encoding'
+                                        , 'size'
+                                        //, 'height'
+                                        //, 'width'
+                                        , 'location'
+                                        , 'mime'
+                                        , 'preview'
+                                    ]
+                                    , formInputsFields  = $el.form.getElementsByTagName('INPUT')
+                                    , fieldType         = null
+                                    , hiddenField       = null
+                                    , _name             = null
+                                    , _nameRe           = null
+                                    , subPrefix         = null
+                                ;
+                                
+                                for (var _f = 0, _fLen = files.length; _f < _fLen; ++_f) { // for each file                                    
+                                    
+                                    hiddenFields[_f] = null;
+                                    subPrefix = fieldPrefix + '['+ _f +']';
+                                    _nameRe = new RegExp('^'+subPrefix.replace(/\[/g, '\\[').replace(/\]/g, '\\]'));
+                                    // collecting existing DOM fields
+                                    for (var h = 0, hLen = formInputsFields.length; h < hLen; ++h) {
+                                        fieldType   = formInputsFields[h].getAttribute('type');
+                                        hiddenField = null;
+                                        _name       = null;
+                                        
+                                        if (fieldType && /hidden/i.test(fieldType) ) {
+                                            hiddenField = formInputsFields[h];
+                                            _name = ( /\[\w+\]$/i.test(hiddenField.name) ) ? hiddenField.name.match(/\[\w+\]$/)[0].replace(/\[|\]/g, '') : hiddenField.name;
+                                            
+                                            // mandatory informations
+                                            if (
+                                                hiddenField 
+                                                && typeof(_name) != 'undefiend' 
+                                                && mandatoryFields.indexOf( _name ) > -1
+                                                && _nameRe.test( hiddenField.name )
+                                            ) {
+                                                
+                                                if (!hiddenFields[_f] )
+                                                    hiddenFields[_f] = {};
+                                                    
+                                                if ( /\[preview\]/i.test(hiddenField.name) ) {
+                                                    if ( typeof(hiddenFields[_f].preview) == 'undefined' )
+                                                        hiddenFields[_f].preview = {};
+                                                        
+                                                    hiddenFields[_f].preview[_name] = hiddenField;
+                                                } else {
+                                                    hiddenFields[_f][_name] = hiddenField;
+                                                }                                        
+                                            } else if (
+                                                hiddenField 
+                                                && typeof(_name) != 'undefiend' 
+                                                && mandatoryFields.indexOf( _name ) < 0
+                                                && _nameRe.test( hiddenField.name )
+                                            ) { // defined by user
+                                                if (!hiddenFields[_f] )
+                                                    hiddenFields[_f] = {};
+                                                    
+                                                if ( /\[preview\]/i.test(hiddenField.name) ) {
+                                                    if ( typeof(hiddenFields[_f].preview) == 'undefined' )
+                                                        hiddenFields[_f].preview = {};
+                                                        
+                                                    hiddenFields[_f].preview[_name] = hiddenField;
+                                                } else {
+                                                    hiddenFields[_f][_name] = hiddenField;
+                                                } 
+                                            }
+                                        }                                            
+                                    }
+                                    
+                                    // completing by adding non-declared mandatoring fields in the DOM: all but preview
+                                    for (var m = 0, mLen = mandatoryFields.length; m < mLen; ++m) {
+                                        // optional, must be set by user
+                                        //if ( mandatoryFields[m] == 'preview' )
+                                        //    continue;
+                                        // needs recheck     
+                                        if (!hiddenFields[_f] )
+                                            hiddenFields[_f] = {};
+                                            
+                                        if ( typeof(hiddenFields[_f][ mandatoryFields[m] ]) == 'undefined' ) {
+                                            
+                                            _name = fieldPrefix +'['+ _f +']['+ mandatoryFields[m] +']'; 
+                                            // create input & add it to the form
+                                            $newVirtualField = document.createElement('input');
+                                            $newVirtualField.type = 'hidden';
+                                            $newVirtualField.id = 'input.' + uuid.v4();
+                                            $newVirtualField.name = _name;
+                                            $newVirtualField.value = '';
+                                            
+                                            $el.form.appendChild($newVirtualField);
+                                            hiddenFields[_f][ mandatoryFields[m] ] = $el.form[$el.form.length-1];// last added
+                                        }
+                                                                        
+                                    }
+                                } // EO for files
+                                
+                                $uploadForm.uploadProperties = {                                    
+                                    id                  : $el.form.id || $el.getAttribute('id'),
+                                    $form               : $el.form,
+                                    mandatoryFields     : mandatoryFields,
+                                    uploadFields        : hiddenFields,
+                                    hasPreviewContainer : hasPreviewContainer,
+                                    isPopinContext      : isPopinContext
+                                };
+                                if (hasPreviewContainer) {
+                                    $uploadForm.uploadProperties.previewContainer = previewContainer;
+                                }
+                                // if (isPopinContext) {
+                                //     $uploadForm.$activePopin = $activePopin;
+                                // }
+                            }
                             
                             if (eventOnSuccess)
                                 $uploadForm.setAttribute('data-gina-form-event-on-submit-success', eventOnSuccess);
@@ -2087,13 +2344,17 @@ function ValidatorPlugin(rules, data, formId) {
                             else
                                 $uploadForm.setAttribute('data-gina-form-event-on-submit-error', 'onGenericXhrResponse');
                             
-                            var previewId = $el.getAttribute('data-gina-form-upload-preview') || null;
-                            if (previewId)
-                                $uploadForm.setAttribute('data-gina-form-upload-preview', previewId);
+                            // var previewId = $el.getAttribute('data-gina-form-upload-preview') || null;
+                            // if (previewId)
+                            //     $uploadForm.setAttribute('data-gina-form-upload-preview', previewId);
                             
                             // adding for to current doccument
-                            document.body.appendChild($uploadForm);
-
+                            if (isPopinContext) {
+                                //$activePopin.$target.appendChild($uploadForm)
+                                document.getElementById($activePopin.id).appendChild($uploadForm)
+                            } else {
+                                document.body.appendChild($uploadForm)
+                            } 
                         }
                         
                         // binding form
