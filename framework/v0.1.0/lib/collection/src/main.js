@@ -869,14 +869,14 @@ function Collection(content, options) {
      * @return {objet} instance
      */    
     instance['update'] = function() {
-        var key         = null // comparison key
+        var key         = '_uuid' // comparison key is _uuid by default
             , result    = null
             , filters   = null
             , set       = null
             //, uuidSearchModeEnabled = true
         ;
 
-                
+        // comparison key  : _uuid by default, but can be set to id        
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
@@ -921,7 +921,7 @@ function Collection(content, options) {
             for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
                 arr[a] = merge( JSON.parse(JSON.stringify(set) ), arr[a]);
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
-                    if ( result[r].id == arr[a].id ) {
+                    if ( result[r][key] == arr[a][key] ) {
                         result[r] = arr[a];
                         break;
                     }
@@ -946,7 +946,7 @@ function Collection(content, options) {
     
     
     instance['replace'] = function() {
-        var key         = null // comparison key
+        var key         = '_uuid' // comparison key
             , result    = null
             , filters   = null
             , set       = null
@@ -998,7 +998,7 @@ function Collection(content, options) {
             for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
                 arr[a] = JSON.parse(JSON.stringify(set));
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
-                    if ( result[r].id == arr[a].id ) {
+                    if ( result[r][key] == arr[a][key] ) {
                         result[r] = arr[a];
                         break;
                     }
@@ -1023,7 +1023,7 @@ function Collection(content, options) {
     
     /**
      * .delete({ key: 2 })
-     * .delete({ name: 'Jordan' }, 'id') where id will be use as the `uuid` to compare records
+     * .delete({ name: 'Jordan' }, ''id) where id will be use as the `uuid` to compare records
      * 
      * AND syntax
      * .delete({ car: 'toyota', color: 'red' })

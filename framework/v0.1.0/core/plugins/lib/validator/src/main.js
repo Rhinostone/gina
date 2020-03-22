@@ -3156,6 +3156,61 @@ function ValidatorPlugin(rules, data, formId) {
         var d = new FormValidator(fields, $fields), args = null;
         var fieldErrorsAttributes = {};
         var re = null, flags = null;
+        
+        var checkFieldAgainstRules = function(field, rules, fields) {
+            // looking for regexp aliases from rules
+            if ( typeof (rules[field]) == 'undefined') {                
+                skipTest = false;
+                for (var _r in rules) {
+                    if ( /^\//.test(_r) ) { // RegExp found
+                        re      = _r.match(/\/(.*)\//).pop();                                        
+                        flags   = _r.replace('/'+ re +'/', '');
+                        // fix escaping "[" & "]"
+                        re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+                        re      = new RegExp(re, flags);
+                        if ( re.test(field)  ) { 
+                            skipTest = true;                                                
+                            // create new entry    
+                            rules[field] = rules[_r];                                   
+                            break;
+                        } 
+                    }                                
+                }    
+                
+                //if ( !skipTest ) continue;
+            }
+            
+            // check each field against rule
+            for (var rule in rules[field]) {
+                            
+                // check for rule params
+                try {
+
+                    if (Array.isArray(rules[field][rule])) { // has args
+                        //convert array to arguments
+                        args = JSON.parse(JSON.stringify(rules[field][rule]));
+                        if ( /\$[\w\[\]]*/.test(args[0]) ) {
+                            var foundVariables = args[0].match(/\$[\w\[\]]*/g);
+                            for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
+                                args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
+                            }
+                        }
+                        d[field][rule].apply(d[field], args);
+                    } else {
+                        d[field][rule](rules[field][rule]);
+                    }
+
+                    delete fields[field];
+
+                } catch (err) {
+                    if (rule == 'conditions') {
+                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
+                    } else {
+                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
+                    }
+                }
+            }
+        }
 
         var forEachField = function($form, fields, $fields, rules, cb, i) {
             
@@ -3164,7 +3219,7 @@ function ValidatorPlugin(rules, data, formId) {
             var hasCase = false, isInCase = null, conditions = null;
             var caseValue = null, caseType = null;
             var localRules = null, caseName = null;
-            var skipTest = null;
+            var localRuleObj = null, skipTest = null;
 
             //console.log('parsing ', fields, $fields, rules);
             if ( typeof(rules) != 'undefined' ) { // means that no rule is set or found
@@ -3176,7 +3231,7 @@ function ValidatorPlugin(rules, data, formId) {
                         console.warn('field `'+ field +'` found for your form rule ('+ $form.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule if this is a mistake.');
                         continue;
                     }
-                    // $fields[field].tagName getAttribute('type')
+                    
                     //if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
                     if (
                         $fields[field].tagName.toLowerCase() == 'input' 
@@ -3212,12 +3267,47 @@ function ValidatorPlugin(rules, data, formId) {
                                         // fix escaping "[" & "]"
                                         re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
                                         re      = new RegExp(re, flags);
-                                        if ( re.test(field)  ) {                                                 
+                                        if ( re.test(field)  ) {    
+                                            // depending on the case value, replace/merge original rule with condition rule
+                                            caseValue = $fields[c.replace(/^\_case\_/, '')].value;
+                                            if (isGFFCtx) {
+                                                if (fields[field] == "true")
+                                                    caseValue = true;
+                                                else if (fields[field] == "false")
+                                                    caseValue = false;
+                                            }
+                                            if ( rules[c].conditions[_c].case == caseValue ) {
+                                                localRuleObj = ( typeof(rules[field]) != 'undefined' ) ? rules[field] : {}; 
+                                                rules[field] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
+                                            }
+                                            // check each field against rule
+                                            checkFieldAgainstRules(field, rules, fields);
+                                                                
                                             isInCase = true;                                         
                                             break;
                                         } 
                                     } else {
-                                        if ( typeof(rules[c].conditions[_c].rules[_r]) != 'undefined' && typeof(rules[_r]) == 'undefined' ) {
+                                        if ( typeof(rules[c].conditions[_c].rules[_r]) != 'undefined' ) {
+                                            // depending on the case value, replace/merge original rule with condition rule
+                                            caseField = c.replace(/^\_case\_/, '');
+                                            caseValue = $fields[caseField].value;
+                                            if (
+                                                isGFFCtx 
+                                                && /^(true|false)$/i.test(caseValue) 
+                                                && typeof(rules[caseField]) != 'undefined'
+                                                && typeof(rules[caseField].isBoolean) != 'undefined' 
+                                                && /^(true)$/i.test(rules[caseField].isBoolean)
+                                            ) {
+                                                caseValue = ( /^(true)$/i.test(caseValue) ) ? true : false;
+                                            }
+                                            if ( rules[c].conditions[_c].case == caseValue ) {
+                                                localRuleObj = ( typeof(rules[field]) != 'undefined' ) ? rules[field] : {}; 
+                                                rules[field] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
+                                            }
+                                            
+                                            // check each field against rule
+                                            checkFieldAgainstRules(field, rules, fields);
+                                            
                                             isInCase = true;
                                             break;
                                         }  
@@ -3232,63 +3322,67 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                     
                     if (isInCase) continue;
+                    
 
-                    if (!hasCase) { // normal case
+                    //if (!hasCase) { // normal case
                                                 
-                        if (typeof (rules[field]) == 'undefined') {
-                            // look for regexp aliases from rules
-                            skipTest = false;
-                            for (var _r in rules) {
-                                if ( /^\//.test(_r) ) { // RegExp found
-                                    re      = _r.match(/\/(.*)\//).pop();                                        
-                                    flags   = _r.replace('/'+ re +'/', '');
-                                    // fix escaping "[" & "]"
-                                    re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
-                                    re      = new RegExp(re, flags);
-                                    if ( re.test(field)  ) { 
-                                        skipTest = true;                                                
-                                        // create new entry    
-                                        rules[field] = rules[_r];                                   
-                                        break;
-                                    } 
-                                }                                
-                            }    
+                        // if (typeof (rules[field]) == 'undefined') {
+                        //     // look for regexp aliases from rules
+                        //     skipTest = false;
+                        //     for (var _r in rules) {
+                        //         if ( /^\//.test(_r) ) { // RegExp found
+                        //             re      = _r.match(/\/(.*)\//).pop();                                        
+                        //             flags   = _r.replace('/'+ re +'/', '');
+                        //             // fix escaping "[" & "]"
+                        //             re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+                        //             re      = new RegExp(re, flags);
+                        //             if ( re.test(field)  ) { 
+                        //                 skipTest = true;                                                
+                        //                 // create new entry    
+                        //                 rules[field] = rules[_r];                                   
+                        //                 break;
+                        //             } 
+                        //         }                                
+                        //     }    
                             
-                            if ( !skipTest ) continue;
-                        }
+                        //     if ( !skipTest ) continue;
+                        // }
 
 
                         // check each field against rule
-                        for (var rule in rules[field]) {
+                        checkFieldAgainstRules(field, rules, fields);
+                        // for (var rule in rules[field]) {
                             
-                            // check for rule params
-                            try {
+                        //     // check for rule params
+                        //     try {
 
-                                if (Array.isArray(rules[field][rule])) { // has args
-                                    //convert array to arguments
-                                    args = JSON.parse(JSON.stringify(rules[field][rule]));
-                                    if ( /\$[\w\[\]]*/.test(args[0]) ) {
-                                        var foundVariables = args[0].match(/\$[\w\[\]]*/g);
-                                        for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
-                                            args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
-                                        }
-                                    }
-                                    d[field][rule].apply(d[field], args);
-                                } else {
-                                    d[field][rule](rules[field][rule]);
-                                }
+                        //         if (Array.isArray(rules[field][rule])) { // has args
+                        //             //convert array to arguments
+                        //             args = JSON.parse(JSON.stringify(rules[field][rule]));
+                        //             if ( /\$[\w\[\]]*/.test(args[0]) ) {
+                        //                 var foundVariables = args[0].match(/\$[\w\[\]]*/g);
+                        //                 for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
+                        //                     args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
+                        //                 }
+                        //             }
+                        //             d[field][rule].apply(d[field], args);
+                        //         } else {
+                        //             d[field][rule](rules[field][rule]);
+                        //         }
 
-                                delete fields[field];
+                        //         delete fields[field];
 
-                            } catch (err) {
-                                if (rule == 'conditions') {
-                                    throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
-                                } else {
-                                    throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
-                                }
-                            }
-                        }
-                    } else {
+                        //     } catch (err) {
+                        //         if (rule == 'conditions') {
+                        //             throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
+                        //         } else {
+                        //             throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
+                        //         }
+                        //     }
+                        // }
+                    //} // else {
+                        
+                    if (hasCase) {
                         ++i; // add sub level
                         conditions = rules['_case_' + field]['conditions'];
 

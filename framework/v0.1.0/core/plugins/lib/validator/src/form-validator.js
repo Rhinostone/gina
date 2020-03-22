@@ -612,9 +612,10 @@ function FormValidatorUtil(data, $fields) {
 
             // test if val is a string
             if ( typeof(val) == 'string' ) {
-                isValid = true;
+                //isValid = true;
 
                 if ( !errors['isRequired'] && val != '' ) {
+                    isValid = true;
                     // if so also test max and min length if defined
                     if (minLength && typeof(minLength) == 'number' && val.length < minLength) {
                         isMinLength = false;
