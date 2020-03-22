@@ -3164,6 +3164,7 @@ function ValidatorPlugin(rules, data, formId) {
             var hasCase = false, isInCase = null, conditions = null;
             var caseValue = null, caseType = null;
             var localRules = null, caseName = null;
+            var skipTest = null;
 
             //console.log('parsing ', fields, $fields, rules);
             if ( typeof(rules) != 'undefined' ) { // means that no rule is set or found
@@ -3195,7 +3196,7 @@ function ValidatorPlugin(rules, data, formId) {
                         if (!/^\_case\_/.test(c) ) continue;
                         if ( typeof(rules[c].conditions) == 'undefined' ) continue;
                         if ( typeof(rules[c].conditions[0].rules) == 'undefined' ) continue;
-                        
+                        // enter cases condition
                         if ( typeof(rules[c].conditions) != 'undefined' && Array.isArray(rules[c].conditions) ) {
                             caseName = c.replace('_case_', '');
                             for (var _c = 0, _cLen = rules[c].conditions.length; _c < _cLen; ++_c) {
@@ -3232,12 +3233,34 @@ function ValidatorPlugin(rules, data, formId) {
                     
                     if (isInCase) continue;
 
-                    if (!hasCase) {
-                        if (typeof (rules[field]) == 'undefined') continue;
+                    if (!hasCase) { // normal case
+                                                
+                        if (typeof (rules[field]) == 'undefined') {
+                            // look for regexp aliases from rules
+                            skipTest = false;
+                            for (var _r in rules) {
+                                if ( /^\//.test(_r) ) { // RegExp found
+                                    re      = _r.match(/\/(.*)\//).pop();                                        
+                                    flags   = _r.replace('/'+ re +'/', '');
+                                    // fix escaping "[" & "]"
+                                    re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+                                    re      = new RegExp(re, flags);
+                                    if ( re.test(field)  ) { 
+                                        skipTest = true;                                                
+                                        // create new entry    
+                                        rules[field] = rules[_r];                                   
+                                        break;
+                                    } 
+                                }                                
+                            }    
+                            
+                            if ( !skipTest ) continue;
+                        }
 
 
                         // check each field against rule
                         for (var rule in rules[field]) {
+                            
                             // check for rule params
                             try {
 
@@ -3251,7 +3274,6 @@ function ValidatorPlugin(rules, data, formId) {
                                         }
                                     }
                                     d[field][rule].apply(d[field], args);
-                                    // .match(/\$[\w\[\]]*/g)
                                 } else {
                                     d[field][rule](rules[field][rule]);
                                 }
