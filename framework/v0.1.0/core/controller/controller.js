@@ -446,7 +446,7 @@ function SuperController(options) {
                 }
             }
 
-            if (data.page.view.ext) {
+            if (data.page.view.ext /** && hasViews() && fs.existsSync(_(path + data.page.view.ext, true))*/ ) {
                 path += data.page.view.ext
             }
 

@@ -1673,6 +1673,7 @@ function Server(options) {
                 var isImage = false;
                 if ( typeof(ext) != 'undefined' &&  ext != null) {
                     ext = ext[0];
+                    // if image with `@` found
                     if ( /^image/i.test(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext.substr(1)]) ) {
                         isImage = true
                     }
@@ -1686,7 +1687,6 @@ function Server(options) {
                     ||
                     ext != null 
                     && isImage
-                    //&& typeof(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext[0].substr(1)]) != 'undefined' 
                     
                 ) {                    
                     staticProps.isStaticFilename = true
