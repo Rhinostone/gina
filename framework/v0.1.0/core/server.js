@@ -1669,15 +1669,23 @@ function Server(options) {
                 staticProps.firstLevel          = '/' + request.url.split(/\//g)[1] + '/';
                 
                 // to be considered as a stativ content, url must content at least 2 caracters after last `.`: .js, .html are ok
-                var ext = request.url.match(/(\.([A-Za-z0-9]+){2}|\/)$/);                
+                var ext = request.url.match(/(\.([A-Za-z0-9]+){2}|\/)$/);   
+                var isImage = false;
+                if ( typeof(ext) != 'undefined' &&  ext != null) {
+                    ext = ext[0];
+                    if ( /^image/i.test(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext.substr(1)]) ) {
+                        isImage = true
+                    }
+                }
                 if ( 
                     ext != null 
                     // and must not be an email
                     && !/^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(request.url)
                     // and must be handled by mime.types
-                    &&  typeof(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext[0].substr(1)]) != 'undefined' 
-                    //||
-                    //ext != null 
+                    &&  typeof(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext.substr(1)]) != 'undefined' 
+                    ||
+                    ext != null 
+                    && isImage
                     //&& typeof(self.conf[self.appName][self.env].server.coreConfiguration.mime[ext[0].substr(1)]) != 'undefined' 
                     
                 ) {                    
