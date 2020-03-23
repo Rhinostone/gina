@@ -3290,6 +3290,11 @@ function ValidatorPlugin(rules, data, formId) {
                                         if ( typeof(rules[c].conditions[_c].rules[_r]) != 'undefined' ) {
                                             // depending on the case value, replace/merge original rule with condition rule
                                             caseField = c.replace(/^\_case\_/, '');
+                                            
+                                            if ( typeof($fields[caseField]) == 'undefined' ) {
+                                                console.warn('ignoring case `'+ c +'`: field `'+ +'` not found in your DOM');
+                                                continue;
+                                            }
                                             caseValue = $fields[caseField].value;
                                             if (
                                                 isGFFCtx 
