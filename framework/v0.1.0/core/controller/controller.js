@@ -305,6 +305,11 @@ function SuperController(options) {
             set('page.view.lang', userCulture);
         }
         
+        if ( !getContext('isProxyHost') ) {
+            var isProxyHost = ( typeof(req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ req.headers.host != local.options.conf.hostname || typeof(req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
+            setContext('isProxyHost', isProxyHost);
+        }
+        
         //TODO - detect when to use swig
         var dir = null;
         if (local.options.template || self.templates) {
@@ -539,8 +544,7 @@ function SuperController(options) {
                     ;
 
 
-                    swig.setFilter('getUrl', function (route, params, base) {
-                        
+                    swig.setFilter('getUrl', function (route, params, base) {                        
             
                         // if no route, returns current route
                         if ( !route || typeof(route) == 'undefined') {
