@@ -2650,9 +2650,7 @@ function ValidatorPlugin(rules, data, formId) {
         evt = 'click';
 
         procced = function () {
-            
-            
-            
+                        
             // click proxy            
             addListener(gina, $target, 'click', function(event) {
                 
