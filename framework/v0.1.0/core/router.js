@@ -51,7 +51,8 @@ function Router(env) {
         if ( typeof(Router.initialized) != "undefined" ) {
             return self.getInstance()
         } else {
-            Router.initialized = true
+            self.initialized = true;
+            self.hasCompletedControlllerSetup = false; 
         }
     }
     
@@ -395,42 +396,41 @@ function Router(env) {
             
             controller.requireController = requireController;
 
-            if (hasSetup && isSetupRequired(params.param.control) ) { // adding setup
+            if (hasSetup && isSetupRequired(params.param.control) || hasSetup && !self.hasCompletedControlllerSetup ) { // adding setup
                 
-                // if ( !isSetupRequired(params.param.control) ) {
-                //     controller.setup = function() { this._setupDone = true;  return };                                      
-                // } else {
-                    controller.setup = function(request, response, next) {
-                        if (!this._setupDone) {
-                            this._setupDone = true;
-                            return function (request, response, next) { // getting rid of the controller context
-                                var Setup = require(_(setupFile, true));
-    
-                                // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
-                                // inheriting SuperController functions & objects
-    
-                                // exporting config & common methods
-                                Setup.engine                = controller.engine;
-                                Setup.getConfig             = controller.getConfig;
-                                Setup.getLocales            = controller.getLocales;
-                                Setup.getFormsRules         = controller.getFormsRules;
-                                Setup.throwError            = serverInstance.throwError;
-                                Setup.redirect              = controller.redirect;
-                                Setup.render                = controller.render;
-                                Setup.renderJSON            = controller.renderJSON;
-                                Setup.renderWithoutLayout   = controller.renderWithoutLayout
-                                Setup.isXMLRequest          = controller.isXMLRequest;
-                                Setup.isWithCredentials     = controller.isWithCredentials,
-                                Setup.isCacheless           = controller.isCacheless;
-                                Setup.requireController     = controller.requireController;
-    
-                                Setup.apply(Setup, arguments);
-    
-                                return Setup;
-                            }(request, response, next)
-                        }
-                    }    
-                //} 
+                controller.setup = function(request, response, next) {
+                    if (!this._setupDone) {
+                        this._setupDone = true;
+                        return function (request, response, next) { // getting rid of the controller context
+                            var Setup = require(_(setupFile, true));
+
+                            // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
+                            // inheriting SuperController functions & objects
+
+                            // exporting config & common methods
+                            Setup.engine                = controller.engine;
+                            Setup.getConfig             = controller.getConfig;
+                            Setup.getLocales            = controller.getLocales;
+                            Setup.getFormsRules         = controller.getFormsRules;
+                            Setup.throwError            = serverInstance.throwError;
+                            Setup.redirect              = controller.redirect;
+                            Setup.render                = controller.render;
+                            Setup.renderJSON            = controller.renderJSON;
+                            Setup.renderWithoutLayout   = controller.renderWithoutLayout
+                            Setup.isXMLRequest          = controller.isXMLRequest;
+                            Setup.isWithCredentials     = controller.isWithCredentials,
+                            Setup.isCacheless           = controller.isCacheless;
+                            Setup.requireController     = controller.requireController;
+
+                            Setup.apply(Setup, arguments);
+
+                            return Setup;
+                        }(request, response, next)
+                    }
+                }    
+                
+                if ( !self.hasCompletedControlllerSetup )
+                    self.hasCompletedControlllerSetup = true;
             } else {
                 controller.setup = function() { return };
             }
