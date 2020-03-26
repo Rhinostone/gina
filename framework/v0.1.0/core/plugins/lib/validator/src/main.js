@@ -715,7 +715,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     result.status = xhr.status;
                                     
                                 // if hasPopinHandler & popinIsBinded
-                                if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler /** && gina.popinIsBinded*/ ) {
+                                if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler ) {
                                     
                                     // select popin by id
                                     var $popin = gina.popin.getActivePopin();
