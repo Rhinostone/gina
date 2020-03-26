@@ -55,7 +55,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             'open'              : null,
             'isOpen'            : false,
             'close'             : null,
-            '$forms'            : []
+            '$forms'            : [],
+            'hasForm'           : false
         };
 
         // imopring other plugins
@@ -206,40 +207,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                                 if (!fired) {
                                     fired = true;
-
-                                    //e.target.innerHTML = e.detail;
-
-
-                                    // bind with formValidator if forms are found
-                                    // if ( /<form/i.test(e.target.innerHTML) && typeof($validatorInstance) != 'undefined' ) {
-                                    //     var _id = null;
-                                    //     var $forms = e.target.getElementsByTagName('form');
-                                    //     for (var i = 0, len = $forms.length; i < len; ++i) {
-
-                                    //         if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
-                                    //             _id = $forms[i].getAttribute('id') || 'form.' + uuid.v4();
-                                    //             $forms[i].setAttribute('id', _id);// just in case
-                                    //             $forms[i]['id'] = _id
-                                    //         } else {
-                                    //             _id = $forms[i]['id']
-                                    //         }
-
-                                    //         //console.log('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
-                                    //         if ($popin['$forms'].indexOf(_id) < 0)
-                                    //             $popin['$forms'].push(_id);
-
-                                    //         $forms[i].close = popinClose;
-                                    //         $validatorInstance.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
-
-                                    //         removeListener(gina, $popin.target, e.type);
-                                    //     }
-                                    // }
                                     
                                     popinBind(e, $popin);
                                     if (!$popin.isOpen) {                                        
                                         popinOpen($popin.name);
-                                    }
-                                        
+                                    }                                        
                                 }
                             });
 
@@ -481,6 +453,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                     removeListener(gina, $popin.target, eventType);
                 }
+                
+                $popin.hasForm = true;
             }
             
             // binding popin close & links (& its target attributes)
@@ -832,7 +806,12 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                                 instance.eventData.success = result;
                                 
-                                triggerEvent(gina, $el, 'loaded.' + id, result);
+                                if ( $popin.isOpen && !$popin.hasForm) {
+                                    popinLoadContent(result, true)                                    
+                                } else {
+                                    triggerEvent(gina, $el, 'loaded.' + id, result);
+                                }
+                                
                                 
                                 updateToolbar(result);
 
@@ -972,9 +951,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
          * popinLoadContent
          * 
          * @param {string} html - plain/text
-         * @param {object} [data] - 
+         * @param {boolean} [isRedirecting] - to handle link inside popin without form
          */
-        function popinLoadContent(stringContent) {
+        function popinLoadContent(stringContent, isRedirecting) {
             
             var $popin = getActivePopin(); 
             if ( !$popin.isOpen )
@@ -985,7 +964,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             popinUnbind($popin.name, true);          
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);            
             
-            triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
+            if ( typeof(isRedirecting) == 'undefined' || isRedirecting == false )
+                triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
         }
                
         function getScript(source, callback) {
@@ -1182,6 +1162,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 
                 removeListener(gina, $popin.target, 'ready.' + instance.id);
                 
+                if ( $popin.hasForm ) {
+                    $popin.hasForm = false;
+                }
 
                 if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
                     
