@@ -49,6 +49,18 @@ module.exports = helpers;
 
 
 /**
+ * Set culture
+ * @return {array} Return instance with new selected culture
+ **/
+Object.defineProperty( Date.prototype, 'setCulture', {
+    writable:   false,
+    enumerable: false,
+    //If loaded several times, it can lead to an exception. That's why I put this.
+    configurable: true,
+    value: function(culture){ return helpers.dateFormat.setCulture(this, culture) }
+});
+
+/**
  * Format date
  * @return {array} Return formated date
  **/
