@@ -272,14 +272,14 @@ function SuperController(options) {
             
             
             
-            var acceptLanguage = 'en-US'; // by default
+            var acceptLanguage = 'en-US'; // by default : language-COUNTRY
             if ( typeof(req.headers['accept-language']) != 'undefined' ) {
                 acceptLanguage = req.headers['accept-language']
             } else if ( typeof(local.options.conf.server.response.header['accept-language']) != 'undefined' ) {
                 acceptLanguage = local.options.conf.server.response.header['accept-language']
             }
 
-            // set user locale
+            // set user locale: region & culture
             var userCulture     = acceptLanguage.split(',')[0];
             var userCultureCode = userCulture.split(/\-/);
             var userLangCode    = userCultureCode[0];

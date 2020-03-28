@@ -1,3 +1,10 @@
+/*
+ * This file is part of the gina package.
+ * Copyright (c) 2016 Rhinostone <gina@rhinostone.com>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
 /**
  * Credits & thanks to Steven Levithan :)
  * http://blog.stevenlevithan.com/archives/date-time-format
@@ -21,18 +28,27 @@
  * @param {string} mask
  */
 function DateFormatHelper() {
+    
+    var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+
+    var merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
 
     var self = {};
+    // language-country
+    self.culture = 'en-US'; // by default
+    self.lang = 'en'; // by default
 
     self.masks = {
+        // i18n
         "default":      "ddd mmm dd yyyy HH:MM:ss",
-        cookieDate:     "GMT:ddd, dd mmm yyyy HH:MM:ss",
-        logger:       "[yyyy mmm dd HH:MM:ss]",
         shortDate:      "m/d/yy",
         shortDate2:      "mm/dd/yyyy",
         mediumDate:     "mmm d, yyyy",
         longDate:       "mmmm d, yyyy",
         fullDate:       "dddd, mmmm d, yyyy",
+        // common
+        cookieDate:     "GMT:ddd, dd mmm yyyy HH:MM:ss",
+        logger:       "[yyyy mmm dd HH:MM:ss]",
         shortTime:      "h:MM TT",
         shortTime2:      "h:MM",
         mediumTime:     "h:MM:ss TT",
@@ -47,21 +63,73 @@ function DateFormatHelper() {
         isoDateTime:    "yyyy-mm-dd'T'HH:MM:ss",
         isoUtcDateTime: "UTC:yyyy-mm-dd'T'HH:MM:ss'Z'"
     };
-
-
+    
     self.i18n = {
-        dayNames: [
-            "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat",
-            "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
-        ],
-        monthNames: [
-            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-            "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
-        ]
+        'en': {
+            dayNames: [
+                "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat",
+                "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+            ],
+            monthNames: [
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+                "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
+            ],
+            masks: {
+                "default":      "ddd mmm dd yyyy HH:MM:ss",
+                shortDate:      "m/d/yy",
+                shortDate2:      "mm/dd/yyyy",
+                mediumDate:     "mmm d, yyyy",
+                longDate:       "mmmm d, yyyy",
+                fullDate:       "dddd, mmmm d, yyyy"
+            }
+        },
+        'fr': {
+            dayNames: [
+                "Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam",
+                "Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"
+            ],
+            monthNames: [
+                "Jan", "Fév", "Mar", "Avr", "Mai", "Jui", "Juil", "Aoû", "Sep", "Oct", "Nov", "Déc",
+                "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+            ],
+            masks: {
+                "default":      "ddd mmm dd yyyy HH:MM:ss",
+                shortDate:      "d/m/yy",
+                shortDate2:      "dd/mm/yyyy",
+                mediumDate:     "d mmm, yyyy",
+                longDate:       "d mmmm, yyyy",
+                fullDate:       "dddd, d mmmm, yyyy"
+            }
+        }
     };
+    
+    /**
+     * 
+     * @param {string} culture (5 chars) | lang (2 chars) 
+     */
+    var setCulture = function(date, culture) {
+        if (/\-/.test(culture) ) {
+            self.culture = culture;
+            self.lang = culture.split(/\-/)[0];
+        } else {
+            self.lang = culture
+        }      
+        
+        return this
+    }
 
     var format = function(date, mask, utc) {
-        var dF = self;
+        var dF          = self
+            , i18n      = dF.i18n[dF.lang] || dF.i18n['en']
+            , masksList = merge(i18n.masks, dF.masks)
+        ;
+        
+        if ( typeof(dF.i18n[dF.culture]) != 'undefined' ) {
+            i18n  = dF.i18n[dF.culture];
+            if ( typeof(dF.i18n[dF.culture].mask) != 'undefined' ) {
+                masksList = merge(i18n.masks, dF.masks)
+            }
+        }
 
         var	token = /d{1,4}|m{1,4}|yy(?:yy)?|([HhMsTt])\1?|[LloSZ]|"[^"]*"|'[^']*'/g,
             timezone = /\b(?:[PMCEA][SDP]T|(?:Pacific|Mountain|Central|Eastern|Atlantic) (?:Standard|Daylight|Prevailing) Time|(?:GMT|UTC)(?:[-+]\d{4})?)\b/g,
@@ -83,7 +151,7 @@ function DateFormatHelper() {
         date = date ? new Date(date) : new Date();
         if (isNaN(date)) throw SyntaxError("invalid date");
 
-        mask = String(dF.masks[mask] || mask || dF.masks["default"]);
+        mask = String(masksList[mask] || mask || masksList["default"]);
 
         // Allow setting the utc argument via the mask
         if (mask.slice(0, 4) == "UTC:") {
@@ -104,12 +172,12 @@ function DateFormatHelper() {
             flags = {
                 d:    d,
                 dd:   pad(d),
-                ddd:  dF.i18n.dayNames[D],
-                dddd: dF.i18n.dayNames[D + 7],
+                ddd:  i18n.dayNames[D],
+                dddd: i18n.dayNames[D + 7],
                 m:    m + 1,
                 mm:   pad(m + 1),
-                mmm:  dF.i18n.monthNames[m],
-                mmmm: dF.i18n.monthNames[m + 12],
+                mmm:  i18n.monthNames[m],
+                mmmm: i18n.monthNames[m + 12],
                 yy:   String(y).slice(2),
                 yyyy: y,
                 h:    H % 12 || 12,
@@ -145,17 +213,17 @@ function DateFormatHelper() {
      *
      * @return {string} maskName
      * */
-    var getMaskNameFromFormat = function (format) {
+    // var getMaskNameFromFormat = function (format) {
 
-        var name = "default";
+    //     var name = "default";
 
-        for (var f in self.masks) {
-            if ( self.masks[f] === format )
-                return f
-        }
+    //     for (var f in self.masks) {
+    //         if ( self.masks[f] === format )
+    //             return f
+    //     }
 
-        return name
-    }
+    //     return name
+    // }
 
 
     /**
@@ -250,13 +318,16 @@ function DateFormatHelper() {
         return copiedDate;
     }
 
-    return {
+    var _proto = {
+        setCulture      : setCulture,
         format          : format,
         countDaysTo     : countDaysTo,
         getDaysTo       : getDaysTo,
         getDaysInMonth  : getDaysInMonth,
         addHours        : addHours
-    }
+    };
+    
+    return _proto
 
 };
 

@@ -1037,7 +1037,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 instance.target.firstChild.className += ' gina-popin-is-active';    
             // overlay
             if ( /gina-popin-is-active/.test(instance.target.firstChild.className) ) {
-                //removeListener(gina, event.target, event.target.getAttribute('id'))
                 removeListener(gina, instance.target, 'open.'+ $popin.id)
             }
 

@@ -2789,8 +2789,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
                     removeListener(gina, $inputs[i], evt);
-                    procced(event.target, evt)
-
+                    procced($inputs[i], evt);
                 } else {
                     procced($inputs[i], evt)
                 }
