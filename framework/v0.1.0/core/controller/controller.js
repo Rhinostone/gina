@@ -1080,7 +1080,7 @@ function SuperController(options) {
         // if (typeof(options) != "undefined" && typeof(options.charset) !="undefined") {
         //     local.res.setHeader("charset", options.charset);
         // }
-        if ( !local.res.get('content-type') ) {
+        if ( !local.res.getHeaders()['content-type'] ) {
             local.res.setHeader('content-type', 'text/plain' + '; charset='+ local.options.conf.encoding);
         }
 
