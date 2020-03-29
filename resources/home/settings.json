@@ -11,5 +11,6 @@
     "homedir": "{home_dir}",
     "rundir": "{run_dir}",
     "tmpdir": "{tmp_dir}",
-    "logdir": "{log_dir}"
+    "logdir": "{log_dir}",
+    "culture": "{culture}"
 }

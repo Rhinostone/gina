@@ -1156,13 +1156,17 @@ function ValidatorPlugin(rules, data, formId) {
                
         
         //reset errors
-        $error.style.display = 'none';
-        if (status != 'success') { // handle errors first
+        if ($error)
+            $error.style.display = 'none';
+            
+        if ($error && status != 'success') { // handle errors first
            // console.error('[ mainUploadError ] ', status, data)
             var errMsg = data.message || data.error;         
             
             $error.innerHTML = '<p>'+ errMsg +'</p>';
             fadeIn($error);
+        } else if(!$error && status != 'success') {
+            throw new Error(errMsg)
         } else {
             
             // reset previwContainer

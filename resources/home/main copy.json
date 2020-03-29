@@ -25,5 +25,12 @@
     },
     "def_scheme": {
         "{release}": "http"
+    },
+    "cultures": {
+        "_comment": "e.g.:  en-US, fr-FR",
+        "{release}": [  "en-US", "fr-FR" ]
+    },
+    "def_culture": {
+        "{release}": "en-US"
     }
 }
