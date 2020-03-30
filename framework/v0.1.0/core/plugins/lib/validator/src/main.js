@@ -809,8 +809,12 @@ function ValidatorPlugin(rules, data, formId) {
                                     throw err
                                 }
                             }
-
+                            
+                            
                             triggerEvent(gina, $target, 'error.' + id, result);
+                            // intercept upload
+                            if ( /^gina\-upload/i.test(id) )
+                                onUpload(gina, $target, 'error', id, result);
                             if (hFormIsRequired)
                                 triggerEvent(gina, $target, 'error.' + id + '.hform', result);
                         }
@@ -897,10 +901,15 @@ function ValidatorPlugin(rules, data, formId) {
                                             throw err
                                         }
                                     }
-
+                                                                                                   
                                     triggerEvent(gina, $target, 'error.' + id, result);
+                                    // intercept upload
+                                    if ( /^gina\-upload/i.test(id) )
+                                        onUpload(gina, $target, 'error', id, result);
                                     if (hFormIsRequired)
                                         triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                                        
+                                    return;
                                 }
                                 
                                     
@@ -951,16 +960,53 @@ function ValidatorPlugin(rules, data, formId) {
                                     throw err
                                 }
                             }
+                                                       
 
-                            triggerEvent(gina, $target, 'error.' + id, result);
+                            // intercept upload
+                            if ( /^gina\-upload/i.test(id) )
+                                onUpload(gina, $target, 'error', id, result);
+                                
+                            triggerEvent(gina, $target, 'error.' + id, result);                            
                             if (hFormIsRequired)
                                 triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                                
+                            
                                                          
                         }
 
                             
-                    }
-                }
+                    } /**else if ( xhr.readyState == 4 && xhr.status == 0 ) { // unknown error
+                        // Consider also the request timeout
+                        // Modern browser return readyState=4 and status=0 if too much time passes before the server response.
+                        result = { 'status': 408, 'message': 'XMLHttpRequest Exception: unkown error' };
+                        XHRData = result;
+                        // update toolbar
+                        if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                            try {
+                                // don't refresh for html datas
+                                if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+                                    window.ginaToolbar.update("data-xhr", XHRData);
+                                }
+
+                            } catch (err) {
+                                throw err
+                            }
+                        }
+                        
+                        // intercept upload
+                        if ( /^gina\-upload/i.test(id) ) {
+                            result.message = 'XMLHttpRequest Exception: trying to render an unknwon file.'
+                            onUpload(gina, $target, 'error', id, result);
+                        }
+                        triggerEvent(gina, $target, 'error.' + id, result);
+                            
+                        if (hFormIsRequired)
+                            triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                            
+                        return;
+                    }*/
+                } 
+                    
             };
 
             // catching request progress
@@ -996,6 +1042,9 @@ function ValidatorPlugin(rules, data, formId) {
                 $form.eventData.ontimeout = result;
 
                 triggerEvent(gina, $target, 'error.' + id, result);
+                // intercept upload
+                if ( /^gina\-upload/i.test(id) )
+                    onUpload(gina, $target, 'error', id, result);
                 if (hFormIsRequired)
                     triggerEvent(gina, $target, 'error.' + id + '.hform', result);
             };
@@ -1051,7 +1100,13 @@ function ValidatorPlugin(rules, data, formId) {
                             return processFiles(binaries, boundary, '', 0, function onComplete(err, data, done) {
                                 
                                 if (err) {
-                                    throw err
+                                    //throw err
+                                    triggerEvent(gina, $target, 'error.' + id, err);
+                                    // intercept upload
+                                    if ( /^gina\-upload/i.test(id) )
+                                        onUpload(gina, $target, 'error', id, err);
+                                    if (hFormIsRequired)
+                                        triggerEvent(gina, $target, 'error.' + id + '.hform', err);
                                 } else {
 
                                     if (done) {
@@ -1074,6 +1129,9 @@ function ValidatorPlugin(rules, data, formId) {
                         
                     } catch (err) {
                         triggerEvent(gina, $target, 'error.' + id, err);
+                        // intercept upload
+                        if ( /^gina\-upload/i.test(id) )
+                            onUpload(gina, $target, 'error', id, err);
                         if (hFormIsRequired)
                             triggerEvent(gina, $target, 'error.' + id + '.hform', err);
                     }
@@ -1151,9 +1209,20 @@ function ValidatorPlugin(rules, data, formId) {
             , name      = null
             , $previewContainer     = null
             , files                 = data.files || []
-            , $error                = $mainForm.getElementsByClassName('js-error')[0]
+            , $error                = null
         ;
+        
+        // reset previwContainer
+        if ( uploadProperties.hasPreviewContainer ) {                
+            $previewContainer = document.getElementById(uploadProperties.previewContainer.id);
+            if ($previewContainer)
+                $previewContainer.innerHTML = '';
+        }
                
+        if (uploadProperties.errorField) {
+            $error = document.getElementById(uploadProperties.errorField)
+        }
+        
         
         //reset errors
         if ($error)
@@ -1169,25 +1238,44 @@ function ValidatorPlugin(rules, data, formId) {
             throw new Error(errMsg)
         } else {
             
-            // reset previwContainer
-            if ( uploadProperties.hasPreviewContainer ) {                
-                $previewContainer = document.getElementById(uploadProperties.previewContainer.id);
-                if ($previewContainer)
-                    $previewContainer.innerHTML = '';
-            }
-            
+                        
             var fieldsObjectList = null
                 , $li   = null
                 , $img = null
                 , maxWidth = null
             ;
             for (var f = 0, fLen = files.length; f<fLen; ++f) {
+                // image preview
+                if ( typeof(files[f].preview) == 'undefined' 
+                    && uploadProperties.hasPreviewContainer 
+                    && /^image/.test(files[f].mime)
+                    && files[f].location != ''
+                ) {
+                    $img = document.createElement('IMG');
+                    $img.src = files[f].tmpUri;
+                    $img.style.display = 'none';
+                    maxWidth = $previewContainer.getAttribute('data-preview-max-width') || null;
+                    if ( maxWidth ) {
+                        $img.width = maxWidth
+                    }
+                    
+                    if ( /ul/i.test(uploadProperties.previewContainer.tagName) ) {
+                        $li = document.createElement('LI');
+                        $li.className = 'item';
+                        $li.appendChild($img);
+                        $previewContainer.appendChild($li);                                
+                    } else {
+                        $previewContainer.appendChild($img);
+                    }
+                    fadeIn($img);
+                }
                 // fill the fields to be saved ;)                
                 fieldsObjectList = uploadProperties.uploadFields[f];
                 for (var key in fieldsObjectList) {                    
                     fieldsObjectList[key].value = files[f][key];
                     // handle preview
-                    if (key == 'preview' ) {
+                    if ( key == 'preview' ) {
+                        
                         for (var previewKey in files[f][key]) {  
                             if ( typeof(files[f][key][previewKey]) != 'undefined' && typeof(fieldsObjectList[key][previewKey]) != 'undefined' ) {
                                 fieldsObjectList[key][previewKey].value = files[f][key][previewKey];
@@ -1215,9 +1303,9 @@ function ValidatorPlugin(rules, data, formId) {
                             } else if ( previewKey == 'tmpUri' ) { // without preview
                                 
                             }
-                        }
+                        }                        
                     }                  
-                }
+                } // EO for 
                 
             }
         }
@@ -1978,14 +2066,14 @@ function ValidatorPlugin(rules, data, formId) {
             if ( typeof(duplicateFound[dID]) == 'undefined'  ) {
                 duplicateFound[dID] = true;
             } else {
-                if (!instance.$forms[dID].warned) {
+                if ( typeof(instance.$forms[dID]) != 'undefined' && !instance.$forms[dID].warned) {
                     if (gina.popinIsBinded) {
                         console.warn('Popin/Validator::bindForm($target, customRule): `'+ dID +'` is a duplicate form ID. If not fixed, this could lead to an undesirable behaviour.\n Check inside your popin content');    
                     } else {
                         console.warn('Validator::bindForm($target, customRule): `'+ dID +'` is a duplicate form ID. If not fixed, this could lead to an undesirable behaviour.');
                     }
                     instance.$forms[dID].warned = true;
-                }                    
+                }                  
             }
         }
     }
@@ -2158,6 +2246,7 @@ function ValidatorPlugin(rules, data, formId) {
                     var uploadFormId    = 'gina-upload-' + name.replace(/\[/g, '-').replace(/\]/g, ''); 
                     var eventOnSuccess  = $el.getAttribute('data-gina-form-upload-on-success');
                     var eventOnError    = $el.getAttribute('data-gina-form-upload-on-error');
+                    var errorField    = null;
                     
                     if (files.length > 0) {
                         // create form if not exists
@@ -2251,6 +2340,7 @@ function ValidatorPlugin(rules, data, formId) {
                                         fieldType   = formInputsFields[h].getAttribute('type');
                                         hiddenField = null;
                                         _name       = null;
+                                        errorField= formInputsFields[h].getAttribute('data-gina-form-upload-error') || fieldId + '-error' || null;
                                         
                                         if (fieldType && /hidden/i.test(fieldType) ) {
                                             hiddenField = formInputsFields[h];
@@ -2325,6 +2415,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 $uploadForm.uploadProperties = {                                    
                                     id                  : $el.form.id || $el.getAttribute('id'),
                                     $form               : $el.form,
+                                    errorField          : errorField,
                                     mandatoryFields     : mandatoryFields,
                                     uploadFields        : hiddenFields,
                                     hasPreviewContainer : hasPreviewContainer,
@@ -2333,9 +2424,6 @@ function ValidatorPlugin(rules, data, formId) {
                                 if (hasPreviewContainer) {
                                     $uploadForm.uploadProperties.previewContainer = previewContainer;
                                 }
-                                // if (isPopinContext) {
-                                //     $uploadForm.$activePopin = $activePopin;
-                                // }
                             }
                             
                             if (eventOnSuccess)
@@ -2348,9 +2436,6 @@ function ValidatorPlugin(rules, data, formId) {
                             else
                                 $uploadForm.setAttribute('data-gina-form-event-on-submit-error', 'onGenericXhrResponse');
                             
-                            // var previewId = $el.getAttribute('data-gina-form-upload-preview') || null;
-                            // if (previewId)
-                            //     $uploadForm.setAttribute('data-gina-form-upload-preview', previewId);
                             
                             // adding for to current doccument
                             if (isPopinContext) {
