@@ -1772,8 +1772,7 @@ function Server(options) {
                     var fileSize    = request.headers["content-length"]/1024/1024; //MB
 
                     if (fileSize > maxSize) {
-                        throwError(response, 431, 'Attachment exceeded maximum file size [ '+ opt.maxFieldsSize +' ]');
-                        return false
+                        return throwError(response, 431, 'Attachment exceeded maximum file size [ '+ opt.maxFieldsSize +' ]');                        
                     }
 
                     var uploadDir = opt.uploadDir || os.tmpdir();

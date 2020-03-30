@@ -397,6 +397,7 @@ function Merge() {
                         
                         if (
                             typeof (target[a]) != 'undefined'
+                            && !/null/i.test(target[a])
                             && typeof (target[a][keyComparison]) != 'undefined'
                             && typeof (options[a]) != 'undefined'
                             && typeof (options[a][keyComparison]) != 'undefined'
