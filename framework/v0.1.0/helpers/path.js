@@ -47,6 +47,11 @@ function PathHelper() {
      * */
 
     _ = function(path, force) {
+        
+        if ( typeof(path) == 'undefined' || !path || path == '' || path.length <=2 ) {
+            throw new Error('This source cannot be used: `'+ path +'`')
+        }
+        
         if ( typeof(force) == undefined) {
             force = _this.force = false
         }
@@ -457,6 +462,12 @@ function PathHelper() {
      * */
 
     _.prototype.cp = function(target, excluded, cb) {
+        
+        if ( typeof(target) == 'undefined' || !target || target == '' || target.length <=2 ) {
+            cb( new Error('This target cannot be used: `'+ target +'`'));
+            return;
+        }
+        
         if ( typeof(excluded) == 'function') {
             var cb = excluded;
             excluded = undefined
@@ -709,8 +720,13 @@ function PathHelper() {
         var listTo = ( typeof(listTo) != 'undefined' ) ? listTo : [];
         var i = ( typeof(i) != 'undefined' ) ? i : 0;
 
-        if (sourceDir == undefined || destinationDir == undefined) {
-            end(callback, false)
+        if (
+            sourceDir == undefined 
+            || sourceDir == '' 
+            || destinationDir == undefined 
+            || destinationDir == ''
+        ) {
+            end(callback, new Error('cp() encountred a fatal error. You have to check your paths.\nSource: '+ sourceDir +'\nDestination: ' + destinationDir) )
         } else {
             fs.stat(sourceDir, function(err, stats) {
 
