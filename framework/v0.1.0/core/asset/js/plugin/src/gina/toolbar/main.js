@@ -661,7 +661,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         self.foldingClass = self.foldingClass.match(/gina-toolbar-folding-state-[a-z0-9_-]+/i)[0].replace(/gina-toolbar-folding-state-/, '');
                     } else {
                         hasXhrFlag = true;
-                        self.foldingClass = self.foldingClass.match(/gina-toolbar-xhr-folding-state-[a-z0-9_-]+/i)[0].replace(/gina-toolbar-xhr-folding-state-/, 'xhr-');
+                        if ( typeof(self.foldingClass) != 'undefined' )
+                            self.foldingClass = self.foldingClass.match(/gina-toolbar-xhr-folding-state-[a-z0-9_-]+/i)[0].replace(/gina-toolbar-xhr-folding-state-/, 'xhr-');
                     }
 
                     if ( settings.isUnfolded.indexOf(self.foldingClass) < 0 ) {
