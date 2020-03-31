@@ -85,8 +85,8 @@ function DateFormatHelper() {
         },
         'fr': {
             dayNames: [
-                "Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam",
-                "Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"
+                "dim", "lun", "mar", "mer", "jeu", "ven", "sam",
+                "dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"
             ],
             monthNames: [
                 "Jan", "Fév", "Mar", "Avr", "Mai", "Jui", "Juil", "Aoû", "Sep", "Oct", "Nov", "Déc",
