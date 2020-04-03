@@ -27,7 +27,7 @@
   "copyright": "Copyright (c) 2009-2017 Rhinostone <gina@rhinostone.com>",
   "dependencies": {
     "colors": "^1.1.2",
-    "couchbase": "^3.0.0",
+    "couchbase": "^3.0.1",
     "tar": ""
   },
   "ginaDependencies": {
