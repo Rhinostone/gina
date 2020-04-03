@@ -901,7 +901,12 @@ function PathHelper() {
 
         fs.exists(p, function(exists){
             if ( !exists ) {
-                callback( new Error(' mv() - source [ '+p+' ] does not exists !') )
+                var err = new Error(' mv() - source [ '+p+' ] does not exists !');
+                console.error(err);
+                if ( !callback ) {
+                    throw err
+                }
+                callback(err)
             } else {
                 mv(self, target)
                     .onComplete( function(err, path){
