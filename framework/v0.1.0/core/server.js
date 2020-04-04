@@ -2134,6 +2134,7 @@ function Server(options) {
     
     var processRequestData = function(request, response, next) {
         
+        var bodyStr = null;
         // to compare with /core/controller/controller.js -> getParams()
         switch( request.method.toLowerCase() ) {
             case 'post':
@@ -2149,17 +2150,25 @@ function Server(options) {
 
                             if ( request.body.substr(0,1) == '?')
                                 request.body = request.body.substr(1);
-
+                            
+                            bodyStr = decodeURIComponent(request.body); // it is already a strig for sure
                             // false & true case
-                            if ( /(\"false\"|\"true\"|\"on\")/.test(request.body) )
-                                request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                            if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                                bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
 
-                            obj = parseBody(request.body);
-                            if (obj.count() == 0 && request.body.length > 1) {
-                                try {
-                                    request.post = JSON.parse(request.body);
-                                } catch (err) {}
+                            obj = parseBody(bodyStr);
+                            
+                            try {
+                                if (obj.count() == 0 && bodyStr.length > 1) {
+                                    request.post = obj;
+                                } else {
+                                    request.post = JSON.parse(bodyStr)
+                                }
+                                
+                            } catch (err) {
+                                throwError(response, 500, err, next)
                             }
+                            
                         }
 
                     } catch (err) {
@@ -2172,7 +2181,7 @@ function Server(options) {
                     if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
                         request.body = request.query
                     }
-                    var bodyStr = JSON.stringify(request.body);
+                    bodyStr = JSON.stringify(request.body);
                     // false & true case
                     if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
                         bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
@@ -2229,14 +2238,16 @@ function Server(options) {
                                 request.body = request.body.substr(1);
 
                             // false & true case
-                            if ( /(\"false\"|\"true\"|\"on\")/.test(request.body) )
-                                request.body = request.body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                             bodyStr = decodeURIComponent(request.body); // it is already a strig for sure
+                            // false & true case
+                            if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                                bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
 
-                            obj = parseBody(request.body);
+                            obj = parseBody(bodyStr);
 
-                            if ( typeof(obj) != 'undefined' && obj.count() == 0 && request.body.length > 1 ) {
+                            if ( typeof(obj) != 'undefined' && obj.count() == 0 && bodyStr.length > 1 ) {
                                 try {
-                                    request.put = merge(request.put, JSON.parse(request.body));
+                                    request.put = merge(request.put, obj);
                                 } catch (err) {
                                     console.log('Case `put` #0 [ merge error ]: ' + (err.stack||err.message))
                                 }
@@ -2254,7 +2265,7 @@ function Server(options) {
                     if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
                         request.body = request.query
                     }
-                    var bodyStr = JSON.stringify(request.body);
+                    bodyStr = JSON.stringify(request.body);
                     // false & true case
                     if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
                         bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);

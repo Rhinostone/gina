@@ -1,10 +1,14 @@
 // Imports.
 var fs              = require('fs');
+var util            = require('util');
 //var promisify       = require('util').promisify;
+
 var lib             = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var inherits        = lib.inherits;
 var merge           = lib.merge;
 var console         = lib.logger;
+
+
 
 /**
  * Couchbase Class
@@ -191,6 +195,10 @@ function Couchbase(conn, infos) {
 
 
                     var queryParams = [];
+                    var queryOptions = { // values by default
+                        adhoc: false, 
+                        consistency: 3 
+                    };
                     if (params) {
                         // BO - patch prepared statement case when placeholder is used as a cursor
                         var p                   = []
@@ -218,11 +226,9 @@ function Couchbase(conn, infos) {
                             queryString = qStr;
 
                             index = 0; i = 0; len = p.length;
-                            for (; i < len; ++i) {
-                                //if ( typeof(p[i]) != 'undefined' ) {
-                                    queryParams[index] = p[i];
-                                    ++index;
-                                //}
+                            for (; i < len; ++i) {                                
+                                queryParams[index] = p[i];
+                                ++index;
                             }
 
                         } else { // normal case
@@ -231,42 +237,75 @@ function Couchbase(conn, infos) {
 
                         // EO - patch
                     }
+                    var sdkVersion = conn.sdk.version || 2;
+                    var query = null, execQuery = null, _collection = null;
+                    if ( sdkVersion > 2 ) { // starting from SDK v3
+                        _collection = queryString.match(/\_collection(\s+\=|=)(.*)(\'|\")/);
+                        if (_collection.length > 0) {
+                            _collection = _collection[0];
+                            if ( /\_collection/.test(_collection) ) {
+                                _collection = _collection.replace(/\_collection|\W+/ig, '');
+                            } else {
+                                _collection = null
+                            }
+                        }
+                        
+                        //var bucket = conn._cluster.bucket(conn._name);
+                        //var scope = conn.scope(conn._name);
+                        //var coll = (_collection) ? scope.collection(_collection) :  scope.defaultCollection();
+                        //execQuery = conn._cluster.query;
+                        execQuery = inherits(conn, conn._cluster.query);
+                        
+                        query = queryString;
+                        queryOptions.parameters = queryParams;
+                        
+                    } else { // version 2
+                        // prepared statement
+                        query = N1qlQuery.fromString(queryString);
+                        // query options
+                        // @param {object} options
+                        // @param {string} options.sample
 
+                        // adhoc option: @param {boolean} options.adhoc [ true | false ]
+                        // default is set to false
+                        //queryOptions.adhoc = false;
 
-                    // prepared statement
-                    var query = N1qlQuery.fromString(queryString);
+                        // scan consistency level: @param {number} options.consistency [ 1 | 2 | 3 ]
+                        // Default is set to 1
+                        //
+                        // Default
+                        //  code        : NOT_BOUNDED
+                        //  number      : 1
+                        //  description : This is the default (for single-statement requests).
+                        //
+                        // Request plus
+                        //  code        : REQUEST_PLUS
+                        //  number      : 2
+                        //  description : This implements strong consistency per request.
+                        //
+                        // Statement plus
+                        //  code        : STATEMENT_PLUS
+                        //  number      : 3
+                        //  description : This implements strong consistency per statement.
+                        //
+                        //
+                        // For more, visit :
+                        // - https://blog.couchbase.com/high-performance-consistency/
+                        // - https://developer.couchbase.com/documentation/server/current/architecture/querying-data-with-n1ql.html
+                        //queryOptions.consistency = 3;
+                                // .adhoc(queryOptions.adhoc)
+                                // .consistency(queryOptions.consistency)
+                        // merge options
+                        for (var qOpt in queryOptions) {
+                            if ( typeof(query[ qOpt ]) == 'undefined' ) {
+                                console.warn('N1QL:'+entityName.toLowerCase()+ '#'+ name + ': `'+ qOpt +'` is not a valid queryOption. Ignorig...');
+                                continue;
+                            }
+                            query[ qOpt ]( queryOptions[ qOpt ] )
+                        }
+                    }
 
-                    // query options
-                    // @param {object} options
-                    // @param {string} options.sample
-
-                    // adhoc option: @param {boolean} options.adhoc [ true | false ]
-                    // default is set to false
-                    query.adhoc(false);
-
-                    // scan consistency level: @param {number} options.consistency [ 1 | 2 | 3 ]
-                    // Default is set to 1
-                    //
-                    // Default
-                    //  code        : NOT_BOUNDED
-                    //  number      : 1
-                    //  description : This is the default (for single-statement requests).
-                    //
-                    // Request plus
-                    //  code        : REQUEST_PLUS
-                    //  number      : 2
-                    //  description : This implements strong consistency per request.
-                    //
-                    // Statement plus
-                    //  code        : STATEMENT_PLUS
-                    //  number      : 3
-                    //  description : This implements strong consistency per statement.
-                    //
-                    //
-                    // For more, visit :
-                    // - https://blog.couchbase.com/high-performance-consistency/
-                    // - https://developer.couchbase.com/documentation/server/current/architecture/querying-data-with-n1ql.html
-                    //query.consistency(3);
+                    
 
 
                     // trick to set event on the fly
@@ -275,11 +314,12 @@ function Couchbase(conn, infos) {
                     var self = this;
 
                     if (GINA_ENV_IS_DEV) {
-                        console.debug('[ ' + trigger +' ] '+query.options.statement);
+                        var statement = (sdkVersion <= 2) ? query.options.statement : query;
+                        console.debug('[ ' + trigger +' ] '+statement);
                     }
                     
-                    conn.query(query, queryParams, function(err, data, meta) {
-                        
+                    var onQueryCallback = function(err, data, meta) {
+                                                    
                         if (!data || data.length == 0) {
                             data = null
                         }
@@ -327,23 +367,49 @@ function Couchbase(conn, infos) {
                         }
                         
 
-                    });
-
-                    if ( _mainCallback == null ) {
+                    };
                     
-                        return {
-                            onComplete : function(cb) {
-                                self.once(trigger, function onComplete(err, data, meta){
-                                    try {
-                                        cb(err, data, meta)
-                                    } catch (onCompleteError) {                                        
-                                        cb(onCompleteError)
-                                    }                                    
-                                })
-                            }
+                    var _proto = {
+                        onComplete : function(cb) {
+                            self.once(trigger, function onComplete(err, data, meta){
+                                try {
+                                    cb(err, data, meta)
+                                } catch (onCompleteError) {                                        
+                                    cb(onCompleteError)
+                                }                                    
+                            })
+                        }
+                    };
+                    
+                    if ( sdkVersion > 2 ) { 
+                        var qErr = false, qData = null, qMeta = null;
+                        
+                        if ( _mainCallback == null ) {   
+                            conn._cluster.query.onComplete = _proto;
+                        }
+                        
+                        conn._cluster.query(query, queryOptions)
+                            .catch( function onError(err) {
+                                qErr = err;
+                            })
+                            .then( function onResult(data, meta) {
+                                qData = data;
+                                qMeta = meta;
+                            });
+                            
+                        if ( qErr ) {
+                            onQueryCallback(qErr);
+                        } else {
+                            onQueryCallback(false, qData, qMeta);
+                        }                        
+                        
+                    } else {
+                        conn.query(query, queryParams, onQueryCallback);
+                        
+                        if ( _mainCallback == null ) {                        
+                            return _proto
                         }
                     }
-
                 }
                 
                 
@@ -370,10 +436,10 @@ function Couchbase(conn, infos) {
     var bulkInsert = function(rec, options) {
 
         try {
-            
-            var queryOptions = {
+            var sdkVersion = conn.sdk.version || 2;
+            var queryOptions = { // by default
                 adhoc: false,
-                consistency: 1
+                consistency: 3
             };
             
             if ( typeof(options) != 'undefined' ) {
@@ -403,16 +469,29 @@ function Couchbase(conn, infos) {
             queryString = queryString.substr(0, queryString.length-1);
             queryString += '\nRETURNING '+ this.database +'.*;';
 
-            // prepared statement
-            var query = N1qlQuery
-                            .fromString(queryString)
-                            .adhoc(queryOptions.adhoc)
-                            .consistency(queryOptions.consistency)
-            ;
+            var conn = this.getConnection();
+            var query = null;
+            if ( sdkVersion > 2) { // starting SDK v3
+                var scope = conn.scope(conn._name);
+                var coll = (_collection) ? scope.collection(_collection) :  scope.defaultCollection();                
+                query = merge(queryString, queryOptions);
+            } else {
+                // prepared statement
+                query = N1qlQuery.fromString(queryString);
+                // merge options
+                for (var qOpt in queryOptions) {
+                    if ( typeof(query[ qOpt ]) == 'undefined' ) {
+                        console.warn('N1QL:'+entityName.toLowerCase()+ '#'+ name + ': `'+ qOpt +'` is not a valid queryOption. Ignorig...');
+                        continue;
+                    }
+                    query[ qOpt ]( queryOptions[ qOpt ] )
+                }
+            }
+                
 
             // trick to set event on the fly
             var trigger = 'N1QL:'+ this.name.toLowerCase()+ '#'+ name;
-            var conn = this.getConnection();
+            
 
             var self = this;
             conn.query(query, rec, function(err, data, meta) {
