@@ -435,7 +435,8 @@ function Couchbase(conn, infos) {
      */
     var bulkInsert = function(rec, options) {
 
-        try {
+        try {    
+            var conn        = this.getConnection();                    
             var sdkVersion = conn.sdk.version || 2;
             var queryOptions = { // by default
                 adhoc: false,
@@ -469,7 +470,7 @@ function Couchbase(conn, infos) {
             queryString = queryString.substr(0, queryString.length-1);
             queryString += '\nRETURNING '+ this.database +'.*;';
 
-            var conn = this.getConnection();
+            
             var query = null;
             if ( sdkVersion > 2) { // starting SDK v3
                 var scope = conn.scope(conn._name);
