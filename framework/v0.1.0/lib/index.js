@@ -31,22 +31,23 @@ function Lib() {
 
 
     var self = {
-        Config      : _require('./config'),
+        Config          : _require('./config'),
         //dev     : require('./lib/dev'),//must be at the same level than gina.utils => gina.dev
-        inherits    : _require('./inherits'),
-        helpers     : _require('./../helpers'),
+        inherits        : _require('./inherits'),
+        helpers         : _require('./../helpers'),
         //this one must move to Dev since it's dev related
-        Model       : _require('./model'),
-        Collection  : _require('./collection'),
-        merge       : _require('./merge'),
-        generator   : _require('./generator'),//move to gina.dev
-        Proc        : _require('./proc'),
-        Shell       : _require('./shell'),
-        logger      : _require('./logger'),
-        math        : _require('./math'),
-        routing     : _require('./routing'),
-        archiver    : _require('./archiver'),
-        cmd         : _require('./cmd')
+        Model           : _require('./model'),
+        Collection      : _require('./collection'),
+        merge           : _require('./merge'),
+        generator       : _require('./generator'),//move to gina.dev
+        Proc            : _require('./proc'),
+        Shell           : _require('./shell'),
+        logger          : _require('./logger'),
+        math            : _require('./math'),
+        routing         : _require('./routing'),
+        archiver        : _require('./archiver'),
+        cmd             : _require('./cmd'),
+        SessionStore    : _require('./session-store')
     };
 
     /**
