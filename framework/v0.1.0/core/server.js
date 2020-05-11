@@ -2151,7 +2151,12 @@ function Server(options) {
                             if ( request.body.substr(0,1) == '?')
                                 request.body = request.body.substr(1);
                             
-                            bodyStr = decodeURIComponent(request.body); // it is already a strig for sure
+                            try {
+                                bodyStr = decodeURIComponent(request.body); // it is already a string for sure
+                            } catch (err) {
+                                bodyStr = request.body;
+                            }
+
                             // false & true case
                             if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
                                 bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
@@ -2172,7 +2177,7 @@ function Server(options) {
                         }
 
                     } catch (err) {
-                        var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
+                        var msg = '[ '+request.url+' ]\nCould not evaluate POST.\n'+ err.stack;
                         console.warn(msg);
                     }
 
@@ -2238,7 +2243,12 @@ function Server(options) {
                                 request.body = request.body.substr(1);
 
                             // false & true case
-                             bodyStr = decodeURIComponent(request.body); // it is already a strig for sure
+                            try {
+                                bodyStr = decodeURIComponent(request.body); // it is already a string for sure
+                            } catch (err) {
+                                bodyStr = request.body;
+                            }
+                             
                             // false & true case
                             if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
                                 bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
@@ -2255,7 +2265,7 @@ function Server(options) {
                         }
 
                     } catch (err) {
-                        var msg = '[ '+request.url+' ]\nCould not decodeURIComponent(requestBody).\n'+ err.stack;
+                        var msg = '[ '+request.url+' ]\nCould not evaluate PUT.\n'+ err.stack;
                         console.error(msg);
                         throwError(response, 500, msg);
                     }
