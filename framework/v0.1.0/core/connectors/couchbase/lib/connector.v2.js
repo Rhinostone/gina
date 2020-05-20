@@ -51,7 +51,7 @@ function Connector(dbString) {
      * @param {object} dbString
      * @callback cb
      * */
-    this.connect = function(dbString, cb) {
+    this.connect = async function(dbString, cb) {
         // Attention: the connection is lost 5 minutes once the bucket is opened.
         var conn        = null;
         
@@ -187,21 +187,34 @@ function Connector(dbString) {
                 }
             });
             
-                               
+                              
             self.emit('ready', false, self.instance);  
         }
         
         try {
-                        
-            if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {
-                conn = self.cluster.openBucket(dbString.database, dbString.password);
+            //console.debug('[ CONNECTOR ][ ' + local.bundle +' ] Now creating instance for '+ dbString.database +'...');            
+            if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {                
+                conn = await self.cluster.openBucket(dbString.database, dbString.password, function onBucketOpened(bErr) {
+                    if (bErr) {
+                        cb(bErr)
+                    } else {
+                        conn.sdk        = sdk;
+                        self.instance   = conn;
+                        onConnect(cb); 
+                    }
+                });
             } else {
-                conn = self.cluster.openBucket(dbString.database);
+                conn = await self.cluster.openBucket(dbString.database, function onBucketOpened(bErr) {
+                    if (bErr) {
+                        cb(bErr)
+                    } else {
+                        conn.sdk        = sdk;
+                        self.instance   = conn;
+                        onConnect(cb);
+                    }
+                });
             }
-            
-            conn.sdk        = sdk;
-            self.instance   = conn;
-            onConnect(cb)    
+                        
             
         } catch (err) {
             console.error('[ CONNECTOR ][ ' + local.bundle +' ] couchbase could not connect to bucket `'+ dbString.database +'`\n'+ (err.stack || err.message || err) );
@@ -394,83 +407,6 @@ function Connector(dbString) {
             self.ping(interval, cb, ncb);
         }
     }
-
-    // /**
-    //  * ping
-    //  * Heartbeat to keep connection alive
-    //  *
-    //  * @param {string} interval
-    //  * @callback cb
-    //  * */
-    // this.ping = function(interval, cb) {
-    //     var options = local.options;
-    //     if (options.keepAlive) {
-    //         if ( self.pingId ) {
-    //             clearInterval(self.pingId )
-    //         }
-
-    //         interval    = interval || options.pingInterval; // for a minute
-    //         var value       = interval.match(/\d+/);
-    //         var unit        = null; // will be seconds by default
-    //         try {
-    //             unit = interval.match(/[a-z]+/i)[0]
-    //         } catch(err) {
-    //             unit = 's'
-    //         }
-
-    //         switch ( unit.toLowerCase() ) {
-    //             case 's':
-    //                 interval = value * 1000;
-    //                 break;
-
-    //             case 'm':
-    //                 interval = value * 60 * 1000;
-    //                 break;
-
-    //             case 'h':
-    //                 interval = value * 60 * 60 * 1000;
-    //                 break;
-
-    //             case 'd':
-    //                 interval = value * 60 * 60 * 1000 * 24;
-    //                 break;
-
-    //             default: // seconds
-    //                 interval = value * 1000
-    //         }
-
-    //         self.pingId = setInterval(function onTimeout(){
-                
-    //             if (!self.instance.connected) {
-    //                 console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connecting to couchbase');
-                    
-    //                 self.reconnected = false;
-    //                 self.reconnecting = true;
-    //                 if ( typeof(next) != 'undefined' ) {
-    //                     self.connect(dbString, next)
-    //                 } else {
-    //                     self.connect(dbString)
-    //                 }
-                    
-    //             } else {
-    //                 self.instance.get('heartbeat', function(err, res){
-    //                     //if (err) {
-    //                     //    console.debug('[ CONNECTOR ][ ' + local.bundle +' ] ping encountered the following error: \n'+ ( err.stack || err.message || err ) );                            
-    //                     //} else {
-    //                         console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connection is being kept alive ...')
-    //                     //}                        
-    //                 })
-    //             }
-                                
-    //         }, interval);
-    //         cb()
-    //     } else {
-    //         self.instance.get('heartbeat', function(err, result){
-    //             console.debug('[ CONNECTOR ][ ' + local.bundle +' ] sent ping to couchbase ...');               
-    //             cb()
-    //         })
-    //     }
-    // }
 
     this.getInstance = function() {
         return self.instance

@@ -158,7 +158,7 @@ function Model(namespace, _config) {
             }
 
         } else {
-            console.debug('[ MODEL ][ ' + model +' ] no configuration found...');
+            console.warn('[ MODEL ][ ' + model +' ] no configuration found...');
             self.emit('model#ready', new Error('[ MODEL ][ ' + model +' ] no configuration found for your model: ' + model), self.bundle, self.name, null)
         }
 
@@ -168,13 +168,14 @@ function Model(namespace, _config) {
 
     this.connect = function(Connector, callback) {
         if ( typeof(self.connectors[_connector]) == 'undefined' ) {
+            //console.debug('[ MODEL ] Need to create connector instance ...');
             self.connectors[_connector] = {};
             var connector = new Connector( self.getConfig(_connector) );
 
             connector.onReady( function(err, conn){
                 self.connectors[_connector].err = err;
                 self.connectors[_connector].conn = conn;
-
+                
                 callback(err, conn);
             });
 

@@ -178,6 +178,30 @@ function Couchbase(conn, infos) {
                 }
                 
                 
+                    // entities[entityName].prototype[name].onComplete = function(cb) {
+                    //     var _mainCallback = null;
+
+                    //     if ( params && params.length != args.length && !/function/.test(typeof(args[args.length-1])) ) {
+                    //         throw new Error('[ N1QL:' + entityName+'#'+name+'() ] arguments must match parameters length. Please refer to [ '+ source +' ]\nFound in param list: ('+ params.join(', ') +') !')
+                    //     } else if ( /function/.test( typeof(args[args.length-1]) ) ) {
+                    //         // to hande Nodejs Util.promisify
+                    //         _mainCallback = args[args.length-1]
+                    //     }
+                    //     if ( _mainCallback == null ) { 
+                    //         // trick to set event on the fly
+                    //         var trigger = 'N1QL:'+entityName.toLowerCase()+ '#'+ name;
+                    //         console.debug('registered trigger: ', trigger);
+                    //         this.once(trigger, function onComplete(err, data, meta){
+                    //             console.debug('received ', trigger);
+                    //             try {
+                    //                 cb(err, data, meta)
+                    //             } catch (onCompleteError) {                                        
+                    //                 cb(onCompleteError)
+                    //             }                                    
+                    //         })
+                    //     }
+                    // }
+                    
                 entities[entityName].prototype[name] = function() {
                     var key     = null
                         , index = null
@@ -318,6 +342,8 @@ function Couchbase(conn, infos) {
                         console.debug('[ ' + trigger +' ] '+statement);
                     }
                     
+                    
+                    
                     var onQueryCallback = function(err, data, meta) {
                                                     
                         if (!data || data.length == 0) {
@@ -355,7 +381,12 @@ function Couchbase(conn, infos) {
                             if ( _mainCallback != null ) {
                                 _mainCallback(err, data, meta)
                             } else {
-                                self.emit(trigger, err, data, meta);
+                                //console.debug('self.emit ? ', typeof(self), typeof(self.emit));
+                                if (err) {
+                                    self.emit(trigger, err);
+                                } else {
+                                    self.emit(trigger, err, data, meta);
+                                }                                
                             }
                             
                         } catch (_err) {
@@ -371,44 +402,92 @@ function Couchbase(conn, infos) {
                     
                     var _proto = {
                         onComplete : function(cb) {
+                            //console.debug('registered trigger: ', trigger);
                             self.once(trigger, function onComplete(err, data, meta){
+                                //console.debug('received ', trigger, meta, err);
+                                //console.debug('received ', trigger);
                                 try {
                                     cb(err, data, meta)
                                 } catch (onCompleteError) {                                        
                                     cb(onCompleteError)
                                 }                                    
-                            })
+                            });
+                            
+                            conn.query(query, queryParams, onQueryCallback);
                         }
                     };
+                                        
                     
                     if ( sdkVersion > 2 ) { 
                         var qErr = false, qData = null, qMeta = null;
                         
-                        if ( _mainCallback == null ) {   
-                            conn._cluster.query.onComplete = _proto;
-                        }
+                        // if ( _mainCallback == null ) {   
+                        //     conn._cluster.query.onComplete = _proto;
+                        // }
                         
-                        conn._cluster.query(query, queryOptions)
-                            .catch( function onError(err) {
-                                qErr = err;
-                            })
-                            .then( function onResult(data, meta) {
-                                qData = data;
-                                qMeta = meta;
-                            });
-                            
-                        if ( qErr ) {
-                            onQueryCallback(qErr);
+                        if ( _mainCallback == null ) {  
+                            return {
+                                onComplete : function(cb) {
+                                    console.debug('registered trigger: ', trigger);
+                                    self.once(trigger, function onComplete(err, data, meta){
+                                        console.debug('received ', trigger);
+                                        try {
+                                            cb(err, data, meta)
+                                        } catch (onCompleteError) {                                        
+                                            cb(onCompleteError)
+                                        }                                    
+                                    });
+                                    
+                                    conn._cluster.query(query, queryOptions)
+                                        .catch( function onError(err) {
+                                            qErr = err;
+                                        })
+                                        .then( function onResult(data, meta) {
+                                            qData = data;
+                                            qMeta = meta;
+                                        });
+                                                            
+                                    try {
+                                        if ( qErr ) {
+                                            onQueryCallback(qErr);
+                                        } else {
+                                            onQueryCallback(false, qData, qMeta);
+                                        } 
+                                    } catch (_err) {
+                                        console.error(_err.stack);
+                                    }
+                                }
+                            }
                         } else {
-                            onQueryCallback(false, qData, qMeta);
-                        }                        
+                            conn._cluster.query(query, queryOptions)
+                                .catch( function onError(err) {
+                                    qErr = err;
+                                })
+                                .then( function onResult(data, meta) {
+                                    qData = data;
+                                    qMeta = meta;
+                                });
+                                                    
+                            try {
+                                if ( qErr ) {
+                                    onQueryCallback(qErr);
+                                } else {
+                                    onQueryCallback(false, qData, qMeta);
+                                } 
+                            } catch (_err) {
+                                console.error(_err.stack);
+                            }
+                        }   
+                                                   
                         
-                    } else {
-                        conn.query(query, queryParams, onQueryCallback);
+                    } else {                             
                         
-                        if ( _mainCallback == null ) {                        
-                            return _proto
+                        if ( _mainCallback == null ) {                              
+                            return _proto 
+                        } else {
+                            conn.query(query, queryParams, onQueryCallback); 
                         }
+                        
                     }
                 }
                 

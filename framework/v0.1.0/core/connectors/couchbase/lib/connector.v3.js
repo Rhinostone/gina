@@ -193,15 +193,36 @@ function Connector(dbString) {
         
         try {
                         
-            if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {
-                conn = self.cluster.bucket(dbString.database, dbString.password);
-            } else {
-                conn = self.cluster.bucket(dbString.database);
-            }
+            // if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {
+            //     conn = self.cluster.bucket(dbString.database, dbString.password);
+            // } else {
+            //     conn = self.cluster.bucket(dbString.database);
+            // }
             
-            conn.sdk        = sdk;
-            self.instance   = conn;   
-            onConnect(cb)
+            // conn.sdk        = sdk;
+            // self.instance   = conn;   
+            // onConnect(cb)
+            if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {                
+                conn = await self.cluster.openBucket(dbString.database, dbString.password, function onBucketOpened(bErr) {
+                    if (bErr) {
+                        cb(bErr)
+                    } else {
+                        conn.sdk        = sdk;
+                        self.instance   = conn;
+                        onConnect(cb); 
+                    }
+                });
+            } else {
+                conn = await self.cluster.openBucket(dbString.database, function onBucketOpened(bErr) {
+                    if (bErr) {
+                        cb(bErr)
+                    } else {
+                        conn.sdk        = sdk;
+                        self.instance   = conn;
+                        onConnect(cb);
+                    }
+                });
+            }
             
         } catch (err) {
             console.error('[ CONNECTOR ][ ' + local.bundle +' ] '+ local.env +' ] couchbase could not connect to bucket `'+ dbString.database +'`\n'+ (err.stack || err.message || err) );
