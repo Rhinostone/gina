@@ -451,7 +451,7 @@ function ModelUtil() {
      * @return {object} model - Model entities
      * */
     getModel = function(bundle, model) {
-
+        
         var ctx       = getContext();
 
         if (arguments.length == 1 || !bundle) {
@@ -538,6 +538,7 @@ function ModelUtil() {
 
                 if ( typeof(self.models[bundle][model]['getConnection']) == 'undefined' ) {
                     self.models[bundle][model]['getConnection'] = function() {
+                        //console.debug('[ MODEL ][ '+ name +' ][ '+ bundle +'] getting model ...');
                         return self.models[bundle][model]['_connection']
                     }
                 }
@@ -546,6 +547,8 @@ function ModelUtil() {
             } catch (err) {
                 return undefined
             }
+        } else {
+            throw new Error('[ MODEL ][ '+ name +' ][ '+ bundle +'] No model found !');
         }
     }
 
