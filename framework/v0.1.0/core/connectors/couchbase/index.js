@@ -177,30 +177,6 @@ function Couchbase(conn, infos) {
                     entities[entityName].prototype._filename      = _( __dirname + '/lib/n1ql.js', true );
                 }
                 
-                
-                    // entities[entityName].prototype[name].onComplete = function(cb) {
-                    //     var _mainCallback = null;
-
-                    //     if ( params && params.length != args.length && !/function/.test(typeof(args[args.length-1])) ) {
-                    //         throw new Error('[ N1QL:' + entityName+'#'+name+'() ] arguments must match parameters length. Please refer to [ '+ source +' ]\nFound in param list: ('+ params.join(', ') +') !')
-                    //     } else if ( /function/.test( typeof(args[args.length-1]) ) ) {
-                    //         // to hande Nodejs Util.promisify
-                    //         _mainCallback = args[args.length-1]
-                    //     }
-                    //     if ( _mainCallback == null ) { 
-                    //         // trick to set event on the fly
-                    //         var trigger = 'N1QL:'+entityName.toLowerCase()+ '#'+ name;
-                    //         console.debug('registered trigger: ', trigger);
-                    //         this.once(trigger, function onComplete(err, data, meta){
-                    //             console.debug('received ', trigger);
-                    //             try {
-                    //                 cb(err, data, meta)
-                    //             } catch (onCompleteError) {                                        
-                    //                 cb(onCompleteError)
-                    //             }                                    
-                    //         })
-                    //     }
-                    // }
                     
                 entities[entityName].prototype[name] = function() {
                     var key     = null
@@ -383,9 +359,18 @@ function Couchbase(conn, infos) {
                             } else {
                                 //console.debug('self.emit ? ', typeof(self), typeof(self.emit));
                                 if (err) {
-                                    self.emit(trigger, err);
+                                    if ( typeof(self.emit) != 'undefined' ) {
+                                        self.emit(trigger, err);
+                                    } else { // Promise case
+                                        throw err
+                                    }
+                                    
                                 } else {
-                                    self.emit(trigger, err, data, meta);
+                                    if ( typeof(self.emit) != 'undefined' ) {
+                                        self.emit(trigger, err, data, meta);
+                                    } else { // Promise case
+                                        return data
+                                    }                                    
                                 }                                
                             }
                             
@@ -396,16 +381,16 @@ function Couchbase(conn, infos) {
                                 throw new Error('[ Couchbase ][ Core Entity Exception] '+ trigger + '\n'+ _err.stack)
                             }                            
                         }
-                        
-
                     };
                     
-                    var _proto = {
-                        onComplete : function(cb) {
-                            //console.debug('registered trigger: ', trigger);
+                    self._isRegisteredFromProto = false;
+                    var register = function (trigger, queryParams, onQueryCallback, cb) {                        
+                        
+                        if ( typeof(self.once) != 'undefined' && typeof(cb) != 'undefined' ) {
+                            self._isRegisteredFromProto = true;
+                            //console.debug('registered trigger: ', trigger, self._isRegisteredFromProto);
                             self.once(trigger, function onComplete(err, data, meta){
                                 //console.debug('received ', trigger, meta, err);
-                                //console.debug('received ', trigger);
                                 try {
                                     cb(err, data, meta)
                                 } catch (onCompleteError) {                                        
@@ -414,6 +399,19 @@ function Couchbase(conn, infos) {
                             });
                             
                             conn.query(query, queryParams, onQueryCallback);
+                        } // else  promise case                                              
+                            
+                        
+                        if (!self._isRegisteredFromProto) {
+                            //console.debug('regular trigger: ', trigger, self._isRegisteredFromProto);
+                            conn.query(query, queryParams, onQueryCallback);
+                        }
+                    }
+                    
+                    var _proto = {
+                        onComplete : function(cb) {                            
+                            //console.debug('onComplete trigger: ', trigger, self._isRegisteredFromProto);
+                            register(trigger, queryParams, onQueryCallback, cb)
                         }
                     };
                                         
@@ -430,7 +428,7 @@ function Couchbase(conn, infos) {
                                 onComplete : function(cb) {
                                     console.debug('registered trigger: ', trigger);
                                     self.once(trigger, function onComplete(err, data, meta){
-                                        console.debug('received ', trigger);
+                                        console.debug('received ', trigger);                                        
                                         try {
                                             cb(err, data, meta)
                                         } catch (onCompleteError) {                                        
@@ -482,16 +480,18 @@ function Couchbase(conn, infos) {
                         
                     } else {                             
                         
-                        if ( _mainCallback == null ) {                              
+                        if ( _mainCallback == null ) {      
+                            setTimeout((trigger, queryParams, onQueryCallback) => {
+                                if (!self._isRegisteredFromProto) {
+                                    register(trigger, queryParams, onQueryCallback); // needed when used as a synchrone method 
+                                }
+                            }, 0, trigger, queryParams, onQueryCallback);             
                             return _proto 
                         } else {
-                            conn.query(query, queryParams, onQueryCallback); 
-                        }
-                        
+                            register(trigger, queryParams, onQueryCallback, _mainCallback)
+                        }                        
                     }
                 }
-                
-                
 
             } catch (err) {
                 console.error(err.stack);
