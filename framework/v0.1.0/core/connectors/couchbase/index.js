@@ -378,7 +378,11 @@ function Couchbase(conn, infos) {
                             if ( _mainCallback != null ) {
                                 _mainCallback(err, data, meta)
                             } else {
-                                throw new Error('[ Couchbase ][ Core Entity Exception] '+ trigger + '\n'+ _err.stack)
+                                if ( typeof(self.emit) != 'undefined' ) {
+                                    self.emit(trigger, _err);
+                                } else {
+                                    throw new Error('[ Couchbase ][ Core Entity Exception] '+ trigger + '\n'+ _err.stack)    
+                                }                                
                             }                            
                         }
                     };
