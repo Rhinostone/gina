@@ -235,10 +235,13 @@ function Logger(opt) {
 
     var parse = function(parse, obj, str) {
 
-        var l = 0, len = obj.count(), isArray = (obj instanceof Array) ? true : false;
+        var l           = 0
+            , len       = obj.count()
+            , isArray   = (obj instanceof Array) ? true : false
+        ;
         str += (isArray) ? '[ ' : '{';
 
-        //log('object count '+ obj.count());
+        
         for (var attr in obj) {
             ++l;
             if (obj[attr] instanceof Function) {
