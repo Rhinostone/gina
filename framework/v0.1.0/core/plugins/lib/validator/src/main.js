@@ -1935,7 +1935,7 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
     }
-
+    
     var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
                         
         if (i == len) { // end
@@ -2005,6 +2005,76 @@ function ValidatorPlugin(rules, data, formId) {
         
         //return
     }
+
+    // var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
+                        
+    //     if (i == len) { // end
+    //         eval(root +'=value');
+    //         return rootObj
+    //     }
+        
+    //     var key = args[i].replace(/^\[|\]$/g, '');
+
+    //     // init root object
+    //     if ( typeof(rootObj) == 'undefined' ) {
+            
+    //         rootObj = {};
+    //         root = 'rootObj';
+            
+    //         root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
+    //         eval(root +'=obj');      
+    //     } else {
+    //         root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
+    //     }
+        
+
+    //     var nextKey = ( typeof(args[i + 1]) != 'undefined' ) ? args[i + 1].replace(/^\[|\]$/g, '') : null;
+    //     var valueType = ( nextKey && parseInt(nextKey) == nextKey ) ? [] : {}
+    //     if ( nextKey ) {            
+    //         eval(root +' = valueType');
+    //     }
+        
+    //     if ( typeof(obj[key]) == 'undefined' ) {
+
+    //         if (/^\d+$/.test(nextKey)) { // collection index ?
+    //             obj[key] = [];
+    //         } else {
+    //             obj[key] = {};
+    //         }
+    //         // //var _keyVal = (/^\d+$/.test(nextKey)) ? [] : {};
+    //         // eval(root +'=obj[key]');
+
+    //         ++i;
+    //         //return makeObjectFromArgs(root, args, obj[key], len, i, value);
+    //         return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
+    //     }
+        
+    //     ++i;
+    //     return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
+
+    //     // if ( Array.isArray(obj) ) {
+    //     //     for (var n = 0, nLen = obj.length; n < nLen; ++n) {
+
+    //     //         if (n == key) {
+    //     //             ++i;
+    //     //             return makeObjectFromArgs(root, args, obj[n], len, i, value);
+    //     //             //makeObjectFromArgs(root, args, obj[key], len, i, value);
+    //     //         }
+    //     //     }
+    //     // } else {
+    //         // for (var k in obj) {
+
+    //         //     if (k == key) {
+    //         //         ++i;
+    //         //         return makeObjectFromArgs(root, args, obj[key], len, i, value);
+    //         //         //makeObjectFromArgs(root, args, obj[key], len, i, value);
+    //         //     }
+    //         // }
+    //     //}
+            
+        
+    //     //return
+    // }
 
     /**
      * makeObject - Preparing form data
