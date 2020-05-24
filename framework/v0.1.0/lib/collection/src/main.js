@@ -413,7 +413,7 @@ function Collection(content, options) {
                     tmpContent[o] = {}
                 }
                 
-                if (!/undefined|function/.test(typeof (tmpContent[o]))) {
+                if (!/undefined|function/.test( typeof(tmpContent[o]))) {
                     for (var l = 0, lLen = filters.count(); l<lLen; ++l) {
                         filter = filters[l];
                         condition = filter.count();
