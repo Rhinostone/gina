@@ -800,6 +800,7 @@ function Server(options) {
                 , defName   = null
                 , d = null
                 , dLen = null
+                , cssMatched = null
             ;
             var cssArr = null, classNames = null, assetsInClassFound = {};
             for (; i < len; ++i) {
@@ -824,7 +825,12 @@ function Server(options) {
                         url = cssArr[c].match(/((background\:url|url)+\()([A-Za-z0-9-_.,:"'%/\s+]+).*?\)+/g)[0].replace(/((background\:url|url)+\(|\))/g, '').trim();                    
                         if ( typeof(assetsInClassFound[url]) != 'undefined') continue; // already defined
                         
-                        definition = cssArr[c].match(/((\.[A-Za-z0-9-_.,;:"'%\s+]+)(\s+\{|{))/)[0].replace(/\{/g, '');
+                        cssMatched = cssArr[c].match(/((\.[A-Za-z0-9-_.,;:"'%\s+]+)(\s+\{|{))/);
+                        if ( !cssMatched ) {
+                            console.warn('[ HTTP2 ][ ASSETS ][ cssMatchedException ] Unable to parse for url or font: `'+ cssFiles[i]+'`');
+                            continue;
+                        }
+                        definition = cssMatched[0].replace(/\{/g, '');
                         
                         classNames = definition.replace(/\./g, '').split(/\s+/);
                                         
