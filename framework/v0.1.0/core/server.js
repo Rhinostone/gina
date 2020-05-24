@@ -827,7 +827,7 @@ function Server(options) {
                         
                         cssMatched = cssArr[c].match(/((\.[A-Za-z0-9-_.,;:"'%\s+]+)(\s+\{|{))/);
                         if ( !cssMatched ) {
-                            console.warn('[ HTTP2 ][ ASSETS ][ cssMatchedException ] Unable to parse for url or font: `'+ cssFiles[i]+'`');
+                            console.warn('[ HTTP2 ][ ASSETS ][ cssMatchedException ] Unable to parse `'+ cssFiles[i] +'` for url : `'+ url +'`');
                             continue;
                         }
                         definition = cssMatched[0].replace(/\{/g, '');
