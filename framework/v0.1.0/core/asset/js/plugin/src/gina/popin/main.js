@@ -247,6 +247,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             evt = 'click';// click proxy
             // for proxies, use popinInstance.id as target is always `document`
             addListener(gina, document, evt, function(event) {
+                
+                if ( event.target.getAttribute('disabled') != null && event.target.getAttribute('disabled') != 'false' ) {
+                    return false;
+                }
 
                 if ( typeof(event.target.id) == 'undefined' ) {
                     event.target.setAttribute('id', evt +'.'+ uuid.v4() );
@@ -264,7 +268,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 if ( /^popin\.click\./.test(event.target.id) ) {
                     cancelEvent(event);
                     //console.log('popin.click !! ', event.target);
-                    var _evt = event.target.id;
+                    var _evt = event.target.id;                    
 
                     if ( new RegExp( '^popin.click.gina-popin-' + instance.id).test(_evt) )
                         triggerEvent(gina, event.target, _evt, event.detail);
@@ -322,6 +326,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 
                 addListener(gina, $element, 'click', function(event) {
                     cancelEvent(event);
+                    
+                    if ( event.target.getAttribute('disabled') != null && event.target.getAttribute('disabled') != 'false' ) {
+                        return false;
+                    }
                     
                     if ( type == 'link' ) {
                         
