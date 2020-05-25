@@ -827,8 +827,8 @@ function Server(options) {
                         
                         //cssMatched = cssArr[c].match(/((\.[A-Za-z0-9-_.,;:"'%\s+]+)(\s+\{|{))/);
                         cssMatched = cssArr[c].match(/((\.[A-Za-z0-9->~_.,;:"'%\s+]+)(\s+\{|{))/);
-                        if ( !cssMatched ) {
-                            console.warn('[ HTTP2 ][ ASSETS ][ cssMatchedException ] Unable to parse `'+ cssFiles[i] +'` for url : '+ url);
+                        if ( !cssMatched ) { // might be a symbol problem : not supported by the regex
+                            console.warn('[ HTTP2 ][ ASSETS ][ cssMatchedException ] `'+ cssFiles[i] +'`: unable to match definition for url : '+ url +'\n'+ cssArr[c]);
                             continue;
                         }
                         definition = cssMatched[0].replace(/\{/g, '');
