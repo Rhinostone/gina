@@ -822,12 +822,13 @@ function Server(options) {
                     
                     if ( /(url\(|url\s+\()/.test(cssArr[c]) && !/data\:|\@font-face/.test(cssArr[c]) ) {
                         
-                        url = cssArr[c].match(/((background\:url|url)+\()([A-Za-z0-9-_.,:"'%/\s+]+).*?\)+/g)[0].replace(/((background\:url|url)+\(|\))/g, '').trim();                    
+                        url = cssArr[c].match(/((background\:url|url)+\()([A-Za-z0-9->~_.,:"'%/\s+]+).*?\)+/g)[0].replace(/((background\:url|url)+\(|\))/g, '').trim();                    
                         if ( typeof(assetsInClassFound[url]) != 'undefined') continue; // already defined
                         
-                        cssMatched = cssArr[c].match(/((\.[A-Za-z0-9-_.,;:"'%\s+]+)(\s+\{|{))/);
+                        //cssMatched = cssArr[c].match(/((\.[A-Za-z0-9-_.,;:"'%\s+]+)(\s+\{|{))/);
+                        cssMatched = cssArr[c].match(/((\.[A-Za-z0-9->~_.,;:"'%\s+]+)(\s+\{|{))/);
                         if ( !cssMatched ) {
-                            console.warn('[ HTTP2 ][ ASSETS ][ cssMatchedException ] Unable to parse `'+ cssFiles[i] +'` for url : `'+ url +'`');
+                            console.warn('[ HTTP2 ][ ASSETS ][ cssMatchedException ] Unable to parse `'+ cssFiles[i] +'` for url : '+ url);
                             continue;
                         }
                         definition = cssMatched[0].replace(/\{/g, '');
