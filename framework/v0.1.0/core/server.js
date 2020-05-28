@@ -2119,8 +2119,8 @@ function Server(options) {
                         request.body += chunk.toString()
                     });
 
-                    request.on('end', function onEnd() {                                                
-                        processRequestData(request, response, next)
+                    request.on('end', function onEnd() {  
+                        processRequestData(request, response, next);
                     });
 
                     if (request.end) request.end();                    
@@ -2210,9 +2210,12 @@ function Server(options) {
                 //     Responses to this method are not cacheable,
                 //     unless the response includes appropriate cache-control or expires header fields.
                 //     However, the 303 (See Other) response can be used to direct the user agent to retrieve a cacheable resource.
-                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
-                response.setHeader('pragma', 'no-cache');
-                response.setHeader('expires', '0');
+                if ( !response.headersSent ) {
+                    response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                    response.setHeader('pragma', 'no-cache');
+                    response.setHeader('expires', '0');
+                }
+                
 
                 // cleaning
                 request.query   = undefined;
@@ -2273,8 +2276,7 @@ function Server(options) {
 
                     } catch (err) {
                         var msg = '[ '+request.url+' ]\nCould not evaluate PUT.\n'+ err.stack;
-                        console.error(msg);
-                        throwError(response, 500, msg);
+                        throwError(response, 500, msg, next);
                     }
 
                 } else {
@@ -2322,8 +2324,7 @@ function Server(options) {
             if (!req.handled) {
                 req.handled = true;
                 if (err) {
-                    if (!res.headersSent)
-                        throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                    throwError(response, 500, 'Internal server error\n' + err.stack, next)
                 } else {                                    
                     handle(req, res, next, bundle, pathname, config)                                                                       
                 }
