@@ -319,7 +319,6 @@ function Couchbase(conn, infos) {
                     }
                     
                     
-                    
                     var onQueryCallback = function(err, data, meta) {
                                                     
                         if (!data || data.length == 0) {
@@ -486,11 +485,12 @@ function Couchbase(conn, infos) {
                         
                         if ( _mainCallback == null ) {      
                             setTimeout((trigger, queryParams, onQueryCallback) => {
-                                if (!self._isRegisteredFromProto) {
+                                if (!self._isRegisteredFromProto) {                                    
                                     register(trigger, queryParams, onQueryCallback); // needed when used as a synchrone method 
                                 }
                             }, 0, trigger, queryParams, onQueryCallback);             
                             return _proto 
+                           
                         } else {
                             register(trigger, queryParams, onQueryCallback, _mainCallback)
                         }                        

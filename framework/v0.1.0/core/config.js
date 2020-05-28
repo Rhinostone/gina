@@ -1330,6 +1330,23 @@ function Config(opt) {
                         noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);  
                     }
                     
+                    if (!files['templates'][section].stylesheetsExcluded) {
+                        if ( /^_common$/.test(section) ) {
+                            noneDefaultCss = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);    
+                        } else {
+                            // filter when a common script url is redeclared in the current section : isCommon `true` -> `false`
+                            if ( noneDefaultCss.length > 0 )
+                                noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss, true);
+                            else
+                                noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss);
+                        }
+                    } else if ( 
+                        typeof(files['templates'][section].stylesheetsExcluded) != 'undefined' 
+                        && files['templates'][section].stylesheetsExcluded == '*' 
+                    ) {
+                        noneDefaultCss = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);  
+                    }
+                    
                     
                     // force js rechecking on `name` & `url`
                     t = 0;
