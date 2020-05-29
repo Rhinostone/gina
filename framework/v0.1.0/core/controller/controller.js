@@ -229,6 +229,9 @@ function SuperController(options) {
             
             var routing = local.options.conf.routing = ctx.config.envConf.routing; // all routes
             set('page.environment.routing', escape(JSON.stringify(routing))); // export for GFF
+            //reverseRouting
+            var reverseRouting = local.options.conf.reverseRouting = ctx.config.envConf.reverseRouting; // all routes
+            set('page.environment.reverseRouting', escape(JSON.stringify(reverseRouting))); // export for GFF
             
             var forms = local.options.conf.forms = options.conf.content.forms // all forms
             set('page.environment.forms', escape(JSON.stringify(forms))); // export for GFF
@@ -614,8 +617,13 @@ function SuperController(options) {
                         // rules are now unique per bundle : rule@bundle
                         rule = route + '@' + config.bundle;
                         
-
-                        if ( typeof(routing[rule]) != 'undefined' ) { //found
+                        // var matchedMethod = ( 
+                        //     typeof(routing[rule]) != 'undefined' && Array.isArray(routing[rule].method) && routing[rule].method.indexOf(local.req.method) > -1 
+                        //     || 
+                        //     typeof(routing[rule]) != 'undefined' && new RegExp(local.req.method, 'i').test(routing[rule].method) 
+                        // ) ? true : false;
+                        
+                        if ( typeof(routing[rule]) != 'undefined' /**&& matchedMethod*/ ) { //found
                             url = routing[rule].url;
                             
                             if ( typeof(routing[rule].requirements) != 'undefined' ) {
@@ -678,11 +686,10 @@ function SuperController(options) {
                                 url = hostname + url
                             }
                             
-                            //url = route;
-                            // if (hostname.length > 0 && /^\//.test(url) ) {
-                            //     url = url.substr(1);
-                            // } 
-                            // url = hostname + url
+                            //if ( route == url ) {
+                                return '404:['+ local.req.method +']'+rule
+                            //}
+                            
                         }
 
                         return url

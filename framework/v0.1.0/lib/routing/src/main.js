@@ -34,6 +34,7 @@ function Routing() {
     
     self.allowedMethods         = ['get', 'post', 'put', 'delete'];
     self.allowedMethodsString   = self.allowedMethods.join(',');
+    self.notFound               = [];
     
     // loading plugins
     var plugins = null, Validator = null;
@@ -603,19 +604,20 @@ function Routing() {
             method = arguments[1], bundle = undefined;
         }
 
-        var matched         = false
-            , hostname      = null
-            , config        = null
-            , env           = null
-            , webroot       = null
-            , prefix        = null
-            , pathname      = null
-            , params        = null            
-            , routing       = null
-            , isRoute       = null
-            , foundRoute    = null
-            , route         = null
-            , routeObj      = null
+        var matched             = false
+            , hostname          = null
+            , config            = null
+            , env               = null
+            , webroot           = null
+            , prefix            = null
+            , pathname          = null
+            , params            = null            
+            , routing           = null
+            , reverseRouting    = null
+            , isRoute           = null
+            , foundRoute        = null
+            , route             = null
+            , routeObj          = null
         ;
 
         if (isGFFCtx) {
@@ -623,6 +625,7 @@ function Routing() {
             bundle          = (typeof (bundle) != 'undefined') ? bundle : config.bundle;
             env             = config.env;
             routing         = config.getRouting(bundle);
+            reverseRouting  = config.reverseRouting;
             isXMLRequest    = ( typeof(isXMLRequest) != 'undefined' ) ? isXMLRequest : false; // TODO - retrieve the right value
 
             hostname        = config.hostname;
@@ -724,12 +727,48 @@ function Routing() {
             } //EO for break out
 
         if (!matched) {
-            if (isGFFCtx) {
-                console.warn('[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route not found for url: `' + url + '` !');
+            if (isGFFCtx) {                
+                var notFound = null, msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route [ %r ] not found for url: `' + url + '` !';
+                if ( gina.hasPopinHandler && gina.popinIsBinded ) {
+                    notFound = gina.popin.getActivePopin().target.innerHTML.match(/404\:\[\w+\][a-z 0-9-_@]+/);
+                    notFound = (notFound && notFound.length > 0) ? notFound[0] : null;
+                    if (notFound && self.notFound.indexOf(notFound) < 0 ) {
+                        self.notFound.push(notFound);
+                        var m = notFound.match(/\[\w+\]/)[0];
+                        
+                        notFound = notFound.replace('404:'+m, m.replace(/\[|\]/g, '')+'::' );
+                        msg = msg.replace(/\%r/, notFound.replace(/404\:\s+/, ''));
+                        
+                        console.warn(msg);                               
+                        return false  
+                    }  
+                    notFound = null;     
+                               
+                }
+                // forms
+                var altRule = gina.config.reverseRouting[url] || null;
+                var altRoute = self.compareUrls(params, url, request) || null;
+                //self.compareUrls(params, url, request).request.routing.rule
+                if (
+                    !notFound 
+                    && altRule
+                    && typeof(altRule) != 'undefined'
+                    && altRule.split(/\@(.+)$/)[1] == bundle
+                    ||
+                    altRoute.past
+                ) {
+                    altRule = (altRule) ? altRule : altRoute.request.routing.rule;
+                    msg = msg.replace(/\%r/, method.toUpperCase() +'::'+ altRule);
+                } else {
+                    msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : no route found for url: `' + url + '` !'
+                }
+                
+                console.warn(msg);                               
                 return false
             }
 
-            console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method, request]) ] : route not found for url: `' + url + '` !').stack )
+            
+            console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method, request]) ] : route not found for url: `' + url + '` !').stack );
             
             return false;
         } else {

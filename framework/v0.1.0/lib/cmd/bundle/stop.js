@@ -82,7 +82,7 @@ function Stop(opt, cmd) {
                         //console.debug('\n'+ row.join('\n'));
                         //console.debug('kill -TERM ', proc, arr);
 
-                        exec('kill -TERM ' + proc, function(err, data) {
+                        exec('kill -9 ' + proc, function(err, data) {
                             if (!err) {
                                 ++opt.offlineCount;
                                 console.info('Bundle [ ' + bundle + '@' + self.projectName + ' ] with PID [ ' + proc + ' ] stopped !');
