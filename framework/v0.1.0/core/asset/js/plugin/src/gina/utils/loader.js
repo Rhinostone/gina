@@ -34,6 +34,8 @@ window['onGinaLoaded']      = function(gina) {
             'hostname': '{{ page.environment.hostname }}',
             /**@js_externs routing*/
             'routing': JSON.parse(unescape('{{ page.environment.routing }}')),
+            /**@js_externs reverseRouting*/
+            'reverseRouting': JSON.parse(unescape('{{ page.environment.reverseRouting }}')),
             /**@js_externs forms*/
             //'forms': JSON.parse(unescape('{{ page.environment.forms }}')),
             /**@js_externs version*/

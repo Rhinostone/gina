@@ -1091,7 +1091,7 @@ function Config(opt) {
                     urls = routing[rule].url.split(/\,/g);                    
                     r = 0; rLen = urls.length;
                     for (; r < rLen; ++r) {                        
-                        reverseRouting[ routing[rule][urls[r]] ] = rule
+                        reverseRouting[ urls[r] ] = rule
                     }
                 } else {
                     reverseRouting[ routing[rule].url ] = rule
