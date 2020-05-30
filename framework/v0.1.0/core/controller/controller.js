@@ -764,14 +764,21 @@ function SuperController(options) {
                                         //.replace(/(defer\s)/g, '')
                                         //.replace(/\s+\<script/g, '\n<script async')
                                         .replace(/\s+\<script/g, '\n<script');
+                                        
+                            // var stylesheets = data.page.view.stylesheets;
+                            // stylesheets = stylesheets
+                            //             .replace(/\s+\<link/g, '\n<link');
+                                                    
                             if (!isProxyHost) {
                                 var webroot = data.page.environment.webroot;
-                                scripts = scripts.replace(/src\=\"\/(.*)\"/g, 'src="'+ webroot +'$1"')
+                                scripts = scripts.replace(/src\=\"\/(.*)\"/g, 'src="'+ webroot +'$1"');
+                                //stylesheets = stylesheets.replace(/href\=\"\/(.*)\"/g, 'href="'+ webroot +'$1"')
                             }
                             
                             // iframe case - without HTML TAG
                             if (self.isXMLRequest() || !/\<html/.test(layout) ) {                                
-                                layout += scripts;  
+                                layout += scripts; 
+                                //layout += stylesheets;  
                             }                            
                                                                    
                         }
