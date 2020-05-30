@@ -2818,6 +2818,7 @@ function Merge() {
                         
                         if (
                             typeof (target[a]) != 'undefined'
+                            && !/null/i.test(target[a])
                             && typeof (target[a][keyComparison]) != 'undefined'
                             && typeof (options[a]) != 'undefined'
                             && typeof (options[a][keyComparison]) != 'undefined'
@@ -3627,6 +3628,13 @@ function on(event, cb) {
 };
 define("utils/events", function(){});
 
+/*
+ * This file is part of the gina package.
+ * Copyright (c) 2016 Rhinostone <gina@rhinostone.com>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
 /**
  * Credits & thanks to Steven Levithan :)
  * http://blog.stevenlevithan.com/archives/date-time-format
@@ -3650,18 +3658,27 @@ define("utils/events", function(){});
  * @param {string} mask
  */
 function DateFormatHelper() {
+    
+    var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+
+    var merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
 
     var self = {};
+    // language-country
+    self.culture = 'en-US'; // by default
+    self.lang = 'en'; // by default
 
     self.masks = {
+        // i18n
         "default":      "ddd mmm dd yyyy HH:MM:ss",
-        cookieDate:     "GMT:ddd, dd mmm yyyy HH:MM:ss",
-        logger:       "[yyyy mmm dd HH:MM:ss]",
         shortDate:      "m/d/yy",
         shortDate2:      "mm/dd/yyyy",
         mediumDate:     "mmm d, yyyy",
         longDate:       "mmmm d, yyyy",
         fullDate:       "dddd, mmmm d, yyyy",
+        // common
+        cookieDate:     "GMT:ddd, dd mmm yyyy HH:MM:ss",
+        logger:       "[yyyy mmm dd HH:MM:ss]",
         shortTime:      "h:MM TT",
         shortTime2:      "h:MM",
         mediumTime:     "h:MM:ss TT",
@@ -3676,21 +3693,73 @@ function DateFormatHelper() {
         isoDateTime:    "yyyy-mm-dd'T'HH:MM:ss",
         isoUtcDateTime: "UTC:yyyy-mm-dd'T'HH:MM:ss'Z'"
     };
-
-
+    
     self.i18n = {
-        dayNames: [
-            "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat",
-            "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
-        ],
-        monthNames: [
-            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-            "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
-        ]
+        'en': {
+            dayNames: [
+                "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat",
+                "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+            ],
+            monthNames: [
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+                "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"
+            ],
+            masks: {
+                "default":      "ddd mmm dd yyyy HH:MM:ss",
+                shortDate:      "m/d/yy",
+                shortDate2:      "mm/dd/yyyy",
+                mediumDate:     "mmm d, yyyy",
+                longDate:       "mmmm d, yyyy",
+                fullDate:       "dddd, mmmm d, yyyy"
+            }
+        },
+        'fr': {
+            dayNames: [
+                "dim", "lun", "mar", "mer", "jeu", "ven", "sam",
+                "dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"
+            ],
+            monthNames: [
+                "Jan", "Fév", "Mar", "Avr", "Mai", "Jui", "Juil", "Aoû", "Sep", "Oct", "Nov", "Déc",
+                "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+            ],
+            masks: {
+                "default":      "ddd mmm dd yyyy HH:MM:ss",
+                shortDate:      "d/m/yy",
+                shortDate2:      "dd/mm/yyyy",
+                mediumDate:     "d mmm, yyyy",
+                longDate:       "d mmmm, yyyy",
+                fullDate:       "dddd, d mmmm, yyyy"
+            }
+        }
     };
+    
+    /**
+     * 
+     * @param {string} culture (5 chars) | lang (2 chars) 
+     */
+    var setCulture = function(date, culture) {
+        if (/\-/.test(culture) ) {
+            self.culture = culture;
+            self.lang = culture.split(/\-/)[0];
+        } else {
+            self.lang = culture
+        }      
+        
+        return this
+    }
 
     var format = function(date, mask, utc) {
-        var dF = self;
+        var dF          = self
+            , i18n      = dF.i18n[dF.lang] || dF.i18n['en']
+            , masksList = merge(i18n.masks, dF.masks)
+        ;
+        
+        if ( typeof(dF.i18n[dF.culture]) != 'undefined' ) {
+            i18n  = dF.i18n[dF.culture];
+            if ( typeof(dF.i18n[dF.culture].mask) != 'undefined' ) {
+                masksList = merge(i18n.masks, dF.masks)
+            }
+        }
 
         var	token = /d{1,4}|m{1,4}|yy(?:yy)?|([HhMsTt])\1?|[LloSZ]|"[^"]*"|'[^']*'/g,
             timezone = /\b(?:[PMCEA][SDP]T|(?:Pacific|Mountain|Central|Eastern|Atlantic) (?:Standard|Daylight|Prevailing) Time|(?:GMT|UTC)(?:[-+]\d{4})?)\b/g,
@@ -3712,7 +3781,7 @@ function DateFormatHelper() {
         date = date ? new Date(date) : new Date();
         if (isNaN(date)) throw SyntaxError("invalid date");
 
-        mask = String(dF.masks[mask] || mask || dF.masks["default"]);
+        mask = String(masksList[mask] || mask || masksList["default"]);
 
         // Allow setting the utc argument via the mask
         if (mask.slice(0, 4) == "UTC:") {
@@ -3733,12 +3802,12 @@ function DateFormatHelper() {
             flags = {
                 d:    d,
                 dd:   pad(d),
-                ddd:  dF.i18n.dayNames[D],
-                dddd: dF.i18n.dayNames[D + 7],
+                ddd:  i18n.dayNames[D],
+                dddd: i18n.dayNames[D + 7],
                 m:    m + 1,
                 mm:   pad(m + 1),
-                mmm:  dF.i18n.monthNames[m],
-                mmmm: dF.i18n.monthNames[m + 12],
+                mmm:  i18n.monthNames[m],
+                mmmm: i18n.monthNames[m + 12],
                 yy:   String(y).slice(2),
                 yyyy: y,
                 h:    H % 12 || 12,
@@ -3774,17 +3843,17 @@ function DateFormatHelper() {
      *
      * @return {string} maskName
      * */
-    var getMaskNameFromFormat = function (format) {
+    // var getMaskNameFromFormat = function (format) {
 
-        var name = "default";
+    //     var name = "default";
 
-        for (var f in self.masks) {
-            if ( self.masks[f] === format )
-                return f
-        }
+    //     for (var f in self.masks) {
+    //         if ( self.masks[f] === format )
+    //             return f
+    //     }
 
-        return name
-    }
+    //     return name
+    // }
 
 
     /**
@@ -3879,13 +3948,16 @@ function DateFormatHelper() {
         return copiedDate;
     }
 
-    return {
+    var _proto = {
+        setCulture      : setCulture,
         format          : format,
         countDaysTo     : countDaysTo,
         getDaysTo       : getDaysTo,
         getDaysInMonth  : getDaysInMonth,
         addHours        : addHours
-    }
+    };
+    
+    return _proto
 
 };
 
@@ -4316,7 +4388,7 @@ function Collection(content, options) {
                     tmpContent[o] = {}
                 }
                 
-                if (!/undefined|function/.test(typeof (tmpContent[o]))) {
+                if (!/undefined|function/.test( typeof(tmpContent[o]))) {
                     for (var l = 0, lLen = filters.count(); l<lLen; ++l) {
                         filter = filters[l];
                         condition = filter.count();
@@ -4772,14 +4844,14 @@ function Collection(content, options) {
      * @return {objet} instance
      */    
     instance['update'] = function() {
-        var key         = null // comparison key
+        var key         = '_uuid' // comparison key is _uuid by default
             , result    = null
             , filters   = null
             , set       = null
             //, uuidSearchModeEnabled = true
         ;
 
-                
+        // comparison key  : _uuid by default, but can be set to id        
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
@@ -4824,7 +4896,7 @@ function Collection(content, options) {
             for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
                 arr[a] = merge( JSON.parse(JSON.stringify(set) ), arr[a]);
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
-                    if ( result[r].id == arr[a].id ) {
+                    if ( result[r][key] == arr[a][key] ) {
                         result[r] = arr[a];
                         break;
                     }
@@ -4849,7 +4921,7 @@ function Collection(content, options) {
     
     
     instance['replace'] = function() {
-        var key         = null // comparison key
+        var key         = '_uuid' // comparison key
             , result    = null
             , filters   = null
             , set       = null
@@ -4901,7 +4973,7 @@ function Collection(content, options) {
             for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
                 arr[a] = JSON.parse(JSON.stringify(set));
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
-                    if ( result[r].id == arr[a].id ) {
+                    if ( result[r][key] == arr[a][key] ) {
                         result[r] = arr[a];
                         break;
                     }
@@ -4926,7 +4998,7 @@ function Collection(content, options) {
     
     /**
      * .delete({ key: 2 })
-     * .delete({ name: 'Jordan' }, 'id') where id will be use as the `uuid` to compare records
+     * .delete({ name: 'Jordan' }, ''id) where id will be use as the `uuid` to compare records
      * 
      * AND syntax
      * .delete({ car: 'toyota', color: 'red' })
@@ -5276,6 +5348,7 @@ function Routing() {
     
     self.allowedMethods         = ['get', 'post', 'put', 'delete'];
     self.allowedMethodsString   = self.allowedMethods.join(',');
+    self.notFound               = [];
     
     // loading plugins
     var plugins = null, Validator = null;
@@ -5845,19 +5918,20 @@ function Routing() {
             method = arguments[1], bundle = undefined;
         }
 
-        var matched         = false
-            , hostname      = null
-            , config        = null
-            , env           = null
-            , webroot       = null
-            , prefix        = null
-            , pathname      = null
-            , params        = null            
-            , routing       = null
-            , isRoute       = null
-            , foundRoute    = null
-            , route         = null
-            , routeObj      = null
+        var matched             = false
+            , hostname          = null
+            , config            = null
+            , env               = null
+            , webroot           = null
+            , prefix            = null
+            , pathname          = null
+            , params            = null            
+            , routing           = null
+            , reverseRouting    = null
+            , isRoute           = null
+            , foundRoute        = null
+            , route             = null
+            , routeObj          = null
         ;
 
         if (isGFFCtx) {
@@ -5865,6 +5939,7 @@ function Routing() {
             bundle          = (typeof (bundle) != 'undefined') ? bundle : config.bundle;
             env             = config.env;
             routing         = config.getRouting(bundle);
+            reverseRouting  = config.reverseRouting;
             isXMLRequest    = ( typeof(isXMLRequest) != 'undefined' ) ? isXMLRequest : false; // TODO - retrieve the right value
 
             hostname        = config.hostname;
@@ -5966,12 +6041,48 @@ function Routing() {
             } //EO for break out
 
         if (!matched) {
-            if (isGFFCtx) {
-                console.warn('[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route not found for url: `' + url + '` !');
+            if (isGFFCtx) {                
+                var notFound = null, msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route [ %r ] not found for url: `' + url + '` !';
+                if ( gina.hasPopinHandler && gina.popinIsBinded ) {
+                    notFound = gina.popin.getActivePopin().target.innerHTML.match(/404\:\[\w+\][a-z 0-9-_@]+/);
+                    notFound = (notFound && notFound.length > 0) ? notFound[0] : null;
+                    if (notFound && self.notFound.indexOf(notFound) < 0 ) {
+                        self.notFound.push(notFound);
+                        var m = notFound.match(/\[\w+\]/)[0];
+                        
+                        notFound = notFound.replace('404:'+m, m.replace(/\[|\]/g, '')+'::' );
+                        msg = msg.replace(/\%r/, notFound.replace(/404\:\s+/, ''));
+                        
+                        console.warn(msg);                               
+                        return false  
+                    }  
+                    notFound = null;     
+                               
+                }
+                // forms
+                var altRule = gina.config.reverseRouting[url] || null;
+                var altRoute = self.compareUrls(params, url, request) || null;
+                //self.compareUrls(params, url, request).request.routing.rule
+                if (
+                    !notFound 
+                    && altRule
+                    && typeof(altRule) != 'undefined'
+                    && altRule.split(/\@(.+)$/)[1] == bundle
+                    ||
+                    altRoute.past
+                ) {
+                    altRule = (altRule) ? altRule : altRoute.request.routing.rule;
+                    msg = msg.replace(/\%r/, method.toUpperCase() +'::'+ altRule);
+                } else {
+                    msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : no route found for url: `' + url + '` !'
+                }
+                
+                console.warn(msg);                               
                 return false
             }
 
-            console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method, request]) ] : route not found for url: `' + url + '` !').stack )
+            
+            console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method, request]) ] : route not found for url: `' + url + '` !').stack );
             
             return false;
         } else {
@@ -6420,9 +6531,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
  * */
 
 function insertAfter(referenceNode, newNode) {
-    //console.log('inserting after ',referenceNode, newNode, referenceNode.nextSibling);
     referenceNode.parentNode.insertBefore(newNode, referenceNode.nextSibling)
-
 }
 
 function getElementsByAttribute(attribute) {
@@ -7055,9 +7164,10 @@ function FormValidatorUtil(data, $fields) {
 
             // test if val is a string
             if ( typeof(val) == 'string' ) {
-                isValid = true;
+                //isValid = true;
 
                 if ( !errors['isRequired'] && val != '' ) {
+                    isValid = true;
                     // if so also test max and min length if defined
                     if (minLength && typeof(minLength) == 'number' && val.length < minLength) {
                         isMinLength = false;
@@ -7326,6 +7436,7 @@ function ValidatorPlugin(rules, data, formId) {
         registerEvents(this.plugin, events);
 
         require('utils/dom');
+        require('utils/effects');
 
     } else {
         var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
@@ -8012,7 +8123,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     result.status = xhr.status;
                                     
                                 // if hasPopinHandler & popinIsBinded
-                                if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler /** && gina.popinIsBinded*/ ) {
+                                if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler ) {
                                     
                                     // select popin by id
                                     var $popin = gina.popin.getActivePopin();
@@ -8073,7 +8184,12 @@ function ValidatorPlugin(rules, data, formId) {
                                 }
                             }
 
-                            triggerEvent(gina, $target, 'success.' + id, result);
+                            // intercept upload
+                            if ( /^gina\-upload/i.test(id) )
+                                onUpload(gina, $target, 'success', id, result);
+                                
+                            triggerEvent(gina, $target, 'success.' + id, result);                            
+                                
                             if (hFormIsRequired)
                                 triggerEvent(gina, $target, 'success.' + id + '.hform', result);
                             
@@ -8102,8 +8218,13 @@ function ValidatorPlugin(rules, data, formId) {
                                     throw err
                                 }
                             }
-
+                            
+                            // intercept upload
+                            if ( /^gina\-upload/i.test(id) )
+                                onUpload(gina, $target, 'error', id, result);
+                                
                             triggerEvent(gina, $target, 'error.' + id, result);
+                            
                             if (hFormIsRequired)
                                 triggerEvent(gina, $target, 'error.' + id + '.hform', result);
                         }
@@ -8190,10 +8311,16 @@ function ValidatorPlugin(rules, data, formId) {
                                             throw err
                                         }
                                     }
-
-                                    triggerEvent(gina, $target, 'error.' + id, result);
+                                                                                       
+                                    // intercept upload
+                                    if ( /^gina\-upload/i.test(id) )
+                                        onUpload(gina, $target, 'error', id, result);
+                                        
+                                    triggerEvent(gina, $target, 'error.' + id, result);                                    
                                     if (hFormIsRequired)
                                         triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                                        
+                                    return;
                                 }
                                 
                                     
@@ -8244,16 +8371,53 @@ function ValidatorPlugin(rules, data, formId) {
                                     throw err
                                 }
                             }
+                                                       
 
-                            triggerEvent(gina, $target, 'error.' + id, result);
+                            // intercept upload
+                            if ( /^gina\-upload/i.test(id) )
+                                onUpload(gina, $target, 'error', id, result);
+                                
+                            triggerEvent(gina, $target, 'error.' + id, result);                            
                             if (hFormIsRequired)
                                 triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                                
+                            
                                                          
                         }
 
                             
-                    }
-                }
+                    } /**else if ( xhr.readyState == 4 && xhr.status == 0 ) { // unknown error
+                        // Consider also the request timeout
+                        // Modern browser return readyState=4 and status=0 if too much time passes before the server response.
+                        result = { 'status': 408, 'message': 'XMLHttpRequest Exception: unkown error' };
+                        XHRData = result;
+                        // update toolbar
+                        if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                            try {
+                                // don't refresh for html datas
+                                if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+                                    window.ginaToolbar.update("data-xhr", XHRData);
+                                }
+
+                            } catch (err) {
+                                throw err
+                            }
+                        }
+                        
+                        // intercept upload
+                        if ( /^gina\-upload/i.test(id) ) {
+                            result.message = 'XMLHttpRequest Exception: trying to render an unknwon file.'
+                            onUpload(gina, $target, 'error', id, result);
+                        }
+                        triggerEvent(gina, $target, 'error.' + id, result);
+                            
+                        if (hFormIsRequired)
+                            triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                            
+                        return;
+                    }*/
+                } 
+                    
             };
 
             // catching request progress
@@ -8288,7 +8452,12 @@ function ValidatorPlugin(rules, data, formId) {
 
                 $form.eventData.ontimeout = result;
 
+                // intercept upload
+                if ( /^gina\-upload/i.test(id) )
+                    onUpload(gina, $target, 'error', id, result);
+                    
                 triggerEvent(gina, $target, 'error.' + id, result);
+                
                 if (hFormIsRequired)
                     triggerEvent(gina, $target, 'error.' + id + '.hform', result);
             };
@@ -8344,7 +8513,15 @@ function ValidatorPlugin(rules, data, formId) {
                             return processFiles(binaries, boundary, '', 0, function onComplete(err, data, done) {
                                 
                                 if (err) {
-                                    throw err
+                                    //throw err
+                                    // intercept upload
+                                    if ( /^gina\-upload/i.test(id) )
+                                        onUpload(gina, $target, 'error', id, err);
+                                        
+                                    triggerEvent(gina, $target, 'error.' + id, err);
+                                    
+                                    if (hFormIsRequired)
+                                        triggerEvent(gina, $target, 'error.' + id + '.hform', err);
                                 } else {
 
                                     if (done) {
@@ -8366,7 +8543,12 @@ function ValidatorPlugin(rules, data, formId) {
                         
                         
                     } catch (err) {
+                        // intercept upload
+                        if ( /^gina\-upload/i.test(id) )
+                            onUpload(gina, $target, 'error', id, err);
+                            
                         triggerEvent(gina, $target, 'error.' + id, err);
+                        
                         if (hFormIsRequired)
                             triggerEvent(gina, $target, 'error.' + id + '.hform', err);
                     }
@@ -8421,6 +8603,151 @@ function ValidatorPlugin(rules, data, formId) {
             }
 
             $form.sent = true;
+        }
+    }
+    
+    var onUpload = function(gina, $target, status, id, data) {
+                
+        var uploadProperties = $target.uploadProperties || null;
+        // {                                    
+        //     id              : String,
+        //     $form           : $Object,
+        //     mandatoryFields : Array,
+        //     uploadFields    : ObjectList
+        //     hasPreviewContainer : Boolean,
+        //     previewContainer : $Object
+        // }
+        
+        if ( !uploadProperties )
+            throw new Error('No uploadProperties found !!');
+        // parent form
+        var $mainForm = uploadProperties.$form;
+        var searchArr   = null
+            , name      = null
+            , $previewContainer     = null
+            , files                 = data.files || []
+            , $error                = null
+        ;
+        
+        // reset previwContainer
+        if ( uploadProperties.hasPreviewContainer ) {                
+            $previewContainer = document.getElementById(uploadProperties.previewContainer.id);
+            if ($previewContainer)
+                $previewContainer.innerHTML = '';
+        }
+               
+        if (uploadProperties.errorField) {
+            $error = document.getElementById(uploadProperties.errorField)
+        }
+        
+        
+        //reset errors
+        if ($error)
+            $error.style.display = 'none';
+            
+        if ($error && status != 'success') { // handle errors first
+           // console.error('[ mainUploadError ] ', status, data)
+            var errMsg = data.message || data.error;         
+            
+            $error.innerHTML = '<p>'+ errMsg +'</p>';
+            fadeIn($error);
+        } else if(!$error && status != 'success') {
+            throw new Error(errMsg)
+        } else {
+            
+                        
+            var fieldsObjectList = null
+                , $li   = null
+                , $img = null
+                , maxWidth = null
+                , ratio = null
+            ;
+            for (var f = 0, fLen = files.length; f<fLen; ++f) {
+                // image preview
+                if ( typeof(files[f].preview) == 'undefined' 
+                    && uploadProperties.hasPreviewContainer 
+                    && /^image/.test(files[f].mime)
+                    && files[f].location != ''
+                ) {
+                    $img = document.createElement('IMG');
+                    $img.src = files[f].tmpUri;
+                    $img.width = files[f].width;
+                    $img.height = files[f].height;
+                    
+                    $img.style.display = 'none';
+                    maxWidth = $previewContainer.getAttribute('data-preview-max-width') || null;
+                    if ( maxWidth && $img.width > maxWidth ) {
+                        ratio = $img.width / maxWidth;
+                        $img.width = maxWidth;
+                        $img.height = $img.height / ratio;
+                    }
+                    
+                    if ( /ul/i.test(uploadProperties.previewContainer.tagName) ) {
+                        $li = document.createElement('LI');
+                        $li.className = 'item';
+                        $li.appendChild($img);
+                        $previewContainer.appendChild($li);                                
+                    } else {
+                        $previewContainer.appendChild($img);
+                    }
+                    fadeIn($img);
+                }
+                // fill the fields to be saved ;)                
+                fieldsObjectList = uploadProperties.uploadFields[f];
+                var $elIgnored = null;
+                for (var key in fieldsObjectList) {                    
+                    // update field value
+                    if ( 
+                        key == 'name' && fieldsObjectList[key].value != '' 
+                        || !files[f][key]
+                        || key == 'preview' && typeof(files[f][key]) == 'undefined'
+                        || /(height|width)/i.test(key) && !/^image/.test(files[f].mime)
+                    ) {
+                        if ( /(preview|height|width)/i.test(key) ) {
+                            $elIgnored = document.getElementById(fieldsObjectList[key].id);
+                            if ( $elIgnored )
+                                $elIgnored.parentNode.removeChild($elIgnored);
+                        }
+                        continue;
+                    }
+                    fieldsObjectList[key].value = files[f][key];
+                    // update submited $fields ??
+                    
+                    // handle preview
+                    if ( key == 'preview' ) {
+                        
+                        for (var previewKey in files[f][key]) {  
+                            if ( typeof(files[f][key][previewKey]) != 'undefined' && typeof(fieldsObjectList[key][previewKey]) != 'undefined' ) {
+                                fieldsObjectList[key][previewKey].value = files[f][key][previewKey];
+                            }
+                            
+                            // with preview
+                            if ( previewKey == 'tmpUri' && uploadProperties.hasPreviewContainer ) {                                
+                                $img = document.createElement('IMG');
+                                $img.src = files[f][key].tmpUri;
+                                $img.style.display = 'none';
+                                maxWidth = $previewContainer.getAttribute('data-preview-max-width') || null;
+                                if ( maxWidth ) {
+                                    $img.width = maxWidth
+                                }
+                                
+                                if ( /ul/i.test(uploadProperties.previewContainer.tagName) ) {
+                                    $li = document.createElement('LI');
+                                    $li.className = 'item';
+                                    $li.appendChild($img);
+                                    $previewContainer.appendChild($li);                                
+                                } else {
+                                    $previewContainer.appendChild($img);
+                                }
+                                fadeIn($img);
+                            } else if ( previewKey == 'tmpUri' ) { // without preview
+                                
+                            }
+                        }                        
+                    }                  
+                } // EO for 
+                
+            }
         }
     }
 
@@ -9016,42 +9343,146 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
     }
-
-    var makeObjectFromArgs = function(root, args, obj, len, i, value) {
-
+    
+    var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
+                        
+        if (i == len) { // end
+            eval(root +'=value');
+            return rootObj
+        }
+        
         var key = args[i].replace(/^\[|\]$/g, '');
 
-
-        if (i == len - 1) { // end
-            obj[key] = value
-
-            return root
+        // init root object
+        if ( typeof(rootObj) == 'undefined' ) {
+            
+            rootObj = {};
+            root = 'rootObj';
+            
+            root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
+            eval(root +'=obj');      
+        } else {
+            root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
         }
+        
 
-        var nextKey = args[i + 1].replace(/^\[|\]$/g, '');
-
-        if (typeof (obj[key]) == 'undefined') {
+        var nextKey = ( typeof(args[i + 1]) != 'undefined' ) ? args[i + 1].replace(/^\[|\]$/g, '') : null;
+        var valueType = ( nextKey && parseInt(nextKey) == nextKey ) ? [] : {}
+        if ( nextKey ) {            
+            eval(root +' = valueType');
+        }
+        
+        if ( typeof(obj[key]) == 'undefined' ) {
 
             if (/^\d+$/.test(nextKey)) { // collection index ?
                 obj[key] = [];
             } else {
                 obj[key] = {};
             }
+            // //var _keyVal = (/^\d+$/.test(nextKey)) ? [] : {};
+            // eval(root +'=obj[key]');
 
             ++i;
-
-            return makeObjectFromArgs(root, args, obj[key], len, i, value);
+            //return makeObjectFromArgs(root, args, obj[key], len, i, value);
+            return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
         }
+        
+        ++i;
+        return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
 
+        // if ( Array.isArray(obj) ) {
+        //     for (var n = 0, nLen = obj.length; n < nLen; ++n) {
 
-        for (var k in obj) {
+        //         if (n == key) {
+        //             ++i;
+        //             return makeObjectFromArgs(root, args, obj[n], len, i, value);
+        //             //makeObjectFromArgs(root, args, obj[key], len, i, value);
+        //         }
+        //     }
+        // } else {
+            // for (var k in obj) {
 
-            if (k == key) {
-                ++i;
-                return makeObjectFromArgs(root, args, obj[key], len, i, value);
-            }
-        }
+            //     if (k == key) {
+            //         ++i;
+            //         return makeObjectFromArgs(root, args, obj[key], len, i, value);
+            //         //makeObjectFromArgs(root, args, obj[key], len, i, value);
+            //     }
+            // }
+        //}
+            
+        
+        //return
     }
+
+    // var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
+                        
+    //     if (i == len) { // end
+    //         eval(root +'=value');
+    //         return rootObj
+    //     }
+        
+    //     var key = args[i].replace(/^\[|\]$/g, '');
+
+    //     // init root object
+    //     if ( typeof(rootObj) == 'undefined' ) {
+            
+    //         rootObj = {};
+    //         root = 'rootObj';
+            
+    //         root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
+    //         eval(root +'=obj');      
+    //     } else {
+    //         root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
+    //     }
+        
+
+    //     var nextKey = ( typeof(args[i + 1]) != 'undefined' ) ? args[i + 1].replace(/^\[|\]$/g, '') : null;
+    //     var valueType = ( nextKey && parseInt(nextKey) == nextKey ) ? [] : {}
+    //     if ( nextKey ) {            
+    //         eval(root +' = valueType');
+    //     }
+        
+    //     if ( typeof(obj[key]) == 'undefined' ) {
+
+    //         if (/^\d+$/.test(nextKey)) { // collection index ?
+    //             obj[key] = [];
+    //         } else {
+    //             obj[key] = {};
+    //         }
+    //         // //var _keyVal = (/^\d+$/.test(nextKey)) ? [] : {};
+    //         // eval(root +'=obj[key]');
+
+    //         ++i;
+    //         //return makeObjectFromArgs(root, args, obj[key], len, i, value);
+    //         return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
+    //     }
+        
+    //     ++i;
+    //     return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
+
+    //     // if ( Array.isArray(obj) ) {
+    //     //     for (var n = 0, nLen = obj.length; n < nLen; ++n) {
+
+    //     //         if (n == key) {
+    //     //             ++i;
+    //     //             return makeObjectFromArgs(root, args, obj[n], len, i, value);
+    //     //             //makeObjectFromArgs(root, args, obj[key], len, i, value);
+    //     //         }
+    //     //     }
+    //     // } else {
+    //         // for (var k in obj) {
+
+    //         //     if (k == key) {
+    //         //         ++i;
+    //         //         return makeObjectFromArgs(root, args, obj[key], len, i, value);
+    //         //         //makeObjectFromArgs(root, args, obj[key], len, i, value);
+    //         //     }
+    //         // }
+    //     //}
+            
+        
+    //     //return
+    // }
 
     /**
      * makeObject - Preparing form data
@@ -9071,7 +9502,7 @@ function ValidatorPlugin(rules, data, formId) {
 
         var key     = args[i].replace(/^\[|\]$/g, '');
         var nextKey = ( i < len-1 && typeof(args[i+1]) != 'undefined' ) ?  args[i+1].replace(/^\[|\]$/g, '') : null;
-
+        
         if ( typeof(obj[key]) == 'undefined' ) {
             if (nextKey && /^\d+$/.test(nextKey)) {
                 nextKey = parseInt(nextKey);
@@ -9081,55 +9512,19 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
 
+        var tmpObj = null;
         if ( Array.isArray(obj[key]) ) {
-            makeObjectFromArgs(obj[key], args, obj[key], args.length, 1, value);
+            //makeObjectFromArgs(obj[key], args, obj[key], args.length, 1, value);
+            tmpObj = makeObjectFromArgs(key, args, obj[key], args.length, 1, value);
+            obj[key] = merge(obj[key], tmpObj);
+            makeObject(obj[key], value, args, len, i + 1);
         } else {
             if (i == len - 1) {
                 obj[key] = value;
-            } else {
+            }// else {
                 makeObject(obj[key], value, args, len, i + 1)
-            }
+            //}
         }
-
-        // for (var o in obj) {
-
-        //     if ( typeof(obj[o]) == 'object' ) {
-
-        //         if ( Array.isArray(obj[o]) ) {
-
-
-        //             if (o === key) {
-
-        //                 // var _args = JSON.parse(JSON.stringify(args));
-        //                 // _args.splice(0, 1);
-
-        //                 // for (var a = i, aLen = _args.length; a < aLen; ++a) {
-        //                 //     key = _args[a].replace(/^\[|\]$/g, '');
-        //                 //     if ( /^\d+$/.test(key) ) {
-        //                 //         key = parseInt(key)
-        //                 //     }
-        //                 //     obj[o][nextKey] = {};
-
-        //                 //     if (a == aLen-1) {
-        //                 //         obj[o][nextKey][key] = value;
-        //                 //     }
-        //                 // }
-        //                 //obj[o] = makeObjectFromArgs(obj[o], args, obj[o], args.length, 0, value);
-        //                 makeObjectFromArgs(obj[o], args, obj[o], args.length, 0, value);
-                        
-        //             }
-
-        //         } else if ( o === key ) {
-
-        //             if (i == len-1) {
-        //                 obj[o] = value;
-        //             } else {
-        //                 makeObject(obj[o], value, args, len, i+1)
-        //             }
-        //         }
-        //     }
-        // }
-
     }
 
     var formatData = function (data) {
@@ -9137,37 +9532,92 @@ function ValidatorPlugin(rules, data, formId) {
         var args        = null
             , obj       = {}
             , key       = null
-            , fields    = {};
+            , fields    = {}
+            , altName   = null;
+            
+        
+        
+        // for (var name in data) {
 
-        for (var name in data) {
+        //     if ( /\[(.*)\]/.test(name) ) {
+        //         // backup name key
+        //         key = name;
 
+        //         // properties
+        //         args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
+
+        //         // root
+        //         name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
+        //         altName    = name.replace(/.*\[(.+)\]$/, "$1");
+                
+        //         if ()
+                    
+        //         // building object tree
+        //         makeObject(obj, data[key], args, args.length, 0);
+
+        //         //if ( Array.isArray(obj) ) {
+        //         //    fields[name] = merge(fields[name], obj);
+        //         //} else {
+        //             if ( typeof(fields[altName]) == 'undefined') {
+        //                 fields[altName] = Array.isArray(obj) ? [] : {};
+        //             }
+        //             fields[altName] = merge(fields[altName], obj);
+        //         //}
+                
+        //         obj = {}
+
+        //     } else {
+        //         fields[name] = data[name];
+        //     }
+        //     altName = null;
+        // }
+
+        var makeFields = function(fields, isObject, data, len, i) {
+            if (i == len ) { // exit
+                return fields
+            }
+            
+            var name = (isObject) ? Object.keys(data)[i] : i;
+            
             if ( /\[(.*)\]/.test(name) ) {
                 // backup name key
                 key = name;
-
                 // properties
                 args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
-
                 // root
                 name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
-
+                //altName = name.replace(/.*\[(.+)\]$/, "$1");
+                
+                if ( typeof(fields[name]) == 'undefined' ) {
+                    fields[name] = ( Array.isArray(data[key]) ) ? [] : {};
+                }
                 // building object tree
                 makeObject(obj, data[key], args, args.length, 0);
-
-                //if ( Array.isArray(obj) ) {
-                //    fields[name] = merge(fields[name], obj);
-                //} else {
-                    fields[name] = merge(fields[name], obj);
-                //}
                 
-                obj = {}
-
-            } else {
+                fields[name] = merge(fields[name], obj);
+                obj = {};
+                
+            } else { // normal case
                 fields[name] = data[name];
             }
+            name = null;
+            altName = null;
+            
+            ++i;
+            return makeFields(fields, isObject, data, len, i);            
         }
-
-        return fields
+        
+        var len = ( typeof(data) == 'undefined' ) ? 0 : 1;// by default
+        var isObject = false;
+        if (Array.isArray(data)) {
+            len = data.length;
+        } else if ( typeof(data) == 'object' ) {
+            len = data.count();
+            isObject = true;
+        } 
+        
+        return makeFields(fields, isObject, data, len, 0);
+        //return fields
     }
     
     var checkForDuplicateForm = function(id) {
@@ -9179,14 +9629,14 @@ function ValidatorPlugin(rules, data, formId) {
             if ( typeof(duplicateFound[dID]) == 'undefined'  ) {
                 duplicateFound[dID] = true;
             } else {
-                if (!instance.$forms[dID].warned) {
+                if ( typeof(instance.$forms[dID]) != 'undefined' && !instance.$forms[dID].warned) {
                     if (gina.popinIsBinded) {
                         console.warn('Popin/Validator::bindForm($target, customRule): `'+ dID +'` is a duplicate form ID. If not fixed, this could lead to an undesirable behaviour.\n Check inside your popin content');    
                     } else {
                         console.warn('Validator::bindForm($target, customRule): `'+ dID +'` is a duplicate form ID. If not fixed, this could lead to an undesirable behaviour.');
                     }
                     instance.$forms[dID].warned = true;
-                }                    
+                }                  
             }
         }
     }
@@ -9334,11 +9784,6 @@ function ValidatorPlugin(rules, data, formId) {
                         if (fileElemId)
                             $upload = document.getElementById(fileElemId);
                         
-                            
-                        //$progress = $($(this).parent().find('.progress'));
-                        // reset progress bar
-                        //$progress.text('0%');
-                        //$progress.width('0%');
                         if ($upload) {
                             $upload.value = '';// force reset : != multiple
                             triggerEvent(gina, $upload, 'click', event.detail);  
@@ -9358,22 +9803,196 @@ function ValidatorPlugin(rules, data, formId) {
                     var url             = $el.getAttribute('data-gina-form-upload-action');      
                     var name            = $el.getAttribute('name');
                     var fileId          = name;                    
-                    var uploadFormId    = 'gina-upload-' + name.replace(/\[/g, '-').replace(/\]/g, ''); 
+                    var uploadFormId    = 'gina-upload-' + name.replace(/\[/g, '-').replace(/\]/g, '' + $form.id); 
                     var eventOnSuccess  = $el.getAttribute('data-gina-form-upload-on-success');
-                    var eventOnError  = $el.getAttribute('data-gina-form-upload-on-error');
+                    var eventOnError    = $el.getAttribute('data-gina-form-upload-on-error');
+                    var errorField    = null;
                     
                     if (files.length > 0) {
                         // create form if not exists
-                        var $uploadForm = $htmlTarget.getElementById(uploadFormId);
+                        var $activePopin = null;
+                        var $uploadForm = null;
+                        var isPopinContext = false;
+                        if ( gina.hasPopinHandler && gina.popinIsBinded ) {
+                            $activePopin = gina.popin.getActivePopin();
+                        }
+                        
+                        if ( $activePopin && $activePopin.isOpen ) {
+                            isPopinContext = true;
+                            // getting active popin
+                            $activePopin.$target = new DOMParser().parseFromString($activePopin.target.outerHTML, 'text/html');
+                            // binding to DOM
+                            $activePopin.$target.getElementById($activePopin.id).innerHTML = document.getElementById($activePopin.id).innerHTML;
+                            
+                            $uploadForm = $activePopin.$target.getElementById(uploadFormId);                            
+                        } else {
+                            $uploadForm = document.getElementById(uploadFormId);
+                        }
                         
                         if ( !$uploadForm ) {
-                            $uploadForm = document.createElement('form');
+                            $uploadForm = (isPopinContext) ? $activePopin.$target.createElement('form') : document.createElement('form');
 
                             // adding form attributes
                             $uploadForm.id       = uploadFormId;
                             $uploadForm.action   = url;
                             $uploadForm.enctype  = 'multipart/form-data';
                             $uploadForm.method   = 'POST';
+                                                        
+                            
+                            if ( typeof($el.form) != 'undefined' ) {
+                                
+                                // adding virtual fields
+                                var fieldPrefix = 'files'; // by default
+                                var fieldName   = $el.getAttribute('data-gina-form-upload-prefix') || $el.name || $el.getAttribute('name');
+                                var fieldId     = $el.id || $el.getAttribute('id');
+                                
+                                var hasPreviewContainer = false;
+                                var previewContainer = $el.getAttribute('data-gina-form-upload-preview') || fieldId + '-preview';
+                                previewContainer = (isPopinContext)
+                                                        ? $activePopin.$target.getElementById(previewContainer)
+                                                        : document.getElementById(previewContainer); 
+                                                        
+                                if ( typeof(previewContainer) != 'undefined' ) {
+                                    hasPreviewContainer = true;                                                                                                            
+                                }
+                                
+                                if (fieldName) {
+                                    fieldPrefix = fieldName
+                                }
+                                                                
+                                var hiddenFields        = []
+                                    , hiddenFieldObject = null                                    
+                                    , mandatoryFields   = [
+                                        'name'
+                                        , 'group'
+                                        , 'originalFilename'
+                                        , 'encoding'
+                                        , 'size'
+                                        , 'height' // will be removed depending on the mime type
+                                        , 'width' // will be removed depending on the mime type
+                                        , 'location'
+                                        , 'mime'
+                                        , 'preview'
+                                    ]
+                                    , formInputsFields  = $el.form.getElementsByTagName('INPUT')
+                                    , fieldType         = null
+                                    , hiddenField       = null
+                                    , _userName         = null
+                                    , _altId            = null
+                                    , _name             = null
+                                    , _nameRe           = null
+                                    , subPrefix         = null
+                                    , uploadFields      = {}
+                                ;
+                                
+                                for (var _f = 0, _fLen = files.length; _f < _fLen; ++_f) { // for each file                                    
+                                    
+                                    hiddenFields[_f] = null;
+                                    subPrefix = fieldPrefix + '['+ _f +']';
+                                    _nameRe = new RegExp('^'+subPrefix.replace(/\[/g, '\\[').replace(/\]/g, '\\]'));
+                                    // collecting existing DOM fields
+                                    for (var h = 0, hLen = formInputsFields.length; h < hLen; ++h) {
+                                        fieldType   = formInputsFields[h].getAttribute('type');
+                                        hiddenField = null;
+                                        _name       = null, _userName = null;
+                                        errorField= formInputsFields[h].getAttribute('data-gina-form-upload-error') || fieldId + '-error' || null;
+                                        
+                                        if (fieldType && /hidden/i.test(fieldType) ) {
+                                            hiddenField = formInputsFields[h];
+                                            
+                                            _name = ( /\[\w+\]$/i.test(hiddenField.name) ) ? hiddenField.name.match(/\[\w+\]$/)[0].replace(/\[|\]/g, '') : hiddenField.name;
+                                            // _altId = hiddenField.getAttribute('id');
+                                            // if ( !_altId ) {
+                                            //     _altId = 'input.' + uuid.v4();
+                                            //     hiddenField.id = _altId;
+                                            //     hiddenField.setAttribute('id', _altId);
+                                            // }
+                                            // _name = _altId;
+                                            
+                                            _userName = ( /\[\w+\]$/i.test(hiddenField.name) ) ? hiddenField.name.match(/\[\w+\]$/)[0].replace(/\[|\]/g, '') : hiddenField.name;
+                                            
+                                            // mandatory informations
+                                            if (
+                                                hiddenField 
+                                                && typeof(_name) != 'undefiend' 
+                                                && mandatoryFields.indexOf( _name ) > -1
+                                                && _nameRe.test( hiddenField.name )
+                                            ) {
+                                                
+                                                if (!hiddenFields[_f] )
+                                                    hiddenFields[_f] = {};
+                                                    
+                                                if ( /\[preview\]/i.test(hiddenField.name) ) {
+                                                    if ( typeof(hiddenFields[_f].preview) == 'undefined' )
+                                                        hiddenFields[_f].preview = {};
+                                                        
+                                                    hiddenFields[_f].preview[_name] = hiddenField;
+                                                } else {
+                                                    hiddenFields[_f][_name] = hiddenField;
+                                                }                                        
+                                            } else if (
+                                                hiddenField 
+                                                && typeof(_name) != 'undefiend' 
+                                                && mandatoryFields.indexOf( _name ) < 0
+                                                && _nameRe.test( hiddenField.name )
+                                            ) { // defined by user
+                                                if (!hiddenFields[_f] )
+                                                    hiddenFields[_f] = {};
+                                                    
+                                                if ( /\[preview\]/i.test(hiddenField.name) ) {
+                                                    if ( typeof(hiddenFields[_f].preview) == 'undefined' )
+                                                        hiddenFields[_f].preview = {};
+                                                        
+                                                    hiddenFields[_f].preview[_userName] = hiddenField;
+                                                } else {
+                                                    hiddenFields[_f][_userName] = hiddenField;
+                                                } 
+                                            }
+                                        }                                            
+                                    }
+                                    
+                                    // completing by adding non-declared mandatoring fields in the DOM: all but preview
+                                    for (var m = 0, mLen = mandatoryFields.length; m < mLen; ++m) {
+                                        // optional, must be set by user
+                                        //if ( mandatoryFields[m] == 'preview' )
+                                        //    continue;
+                                        // needs recheck     
+                                        if (!hiddenFields[_f] )
+                                            hiddenFields[_f] = {};
+                                            
+                                        if ( typeof(hiddenFields[_f][ mandatoryFields[m] ]) == 'undefined' ) {
+                                            
+                                            _name = fieldPrefix +'['+ _f +']['+ mandatoryFields[m] +']'; 
+                                            // create input & add it to the form
+                                            $newVirtualField = document.createElement('input');
+                                            $newVirtualField.type = 'hidden';
+                                            $newVirtualField.id = 'input.' + uuid.v4();
+                                            $newVirtualField.name = _name;
+                                            $newVirtualField.value = '';
+                                            
+                                            $el.form.appendChild($newVirtualField);
+                                            hiddenFields[_f][ mandatoryFields[m] ] = $el.form[$el.form.length-1];// last added
+                                        }
+                                                                        
+                                    }
+                                    
+                                } // EO for files
+                                
+                                //$uploadForm.uploadProperties = {
+                                $uploadForm.uploadProperties = {                                    
+                                    id                  : $el.form.id || $el.getAttribute('id'),
+                                    $form               : $el.form,
+                                    //$form               : $form,
+                                    errorField          : errorField,
+                                    mandatoryFields     : mandatoryFields,
+                                    uploadFields        : hiddenFields,
+                                    hasPreviewContainer : hasPreviewContainer,
+                                    isPopinContext      : isPopinContext
+                                };
+                                if (hasPreviewContainer) {
+                                    $uploadForm.uploadProperties.previewContainer = previewContainer;
+                                }
+                            }
                             
                             if (eventOnSuccess)
                                 $uploadForm.setAttribute('data-gina-form-event-on-submit-success', eventOnSuccess);
@@ -9385,13 +10004,14 @@ function ValidatorPlugin(rules, data, formId) {
                             else
                                 $uploadForm.setAttribute('data-gina-form-event-on-submit-error', 'onGenericXhrResponse');
                             
-                            var previewId = $el.getAttribute('data-gina-form-upload-preview') || null;
-                            if (previewId)
-                                $uploadForm.setAttribute('data-gina-form-upload-preview', previewId);
                             
                             // adding for to current doccument
-                            document.body.appendChild($uploadForm);
-
+                            if (isPopinContext) {
+                                //$activePopin.$target.appendChild($uploadForm)
+                                document.getElementById($activePopin.id).appendChild($uploadForm)
+                            } else {
+                                document.body.appendChild($uploadForm)
+                            } 
                         }
                         
                         // binding form
@@ -9410,34 +10030,34 @@ function ValidatorPlugin(rules, data, formId) {
                                 // .on('error', function(e, result) {
                                 //     console.error('[error] ', '\n(e)' + e, '\n(result)' + result)
                                 // })
-                                .on('success', function(e, result){
+                                // .on('success', function(e, result){
                                     
-                                    var $el = e.target;
-                                    var $preview = null, $ul = null, $li = null, $img = null;
-                                    var previewId = $el.getAttribute('data-gina-form-upload-preview') || null;
-                                    if (previewId)
-                                        $preview = document.getElementById(previewId);
+                                //     var $el = e.target;
+                                //     var $preview = null, $ul = null, $li = null, $img = null;
+                                //     var previewId = $el.getAttribute('data-gina-form-upload-preview') || null;
+                                //     if (previewId)
+                                //         $preview = document.getElementById(previewId);
                                     
                                                                         
-                                    var files = result.files;
-                                    if ($preview) {
-                                        $preview.innerHTML = '';
-                                        $ul = document.createElement("ul");
-                                        for (var f = 0, fLen = files.length; f<fLen; ++f) {
-                                            $li = document.createElement("li");
-                                            $img = document.createElement("img");
+                                //     var files = result.files;
+                                //     if ($preview) {
+                                //         $preview.innerHTML = '';
+                                //         $ul = document.createElement("ul");
+                                //         for (var f = 0, fLen = files.length; f<fLen; ++f) {
+                                //             $li = document.createElement("li");
+                                //             $img = document.createElement("img");
                                             
-                                            $img.src = files[f].tmpSrc;
-                                            $img.width = files[f].width;
-                                            $img.height = files[f].height;
+                                //             $img.src = files[f].tmpSrc;
+                                //             $img.width = files[f].width;
+                                //             $img.height = files[f].height;
                                             
-                                            $li.appendChild($img);
-                                            $ul.appendChild($li);
-                                        }
-                                        $preview.appendChild($ul);
-                                    }
+                                //             $li.appendChild($img);
+                                //             $ul.appendChild($li);
+                                //         }
+                                //         $preview.appendChild($ul);
+                                //     }
                                      
-                                })
+                                // })
                                 /**.on('progress', function(evt, result) {
                     
                                 percentComplete = result.progress;
@@ -9687,9 +10307,7 @@ function ValidatorPlugin(rules, data, formId) {
         evt = 'click';
 
         procced = function () {
-            
-            
-            
+                        
             // click proxy            
             addListener(gina, $target, 'click', function(event) {
                 
@@ -9828,8 +10446,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
                     removeListener(gina, $inputs[i], evt);
-                    procced(event.target, evt)
-
+                    procced($inputs[i], evt);
                 } else {
                     procced($inputs[i], evt)
                 }
@@ -10193,6 +10810,61 @@ function ValidatorPlugin(rules, data, formId) {
         var d = new FormValidator(fields, $fields), args = null;
         var fieldErrorsAttributes = {};
         var re = null, flags = null;
+        
+        var checkFieldAgainstRules = function(field, rules, fields) {
+            // looking for regexp aliases from rules
+            if ( typeof (rules[field]) == 'undefined') {                
+                skipTest = false;
+                for (var _r in rules) {
+                    if ( /^\//.test(_r) ) { // RegExp found
+                        re      = _r.match(/\/(.*)\//).pop();                                        
+                        flags   = _r.replace('/'+ re +'/', '');
+                        // fix escaping "[" & "]"
+                        re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+                        re      = new RegExp(re, flags);
+                        if ( re.test(field)  ) { 
+                            skipTest = true;                                                
+                            // create new entry    
+                            rules[field] = rules[_r];                                   
+                            break;
+                        } 
+                    }                                
+                }    
+                
+                //if ( !skipTest ) continue;
+            }
+            
+            // check each field against rule
+            for (var rule in rules[field]) {
+                            
+                // check for rule params
+                try {
+
+                    if (Array.isArray(rules[field][rule])) { // has args
+                        //convert array to arguments
+                        args = JSON.parse(JSON.stringify(rules[field][rule]));
+                        if ( /\$[\w\[\]]*/.test(args[0]) ) {
+                            var foundVariables = args[0].match(/\$[\w\[\]]*/g);
+                            for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
+                                args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
+                            }
+                        }
+                        d[field][rule].apply(d[field], args);
+                    } else {
+                        d[field][rule](rules[field][rule]);
+                    }
+
+                    delete fields[field];
+
+                } catch (err) {
+                    if (rule == 'conditions') {
+                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
+                    } else {
+                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
+                    }
+                }
+            }
+        }
 
         var forEachField = function($form, fields, $fields, rules, cb, i) {
             
@@ -10201,6 +10873,7 @@ function ValidatorPlugin(rules, data, formId) {
             var hasCase = false, isInCase = null, conditions = null;
             var caseValue = null, caseType = null;
             var localRules = null, caseName = null;
+            var localRuleObj = null, skipTest = null;
 
             //console.log('parsing ', fields, $fields, rules);
             if ( typeof(rules) != 'undefined' ) { // means that no rule is set or found
@@ -10212,7 +10885,7 @@ function ValidatorPlugin(rules, data, formId) {
                         console.warn('field `'+ field +'` found for your form rule ('+ $form.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule if this is a mistake.');
                         continue;
                     }
-                    // $fields[field].tagName getAttribute('type')
+                    
                     //if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
                     if (
                         $fields[field].tagName.toLowerCase() == 'input' 
@@ -10232,7 +10905,7 @@ function ValidatorPlugin(rules, data, formId) {
                         if (!/^\_case\_/.test(c) ) continue;
                         if ( typeof(rules[c].conditions) == 'undefined' ) continue;
                         if ( typeof(rules[c].conditions[0].rules) == 'undefined' ) continue;
-                        
+                        // enter cases condition
                         if ( typeof(rules[c].conditions) != 'undefined' && Array.isArray(rules[c].conditions) ) {
                             caseName = c.replace('_case_', '');
                             for (var _c = 0, _cLen = rules[c].conditions.length; _c < _cLen; ++_c) {
@@ -10248,12 +10921,52 @@ function ValidatorPlugin(rules, data, formId) {
                                         // fix escaping "[" & "]"
                                         re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
                                         re      = new RegExp(re, flags);
-                                        if ( re.test(field)  ) {                                                 
+                                        if ( re.test(field)  ) {    
+                                            // depending on the case value, replace/merge original rule with condition rule
+                                            caseValue = $fields[c.replace(/^\_case\_/, '')].value;
+                                            if (isGFFCtx) {
+                                                if (fields[field] == "true")
+                                                    caseValue = true;
+                                                else if (fields[field] == "false")
+                                                    caseValue = false;
+                                            }
+                                            if ( rules[c].conditions[_c].case == caseValue ) {
+                                                localRuleObj = ( typeof(rules[field]) != 'undefined' ) ? rules[field] : {}; 
+                                                rules[field] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
+                                            }
+                                            // check each field against rule
+                                            checkFieldAgainstRules(field, rules, fields);
+                                                                
                                             isInCase = true;                                         
                                             break;
                                         } 
                                     } else {
-                                        if ( typeof(rules[c].conditions[_c].rules[_r]) != 'undefined' && typeof(rules[_r]) == 'undefined' ) {
+                                        if ( typeof(rules[c].conditions[_c].rules[_r]) != 'undefined' ) {
+                                            // depending on the case value, replace/merge original rule with condition rule
+                                            caseField = c.replace(/^\_case\_/, '');
+                                            
+                                            if ( typeof($fields[caseField]) == 'undefined' ) {
+                                                console.warn('ignoring case `'+ c +'`: field `'+ +'` not found in your DOM');
+                                                continue;
+                                            }
+                                            caseValue = $fields[caseField].value;
+                                            if (
+                                                isGFFCtx 
+                                                && /^(true|false)$/i.test(caseValue) 
+                                                && typeof(rules[caseField]) != 'undefined'
+                                                && typeof(rules[caseField].isBoolean) != 'undefined' 
+                                                && /^(true)$/i.test(rules[caseField].isBoolean)
+                                            ) {
+                                                caseValue = ( /^(true)$/i.test(caseValue) ) ? true : false;
+                                            }
+                                            if ( rules[c].conditions[_c].case == caseValue ) {
+                                                localRuleObj = ( typeof(rules[field]) != 'undefined' ) ? rules[field] : {}; 
+                                                rules[field] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
+                                            }
+                                            
+                                            // check each field against rule
+                                            checkFieldAgainstRules(field, rules, fields);
+                                            
                                             isInCase = true;
                                             break;
                                         }  
@@ -10268,42 +10981,67 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                     
                     if (isInCase) continue;
+                    
 
-                    if (!hasCase) {
-                        if (typeof (rules[field]) == 'undefined') continue;
+                    //if (!hasCase) { // normal case
+                                                
+                        // if (typeof (rules[field]) == 'undefined') {
+                        //     // look for regexp aliases from rules
+                        //     skipTest = false;
+                        //     for (var _r in rules) {
+                        //         if ( /^\//.test(_r) ) { // RegExp found
+                        //             re      = _r.match(/\/(.*)\//).pop();                                        
+                        //             flags   = _r.replace('/'+ re +'/', '');
+                        //             // fix escaping "[" & "]"
+                        //             re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+                        //             re      = new RegExp(re, flags);
+                        //             if ( re.test(field)  ) { 
+                        //                 skipTest = true;                                                
+                        //                 // create new entry    
+                        //                 rules[field] = rules[_r];                                   
+                        //                 break;
+                        //             } 
+                        //         }                                
+                        //     }    
+                            
+                        //     if ( !skipTest ) continue;
+                        // }
 
 
                         // check each field against rule
-                        for (var rule in rules[field]) {
-                            // check for rule params
-                            try {
+                        checkFieldAgainstRules(field, rules, fields);
+                        // for (var rule in rules[field]) {
+                            
+                        //     // check for rule params
+                        //     try {
 
-                                if (Array.isArray(rules[field][rule])) { // has args
-                                    //convert array to arguments
-                                    args = JSON.parse(JSON.stringify(rules[field][rule]));
-                                    if ( /\$[\w\[\]]*/.test(args[0]) ) {
-                                        var foundVariables = args[0].match(/\$[\w\[\]]*/g);
-                                        for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
-                                            args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
-                                        }
-                                    }
-                                    d[field][rule].apply(d[field], args);
-                                    // .match(/\$[\w\[\]]*/g)
-                                } else {
-                                    d[field][rule](rules[field][rule]);
-                                }
+                        //         if (Array.isArray(rules[field][rule])) { // has args
+                        //             //convert array to arguments
+                        //             args = JSON.parse(JSON.stringify(rules[field][rule]));
+                        //             if ( /\$[\w\[\]]*/.test(args[0]) ) {
+                        //                 var foundVariables = args[0].match(/\$[\w\[\]]*/g);
+                        //                 for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
+                        //                     args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
+                        //                 }
+                        //             }
+                        //             d[field][rule].apply(d[field], args);
+                        //         } else {
+                        //             d[field][rule](rules[field][rule]);
+                        //         }
 
-                                delete fields[field];
+                        //         delete fields[field];
 
-                            } catch (err) {
-                                if (rule == 'conditions') {
-                                    throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
-                                } else {
-                                    throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
-                                }
-                            }
-                        }
-                    } else {
+                        //     } catch (err) {
+                        //         if (rule == 'conditions') {
+                        //             throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
+                        //         } else {
+                        //             throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
+                        //         }
+                        //     }
+                        // }
+                    //} // else {
+                        
+                    if (hasCase) {
                         ++i; // add sub level
                         conditions = rules['_case_' + field]['conditions'];
 
@@ -10737,6 +11475,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                 // filtering before
                 delete jsonObject.environment.routing;
                 delete ginaJsonObject.environment.routing;
+                delete jsonObject.environment.reverseRouting;
+                delete ginaJsonObject.environment.reverseRouting;
                 delete jsonObject.environment.forms;
                 delete ginaJsonObject.environment.forms;
                 $htmlConfigurationEnvironment.html(parseObject(jsonObject.environment, ginaJsonObject.environment));
@@ -11171,7 +11911,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         self.foldingClass = self.foldingClass.match(/gina-toolbar-folding-state-[a-z0-9_-]+/i)[0].replace(/gina-toolbar-folding-state-/, '');
                     } else {
                         hasXhrFlag = true;
-                        self.foldingClass = self.foldingClass.match(/gina-toolbar-xhr-folding-state-[a-z0-9_-]+/i)[0].replace(/gina-toolbar-xhr-folding-state-/, 'xhr-');
+                        if ( typeof(self.foldingClass) != 'undefined' )
+                            self.foldingClass = self.foldingClass.match(/gina-toolbar-xhr-folding-state-[a-z0-9_-]+/i)[0].replace(/gina-toolbar-xhr-folding-state-/, 'xhr-');
                     }
 
                     if ( settings.isUnfolded.indexOf(self.foldingClass) < 0 ) {
@@ -17430,7 +18171,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             'open'              : null,
             'isOpen'            : false,
             'close'             : null,
-            '$forms'            : []
+            '$forms'            : [],
+            'hasForm'           : false
         };
 
         // imopring other plugins
@@ -17581,40 +18323,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                                 if (!fired) {
                                     fired = true;
-
-                                    //e.target.innerHTML = e.detail;
-
-
-                                    // bind with formValidator if forms are found
-                                    // if ( /<form/i.test(e.target.innerHTML) && typeof($validatorInstance) != 'undefined' ) {
-                                    //     var _id = null;
-                                    //     var $forms = e.target.getElementsByTagName('form');
-                                    //     for (var i = 0, len = $forms.length; i < len; ++i) {
-
-                                    //         if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
-                                    //             _id = $forms[i].getAttribute('id') || 'form.' + uuid.v4();
-                                    //             $forms[i].setAttribute('id', _id);// just in case
-                                    //             $forms[i]['id'] = _id
-                                    //         } else {
-                                    //             _id = $forms[i]['id']
-                                    //         }
-
-                                    //         //console.log('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
-                                    //         if ($popin['$forms'].indexOf(_id) < 0)
-                                    //             $popin['$forms'].push(_id);
-
-                                    //         $forms[i].close = popinClose;
-                                    //         $validatorInstance.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
-
-                                    //         removeListener(gina, $popin.target, e.type);
-                                    //     }
-                                    // }
                                     
                                     popinBind(e, $popin);
                                     if (!$popin.isOpen) {                                        
                                         popinOpen($popin.name);
-                                    }
-                                        
+                                    }                                        
                                 }
                             });
 
@@ -17650,6 +18363,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             evt = 'click';// click proxy
             // for proxies, use popinInstance.id as target is always `document`
             addListener(gina, document, evt, function(event) {
+                
+                if ( event.target.getAttribute('disabled') != null && event.target.getAttribute('disabled') != 'false' ) {
+                    return false;
+                }
 
                 if ( typeof(event.target.id) == 'undefined' ) {
                     event.target.setAttribute('id', evt +'.'+ uuid.v4() );
@@ -17667,7 +18384,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 if ( /^popin\.click\./.test(event.target.id) ) {
                     cancelEvent(event);
                     //console.log('popin.click !! ', event.target);
-                    var _evt = event.target.id;
+                    var _evt = event.target.id;                    
 
                     if ( new RegExp( '^popin.click.gina-popin-' + instance.id).test(_evt) )
                         triggerEvent(gina, event.target, _evt, event.detail);
@@ -17725,6 +18442,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 
                 addListener(gina, $element, 'click', function(event) {
                     cancelEvent(event);
+                    
+                    if ( event.target.getAttribute('disabled') != null && event.target.getAttribute('disabled') != 'false' ) {
+                        return false;
+                    }
                     
                     if ( type == 'link' ) {
                         
@@ -17856,6 +18577,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                     removeListener(gina, $popin.target, eventType);
                 }
+                
+                $popin.hasForm = true;
             }
             
             // binding popin close & links (& its target attributes)
@@ -18207,7 +18930,12 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                                 instance.eventData.success = result;
                                 
-                                triggerEvent(gina, $el, 'loaded.' + id, result);
+                                if ( $popin.isOpen && !$popin.hasForm) {
+                                    popinLoadContent(result, true)                                    
+                                } else {
+                                    triggerEvent(gina, $el, 'loaded.' + id, result);
+                                }
+                                
                                 
                                 updateToolbar(result);
 
@@ -18347,9 +19075,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
          * popinLoadContent
          * 
          * @param {string} html - plain/text
-         * @param {object} [data] - 
+         * @param {boolean} [isRedirecting] - to handle link inside popin without form
          */
-        function popinLoadContent(stringContent) {
+        function popinLoadContent(stringContent, isRedirecting) {
             
             var $popin = getActivePopin(); 
             if ( !$popin.isOpen )
@@ -18360,7 +19088,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             popinUnbind($popin.name, true);          
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);            
             
-            triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
+            if ( typeof(isRedirecting) == 'undefined' || isRedirecting == false )
+                triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
         }
                
         function getScript(source, callback) {
@@ -18432,7 +19161,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 instance.target.firstChild.className += ' gina-popin-is-active';    
             // overlay
             if ( /gina-popin-is-active/.test(instance.target.firstChild.className) ) {
-                //removeListener(gina, event.target, event.target.getAttribute('id'))
                 removeListener(gina, instance.target, 'open.'+ $popin.id)
             }
 
@@ -18557,6 +19285,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 
                 removeListener(gina, $popin.target, 'ready.' + instance.id);
                 
+                if ( $popin.hasForm ) {
+                    $popin.hasForm = false;
+                }
 
                 if ( $el != null && /gina-popin-is-active/.test($el.className) ) {
                     
@@ -18700,6 +19431,38 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
     return Popin
 });
+/**
+ * Operations on element
+ * - animations
+ * */
+function fadeIn(element) {
+    var op = 0.1;  // initial opacity
+    element.style.display = 'block';
+    var timer = setInterval(function () {
+        if (op >= 1){
+            clearInterval(timer);
+        }
+        element.style.opacity = op;
+        element.style.filter = 'alpha(opacity=' + op * 100 + ")";
+        op += op * 0.1;
+    }, 10);
+}
+
+function fadeOut(element) {
+    var op = 1;  // initial opacity
+    var timer = setInterval(function () {
+        if (op <= 0.1){
+            clearInterval(timer);
+            element.style.display = 'none';
+        }
+        element.style.opacity = op;
+        element.style.filter = 'alpha(opacity=' + op * 100 + ")";
+        op -= op * 0.1;
+    }, 50);
+}
+;
+define("utils/effects", function(){});
+
 /**
  * This file is part of the gina package.
  * Copyright (c) 2017 Rhinostone <gina@rhinostone.com>
@@ -18971,6 +19734,7 @@ require([
     // utils
     "utils/dom",
     "utils/events",
+    "utils/effects",
     "utils/inherits",
     //"utils/merge",
     "utils/form-validator",

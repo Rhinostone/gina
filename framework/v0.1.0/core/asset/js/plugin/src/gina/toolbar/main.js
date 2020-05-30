@@ -1148,7 +1148,12 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
                 if ( /^action$/.test(key) ) {
                     
-                    formMethod  = ( typeof(attributes['method']) != 'undefined' ) ? attributes['method'].nodeValue : undefined;                   
+                    formMethod  = ( typeof(attributes['method']) != 'undefined' ) ? attributes['method'].nodeValue : undefined;   
+                    
+                    if (!formMethod) {
+                        console.warn('[ ToolbarFormHelper::UndefinedMethod : form `'+ attributes['id'].nodeValue +'` method attribute cannot be left undefined !');                        
+                    }
+                    
                     routeObj    = routing.getRouteByUrl(val, formMethod);
 
                     if ( typeof(routeObj) == 'undefined' || !routeObj ) {

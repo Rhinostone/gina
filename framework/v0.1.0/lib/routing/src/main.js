@@ -619,6 +619,8 @@ function Routing() {
             , route             = null
             , routeObj          = null
         ;
+        
+        var isMethodProvidedByDefault = ( typeof(method) != 'undefined' ) ? true : false;
 
         if (isGFFCtx) {
             config          = window.gina.config;
@@ -728,41 +730,63 @@ function Routing() {
 
         if (!matched) {
             if (isGFFCtx) {                
-                var notFound = null, msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route [ %r ] not found for url: `' + url + '` !';
+                if ( 
+                    url == '#' 
+                    && /GET/i.test(method) 
+                    && isMethodProvidedByDefault 
+                ) {
+                    url = location.pathname;
+                }
+                var notFound = null, msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route [ %r ] is called but not found inside your view: `' + url + '` !';
                 if ( gina.hasPopinHandler && gina.popinIsBinded ) {
                     notFound = gina.popin.getActivePopin().target.innerHTML.match(/404\:\[\w+\][a-z 0-9-_@]+/);
-                    notFound = (notFound && notFound.length > 0) ? notFound[0] : null;
-                    if (notFound && self.notFound.indexOf(notFound) < 0 ) {
-                        self.notFound.push(notFound);
-                        var m = notFound.match(/\[\w+\]/)[0];
-                        
-                        notFound = notFound.replace('404:'+m, m.replace(/\[|\]/g, '')+'::' );
-                        msg = msg.replace(/\%r/, notFound.replace(/404\:\s+/, ''));
-                        
-                        console.warn(msg);                               
-                        return false  
-                    }  
-                    notFound = null;     
-                               
+                } else {
+                    notFound = document.body.innerHTML.match(/404\:\[\w+\][a-z 0-9-_@]+/);
                 }
+                notFound = (notFound && notFound.length > 0) ? notFound[0] : null;
+                
+                if (notFound && self.notFound.indexOf(notFound) < 0 ) {
+                    self.notFound.push(notFound);
+                    var m = notFound.match(/\[\w+\]/)[0];
+                    
+                    if ( url == '#') {
+                        msg = msg.replace(/\`\#\`/, location.pathname)    
+                    }
+                    notFound = notFound.replace('404:'+m, m.replace(/\[|\]/g, '')+'::' );
+                    
+                    msg = msg.replace(/\%r/, notFound.replace(/404\:\s+/, ''));
+                
+                    console.warn(msg);                               
+                    return false  
+                }  
+                notFound = null;     
+                               
+                
                 // forms
                 var altRule = gina.config.reverseRouting[url] || null;
-                var altRoute = self.compareUrls(params, url, request) || null;
-                //self.compareUrls(params, url, request).request.routing.rule
+                
                 if (
                     !notFound 
                     && altRule
                     && typeof(altRule) != 'undefined'
                     && altRule.split(/\@(.+)$/)[1] == bundle
-                    ||
-                    altRoute.past
                 ) {
-                    altRule = (altRule) ? altRule : altRoute.request.routing.rule;
+                    if ( url == '#') {
+                        msg = msg.replace(/\`\#\`/, location.pathname)    
+                    }
                     msg = msg.replace(/\%r/, method.toUpperCase() +'::'+ altRule);
-                } else {
-                    msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : no route found for url: `' + url + '` !'
+                    console.warn(msg);                               
+                    return false
+                }
+                var altRoute = self.compareUrls(params, url, request) || null;
+                if(altRoute.past && isMethodProvidedByDefault) {
+                    msg = msg.replace(/\%r/, method.toUpperCase() +'::'+ altRoute.request.routing.rule);
+                    console.warn(msg);                               
+                    return false
                 }
                 
+                msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : no route found for url: `' + url + '` !'
+                               
                 console.warn(msg);                               
                 return false
             }
