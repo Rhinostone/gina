@@ -115,10 +115,13 @@ function FormValidatorUtil(data, $fields) {
          *
          * */
         self[el]['is'] = function(condition, errorMessage, errorStack) {
-            var isValid   = false;
-            var errors  = {};
+            var isValid     = false;
+            var alias       = window._currentValidatorAlias || 'is';
+            delete window._currentValidatorAlias;
+            var errors      = {};  
             
-            if ( !errors['isRequired'] && this.value == '' ) {
+            
+            if ( !errors['isRequired'] && this.value == '' && this.value != 0 ) {
                 isValid = true;
             }
             
@@ -173,6 +176,7 @@ function FormValidatorUtil(data, $fields) {
                             isValid = new RegExp(re, flags).test(this.value)
                         } else {
                             isValid = eval(condition);
+                            //isValid = eval(condition) ? false: true;
                         }
                             
                         //valid = new RegExp(condition.replace(/\//g, '')).test(this.value)
@@ -183,7 +187,7 @@ function FormValidatorUtil(data, $fields) {
             }
 
             if (!isValid) {
-                errors['is'] = replace(this.error || errorMessage || local.errorLabels['is'], this);
+                errors[alias] = replace(this.error || errorMessage || local.errorLabels[alias], this);
                 if ( typeof(errorStack) != 'undefined' )
                     errors['stack'] = errorStack;
             }
@@ -192,8 +196,11 @@ function FormValidatorUtil(data, $fields) {
             if ( errors.count() > 0 )
                 this['errors'] = errors;
 
+            
             return self[this.name]
         }
+        
+        
 
         self[el]['isEmail'] = function() {
 

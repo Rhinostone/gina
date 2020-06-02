@@ -39,6 +39,7 @@ function ValidatorPlugin(rules, data, formId) {
 
     var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
     var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
+    var inherits        = (isGFFCtx) ? require('utils/inherits') : require('../../../../../lib/inherits');
     var FormValidator   = (isGFFCtx) ? require('utils/form-validator') : require('./form-validator');
 
     /** definitions */
@@ -3428,15 +3429,22 @@ function ValidatorPlugin(rules, data, formId) {
             
             // check each field against rule
             for (var rule in rules[field]) {
-                            
+                
+                if ( /^(is)\d+/.test(rule) ) { // is aliases                   
+                    d[field][rule] = function(){};
+                    d[field][rule] = inherits(d[field][rule], d[field][ rule.replace(/\d+/, '') ]);
+                    d[field][rule].setAlias = (function(alias) {
+                        this._currentValidatorAlias = alias
+                    }(rule));  
+                }            
                 // check for rule params
                 try {
 
                     if (Array.isArray(rules[field][rule])) { // has args
                         //convert array to arguments
                         args = JSON.parse(JSON.stringify(rules[field][rule]));
-                        if ( /\$[\w\[\]]*/.test(args[0]) ) {
-                            var foundVariables = args[0].match(/\$[\w\[\]]*/g);
+                        if ( /\$[\-\w\[\]]*/.test(args[0]) ) {
+                            var foundVariables = args[0].match(/\$[\-\w\[\]]*/g);
                             for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
                                 args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
                             }

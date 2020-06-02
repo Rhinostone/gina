@@ -23,7 +23,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             foldingClass    : null,
             isUnfolded      : null,
             isXHR           : false,
-            isValidator     : false
+            isValidator     : false,
+            hasParsedUrls   : false
         };
 
         var bucket      = new Storage({bucket: 'gina'}) // <Bucket>
@@ -399,7 +400,12 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         }
                     })
                 }
-            }            
+            }   
+            
+            if ( !section || section == 'el-xhr' && !self.hasParsedUrls) {
+                self.hasParsedUrls = (section && section == 'el-xhr' ) ? true : false;
+                parseUrls(section);
+            }                
         }
 
 
@@ -894,7 +900,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
         }
 
         var parseView = function (obj, ginaObj, elId, elIsXHR, $html, $root) {
-
+                        
             var id          = (elId != null) ? elId.replace(/[^A-Za-z0-9_-]/g, '_') : '';
             var section     = null;
             var isXHR       = ( typeof(elIsXHR) != 'undefined' && elIsXHR != null ) ? '-xhr' : '';
@@ -1096,6 +1102,49 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
             return parseObject(rules, rules, id, elIsXHR, section)
         }
+        
+        var parseUrls = function(section) {
+            
+            var $el = null;
+            var $currentPopin = (gina.hasPopinHandler) ? gina.popin.getActivePopin() : null;
+            var isPopinContext = ( gina.hasPopinHandler ) ? true : false;
+            if ( isPopinContext ) {
+                $el = $('#' + $currentPopin.id );
+            } else {
+                $el = $('body');
+            }
+            
+            // look for `404: `
+            var found = {}
+                , foundStr = null
+                , formMethod = null
+                , f = 0
+                , fLen = 0
+            ;
+            var matched = $el.html().match(/404\:\[(.+)\](.+)@(.+)\"/gm);
+            if (matched) {
+                f = 0; fLen = matched.length;
+                for (; f < fLen; ++f) {
+                    foundStr = matched[f].replace(/\"(.*)|\"/g, '');
+                    formMethod = foundStr.match(/\[(.*)\]/g, '')[0].replace(/\[|\]/g,'');
+                    
+                    routing.getRouteByUrl(foundStr, formMethod)
+                }
+            } 
+               
+            printLogs();
+            
+            //console.debug('popinIsActive: '+ isPopinContext +'isXHR: ', self.isXHR, ' -> ' + section, routing.notFound);
+        }
+        
+        var printLogs = function() {
+            fLen = routing.notFound.count();
+            if ( fLen > 0 ) {                
+                for (f in routing.notFound) {
+                    console.warn( '(x'+ routing.notFound[f].count +') ' + f + ' => ' + routing.notFound[f].message );
+                }
+            }
+        }
 
         var parseForms = function (obj, ginaObj, $html, i, $forms, len, elIsXHR) {
             
@@ -1154,7 +1203,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         console.warn('[ ToolbarFormHelper::UndefinedMethod : form `'+ attributes['id'].nodeValue +'` method attribute cannot be left undefined !');                        
                     }
                     
-                    routeObj    = routing.getRouteByUrl(val, formMethod);
+                    routeObj    = routing.getRouteByUrl(val, formMethod);                    
 
                     if ( typeof(routeObj) == 'undefined' || !routeObj ) {
                         routeObj = {
@@ -1434,8 +1483,10 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             if (lastJsonObjectState && typeof (lastJsonObjectState.data) != 'undefined' ) {
                 originalData.jsonObject.data = lastJsonObjectState.data;
             }
-
+            
             loadData('data', originalData.jsonObject, originalData.ginaJsonObject);
+            self.hasParsedUrls = false;
+            routing.notFound = {};
         }
 
         
