@@ -29,12 +29,13 @@
 
 function Routing() {
 
-    var self        = {};    
     var isGFFCtx    = ((typeof (module) !== 'undefined') && module.exports) ? false :  true;
-    
-    self.allowedMethods         = ['get', 'post', 'put', 'delete'];
+    var self        = {
+        allowedMethods: ['get', 'post', 'put', 'delete'],
+        notFound: {}
+    };    
+        
     self.allowedMethodsString   = self.allowedMethods.join(',');
-    self.notFound               = [];
     
     // loading plugins
     var plugins = null, Validator = null;
@@ -536,10 +537,6 @@ function Routing() {
         }
 
         route.toUrl = function (ignoreWebRoot) {
-
-            // var conf        = config.bundlesConfiguration.conf[bundle][env]
-            //     , wroot     = conf.server.webroot
-            // ;
             
             var wroot       = this.webroot
                 , hostname  = this.hostname
@@ -729,65 +726,97 @@ function Routing() {
             } //EO for break out
 
         if (!matched) {
-            if (isGFFCtx) {                
+            if (isGFFCtx) {  
+                var urlHasChanged = false;              
                 if ( 
                     url == '#' 
                     && /GET/i.test(method) 
                     && isMethodProvidedByDefault 
+                    || /^404\:/.test(url)
                 ) {
                     url = location.pathname;
+                    urlHasChanged = true;
                 }
+                
+                if ( typeof(self.notFound) == 'undefined' ) {
+                    self.notFound = {}
+                }
+                
                 var notFound = null, msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route [ %r ] is called but not found inside your view: `' + url + '` !';
                 if ( gina.hasPopinHandler && gina.popinIsBinded ) {
                     notFound = gina.popin.getActivePopin().target.innerHTML.match(/404\:\[\w+\][a-z 0-9-_@]+/);
                 } else {
                     notFound = document.body.innerHTML.match(/404\:\[\w+\][a-z 0-9-_@]+/);
                 }
+               
                 notFound = (notFound && notFound.length > 0) ? notFound[0] : null;
                 
-                if (notFound && self.notFound.indexOf(notFound) < 0 ) {
-                    self.notFound.push(notFound);
-                    var m = notFound.match(/\[\w+\]/)[0];
+                if ( notFound && isMethodProvidedByDefault && urlHasChanged ) {
+                                        
+                    var m = notFound.match(/\[\w+\]/)[0];                    
                     
-                    if ( url == '#') {
-                        msg = msg.replace(/\`\#\`/, location.pathname)    
-                    }
                     notFound = notFound.replace('404:'+m, m.replace(/\[|\]/g, '')+'::' );
                     
                     msg = msg.replace(/\%r/, notFound.replace(/404\:\s+/, ''));
-                
-                    console.warn(msg);                               
+                    
+                    if (typeof(self.notFound[notFound]) == 'undefined') {
+                        self.notFound[notFound] = { 
+                            count: 1,
+                            message: msg 
+                        };
+                    } else if ( isMethodProvidedByDefault && typeof(self.notFound[notFound]) != 'undefined' ) {
+                        ++self.notFound[notFound].count;
+                    }
+                                                
                     return false  
-                }  
+                } 
+                
                 notFound = null;     
                                
                 
-                // forms
-                var altRule = gina.config.reverseRouting[url] || null;
                 
+                var altRule = gina.config.reverseRouting[url] || null;                
                 if (
                     !notFound 
                     && altRule
                     && typeof(altRule) != 'undefined'
                     && altRule.split(/\@(.+)$/)[1] == bundle
                 ) {
-                    if ( url == '#') {
-                        msg = msg.replace(/\`\#\`/, location.pathname)    
+                    
+                    notFound = altRule;
+                    if ( typeof(self.notFound[notFound]) == 'undefined' ) {
+                        
+                        msg = msg.replace(/\%r/, method.toUpperCase() +'::'+ altRule);
+                        
+                        self.notFound[notFound] = { 
+                            count: 1,
+                            message: msg 
+                        };
+                        //console.warn(msg);   
+                    } else if ( isMethodProvidedByDefault && typeof(self.notFound[notFound]) != 'undefined' ) {
+                        ++self.notFound[notFound].count;
                     }
-                    msg = msg.replace(/\%r/, method.toUpperCase() +'::'+ altRule);
-                    console.warn(msg);                               
-                    return false
-                }
-                var altRoute = self.compareUrls(params, url, request) || null;
-                if(altRoute.past && isMethodProvidedByDefault) {
-                    msg = msg.replace(/\%r/, method.toUpperCase() +'::'+ altRoute.request.routing.rule);
-                    console.warn(msg);                               
+                                                    
                     return false
                 }
                 
-                msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : no route found for url: `' + url + '` !'
+                // forms
+                var altRoute = self.compareUrls(params, url, request) || null;
+                if(altRoute.past && isMethodProvidedByDefault) {
+                    notFound = method.toUpperCase() +'::'+ altRoute.request.routing.rule;
+                    if ( typeof(self.notFound[notFound]) == 'undefined' ) {
+                        msg = msg.replace(/\%r/, notFound);
+                        //console.warn(msg);  
+                    } else {
+                        ++self.notFound[notFound].count;
+                    }
+                                                     
+                    return false
+                }
+                
+                //msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : no route found for url: `' + url + '` !'
                                
-                console.warn(msg);                               
+                //console.warn(msg);                               
                 return false
             }
 
