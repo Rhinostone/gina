@@ -732,14 +732,20 @@ function SuperController(options) {
                         self.throwError(local.res, 500, err);
                     } else {
                         
-                        assets  = {assets:"${assets}"};                        
-                        //mapping = { filename: local.options.template.layout };         
-                        mapping = { filename: layoutPath }; 
-                        layout  = layout.toString();
-                        // precompie in case of extends
-                        if ( /\{\%(\s+extends|extends)/.test(layout) ) {
-                            layout = swig.compile(layout, mapping)(data);
+                        try {
+                            assets  = {assets:"${assets}"};                        
+                            //mapping = { filename: local.options.template.layout };         
+                            mapping = { filename: layoutPath }; 
+                            layout  = layout.toString();
+                            // precompie in case of extends
+                            if ( /\{\%(\s+extends|extends)/.test(layout) ) {
+                                layout = swig.compile(layout, mapping)(data);
+                            }
+                        } catch(err) {
+                            err.stack = 'Exception,  bad syntax or undefined data found: start investigating in '+ mapping.filename +'\n' + err.stack;
+                            self.throwError(local.res, 500, err);
                         }
+                            
                             
                         
                         isDeferModeEnabled = local.options.template.javascriptsDeferEnabled;  
@@ -2926,7 +2932,7 @@ function SuperController(options) {
         var next    = local.next;
 
         if (!res.headersSent) {
-            if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate ) {
+            if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() ) {
                 // allowing this.throwError(err)
                 if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
                     msg     = code.error || code.message;
