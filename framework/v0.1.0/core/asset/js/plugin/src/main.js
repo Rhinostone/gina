@@ -161,7 +161,9 @@ require([
 
     "core",
     // helpers
+    "helpers/prototypes",
     "helpers/binding",
+    "helpers/dateFormat",
 
     // plugins
     "gina/link",
