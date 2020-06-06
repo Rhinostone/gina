@@ -937,9 +937,7 @@ function Collection(content, options) {
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
                     if ( typeof(result[r][key]) == 'undefined' && key == '_uuid' && typeof(result[r]['id']) != 'undefined' ) {
                         key = 'id';
-                    } else if (typeof(result[r][key]) == 'undefined' && key == '_uuid') {
-                        throw new Error('No comparison key defined !')
-                    } 
+                    }
                     
                     if ( result[r][key] == arr[a][key] ) {
                         result[r] = arr[a];
