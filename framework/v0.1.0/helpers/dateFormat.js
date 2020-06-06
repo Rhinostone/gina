@@ -314,7 +314,34 @@ function DateFormatHelper() {
      * */
     var addHours = function(date, h) {
         var copiedDate = new Date(date.getTime());
-        copiedDate.setHours(copiedDate.getHours()+h);
+        copiedDate.setHours(copiedDate.getHours() + h);
+        return copiedDate;
+    }
+
+
+    /**
+     * Add or subtract days
+     *  Adding 2 days
+     *      => myDate.addDays(2)
+     *  Subtracting 10 days
+     *      => myDate.addDays(-10)
+     * */
+    var addDays = function(date, d) {
+        var copiedDate = new Date(date.getTime());
+        copiedDate.setHours(copiedDate.getHours() + d * 24);
+        return copiedDate;
+    }
+
+    /**
+     * Add or subtract years
+     *  Adding 2 days
+     *      => myDate.addYears(2)
+     *  Subtracting 10 years
+     *      => myDate.addYears(-10)
+     * */
+    var addYears = function(date, y) {
+        var copiedDate = new Date(date.getTime());
+        copiedDate.setFullYear(copiedDate.getFullYear() + y);
         return copiedDate;
     }
 
@@ -324,7 +351,9 @@ function DateFormatHelper() {
         countDaysTo     : countDaysTo,
         getDaysTo       : getDaysTo,
         getDaysInMonth  : getDaysInMonth,
-        addHours        : addHours
+        addHours        : addHours,
+        addDays         : addDays,
+        addYears        : addYears
     };
     
     return _proto
