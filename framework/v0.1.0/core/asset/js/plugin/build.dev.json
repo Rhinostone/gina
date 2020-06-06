@@ -10,6 +10,7 @@
     "core"                  : "main",
     
     "helpers/binding"      : "gina/helpers/binding",
+    "helpers/prototypes"      : "../../../../../helpers/prototypes",
     "helpers/dateFormat"    : "../../../../../helpers/dateFormat",
     
     "utils/events"          : "gina/utils/events",

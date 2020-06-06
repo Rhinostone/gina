@@ -32,7 +32,11 @@ function DateFormatHelper() {
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
 
     var merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
-
+    
+    // if ( typeof(define) === 'function' && define.amd ) {
+    //     var Date = this.Date;
+    // }
+    
     var self = {};
     // language-country
     self.culture = 'en-US'; // by default

@@ -10,6 +10,7 @@ function StoragePlugin(options) {
     var merge       = merge || require('utils/merge');;
     var Collection  = Collection || require('utils/collection');
     var uuid        = uuid || require('vendor/uuid');
+    var dateFormat  = dateFormat || require('helpers/dateFormat');
 
 
     var self = {
@@ -422,5 +423,5 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
 
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('gina/storage',function() { return StoragePlugin })
+    define('gina/storage', ['helpers/dateFormat', 'helpers/prototypes'],function() { return StoragePlugin })
 }
