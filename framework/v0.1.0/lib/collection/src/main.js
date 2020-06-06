@@ -516,11 +516,13 @@ function Collection(content, options) {
     if ( typeof(arguments[arguments.length-1]) == 'string' ) {
         key = arguments[arguments.length - 1];
         delete arguments[arguments.length - 1];
+        --arguments.length;
     }
     
     // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
     //     uuidSearchModeEnabled = arguments[arguments.length - 1]
     //     delete arguments[arguments.length - 1];
+    //     --arguments.length;
     // }
     
     if (arguments.length > 0) {
@@ -701,11 +703,13 @@ function Collection(content, options) {
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
+            --arguments.length;
         }
         
         if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
             uuidSearchModeEnabled = arguments[arguments.length - 1]
             delete arguments[arguments.length - 1];
+            --arguments.length;
         }
         
         if (arguments.length > 0) {
@@ -728,6 +732,7 @@ function Collection(content, options) {
         }
         
         if (foundResults.length > 0) {
+            
             // check key
             if ( 
                 uuidSearchModeEnabled
@@ -738,7 +743,13 @@ function Collection(content, options) {
                 throw new Error('[ Collection ][ notIn ] `key` not valid');
             } else if ( uuidSearchModeEnabled && !key && typeof(foundResults[0]['_uuid']) != 'undefined' ) {
                 key = '_uuid'
+            } else if ( typeof(foundResults[0]['id']) != 'undefined' ) {
+                key = 'id';
             }
+            
+            if ( !key || typeof(foundResults[0][key]) == 'undefined' ) {
+                throw new Error('No comparison key defined !')
+            } 
 
             // fast search with key
             var r       = 0
@@ -880,16 +891,19 @@ function Collection(content, options) {
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
+            --arguments.length;
         } 
         
         if ( typeof(arguments[arguments.length-1]) == 'object' ) {
             set = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
+            --arguments.length
         }
         
         // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
         //     uuidSearchModeEnabled = arguments[arguments.length - 1]
         //     delete arguments[arguments.length - 1];
+        //     --arguments.length;
         // }
         
         if (arguments.length > 0) {
@@ -921,6 +935,12 @@ function Collection(content, options) {
             for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
                 arr[a] = merge( JSON.parse(JSON.stringify(set) ), arr[a]);
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
+                    if ( typeof(result[r][key]) == 'undefined' && key == '_uuid' && typeof(result[r]['id']) != 'undefined' ) {
+                        key = 'id';
+                    } else if (typeof(result[r][key]) == 'undefined' && key == '_uuid') {
+                        throw new Error('No comparison key defined !')
+                    } 
+                    
                     if ( result[r][key] == arr[a][key] ) {
                         result[r] = arr[a];
                         break;
@@ -957,16 +977,19 @@ function Collection(content, options) {
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
+            --arguments.length;
         } 
         
         if ( typeof(arguments[arguments.length-1]) == 'object' ) {
             set = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
+            --arguments.length;
         }
         
         // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
         //     uuidSearchModeEnabled = arguments[arguments.length - 1]
         //     delete arguments[arguments.length - 1];
+        //     --arguments.length;
         // }
         
         if (arguments.length > 0) {
@@ -998,6 +1021,12 @@ function Collection(content, options) {
             for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
                 arr[a] = JSON.parse(JSON.stringify(set));
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
+                    if ( typeof(result[r][key]) == 'undefined' && key == '_uuid' && typeof(result[r]['id']) != 'undefined' ) {
+                        key = 'id';
+                    } else if (typeof(result[r][key]) == 'undefined' && key == '_uuid') {
+                        throw new Error('No comparison key defined !')
+                    } 
+                    
                     if ( result[r][key] == arr[a][key] ) {
                         result[r] = arr[a];
                         break;
