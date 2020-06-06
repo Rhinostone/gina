@@ -120,6 +120,32 @@ Object.defineProperty( Date.prototype, 'addHours', {
 });
 
 /**
+ * Add or subtract days from current date
+ * @param {number} d
+ * @return {date} Return date
+ **/
+Object.defineProperty( Date.prototype, 'addDays', {
+    writable:   false,
+    enumerable: false,
+    //If loaded several times, it can lead to an exception. That's why I put this.
+    configurable: true,
+    value: function(d){ return helpers.dateFormat.addDays(this, d) }
+});
+
+/**
+ * Add or subtract years from current date
+ * @param {number} y
+ * @return {date} Return date
+ **/
+Object.defineProperty( Date.prototype, 'addYears', {
+    writable:   false,
+    enumerable: false,
+    //If loaded several times, it can lead to an exception. That's why I put this.
+    configurable: true,
+    value: function(y){ return helpers.dateFormat.addYears(this, y) }
+});
+
+/**
  * clone array
  * @return {array} Return cloned array
  **/
