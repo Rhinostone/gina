@@ -3102,6 +3102,8 @@ function ValidatorPlugin(rules, data, formId) {
                     for (var i = 0, len = $target.length; i<len; ++i) {
 
                         name        = $target[i].getAttribute('name');
+                        // NB.: If you still want to save the info and you main field is disabled;
+                        //      consider using an input type=hidden
                         isDisabled  = $target[i].disabled || $target[i].getAttribute('disabled'); 
                         isDisabled  = ( /disabled|true/i.test(isDisabled) ) ? true : false;
                         
@@ -3311,6 +3313,8 @@ function ValidatorPlugin(rules, data, formId) {
             for (var i = 0, len = $target.length; i<len; ++i) {
                 
                 name        = $target[i].getAttribute('name');
+                // NB.: If you still want to save the info and you main field is disabled;
+                //      consider using an input type=hidden
                 isDisabled  = $target[i].disabled || $target[i].getAttribute('disabled'); 
                 isDisabled  = ( /disabled|true/i.test(isDisabled) ) ? true : false;
 
