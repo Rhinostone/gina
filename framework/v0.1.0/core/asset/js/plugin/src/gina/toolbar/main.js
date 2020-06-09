@@ -176,21 +176,23 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
         var loadData = function (section, data, ginaData) {
 
             var $currentForms = null;
-
+            console.log('load data =>', data, ginaData);
             try {
                 var txt = $json.text();
                 if (txt == '' || txt == 'null' ) {
                     $json.text('Empty')
                 } else {
-                    jsonObject = JSON.parse(txt);
+                    jsonObject = JSON.parse( txt );
                     ginaJsonObject = JSON.parse($ginaJson.text());
+                    
                     $json.text('');
 
                     // backing up document data for restore action
                     if (!originalData) {
+                        
                         originalData = {
-                            jsonObject      : JSON.parse(JSON.stringify(jsonObject)),
-                            ginaJsonObject  : JSON.parse(JSON.stringify(ginaJsonObject))
+                            jsonObject      : JSON.parse(JSON.stringify( jsonObject) ),
+                            ginaJsonObject  : JSON.parse(JSON.stringify( ginaJsonObject) )
                         };
                         lastJsonObjectState = {}; // jsonObject.data
                         
