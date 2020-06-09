@@ -2693,9 +2693,6 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
         var updateSelect = function($el) {
-            //var selectedIndex = $el.selectedIndex;
-            //var isBoolean = /^(true|false)$/i.test($el.value);
-            
             $el.setAttribute('data-value', $el.value);
         };
         
@@ -3089,21 +3086,27 @@ function ValidatorPlugin(rules, data, formId) {
                     cancelEvent(event);
 
                     // getting fields & values
-                    var $fields     = {}
-                        , fields    = { '_length': 0 }
-                        , id        = $target.getAttribute('id')
-                        , rules     = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
-                        , name      = null
-                        , value     = 0
-                        , type      = null
-                        , index     = { checkbox: 0, radio: 0 };
+                    var $fields         = {}
+                        , fields        = { '_length': 0 }
+                        , id            = $target.getAttribute('id')
+                        , rules         = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
+                        , name          = null
+                        , value         = 0
+                        , type          = null
+                        , index         = { checkbox: 0, radio: 0 }
+                        , isDisabled    = null;
+                        
+                    ;
 
 
                     for (var i = 0, len = $target.length; i<len; ++i) {
 
-                        name    = $target[i].getAttribute('name');
-
+                        name        = $target[i].getAttribute('name');
+                        isDisabled  = $target[i].disabled || $target[i].getAttribute('disabled'); 
+                        isDisabled  = ( /disabled|true/i.test(isDisabled) ) ? true : false;
+                        
                         if (!name) continue;
+                        if (isDisabled) continue;
 
                         // TODO - add switch cases against tagName (checkbox/radio)
                         if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
@@ -3293,20 +3296,26 @@ function ValidatorPlugin(rules, data, formId) {
 
             // just collect data over forms
             // getting fields & values
-            var $fields     = {}
-                , fields    = { '_length': 0 }
-                , id        = $target.getAttribute('id')
-                , rules     = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
-                , name      = null
-                , value     = 0
-                , type      = null
-                , index     = { checkbox: 0, radio: 0 };
+            var $fields         = {}
+                , fields        = { '_length': 0 }
+                , id            = $target.getAttribute('id')
+                , rules         = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
+                , name          = null
+                , value         = 0
+                , type          = null
+                , index         = { checkbox: 0, radio: 0 }
+                , isDisabled    = null 
+            ;
 
 
             for (var i = 0, len = $target.length; i<len; ++i) {
-                name = $target[i].getAttribute('name');
+                
+                name        = $target[i].getAttribute('name');
+                isDisabled  = $target[i].disabled || $target[i].getAttribute('disabled'); 
+                isDisabled  = ( /disabled|true/i.test(isDisabled) ) ? true : false;
 
                 if (!name) continue;
+                if (isDisabled) continue;
 
                 // checkbox or radio
                 if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
@@ -3422,9 +3431,7 @@ function ValidatorPlugin(rules, data, formId) {
                             break;
                         } 
                     }                                
-                }    
-                
-                //if ( !skipTest ) continue;
+                }
             }
             
             // check each field against rule
@@ -3492,9 +3499,8 @@ function ValidatorPlugin(rules, data, formId) {
                         && /(checkbox)/.test($fields[field].getAttribute('type')) 
                         && !$fields[field].checked 
                         && typeof(rules[field]) == 'undefined' // just in case of rules inside cases
-                    ) {
-                        //if ( typeof(rules[field]) == 'undefined' && !$fields[field].checked || typeof(rules[field]) != 'undefined' && typeof(rules[field]['isRequired']) != 'undefined' && /(false)/.test(rules[field]['isRequired']) )
-                            continue;
+                    ) {                        
+                        continue;
                     }
 
                     hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
@@ -3580,66 +3586,10 @@ function ValidatorPlugin(rules, data, formId) {
                         // }                            
                     }
                     
-                    if (isInCase) continue;
-                    
+                    if (isInCase) continue;                
 
-                    //if (!hasCase) { // normal case
-                                                
-                        // if (typeof (rules[field]) == 'undefined') {
-                        //     // look for regexp aliases from rules
-                        //     skipTest = false;
-                        //     for (var _r in rules) {
-                        //         if ( /^\//.test(_r) ) { // RegExp found
-                        //             re      = _r.match(/\/(.*)\//).pop();                                        
-                        //             flags   = _r.replace('/'+ re +'/', '');
-                        //             // fix escaping "[" & "]"
-                        //             re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
-                        //             re      = new RegExp(re, flags);
-                        //             if ( re.test(field)  ) { 
-                        //                 skipTest = true;                                                
-                        //                 // create new entry    
-                        //                 rules[field] = rules[_r];                                   
-                        //                 break;
-                        //             } 
-                        //         }                                
-                        //     }    
-                            
-                        //     if ( !skipTest ) continue;
-                        // }
-
-
-                        // check each field against rule
-                        checkFieldAgainstRules(field, rules, fields);
-                        // for (var rule in rules[field]) {
-                            
-                        //     // check for rule params
-                        //     try {
-
-                        //         if (Array.isArray(rules[field][rule])) { // has args
-                        //             //convert array to arguments
-                        //             args = JSON.parse(JSON.stringify(rules[field][rule]));
-                        //             if ( /\$[\w\[\]]*/.test(args[0]) ) {
-                        //                 var foundVariables = args[0].match(/\$[\w\[\]]*/g);
-                        //                 for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
-                        //                     args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
-                        //                 }
-                        //             }
-                        //             d[field][rule].apply(d[field], args);
-                        //         } else {
-                        //             d[field][rule](rules[field][rule]);
-                        //         }
-
-                        //         delete fields[field];
-
-                        //     } catch (err) {
-                        //         if (rule == 'conditions') {
-                        //             throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
-                        //         } else {
-                        //             throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
-                        //         }
-                        //     }
-                        // }
-                    //} // else {
+                    // check each field against rule
+                    checkFieldAgainstRules(field, rules, fields);
                         
                     if (hasCase) {
                         ++i; // add sub level

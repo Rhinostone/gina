@@ -9,8 +9,6 @@ function PrototypesHelper(instance) {
             if ( typeof(Date[method]) != 'undefined' )
                 continue;
             
-            //console.log('----> ', method);
-            
             Object.defineProperty( Date.prototype, method, {
                 writable:   false,
                 enumerable: false,
@@ -35,7 +33,7 @@ function PrototypesHelper(instance) {
     }
         
        
-    
+    // Global proto
 
     if ( typeof(Array.clone) == 'undefined' ) {
         /**
