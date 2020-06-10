@@ -996,9 +996,14 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         
             script.src = source;            
             
+            var hostname = gina.config.hostname;
+            if ( gina.config.webroot != '' ) {
+                hostname += gina.config.webroot;
+            }
             var s = 0
                 , sLen = scripts.length
-                , file = source.substr( source.lastIndexOf('/')+1 || 0 )
+                //, filename = source.substr( source.lastIndexOf('/')+1 || 0 )
+                , filename = source.substr( source.lastIndexOf(hostname)+hostname.length || 0)
                 , re = null
             ;
             if (sLen == 0) {
@@ -1011,7 +1016,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     if ( typeof(scripts[s].src) == 'undefined' || !scripts[s].src )
                         continue;
                     // insert only if not already loaded
-                    re = new RegExp(file+'$');                
+                    re = new RegExp(filename+'$');                
                     if ( re.test(scripts[s].src) ) {
                         found = true;
                         break;
