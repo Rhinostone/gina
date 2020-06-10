@@ -176,7 +176,6 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
         var loadData = function (section, data, ginaData) {
 
             var $currentForms = null;
-            console.log('load data =>', data, ginaData);
             try {
                 var txt = $json.text();
                 if (txt == '' || txt == 'null' ) {

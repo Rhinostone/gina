@@ -922,7 +922,7 @@ function SuperController(options) {
 
                             local.res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime['html'] + '; charset='+ local.options.conf.encoding );
                             try {
-                                
+                                // escape special chars
                                 var blacklistRe = new RegExp('[\<\>]', 'g');
                                 data.page.data = JSON.parse(JSON.stringify(data.page.data).replace(blacklistRe, '\$&'));
                                 
