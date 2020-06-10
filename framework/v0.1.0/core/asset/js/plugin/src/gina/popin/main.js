@@ -56,7 +56,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             'isOpen'            : false,
             'close'             : null,
             '$forms'            : [],
-            'hasForm'           : false
+            'hasForm'           : false,
+            '$headers'             : [] // head elements for this popin
         };
 
         // imopring other plugins
@@ -261,7 +262,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     cancelEvent(event);
 
                     var _evt = event.target.id;
-
                     triggerEvent(gina, event.target, _evt, event.detail);
                 }
 
@@ -976,9 +976,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
         }
                
-        function getScript(source, callback) {
+        function getScript($popin, source, callback) {
+            // existing scripts
+            var scripts  = document.head.getElementsByTagName('script');            
+            // new script element
             var script = document.createElement('script');
-            var prior = document.getElementsByTagName('script')[0];
+            // index 0 if for the loader
+            var prior = document.getElementsByTagName('script')[1];
             script.async = 0;
         
             script.onload = script.onreadystatechange = function( _, isAbort ) {
@@ -990,8 +994,36 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 }
             };
         
-            script.src = source;
-            prior.parentNode.insertBefore(script, prior);
+            script.src = source;            
+            
+            var s = 0
+                , sLen = scripts.length
+                , file = source.substr( source.lastIndexOf('/')+1 || 0 )
+                , re = null
+            ;
+            if (sLen == 0) {
+                script.id = 'gina-popin-script-' + $popin.id;
+                prior.parentNode.insertBefore(script, prior);
+                $popin.$headers.push({ id: script.id});
+            } else {
+                var found = false;
+                for (; s<sLen; ++s) {
+                    if ( typeof(scripts[s].src) == 'undefined' || !scripts[s].src )
+                        continue;
+                    // insert only if not already loaded
+                    re = new RegExp(file+'$');                
+                    if ( re.test(scripts[s].src) ) {
+                        found = true;
+                        break;
+                    }                                    
+                }
+                if (!found) {
+                    script.id = 'gina-popin-script-' + $popin.id;
+                    prior.parentNode.insertBefore(script, prior);
+                    // will be removed on close
+                    $popin.$headers.push({ id: script.id});
+                }
+            }                
         }
         
         /**
@@ -1031,7 +1063,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 // if ( ignoreList.indexOf(scripts[i].src) > -1 )
                 //     continue;
                 
-                getScript(scripts[i].src);               
+                getScript($popin, scripts[i].src);               
             }  
             
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
@@ -1184,6 +1216,19 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         ginaToolbar.restore();
 
                     instance.activePopinId  = null;
+                    if ( $popin.$headers.length > 0) {
+                        var s = 0
+                            , sLen = $popin.$headers.length
+                        ;
+                        try {
+                            for (; s<sLen; ++s) {
+                                document.getElementById( $popin.$headers[s].id ).remove(); 
+                            }
+                        } catch(err){
+                            console.warn('Could not remove script `'+ $popin.$headers[s].id +'`\n'+ err.stack)
+                        }
+                        $popin.$headers = [];                            
+                    }
                     triggerEvent(gina, $popin.target, 'close.'+ $popin.id, $popin);
                 }
             }            
