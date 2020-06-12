@@ -28,7 +28,7 @@ desktop.ini
 *.bak
 *.old
 
-framework/v0.1.0/package-lock.json
+#framework/v0.1.0/package-lock.json
 
 framework/v0.1.0/package.json
 
