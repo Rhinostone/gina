@@ -3476,8 +3476,8 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
         }
-
-        var forEachField = function($form, fields, $fields, rules, cb, i) {
+        var allFields = JSON.parse(JSON.stringify(fields));
+        var forEachField = function($form, allFields, fields, $fields, rules, cb, i) {
             
             
             
@@ -3559,7 +3559,9 @@ function ValidatorPlugin(rules, data, formId) {
                                                 console.warn('ignoring case `'+ c +'`: field `'+ +'` not found in your DOM');
                                                 continue;
                                             }
-                                            caseValue = $fields[caseField].value;
+                                            // by default
+                                            caseValue =  allFields[caseField];//$fields[caseField].value
+                                            // boolean caseValue
                                             if (
                                                 isGFFCtx 
                                                 && /^(true|false)$/i.test(caseValue) 
@@ -3569,6 +3571,7 @@ function ValidatorPlugin(rules, data, formId) {
                                             ) {
                                                 caseValue = ( /^(true)$/i.test(caseValue) ) ? true : false;
                                             }
+                                            
                                             if ( rules[c].conditions[_c].case == caseValue ) {
                                                 localRuleObj = ( typeof(rules[field]) != 'undefined' ) ? rules[field] : {}; 
                                                 rules[field] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
@@ -3605,8 +3608,9 @@ function ValidatorPlugin(rules, data, formId) {
                         
                         
                         for (var c = 0, cLen = conditions.length; c<cLen; ++c) {
-
-                            caseValue = fields[field];
+                            // by default
+                            //caseValue = fields[field];
+                            caseValue =  allFields[field];
 
                             if (isGFFCtx) {
                                 if (fields[field] == "true")
@@ -3620,8 +3624,13 @@ function ValidatorPlugin(rules, data, formId) {
 
                                 //console.log('[fields ] ' + JSON.stringify(fields, null, 4));
                                 localRules = {};   
-                                // exclude case field if not declared in rules
-                                if ( typeof(conditions[c]['rules'][field]) == 'undefined' ) {
+                                // exclude case field if not declared in rules && not disabled
+                                if ( 
+                                    typeof(conditions[c]['rules'][field]) == 'undefined' 
+                                    && typeof(allFields[field]) == 'undefined'
+                                    ||
+                                    $fields[field].disabled 
+                                ) {
                                     conditions[c]['rules'][field] = { exclude: true }            
                                 }                             
                                 for (var f in conditions[c]['rules']) {
@@ -3684,9 +3693,9 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                                 ++subLevelRules; // add sub level
                                 if (isGFFCtx)
-                                    forEachField($form, fields, $fields, localRules, cb, i);
+                                    forEachField($form, allFields, fields, $fields, localRules, cb, i);
                                 else
-                                    return forEachField($form, fields, $fields, localRules, cb, i);
+                                    return forEachField($form, allFields, fields, $fields, localRules, cb, i);
                             }
                             
                         }
@@ -3767,9 +3776,9 @@ function ValidatorPlugin(rules, data, formId) {
 
         // 0 is the starting level
         if (isGFFCtx)
-            forEachField($form, fields, $fields, rules, cb, 0);
+            forEachField($form, allFields, fields, $fields, rules, cb, 0);
         else
-            return forEachField($form, fields, $fields, rules, cb, 0);
+            return forEachField($form, allFields, fields, $fields, rules, cb, 0);
     }
 
     var setupInstanceProto = function() {
