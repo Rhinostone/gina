@@ -1002,7 +1002,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             }
             var s = 0
                 , sLen = scripts.length
-                //, filename = source.substr( source.lastIndexOf('/')+1 || 0 )
                 , filename = source.substr( source.lastIndexOf(hostname)+hostname.length || 0)
                 , re = null
             ;
