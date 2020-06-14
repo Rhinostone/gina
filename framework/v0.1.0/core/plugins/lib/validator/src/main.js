@@ -3436,6 +3436,9 @@ function ValidatorPlugin(rules, data, formId) {
                         } 
                     }                                
                 }
+                
+                if ( typeof(rules[field]) == 'undefined' )
+                    return;
             }
             
             // check each field against rule
@@ -3477,7 +3480,8 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
         var allFields = JSON.parse(JSON.stringify(fields));
-        var forEachField = function($form, allFields, fields, $fields, rules, cb, i) {
+        var allRules = JSON.parse(JSON.stringify(rules));
+        var forEachField = function($form, allFields, allRules, fields, $fields, rules, cb, i) {
             
             
             
@@ -3659,8 +3663,22 @@ function ValidatorPlugin(rules, data, formId) {
                                                 }
                                                 
                                                 // we need to add it to fields list if not declared
-                                                if ( typeof(fields[localField]) == 'undefined' ) {
-                                                    fields[localField] = caseValue;
+                                                if ( 
+                                                    typeof(fields[localField]) == 'undefined' 
+                                                    && typeof($fields[localField]) != 'undefined' 
+                                                    && typeof($fields[localField].value) != 'undefined'
+                                                ) {
+                                                    fields[localField] = $fields[localField].value;//caseValue is not goo here
+                                                    if (isGFFCtx && /(true|false)/i.test(fields[localField] ) ) {
+                                                        if (fields[localField] == "true")
+                                                            fields[localField]  = true;
+                                                        else if (fields[localField] == "false")
+                                                            fields[localField]  = false;
+                                                    }
+                                                    d.addField(localField, fields[localField]);
+                                                    if ( typeof(allRules[localField]) != 'undefined' ) {
+                                                        localRules[localField] = merge(localRules[localField], allRules[localField])
+                                                    }
                                                 }
                                             }
                                         }
@@ -3683,8 +3701,26 @@ function ValidatorPlugin(rules, data, formId) {
                                         }
                                         
                                         // we need to add it to fields list if not declared
-                                        if ( typeof(fields[f]) == 'undefined' ) {
-                                            fields[f] = caseValue;
+                                        // if ( typeof(fields[f]) == 'undefined' ) {
+                                        //     fields[f] = caseValue;
+                                        // }
+                                        if ( 
+                                            typeof(fields[f]) == 'undefined' 
+                                            && typeof($fields[f]) != 'undefined' 
+                                            && typeof($fields[f].value) != 'undefined'
+                                        ) {
+                                            fields[f] = $fields[f].value;
+                                            if (isGFFCtx && /(true|false)/i.test(fields[f] ) ) {
+                                                if (fields[f] == "true")
+                                                    fields[f]  = true;
+                                                else if (fields[f] == "false")
+                                                    fields[f]  = false;
+                                            }                                           
+                                            
+                                            d.addField(f, fields[f]);
+                                            if ( typeof(allRules[f]) != 'undefined' ) {
+                                                localRules[f] = merge(localRules[f], allRules[f])
+                                            }
                                         }
                                     }                                    
                                 }
@@ -3693,9 +3729,9 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                                 ++subLevelRules; // add sub level
                                 if (isGFFCtx)
-                                    forEachField($form, allFields, fields, $fields, localRules, cb, i);
+                                    forEachField($form, allFields, allRules, fields, $fields, localRules, cb, i);
                                 else
-                                    return forEachField($form, allFields, fields, $fields, localRules, cb, i);
+                                    return forEachField($form, allFields, allRules, fields, $fields, localRules, cb, i);
                             }
                             
                         }
@@ -3776,9 +3812,9 @@ function ValidatorPlugin(rules, data, formId) {
 
         // 0 is the starting level
         if (isGFFCtx)
-            forEachField($form, allFields, fields, $fields, rules, cb, 0);
+            forEachField($form, allFields, allRules, fields, $fields, rules, cb, 0);
         else
-            return forEachField($form, allFields, fields, $fields, rules, cb, 0);
+            return forEachField($form, allFields, allRules, fields, $fields, rules, cb, 0);
     }
 
     var setupInstanceProto = function() {

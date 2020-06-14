@@ -67,9 +67,19 @@ function FormValidatorUtil(data, $fields) {
     }
 
 
-    var val = null, label = null;
-    for (var el in self) {
-
+    /**
+     * addField
+     * Add field to the validation context
+     * @param {string} el 
+     * @param {string|boolean|number|object} [value] 
+     */
+    var addField = function(el, value) {        
+        var val = null, label = null;
+        
+        if ( typeof(self[el]) == 'undefined' && typeof(value) != 'undefined' ) {
+            self[el] = value
+        }
+        
         if ( typeof(self[el]) == 'object' ) {
             try {
                 val = JSON.parse( JSON.stringify( self[el] ))
@@ -789,6 +799,17 @@ function FormValidatorUtil(data, $fields) {
         }
 
     } // EO for (var el in self)
+    
+    for (var el in self) {
+        addField(el)
+    }
+    
+    self['addField'] = function(el, value) {
+        if ( typeof(self[el]) != 'undefined' ) {
+            return
+        }
+        addField(el, value);
+    };
 
     /**
      * Check if errors found during validation
