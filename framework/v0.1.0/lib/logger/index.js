@@ -139,11 +139,15 @@ function Logger(opt) {
                     opt._maxLevelLen = l.length;
                 }
                 
-                if ( typeof(self[l]) != 'undefined' )
-                    delete self[l];
+                if ( typeof(self[l]) == 'undefined' ) {
+                    self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ parse +', "'+ l +'", arguments);');
+                }                
+                
+                // if ( typeof(self[l]) != 'undefined' )
+                //     delete self[l];
                     
                 
-                self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ parse +', "'+ l +'", arguments);');
+                // self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ parse +', "'+ l +'", arguments);');
             }
         } catch (err) {
             process.stdout.write(err.stack + '\n')
