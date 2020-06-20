@@ -336,7 +336,7 @@ function Logger(opt) {
 
     self.log = function() {
         var args = arguments, content = '';
-        //console.log("arg: ", args);
+        
         //To handle logs with coma separated arguments.
         for (var i=0; i<args.length; ++i) {
 
@@ -347,7 +347,7 @@ function Logger(opt) {
                 content += args[i]
             }
         }
-        //console.log("hum ? ", content);
+       
         if (content != '')
             process.stdout.write(content + '\n')
     }

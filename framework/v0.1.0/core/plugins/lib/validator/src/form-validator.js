@@ -128,7 +128,7 @@ function FormValidatorUtil(data, $fields) {
             var isValid     = false;
             var alias       = window._currentValidatorAlias || 'is';
             delete window._currentValidatorAlias;
-            var errors      = {};  
+            var errors      = self[this['name']]['errors'] || {};  
             
             
             if ( !errors['isRequired'] && this.value == '' && this.value != 0 ) {
@@ -201,6 +201,11 @@ function FormValidatorUtil(data, $fields) {
                 if ( typeof(errorStack) != 'undefined' )
                     errors['stack'] = errorStack;
             }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            else if ( isValid && typeof(errors[alias]) != 'undefined' ) {
+                delete errors[alias];
+                //delete errors['stack'];
+            }
 
             this.valid = isValid;
             if ( errors.count() > 0 )
@@ -210,7 +215,11 @@ function FormValidatorUtil(data, $fields) {
             return self[this.name]
         }
         
-        
+        self[el]['set'] = function(value) {
+            this.value  = local['data'][this.name] = value;
+            
+            return self[this.name]
+        }
 
         self[el]['isEmail'] = function() {
 
@@ -227,6 +236,11 @@ function FormValidatorUtil(data, $fields) {
 
             if (!isValid) {
                 errors['isEmail'] = replace(this['error'] || local.errorLabels['isEmail'], this)
+            }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            else if ( isValid && typeof(errors['isEmail']) != 'undefined' ) {
+                delete errors['isEmail'];
+                //delete errors['stack'];
             }
 
             this.valid = isValid;
@@ -252,6 +266,11 @@ function FormValidatorUtil(data, $fields) {
 
             if (!isValid) {
                 errors['isJsonWebToken'] = replace(this['error'] || local.errorLabels['isJsonWebToken'], this)
+            }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            else if ( isValid && typeof(errors['isJsonWebToken']) != 'undefined' ) {
+                delete errors['isJsonWebToken'];
+                //delete errors['stack'];
             }
 
             this.valid = isValid;
@@ -294,6 +313,11 @@ function FormValidatorUtil(data, $fields) {
             if (!valid) {
                 errors['isBoolean'] = replace(this.error || local.errorLabels['isBoolean'], this)
             }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            else if ( isValid && typeof(errors['isBoolean']) != 'undefined' ) {
+                delete errors['isBoolean'];
+                //delete errors['stack'];
+            }
 
             this.valid = valid;
             if ( errors.count() > 0 )
@@ -319,8 +343,8 @@ function FormValidatorUtil(data, $fields) {
                 , isValid       = false
                 , isMinLength   = true
                 , isMaxLength   = true
-                , errors        = {}
-                ;
+                , errors        = self[this['name']]['errors'] || {}
+            ;
             
             // test if val is a number
             try {
@@ -370,6 +394,10 @@ function FormValidatorUtil(data, $fields) {
 
                 isValid = false;
             }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            if ( isValid && typeof(errors['isNumberLength']) != 'undefined') {
+                delete errors['isNumberLength'];
+            }
 
             this.valid = isValid;
             val = this.value = local.data[this.name] = ( val != '' ) ? Number(val) : val;
@@ -380,7 +408,9 @@ function FormValidatorUtil(data, $fields) {
         }
 
         self[el]['toInteger'] = function() {
-            var val = this.value, errors = {};
+            var val = this.value
+                , errors = self[this['name']]['errors'] || {}
+            ;
 
             if (!val) {
                 return self[this.name]
@@ -406,7 +436,7 @@ function FormValidatorUtil(data, $fields) {
                 , isValid       = false
                 , isMinLength   = true
                 , isMaxLength   = true
-                , errors        = {}
+                , errors        = self[this['name']]['errors'] || {}
                 ;
 
             // test if val is a number
@@ -469,7 +499,10 @@ function FormValidatorUtil(data, $fields) {
                 }
             }
 
-            var val = this.value, errors = {}, isValid = true;
+            var val         = this.value
+                , errors    = self[this['name']]['errors'] || {}
+                , isValid   = true
+            ;
 
             if (decimals) {
                 this['decimals'] = parseInt(decimals)
@@ -532,7 +565,8 @@ function FormValidatorUtil(data, $fields) {
 
             var val         = this.value
                 , isValid   = false
-                , errors    = {};
+                , errors    = self[this['name']]['errors'] || {}
+            ;
 
 
             if ( typeof(val) == 'string' && /\./.test(val) && Number.isFinite( Number(val) ) ) {
@@ -572,6 +606,12 @@ function FormValidatorUtil(data, $fields) {
             if ( typeof(isApplicable) == 'boolean' && !isApplicable ) {
 
                 this.valid = true;
+                
+                // is in exluded ?
+                var excludedIndex = local.excluded.indexOf(this.name);
+                if ( excludedIndex > -1 ) {
+                    local.excluded.splice(excludedIndex, 1);
+                }
 
                 return self[this.name]
             }
@@ -595,11 +635,16 @@ function FormValidatorUtil(data, $fields) {
 
 
             var isValid = ( typeof(this.value) != 'undefined' && this.value != null && this.value != '' && !/^\s+/.test(this.value) ) ? true : false;
-            var errors  = {};
+            var errors  = self[this['name']]['errors'] || {};
 
 
             if (!isValid) {
                 errors['isRequired'] = replace(this.error || local.errorLabels['isRequired'], this)
+            }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            else if ( isValid && typeof(errors['isRequired']) != 'undefined' ) {
+                delete errors['isRequired'];
+                //delete errors['stack'];
             }
 
             this.valid = isValid;
@@ -623,8 +668,8 @@ function FormValidatorUtil(data, $fields) {
                 , isValid       = false
                 , isMinLength   = true
                 , isMaxLength   = true
-                , errors        = {}
-                ;
+                , errors        = self[this['name']]['errors'] || {}
+            ;
 
 
             // test if val is a string
@@ -687,7 +732,7 @@ function FormValidatorUtil(data, $fields) {
         self[el]['isDate'] = function(mask) {
             var val         = this.value
                 , isValid   = false
-                , errors    = {}
+                , errors    = self[this['name']]['errors'] || {}
                 ;
             if (!val) return self[this.name];
 
