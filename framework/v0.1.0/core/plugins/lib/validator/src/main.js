@@ -2906,15 +2906,25 @@ function ValidatorPlugin(rules, data, formId) {
                 if (
                     /(label)/i.test(event.target.tagName) && typeof(event.target.control) != 'undefined' && event.target.control != null && /(checkbox|radio)/i.test(event.target.control.type) 
                     || /(label)/i.test(event.target.parentNode.tagName) && typeof(event.target.parentNode.control) != 'undefined' && event.target.parentNode.control != null && /(checkbox|radio)/i.test(event.target.parentNode.control.type) 
-                ) {                    
+                ) {        
+                    var isCaseIgnored = ( 
+                                        event.target.getAttribute('for') 
+                                        || 
+                                        event.target.parentNode.getAttribute('for')
+                                    ) ? true : false
+                    ;          
                     // if `event.target.control` not working on all browser,
                     // try to detect `for` attribute OR check if on of the label's event.target.children is an input & type == (checkbox|radio)
                     $el = event.target.control || event.target.parentNode.control;
-                    if ( !$el.disabled && /(checkbox|radio)/i.test($el.type) ) {
+                    if ( 
+                        !$el.disabled 
+                        && /(checkbox|radio)/i.test($el.type) 
+                        && !isCaseIgnored
+                    ) {
                         // apply checked choice : if true -> set to false, and if false -> set to true                        
                         if ( /checkbox/i.test($el.type) ) {
                             return updateCheckBox($el);
-                        } else {
+                        } else if ( /radio/i.test($el.type) ) {
                             return updateRadio($el);
                         }
                     }                    
@@ -3501,6 +3511,10 @@ function ValidatorPlugin(rules, data, formId) {
                         continue;
                     }
                     
+                    hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
+                    isInCase = false;
+                    
+                    
                     //if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
                     if (
                         $fields[field].tagName.toLowerCase() == 'input' 
@@ -3511,23 +3525,64 @@ function ValidatorPlugin(rules, data, formId) {
                         continue;
                     }
 
-                    hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
-                    isInCase = false;
+                    // hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
+                    // isInCase = false;
                     
                     
                     for (var c in rules) {
                         if (!/^\_case\_/.test(c) ) continue;
                         if ( typeof(rules[c].conditions) == 'undefined' ) continue;
                         if ( typeof(rules[c].conditions[0].rules) == 'undefined' ) continue;
-                        // enter cases condition
-                        if ( typeof(rules[c].conditions) != 'undefined' && Array.isArray(rules[c].conditions) ) {
-                            caseName = c.replace('_case_', '');
+                        
+                        
+                        // enter cases conditions
+                        if ( 
+                            typeof(rules[c].conditions) != 'undefined' 
+                            && Array.isArray(rules[c].conditions) 
+                        ) {
+                            caseName = c.replace('_case_', '');                            
+                            // if case exists but case field not existing
+                            if ( typeof($fields[caseName]) == 'undefined' ) {
+                                continue
+                            }
+                            
+                            // depending on the case value, replace/merge original rule with condition rule
+                            if ( typeof(allFields[caseName]) == 'undefined' ) {
+                                allFields[caseName] =  $fields[c.replace(/^\_case\_/, '')].value
+                            }
+                            caseValue = allFields[caseName];
+                            if (isGFFCtx) {
+                                if (fields[field] == "true")
+                                    caseValue = true;
+                                else if (fields[field] == "false")
+                                    caseValue = false;
+                            }
+                            // filtering conditions
                             for (var _c = 0, _cLen = rules[c].conditions.length; _c < _cLen; ++_c) {
                                 
+                                if (rules[c].conditions[_c].case != caseValue) {
+                                    continue;
+                                }
+                                
+                                // enter condition rules
                                 for (var _r in rules[c].conditions[_c].rules) {
                                     
-                                    if (field != _r && !/^\//.test(_r) )
+                                    // ok, not the current case but still, 
+                                    // we want to apply the validation when the field is not yet listed 
+                                    if (field != _r && !/^\//.test(_r) ) {
+                                        if ( 
+                                            typeof(fields[_r]) == 'undefined' 
+                                            &&  typeof(allFields[_r]) != 'undefined' 
+                                        ) {
+                                            fields[_r] = allFields[_r];
+                                            localRuleObj = ( typeof(rules[_r]) != 'undefined' ) ? rules[_r] : {}; 
+                                            rules[_r] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
+                                            
+                                            checkFieldAgainstRules(_r, rules, fields);
+                                        }
                                         continue;
+                                    }
+                                        
                                     
                                     if ( /^\//.test(_r) ) { // RegExp found
                                         re      = _r.match(/\/(.*)\//).pop();                                        
@@ -3537,22 +3592,33 @@ function ValidatorPlugin(rules, data, formId) {
                                         re      = new RegExp(re, flags);
                                         if ( re.test(field)  ) {    
                                             // depending on the case value, replace/merge original rule with condition rule
-                                            caseValue = $fields[c.replace(/^\_case\_/, '')].value;
-                                            if (isGFFCtx) {
-                                                if (fields[field] == "true")
-                                                    caseValue = true;
-                                                else if (fields[field] == "false")
-                                                    caseValue = false;
-                                            }
-                                            if ( rules[c].conditions[_c].case == caseValue ) {
+                                            // if ( typeof(allFields[caseField]) == 'undefined' ) {
+                                            //     allFields[caseField] =  $fields[c.replace(/^\_case\_/, '')].value
+                                            // }
+                                            // caseValue = allFields[caseField];
+                                            // if (isGFFCtx) {
+                                            //     if (fields[field] == "true")
+                                            //         caseValue = true;
+                                            //     else if (fields[field] == "false")
+                                            //         caseValue = false;
+                                            // }
+                                            if ( 
+                                                rules[c].conditions[_c].case == caseValue 
+                                                ||
+                                                // test for regexp 
+                                                /^\//.test(rules[c].conditions[_c].case) 
+                                                && new RegExp(rules[c].conditions[_c].case).test(caseValue)                                                
+                                            ) {
                                                 localRuleObj = ( typeof(rules[field]) != 'undefined' ) ? rules[field] : {}; 
                                                 rules[field] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
                                             }
-                                            // check each field against rule
-                                            checkFieldAgainstRules(field, rules, fields);
+                                            // check each field against rule only if rule exists
+                                            if ( typeof(rules[field]) != 'undefined' ) {
+                                                checkFieldAgainstRules(field, rules, fields);
+                                            }
                                                                 
-                                            isInCase = true;                                         
-                                            break;
+                                            //isInCase = true;                                         
+                                            //break;
                                         } 
                                     } else {
                                         if ( typeof(rules[c].conditions[_c].rules[_r]) != 'undefined' ) {
@@ -3564,7 +3630,10 @@ function ValidatorPlugin(rules, data, formId) {
                                                 continue;
                                             }
                                             // by default
-                                            caseValue =  allFields[caseField];//$fields[caseField].value
+                                            // if ( typeof(allFields[caseField]) == 'undefined' ) {
+                                            //     allFields[caseField] =  $fields[caseField].value
+                                            // }
+                                            // caseValue =  allFields[caseField];
                                             // boolean caseValue
                                             if (
                                                 isGFFCtx 
@@ -3576,16 +3645,24 @@ function ValidatorPlugin(rules, data, formId) {
                                                 caseValue = ( /^(true)$/i.test(caseValue) ) ? true : false;
                                             }
                                             
-                                            if ( rules[c].conditions[_c].case == caseValue ) {
+                                            if ( 
+                                                rules[c].conditions[_c].case == caseValue 
+                                                ||
+                                                // test for regexp 
+                                                /^\//.test(rules[c].conditions[_c].case) 
+                                                && new RegExp(rules[c].conditions[_c].case).test(caseValue)
+                                            ) {
                                                 localRuleObj = ( typeof(rules[field]) != 'undefined' ) ? rules[field] : {}; 
                                                 rules[field] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
                                             }
                                             
-                                            // check each field against rule
-                                            checkFieldAgainstRules(field, rules, fields);
+                                            // check each field against rule only if rule exists
+                                            if ( typeof(rules[field]) != 'undefined' ) {
+                                                checkFieldAgainstRules(field, rules, fields);
+                                            }
                                             
-                                            isInCase = true;
-                                            break;
+                                            //isInCase = true;
+                                            //break;
                                         }  
                                     }
                                 }
@@ -3599,8 +3676,10 @@ function ValidatorPlugin(rules, data, formId) {
                     
                     if (isInCase) continue;                
 
-                    // check each field against rule
-                    checkFieldAgainstRules(field, rules, fields);
+                    // check each field against rule only if rule exists
+                    if ( typeof(rules[field]) != 'undefined' ) {
+                        checkFieldAgainstRules(field, rules, fields);
+                    }                    
                         
                     if (hasCase) {
                         ++i; // add sub level
