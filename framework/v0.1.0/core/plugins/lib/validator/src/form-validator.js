@@ -308,9 +308,9 @@ function FormValidatorUtil(data, $fields) {
                     val = this.value = local.data[this.name] = false;
                     break;
             }
-            var valid = (val !== null) ? true : false;
+            var isValid = (val !== null) ? true : false;
 
-            if (!valid) {
+            if (!isValid) {
                 errors['isBoolean'] = replace(this.error || local.errorLabels['isBoolean'], this)
             }
             // if error tagged by a previous vlaidation, remove it when isValid == true 
@@ -319,7 +319,7 @@ function FormValidatorUtil(data, $fields) {
                 //delete errors['stack'];
             }
 
-            this.valid = valid;
+            this.valid = isValid;
             if ( errors.count() > 0 )
                 this['errors'] = errors;
 
