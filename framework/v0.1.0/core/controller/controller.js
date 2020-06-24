@@ -2858,6 +2858,8 @@ function SuperController(options) {
         // if no session defined, will push to all active clients
         var sessionId = ( typeof(req[method].sessionID) != 'undefined' ) ? req[method].sessionID : null;
         
+        // resume current session
+        
         if (!payload) {           
             payload     = null;            
             if ( typeof(req[method]) != 'undefined' && typeof(req[method].payload) != 'undefined' ) {
@@ -2877,16 +2879,17 @@ function SuperController(options) {
                 clients = self.serverInstance.eio.getClientsBySessionId(sessionId);
                 if (clients)
                     clients.send(payload);
-            } else {
+            } 
+            
+            // send to all clients if no specific sessionId defined
+            if (!sessionId) {
                 clients = self.serverInstance.eio.clients;
-                
                 for (var id in clients) {
                     clients[id].send(payload)
                 }
             }
                 
             res.end();
-            
         } catch(err) {
             self.throwError(err)
         } 

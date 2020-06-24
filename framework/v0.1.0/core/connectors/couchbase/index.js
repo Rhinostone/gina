@@ -213,22 +213,26 @@ function Couchbase(conn, infos) {
                             i = 0; len = args.length;
                             for (; i < len; ++i) {
                                 key = inl.indexOf(params[i]);
-                                p[key] = args[key];
-                                
-                                re = new RegExp('(.*)\\.'+ inl[key].replace(/([$%]+)/, '\\$1'));                                
-                                if ( re.test(qStr) ) {
+                                if (key > -1) {
                                     p[key] = args[key];
-                                    qStr = qStr.replace( new RegExp('(.*)\\.'+ params[i].replace(/([$%]+)/, '\\$1')), '$1\.'+args[i]);
-                                    inl.splice(key, 1);
-                                }
+                                    
+                                    re = new RegExp('(.*)\\.'+ inl[key].replace(/([$%]+)/, '\\$1'));                                
+                                    if ( re.test(qStr) ) {
+                                        p[key] = args[key];
+                                        qStr = qStr.replace( new RegExp('(.*)\\.'+ params[i].replace(/([$%]+)/, '\\$1')), '$1\.'+args[i]);
+                                        inl.splice(key, 1);
+                                    }
+                                }                                    
                             }
 
                             queryString = qStr;
 
                             index = 0; i = 0; len = p.length;
-                            for (; i < len; ++i) {                                
-                                queryParams[index] = p[i];
-                                ++index;
+                            for (; i < len; ++i) {  
+                                if ( typeof(p[i]) != 'undefined' )  {
+                                    queryParams[index] = p[i];
+                                    ++index;
+                                }
                             }
 
                         } else { // normal case
