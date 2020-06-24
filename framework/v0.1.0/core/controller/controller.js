@@ -1289,8 +1289,14 @@ function SuperController(options) {
      * @param {string} requestMethod - GET, POST, PUT, DELETE
      */
     var localRequestMethod = null, localRequestMethodParams = null;
-    this.setRequestMethod = function(requestMethod) {
+    this.setRequestMethod = function(requestMethod, conf) {
+        // http/2 case
+        if ( /http\/2/i.test(conf.server.protocolShort) ) {
+            local.req.headers[':method'] = local.req.method.toUpperCase()
+        }
+        
         localRequestMethod = local.req.method = local.req.routing.method = requestMethod.toUpperCase();
+        
         local.res.setHeader('access-control-allow-methods', localRequestMethod);
         
         return localRequestMethod;      
@@ -1428,6 +1434,8 @@ function SuperController(options) {
         var route   = '', rte = '';
         var ignoreWebRoot = null, isRelative = false;
         var originalUrl = null;
+        var method = null;
+        var originalMethod = null; 
 
         if ( typeof(req) === 'string' ) {
 
@@ -1460,9 +1468,19 @@ function SuperController(options) {
                 rte             = rte.replace(/\?(.*)/, '');
                 
                 req             = local.req;
-                console.debug('trying to get route: ', rte, bundle, req.method);
-                if ( !isStaticRoute(rte, req.method, bundle, env, ctx.config.envConf) ) {
+                originalMethod = ( typeof(req.originalMethod) != 'undefined') ? req.originalMethod :  req.method;           
+                console.debug('trying to get route: ', rte, bundle, req.method);     
+                if ( !isStaticRoute(rte, req.method, bundle, env, ctx.config.envConf) ) {                    
                     req.routing     = lib.routing.getRouteByUrl(rte, bundle, req.method, req);
+                    // try alternative method
+                    if (!req.routing) {
+                        req.routing     = lib.routing.getRouteByUrl(rte, bundle, 'GET', req);
+                        if (req.routing) {
+                            method = req.method = 'GET'
+                        }
+                    }
+                    
+                    //route = route = req.routing.name;
                 } else {
                     req.routing = {
                         param : {
@@ -1508,15 +1526,16 @@ function SuperController(options) {
                 next    = local.next;
                 
                 req.routing.param.route = routing[rte]
-            }
+            }            
+            
         } else {
             route = req.routing.param.route;            
         }
         
-        // if ( !/GET/i.test(req.method) ) {
-        //     local.req.method = req.method = 'GET' // Always for redirect !!!!
-        // }
-
+        if ( !originalMethod ) {
+            originalMethod = ( typeof(req.originalMethod) != 'undefined') ? req.originalMethod :  req.method;
+        }
+        
         var path        = originalUrl || req.routing.param.path || '';
         var url         = req.routing.param.url;
         var code        = req.routing.param.code || 301;
@@ -1569,7 +1588,11 @@ function SuperController(options) {
 
             if (!local.res.headersSent) {
                 
-                if ( !/GET/i.test(req.method) ) { // trying to redirect using the wrong method ?
+                if ( 
+                    !/GET/i.test(req.method) 
+                    || 
+                    originalMethod && !/GET/i.test(originalMethod) 
+                ) { // trying to redirect using the wrong method ?
                     
                     
                     //console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA redirection is not permitted in this scenario.\nSwitching rendering mode: calling self.renderJSON({ location: "'+ path +'"})\nFrom now, you just need to catch the response with a frontend script.\n').message);
@@ -1578,7 +1601,7 @@ function SuperController(options) {
                     code = 303;
                     
                     //var method = local.req.method.toUpperCase();
-                    method = local.req.method = self.setRequestMethod('GET'); ;
+                    method = local.req.method = self.setRequestMethod('GET', conf);
                     // if ( typeof(local.res._headers['access-control-allow-methods']) != 'undefined' && local.res._headers['access-control-allow-methods'] != method ) {
                     //     res.setHeader('access-control-allow-methods', method);
                     // }                    
@@ -1591,12 +1614,18 @@ function SuperController(options) {
                 var ext = 'html';
                 res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime[ext]);
                 
-                if ( typeof(local.res._headers) != 'undefined' && typeof(local.res._headers['access-control-allow-methods']) != 'undefined' && local.res._headers['access-control-allow-methods'] != req.method ) {
-                    res.setHeader('access-control-allow-methods', req.method);
+                if ( 
+                    typeof(local.res._headers) != 'undefined'
+                    && typeof(local.res._headers['access-control-allow-methods']) != 'undefined' 
+                    && local.res._headers['access-control-allow-methods'] != req.method 
+                    ||
+                    !new RegExp(req.method, 'i').test( res.getHeader('access-control-allow-methods') )
+                ) {
+                    res.setHeader('access-control-allow-methods', req.method.toUpperCase() );
                 }
                 //path += '?query='+ JSON.stringify(self.getRequestMethodParams());
                 local.req[req.method.toLowerCase()] = self.getRequestMethodParams() || {};
-                
+                                
                 
                 if (GINA_ENV_IS_DEV) {
                     res.writeHead(code, {
@@ -1611,7 +1640,7 @@ function SuperController(options) {
                     
                 res.end();
                 local.res.headersSent = true;// done for the render() method
-                console.info(local.req.method +' ['+code+'] '+ path);
+                console.info(local.req.method.toUpperCase() +' ['+code+'] '+ path);
                 
                 
                 if ( typeof(next) != 'undefined' )

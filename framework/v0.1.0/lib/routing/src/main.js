@@ -214,6 +214,8 @@ function Routing() {
             , _rule         = null
             , rule          = null
             , str           = null
+            // request method
+            , requestMethod        = request.method.toLowerCase()
         ;
         
         if (!_param.length) return false;
@@ -258,7 +260,11 @@ function Routing() {
 
             if (matched === false) return matched;
             // filter on method
-            if (params.method.toLowerCase() !== request.method.toLowerCase()) return false;
+            if (params.method.toLowerCase() !== requestMethod) return false;
+            
+            if ( typeof(request[requestMethod]) == 'undefined' ) {
+                request[requestMethod] = {}
+            }
 
             key     = _param[matched].substr(1);
             regex   = params.requirements[key];
@@ -304,6 +310,9 @@ function Routing() {
                 tested
             ) {                
                 request.params[key] = urlVal;
+                if ( typeof(request[requestMethod][key]) == 'undefined' ) {
+                    request[requestMethod][key] = urlVal
+                }
                 return true
             }
 
@@ -656,8 +665,13 @@ function Routing() {
             
             if ( !request ) {
                 request = {
+                    routing: {
+                        path: unescape(pathname)
+                    },
                     isXMLRequest: false,
-                    method : ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get'
+                    method : ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get',
+                    params: {},
+                    url: url
                 }
             }
             isXMLRequest    = request.isXMLRequest || false;
@@ -665,6 +679,14 @@ function Routing() {
 
         pathname    = url.replace( new RegExp('^('+ hostname +'|'+hostname.replace(/\:\d+/, '') +')' ), '');
         method      = ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get';
+        
+        if (isMethodProvidedByDefault) {
+            // to handle 303 redirect like PUT -> GET
+            request.originalMethod = request.method;
+            
+            request.method = method;
+            request.routing.path = unescape(pathname)
+        }
 
         //  getting params
         params = {};
@@ -707,6 +729,7 @@ function Routing() {
                 // normal case
                 //Parsing for the right url.
                 try {
+                    
                     isRoute = self.compareUrls(params, routing[name].url, request);
 
                     if (isRoute.past) {
@@ -812,11 +835,7 @@ function Routing() {
                     }
                                                      
                     return false
-                }
-                
-                //msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : no route found for url: `' + url + '` !'
-                               
-                //console.warn(msg);                               
+                }                                             
                 return false
             }
 
@@ -825,6 +844,20 @@ function Routing() {
             
             return false;
         } else {
+            // override method inf needed fot http2
+            
+            route.url = url;
+            route.toUrl = function (ignoreWebRoot) {
+            
+                var wroot       = this.webroot
+                    , hostname  = this.hostname
+                ;
+                
+                this.url = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : this.url;
+    
+                return hostname + this.url
+            };
+            
             return route
         }
     }
