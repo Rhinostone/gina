@@ -132,7 +132,7 @@ function ServerEngineClass(options) {
     }  
     
     if ( typeof(options.ioServer) != 'undefined' && typeof(options.ioServer.integrationMode) != 'undefined' && /^attach$/.test(options.ioServer.integrationMode) ) {
-        console.info('[IO SERVER ] `eio` found using `attach` integration mode');
+        console.info('[IO SERVER ] `eio` found using `'+ options.ioServer.integrationMode +'` integration mode');
         delete options.ioServer.integrationMode;
         
         ioServer = new Eio(server, options.ioServer);        
@@ -175,8 +175,12 @@ function ServerEngineClass(options) {
         ioServer.on('connection', function (socket) {
             
             socket.send(JSON.stringify({
-                id: socket.id,
-                handshake: 'Welcomed to `'+ options.bundle +'` main socket !'
+                id: this.id,//socket.id,
+                handshake: 'Welcomed to `'+ options.bundle +'` main socket !',
+                // how many ms before sending a new ping packet
+                pingTimeout: options.ioServer.pingTimeout || options.ioServer.timeout,
+                // how many ms without a pong packet to consider the connection closed
+                pingInterval: options.ioServer.pingInterval || options.ioServer.interval
             }));
             
             socket.on('message', function(payload){ 
@@ -199,7 +203,8 @@ function ServerEngineClass(options) {
             });
         });
         
-        server.on('upgrade', function(req, socket, head){            
+        server.on('upgrade', function(req, socket, head){
+            console.debug('[IO SERVER ] upgrading socket #'+ this.id);            
             ioServer.handleUpgrade(req, socket, head);
         });
         // httpServer.on('request', function(req, res){

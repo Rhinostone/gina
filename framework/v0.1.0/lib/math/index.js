@@ -40,16 +40,16 @@ function Math() {
      * e.g.:
      *
      *  var operate = require("gina").utils.math.operate;
-     *  var calculation = "10*2";
-     *  var result = operate(calculation);
+     *  var computation = "10*2";
+     *  var result = operate(computation);
      *      => 20
      *
      *  @param {string} calcultation
      *
      *  @return {number} result
      * */
-    this.operate = function(calculation) {
-        return new Function('return ' + calculation)()
+    this.operate = function(computation) {
+        return new Function('return ' + computation)()
     }
 
     /**
