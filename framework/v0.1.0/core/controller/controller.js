@@ -1598,13 +1598,9 @@ function SuperController(options) {
                     //console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA redirection is not permitted in this scenario.\nSwitching rendering mode: calling self.renderJSON({ location: "'+ path +'"})\nFrom now, you just need to catch the response with a frontend script.\n').message);
                     console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA redirection is not permitted in this scenario.\nSwitching request method to `GET` method instead.\n').message);
                     
-                    code = 303;
-                    
-                    //var method = local.req.method.toUpperCase();
+                    code = 303;                    
                     method = local.req.method = self.setRequestMethod('GET', conf);
-                    // if ( typeof(local.res._headers['access-control-allow-methods']) != 'undefined' && local.res._headers['access-control-allow-methods'] != method ) {
-                    //     res.setHeader('access-control-allow-methods', method);
-                    // }                    
+                    
                     var requestParams = local.req[method.toLowerCase()];
                     if ( typeof(requestParams) != 'undefined' ) {
                         path += '?'+ encodeURIComponent(JSON.stringify(local.req[method.toLowerCase()]));                 

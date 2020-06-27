@@ -81,6 +81,10 @@ function ValidatorPlugin(rules, data, formId) {
         'resetErrorsDisplay'    : null,
         'resetFields'           : null
     };
+    
+    var local = {
+        rules: {}
+    };
 
 
     /**
@@ -146,7 +150,7 @@ function ValidatorPlugin(rules, data, formId) {
             } catch (err) {
                 throw err
             }
-
+            
             backendProto.rules = instance.rules;
 
             return validate($form, fields, null, instance.rules)
@@ -209,7 +213,11 @@ function ValidatorPlugin(rules, data, formId) {
      * @return {object} $form
      * */
     var validateFormById = function(formId, customRule) {
-        var $form = null, _id = formId;
+        var $form = null
+            , _id = formId
+            , rules = ( typeof(local.rules.count() > 0 ) ) ? local.rules : instance.rules
+            , $target = null
+        ;
 
 
         if ( !instance['$forms'] ) {
@@ -229,7 +237,7 @@ function ValidatorPlugin(rules, data, formId) {
             _id = _id.replace(/\#/, '')
         } else if ( typeof(_id) == 'object' && !Array.isArray(_id) ) { // weird exception
 
-            var $target = _id.form;
+            $target = _id.form;
             _id = $target.getAttribute('id') || 'form.'+uuid.v4();
 
             $target.setAttribute('id', _id);// just in case
@@ -243,7 +251,7 @@ function ValidatorPlugin(rules, data, formId) {
         if ( typeof(instance['$forms'][_id]) != 'undefined' ) {            
             $form   = this.$forms[_id] = instance['$forms'][_id];
         } else { // binding a form out of context (outside of the main instance)
-            var $target             = document.getElementById(_id);
+            $target             = document.getElementById(_id);
             $validator.id           = _id;
             $validator.target       = $target;
 
@@ -253,13 +261,13 @@ function ValidatorPlugin(rules, data, formId) {
             if ( typeof(customRule) == 'undefined') {
                 rule = _id.replace(/\-/g, '.');
 
-                if ( typeof(instance.rules[rule]) != 'undefined' ) {
-                    $form['rule'] = customRule = instance.rules[rule];
+                if ( typeof(rules) != 'undefined' ) {
+                    $form['rule'] = customRule = getRuleObjByName(rule)
                 } else if ( typeof($form.target) != 'undefined' && $form.target !== null && $form.target.getAttribute('data-gina-form-rule') ) {
                     rule = $form.target.getAttribute('data-gina-form-rule').replace(/\-/g, '.');
 
-                    if ( typeof(instance.rules[rule]) != 'undefined' ) {
-                        $form['rule'] = instance.rules[rule]
+                    if ( typeof(rules) != 'undefined' ) {
+                        $form['rule'] = getRuleObjByName(rule)
                     } else {
                         throw new Error('[ FormValidator::validateFormById(formId) ] using `data-gina-form-rule` on form `'+$form.target+'`: no matching rule found')
                     }
@@ -267,8 +275,8 @@ function ValidatorPlugin(rules, data, formId) {
             } else {
                 rule = customRule.replace(/\-/g, '.');
 
-                if ( typeof(instance.rules[rule]) != 'undefined' ) {
-                    $form['rule'] = instance.rules[rule]
+                if ( typeof(rules) != 'undefined' ) {
+                    $form['rule'] = getRuleObjByName(rule)
                 } else {
                     throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+customRule+'` is not a valid rule')
                 }
@@ -1202,6 +1210,7 @@ function ValidatorPlugin(rules, data, formId) {
     var onUpload = function(gina, $target, status, id, data) {
                 
         var uploadProperties = $target.uploadProperties || null;
+        // FYI
         // {                                    
         //     id              : String,
         //     $form           : $Object,
@@ -1384,16 +1393,16 @@ function ValidatorPlugin(rules, data, formId) {
 
         }
 
-
         var abLen = ab.length;
         var CHUNK_SIZE = Math.pow(2, 8) + bits;
-        var offset = null, len = null, subab = null;
+        var offset = 0, len = null, subab = null;
         
-        for (offset = 0; offset < abLen; offset += CHUNK_SIZE) {
+        for (; offset < abLen; offset += CHUNK_SIZE) {
             len = Math.min(CHUNK_SIZE, abLen - offset);
             subab = ab.subarray(offset, offset + len);
             str += String.fromCharCode.apply(null, subab);
         }
+        
         return str;
     }
 
@@ -1681,10 +1690,6 @@ function ValidatorPlugin(rules, data, formId) {
 
             }
 
-            // if (!instance.rules) {
-            //     instance.rules = {}
-            // }
-
             
             rules = JSON.parse(rulesStr);
             parseRules(rules, '');
@@ -1698,6 +1703,7 @@ function ValidatorPlugin(rules, data, formId) {
     var init = function (rules) {
 
         if (gina.hasValidator) {
+            
             instance = merge(instance, gina.validator);
             instance.on('init', function(event) {
                 instance.isReady = true;
@@ -1708,16 +1714,23 @@ function ValidatorPlugin(rules, data, formId) {
             instance.on('init', function(event) {
                 // parsing rules
                 if ( typeof(rules) != 'undefined' && rules.count() ) {
-                    try {
-                        // making copy
-                        gina.forms.rules = JSON.parse(JSON.stringify(rules));
-                        
+                    try {                                                                       
                         parseRules(rules, '');
                         checkForRulesImports(rules);
+                        // making copy
+                        if ( typeof(gina.forms.rules) == 'undefined' || !gina.forms.rules) {
+                            //gina.forms.rules = JSON.parse(JSON.stringify(rules));
+                            gina.forms.rules = rules
+                        }
+                            
+                        
                     } catch (err) {
                         throw (err)
                     }
                 }
+                
+                if ( !local.rules.count() )
+                    local.rules = JSON.parse(JSON.stringify(instance.rules));
 
                 $validator.setOptions           = setOptions;
                 $validator.getFormById          = getFormById;
@@ -1761,16 +1774,16 @@ function ValidatorPlugin(rules, data, formId) {
 
                         if (customRule) {
                             customRule = customRule.replace(/\-/g, '.');
-                            if ( typeof(instance.rules[customRule]) == 'undefined' ) {
-                                //customRule = null;   
+                            if ( typeof(local.rules[customRule]) == 'undefined' ) {
                                 throw new Error('['+$allForms[f].id+'] no rule found with key: `'+customRule+'`. Please check if json is not malformed @ /forms/rules/' + customRule.replace(/\./g, '/') +'.json');        
                             } else {
-                                customRule = instance.rules[customRule]
+                                //customRule = instance.rules[customRule]
+                                customRule = getRuleObjByName(customRule)
                             }
                         }
 
                         // finding forms handled by rules
-                        if ( typeof($allForms[f].id) == 'string' && typeof(instance.rules[$allForms[f].id.replace(/\-/g, '.')]) != 'undefined' ) {
+                        if ( typeof($allForms[f].id) == 'string' && typeof(local.rules[$allForms[f].id.replace(/\-/g, '.')]) != 'undefined' ) {
                             $target = instance.$forms[$allForms[f].id].target;
                             if (customRule) {
                                 bindForm($target, customRule)
@@ -1826,6 +1839,8 @@ function ValidatorPlugin(rules, data, formId) {
                         catch (e) {}
                     }
                 }
+                
+                
 
                 instance.isReady = true;
                 gina.hasValidator = true;
@@ -1841,7 +1856,9 @@ function ValidatorPlugin(rules, data, formId) {
 
     var initForm = function ($form) {
 
-        var customRule = null;
+        var customRule = null
+            , rules = ( typeof(local.rules.count() > 0 ) ) ? local.rules : instance.rules
+        ;
 
         if ($form.getAttribute) {
             id = $form.getAttribute('id') || 'form.' + uuid.v4();
@@ -1864,16 +1881,16 @@ function ValidatorPlugin(rules, data, formId) {
 
             if (customRule) {
                 customRule = customRule.replace(/\-/g, '.');
-                if (typeof (instance.rules[customRule]) == 'undefined') {
+                if ( typeof(rules[customRule]) == 'undefined') {
                     customRule = null;
                     throw new Error('[' + $form.id + '] no rule found with key: `' + customRule + '`');
                 } else {
-                    customRule = instance.rules[customRule]
+                    customRule = rules[customRule]
                 }
             }
 
             // finding forms handled by rules
-            if (typeof ($form.id) == 'string' && typeof (instance.rules[$form.id.replace(/\-/g, '.')]) != 'undefined') {
+            if (typeof ($form.id) == 'string' && typeof (rules[$form.id.replace(/\-/g, '.')]) != 'undefined') {
                 $target = instance.$forms[$form.id].target;
                 if (customRule) {
                     bindForm($target, customRule)
@@ -1929,12 +1946,122 @@ function ValidatorPlugin(rules, data, formId) {
                 if (/\[|\]/.test(r) ) { // must be a real path
                     _r = r.replace(/\[/g, '.').replace(/\]/g, '');
                 }
-
+                
                 instance.rules[tmp + _r] = rules[r];
+                
                 //delete instance.rules[r];
                 parseRules(rules[r], tmp + _r +'.');
             }
         }
+    }
+    
+    var getRuleObjByName = function(ruleName) {
+        
+        if ( typeof(local.rules[ruleName]) != 'undefined' ) {
+            return local.rules[ruleName]
+        }
+        var rules = null;
+        // just in case : many ways to access this method
+        if ( typeof(instance.rules[ruleName]) == 'undefined' ) {            
+            parseRules(local.rules, '');
+            checkForRulesImports(local.rules);
+            rules = local.rules[ruleName];
+            if ( !rules ) {
+                return {}
+            }
+        } else {
+            rules = instance.rules[ruleName]
+        }
+        
+        var ruleObj = JSON.parse(JSON.stringify(rules))
+            , re = new RegExp('^'+ruleName)
+            , propRe = new RegExp('^'+ruleName +'.')
+            , propName = null
+        ;
+                
+        var rulesFromPath = function(obj, keys, val, originalRuleObj, field, i, len) {
+            if (!keys.length) {                
+                return
+            }
+            
+            var _id = Object.getOwnPropertyNames(obj)[0];
+            var _key = keys[0];
+            var nextFieldName = null;
+            if ( field == '') {
+                field += _key;
+                nextFieldName = field
+            } else {
+                nextFieldName =  field + '['+ _key + ']'
+            }
+            
+            if ( keys.length == 1) {
+                // obj[ _key ] =  ( 
+                //     typeof(obj[ _key ]) == 'undefined' 
+                //     && typeof(val) == 'object' 
+                //     && Array.isArray(val)
+                // ) ? [] : {} ;
+                
+                obj[ _id ] = merge(obj[ _id ], val, true);  
+                
+                // if ( 
+                //     typeof(originalRuleObj[nextFieldName]) != 'undefined' 
+                //     //&& typeof(originalRuleObj[nextFieldName][_key]) != 'undefined' 
+                // ) {
+                    
+                //     originalRuleObj[nextFieldName] = val//merge(originalRuleObj[nextFieldName], val, true);
+                //     //if ( typeof(originalRuleObj[nextFieldName][_key]) != 'undefined' ) {
+                //     //    originalRuleObj[nextFieldName][_key] = val
+                //     //}// else {
+                //       //  originalRuleObj[nextFieldName][_key] = merge(originalRuleObj[nextFieldName][_key], val, true);
+                //     //}
+                    
+                                        
+                // } else if ( 
+                //     typeof(originalRuleObj[field]) != 'undefined' 
+                //     //&& typeof(originalRuleObj[field][_key]) != 'undefined'
+                // ) {
+                //     originalRuleObj[field] = val
+                //     //originalRuleObj[field] = merge(originalRuleObj[field], val, true);
+                //     //if ( typeof(originalRuleObj[field][_key]) != 'undefined' ) {                        
+                //     //    originalRuleObj[field][_key] = val//merge(originalRuleObj[field][_key], val, true);
+                //     //} //else {
+                //      //   originalRuleObj[field] = merge(originalRuleObj[field], val, true);
+                //     //}
+                   
+                // }  else if ( typeof(originalRuleObj[_key]) != 'undefined' ) {
+                //     originalRuleObj[_key] = val
+                //    //originalRuleObj[_key] = merge(originalRuleObj[_key], val, true)
+                // }
+                   
+                
+            } //else if ( typeof(originalRuleObj[nextFieldName]) != 'undefined' ) {
+            //    field = nextFieldName;
+            //}
+            
+            keys.splice(0,1);
+            if (nextFieldName == _id) {
+                rulesFromPath(obj[ _id ], keys, val, originalRuleObj, nextFieldName, i, len)
+            } else if ( typeof(obj[ _id ]) != 'undefined' ) {
+                rulesFromPath(obj[ _id ], keys, val, originalRuleObj, nextFieldName, i, len)
+            } else {
+                rulesFromPath(obj, keys, val, originalRuleObj, field, i, len)
+            }
+            
+        }
+        
+        for (var prop in instance.rules) {
+            if ( prop != ruleName && re.test(prop) ) {
+                
+                propName = prop.replace(propRe, '');
+                if ( /\./.test(propName) ) {
+                    var keys = propName.split(/\./g);
+                    rulesFromPath( ruleObj, keys, instance.rules[prop], ruleObj, '',  0, ruleObj.count()-1 )
+                }                
+            }
+        }
+        //cache rules
+        local.rules[ruleName] = ruleObj;
+        return ruleObj
     }
     
     var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
@@ -1972,110 +2099,16 @@ function ValidatorPlugin(rules, data, formId) {
             } else {
                 obj[key] = {};
             }
-            // //var _keyVal = (/^\d+$/.test(nextKey)) ? [] : {};
-            // eval(root +'=obj[key]');
 
             ++i;
-            //return makeObjectFromArgs(root, args, obj[key], len, i, value);
             return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
         }
         
         ++i;
         return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
-
-        // if ( Array.isArray(obj) ) {
-        //     for (var n = 0, nLen = obj.length; n < nLen; ++n) {
-
-        //         if (n == key) {
-        //             ++i;
-        //             return makeObjectFromArgs(root, args, obj[n], len, i, value);
-        //             //makeObjectFromArgs(root, args, obj[key], len, i, value);
-        //         }
-        //     }
-        // } else {
-            // for (var k in obj) {
-
-            //     if (k == key) {
-            //         ++i;
-            //         return makeObjectFromArgs(root, args, obj[key], len, i, value);
-            //         //makeObjectFromArgs(root, args, obj[key], len, i, value);
-            //     }
-            // }
-        //}
-            
-        
-        //return
     }
 
-    // var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
-                        
-    //     if (i == len) { // end
-    //         eval(root +'=value');
-    //         return rootObj
-    //     }
-        
-    //     var key = args[i].replace(/^\[|\]$/g, '');
-
-    //     // init root object
-    //     if ( typeof(rootObj) == 'undefined' ) {
-            
-    //         rootObj = {};
-    //         root = 'rootObj';
-            
-    //         root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
-    //         eval(root +'=obj');      
-    //     } else {
-    //         root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
-    //     }
-        
-
-    //     var nextKey = ( typeof(args[i + 1]) != 'undefined' ) ? args[i + 1].replace(/^\[|\]$/g, '') : null;
-    //     var valueType = ( nextKey && parseInt(nextKey) == nextKey ) ? [] : {}
-    //     if ( nextKey ) {            
-    //         eval(root +' = valueType');
-    //     }
-        
-    //     if ( typeof(obj[key]) == 'undefined' ) {
-
-    //         if (/^\d+$/.test(nextKey)) { // collection index ?
-    //             obj[key] = [];
-    //         } else {
-    //             obj[key] = {};
-    //         }
-    //         // //var _keyVal = (/^\d+$/.test(nextKey)) ? [] : {};
-    //         // eval(root +'=obj[key]');
-
-    //         ++i;
-    //         //return makeObjectFromArgs(root, args, obj[key], len, i, value);
-    //         return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
-    //     }
-        
-    //     ++i;
-    //     return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
-
-    //     // if ( Array.isArray(obj) ) {
-    //     //     for (var n = 0, nLen = obj.length; n < nLen; ++n) {
-
-    //     //         if (n == key) {
-    //     //             ++i;
-    //     //             return makeObjectFromArgs(root, args, obj[n], len, i, value);
-    //     //             //makeObjectFromArgs(root, args, obj[key], len, i, value);
-    //     //         }
-    //     //     }
-    //     // } else {
-    //         // for (var k in obj) {
-
-    //         //     if (k == key) {
-    //         //         ++i;
-    //         //         return makeObjectFromArgs(root, args, obj[key], len, i, value);
-    //         //         //makeObjectFromArgs(root, args, obj[key], len, i, value);
-    //         //     }
-    //         // }
-    //     //}
-            
-        
-    //     //return
-    // }
+    
 
     /**
      * makeObject - Preparing form data
@@ -2126,44 +2159,8 @@ function ValidatorPlugin(rules, data, formId) {
             , obj       = {}
             , key       = null
             , fields    = {}
-            , altName   = null;
-            
-        
-        
-        // for (var name in data) {
-
-        //     if ( /\[(.*)\]/.test(name) ) {
-        //         // backup name key
-        //         key = name;
-
-        //         // properties
-        //         args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
-
-        //         // root
-        //         name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
-        //         altName    = name.replace(/.*\[(.+)\]$/, "$1");
-                
-        //         if ()
-                    
-        //         // building object tree
-        //         makeObject(obj, data[key], args, args.length, 0);
-
-        //         //if ( Array.isArray(obj) ) {
-        //         //    fields[name] = merge(fields[name], obj);
-        //         //} else {
-        //             if ( typeof(fields[altName]) == 'undefined') {
-        //                 fields[altName] = Array.isArray(obj) ? [] : {};
-        //             }
-        //             fields[altName] = merge(fields[altName], obj);
-        //         //}
-                
-        //         obj = {}
-
-        //     } else {
-        //         fields[name] = data[name];
-        //     }
-        //     altName = null;
-        // }
+            , altName   = null
+        ;
 
         var makeFields = function(fields, isObject, data, len, i) {
             if (i == len ) { // exit
@@ -2243,7 +2240,10 @@ function ValidatorPlugin(rules, data, formId) {
      * */
     var bindForm = function($target, customRule) {
 
-        var $form = null, _id = null;
+        var $form   = null
+            , _id   = null
+            , rules = ( typeof(local.rules.count() > 0 ) ) ? local.rules : instance.rules
+        ;
 
         try {
             if ( $target.getAttribute && $target.getAttribute('id') ) {
@@ -2267,15 +2267,24 @@ function ValidatorPlugin(rules, data, formId) {
 
         var withRules = false, rule = null, evt = '', procced = null;
 
-        if ( typeof(customRule) != 'undefined' || typeof(_id) == 'string' && typeof(instance.rules[_id.replace(/\-/g, '.')]) != 'undefined' ) {
+        if ( 
+            typeof(customRule) != 'undefined' 
+            || 
+            typeof(_id) == 'string' 
+                && typeof(rules[_id.replace(/\-/g, '.')]) != 'undefined' 
+        ) {
             withRules = true;
 
             if ( customRule && typeof(customRule) == 'object' ) {
                 rule = customRule
-            } else if ( customRule && typeof(customRule) == 'string' && typeof(instance.rules[customRule.replace(/\-/g, '.')]) != 'undefined') {
-                rule = instance.rules[customRule.replace(/\-/g, '.')]
+            } else if ( 
+                customRule 
+                && typeof(customRule) == 'string' 
+                && typeof(rules[customRule.replace(/\-/g, '.')]) != 'undefined'
+            ) {                
+                rule = getRuleObjByName(customRule.replace(/\-/g, '.'))
             } else {
-                rule = instance.rules[_id.replace(/\-/g, '.')]
+                rule = getRuleObjByName(_id.replace(/\-/g, '.'))
             }
 
             $form.rules = rule
@@ -3199,9 +3208,11 @@ function ValidatorPlugin(rules, data, formId) {
                         var customRule = $target.getAttribute('data-gina-form-rule');
 
                         if ( customRule ) { // 'data-gina-form-rule'
-                            rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
+                            //rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
+                            rule = getRuleObjByName(customRule.replace(/\-/g, '.'))
                         } else {
-                            rule = gina.validator.$forms[ _id ].rules;
+                            //rule = gina.validator.$forms[ _id ].rules;
+                            rule = getRuleObjByName(_id.replace(/\-/g, '.'))
                         }
 
                         validate($target, fields, $fields, rule, function onValidation(result){
@@ -3388,9 +3399,11 @@ function ValidatorPlugin(rules, data, formId) {
                 var customRule = $target.getAttribute('data-gina-form-rule');
 
                 if ( customRule ) { // 'data-gina-form-rule'
-                    rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
+                    //rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
+                    rule = getRuleObjByName(customRule.replace(/\-/g, '.'))
                 } else {
-                    rule = gina.validator.$forms[ id ].rules;
+                    //rule = gina.validator.$forms[ id ].rules;
+                    rule= getRuleObjByName(id.replace(/\-/g, '.'))
                 }
 
                 validate($target, fields, $fields, rule, function onValidation(result){
@@ -3898,10 +3911,9 @@ function ValidatorPlugin(rules, data, formId) {
 
     var setupInstanceProto = function() {
 
+        instance.target                 = document;
         instance.setOptions             = setOptions;
         instance.getFormById            = getFormById;
-        instance.validateFormById       = validateFormById;
-        instance.target                 = document;
         instance.validateFormById       = validateFormById;
         instance.resetErrorsDisplay     = resetErrorsDisplay;
         instance.resetFields            = resetFields;
