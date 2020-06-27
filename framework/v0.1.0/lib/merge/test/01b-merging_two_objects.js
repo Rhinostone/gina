@@ -13,6 +13,13 @@ var setVariable = function () {
                     "section":"urssaf"
                 }
             }
+        },
+        "form" :{
+            "rule": {
+                "testField" :{
+                    "isString": [25]
+                }
+            }
         }
     };
 
@@ -20,6 +27,13 @@ var setVariable = function () {
         "page": {
             "view": {
                 "file": "factsheets"
+            }
+        },
+        "form" :{
+            "rule": {
+                "testField" :{
+                    "isString": [25, 25]
+                }
             }
         }
     };
@@ -77,6 +91,13 @@ exports['Merge : A<-B without override'] = function(test) {
                     "section":"urssaf"
                 },
                 "file": "factsheets"
+            }
+        },
+        "form" :{
+            "rule": {
+                "testField" :{
+                    "isString": [25, 25]
+                }
             }
         }
     };

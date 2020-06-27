@@ -801,7 +801,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                 if ( typeof(obj[i]) == 'object' && !Array.isArray(obj[i]) && obj[i] !== null ) { // parse
                     //id += i + '-';
                     id += '-' + i.replace(/[^A-Za-z0-9_-]/g, '_');
-                    isEmptyClass = (obj[i].count() > 0 || ginaObj[i].count() > 0) ? '' : ' is-empty';
+                    isEmptyClass = (obj[i].count() > 0 || typeof(ginaObj[i]) != 'undefined' && ginaObj[i].count() > 0) ? '' : ' is-empty';
 
                     html += '<li class="gina-toolbar-object">';
                     html +=  '<a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( section, i.replace(/[^A-Za-z0-9_-]/g, '_') ) + isEmptyClass +'">'+ i +' <span>{ }</span></a>';
@@ -813,7 +813,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                 } else if ( Array.isArray(obj[i]) ) {
                     //id += i + '-';
                     id += '-' + i.replace(/[^A-Za-z0-9_-]/g, '_');
-                    isEmptyClass = (obj[i].length > 0 || ginaObj[i].length > 0) ? '' : ' is-empty';
+                    isEmptyClass = (obj[i].length > 0 || typeof(ginaObj[i]) != 'undefined' && ginaObj[i].length > 0) ? '' : ' is-empty';
 
                     html += '<li class="gina-toolbar-collection">';
                     html +=  '<a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( section, i.replace(/[^A-Za-z0-9_-]/g, '_') ) + isEmptyClass +'">'+ i +' <span>['+ obj[i].length +']</span></a>';

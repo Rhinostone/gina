@@ -229,7 +229,11 @@ function Merge() {
         newTarget = [];
                 
         
-        var newTargetIds = [], keyComparison = browse.getKeyComparison();
+        var newTargetIds = []
+            , keyComparison = browse.getKeyComparison()
+            , a = null
+            , i = 0
+        ;
 
         if (override) {
 
@@ -239,7 +243,7 @@ function Merge() {
                 && typeof(target[0]) == 'object' && typeof(target[0][keyComparison]) != 'undefined'
             ) {
 
-                newTarget = JSON.parse(JSON.stringify(target));
+                newTarget =  (Array.isArray(target)) ? Array.from(target) : JSON.parse(JSON.stringify(target));
                 for (var nt = 0, ntLen = newTarget.length; nt < ntLen; ++nt) {
                     newTargetIds.push(newTarget[nt][keyComparison]);
                 }
@@ -247,7 +251,8 @@ function Merge() {
                 var _options    = JSON.parse(JSON.stringify(options));
                 
                 var index = 0;
-
+                a = 0;
+                aLen = _options.length;
                 for (var n = next || 0, nLen = target.length; n < nLen; ++n) {
                     
                     // if (newTargetIds.indexOf(target[n][keyComparison]) == -1) {
@@ -258,7 +263,7 @@ function Merge() {
                     // }
                     
                     label:
-                    for (var a = a || 0, aLen = _options.length; a < aLen; ++a) {
+                    for (a = a || 0; a < aLen; ++a) {
                     
                         if (_options[a][keyComparison] === target[n][keyComparison] ) {
 
@@ -300,15 +305,17 @@ function Merge() {
         }
 
         if ( target.length == 0 && options.length > 0) {
-            for (var a = 0; a < options.length; ++a ) {
+            a = 0;
+            for (; a < options.length; ++a ) {
                 target.push(options[a]);
             }
         }
 
         if (newTarget.length == 0 && target.length > 0) {            
             // ok, but don't merge objects
-            for (var a = 0; a < target.length; ++a ) {
-                if ( typeof(target[a]) != 'object' && newTarget.indexOf(target[a]) == -1) {
+            a = 0;
+            for (; a < target.length; ++a ) {
+                if ( typeof(target[a]) != 'object' && newTarget.indexOf(target[a]) == -1 ) {
                     newTarget.push(target[a]);
                 }
             }
@@ -326,15 +333,17 @@ function Merge() {
                 && typeof(target[0][keyComparison]) != 'undefined'
             ) {
 
-                newTarget       = JSON.parse(JSON.stringify(target));
+                newTarget       = (Array.isArray(target)) ? Array.from(target) : JSON.parse(JSON.stringify(target));
                 var _options    = JSON.parse(JSON.stringify(options));
                 var next        = null;
                 
-
-                for (var a = 0, aLen = newTarget.length; a < aLen; ++a) {
+                i = 0;
+                a = 0; aLen = newTarget.length;
+                for (; a < aLen; ++a) {
                     newTargetIds.push(newTarget[a][keyComparison]);
                 }
-                for (var a = 0, aLen = newTarget.length; a < aLen; ++a) {
+                a = 0;
+                for (; a < aLen; ++a) {
                     
                     end:
                         for (var n = next || 0, nLen = _options.length; n < nLen; ++n) {
@@ -374,7 +383,8 @@ function Merge() {
 
 
             } else { // normal case `arrays`
-                for (var a = 0; a < options.length; ++a ) {
+                a = 0;
+                for (; a < options.length; ++a ) {
                     if ( target.indexOf(options[a]) > -1 && override) {
                         target.splice(target.indexOf(options[a]), 1, options[a])
                     } else if ( typeof(newTarget[a]) == 'undefined' && typeof(options[a]) == 'object' ) {
@@ -385,15 +395,24 @@ function Merge() {
                             newTarget[a] = {};
                                                     
                             
-                        for (var k in options[a]) {
+                        for (let k in options[a]) {
                             if (!newTarget[a].hasOwnProperty(k)) {
                                 newTarget[a][k] = options[a][k]
                             }
                         }   
                         
                     } else {
-                        // if (newTarget.indexOf(options[a]) == -1)
-                        //     newTarget.push(options[a]);
+                        // fixing a = [25]; b = [25,25];
+                        // result must be [25,25]
+                        if (
+                            !override
+                            && newTarget.indexOf(options[a]) > -1 
+                            && typeof(options[a]) == 'number'
+                        ) {
+                            newTarget.push(options[a]);
+                            break;
+                        }
+                            
                         
                         if (
                             typeof (target[a]) != 'undefined'
@@ -406,8 +425,8 @@ function Merge() {
                             if (override)
                                 newTarget[a] = options[a]
                             else
-                                newTarget[a] = target[a]
-                        } else if (newTarget.indexOf(options[a]) == -1) {
+                               newTarget[a] = target[a]
+                        } else if (newTarget.indexOf(options[a]) == -1 && typeof(options[a]) == 'string') {
                             newTarget.push(options[a]);
                         }
                         
