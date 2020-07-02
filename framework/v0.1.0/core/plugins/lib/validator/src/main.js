@@ -2883,8 +2883,15 @@ function ValidatorPlugin(rules, data, formId) {
                 var $el = event.target;
                 
                 if (
-                    /(label)/i.test(event.target.tagName) && typeof(event.target.control) != 'undefined' && event.target.control != null && /(checkbox|radio)/i.test(event.target.control.type) 
-                    || /(label)/i.test(event.target.parentNode.tagName) && typeof(event.target.parentNode.control) != 'undefined' && event.target.parentNode.control != null && /(checkbox|radio)/i.test(event.target.parentNode.control.type) 
+                    /(label)/i.test(event.target.tagName) 
+                        && typeof(event.target.control) != 'undefined' 
+                        && event.target.control != null 
+                        && /(checkbox|radio)/i.test(event.target.control.type) 
+                    || 
+                    /(label)/i.test(event.target.parentNode.tagName) 
+                        && typeof(event.target.parentNode.control) != 'undefined' 
+                        && event.target.parentNode.control != null 
+                        && /(checkbox|radio)/i.test(event.target.parentNode.control.type) 
                 ) {        
                     var isCaseIgnored = ( 
                                         event.target.getAttribute('for') 
@@ -2977,7 +2984,7 @@ function ValidatorPlugin(rules, data, formId) {
                 }
 
 
-                evt = $inputs[i].id;
+                evt = 'change.'+ $inputs[i].id;
 
                 procced = function ($el, evt) {
 
@@ -2988,6 +2995,8 @@ function ValidatorPlugin(rules, data, formId) {
                         
                         if ( /^(true|false|on)$/i.test(value) ) {
                             cancelEvent(event);
+                            // fixed inverted state
+                            $el.checked = !/true|on/.test(value) ? true : false;
                             updateCheckBox(event.target);
                         }
                     });
@@ -3014,8 +3023,8 @@ function ValidatorPlugin(rules, data, formId) {
 
                 procced = function ($el, evt) {
                     addListener(gina, $el, evt, function(event) {
-
                         cancelEvent(event);
+                        
                         updateRadio(event.target);
                     });
 
