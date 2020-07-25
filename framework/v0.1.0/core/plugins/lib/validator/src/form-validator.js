@@ -127,11 +127,13 @@ function FormValidatorUtil(data, $fields) {
         self[el]['is'] = function(condition, errorMessage, errorStack) {
             var isValid     = false;
             var alias       = window._currentValidatorAlias || 'is';
-            delete window._currentValidatorAlias;
+            if (window._currentValidatorAlias)
+                delete window._currentValidatorAlias;
+                
             var errors      = self[this['name']]['errors'] || {};  
             
             
-            if ( !errors['isRequired'] && this.value == '' && this.value != 0 ) {
+            if ( typeof(errors['isRequired']) == 'undefined' || !errors['isRequired'] && this.value == '' && this.value != 0 ) {
                 isValid = true;
             }
             
