@@ -133,7 +133,7 @@ function FormValidatorUtil(data, $fields) {
             var errors      = self[this['name']]['errors'] || {};  
             
             
-            if ( typeof(errors['isRequired']) == 'undefined' || !errors['isRequired'] && this.value == '' && this.value != 0 ) {
+            if ( typeof(errors['isRequired']) == 'undefined' && this.value == '' || !errors['isRequired'] && this.value == '' && this.value != 0 ) {
                 isValid = true;
             }
             
