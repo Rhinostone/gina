@@ -126,8 +126,8 @@ function FormValidatorUtil(data, $fields) {
          * */
         self[el]['is'] = function(condition, errorMessage, errorStack) {
             var isValid     = false;
-            var alias       = window._currentValidatorAlias || 'is';
-            if (window._currentValidatorAlias)
+            var alias       = ( typeof(window) != 'undefined' ) ? window._currentValidatorAlias : 'is';
+            if ( typeof(window) != 'undefined'  && window._currentValidatorAlias)
                 delete window._currentValidatorAlias;
                 
             var errors      = self[this['name']]['errors'] || {};  
