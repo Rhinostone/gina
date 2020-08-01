@@ -2940,6 +2940,19 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( !/^click\./.test(_evt) ) {
                             _evt = $el.id
                         }
+                        
+                        // normal case
+                        if (
+                            !$el.disabled 
+                            && /(checkbox|radio)/i.test($el.type) 
+                        ) {
+                            // apply checked choice : if true -> set to false, and if false -> set to true                        
+                            if ( /checkbox/i.test($el.type) ) {
+                                return updateCheckBox($el);
+                            } else if ( /radio/i.test($el.type) ) {
+                                return updateRadio($el);
+                            }
+                        }
     
                         // prevent event to be triggered twice
                         if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
