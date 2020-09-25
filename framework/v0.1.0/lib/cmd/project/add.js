@@ -361,7 +361,7 @@ function Add(opt, cmd) {
                             
                             if ( fs.existsSync(settingsPath) ) {
                                                                                             
-                                bundleSettings  = require(settingsPath);  
+                                bundleSettings  = requireJSON(settingsPath);  
                                 //console.debug('found [ '+ bundleName +' ] settings ');                             
                                 if ( typeof(bundleSettings.server) != 'undefined' ) {           
                                     // update only if given bundle protocol setting not in project protocols list  
