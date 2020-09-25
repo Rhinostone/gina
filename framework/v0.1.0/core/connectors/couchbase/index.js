@@ -339,10 +339,24 @@ function Couchbase(conn, infos) {
                         }
                         
                         // handle return type
-                        if ( returnType && returnType == 'boolean' ) {
-                            
-                            data = ( Array.isArray(data) && typeof(data.length) != 'undefined' && data.length > 0 || /string|number/i.test( typeof(data) && /true/i.test(data) ) ) ? true : false;
-                            
+                        if ( returnType && returnType == 'boolean' ) {  
+                            // CASE #1
+                            // SELECT COUNT(a) AS someField <- means that keyword `COUNT(` is found in queryString
+                            // [ { someField: 1 }] <- a collection with only one object which has prop: <number>    
+                            if ( 
+                                /count\(|count\s+\(/i.test(queryString)
+                                && Array.isArray(data) 
+                                && /object/i.test(typeof(data[0]))
+                                && Object.keys(data[0]).length == 1
+                                && /number/i.test( typeof(data[0][Object.keys(data[0])]) )
+                            ) {
+                                data = ( data[0][Object.keys(data[0])] > 0 ) ? true : false
+                            } 
+                            // CASE #2
+                            // regular query, just counting result
+                            else {
+                                data = ( typeof(data.length) != 'undefined' && data.length > 0 ) ? true : false
+                            }                            
                         } else if ( returnType && returnType == 'object' ) {
 
                             data = (data) ? data[0] : data
