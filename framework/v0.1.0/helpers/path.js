@@ -225,13 +225,55 @@ function PathHelper() {
     }
 
     _.prototype.existsSync = function() {
-        return fs.existsSync(this.value)
+        
+        if ( typeof(fs.accessSync) != 'undefined' ) {
+            return fs.accessSync(this.value, fs.constants.F_OK);
+        } else { // suport for old version of nodejs
+            return fs.existsSync(this.value)
+        } 
     }
 
-    _.prototype.exists = function(callback) {
-        fs.exists(this.value, function(exists) {
-            callback(exists)
-        })
+    _.prototype.exists = function(callback) {        
+        if ( typeof(fs.access) != 'undefined' ) {
+            fs.access(this.value, fs.constants.F_OK, (err) => {
+                callback( (err) ? false: true )
+            });
+        } else { // suport for old version of nodejs
+            fs.exists(this.value, function(exists) {
+                callback(exists)
+            })
+        }   
+    }
+    
+    _.prototype.isWritableSync = function() {
+        
+        if ( typeof(fs.accessSync) != 'undefined' ) {
+            return fs.accessSync(this.value, fs.constants.W_OK);
+        } else { // suport for old version of nodejs
+            var canWrite = false
+            try {
+                canWrite = (fs.statSync(this.value).mode & (fs.constants.S_IRUSR | fs.constants.S_IRGRP | fs.constants.S_IROTH));
+            } catch (err) {
+                canWrite = false
+            }
+            return canWrite
+        } 
+    }
+
+    _.prototype.isWritable = function(callback) {        
+        if ( typeof(fs.access) != 'undefined' ) {
+            fs.access(this.value, fs.constants.F_OK, (err) => {
+                callback( (err) ? false: true )
+            });
+        } else { // suport for old version of nodejs
+            fs.stat(this.value, function(err, stats) {
+                var canWrite = false;
+                if (!err && stats.mode & (fs.constants.S_IRUSR | fs.constants.S_IRGRP | fs.constants.S_IROTH)) {
+                    canWrite = true;
+                }
+                callback( canWrite )
+            })
+        }   
     }
 
     /**

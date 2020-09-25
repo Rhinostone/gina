@@ -531,14 +531,15 @@ function Routing() {
             urlIndex = ( typeof(urlIndex) != 'undefined' ) ? urlIndex : 0;
             route.url = route.url.split(/,/g)[urlIndex];            
         }
-
+        // recommanded for x-bundle coms
         route.toUrl = function (ignoreWebRoot) {
             
             var wroot       = this.webroot
                 , hostname  = this.hostname
+                , path      = this.url
             ;
             
-            this.url = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : this.url;
+            this.url = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : path;
 
             return hostname + this.url
         };
@@ -623,7 +624,14 @@ function Routing() {
             , foundRoute        = null
             , route             = null
             , routeObj          = null
+            , hash              = null // #section nav
         ;
+        
+        if ( /\#/.test(url) && url.length > 1 ) {
+            var urlPart = url.split(/\#/);
+            url     = urlPart[0];
+            hash    = '#' + urlPart[1];
+        }
         
         var isMethodProvidedByDefault = ( typeof(method) != 'undefined' ) ? true : false;
 
@@ -798,9 +806,7 @@ function Routing() {
                 } 
                 
                 notFound = null;     
-                               
-                
-                
+                                               
                 var altRule = gina.config.reverseRouting[url] || null;                
                 if (
                     !notFound 
@@ -846,16 +852,20 @@ function Routing() {
             console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method, request]) ] : route not found for url: `' + url + '` !').stack );            
             return false;
         } else {
-            // override method inf needed fot http2
+            // override method if needed for http2
+            if (hash)
+                url += hash;
             
             route.url = url;
+            // recommanded for x-bundle coms
             route.toUrl = function (ignoreWebRoot) {
             
                 var wroot       = this.webroot
                     , hostname  = this.hostname
+                    , path      = this.url
                 ;
                 
-                this.url = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : this.url;
+                this.url = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : path;
     
                 return hostname + this.url
             };
