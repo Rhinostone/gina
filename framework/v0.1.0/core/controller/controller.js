@@ -1439,10 +1439,11 @@ function SuperController(options) {
 
         if ( typeof(req) === 'string' ) {
 
-            if ( typeof(res) == 'undefined') {
-                // nothing to do
-                ignoreWebRoot = false
-            } else if (typeof(res) === 'string' || typeof(res) === 'number' || typeof(res) === 'boolean') {
+            // if ( typeof(res) == 'undefined') {
+            //     // nothing to do
+            //     ignoreWebRoot = false
+            // } else 
+            if (typeof(res) === 'string' || typeof(res) === 'number' || typeof(res) === 'boolean') {
                 if ( /true|1/.test(res) ) {
                     ignoreWebRoot = true
                 } else if ( /false|0/.test(res) ) {
@@ -1452,6 +1453,9 @@ function SuperController(options) {
                     var stack = __stack.splice(1).toString().split(',').join('\n');
                     self.throwError(res, 500, new Error('RedirectError: @param `ignoreWebRoot` must be a boolean\n' + stack));
                 }
+            } else {
+                // detect by default
+                ignoreWebRoot = ( new RegExp('^'+wroot).test(req) ) ? true : false
             }
 
             if ( req.substr(0,1) === '/') { // is relative (not checking if the URI is defined in the routing.json)
@@ -1462,7 +1466,7 @@ function SuperController(options) {
                 if ( /^\//.test(req) && !ignoreWebRoot )
                     req = req.substr(1);
                 
-                rte             = ( ignoreWebRoot != null && ignoreWebRoot) ? req : wroot + req;
+                rte             = ( ignoreWebRoot != null && ignoreWebRoot  ) ? req : wroot + req;
                 // cleaning url in case of ?param=value
                 originalUrl     = rte; 
                 rte             = rte.replace(/\?(.*)/, '');
@@ -1474,7 +1478,8 @@ function SuperController(options) {
                     req.routing     = lib.routing.getRouteByUrl(rte, bundle, req.method, req);
                     // try alternative method
                     if (!req.routing) {
-                        req.routing     = lib.routing.getRouteByUrl(rte, bundle, 'GET', req);
+                        req.routing     = lib.routing.getRouteByUrl(rte, bundle, 'GET', req, true); // true == override
+                        // if still (!req.routing) { should throw a 404 }
                         if (req.routing) {
                             method = req.method = 'GET'
                         }
@@ -2597,8 +2602,9 @@ function SuperController(options) {
                         if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {                            
                             self.throwError(data)
                         } else {
-                            callback( false, data )
+                            callback( false, data )                        
                         }
+                        return;
                     } catch (e) {
                         var infos = local.options, controllerName = infos.controller.substr(infos.controller.lastIndexOf('/'));
                         var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
@@ -2964,7 +2970,8 @@ function SuperController(options) {
         var next    = local.next;
 
         if (!res.headersSent) {
-            if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() ) {
+            //if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() ) {
+            if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
                 // allowing this.throwError(err)
                 if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
                     msg     = code.error || code.message;
@@ -3035,7 +3042,8 @@ function SuperController(options) {
                     msgString += '<pre class="'+ eCode +'xx message">'+ msg +'</pre>';
                 }
 
-                res.end(msgString)
+                res.end(msgString);
+                return;
             }
         } else {
             if (typeof(next) != 'undefined')

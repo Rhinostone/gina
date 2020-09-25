@@ -2734,8 +2734,10 @@ function Server(options) {
         
         if (!res.headersSent) {
             res.headersSent = true;
-            local.request = checkPreflightRequest(local.request);            
-            if (isXMLRequest || !withViews || !isUsingTemplate ) {
+            local.request = checkPreflightRequest(local.request);       
+            // updated filter on controller.js : 2020/09/25     
+            //if (isXMLRequest || !withViews || !isUsingTemplate ) {
+            if (isXMLRequest || !withViews || !isUsingTemplate || withViews && !isUsingTemplate ) {
                 // allowing this.throwError(err)
                 
                 if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {

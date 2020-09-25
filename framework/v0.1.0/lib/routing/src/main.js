@@ -5,19 +5,6 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-// if (typeof (module) !== 'undefined' && module.exports) {
-    
-//     var lib = null;
-//     if ( typeof( getPath('gina') ) != 'undefined' ) {
-//         lib     = require(getPath('gina').lib);
-//     } else {
-//         lib     = require('../../index');
-//     }
-    
-//     var console = lib.logger;
-//     //var merge   = lib.merge;
-// }
-
 
 /**
  * Routing
@@ -151,8 +138,7 @@ function Routing() {
         ;
         
         //attaching routing description for this request
-        //request.routing = params; // can be retried in controller with: req.routing
-        
+        //request.routing = params; // can be retried in controller with: req.routing        
         if ( typeof(params.requirements) != 'undefined' && typeof(request.get) != 'undefined' ) {            
             for (var p in request.get) {
                 if ( typeof(params.requirements[p]) != 'undefined' && uRo.indexOf(':' + p) < 0 ) {
@@ -455,7 +441,7 @@ function Routing() {
         
         var env         = config.env || GINA_ENV  // by default, takes the current bundle
             , envTmp    = null
-            , scheme    = null
+            //, scheme    = null
             , bundle    = config.bundle // by default, takes the current bundle
         ;
         
@@ -496,6 +482,7 @@ function Routing() {
             , urls      = null
             , i         = null
             , len       = null
+            , msg       = null
         ;
         
         var replacement = function(matched){
@@ -542,7 +529,7 @@ function Routing() {
 
         if ( /\,/.test(route.url) ) {
             urlIndex = ( typeof(urlIndex) != 'undefined' ) ? urlIndex : 0;
-            route.url = route.url.split(/,/g)[urlIndex]
+            route.url = route.url.split(/,/g)[urlIndex];            
         }
 
         route.toUrl = function (ignoreWebRoot) {
@@ -582,6 +569,16 @@ function Routing() {
                 agent.get(url, options, cb)
             }                
         }
+        
+        if ( /\:/.test(route.url) ) {
+            var paramList = route.url
+                                .match(/(\:(.*)\/|\:(.*)$)/g)
+                                .map(function(el){  return el.replace(/\//g, ''); }).join(', ');
+            msg = '[ RoutingHelper::getRoute(rule[, bundle, method]) ] : route [ %r ] param placeholder not defined: `' + route.url + '` !\n Check your route description to compare requirements against param variables [ '+ paramList +']';
+            msg = msg.replace(/\%r/, rule);
+            console.warn( new Error(msg) );
+            //return false;
+        }
 
         return route
     };
@@ -598,17 +595,19 @@ function Routing() {
      * @param {string} [bundle] targeted bundle
      * @param {string} [method] request method (GET|PUT|PUT|DELETE) - GET is set by default
      * @param {object} [request] 
-     *
+     * @param {boolean} [isOverridinMethod] // will replace request.method by the provided method - Used for redirections
+     * 
      * @return {object|boolean} route - when route is found; `false` when not found
      * */
     
-    self.getRouteByUrl = function (url, bundle, method, request) {
+    self.getRouteByUrl = function (url, bundle, method, request, isOverridinMethod) {
         
         if (
             arguments.length == 2 && typeof(arguments[1]) != 'undefined' && self.allowedMethods.indexOf(arguments[1].toLowerCase()) > -1 
         ) {
             method = arguments[1], bundle = undefined;
         }
+        isOverridinMethod = ( typeof(arguments[arguments.length-1]) != 'boolean') ? false : arguments[arguments.length-1];
 
         var matched             = false
             , hostname          = null
@@ -641,9 +640,7 @@ function Routing() {
             prefix          = hostname + webroot;
 
             request = {
-                routing: {
-                    path: unescape(pathname)
-                },
+                routing: {},
                 method: method,
                 params: {},
                 url: url
@@ -665,21 +662,24 @@ function Routing() {
             
             if ( !request ) {
                 request = {
-                    routing: {
-                        path: unescape(pathname)
-                    },
+                    routing: {},
                     isXMLRequest: false,
                     method : ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get',
                     params: {},
                     url: url
                 }
             }
+            if (isOverridinMethod) {
+                request.method = method;
+            }
             isXMLRequest    = request.isXMLRequest || false;
         }
 
         pathname    = url.replace( new RegExp('^('+ hostname +'|'+hostname.replace(/\:\d+/, '') +')' ), '');
+        if ( typeof(request.routing.path) == 'undefined' )
+            request.routing.path = unescape(pathname);
         method      = ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get';
-        
+                
         if (isMethodProvidedByDefault) {
             // to handle 303 redirect like PUT -> GET
             request.originalMethod = request.method;
@@ -687,6 +687,9 @@ function Routing() {
             request.method = method;
             request.routing.path = unescape(pathname)
         }
+        // last method check
+        if ( !request.method)
+            request.method = method;
 
         //  getting params
         params = {};
@@ -728,7 +731,7 @@ function Routing() {
 
                 // normal case
                 //Parsing for the right url.
-                try {
+                try {                                        
                     
                     isRoute = self.compareUrls(params, routing[name].url, request);
 
@@ -840,8 +843,7 @@ function Routing() {
             }
 
             
-            console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method, request]) ] : route not found for url: `' + url + '` !').stack );
-            
+            console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method, request]) ] : route not found for url: `' + url + '` !').stack );            
             return false;
         } else {
             // override method inf needed fot http2
