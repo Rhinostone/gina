@@ -304,8 +304,7 @@ function EntitySuper(conn, caller) {
 
         var args = Array.prototype.slice.call(arguments);
         var trigger = args.splice(0, 1)[0];
-
-        //self.removeAllListener(trigger);
+        
         if ( !/\#/.test(trigger) ) {
             throw new Error('trigger name not properly set: use `#` between the entity name and the method reference');
             process.exit(1)
