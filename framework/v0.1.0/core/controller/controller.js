@@ -90,6 +90,30 @@ function SuperController(options) {
         return ( typeof(local.options.template) != 'undefined' ) ? true : false;
     }
     
+    /**
+     * isHttp2
+     * Returns `true` if server configured for HTTP/2
+     * 
+     * @return {boolean} isHttp2
+     */
+    var isHttp2 = function() {
+        var options =  local.options;  
+        var protocolVersion = ~~options.conf.server.protocol.match(/\/(.*)$/)[1].replace(/\.\d+/, '');
+        var httpLib =  options.conf.server.protocol.match(/^(.*)\//)[1] + ( (protocolVersion >= 2) ? protocolVersion : '' );
+                            
+        
+        return /http2/.test(httpLib)
+    }
+    /**
+     * isSecured
+     * Returns `true` if server configured to handle a HTTPS exchanges
+     * 
+     * @return {boolean} isSecured
+     */
+    var isSecured = function() {
+        return /https/.test(local.options.conf.server.scheme)
+    }
+    
     this.getRequestObject = function() {
         return local.req;
     }
@@ -1455,7 +1479,15 @@ function SuperController(options) {
                 }
             } else {
                 // detect by default
-                ignoreWebRoot = ( new RegExp('^'+wroot).test(req) ) ? true : false
+                if (!ignoreWebRoot) {
+                    var re = new RegExp('^'+wroot)
+                    if ( re.test(req) ) {
+                        ignoreWebRoot = true;
+                    } else {
+                        ignoreWebRoot = false;
+                    }
+                }
+                
             }
 
             if ( req.substr(0,1) === '/') { // is relative (not checking if the URI is defined in the routing.json)
@@ -1474,7 +1506,7 @@ function SuperController(options) {
                 req             = local.req;
                 originalMethod = ( typeof(req.originalMethod) != 'undefined') ? req.originalMethod :  req.method;           
                 console.debug('trying to get route: ', rte, bundle, req.method);     
-                if ( !isStaticRoute(rte, req.method, bundle, env, ctx.config.envConf) ) {                    
+                if ( !ignoreWebRoot || !isStaticRoute(rte, req.method, bundle, env, ctx.config.envConf) && !ignoreWebRoot ) {                    
                     req.routing     = lib.routing.getRouteByUrl(rte, bundle, req.method, req);
                     // try alternative method
                     if (!req.routing) {
@@ -1601,7 +1633,7 @@ function SuperController(options) {
                     
                     
                     //console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA redirection is not permitted in this scenario.\nSwitching rendering mode: calling self.renderJSON({ location: "'+ path +'"})\nFrom now, you just need to catch the response with a frontend script.\n').message);
-                    console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA redirection is not permitted in this scenario.\nSwitching request method to `GET` method instead.\n').message);
+                    console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nThis can often occur while redirecting from a controller to another controller or from a bundle to another.\nA redirection is not permitted in this scenario.\nD\'ont panic :)\nSwitching request method to `GET` method instead.\n').message);
                     
                     code = 303;                    
                     method = local.req.method = self.setRequestMethod('GET', conf);
@@ -1627,18 +1659,32 @@ function SuperController(options) {
                 //path += '?query='+ JSON.stringify(self.getRequestMethodParams());
                 local.req[req.method.toLowerCase()] = self.getRequestMethodParams() || {};
                                 
-                
+                var headInfos = {
+                    'location': path 
+                };
+                if ( isHttp2() ) {
+                    //var stream = res.stream;
+                    //if (stream.headersSent) return;
+                    //headInfos[':path'] = path;
+                    headInfos[':status'] = code;
+                    // local.res.headersSent = stream.headersSent =true;
+                    
+                    // //if (!stream.pushAllowed) { 
+                    //     //header = merge({ ':status': 200 }, response.getHeaders());
+                    //     stream.respond(headInfos);
+                    //     stream.end();
+                    //     return; 
+                    // //}                    
+                }
                 if (GINA_ENV_IS_DEV) {
-                    res.writeHead(code, {
-                        'location': path,
+                    res.writeHead(code, merge(headInfos, {
                         'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
                         'pragma': 'no-cache',
                         'expires': '0'
-                    })
+                    }))
                 } else {
-                    res.writeHead(code, { 'location': path })
-                }
-                    
+                    res.writeHead(code, headInfos)
+                }                    
                 res.end();
                 local.res.headersSent = true;// done for the render() method
                 console.info(local.req.method.toUpperCase() +' ['+code+'] '+ path);
@@ -1651,11 +1697,6 @@ function SuperController(options) {
             }
             
         }
-        
-        // if ( typeof(next) != 'undefined' )
-        //     next();
-        // else
-        //     return;
     }
 
     /**
@@ -2941,10 +2982,13 @@ function SuperController(options) {
         if (local.options.renderingStack.length > 1) {
             return false
         }
-
+        // handle error fallback
+        // err.fallback must be a valide route object or a url string
+        var fallback = null;
+        
         if (arguments.length == 1 && typeof(res) == 'object' ) {
             var code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
-                //, msg   = res.stack || res.message || res.error
+                //, msg   = res.stack || res.message || res.error || res.fallback
             var msg = {};
 
             if ( res instanceof Error) {
@@ -2952,6 +2996,10 @@ function SuperController(options) {
                 msg.stack   = res.stack;
             } else {
                 msg = JSON.parse(JSON.stringify(res))
+            }
+            
+            if ( typeof(res.fallback) != 'undefined' ) {
+                fallback = res.fallback
             }
 
             var res   = local.res;
@@ -2965,6 +3013,8 @@ function SuperController(options) {
             msg = err.message;
             code = 
         }*/
+        
+                
 
         var req     = local.req;
         var next    = local.next;
@@ -2972,6 +3022,19 @@ function SuperController(options) {
         if (!res.headersSent) {
             //if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() ) {
             if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
+                // faaback interception
+                if ( fallback ) {            
+                    if ( typeof(fallback) == 'string' ){ // string url: user provided
+                        self.redirect( fallback, true );
+                        return;
+                    }
+                    // else, using url from route object
+                    // Reminder
+                    // Here, we use route.toUrl() intead of
+                    // route.url to support x-bundle com 
+                    self.redirect( fallback.toUrl(true) );
+                }
+                
                 // allowing this.throwError(err)
                 if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
                     msg     = code.error || code.message;
