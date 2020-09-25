@@ -1661,21 +1661,8 @@ function SuperController(options) {
                                 
                 var headInfos = {
                     'location': path 
-                };
-                if ( isHttp2() ) {
-                    //var stream = res.stream;
-                    //if (stream.headersSent) return;
-                    //headInfos[':path'] = path;
-                    headInfos[':status'] = code;
-                    // local.res.headersSent = stream.headersSent =true;
-                    
-                    // //if (!stream.pushAllowed) { 
-                    //     //header = merge({ ':status': 200 }, response.getHeaders());
-                    //     stream.respond(headInfos);
-                    //     stream.end();
-                    //     return; 
-                    // //}                    
-                }
+                };                
+                
                 if (GINA_ENV_IS_DEV) {
                     res.writeHead(code, merge(headInfos, {
                         'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
@@ -1684,8 +1671,10 @@ function SuperController(options) {
                     }))
                 } else {
                     res.writeHead(code, headInfos)
-                }                    
-                res.end();
+                }         
+                // in case of query from another bundle waiting for a response  
+                var redirectObject = JSON.stringify({ status: code, headers: headInfos });         
+                res.end(redirectObject);
                 local.res.headersSent = true;// done for the render() method
                 console.info(local.req.method.toUpperCase() +' ['+code+'] '+ path);
                 
@@ -2640,6 +2629,12 @@ function SuperController(options) {
                     }
                     //console.debug(options[':method']+ ' ['+ (data.status || 200) +'] '+ options[':path']);
                     try {
+                        // intercepting fallback redirect
+                        if ( data.status && /^3/.test(data.status) && typeof(data.headers) != 'undefined' ) {
+                            local.res.writeHead(data.status, data.headers);
+                            return local.res.end();
+                        }                        
+                        
                         if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {                            
                             self.throwError(data)
                         } else {
@@ -2666,6 +2661,13 @@ function SuperController(options) {
                             self.emit('query#complete', data)
                         }
                     }
+                    
+                    // intercepting fallback redirect
+                    if ( data.status && /^3/.test(data.status) && typeof(data.headers) != 'undefined' ) {
+                        self.removeAllListeners(['query#complete']);
+                        local.res.writeHead(data.status, data.headers);
+                        return local.res.end();
+                    } 
 
                     if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
                         self.emit('query#complete', data)
@@ -3025,14 +3027,14 @@ function SuperController(options) {
                 // faaback interception
                 if ( fallback ) {            
                     if ( typeof(fallback) == 'string' ){ // string url: user provided
-                        self.redirect( fallback, true );
-                        return;
+                        return self.redirect( fallback, true )
+                    } else {
+                        // else, using url from route object
+                        // Reminder
+                        // Here, we use route.toUrl() intead of
+                        // route.url to support x-bundle com 
+                        return self.redirect( fallback.toUrl() );
                     }
-                    // else, using url from route object
-                    // Reminder
-                    // Here, we use route.toUrl() intead of
-                    // route.url to support x-bundle com 
-                    self.redirect( fallback.toUrl(true) );
                 }
                 
                 // allowing this.throwError(err)

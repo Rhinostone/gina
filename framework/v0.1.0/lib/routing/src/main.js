@@ -532,6 +532,7 @@ function Routing() {
             route.url = route.url.split(/,/g)[urlIndex];            
         }
         // recommanded for x-bundle coms
+        // leave `ignoreWebRoot` empty or set it to false for x-bundle coms
         route.toUrl = function (ignoreWebRoot) {
             
             var wroot       = this.webroot
@@ -858,8 +859,8 @@ function Routing() {
             
             route.url = url;
             // recommanded for x-bundle coms
-            route.toUrl = function (ignoreWebRoot) {
-            
+            // leave `ignoreWebRoot` empty or set it to false for x-bundle coms
+            route.toUrl = function (ignoreWebRoot) {                
                 var wroot       = this.webroot
                     , hostname  = this.hostname
                     , path      = this.url
