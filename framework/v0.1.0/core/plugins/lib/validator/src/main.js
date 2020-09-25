@@ -2830,8 +2830,10 @@ function ValidatorPlugin(rules, data, formId) {
         };
 
         var radioGroup = null;
-        var updateRadio = function($el, isInit) {
+        var updateRadio = function($el, isInit, isTriggedByUser) {
             isInit = ( typeof(isInit) == 'undefined' ) ? false : true;
+            isTriggedByUser = ( typeof(isTriggedByUser) == 'undefined' ) ? false : true;
+            
             var checked = $el.checked;
             var isBoolean = /^(true|false)$/i.test($el.value);
             radioGroup = document.getElementsByName($el.name);
@@ -2852,6 +2854,8 @@ function ValidatorPlugin(rules, data, formId) {
 
                 // prevents ticking behavior
                 setTimeout(function () {
+                    if (isTriggedByUser)
+                        return;
                     if (!$el.checked)
                         $el.checked = true;
                         $el.setAttribute('checked', 'checked');
@@ -2861,6 +2865,8 @@ function ValidatorPlugin(rules, data, formId) {
 
                 // prevents ticking behavior
                 setTimeout(function () {
+                    if (isTriggedByUser)
+                        return;
                     if ($el.checked)
                         $el.checked = false;
                         $el.removeAttribute('checked');
@@ -2870,6 +2876,8 @@ function ValidatorPlugin(rules, data, formId) {
             if (isBoolean) { // force boolean value
                 $el.value = (/^true$/.test($el.value)) ? true : false
             }
+            // fix added on 2020/09/25 : 
+            return;
         }
                                
 
@@ -2950,7 +2958,7 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( /checkbox/i.test($el.type) ) {
                                 return updateCheckBox($el);
                             } else if ( /radio/i.test($el.type) ) {
-                                return updateRadio($el);
+                                return updateRadio($el, false, true);
                             }
                         }
     

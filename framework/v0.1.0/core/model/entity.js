@@ -162,6 +162,9 @@ function EntitySuper(conn, caller) {
                         /**
                          * handle promises with async/await
                          * 
+                         * NB.: Always use the prefix `db` inside an entity file
+                         *      instead of using `this.getRelation(entityName)`
+                         * 
                          * e.g.: 
                          *  var recordJob   = promisify(db.jobEntity.insert);
                          *  await recordJob(jobObj)

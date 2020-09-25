@@ -17,9 +17,6 @@ var fs                = require('fs')
     
     , SuperController   = require('./controller')
     , Config            = require('./config')
-    
-    //get config instance
-    //, config            = new Config()
 ;
 
 /**
@@ -515,7 +512,7 @@ function Router(env) {
                 middleware.splice(middleware.length-1);
                 middleware = middleware.join('/');
                 filename = _(filename +'/'+ middleware + '/index.js');
-                if ( /*!/^middlewares\.express\./.test(filename) &&*/ !fs.existsSync( filename ) ) {
+                if ( !fs.existsSync( filename ) ) {
                     // no middleware found with this alias
                     serverInstance.throwError(res, 501, new Error('middleware not found '+ middleware).stack);
                 }
@@ -582,63 +579,6 @@ function Router(env) {
     var hasViews = function() {
         return local.routeHasViews;
     };
-
-    // var throwError = function(res, code, msg) {
-    //     if (arguments.length < 3) {
-    //         var msg     = code || null
-    //             , code  = res || 500
-    //             , res   = local.res;
-    //     }
-
-    //     if (!res.headersSent) {
-    //         res.headersSent = true;
-
-    //         if (local.isXMLRequest || !hasViews() || !local.isUsingTemplate) {
-    //             // Internet Explorer override
-    //             if ( /msie/i.test(local.request.headers['user-agent']) ) {
-    //                 res.writeHead(code, "Content-Type", "text/plain")
-    //             } else {
-    //                 res.writeHead(code, { 'Content-Type': 'application/json'} )
-    //             }
-
-                
-    //             var err = null;
-
-    //             if ( typeof(msg) == 'object' ) {
-    //                 err = {
-    //                     status: code,
-    //                     message: msg
-    //                 }
-    //             } else {
-    //                 err = {
-    //                     status: code,
-    //                     message : msg.message,
-    //                     stack: msg.stack || msg || null
-    //                 }
-    //             }
-
-
-    //             if ( !err.stack ) {
-    //                 delete err.stack
-    //             }
-                
-                
-
-    //             res.end(JSON.stringify(err))
-    //         } else {
-    //             res.writeHead(code, { 'Content-Type': 'text/html'} );
-    //             //console.error('[ ROUTER ] '+ res.req.method +' [ '+code+' ] '+ res.req.url);
-    //             res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>', local.next);
-    //         }
-            
-    //         console.error('[ ROUTER ] ' + local.request.method + ' [ ' + code + ' ] ' + local.request.url + '\n'+ (msg.stack || msg.message || msg) /**routing.getRouteByUrl(res.req.url).toUrl()*/ );
-    //     } else {
-    //         if (typeof(local.next) != 'undefined')
-    //             return local.next();
-    //         else
-    //             return;
-    //     }
-    // };
 
     init()
 };
