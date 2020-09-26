@@ -544,6 +544,7 @@ function SuperController(options) {
                      *      <a href="{{ '/homepage' | getUrl() }}">Homepage</a>
                      *      <a href="{{ 'users-add' | getUrl({ id: user.id }) }}">Add User</a>
                      *      <a href="{{ 'users-edit' | getUrl({ id: user.id }) }}">Edit user</a>
+                     *      <a href="{{ 'users-get-empty' | getUrl({ id: '' }) }}">Get empty</a>
                      *      <a href="{{ 'users-list' | getUrl(null, 'http://domain.com') }}">Display all users</a>
                      *      <a href="{{ '/dashboard' | getUrl(null, 'admin') }}">Go to admin bundle's dashboard page</a>
                      *      <a href="{{ 'home@admin' | getUrl() }}">Go to admin bundle's dashboard page</a>
@@ -692,7 +693,14 @@ function SuperController(options) {
                             
                             if (hostname.length > 0) {
                                 url = url.replace(wrootRe, '');
-                            }                            
+                            }   
+                            
+                            // fix url in case of empty param value allowed by the routing rule
+                            // to prevent having a folder.
+                            // eg.: {..., id: '/^\\s*$/'} => {..., id: ''} => /path/to/ becoming /path/to
+                            if ( /\/$/.test(url) )
+                                url = url.substr(0, url.length-1);
+                                
                             url = hostname + url;
 
                         } else {
@@ -712,10 +720,7 @@ function SuperController(options) {
                                 url = hostname + url
                             }
                             
-                            //if ( route == url ) {
-                                return '404:['+ local.req.method +']'+rule
-                            //}
-                            
+                            return '404:['+ local.req.method +']'+rule                            
                         }
 
                         return url

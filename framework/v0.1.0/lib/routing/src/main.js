@@ -184,7 +184,7 @@ function Routing() {
      * @private
      * */
     var fitsWithRequirements = function(urlVar, urlVal, params, request) {
-        //var isValid = new Validator('routing', { email: "m.etouman@wics"}, null, {email: {isEmail: true}} ).isEmail().valid;
+        //var isValid = new Validator('routing', { email: "contact@gina.io"}, null, {email: {isEmail: true}} ).isEmail().valid;
         var matched     = -1
             , _param    = urlVar.match(/\:\w+/g)
             , regex     = new RegExp(urlVar, 'g')
@@ -253,7 +253,8 @@ function Routing() {
             }
 
             key     = _param[matched].substr(1);
-            regex   = params.requirements[key];
+            // escaping `\` characters
+            regex   = ( /\\/.test(params.requirements[key]) ) ? params.requirements[key].replace(/\\/, '') : params.requirements[key];
 
             if (/^\//.test(regex)) {
                 re      = regex.match(/\/(.*)\//).pop();
@@ -531,6 +532,12 @@ function Routing() {
             urlIndex = ( typeof(urlIndex) != 'undefined' ) ? urlIndex : 0;
             route.url = route.url.split(/,/g)[urlIndex];            
         }
+        // fix url in case of empty param value allowed by the routing rule
+        // to prevent having a folder.
+        // eg.: {..., id: '/^\\s*$/'} => {..., id: ''} => /path/to/ becoming /path/to
+        if ( /\/$/.test(route.url) )
+            route.url = route.url.substr(0, route.url.length-1);
+                
         // recommanded for x-bundle coms
         // leave `ignoreWebRoot` empty or set it to false for x-bundle coms
         route.toUrl = function (ignoreWebRoot) {
@@ -853,7 +860,12 @@ function Routing() {
             console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method, request]) ] : route not found for url: `' + url + '` !').stack );            
             return false;
         } else {
-            // override method if needed for http2
+            // fix url in case of empty param value allowed by the routing rule
+            // to prevent having a folder.
+            // eg.: {..., id: '/^\\s*$/'} => {..., id: ''} => /path/to/ becoming /path/to
+            if ( /\/$/.test(url) )
+                url = url.substr(0, url.length-1);
+            // adding hash if found
             if (hash)
                 url += hash;
             
