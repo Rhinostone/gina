@@ -145,12 +145,7 @@ if (
     || process.argv[2].substr(0, 2) === '--'
     || process.argv[2].substr(0, 1) === '-'
 ) {
-    // if (debugPort) {
         
-    //     process.argv[0] = process.argv[0].replace(/node$/, function(str){ return str+' --inspect-brk='+ debugPort });
-    //     console.log('arg 0', process.argv[0]);
-    // }
-    
     require(binPath + '/cmd')({
         binPath         : binPath,
         ginaPath        : ginaPath,

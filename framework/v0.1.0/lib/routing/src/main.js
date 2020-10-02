@@ -535,7 +535,7 @@ function Routing() {
         // fix url in case of empty param value allowed by the routing rule
         // to prevent having a folder.
         // eg.: {..., id: '/^\\s*$/'} => {..., id: ''} => /path/to/ becoming /path/to
-        if ( /\/$/.test(route.url) )
+        if ( /\/$/.test(route.url) && route.url != '/' )
             route.url = route.url.substr(0, route.url.length-1);
                 
         // recommanded for x-bundle coms
@@ -863,7 +863,7 @@ function Routing() {
             // fix url in case of empty param value allowed by the routing rule
             // to prevent having a folder.
             // eg.: {..., id: '/^\\s*$/'} => {..., id: ''} => /path/to/ becoming /path/to
-            if ( /\/$/.test(url) )
+            if ( /\/$/.test(url) && url != '/' )
                 url = url.substr(0, url.length-1);
             // adding hash if found
             if (hash)

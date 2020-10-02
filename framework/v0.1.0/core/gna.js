@@ -77,12 +77,14 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
             tmp[2].envVars = importedContext.envVars;
             tmp[2].processList = importedContext.processList;
             tmp[2].ginaProcess = importedContext.ginaProcess;
+            tmp[2].debugPort = importedContext.debugPort;
 
             tmp[3] = importedContext.project || importedContext.config.projectName;
             tmp[4] = importedContext.bundle;
 
             setContext('env', importedContext.env);
             setContext('bundles', importedContext.bundles);
+            setContext('debugPort', importedContext.debugPort);
             
             ctxObj = tmp[2];
 
@@ -103,6 +105,7 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
         
         setContext('processList', ctxObj.processList);
         setContext('ginaProcess', ctxObj.ginaProcess);
+        setContext('debugPort', ctxObj.debugPort);
 
         projectName = tmp[3];
         setContext('projectName', projectName);
@@ -801,6 +804,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                     '\nprotocol: ' + conf.server.protocol,
                                     '\nscheme: ' + conf.server.scheme,
                                     '\nport: ' + conf.server.port,
+                                    '\ndebugPort: ' + conf.server.debugPort,
                                     '\npid: ' + process.pid,
                                     '\nThis way please -> '+ conf.hostname + conf.server.webroot
                                     )
