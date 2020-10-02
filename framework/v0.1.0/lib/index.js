@@ -47,7 +47,8 @@ function Lib() {
         routing         : _require('./routing'),
         archiver        : _require('./archiver'),
         cmd             : _require('./cmd'),
-        SessionStore    : _require('./session-store')
+        SessionStore    : _require('./session-store'),
+        SwigFilters     : _require('./swig-filters')
     };
 
     /**
