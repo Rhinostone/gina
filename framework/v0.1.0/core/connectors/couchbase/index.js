@@ -3,7 +3,7 @@ var fs              = require('fs');
 var util            = require('util');
 //var promisify       = require('util').promisify;
 
-var lib             = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
+var lib             = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var inherits        = lib.inherits;
 var merge           = lib.merge;
 var console         = lib.logger;
@@ -196,7 +196,9 @@ function Couchbase(conn, infos) {
 
                     var queryParams = [];
                     var queryOptions = { // values by default
-                        adhoc: false, 
+                        // Do not turn off the adhoc flag for each query since 
+                        // only a finite number of query plans (currently 5000) can be stored in the SDK
+                        adhoc: true, // false to use plan optimization, but need a statement `name param` or `num param`
                         consistency: 3 
                     };
                     if (params) {
@@ -264,13 +266,13 @@ function Couchbase(conn, infos) {
                         queryOptions.parameters = queryParams;
                         
                     } else { // version 2
-                        // prepared statement
-                        query = N1qlQuery.fromString(queryString);
+                        // prepared statement                        
+                        query = N1qlQuery.fromString(queryString.replace(/^\s+/, ''));
                         // query options
                         // @param {object} options
                         // @param {string} options.sample
 
-                        // adhoc option: @param {boolean} options.adhoc [ true | false ]
+                        // adhoc option: @param {boolean} options.adhoc [ true | false ]
                         // default is set to false
                         //queryOptions.adhoc = false;
 
@@ -306,7 +308,8 @@ function Couchbase(conn, infos) {
                                 continue;
                             }
                             query[ qOpt ]( queryOptions[ qOpt ] )
-                        }
+                        }    
+                                          
                     }
 
                     
@@ -324,7 +327,10 @@ function Couchbase(conn, infos) {
                     
                     
                     var onQueryCallback = function(err, data, meta) {
-                                                    
+                        if (/deleteAllSandboxedDocuments/.test(trigger)) {
+                            console.log('[ ' + trigger + '] onQueryCallback => ', err, data, meta);
+                        }
+                                                 
                         if (!data || data.length == 0) {
                             data = null
                         }

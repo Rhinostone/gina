@@ -22,6 +22,7 @@ var inherits        = lib.inherits;
 var console         = lib.logger;
 var Collection      = lib.Collection;
 var swig            = require('swig');
+var SwigFilters     = lib.SwigFilters;
 
 
 /**
@@ -223,7 +224,7 @@ function SuperController(options) {
                 }
     
                 var rule        = local.options.rule
-                    , namespace = local.options.namespace || rule;
+                    , namespace = local.options.namespace || 'default';
     
     
                 set('page.view.file', local.options.file);
@@ -251,6 +252,7 @@ function SuperController(options) {
             set('page.environment.env', GINA_ENV);
             set('page.environment.envIsDev', GINA_ENV_IS_DEV);
             
+            
             var routing = local.options.conf.routing = ctx.config.envConf.routing; // all routes
             set('page.environment.routing', escape(JSON.stringify(routing))); // export for GFF
             //reverseRouting
@@ -268,6 +270,7 @@ function SuperController(options) {
             set('page.environment.protocol', options.conf.server.protocol);
             set('page.environment.scheme', options.conf.server.scheme);
             set('page.environment.port', options.conf.server.port);
+            set('page.environment.debugPort', options.conf.server.debugPort);
             set('page.environment.pid', process.pid);
 
             set('page.view.layout', local.options.template.layout);
@@ -356,9 +359,7 @@ function SuperController(options) {
 
         
     }
-
-
-
+    
     this.renderWithoutLayout = function (data, displayToolbar) {
 
         // preventing multiple call of self.renderWithoutLayout() when controller is rendering from another required controller
@@ -489,6 +490,7 @@ function SuperController(options) {
                 dic['page.'+d] = data.page[d]
             }
 
+            
 
             // please, do not put any slashes when including...
             // ex.:
@@ -496,7 +498,21 @@ function SuperController(options) {
             //      html/inc/_partial.html (GOOD)
             //      ./html/namespace/page.html (GOOD)
             fs.readFile(path, function (err, content) {
-
+                var isProxyHost = ( 
+                    typeof(local.req.headers.host) != 'undefined' 
+                        && local.options.conf.server.scheme +'://'+ local.req.headers.host != local.options.conf.hostname 
+                    || typeof(local.req.headers[':authority']) != 'undefined' 
+                        && local.options.conf.server.scheme +'://'+ local.req.headers[':authority'] != local.options.conf.hostname  
+                ) ? true : false;
+                // setup swig default filters                
+                var filters = SwigFilters({
+                    options     : local.options,
+                    isProxyHost : isProxyHost,
+                    throwError  : self.throwError,
+                    req         : local.req,
+                    res         : local.res 
+                });
+                
                 if (err) {
                     msg = 'could not open "'+ path +'"' +
                             '\n1) The requested file does not exists in your views/html (check your template directory). Can you find: '+path +
@@ -510,221 +526,16 @@ function SuperController(options) {
                 }
 
                 try {
+                    
                     // Extends default `length` filter
-                    swig.setFilter('length', function (input, obj) {
+                    swig.setFilter('length', filters.length);
 
-                        if ( typeof(input.count) != 'undefined' ) {
-                            return input.count()
-                        } else {
-                            return input.length
-                        }
-                    });
-
-                    var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers.host != local.options.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
+                    
 
                     // Allows you to get a bundle web root
-                    swig.setFilter('getWebroot', function (input, obj) {
-                        var url = null, prop = options.envObj.getConf(obj, options.conf.env);
-                        if ( isProxyHost ) {
-                            url = prop.server.scheme + '://'+ prop.host;
-                        } else {
-                            url = prop.server.scheme + '://'+ prop.host +':'+ prop.port[prop.server.protocol][prop.server.scheme];
-                        }
-                            
-                        if ( typeof(prop.server['webroot']) != 'undefined') {
-                            url += prop.server['webroot']
-                        }
-                        return url
-                    });
-
-                    /**
-                     * getUrl filter
-                     *
-                     * Usage:
-                     *      <a href="{{ '/homepage' | getUrl() }}">Homepage</a>
-                     *      <a href="{{ 'users-add' | getUrl({ id: user.id }) }}">Add User</a>
-                     *      <a href="{{ 'users-edit' | getUrl({ id: user.id }) }}">Edit user</a>
-                     *      <a href="{{ 'users-get-empty' | getUrl({ id: '' }) }}">Get empty</a>
-                     *      <a href="{{ 'users-list' | getUrl(null, 'http://domain.com') }}">Display all users</a>
-                     *      <a href="{{ '/dashboard' | getUrl(null, 'admin') }}">Go to admin bundle's dashboard page</a>
-                     *      <a href="{{ 'home@admin' | getUrl() }}">Go to admin bundle's dashboard page</a>
-                     *
-                     *      // can also be used with standalone mode: will add webroot if current bundle is not master
-                     *      <script src="{{ '/js/vendor/modernizr-2.8.3.min.js' | getUrl() }}"></script>
-                     *      compiled as => <script src="/my-bundle/js/vendor/modernizr-2.8.3.min.js"></script>
-                     *
-                     * @param {string} route
-                     * @param {object} params - can't be left blank if base is required -> null if not defined
-                     * @param {string} [base] - can be a CDN, the http://domain.com or a bundle name
-                     *
-                     * @return {string} relativeUrl|absoluteUrl - /sample/url.html or http://domain.com/sample/url.html
-                     * */
-                    var config              = null
-                        , hostname          = null
-                        , wroot             = null
-                        , wrootRe           = null
-                        , isStandalone      = null
-                        , isMaster          = null
-                        , routing           = null                        
-                        , rule              = null
-                        , url               = NaN
-                        , urlStr            = null
-                    ;
-
-
-                    swig.setFilter('getUrl', function (route, params, base) {                        
-            
-                        // if no route, returns current route
-                        if ( !route || typeof(route) == 'undefined') {
-                            route = local.options.rule
-                        }
-                        
-                        config = {};
-                        if (/\@/.test(route) && typeof(base) == 'undefined') {
-                            var r = route.split(/\@/);
-                            route = r[0];
-                            base = config.bundle = r[1];
-                        }
-
-                        // setting default config
-                        config          = merge(config,local.options.conf);
-                        hostname        = '';
-                        wroot           = config.server.webroot;
-                        isStandalone    = (config.bundles.length > 1) ? true : false;
-                        isMaster        = (config.bundles[0] === config.bundle) ? true : false;
-                        routing         = config.routing;
-                        
-                        
-                        
-
-                        if ( typeof(base) != 'undefined' ) {
-
-                            // if base is not an URL, must be a bundle
-                            if ( !/^(http|https)\:/.test(base) ) {
-                                var mainConf = getContext('gina').Config.instance;
-                                // is real bundle ?
-                                if ( mainConf.allBundles.indexOf(base) > -1 ) {
-                                    // needs a copy in case of confi override
-                                    //routing         = JSON.parse(JSON.stringify(config.routing));
-                                    // config override
-                                    config          = mainConf.Env.getConf(base, mainConf.env);
-                                    
-                                    // retrieve hostname, webroot & routing
-                                    hostname        = config.hostname + config.server.webroot;
-                                    // rewrite hostname vs local.req.headers.host
-                                    if ( isProxyHost ) {
-                                        hostname = hostname.replace(/\:\d+/, '');
-                                    }
-
-                                    config.bundle   = base;
-                                    isStandalone    = (mainConf.bundles.length > 1) ? true : false;
-                                    isMaster        = (mainConf.bundles[0] === config.bundle) ? true : false;
-
-                                } else {
-                                    self.throwError(local.res, 500, new Error('bundle `'+ base +'` not found: Swig.getUrl() filter encountered a problem while trying to compile base `'+base+'` and route `'+route+'`').stack)
-                                }
-                            }
-                        }
-                        
-                        wrootRe = new RegExp('^'+ config.server.webroot);
-
-                        // is path ?
-                        if (/^\//.test(route)) {
-                            
-                            if ( !wrootRe.test(route) ) {
-                                route = config.server.webroot + route.substr(1);
-                                hostname = hostname.replace(new RegExp( config.server.webroot +'$'), '')
-                            } else {
-                                route = route.substr(1)
-                            }                          
-
-                            return hostname + route;
-                        }
-
-                        // rules are now unique per bundle : rule@bundle
-                        rule = route + '@' + config.bundle;
-                        
-                        // var matchedMethod = ( 
-                        //     typeof(routing[rule]) != 'undefined' && Array.isArray(routing[rule].method) && routing[rule].method.indexOf(local.req.method) > -1 
-                        //     || 
-                        //     typeof(routing[rule]) != 'undefined' && new RegExp(local.req.method, 'i').test(routing[rule].method) 
-                        // ) ? true : false;
-                        
-                        if ( typeof(routing[rule]) != 'undefined' /**&& matchedMethod*/ ) { //found
-                            url = routing[rule].url;
-                            
-                            if ( typeof(routing[rule].requirements) != 'undefined' ) {
-                                var urls    = null
-                                    , i     = 0
-                                    , len   = null
-                                    , p     = null
-                                ;
-                                
-                                for (p in routing[rule].requirements) {
-                                    
-                                    if ( /\,/.test(url) ) {
-                                        urls = url.split(/\,/g);
-                                        i = 0; len = urls.length;
-                                        for (; i< len; ++i) {
-                                            if ( params && /:/.test(urls[i]) ) {
-                                                urlStr = urls[i].replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]+'$1');
-                                                break
-                                            }
-                                        }
-
-                                        url = (urlStr != null) ? urlStr : urls[0];
-                                    } else {
-                                        try {
-                                            url = url.replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]+'$1')
-                                        } catch (err) {
-                                            self.throwError(local.res, 500, new Error('template compilation exception encoutered: [ '+ path +' ]\nsounds like you are having troubles with the following call `{{ "'+route+'" | getUrl() }}` where `'+p+'` parameter is expected according to your `routing.json`'  +'\n'+ (err.stack||err.message)));
-                                        }
-                                    }
-                                }
-                            } else {
-                                if ( /\,/.test(url) ) {
-                                    url = url.split(/\,/g)[0] || null; // just taking the default one: using the first element unless it is empty.
-                                    if (!url) {
-                                        self.throwError(local.res, 500, new Error('please check your `routing.json` at the defined rule `'+ rule +'` : `url` attribute cannot be empty').stack)
-                                    }
-                                }
-                            }
-                            
-                            
-                            if (hostname.length > 0) {
-                                url = url.replace(wrootRe, '');
-                            }   
-                            
-                            // fix url in case of empty param value allowed by the routing rule
-                            // to prevent having a folder.
-                            // eg.: {..., id: '/^\\s*$/'} => {..., id: ''} => /path/to/ becoming /path/to
-                            if ( /\/$/.test(url) )
-                                url = url.substr(0, url.length-1);
-                                
-                            url = hostname + url;
-
-                        } else {
-                            
-                            if ( typeof(routing['404@'+ config.bundle]) != 'undefined' && typeof(routing['404@'+ config.bundle].url) != 'undefined' ) {                              
-                                //url = ( /^\//.test(routing['404@'+ config.bundle].url) ) ? hostname + routing['404@'+ config.bundle].url.substr(1) : hostname + routing['404@'+ config.bundle].url;
-                                url = routing['404@'+ config.bundle].url.replace(wrootRe, '');
-                                if (hostname.length > 0) {
-                                    url = url.replace(wrootRe, '');
-                                }  
-                                url = hostname + url;
-                            } else {
-                                url = route;
-                                if (hostname.length > 0) {
-                                    url = url.substr(1);
-                                } 
-                                url = hostname + url
-                            }
-                            
-                            return '404:['+ local.req.method +']'+rule                            
-                        }
-
-                        return url
-                    });
+                    swig.setFilter('getWebroot', filters.getWebroot);
+                    
+                    swig.setFilter('getUrl', filters.getUrl);
 
                 } catch (err) {
                     // [ martin ]
@@ -2640,8 +2451,12 @@ function SuperController(options) {
                             return local.res.end();
                         }                        
                         
-                        if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {                            
-                            self.throwError(data)
+                        if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
+                              if ( /^5/.test(data.status)  ) {
+                                  callback(data)  
+                              } else {
+                                  self.throwError(data)
+                              }  
                         } else {
                             callback( false, data )                        
                         }

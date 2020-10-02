@@ -24,11 +24,11 @@ function Start(opt, cmd) {
         
         // import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
-        
-                
+                        
         // check CMD configuration
         if (!isCmdConfigured()) return false;
-              
+        
+                      
         // start all bundles   
         opt.onlineCount = 0;   
         opt.notStarted = [];  
@@ -40,7 +40,22 @@ function Start(opt, cmd) {
     }
     
     var start = function(opt, cmd, bundleIndex) {
-       
+        
+        // getting the debug port
+        var debugStr = null;
+        if ( /\-\-(inspect|debug)/.test(opt.argv.join(',')) ) {
+            var pArr = null;
+            for (var i = 0, len = opt.argv.length; i<len; i++) {
+                if ( /\-\-(inspect|debug)/.test(opt.argv[i]) ) {
+                    pArr = opt.argv[i].replace(/\s+/g, '').split(/=/);
+                    opt.debugBrkEnabled = /\-brk/.test(pArr[0]);
+                    opt.debugPort = pArr[1];  
+                    debugStr = opt.argv[i];
+                    break;
+                }
+            }            
+        }
+        
         var isBulkStart = (typeof(bundleIndex) != 'undefined') ? true : false;
         var bundle = (isBulkStart) ? self.bundles[bundleIndex] : self.name;
 
@@ -72,12 +87,17 @@ function Start(opt, cmd) {
                         return;
                     
                     msg = 'Trying to start bundle [ ' + bundle + '@' + self.projectName + ' ]';
+                    if (opt.debugPort) {
+                        msg += ' (debug port: '+ opt.debugPort +')'
+                    }
                     console.info(msg);
                     opt.client.write(msg);
                     
                     process.list = (process.list == undefined) ? [] : process.list;
                     setContext('processList', process.list);
                     setContext('ginaProcess', process.pid);
+                    setContext('debugPort', opt.debugPort);
+                    setContext('debugBrkEnabled', opt.debugBrkEnabled);
 
                     params = [
                         // node arguments will be passed by gina

@@ -39,7 +39,7 @@ function Stop(opt, cmd) {
     }
     
     var stop = function(opt, cmd, bundleIndex) {
-
+        
         var isBulkStop = (typeof(bundleIndex) != 'undefined') ? true : false;
         var bundle = (isBulkStop) ? self.bundles[bundleIndex] : self.name;
 
