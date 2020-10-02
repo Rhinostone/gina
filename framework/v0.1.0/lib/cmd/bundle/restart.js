@@ -39,7 +39,7 @@ function Restart(opt, cmd) {
     }
     
     var restart = function(opt, cmd, bundleIndex) {
-        
+                
         var isBulkRestart = (typeof(bundleIndex) != 'undefined') ? true : false;
         var bundle = (isBulkRestart) ? self.bundles[bundleIndex] : self.name;
         
@@ -58,9 +58,16 @@ function Restart(opt, cmd) {
                 }
 
                 var error = null;
-                
+                //console.debug(' OPTIONS => ', opt.debugPort, opt.debugBrkEnabled);
                 //console.info('running: gina bundle:restart '+ bundle + '@' + self.projectName);
                 cmd = '$gina bundle:stop ' + bundle + ' @' + self.projectName + ' && $gina bundle:start ' + bundle + ' @' + self.projectName;
+                if (opt.debugPort) {
+                    cmd += ' --inspect';
+                    if (opt.debugBrkEnabled) {
+                        cmd += '-brk'
+                    }
+                    cmd += '='+ opt.debugPort
+                }
                 cmd = cmd.replace(/\$gina/g, self.cmdStr);
                 console.debug(cmd);
                 

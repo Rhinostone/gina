@@ -3,6 +3,7 @@
 .jshintrc
 .idea
 nbproject
+.vscode
 
 # Gina
 /logs

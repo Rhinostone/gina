@@ -141,7 +141,7 @@ function EntitySuper(conn, caller) {
             // only if method content is about the event
             if (methods.indexOf(f) > -1 && new RegExp('(' + events[i].shortName + '\'|' + events[i].shortName + '\"|' + events[i].shortName + '$)').test(fSource)) {
 
-
+                // CRUD | model's methods, for the n1ql, look into connector/<connectorName>/index.js
                 entity[f] = (function onEntityEvent(e, m, i, source) {
 
                     var cached      = entity[m];
@@ -153,7 +153,6 @@ function EntitySuper(conn, caller) {
                         variables = variables.replace(/\(|\)/g, '').replace(/\s*/g, '');
                         if (variables) args = variables.split(/\,/g);
                     }
-
                     // TODO - retrieve argument while the method is being rewritten
                     return function () {
 
@@ -180,6 +179,7 @@ function EntitySuper(conn, caller) {
                             
                             var promise = function() {
                                 var cb = arguments[arguments.length-1];
+                                
                                 if (entity._triggers.indexOf(events[i].shortName) > -1) {
                                     console.debug('[ MODEL ][ ENTITY ] Setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
                                     
@@ -196,8 +196,7 @@ function EntitySuper(conn, caller) {
                                                 entity.removeAllListeners([events[i].shortName]);
                                                 console.log('\nFIRING #1 - promise ' + events[i].shortName +'('+ events[i].index  +')');                                                
                                                 cb.apply(this, arguments);
-                                            }
-                                                
+                                            }                                                
                                         });
                                             
     

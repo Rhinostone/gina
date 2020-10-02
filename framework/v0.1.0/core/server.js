@@ -124,6 +124,7 @@ function Server(options) {
             self.conf[self.appName][self.env].server.engine = serverOpt.engine;
             
             serverOpt.port      = self.conf[self.appName][self.env].server.port = portsReverse[ self.appName +'@'+ self.projectName ][self.env][serverOpt.protocol][serverOpt.scheme];
+            self.conf[self.appName][self.env].server.debugPort = getContext().debugPort;
             
             // engin.io options
             if ( ioServerOpt ) {
@@ -1070,10 +1071,14 @@ function Server(options) {
         } 
         
         // update response
-        if ( responseHeaders && responseHeaders.count() > 0 ) {
-            return merge(responseHeaders, response.getHeaders());
-        }        
-        return response.getHeaders();        
+        try {
+            if ( responseHeaders && responseHeaders.count() > 0 ) {
+                return merge(responseHeaders, response.getHeaders());
+            }        
+            return response.getHeaders();   
+        } catch(err) {
+            return responseHeaders
+        }
     }
     
     this.onHttp2Stream = function(stream, headers) {
@@ -1218,7 +1223,12 @@ function Server(options) {
         } else {
             // var err = new Error(headers[':path']);
             // err.status = 404;
-            return throwError({stream: stream}, 404, 'Page not found: \n' + headers[':path']);      
+            var status = 404;
+            if ( /\/$/.test(headers[':path']) && this._options.template.assets[ headers[':path'] +'index.html' ].isAvailable   ) { // preview of directory is forbidden
+                status = 403;
+                headers[':status'] = status;
+            }
+            return throwError({stream: stream}, status, 'Page not found: \n' + headers[':path']);      
         }       
     }
     
