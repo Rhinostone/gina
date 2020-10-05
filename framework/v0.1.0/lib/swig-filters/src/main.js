@@ -8,7 +8,9 @@
 
 /**
  * SwigFilters
- * 
+ * ------
+ * Setup
+ * ------
  * var filters = SwigFilters({
  *   options     : local.options,
  *   isProxyHost : isProxyHost,
@@ -16,9 +18,12 @@
  *   req         : local.req,
  *   res         : local.res 
  * });
- * 
+ * -----
+ * Call
+ * ----- 
  * swig.setFilter('getUrl', filters.getUrl);
  *
+ * 
  * @package     Gina.Lib
  * @namespace   Gina.Lib.SwigFilters
  * @author      Rhinostone <gina@rhinostone.com>
@@ -134,9 +139,7 @@ function SwigFilters(conf) {
         isStandalone    = (config.bundles.length > 1) ? true : false;
         isMaster        = (config.bundles[0] === config.bundle) ? true : false;
         routing         = config.routing;
-        
-        
-        
+      
 
         if ( typeof(base) != 'undefined' ) {
 
