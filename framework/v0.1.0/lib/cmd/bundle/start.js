@@ -211,7 +211,7 @@ function Start(opt, cmd) {
 
                         error = err.toString();                        
                         
-                        if (/Debugger listening|Debugger attached|Warning/.test(error)) {
+                        if (/Debugger listening|Debugger attached|Warning|address already in use/i.test(error)) {
                             console.warn(error);
 
                             if (!opt.client.destroyed) {
