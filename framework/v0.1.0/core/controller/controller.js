@@ -596,7 +596,7 @@ function SuperController(options) {
                         }                     
                         
                         // adding stylesheets
-                        if (data.page.view.stylesheets && !/\{\{\s+(page\.view\.stylesheets)\s+\}\}/.test(layout) ) {
+                        if (!isWithoutLayout && data.page.view.stylesheets && !/\{\{\s+(page\.view\.stylesheets)\s+\}\}/.test(layout) ) {
                             layout = layout.replace(/\<\/head\>/i, '\n{{ page.view.stylesheets }}\n</head>')
                         }
                                         
