@@ -205,7 +205,7 @@ function Couchbase(conn, infos) {
                         // BO - patch prepared statement case when placeholder is used as a cursor
                         var p                   = []
                             , qStr              = queryString
-                            , inl               = inlineParams
+                            , inl               = inlineParams.slice()
                             , re                = null
                             , foundSpecialCase  = /\w+\.(\$|\%)/.test(queryString);
                             
@@ -229,10 +229,12 @@ function Couchbase(conn, infos) {
 
                             queryString = qStr;
 
-                            index = 0; i = 0; len = p.length;
+                            index = 0; i = 0; len = inlineParams.length;
+                            var matched = null;
                             for (; i < len; ++i) {  
-                                if ( typeof(p[i]) != 'undefined' )  {
-                                    queryParams[index] = p[i];
+                                matched = params.indexOf( inlineParams[i] );
+                                if ( matched > -1 && typeof(p[matched]) != 'undefined' )  {
+                                    queryParams[ index ] = p[matched]
                                     ++index;
                                 }
                             }
