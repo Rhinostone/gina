@@ -146,9 +146,7 @@ function Couchbase(conn, infos) {
             returnType  = queryString.match(/\@return\s+\{(.*)\}/);
             if ( Array.isArray(returnType) ) {
                 returnType = returnType[1]
-            }/** else {
-                returnType = null
-            }*/
+            }
 
             if (comments) {
                 params = comments[0].match(/\$\w+/g); // param list from comments
@@ -193,7 +191,7 @@ function Couchbase(conn, infos) {
                         _mainCallback = args[args.length-1]
                     }
 
-
+                    var sdkVersion = conn.sdk.version || 2;
                     var queryParams = [];
                     var queryOptions = { // values by default
                         // Do not turn off the adhoc flag for each query since 
@@ -227,25 +225,38 @@ function Couchbase(conn, infos) {
                                 }                                    
                             }
 
-                            queryString = qStr;
-
-                            index = 0; i = 0; len = inlineParams.length;
-                            var matched = null;
-                            for (; i < len; ++i) {  
-                                matched = params.indexOf( inlineParams[i] );
-                                if ( matched > -1 && typeof(p[matched]) != 'undefined' )  {
-                                    queryParams[ index ] = p[matched]
-                                    ++index;
+                            queryString = qStr;                                
+                            if ( sdkVersion > 2 ) { // starting from SDK v3
+                                queryParams = {};
+                                index = 0; i = 0; len = inlineParams.length;                            
+                                var matched = null;
+                                for (; i < len; ++i) {  
+                                    //matched = params.indexOf( inlineParams[i] );
+                                    matched = params.indexOf( inl[i] );
+                                    if ( matched > -1 && typeof(p[matched]) != 'undefined' )  {                                                                          
+                                        // e.g.: queryParams[ $3 ] = 1                                    
+                                        queryParams[ inl[i] ] = p[matched]
+                                    }
+                                }
+                            } else {
+                                // Novemeber 2020 patch
+                                index = 0; i = 0; len = params.length;
+                                for (; i < len; ++i) {  
+                                    if ( typeof(p[i]) != 'undefined' )  {
+                                        queryParams[i] = p[i];
+                                    } else { // means that placeholder has been replaced
+                                        // But we still need to keep the reference in the list
+                                        queryParams[i] = null
+                                    }
                                 }
                             }
-
+                                
                         } else { // normal case
                             queryParams = args;
                         }
-
                         // EO - patch
                     }
-                    var sdkVersion = conn.sdk.version || 2;
+                    
                     var query = null, execQuery = null, _collection = null;
                     if ( sdkVersion > 2 ) { // starting from SDK v3
                         _collection = queryString.match(/\_collection(\s+\=|=)(.*)(\'|\")/);
@@ -332,7 +343,7 @@ function Couchbase(conn, infos) {
                         if (/deleteAllSandboxedDocuments/.test(trigger)) {
                             console.log('[ ' + trigger + '] onQueryCallback => ', err, data, meta);
                         }
-                                                 
+                                               
                         if (!data || data.length == 0) {
                             data = null
                         }
@@ -396,10 +407,11 @@ function Couchbase(conn, infos) {
                                     } else { // Promise case
                                         return data
                                     }                                    
-                                }                                
+                                }
+                                return                                
                             }
                             
-                        } catch (_err) {
+                        } catch (_err) { 
                             if ( _mainCallback != null ) {
                                 _mainCallback(err, data, meta)
                             } else {
@@ -439,7 +451,7 @@ function Couchbase(conn, infos) {
                     
                     var _proto = {
                         onComplete : function(cb) {                            
-                            //console.debug('onComplete trigger: ', trigger, self._isRegisteredFromProto);
+                            //console.debug('onComplete trigger: ', trigger, self._isRegisteredFromProto);                            
                             register(trigger, queryParams, onQueryCallback, cb)
                         }
                     };
@@ -455,9 +467,9 @@ function Couchbase(conn, infos) {
                         if ( _mainCallback == null ) {  
                             return {
                                 onComplete : function(cb) {
-                                    console.debug('registered trigger: ', trigger);
+                                    //console.debug('registered trigger: ', trigger);
                                     self.once(trigger, function onComplete(err, data, meta){
-                                        console.debug('received ', trigger);                                        
+                                        //console.debug('received ', trigger);                                        
                                         try {
                                             cb(err, data, meta)
                                         } catch (onCompleteError) {                                        
