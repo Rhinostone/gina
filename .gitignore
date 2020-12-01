@@ -28,6 +28,7 @@ desktop.ini
 ._.DS_Store
 *.bak
 *.old
+src.old
 
 framework/v0.1.0/package-lock.json
 
