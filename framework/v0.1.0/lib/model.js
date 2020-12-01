@@ -528,9 +528,16 @@ function ModelUtil() {
             }
         }
 
-        //if (!self.models) {
+        // if ( 
+        //     typeof(ctx.modelUtil.models) != 'undefined' 
+        //     && typeof(ctx.modelUtil.models) != 'undefined'
+        //     && typeof(ctx.modelUtil.models[bundle]) != 'undefined'
+        //     && typeof(ctx.modelUtil.models[bundle][model]) != 'undefined'
+        // ) {
+            
+        // } else {
             self.models = ModelUtil.instance.models
-        //}
+        // }
 
         if ( typeof(model) != 'undefined' && typeof(self.models[bundle]) != 'undefined' ) {
 

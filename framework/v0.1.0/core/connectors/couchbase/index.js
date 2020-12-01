@@ -340,9 +340,9 @@ function Couchbase(conn, infos) {
                     
                     
                     var onQueryCallback = function(err, data, meta) {
-                        if (/deleteAllSandboxedDocuments/.test(trigger)) {
-                            console.log('[ ' + trigger + '] onQueryCallback => ', err, data, meta);
-                        }
+                        // if (/deleteAllSandboxedDocuments/.test(trigger)) {
+                        //     console.log('[ ' + trigger + '] onQueryCallback => ', err, data, meta);
+                        // }
                                                
                         if (!data || data.length == 0) {
                             data = null
