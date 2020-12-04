@@ -219,6 +219,9 @@ function FormValidatorUtil(data, $fields) {
         
         self[el]['set'] = function(value) {
             this.value  = local['data'][this.name] = value;
+            //  html 
+            this.target.setAttribute('value', value);
+            // Todo : select and radio case to apply change
             
             return self[this.name]
         }

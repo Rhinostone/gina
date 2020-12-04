@@ -1024,13 +1024,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var ignoreList  = [], s = 0;
             var i = 0, len = globalScriptsList.length;
             var scripts = $el.getElementsByTagName('script');
-            // for (;i < len; ++i) {
-            //     if ( !globalScriptsList[i].src || /gina(\.min\.js|\.js)$/.test(globalScriptsList[i].src) )
-            //         continue;    
-                    
-            //     ignoreList[s] = globalScriptsList[i].src;
-            //     ++s
-            // }
                         
             i = 0; len = scripts.length;
             for (;i < len; ++i) {
