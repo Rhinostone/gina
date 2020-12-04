@@ -1451,12 +1451,18 @@ function SuperController(options) {
                     //console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA redirection is not permitted in this scenario.\nSwitching rendering mode: calling self.renderJSON({ location: "'+ path +'"})\nFrom now, you just need to catch the response with a frontend script.\n').message);
                     console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nThis can often occur while redirecting from a controller to another controller or from a bundle to another.\nA redirection is not permitted in this scenario.\nD\'ont panic :)\nSwitching request method to `GET` method instead.\n').message);
                     
-                    code = 303;                    
-                    method = local.req.method = self.setRequestMethod('GET', conf);
+                    code = 303;
                     
-                    var requestParams = local.req[method.toLowerCase()];
-                    if ( typeof(requestParams) != 'undefined' ) {
-                        path += '?'+ encodeURIComponent(JSON.stringify(local.req[method.toLowerCase()]));                 
+                    // backing up oldParams
+                    var oldParams = local.req[req.method.toLowerCase()]
+                    
+                    method = local.req.method = self.setRequestMethod('GET', conf);                    
+                    var requestParams = req[req.method.toLowerCase()] || {};
+                    // merging new & olds params
+                    requestParams = merge(requestParams, oldParams);
+                    if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {
+                        //path += '?'+ encodeURIComponent(JSON.stringify(local.req[method.toLowerCase()]));                 
+                        path += '?'+ encodeURIComponent(JSON.stringify(requestParams));  
                     }                    
                 }
                     

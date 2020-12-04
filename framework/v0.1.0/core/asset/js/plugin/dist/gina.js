@@ -2650,7 +2650,11 @@ function Merge() {
         newTarget = [];
                 
         
-        var newTargetIds = [], keyComparison = browse.getKeyComparison();
+        var newTargetIds = []
+            , keyComparison = browse.getKeyComparison()
+            , a = null
+            , i = 0
+        ;
 
         if (override) {
 
@@ -2660,7 +2664,7 @@ function Merge() {
                 && typeof(target[0]) == 'object' && typeof(target[0][keyComparison]) != 'undefined'
             ) {
 
-                newTarget = JSON.parse(JSON.stringify(target));
+                newTarget =  (Array.isArray(target)) ? Array.from(target) : JSON.parse(JSON.stringify(target));
                 for (var nt = 0, ntLen = newTarget.length; nt < ntLen; ++nt) {
                     newTargetIds.push(newTarget[nt][keyComparison]);
                 }
@@ -2668,7 +2672,8 @@ function Merge() {
                 var _options    = JSON.parse(JSON.stringify(options));
                 
                 var index = 0;
-
+                a = 0;
+                aLen = _options.length;
                 for (var n = next || 0, nLen = target.length; n < nLen; ++n) {
                     
                     // if (newTargetIds.indexOf(target[n][keyComparison]) == -1) {
@@ -2679,7 +2684,7 @@ function Merge() {
                     // }
                     
                     label:
-                    for (var a = a || 0, aLen = _options.length; a < aLen; ++a) {
+                    for (a = a || 0; a < aLen; ++a) {
                     
                         if (_options[a][keyComparison] === target[n][keyComparison] ) {
 
@@ -2721,15 +2726,17 @@ function Merge() {
         }
 
         if ( target.length == 0 && options.length > 0) {
-            for (var a = 0; a < options.length; ++a ) {
+            a = 0;
+            for (; a < options.length; ++a ) {
                 target.push(options[a]);
             }
         }
 
         if (newTarget.length == 0 && target.length > 0) {            
             // ok, but don't merge objects
-            for (var a = 0; a < target.length; ++a ) {
-                if ( typeof(target[a]) != 'object' && newTarget.indexOf(target[a]) == -1) {
+            a = 0;
+            for (; a < target.length; ++a ) {
+                if ( typeof(target[a]) != 'object' && newTarget.indexOf(target[a]) == -1 ) {
                     newTarget.push(target[a]);
                 }
             }
@@ -2747,15 +2754,17 @@ function Merge() {
                 && typeof(target[0][keyComparison]) != 'undefined'
             ) {
 
-                newTarget       = JSON.parse(JSON.stringify(target));
+                newTarget       = (Array.isArray(target)) ? Array.from(target) : JSON.parse(JSON.stringify(target));
                 var _options    = JSON.parse(JSON.stringify(options));
                 var next        = null;
                 
-
-                for (var a = 0, aLen = newTarget.length; a < aLen; ++a) {
+                i = 0;
+                a = 0; aLen = newTarget.length;
+                for (; a < aLen; ++a) {
                     newTargetIds.push(newTarget[a][keyComparison]);
                 }
-                for (var a = 0, aLen = newTarget.length; a < aLen; ++a) {
+                a = 0;
+                for (; a < aLen; ++a) {
                     
                     end:
                         for (var n = next || 0, nLen = _options.length; n < nLen; ++n) {
@@ -2795,7 +2804,8 @@ function Merge() {
 
 
             } else { // normal case `arrays`
-                for (var a = 0; a < options.length; ++a ) {
+                a = 0;
+                for (; a < options.length; ++a ) {
                     if ( target.indexOf(options[a]) > -1 && override) {
                         target.splice(target.indexOf(options[a]), 1, options[a])
                     } else if ( typeof(newTarget[a]) == 'undefined' && typeof(options[a]) == 'object' ) {
@@ -2806,15 +2816,24 @@ function Merge() {
                             newTarget[a] = {};
                                                     
                             
-                        for (var k in options[a]) {
+                        for (let k in options[a]) {
                             if (!newTarget[a].hasOwnProperty(k)) {
                                 newTarget[a][k] = options[a][k]
                             }
                         }   
                         
                     } else {
-                        // if (newTarget.indexOf(options[a]) == -1)
-                        //     newTarget.push(options[a]);
+                        // fixing a = [25]; b = [25,25];
+                        // result must be [25,25]
+                        if (
+                            !override
+                            && newTarget.indexOf(options[a]) > -1 
+                            && typeof(options[a]) == 'number'
+                        ) {
+                            newTarget.push(options[a]);
+                            break;
+                        }
+                            
                         
                         if (
                             typeof (target[a]) != 'undefined'
@@ -2827,8 +2846,8 @@ function Merge() {
                             if (override)
                                 newTarget[a] = options[a]
                             else
-                                newTarget[a] = target[a]
-                        } else if (newTarget.indexOf(options[a]) == -1) {
+                               newTarget[a] = target[a]
+                        } else if (newTarget.indexOf(options[a]) == -1 && typeof(options[a]) == 'string') {
                             newTarget.push(options[a]);
                         }
                         
@@ -3628,6 +3647,158 @@ function on(event, cb) {
 };
 define("utils/events", function(){});
 
+function PrototypesHelper(instance) {
+    
+    var local = instance || null;    
+    
+    // dateFormat proto
+    if ( typeof(local) != 'undefined' && typeof(local.dateFormat) != 'undefined' ) {
+        for (let method in local.dateFormat) {
+            
+            if ( typeof(Date[method]) != 'undefined' )
+                continue;
+            
+            Object.defineProperty( Date.prototype, method, {
+                writable:   false,
+                enumerable: false,
+                //If loaded several times, it can lead to an exception. That's why I put this.
+                configurable: true,
+                value: function() { 
+                    
+                    var newArgs = { 0: this }, i = 1;
+                    for (var a in arguments) {
+                        newArgs[i] = arguments[a];
+                        ++i
+                    }
+                    newArgs.length = i;
+                    // don't touch this, we need the name
+                    const name = method;
+                    
+                    return local.dateFormat[name].apply(this, newArgs );
+                }
+            });
+            
+        }
+    }
+        
+       
+    // Global proto
+
+    if ( typeof(Array.clone) == 'undefined' ) {
+        /**
+         * clone array
+         * @return {array} Return cloned array
+         **/
+        Object.defineProperty( Array.prototype, 'clone', {
+            writable:   false,
+            enumerable: false,
+            //If loaded several times, it can lead to an exception. That's why I put this.
+            configurable: true,
+            value: function(){ return this.slice(0) }
+        });
+    }
+        
+
+    if ( typeof(Array.toString) == 'undefined' ) {
+        Array.prototype.toString = function(){
+            return this.join();
+        };
+    }
+
+    if ( typeof(Array.inArray) == 'undefined' ) {
+        Object.defineProperty( Array.prototype, 'inArray', {
+            writable:   false,
+            enumerable: false,
+            //If loaded several times, it can lead to an exception. That's why I put this.
+            configurable: true,
+            value: function(o){ return this.indexOf(o)!=-1 }
+        });
+    }
+        
+    if ( typeof(Array.from) == 'undefined' ) { // if not under ES6
+
+        Object.defineProperty( Array.prototype, 'from', {
+            writable:   false,
+            enumerable: false,
+            //If loaded several times, it can lead to an exception. That's why I put this.
+            configurable: true,
+            value: function(a){
+                var seen    = {}
+                    , out   = []
+                    , len   = a.length
+                    , j     = 0;
+
+                for(var i = 0; i < len; i++) {
+                    var item = a[i];
+                    if(seen[item] !== 1) {
+                        seen[item] = 1;
+                        out[j++] = item
+                    }
+                }
+
+                return out
+            }
+        });
+    }
+    
+    if ( typeof(Object.count) == 'undefined' ) {
+        Object.defineProperty( Object.prototype, 'count', {
+            writable:   true,
+            enumerable: false,
+            //If loaded several times, it can lead to an exception. That's why I put this.
+            configurable: true,
+            value: function(){
+                try {
+                    var self = this;
+                    if (this instanceof String) self = JSON.parse(this);
+                    var i = 0;
+                    for (var prop in this)
+                        if (this.hasOwnProperty(prop)) ++i;
+
+                    return i;
+                } catch (err) {
+                    return i
+                }
+
+            }
+        });
+    }        
+
+    
+        
+    if ( typeof(global) != 'undefined' && typeof(global.__stack) == 'undefined' ) {
+        /**
+         * __stack Get current stack
+         * @return {Object} stack Current stack
+         **/
+        Object.defineProperty(global, '__stack', {
+            //If loaded several times, it can lead to an exception. That's why I put this.
+            configurable: true,
+            get: function(){
+                var orig = Error.prepareStackTrace;
+                Error.prepareStackTrace = function(_, stack){
+                    return stack;
+                };
+                var err = new Error;
+                Error.captureStackTrace(err, arguments.callee);
+                var stack = err.stack;
+                Error.prepareStackTrace = orig;
+                return stack;
+            }
+        });
+    }
+    
+    
+}
+
+if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
+    // Publish as node.js module
+    module.exports = PrototypesHelper
+} else if ( typeof(define) === 'function' && define.amd) {
+    // Publish as AMD module
+    define( 'helpers/prototypes',[],function() { return PrototypesHelper })
+}
+    ;
 /*
  * This file is part of the gina package.
  * Copyright (c) 2016 Rhinostone <gina@rhinostone.com>
@@ -3662,7 +3833,11 @@ function DateFormatHelper() {
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
 
     var merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
-
+    
+    // if ( typeof(define) === 'function' && define.amd ) {
+    //     var Date = this.Date;
+    // }
+    
     var self = {};
     // language-country
     self.culture = 'en-US'; // by default
@@ -3944,7 +4119,34 @@ function DateFormatHelper() {
      * */
     var addHours = function(date, h) {
         var copiedDate = new Date(date.getTime());
-        copiedDate.setHours(copiedDate.getHours()+h);
+        copiedDate.setHours(copiedDate.getHours() + h);
+        return copiedDate;
+    }
+
+
+    /**
+     * Add or subtract days
+     *  Adding 2 days
+     *      => myDate.addDays(2)
+     *  Subtracting 10 days
+     *      => myDate.addDays(-10)
+     * */
+    var addDays = function(date, d) {
+        var copiedDate = new Date(date.getTime());
+        copiedDate.setHours(copiedDate.getHours() + d * 24);
+        return copiedDate;
+    }
+
+    /**
+     * Add or subtract years
+     *  Adding 2 days
+     *      => myDate.addYears(2)
+     *  Subtracting 10 years
+     *      => myDate.addYears(-10)
+     * */
+    var addYears = function(date, y) {
+        var copiedDate = new Date(date.getTime());
+        copiedDate.setFullYear(copiedDate.getFullYear() + y);
         return copiedDate;
     }
 
@@ -3954,7 +4156,9 @@ function DateFormatHelper() {
         countDaysTo     : countDaysTo,
         getDaysTo       : getDaysTo,
         getDaysInMonth  : getDaysInMonth,
-        addHours        : addHours
+        addHours        : addHours,
+        addDays         : addDays,
+        addYears        : addYears
     };
     
     return _proto
@@ -4491,11 +4695,13 @@ function Collection(content, options) {
     if ( typeof(arguments[arguments.length-1]) == 'string' ) {
         key = arguments[arguments.length - 1];
         delete arguments[arguments.length - 1];
+        --arguments.length;
     }
     
     // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
     //     uuidSearchModeEnabled = arguments[arguments.length - 1]
     //     delete arguments[arguments.length - 1];
+    //     --arguments.length;
     // }
     
     if (arguments.length > 0) {
@@ -4676,11 +4882,13 @@ function Collection(content, options) {
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
+            --arguments.length;
         }
         
         if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
             uuidSearchModeEnabled = arguments[arguments.length - 1]
             delete arguments[arguments.length - 1];
+            --arguments.length;
         }
         
         if (arguments.length > 0) {
@@ -4703,6 +4911,7 @@ function Collection(content, options) {
         }
         
         if (foundResults.length > 0) {
+            
             // check key
             if ( 
                 uuidSearchModeEnabled
@@ -4713,7 +4922,13 @@ function Collection(content, options) {
                 throw new Error('[ Collection ][ notIn ] `key` not valid');
             } else if ( uuidSearchModeEnabled && !key && typeof(foundResults[0]['_uuid']) != 'undefined' ) {
                 key = '_uuid'
+            } else if ( typeof(foundResults[0]['id']) != 'undefined' ) {
+                key = 'id';
             }
+            
+            if ( !key || typeof(foundResults[0][key]) == 'undefined' ) {
+                throw new Error('No comparison key defined !')
+            } 
 
             // fast search with key
             var r       = 0
@@ -4855,16 +5070,19 @@ function Collection(content, options) {
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
+            --arguments.length;
         } 
         
         if ( typeof(arguments[arguments.length-1]) == 'object' ) {
             set = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
+            --arguments.length
         }
         
         // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
         //     uuidSearchModeEnabled = arguments[arguments.length - 1]
         //     delete arguments[arguments.length - 1];
+        //     --arguments.length;
         // }
         
         if (arguments.length > 0) {
@@ -4896,6 +5114,10 @@ function Collection(content, options) {
             for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
                 arr[a] = merge( JSON.parse(JSON.stringify(set) ), arr[a]);
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
+                    if ( typeof(result[r][key]) == 'undefined' && key == '_uuid' && typeof(result[r]['id']) != 'undefined' ) {
+                        key = 'id';
+                    }
+                    
                     if ( result[r][key] == arr[a][key] ) {
                         result[r] = arr[a];
                         break;
@@ -4932,16 +5154,19 @@ function Collection(content, options) {
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
+            --arguments.length;
         } 
         
         if ( typeof(arguments[arguments.length-1]) == 'object' ) {
             set = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
+            --arguments.length;
         }
         
         // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
         //     uuidSearchModeEnabled = arguments[arguments.length - 1]
         //     delete arguments[arguments.length - 1];
+        //     --arguments.length;
         // }
         
         if (arguments.length > 0) {
@@ -4973,6 +5198,12 @@ function Collection(content, options) {
             for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
                 arr[a] = JSON.parse(JSON.stringify(set));
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
+                    if ( typeof(result[r][key]) == 'undefined' && key == '_uuid' && typeof(result[r]['id']) != 'undefined' ) {
+                        key = 'id';
+                    } else if (typeof(result[r][key]) == 'undefined' && key == '_uuid') {
+                        throw new Error('No comparison key defined !')
+                    } 
+                    
                     if ( result[r][key] == arr[a][key] ) {
                         result[r] = arr[a];
                         break;
@@ -5319,19 +5550,6 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-// if (typeof (module) !== 'undefined' && module.exports) {
-    
-//     var lib = null;
-//     if ( typeof( getPath('gina') ) != 'undefined' ) {
-//         lib     = require(getPath('gina').lib);
-//     } else {
-//         lib     = require('../../index');
-//     }
-    
-//     var console = lib.logger;
-//     //var merge   = lib.merge;
-// }
-
 
 /**
  * Routing
@@ -5343,12 +5561,13 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
 
 function Routing() {
 
-    var self        = {};    
     var isGFFCtx    = ((typeof (module) !== 'undefined') && module.exports) ? false :  true;
-    
-    self.allowedMethods         = ['get', 'post', 'put', 'delete'];
+    var self        = {
+        allowedMethods: ['get', 'post', 'put', 'delete'],
+        notFound: {}
+    };    
+        
     self.allowedMethodsString   = self.allowedMethods.join(',');
-    self.notFound               = [];
     
     // loading plugins
     var plugins = null, Validator = null;
@@ -5464,8 +5683,7 @@ function Routing() {
         ;
         
         //attaching routing description for this request
-        //request.routing = params; // can be retried in controller with: req.routing
-        
+        //request.routing = params; // can be retried in controller with: req.routing        
         if ( typeof(params.requirements) != 'undefined' && typeof(request.get) != 'undefined' ) {            
             for (var p in request.get) {
                 if ( typeof(params.requirements[p]) != 'undefined' && uRo.indexOf(':' + p) < 0 ) {
@@ -5511,7 +5729,7 @@ function Routing() {
      * @private
      * */
     var fitsWithRequirements = function(urlVar, urlVal, params, request) {
-        //var isValid = new Validator('routing', { email: "m.etouman@wics"}, null, {email: {isEmail: true}} ).isEmail().valid;
+        //var isValid = new Validator('routing', { email: "contact@gina.io"}, null, {email: {isEmail: true}} ).isEmail().valid;
         var matched     = -1
             , _param    = urlVar.match(/\:\w+/g)
             , regex     = new RegExp(urlVar, 'g')
@@ -5527,6 +5745,8 @@ function Routing() {
             , _rule         = null
             , rule          = null
             , str           = null
+            // request method
+            , requestMethod        = request.method.toLowerCase()
         ;
         
         if (!_param.length) return false;
@@ -5571,10 +5791,15 @@ function Routing() {
 
             if (matched === false) return matched;
             // filter on method
-            if (params.method.toLowerCase() !== request.method.toLowerCase()) return false;
+            if (params.method.toLowerCase() !== requestMethod) return false;
+            
+            if ( typeof(request[requestMethod]) == 'undefined' ) {
+                request[requestMethod] = {}
+            }
 
             key     = _param[matched].substr(1);
-            regex   = params.requirements[key];
+            // escaping `\` characters
+            regex   = ( /\\/.test(params.requirements[key]) ) ? params.requirements[key].replace(/\\/, '') : params.requirements[key];
 
             if (/^\//.test(regex)) {
                 re      = regex.match(/\/(.*)\//).pop();
@@ -5617,6 +5842,9 @@ function Routing() {
                 tested
             ) {                
                 request.params[key] = urlVal;
+                if ( typeof(request[requestMethod][key]) == 'undefined' ) {
+                    request[requestMethod][key] = urlVal
+                }
                 return true
             }
 
@@ -5759,7 +5987,7 @@ function Routing() {
         
         var env         = config.env || GINA_ENV  // by default, takes the current bundle
             , envTmp    = null
-            , scheme    = null
+            //, scheme    = null
             , bundle    = config.bundle // by default, takes the current bundle
         ;
         
@@ -5800,6 +6028,7 @@ function Routing() {
             , urls      = null
             , i         = null
             , len       = null
+            , msg       = null
         ;
         
         var replacement = function(matched){
@@ -5846,20 +6075,24 @@ function Routing() {
 
         if ( /\,/.test(route.url) ) {
             urlIndex = ( typeof(urlIndex) != 'undefined' ) ? urlIndex : 0;
-            route.url = route.url.split(/,/g)[urlIndex]
+            route.url = route.url.split(/,/g)[urlIndex];            
         }
-
+        // fix url in case of empty param value allowed by the routing rule
+        // to prevent having a folder.
+        // eg.: {..., id: '/^\\s*$/'} => {..., id: ''} => /path/to/ becoming /path/to
+        if ( /\/$/.test(route.url) && route.url != '/' )
+            route.url = route.url.substr(0, route.url.length-1);
+                
+        // recommanded for x-bundle coms
+        // leave `ignoreWebRoot` empty or set it to false for x-bundle coms
         route.toUrl = function (ignoreWebRoot) {
-
-            // var conf        = config.bundlesConfiguration.conf[bundle][env]
-            //     , wroot     = conf.server.webroot
-            // ;
             
             var wroot       = this.webroot
                 , hostname  = this.hostname
+                , path      = this.url
             ;
             
-            this.url = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : this.url;
+            this.url = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : path;
 
             return hostname + this.url
         };
@@ -5890,6 +6123,16 @@ function Routing() {
                 agent.get(url, options, cb)
             }                
         }
+        
+        if ( /\:/.test(route.url) ) {
+            var paramList = route.url
+                                .match(/(\:(.*)\/|\:(.*)$)/g)
+                                .map(function(el){  return el.replace(/\//g, ''); }).join(', ');
+            msg = '[ RoutingHelper::getRoute(rule[, bundle, method]) ] : route [ %r ] param placeholder not defined: `' + route.url + '` !\n Check your route description to compare requirements against param variables [ '+ paramList +']';
+            msg = msg.replace(/\%r/, rule);
+            console.warn( new Error(msg) );
+            //return false;
+        }
 
         return route
     };
@@ -5906,17 +6149,19 @@ function Routing() {
      * @param {string} [bundle] targeted bundle
      * @param {string} [method] request method (GET|PUT|PUT|DELETE) - GET is set by default
      * @param {object} [request] 
-     *
+     * @param {boolean} [isOverridinMethod] // will replace request.method by the provided method - Used for redirections
+     * 
      * @return {object|boolean} route - when route is found; `false` when not found
      * */
     
-    self.getRouteByUrl = function (url, bundle, method, request) {
+    self.getRouteByUrl = function (url, bundle, method, request, isOverridinMethod) {
         
         if (
             arguments.length == 2 && typeof(arguments[1]) != 'undefined' && self.allowedMethods.indexOf(arguments[1].toLowerCase()) > -1 
         ) {
             method = arguments[1], bundle = undefined;
         }
+        isOverridinMethod = ( typeof(arguments[arguments.length-1]) != 'boolean') ? false : arguments[arguments.length-1];
 
         var matched             = false
             , hostname          = null
@@ -5932,7 +6177,16 @@ function Routing() {
             , foundRoute        = null
             , route             = null
             , routeObj          = null
+            , hash              = null // #section nav
         ;
+        
+        if ( /\#/.test(url) && url.length > 1 ) {
+            var urlPart = url.split(/\#/);
+            url     = urlPart[0];
+            hash    = '#' + urlPart[1];
+        }
+        
+        var isMethodProvidedByDefault = ( typeof(method) != 'undefined' ) ? true : false;
 
         if (isGFFCtx) {
             config          = window.gina.config;
@@ -5947,9 +6201,7 @@ function Routing() {
             prefix          = hostname + webroot;
 
             request = {
-                routing: {
-                    path: unescape(pathname)
-                },
+                routing: {},
                 method: method,
                 params: {},
                 url: url
@@ -5971,15 +6223,34 @@ function Routing() {
             
             if ( !request ) {
                 request = {
+                    routing: {},
                     isXMLRequest: false,
-                    method : ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get'
+                    method : ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get',
+                    params: {},
+                    url: url
                 }
+            }
+            if (isOverridinMethod) {
+                request.method = method;
             }
             isXMLRequest    = request.isXMLRequest || false;
         }
 
         pathname    = url.replace( new RegExp('^('+ hostname +'|'+hostname.replace(/\:\d+/, '') +')' ), '');
+        if ( typeof(request.routing.path) == 'undefined' )
+            request.routing.path = unescape(pathname);
         method      = ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get';
+                
+        if (isMethodProvidedByDefault) {
+            // to handle 303 redirect like PUT -> GET
+            request.originalMethod = request.method;
+            
+            request.method = method;
+            request.routing.path = unescape(pathname)
+        }
+        // last method check
+        if ( !request.method)
+            request.method = method;
 
         //  getting params
         params = {};
@@ -6021,7 +6292,8 @@ function Routing() {
 
                 // normal case
                 //Parsing for the right url.
-                try {
+                try {                                        
+                    
                     isRoute = self.compareUrls(params, routing[name].url, request);
 
                     if (isRoute.past) {
@@ -6041,51 +6313,121 @@ function Routing() {
             } //EO for break out
 
         if (!matched) {
-            if (isGFFCtx) {                
-                var notFound = null, msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route [ %r ] not found for url: `' + url + '` !';
+            if (isGFFCtx) {  
+                var urlHasChanged = false;              
+                if ( 
+                    url == '#' 
+                    && /GET/i.test(method) 
+                    && isMethodProvidedByDefault 
+                    || /^404\:/.test(url)
+                ) {
+                    url = location.pathname;
+                    urlHasChanged = true;
+                }
+                
+                if ( typeof(self.notFound) == 'undefined' ) {
+                    self.notFound = {}
+                }
+                
+                var notFound = null, msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : route [ %r ] is called but not found inside your view: `' + url + '` !';
                 if ( gina.hasPopinHandler && gina.popinIsBinded ) {
                     notFound = gina.popin.getActivePopin().target.innerHTML.match(/404\:\[\w+\][a-z 0-9-_@]+/);
-                    notFound = (notFound && notFound.length > 0) ? notFound[0] : null;
-                    if (notFound && self.notFound.indexOf(notFound) < 0 ) {
-                        self.notFound.push(notFound);
-                        var m = notFound.match(/\[\w+\]/)[0];
-                        
-                        notFound = notFound.replace('404:'+m, m.replace(/\[|\]/g, '')+'::' );
-                        msg = msg.replace(/\%r/, notFound.replace(/404\:\s+/, ''));
-                        
-                        console.warn(msg);                               
-                        return false  
-                    }  
-                    notFound = null;     
-                               
+                } else {
+                    notFound = document.body.innerHTML.match(/404\:\[\w+\][a-z 0-9-_@]+/);
                 }
-                // forms
-                var altRule = gina.config.reverseRouting[url] || null;
-                var altRoute = self.compareUrls(params, url, request) || null;
-                //self.compareUrls(params, url, request).request.routing.rule
+               
+                notFound = (notFound && notFound.length > 0) ? notFound[0] : null;
+                
+                if ( notFound && isMethodProvidedByDefault && urlHasChanged ) {
+                                        
+                    var m = notFound.match(/\[\w+\]/)[0];                    
+                    
+                    notFound = notFound.replace('404:'+m, m.replace(/\[|\]/g, '')+'::' );
+                    
+                    msg = msg.replace(/\%r/, notFound.replace(/404\:\s+/, ''));
+                    
+                    if (typeof(self.notFound[notFound]) == 'undefined') {
+                        self.notFound[notFound] = { 
+                            count: 1,
+                            message: msg 
+                        };
+                    } else if ( isMethodProvidedByDefault && typeof(self.notFound[notFound]) != 'undefined' ) {
+                        ++self.notFound[notFound].count;
+                    }
+                                                
+                    return false  
+                } 
+                
+                notFound = null;     
+                                               
+                var altRule = gina.config.reverseRouting[url] || null;                
                 if (
                     !notFound 
                     && altRule
                     && typeof(altRule) != 'undefined'
                     && altRule.split(/\@(.+)$/)[1] == bundle
-                    ||
-                    altRoute.past
                 ) {
-                    altRule = (altRule) ? altRule : altRoute.request.routing.rule;
-                    msg = msg.replace(/\%r/, method.toUpperCase() +'::'+ altRule);
-                } else {
-                    msg = '[ RoutingHelper::getRouteByUrl(rule[, bundle, method]) ] : no route found for url: `' + url + '` !'
+                    
+                    notFound = altRule;
+                    if ( typeof(self.notFound[notFound]) == 'undefined' ) {
+                        
+                        msg = msg.replace(/\%r/, method.toUpperCase() +'::'+ altRule);
+                        
+                        self.notFound[notFound] = { 
+                            count: 1,
+                            message: msg 
+                        };
+                        //console.warn(msg);   
+                    } else if ( isMethodProvidedByDefault && typeof(self.notFound[notFound]) != 'undefined' ) {
+                        ++self.notFound[notFound].count;
+                    }
+                                                    
+                    return false
                 }
                 
-                console.warn(msg);                               
+                // forms
+                var altRoute = self.compareUrls(params, url, request) || null;
+                if(altRoute.past && isMethodProvidedByDefault) {
+                    notFound = method.toUpperCase() +'::'+ altRoute.request.routing.rule;
+                    if ( typeof(self.notFound[notFound]) == 'undefined' ) {
+                        msg = msg.replace(/\%r/, notFound);
+                        //console.warn(msg);  
+                    } else {
+                        ++self.notFound[notFound].count;
+                    }
+                                                     
+                    return false
+                }                                             
                 return false
             }
 
             
-            console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method, request]) ] : route not found for url: `' + url + '` !').stack );
-            
+            console.warn( new Error('[ RoutingHelper::getRouteByUrl(rule[, bundle, method, request]) ] : route not found for url: `' + url + '` !').stack );            
             return false;
         } else {
+            // fix url in case of empty param value allowed by the routing rule
+            // to prevent having a folder.
+            // eg.: {..., id: '/^\\s*$/'} => {..., id: ''} => /path/to/ becoming /path/to
+            if ( /\/$/.test(url) && url != '/' )
+                url = url.substr(0, url.length-1);
+            // adding hash if found
+            if (hash)
+                url += hash;
+            
+            route.url = url;
+            // recommanded for x-bundle coms
+            // leave `ignoreWebRoot` empty or set it to false for x-bundle coms
+            route.toUrl = function (ignoreWebRoot) {                
+                var wroot       = this.webroot
+                    , hostname  = this.hostname
+                    , path      = this.url
+                ;
+                
+                this.url = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : path;
+    
+                return hostname + this.url
+            };
+            
             return route
         }
     }
@@ -6112,6 +6454,7 @@ function StoragePlugin(options) {
     var merge       = merge || require('utils/merge');;
     var Collection  = Collection || require('utils/collection');
     var uuid        = uuid || require('vendor/uuid');
+    var dateFormat  = dateFormat || require('helpers/dateFormat');
 
 
     var self = {
@@ -6524,7 +6867,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
 
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('gina/storage',[],function() { return StoragePlugin })
+    define('gina/storage', ['helpers/dateFormat', 'helpers/prototypes'],function() { return StoragePlugin })
 };
 /**
  * Operations on selectors
@@ -6619,9 +6962,19 @@ function FormValidatorUtil(data, $fields) {
     }
 
 
-    var val = null, label = null;
-    for (var el in self) {
-
+    /**
+     * addField
+     * Add field to the validation context
+     * @param {string} el 
+     * @param {string|boolean|number|object} [value] 
+     */
+    var addField = function(el, value) {        
+        var val = null, label = null;
+        
+        if ( typeof(self[el]) == 'undefined' && typeof(value) != 'undefined' ) {
+            self[el] = value
+        }
+        
         if ( typeof(self[el]) == 'object' ) {
             try {
                 val = JSON.parse( JSON.stringify( self[el] ))
@@ -6667,10 +7020,15 @@ function FormValidatorUtil(data, $fields) {
          *
          * */
         self[el]['is'] = function(condition, errorMessage, errorStack) {
-            var isValid   = false;
-            var errors  = {};
+            var isValid     = false;
+            var alias       = ( typeof(window) != 'undefined' ) ? window._currentValidatorAlias : 'is';
+            if ( typeof(window) != 'undefined'  && window._currentValidatorAlias)
+                delete window._currentValidatorAlias;
+                
+            var errors      = self[this['name']]['errors'] || {};  
             
-            if ( !errors['isRequired'] && this.value == '' ) {
+            
+            if ( typeof(errors['isRequired']) == 'undefined' && this.value == '' || !errors['isRequired'] && this.value == '' && this.value != 0 ) {
                 isValid = true;
             }
             
@@ -6725,6 +7083,7 @@ function FormValidatorUtil(data, $fields) {
                             isValid = new RegExp(re, flags).test(this.value)
                         } else {
                             isValid = eval(condition);
+                            //isValid = eval(condition) ? false: true;
                         }
                             
                         //valid = new RegExp(condition.replace(/\//g, '')).test(this.value)
@@ -6735,15 +7094,27 @@ function FormValidatorUtil(data, $fields) {
             }
 
             if (!isValid) {
-                errors['is'] = replace(this.error || errorMessage || local.errorLabels['is'], this);
+                errors[alias] = replace(this.error || errorMessage || local.errorLabels[alias], this);
                 if ( typeof(errorStack) != 'undefined' )
                     errors['stack'] = errorStack;
+            }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            else if ( isValid && typeof(errors[alias]) != 'undefined' ) {
+                delete errors[alias];
+                //delete errors['stack'];
             }
 
             this.valid = isValid;
             if ( errors.count() > 0 )
                 this['errors'] = errors;
 
+            
+            return self[this.name]
+        }
+        
+        self[el]['set'] = function(value) {
+            this.value  = local['data'][this.name] = value;
+            
             return self[this.name]
         }
 
@@ -6762,6 +7133,11 @@ function FormValidatorUtil(data, $fields) {
 
             if (!isValid) {
                 errors['isEmail'] = replace(this['error'] || local.errorLabels['isEmail'], this)
+            }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            else if ( isValid && typeof(errors['isEmail']) != 'undefined' ) {
+                delete errors['isEmail'];
+                //delete errors['stack'];
             }
 
             this.valid = isValid;
@@ -6787,6 +7163,11 @@ function FormValidatorUtil(data, $fields) {
 
             if (!isValid) {
                 errors['isJsonWebToken'] = replace(this['error'] || local.errorLabels['isJsonWebToken'], this)
+            }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            else if ( isValid && typeof(errors['isJsonWebToken']) != 'undefined' ) {
+                delete errors['isJsonWebToken'];
+                //delete errors['stack'];
             }
 
             this.valid = isValid;
@@ -6824,13 +7205,18 @@ function FormValidatorUtil(data, $fields) {
                     val = this.value = local.data[this.name] = false;
                     break;
             }
-            var valid = (val !== null) ? true : false;
+            var isValid = (val !== null) ? true : false;
 
-            if (!valid) {
+            if (!isValid) {
                 errors['isBoolean'] = replace(this.error || local.errorLabels['isBoolean'], this)
             }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            else if ( isValid && typeof(errors['isBoolean']) != 'undefined' ) {
+                delete errors['isBoolean'];
+                //delete errors['stack'];
+            }
 
-            this.valid = valid;
+            this.valid = isValid;
             if ( errors.count() > 0 )
                 this['errors'] = errors;
 
@@ -6854,8 +7240,8 @@ function FormValidatorUtil(data, $fields) {
                 , isValid       = false
                 , isMinLength   = true
                 , isMaxLength   = true
-                , errors        = {}
-                ;
+                , errors        = self[this['name']]['errors'] || {}
+            ;
             
             // test if val is a number
             try {
@@ -6905,6 +7291,10 @@ function FormValidatorUtil(data, $fields) {
 
                 isValid = false;
             }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            if ( isValid && typeof(errors['isNumberLength']) != 'undefined') {
+                delete errors['isNumberLength'];
+            }
 
             this.valid = isValid;
             val = this.value = local.data[this.name] = ( val != '' ) ? Number(val) : val;
@@ -6915,7 +7305,9 @@ function FormValidatorUtil(data, $fields) {
         }
 
         self[el]['toInteger'] = function() {
-            var val = this.value, errors = {};
+            var val = this.value
+                , errors = self[this['name']]['errors'] || {}
+            ;
 
             if (!val) {
                 return self[this.name]
@@ -6941,7 +7333,7 @@ function FormValidatorUtil(data, $fields) {
                 , isValid       = false
                 , isMinLength   = true
                 , isMaxLength   = true
-                , errors        = {}
+                , errors        = self[this['name']]['errors'] || {}
                 ;
 
             // test if val is a number
@@ -7004,7 +7396,10 @@ function FormValidatorUtil(data, $fields) {
                 }
             }
 
-            var val = this.value, errors = {}, isValid = true;
+            var val         = this.value
+                , errors    = self[this['name']]['errors'] || {}
+                , isValid   = true
+            ;
 
             if (decimals) {
                 this['decimals'] = parseInt(decimals)
@@ -7067,7 +7462,8 @@ function FormValidatorUtil(data, $fields) {
 
             var val         = this.value
                 , isValid   = false
-                , errors    = {};
+                , errors    = self[this['name']]['errors'] || {}
+            ;
 
 
             if ( typeof(val) == 'string' && /\./.test(val) && Number.isFinite( Number(val) ) ) {
@@ -7107,6 +7503,12 @@ function FormValidatorUtil(data, $fields) {
             if ( typeof(isApplicable) == 'boolean' && !isApplicable ) {
 
                 this.valid = true;
+                
+                // is in exluded ?
+                var excludedIndex = local.excluded.indexOf(this.name);
+                if ( excludedIndex > -1 ) {
+                    local.excluded.splice(excludedIndex, 1);
+                }
 
                 return self[this.name]
             }
@@ -7130,11 +7532,16 @@ function FormValidatorUtil(data, $fields) {
 
 
             var isValid = ( typeof(this.value) != 'undefined' && this.value != null && this.value != '' && !/^\s+/.test(this.value) ) ? true : false;
-            var errors  = {};
+            var errors  = self[this['name']]['errors'] || {};
 
 
             if (!isValid) {
                 errors['isRequired'] = replace(this.error || local.errorLabels['isRequired'], this)
+            }
+            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            else if ( isValid && typeof(errors['isRequired']) != 'undefined' ) {
+                delete errors['isRequired'];
+                //delete errors['stack'];
             }
 
             this.valid = isValid;
@@ -7158,8 +7565,8 @@ function FormValidatorUtil(data, $fields) {
                 , isValid       = false
                 , isMinLength   = true
                 , isMaxLength   = true
-                , errors        = {}
-                ;
+                , errors        = self[this['name']]['errors'] || {}
+            ;
 
 
             // test if val is a string
@@ -7222,7 +7629,7 @@ function FormValidatorUtil(data, $fields) {
         self[el]['isDate'] = function(mask) {
             var val         = this.value
                 , isValid   = false
-                , errors    = {}
+                , errors    = self[this['name']]['errors'] || {}
                 ;
             if (!val) return self[this.name];
 
@@ -7334,6 +7741,17 @@ function FormValidatorUtil(data, $fields) {
         }
 
     } // EO for (var el in self)
+    
+    for (var el in self) {
+        addField(el)
+    }
+    
+    self['addField'] = function(el, value) {
+        if ( typeof(self[el]) != 'undefined' ) {
+            return
+        }
+        addField(el, value);
+    };
 
     /**
      * Check if errors found during validation
@@ -7406,7 +7824,6 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as AMD module
     define('utils/form-validator',[],function() { return FormValidatorUtil })
 };
-
 /**
  * ValidatorPlugin
  *
@@ -7447,6 +7864,7 @@ function ValidatorPlugin(rules, data, formId) {
 
     var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
     var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
+    var inherits        = (isGFFCtx) ? require('utils/inherits') : require('../../../../../lib/inherits');
     var FormValidator   = (isGFFCtx) ? require('utils/form-validator') : require('./form-validator');
 
     /** definitions */
@@ -7487,6 +7905,10 @@ function ValidatorPlugin(rules, data, formId) {
         'destroy'               : null,
         'resetErrorsDisplay'    : null,
         'resetFields'           : null
+    };
+    
+    var local = {
+        rules: {}
     };
 
 
@@ -7553,7 +7975,7 @@ function ValidatorPlugin(rules, data, formId) {
             } catch (err) {
                 throw err
             }
-
+            
             backendProto.rules = instance.rules;
 
             return validate($form, fields, null, instance.rules)
@@ -7568,7 +7990,6 @@ function ValidatorPlugin(rules, data, formId) {
     /**
      * GFF definitions
      * */
-
     var setOptions = function (options) {
         var options = merge(options, xhrOptions);
         xhrOptions = options;
@@ -7616,7 +8037,11 @@ function ValidatorPlugin(rules, data, formId) {
      * @return {object} $form
      * */
     var validateFormById = function(formId, customRule) {
-        var $form = null, _id = formId;
+        var $form = null
+            , _id = formId
+            , rules = ( typeof(local.rules.count() > 0 ) ) ? local.rules : instance.rules
+            , $target = null
+        ;
 
 
         if ( !instance['$forms'] ) {
@@ -7636,7 +8061,7 @@ function ValidatorPlugin(rules, data, formId) {
             _id = _id.replace(/\#/, '')
         } else if ( typeof(_id) == 'object' && !Array.isArray(_id) ) { // weird exception
 
-            var $target = _id.form;
+            $target = _id.form;
             _id = $target.getAttribute('id') || 'form.'+uuid.v4();
 
             $target.setAttribute('id', _id);// just in case
@@ -7650,7 +8075,7 @@ function ValidatorPlugin(rules, data, formId) {
         if ( typeof(instance['$forms'][_id]) != 'undefined' ) {            
             $form   = this.$forms[_id] = instance['$forms'][_id];
         } else { // binding a form out of context (outside of the main instance)
-            var $target             = document.getElementById(_id);
+            $target             = document.getElementById(_id);
             $validator.id           = _id;
             $validator.target       = $target;
 
@@ -7660,13 +8085,13 @@ function ValidatorPlugin(rules, data, formId) {
             if ( typeof(customRule) == 'undefined') {
                 rule = _id.replace(/\-/g, '.');
 
-                if ( typeof(instance.rules[rule]) != 'undefined' ) {
-                    $form['rule'] = customRule = instance.rules[rule];
+                if ( typeof(rules) != 'undefined' ) {
+                    $form['rule'] = customRule = getRuleObjByName(rule)
                 } else if ( typeof($form.target) != 'undefined' && $form.target !== null && $form.target.getAttribute('data-gina-form-rule') ) {
                     rule = $form.target.getAttribute('data-gina-form-rule').replace(/\-/g, '.');
 
-                    if ( typeof(instance.rules[rule]) != 'undefined' ) {
-                        $form['rule'] = instance.rules[rule]
+                    if ( typeof(rules) != 'undefined' ) {
+                        $form['rule'] = getRuleObjByName(rule)
                     } else {
                         throw new Error('[ FormValidator::validateFormById(formId) ] using `data-gina-form-rule` on form `'+$form.target+'`: no matching rule found')
                     }
@@ -7674,8 +8099,8 @@ function ValidatorPlugin(rules, data, formId) {
             } else {
                 rule = customRule.replace(/\-/g, '.');
 
-                if ( typeof(instance.rules[rule]) != 'undefined' ) {
-                    $form['rule'] = instance.rules[rule]
+                if ( typeof(rules) != 'undefined' ) {
+                    $form['rule'] = getRuleObjByName(rule)
                 } else {
                     throw new Error('[ FormValidator::validateFormById(formId, customRule) ] `'+customRule+'` is not a valid rule')
                 }
@@ -8609,6 +9034,7 @@ function ValidatorPlugin(rules, data, formId) {
     var onUpload = function(gina, $target, status, id, data) {
                 
         var uploadProperties = $target.uploadProperties || null;
+        // FYI
         // {                                    
         //     id              : String,
         //     $form           : $Object,
@@ -8791,16 +9217,16 @@ function ValidatorPlugin(rules, data, formId) {
 
         }
 
-
         var abLen = ab.length;
         var CHUNK_SIZE = Math.pow(2, 8) + bits;
-        var offset = null, len = null, subab = null;
+        var offset = 0, len = null, subab = null;
         
-        for (offset = 0; offset < abLen; offset += CHUNK_SIZE) {
+        for (; offset < abLen; offset += CHUNK_SIZE) {
             len = Math.min(CHUNK_SIZE, abLen - offset);
             subab = ab.subarray(offset, offset + len);
             str += String.fromCharCode.apply(null, subab);
         }
+        
         return str;
     }
 
@@ -8862,26 +9288,18 @@ function ValidatorPlugin(rules, data, formId) {
 
             // Describe it as form data
             data += 'Content-Disposition: form-data; '
-
                 // Define the name of the form data
-                + 'name="' + binaries[this.index].key + '"; '
-                
+                + 'name="' + binaries[this.index].key + '"; '                
                 // Define the upload group
                 + 'group="' + binaries[this.index].group + '"; '
-
                 // Provide the real name of the file
-                + 'filename="' + binaries[this.index].file.name + '"\r\n';
-
-
-            // And the MIME type of the file
-            data += 'Content-Type: ' + binaries[this.index].file.type + '\r\n';
-            
-
-            // File length
-            data += 'Content-Length: ' + binaries[this.index].bin.length + '\r\n';
-
-            // There's a blank line between the metadata and the data
-            data += '\r\n';
+                + 'filename="' + binaries[this.index].file.name + '"\r\n'
+                // And the MIME type of the file
+                + 'Content-Type: ' + binaries[this.index].file.type + '\r\n'
+                // File length
+                + 'Content-Length: ' + binaries[this.index].bin.length + '\r\n'
+                // There's a blank line between the metadata and the data
+                + '\r\n';
 
             // Append the binary data to our body's request
             data += binaries[this.index].bin + '\r\n';
@@ -8889,7 +9307,6 @@ function ValidatorPlugin(rules, data, formId) {
             ++this.index;
             // is last file ?
             if (this.index == binaries.length) {
-
                 // Once we are done, "close" the body's request
                 data += "--" + boundary + "--";
 
@@ -8897,9 +9314,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             } else { // process next file
                 processFiles(binaries, boundary, data, this.index, onComplete)
-            }
-
-            
+            }            
         }, false);
 
         reader.index = f;
@@ -8911,8 +9326,6 @@ function ValidatorPlugin(rules, data, formId) {
 
     
     var listenToXhrEvents = function($form) {
-
-
         //data-gina-form-event-on-submit-success
         var htmlSuccesEventCallback =  $form.target.getAttribute('data-gina-form-event-on-submit-success') || null;
         if (htmlSuccesEventCallback != null) {
@@ -8923,7 +9336,6 @@ function ValidatorPlugin(rules, data, formId) {
                 $form.on('success.hform',  window[htmlSuccesEventCallback])
             }
         }
-
         //data-gina-form-event-on-submit-error
         var htmlErrorEventCallback =  $form.target.getAttribute('data-gina-form-event-on-submit-error') || null;
         if (htmlErrorEventCallback != null) {
@@ -9088,10 +9500,6 @@ function ValidatorPlugin(rules, data, formId) {
 
             }
 
-            // if (!instance.rules) {
-            //     instance.rules = {}
-            // }
-
             
             rules = JSON.parse(rulesStr);
             parseRules(rules, '');
@@ -9105,6 +9513,7 @@ function ValidatorPlugin(rules, data, formId) {
     var init = function (rules) {
 
         if (gina.hasValidator) {
+            
             instance = merge(instance, gina.validator);
             instance.on('init', function(event) {
                 instance.isReady = true;
@@ -9115,16 +9524,23 @@ function ValidatorPlugin(rules, data, formId) {
             instance.on('init', function(event) {
                 // parsing rules
                 if ( typeof(rules) != 'undefined' && rules.count() ) {
-                    try {
-                        // making copy
-                        gina.forms.rules = JSON.parse(JSON.stringify(rules));
-                        
+                    try {                                                                       
                         parseRules(rules, '');
                         checkForRulesImports(rules);
+                        // making copy
+                        if ( typeof(gina.forms.rules) == 'undefined' || !gina.forms.rules) {
+                            //gina.forms.rules = JSON.parse(JSON.stringify(rules));
+                            gina.forms.rules = rules
+                        }
+                            
+                        
                     } catch (err) {
                         throw (err)
                     }
                 }
+                
+                if ( !local.rules.count() )
+                    local.rules = JSON.parse(JSON.stringify(instance.rules));
 
                 $validator.setOptions           = setOptions;
                 $validator.getFormById          = getFormById;
@@ -9168,16 +9584,16 @@ function ValidatorPlugin(rules, data, formId) {
 
                         if (customRule) {
                             customRule = customRule.replace(/\-/g, '.');
-                            if ( typeof(instance.rules[customRule]) == 'undefined' ) {
-                                //customRule = null;   
+                            if ( typeof(local.rules[customRule]) == 'undefined' ) {
                                 throw new Error('['+$allForms[f].id+'] no rule found with key: `'+customRule+'`. Please check if json is not malformed @ /forms/rules/' + customRule.replace(/\./g, '/') +'.json');        
                             } else {
-                                customRule = instance.rules[customRule]
+                                //customRule = instance.rules[customRule]
+                                customRule = getRuleObjByName(customRule)
                             }
                         }
 
                         // finding forms handled by rules
-                        if ( typeof($allForms[f].id) == 'string' && typeof(instance.rules[$allForms[f].id.replace(/\-/g, '.')]) != 'undefined' ) {
+                        if ( typeof($allForms[f].id) == 'string' && typeof(local.rules[$allForms[f].id.replace(/\-/g, '.')]) != 'undefined' ) {
                             $target = instance.$forms[$allForms[f].id].target;
                             if (customRule) {
                                 bindForm($target, customRule)
@@ -9233,6 +9649,8 @@ function ValidatorPlugin(rules, data, formId) {
                         catch (e) {}
                     }
                 }
+                
+                
 
                 instance.isReady = true;
                 gina.hasValidator = true;
@@ -9248,7 +9666,9 @@ function ValidatorPlugin(rules, data, formId) {
 
     var initForm = function ($form) {
 
-        var customRule = null;
+        var customRule = null
+            , rules = ( typeof(local.rules.count() > 0 ) ) ? local.rules : instance.rules
+        ;
 
         if ($form.getAttribute) {
             id = $form.getAttribute('id') || 'form.' + uuid.v4();
@@ -9271,16 +9691,16 @@ function ValidatorPlugin(rules, data, formId) {
 
             if (customRule) {
                 customRule = customRule.replace(/\-/g, '.');
-                if (typeof (instance.rules[customRule]) == 'undefined') {
+                if ( typeof(rules[customRule]) == 'undefined') {
                     customRule = null;
                     throw new Error('[' + $form.id + '] no rule found with key: `' + customRule + '`');
                 } else {
-                    customRule = instance.rules[customRule]
+                    customRule = rules[customRule]
                 }
             }
 
             // finding forms handled by rules
-            if (typeof ($form.id) == 'string' && typeof (instance.rules[$form.id.replace(/\-/g, '.')]) != 'undefined') {
+            if (typeof ($form.id) == 'string' && typeof (rules[$form.id.replace(/\-/g, '.')]) != 'undefined') {
                 $target = instance.$forms[$form.id].target;
                 if (customRule) {
                     bindForm($target, customRule)
@@ -9336,12 +9756,122 @@ function ValidatorPlugin(rules, data, formId) {
                 if (/\[|\]/.test(r) ) { // must be a real path
                     _r = r.replace(/\[/g, '.').replace(/\]/g, '');
                 }
-
+                
                 instance.rules[tmp + _r] = rules[r];
+                
                 //delete instance.rules[r];
                 parseRules(rules[r], tmp + _r +'.');
             }
         }
+    }
+    
+    var getRuleObjByName = function(ruleName) {
+        
+        if ( typeof(local.rules[ruleName]) != 'undefined' ) {
+            return local.rules[ruleName]
+        }
+        var rules = null;
+        // just in case : many ways to access this method
+        if ( typeof(instance.rules[ruleName]) == 'undefined' ) {            
+            parseRules(local.rules, '');
+            checkForRulesImports(local.rules);
+            rules = local.rules[ruleName];
+            if ( !rules ) {
+                return {}
+            }
+        } else {
+            rules = instance.rules[ruleName]
+        }
+        
+        var ruleObj = JSON.parse(JSON.stringify(rules))
+            , re = new RegExp('^'+ruleName)
+            , propRe = new RegExp('^'+ruleName +'.')
+            , propName = null
+        ;
+                
+        var rulesFromPath = function(obj, keys, val, originalRuleObj, field, i, len) {
+            if (!keys.length) {                
+                return
+            }
+            
+            var _id = Object.getOwnPropertyNames(obj)[0];
+            var _key = keys[0];
+            var nextFieldName = null;
+            if ( field == '') {
+                field += _key;
+                nextFieldName = field
+            } else {
+                nextFieldName =  field + '['+ _key + ']'
+            }
+            
+            if ( keys.length == 1) {
+                // obj[ _key ] =  ( 
+                //     typeof(obj[ _key ]) == 'undefined' 
+                //     && typeof(val) == 'object' 
+                //     && Array.isArray(val)
+                // ) ? [] : {} ;
+                
+                obj[ _id ] = merge(obj[ _id ], val, true);  
+                
+                // if ( 
+                //     typeof(originalRuleObj[nextFieldName]) != 'undefined' 
+                //     //&& typeof(originalRuleObj[nextFieldName][_key]) != 'undefined' 
+                // ) {
+                    
+                //     originalRuleObj[nextFieldName] = val//merge(originalRuleObj[nextFieldName], val, true);
+                //     //if ( typeof(originalRuleObj[nextFieldName][_key]) != 'undefined' ) {
+                //     //    originalRuleObj[nextFieldName][_key] = val
+                //     //}// else {
+                //       //  originalRuleObj[nextFieldName][_key] = merge(originalRuleObj[nextFieldName][_key], val, true);
+                //     //}
+                    
+                                        
+                // } else if ( 
+                //     typeof(originalRuleObj[field]) != 'undefined' 
+                //     //&& typeof(originalRuleObj[field][_key]) != 'undefined'
+                // ) {
+                //     originalRuleObj[field] = val
+                //     //originalRuleObj[field] = merge(originalRuleObj[field], val, true);
+                //     //if ( typeof(originalRuleObj[field][_key]) != 'undefined' ) {                        
+                //     //    originalRuleObj[field][_key] = val//merge(originalRuleObj[field][_key], val, true);
+                //     //} //else {
+                //      //   originalRuleObj[field] = merge(originalRuleObj[field], val, true);
+                //     //}
+                   
+                // }  else if ( typeof(originalRuleObj[_key]) != 'undefined' ) {
+                //     originalRuleObj[_key] = val
+                //    //originalRuleObj[_key] = merge(originalRuleObj[_key], val, true)
+                // }
+                   
+                
+            } //else if ( typeof(originalRuleObj[nextFieldName]) != 'undefined' ) {
+            //    field = nextFieldName;
+            //}
+            
+            keys.splice(0,1);
+            if (nextFieldName == _id) {
+                rulesFromPath(obj[ _id ], keys, val, originalRuleObj, nextFieldName, i, len)
+            } else if ( typeof(obj[ _id ]) != 'undefined' ) {
+                rulesFromPath(obj[ _id ], keys, val, originalRuleObj, nextFieldName, i, len)
+            } else {
+                rulesFromPath(obj, keys, val, originalRuleObj, field, i, len)
+            }
+            
+        }
+        
+        for (var prop in instance.rules) {
+            if ( prop != ruleName && re.test(prop) ) {
+                
+                propName = prop.replace(propRe, '');
+                if ( /\./.test(propName) ) {
+                    var keys = propName.split(/\./g);
+                    rulesFromPath( ruleObj, keys, instance.rules[prop], ruleObj, '',  0, ruleObj.count()-1 )
+                }                
+            }
+        }
+        //cache rules
+        local.rules[ruleName] = ruleObj;
+        return ruleObj
     }
     
     var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
@@ -9379,110 +9909,16 @@ function ValidatorPlugin(rules, data, formId) {
             } else {
                 obj[key] = {};
             }
-            // //var _keyVal = (/^\d+$/.test(nextKey)) ? [] : {};
-            // eval(root +'=obj[key]');
 
             ++i;
-            //return makeObjectFromArgs(root, args, obj[key], len, i, value);
             return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
         }
         
         ++i;
         return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
-
-        // if ( Array.isArray(obj) ) {
-        //     for (var n = 0, nLen = obj.length; n < nLen; ++n) {
-
-        //         if (n == key) {
-        //             ++i;
-        //             return makeObjectFromArgs(root, args, obj[n], len, i, value);
-        //             //makeObjectFromArgs(root, args, obj[key], len, i, value);
-        //         }
-        //     }
-        // } else {
-            // for (var k in obj) {
-
-            //     if (k == key) {
-            //         ++i;
-            //         return makeObjectFromArgs(root, args, obj[key], len, i, value);
-            //         //makeObjectFromArgs(root, args, obj[key], len, i, value);
-            //     }
-            // }
-        //}
-            
-        
-        //return
     }
 
-    // var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
-                        
-    //     if (i == len) { // end
-    //         eval(root +'=value');
-    //         return rootObj
-    //     }
-        
-    //     var key = args[i].replace(/^\[|\]$/g, '');
-
-    //     // init root object
-    //     if ( typeof(rootObj) == 'undefined' ) {
-            
-    //         rootObj = {};
-    //         root = 'rootObj';
-            
-    //         root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
-    //         eval(root +'=obj');      
-    //     } else {
-    //         root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
-    //     }
-        
-
-    //     var nextKey = ( typeof(args[i + 1]) != 'undefined' ) ? args[i + 1].replace(/^\[|\]$/g, '') : null;
-    //     var valueType = ( nextKey && parseInt(nextKey) == nextKey ) ? [] : {}
-    //     if ( nextKey ) {            
-    //         eval(root +' = valueType');
-    //     }
-        
-    //     if ( typeof(obj[key]) == 'undefined' ) {
-
-    //         if (/^\d+$/.test(nextKey)) { // collection index ?
-    //             obj[key] = [];
-    //         } else {
-    //             obj[key] = {};
-    //         }
-    //         // //var _keyVal = (/^\d+$/.test(nextKey)) ? [] : {};
-    //         // eval(root +'=obj[key]');
-
-    //         ++i;
-    //         //return makeObjectFromArgs(root, args, obj[key], len, i, value);
-    //         return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
-    //     }
-        
-    //     ++i;
-    //     return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
-
-    //     // if ( Array.isArray(obj) ) {
-    //     //     for (var n = 0, nLen = obj.length; n < nLen; ++n) {
-
-    //     //         if (n == key) {
-    //     //             ++i;
-    //     //             return makeObjectFromArgs(root, args, obj[n], len, i, value);
-    //     //             //makeObjectFromArgs(root, args, obj[key], len, i, value);
-    //     //         }
-    //     //     }
-    //     // } else {
-    //         // for (var k in obj) {
-
-    //         //     if (k == key) {
-    //         //         ++i;
-    //         //         return makeObjectFromArgs(root, args, obj[key], len, i, value);
-    //         //         //makeObjectFromArgs(root, args, obj[key], len, i, value);
-    //         //     }
-    //         // }
-    //     //}
-            
-        
-    //     //return
-    // }
+    
 
     /**
      * makeObject - Preparing form data
@@ -9533,44 +9969,8 @@ function ValidatorPlugin(rules, data, formId) {
             , obj       = {}
             , key       = null
             , fields    = {}
-            , altName   = null;
-            
-        
-        
-        // for (var name in data) {
-
-        //     if ( /\[(.*)\]/.test(name) ) {
-        //         // backup name key
-        //         key = name;
-
-        //         // properties
-        //         args    = name.match(/(\[[-_\[a-z 0-9]*\]\]|\[[-_\[a-z 0-9]*\])/ig);
-
-        //         // root
-        //         name    = name.match(/^[-_a-z 0-9]+\[{0}/ig);
-        //         altName    = name.replace(/.*\[(.+)\]$/, "$1");
-                
-        //         if ()
-                    
-        //         // building object tree
-        //         makeObject(obj, data[key], args, args.length, 0);
-
-        //         //if ( Array.isArray(obj) ) {
-        //         //    fields[name] = merge(fields[name], obj);
-        //         //} else {
-        //             if ( typeof(fields[altName]) == 'undefined') {
-        //                 fields[altName] = Array.isArray(obj) ? [] : {};
-        //             }
-        //             fields[altName] = merge(fields[altName], obj);
-        //         //}
-                
-        //         obj = {}
-
-        //     } else {
-        //         fields[name] = data[name];
-        //     }
-        //     altName = null;
-        // }
+            , altName   = null
+        ;
 
         var makeFields = function(fields, isObject, data, len, i) {
             if (i == len ) { // exit
@@ -9650,7 +10050,10 @@ function ValidatorPlugin(rules, data, formId) {
      * */
     var bindForm = function($target, customRule) {
 
-        var $form = null, _id = null;
+        var $form   = null
+            , _id   = null
+            , rules = ( typeof(local.rules.count() > 0 ) ) ? local.rules : instance.rules
+        ;
 
         try {
             if ( $target.getAttribute && $target.getAttribute('id') ) {
@@ -9674,18 +10077,29 @@ function ValidatorPlugin(rules, data, formId) {
 
         var withRules = false, rule = null, evt = '', procced = null;
 
-        if ( typeof(customRule) != 'undefined' || typeof(_id) == 'string' && typeof(instance.rules[_id.replace(/\-/g, '.')]) != 'undefined' ) {
+        if ( 
+            typeof(customRule) != 'undefined' 
+            || 
+            typeof(_id) == 'string' 
+                && typeof(rules[_id.replace(/\-/g, '.')]) != 'undefined' 
+        ) {
             withRules = true;
 
             if ( customRule && typeof(customRule) == 'object' ) {
                 rule = customRule
-            } else if ( customRule && typeof(customRule) == 'string' && typeof(instance.rules[customRule.replace(/\-/g, '.')]) != 'undefined') {
-                rule = instance.rules[customRule.replace(/\-/g, '.')]
+            } else if ( 
+                customRule 
+                && typeof(customRule) == 'string' 
+                && typeof(rules[customRule.replace(/\-/g, '.')]) != 'undefined'
+            ) {                
+                rule = getRuleObjByName(customRule.replace(/\-/g, '.'))
             } else {
-                rule = instance.rules[_id.replace(/\-/g, '.')]
+                rule = getRuleObjByName(_id.replace(/\-/g, '.'))
             }
 
             $form.rules = rule
+        } else { // form without any rule binded
+            $form.rules = {}
         }
 
         // form fields collection
@@ -9735,7 +10149,14 @@ function ValidatorPlugin(rules, data, formId) {
                     if ( typeof($form.rules[ $inputs[f].name ]) == 'undefined') {
                         $form.rules[ $inputs[f].name ] = {}
                     }
-                    $form.rules[ $inputs[f].name ].exclude = true;
+                    // exclude gorups only if not required
+                    if ( 
+                        typeof($form.rules[ $inputs[f].name ].isRequired) == 'undefined'
+                        ||  !$form.rules[ $inputs[f].name ].isRequired
+                    ) {
+                        $form.rules[ $inputs[f].name ].exclude = true;
+                    }
+                    
                 }
             }
             
@@ -10100,9 +10521,6 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
         var updateSelect = function($el) {
-            //var selectedIndex = $el.selectedIndex;
-            //var isBoolean = /^(true|false)$/i.test($el.value);
-            
             $el.setAttribute('data-value', $el.value);
         };
         
@@ -10205,8 +10623,9 @@ function ValidatorPlugin(rules, data, formId) {
                 for ( var item in elGroup ) {  
                     if (withRules && typeof($form.rule[item]) == 'undefined' ) { 
                         $form.rule[item] = {}
-                    }                  
-                    if ( /^true$/.test($el.value) ) {
+                    } 
+                    if ( /^true$/.test($el.checked) ) {                 
+                    //if ( /^true$/.test($el.value) ) {
                         elGroup[item].disabled = false;
                         if (withRules) {
                             $form.rules[item].exclude = false;
@@ -10223,84 +10642,54 @@ function ValidatorPlugin(rules, data, formId) {
         };
 
         var radioGroup = null;
-        var updateRadio = function($el, isInit) {
+        var updateRadio = function($el, isInit, isTriggedByUser) {
+            isInit = ( typeof(isInit) == 'undefined' ) ? false : true;
+            isTriggedByUser = ( typeof(isTriggedByUser) == 'undefined' ) ? false : true;
+            
             var checked = $el.checked;
             var isBoolean = /^(true|false)$/i.test($el.value);
-            
+            radioGroup = document.getElementsByName($el.name);
 
             // loop if radio group
-            if (!isInit) {
-                radioGroup = document.getElementsByName($el.name);
-                //console.log('found ', radioGroup.length, radioGroup)
-                for (var r = 0, rLen = radioGroup.length; r < rLen; ++r) {
-                    if (radioGroup[r].id !== $el.id) {
-                        radioGroup[r].checked = false;
-                        radioGroup[r].removeAttribute('checked');
-                    }
+            for (let r = 0, rLen = radioGroup.length; r < rLen; ++r) {
+                if (radioGroup[r].id !== $el.id && checked) {
+                    radioGroup[r].checked = false;
+                    radioGroup[r].removeAttribute('checked');
                 }
             }
-
+            
+            if (isInit)
+                return;
             
 
             if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
                 // prevents ticking behavior
                 setTimeout(function () {
-                    $el.checked = false;
+                    if (isTriggedByUser)
+                        return;
+                    if (!$el.checked)
+                        $el.checked = true;
+                        $el.setAttribute('checked', 'checked');
                 }, 0)
-
-                $el.removeAttribute('checked');
-
-                //if (isBoolean) {
-                //    $el.value = false;
-                //}
-
-                // if (isBoolean) { // force boolean value
-                //     $el.value = (/^true$/.test($el.value)) ? true : false
-                // }
                 
-
             } else {
 
                 // prevents ticking behavior
                 setTimeout(function () {
-                    $el.checked = true;
+                    if (isTriggedByUser)
+                        return;
+                    if ($el.checked)
+                        $el.checked = false;
+                        $el.removeAttribute('checked');
                 }, 0)
-
-                $el.setAttribute('checked', 'checked');
-                //$el.value = $el.getAttribute('value');
-
-                //if (isBoolean) { // no multiple choice supported
-                //    $el.value = true;
-                //}
-
-                
-
-                radioGroup = document.getElementsByName($el.name);
-                //console.log('found ', radioGroup.length, radioGroup)
-                for (var g = 0, gLen = radioGroup.length; g < gLen; ++g) {
-                    if (radioGroup[g].id !== $el.id) {
-                        radioGroup[g].checked = false;
-                        radioGroup[g].removeAttribute('checked');
-                        
-                        // if (isBoolean) {
-                        //     radioGroup[g].value = false;
-                        // }
-                        // if ( /^(true|false)$/.test($el.value) ) {
-                        //     radioGroup[g].value = (/^true$/.test(radioGroup[g].value)) ? true : false
-                        // }
-                        
-                    }
-                }
-
-                // if (isBoolean) { // force boolean value
-                //     $el.value = ( /^true$/.test($el.value) ) ? true : false
-                // }
             }
 
             if (isBoolean) { // force boolean value
                 $el.value = (/^true$/.test($el.value)) ? true : false
             }
+            // fix added on 2020/09/25 : 
+            return;
         }
                                
 
@@ -10312,19 +10701,36 @@ function ValidatorPlugin(rules, data, formId) {
             addListener(gina, $target, 'click', function(event) {
                 
                 var $el = event.target;
-                
+                var isCustomSubmit = false;
                 if (
-                    /(label)/i.test(event.target.tagName) && typeof(event.target.control) != 'undefined' && event.target.control != null && /(checkbox|radio)/i.test(event.target.control.type) 
-                    || /(label)/i.test(event.target.parentNode.tagName) && typeof(event.target.parentNode.control) != 'undefined' && event.target.parentNode.control != null && /(checkbox|radio)/i.test(event.target.parentNode.control.type) 
-                ) {                    
+                    /(label)/i.test(event.target.tagName) 
+                        && typeof(event.target.control) != 'undefined' 
+                        && event.target.control != null 
+                        && /(checkbox|radio)/i.test(event.target.control.type) 
+                    || 
+                    /(label)/i.test(event.target.parentNode.tagName) 
+                        && typeof(event.target.parentNode.control) != 'undefined' 
+                        && event.target.parentNode.control != null 
+                        && /(checkbox|radio)/i.test(event.target.parentNode.control.type) 
+                ) {        
+                    var isCaseIgnored = ( 
+                                        event.target.getAttribute('for') 
+                                        || 
+                                        event.target.parentNode.getAttribute('for')
+                                    ) ? true : false
+                    ;          
                     // if `event.target.control` not working on all browser,
                     // try to detect `for` attribute OR check if on of the label's event.target.children is an input & type == (checkbox|radio)
                     $el = event.target.control || event.target.parentNode.control;
-                    if ( !$el.disabled && /(checkbox|radio)/i.test($el.type) ) {
+                    if ( 
+                        !$el.disabled 
+                        && /(checkbox|radio)/i.test($el.type) 
+                        && !isCaseIgnored
+                    ) {
                         // apply checked choice : if true -> set to false, and if false -> set to true                        
                         if ( /checkbox/i.test($el.type) ) {
                             return updateCheckBox($el);
-                        } else {
+                        } else if ( /radio/i.test($el.type) ) {
                             return updateRadio($el);
                         }
                     }                    
@@ -10336,6 +10742,10 @@ function ValidatorPlugin(rules, data, formId) {
                     /(button|input)/i.test($el.tagName) && /(submit|checkbox|radio)/i.test($el.type)
                     || /a/i.test($el.tagName) && $el.attributes.getNamedItem('data-gina-form-submit')
                 ) {
+                    
+                    if ($el.attributes.getNamedItem('data-gina-form-submit')) {                        
+                        isCustomSubmit = true;
+                    }
                     
                     if ( typeof($el.id) == 'undefined' || !$el.getAttribute('id') ) {
                         $el.setAttribute('id', 'click.' + uuid.v4() );
@@ -10354,6 +10764,19 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( !/^click\./.test(_evt) ) {
                             _evt = $el.id
                         }
+                        
+                        // normal case
+                        if (
+                            !$el.disabled 
+                            && /(checkbox|radio)/i.test($el.type) 
+                        ) {
+                            // apply checked choice : if true -> set to false, and if false -> set to true                        
+                            if ( /checkbox/i.test($el.type) ) {
+                                return updateCheckBox($el);
+                            } else if ( /radio/i.test($el.type) ) {
+                                return updateRadio($el, false, true);
+                            }
+                        }
     
                         // prevent event to be triggered twice
                         if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
@@ -10361,8 +10784,16 @@ function ValidatorPlugin(rules, data, formId) {
     
                         if (gina.events[_evt]) {
                             cancelEvent(event);
-    
+                            
                             triggerEvent(gina, $el, _evt, event.detail);
+                        } else if ( 
+                            isCustomSubmit
+                            && typeof(this.id) != 'undefined'
+                            && this.id != ''
+                            && typeof(gina.validator.$forms[this.id]) != 'undefined'
+                        ) {
+                            gina.validator.getFormById(this.id).submit();
+                            cancelEvent(event); // stop #navigation
                         }
     
                     }
@@ -10398,7 +10829,7 @@ function ValidatorPlugin(rules, data, formId) {
                 }
 
 
-                evt = $inputs[i].id;
+                evt = 'change.'+ $inputs[i].id;
 
                 procced = function ($el, evt) {
 
@@ -10409,6 +10840,8 @@ function ValidatorPlugin(rules, data, formId) {
                         
                         if ( /^(true|false|on)$/i.test(value) ) {
                             cancelEvent(event);
+                            // fixed inverted state
+                            $el.checked = !/true|on/.test(value) ? true : false;
                             updateCheckBox(event.target);
                         }
                     });
@@ -10435,8 +10868,8 @@ function ValidatorPlugin(rules, data, formId) {
 
                 procced = function ($el, evt) {
                     addListener(gina, $el, evt, function(event) {
-
                         cancelEvent(event);
+                        
                         updateRadio(event.target);
                     });
 
@@ -10454,228 +10887,237 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
 
-        if (withRules) {
+        //if (withRules) {
 
-            evt = 'validate.' + _id;
-            procced = function () {
+        evt = 'validate.' + _id;
+        procced = function () {
+            // attach form event
+            addListener(gina, $target, evt, function(event) {
+                cancelEvent(event);
 
-                // attach form event
-                addListener(gina, $target, evt, function(event) {
-                    cancelEvent(event);
 
+                var result = event['detail'] || $form.eventData.validation;
+                
+                handleErrorsDisplay(event['target'], result['errors'], result['data']);
 
-                    var result = event['detail'] || $form.eventData.validation;
+                var _id = event.target.getAttribute('id');
+
+                if ( result['isValid']() ) { // send if valid
+                    // now sending to server
+                    if (instance.$forms[_id]) {
+                        instance.$forms[_id].send(result['data']);
+                    } else if ($form) { // just in case the form is being destroyed
+                        $form.send(result['data']);
+                    }
+                }
+            })
+        }
+        // cannot be binded twice
+        if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == 'validate.' + _id ) {
+            removeListener(gina, $form, evt, procced)
+        }// else {
+        //    procced()
+        //}
+        procced();
+
+        var proccedToSubmit = function (evt, $submit) {
+            // console.log('placing submit ', evt, $submit);
+            // attach submit events
+            addListener(gina, $submit, evt, function(event) {
+                // start validation
+                cancelEvent(event);
+
+                // getting fields & values
+                var $fields         = {}
+                    , fields        = { '_length': 0 }
+                    , id            = $target.getAttribute('id')
+                    , rules         = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
+                    , name          = null
+                    , value         = 0
+                    , type          = null
+                    , index         = { checkbox: 0, radio: 0 }
+                    , isDisabled    = null;
                     
-                    handleErrorsDisplay(event['target'], result['errors'], result['data']);
-
-                    var _id = event.target.getAttribute('id');
-
-                    if ( result['isValid']() ) { // send if valid
-                        // now sending to server
-                        if (instance.$forms[_id]) {
-                            instance.$forms[_id].send(result['data']);
-                        } else if ($form) { // just in case the form is being destroyed
-                            $form.send(result['data']);
-                        }
-                    }
-                })
-            }
-
-            if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == 'validate.' + _id ) {
-                removeListener(gina, $form, evt, procced)
-            } else {
-                procced()
-            }
+                ;
 
 
-            var proccedToSubmit = function (evt, $submit) {
-                // console.log('placing submit ', evt, $submit);
-                // attach submit events
-                addListener(gina, $submit, evt, function(event) {
-                    // start validation
-                    cancelEvent(event);
+                for (var i = 0, len = $target.length; i<len; ++i) {
 
-                    // getting fields & values
-                    var $fields     = {}
-                        , fields    = { '_length': 0 }
-                        , id        = $target.getAttribute('id')
-                        , rules     = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
-                        , name      = null
-                        , value     = 0
-                        , type      = null
-                        , index     = { checkbox: 0, radio: 0 };
+                    name        = $target[i].getAttribute('name');
+                    // NB.: If you still want to save the info and you main field is disabled;
+                    //      consider using an input type=hidden
+                    isDisabled  = $target[i].disabled || $target[i].getAttribute('disabled'); 
+                    isDisabled  = ( /disabled|true/i.test(isDisabled) ) ? true : false;
+                    
+                    if (!name) continue;
+                    if (isDisabled) continue;
 
-
-                    for (var i = 0, len = $target.length; i<len; ++i) {
-
-                        name    = $target[i].getAttribute('name');
-
-                        if (!name) continue;
-
-                        // TODO - add switch cases against tagName (checkbox/radio)
-                        if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
-                            
-                            
-                            
-                            if ( 
-                                $target[i].checked 
-                                || typeof (rules[name]) == 'undefined'
-                                    && $target[i].value != 'undefined'
-                                    && /^(true|false)$/.test($target[i].value)
-                                || !$target[i].checked
-                                    && typeof (rules[name]) != 'undefined'
-                                    && typeof (rules[name].isBoolean) != 'undefined' && /^true$/.test(rules[name].isBoolean)
-                                    && typeof (rules[name].isRequired) != 'undefined' && /^true$/.test(rules[name].isRequired)
-                            ) {
-                                // if is boolean
-                                if ( /^(true|false)$/.test($target[i].value) ) {
-                                    
-                                    if ( typeof(rules[name]) == 'undefined' ) {
-                                        rules[name] = { isBoolean: true };
-                                    } else if ( typeof(rules[name]) != 'undefined' && typeof(rules[name].isBoolean) == 'undefined' ) {
-                                        rules[name].isBoolean = true;
-                                    }
-
-                                    if ($target[i].type == 'radio') {
-                                        if ( typeof(rules[name]) == 'undefined' )
-                                            throw new Error('rule '+ name +' is not defined');
-                                            
-                                        if (/^true$/.test(rules[name].isBoolean) && $target[i].checked ) {
-                                            fields[name] = (/^true$/.test($target[i].value)) ? true : false;
-                                        }
-                                    } else {
-                                        fields[name] = $target[i].value = (/^true$/.test($target[i].value)) ? true : false;
-                                    }
-
-                                } else {
-                                    fields[name] = $target[i].value
-                                }
-                            }  else if ( // force validator to pass `false` if boolean is required explicitly
-                                rules
-                                && typeof(rules[name]) != 'undefined'
-                                && typeof(rules[name].isBoolean) != 'undefined'
-                                && typeof(rules[name].isRequired) != 'undefined'
-                                && !/^(true|false)$/.test($target[i].value)
-
-                            ) {
-                                fields[name] = false;
-                            }
-
-                        } else {
-                            fields[name] = $target[i].value;
-                        }
-
-                        if ( typeof($fields[name]) == 'undefined' ) {
-                            $fields[name] = $target[i];
-                            // reset filed error data attributes
-                            $fields[name].setAttribute('data-gina-form-errors', '');
-                        }
+                    // TODO - add switch cases against tagName (checkbox/radio)
+                    if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
                         
-                        ++fields['_length']
-                    }
+                        
+                        
+                        if ( 
+                            $target[i].checked 
+                            || typeof (rules[name]) == 'undefined'
+                                && $target[i].value != 'undefined'
+                                && /^(true|false)$/.test($target[i].value)
+                            || !$target[i].checked
+                                && typeof (rules[name]) != 'undefined'
+                                && typeof (rules[name].isBoolean) != 'undefined' && /^true$/.test(rules[name].isBoolean)
+                                && typeof (rules[name].isRequired) != 'undefined' && /^true$/.test(rules[name].isRequired)
+                        ) {
+                            // if is boolean
+                            if ( /^(true|false)$/.test($target[i].value) ) {
+                                
+                                if ( typeof(rules[name]) == 'undefined' ) {
+                                    rules[name] = { isBoolean: true };
+                                } else if ( typeof(rules[name]) != 'undefined' && typeof(rules[name].isBoolean) == 'undefined' ) {
+                                    rules[name].isBoolean = true;
+                                }
 
-                    if ( fields['_length'] == 0 ) { // nothing to validate
-                        delete fields['_length'];
-                        var result = {
-                            'errors'    : [],
-                            'isValid'   : function() { return true },
-                            'data'      : formatData(fields)
-                        };
+                                if ($target[i].type == 'radio') {
+                                    if ( typeof(rules[name]) == 'undefined' )
+                                        throw new Error('rule '+ name +' is not defined');
+                                        
+                                    if (/^true$/.test(rules[name].isBoolean) && $target[i].checked ) {
+                                        fields[name] = (/^true$/.test($target[i].value)) ? true : false;
+                                    }
+                                } else {
+                                    fields[name] = $target[i].value = (/^true$/.test($target[i].value)) ? true : false;
+                                }
 
-                        triggerEvent(gina, $target, 'validate.' + _id, result)
+                            } else {
+                                fields[name] = $target[i].value
+                            }
+                        }  else if ( // force validator to pass `false` if boolean is required explicitly
+                            rules
+                            && typeof(rules[name]) != 'undefined'
+                            && typeof(rules[name].isBoolean) != 'undefined'
+                            && typeof(rules[name].isRequired) != 'undefined'
+                            && !/^(true|false)$/.test($target[i].value)
+
+                        ) {
+                            fields[name] = false;
+                        }
 
                     } else {
-                        // update rule in case the current event is triggered outside the main sequence
-                        // e.g.: form `id` attribute rewritten on the fly
-                        _id = $target.getAttribute('id');
-                        var customRule = $target.getAttribute('data-gina-form-rule');
-
-                        if ( customRule ) { // 'data-gina-form-rule'
-                            rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
-                        } else {
-                            rule = gina.validator.$forms[ _id ].rules;
-                        }
-
-                        validate($target, fields, $fields, rule, function onValidation(result){
-                            triggerEvent(gina, $target, 'validate.' + _id, result)
-                        })
+                        fields[name] = $target[i].value;
                     }
-                });
-            }
 
-
-            // binding submit button
-            var $submit         = null
-                , $buttons      = []
-                , $buttonsTMP   = []
-                , linkId        = null 
-                , buttonId      = null
-            ;
-            $buttonsTMP = $target.getElementsByTagName('button');
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ($buttonsTMP[b].type == 'submit')
-                        $buttons.push($buttonsTMP[b])
-                }
-            }
-
-            // binding links
-            $buttonsTMP = $target.getElementsByTagName('a');            
-            if ( $buttonsTMP.length > 0 ) {
-                for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
-                    if ( $buttonsTMP[b].attributes.getNamedItem('data-gina-form-submit') ) {
-                        $buttons.push($buttonsTMP[b])
-                    } else if ( 
-                        !$buttonsTMP[b].getAttribute('id') 
-                        && !/gina\-popin/.test($buttonsTMP[b].className) 
-                        && !gina.popinIsBinded
-                        && !/gina\-link/.test($buttonsTMP[b].className) 
-                    ) { // will not be binded but will receive an id if not existing
-                        linkId = 'link.'+ uuid.v4();
-                        $buttonsTMP[b].id = linkId;
+                    if ( typeof($fields[name]) == 'undefined' ) {
+                        $fields[name] = $target[i];
+                        // reset filed error data attributes
+                        $fields[name].setAttribute('data-gina-form-errors', '');
                     }
-                }
-            }
-
-
-            var onclickAttribute = null, isSubmitType = false;
-            for (var b=0, len=$buttons.length; b<len; ++b) {
-
-                $submit = $buttons[b];
-
-                if ($submit.tagName == 'A') { // without this test, XHR callback is ignored
-                    //console.log('a#$buttons ', $buttonsTMP[b]);
-                    onclickAttribute    = $submit.getAttribute('onclick');
-                    isSubmitType        = $submit.getAttribute('data-gina-form-submit');
-
-                    if ( !onclickAttribute && !isSubmitType) {
-                        $submit.setAttribute('onclick', 'return false;')
-                    } else if ( !/return false/ && !isSubmitType) {
-                        if ( /\;$/.test(onclickAttribute) ) {
-                            onclickAttribute += 'return false;'
-                        } else {
-                            onclickAttribute += '; return false;'
-                        }
-                    }
+                    
+                    ++fields['_length']
                 }
 
-                if (!$submit['id']) {
+                if ( fields['_length'] == 0 ) { // nothing to validate
+                    delete fields['_length'];
+                    var result = {
+                        'errors'    : [],
+                        'isValid'   : function() { return true },
+                        'data'      : formatData(fields)
+                    };
 
-                    evt = 'click.'+ uuid.v4();
-                    $submit['id'] = evt;
-                    $submit.setAttribute( 'id', evt);
+                    triggerEvent(gina, $target, 'validate.' + _id, result)
 
                 } else {
-                    evt = $submit['id'];
+                    // update rule in case the current event is triggered outside the main sequence
+                    // e.g.: form `id` attribute rewritten on the fly
+                    _id = $target.getAttribute('id');
+                    var customRule = $target.getAttribute('data-gina-form-rule');
+
+                    if ( customRule ) { // 'data-gina-form-rule'
+                        //rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
+                        rule = getRuleObjByName(customRule.replace(/\-/g, '.'))
+                    } else {
+                        //rule = gina.validator.$forms[ _id ].rules;
+                        rule = getRuleObjByName(_id.replace(/\-/g, '.'))
+                    }
+
+                    validate($target, fields, $fields, rule, function onValidation(result){
+                        triggerEvent(gina, $target, 'validate.' + _id, result)
+                    })
                 }
+            });
+        }
 
 
-                if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $submit.id ) {
-                    proccedToSubmit(evt, $submit)
-                }
-
+        // binding submit button
+        var $submit         = null
+            , $buttons      = []
+            , $buttonsTMP   = []
+            , linkId        = null 
+            , buttonId      = null
+        ;
+        $buttonsTMP = $target.getElementsByTagName('button');
+        if ( $buttonsTMP.length > 0 ) {
+            for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                if ($buttonsTMP[b].type == 'submit')
+                    $buttons.push($buttonsTMP[b])
             }
         }
+
+        // binding links
+        $buttonsTMP = $target.getElementsByTagName('a');            
+        if ( $buttonsTMP.length > 0 ) {
+            for(var b = 0, len = $buttonsTMP.length; b < len; ++b) {
+                if ( $buttonsTMP[b].attributes.getNamedItem('data-gina-form-submit') ) {
+                    $buttons.push($buttonsTMP[b])
+                } else if ( 
+                    !$buttonsTMP[b].getAttribute('id') 
+                    && !/gina\-popin/.test($buttonsTMP[b].className) 
+                    && !gina.popinIsBinded
+                    && !/gina\-link/.test($buttonsTMP[b].className) 
+                ) { // will not be binded but will receive an id if not existing
+                    linkId = 'link.'+ uuid.v4();
+                    $buttonsTMP[b].id = linkId;
+                }
+            }
+        }
+
+
+        var onclickAttribute = null, isSubmitType = false;
+        for (var b=0, len=$buttons.length; b<len; ++b) {
+
+            $submit = $buttons[b];
+
+            if ($submit.tagName == 'A') { // without this test, XHR callback is ignored
+                //console.log('a#$buttons ', $buttonsTMP[b]);
+                onclickAttribute    = $submit.getAttribute('onclick');
+                isSubmitType        = $submit.getAttribute('data-gina-form-submit');
+
+                if ( !onclickAttribute && !isSubmitType) {
+                    $submit.setAttribute('onclick', 'return false;')
+                } else if ( !/return false/ && !isSubmitType) {
+                    if ( /\;$/.test(onclickAttribute) ) {
+                        onclickAttribute += 'return false;'
+                    } else {
+                        onclickAttribute += '; return false;'
+                    }
+                }
+            }
+
+            if (!$submit['id']) {
+
+                evt = 'click.'+ uuid.v4();
+                $submit['id'] = evt;
+                $submit.setAttribute( 'id', evt);
+
+            } else {
+                evt = $submit['id'];
+            }
+
+
+            if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $submit.id ) {
+                proccedToSubmit(evt, $submit)
+            }
+
+        }
+        //} // EO if (withRules)
 
 
 
@@ -10700,20 +11142,28 @@ function ValidatorPlugin(rules, data, formId) {
 
             // just collect data over forms
             // getting fields & values
-            var $fields     = {}
-                , fields    = { '_length': 0 }
-                , id        = $target.getAttribute('id')
-                , rules     = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
-                , name      = null
-                , value     = 0
-                , type      = null
-                , index     = { checkbox: 0, radio: 0 };
+            var $fields         = {}
+                , fields        = { '_length': 0 }
+                , id            = $target.getAttribute('id')
+                , rules         = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
+                , name          = null
+                , value         = 0
+                , type          = null
+                , index         = { checkbox: 0, radio: 0 }
+                , isDisabled    = null 
+            ;
 
 
             for (var i = 0, len = $target.length; i<len; ++i) {
-                name = $target[i].getAttribute('name');
+                
+                name        = $target[i].getAttribute('name');
+                // NB.: If you still want to save the info and you main field is disabled;
+                //      consider using an input type=hidden
+                isDisabled  = $target[i].disabled || $target[i].getAttribute('disabled'); 
+                isDisabled  = ( /disabled|true/i.test(isDisabled) ) ? true : false;
 
                 if (!name) continue;
+                if (isDisabled) continue;
 
                 // checkbox or radio
                 if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
@@ -10772,9 +11222,11 @@ function ValidatorPlugin(rules, data, formId) {
                 var customRule = $target.getAttribute('data-gina-form-rule');
 
                 if ( customRule ) { // 'data-gina-form-rule'
-                    rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
+                    //rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
+                    rule = getRuleObjByName(customRule.replace(/\-/g, '.'))
                 } else {
-                    rule = gina.validator.$forms[ id ].rules;
+                    //rule = gina.validator.$forms[ id ].rules;
+                    rule= getRuleObjByName(id.replace(/\-/g, '.'))
                 }
 
                 validate($target, fields, $fields, rule, function onValidation(result){
@@ -10829,22 +11281,30 @@ function ValidatorPlugin(rules, data, formId) {
                             break;
                         } 
                     }                                
-                }    
+                }
                 
-                //if ( !skipTest ) continue;
+                if ( typeof(rules[field]) == 'undefined' )
+                    return;
             }
             
             // check each field against rule
             for (var rule in rules[field]) {
-                            
+                
+                if ( /^((is)\d+|is$)/.test(rule) ) { // is aliases                   
+                    d[field][rule] = function(){};
+                    d[field][rule] = inherits(d[field][rule], d[field][ rule.replace(/\d+/, '') ]);
+                    d[field][rule].setAlias = (function(alias) {
+                        this._currentValidatorAlias = alias
+                    }(rule));  
+                }            
                 // check for rule params
                 try {
 
                     if (Array.isArray(rules[field][rule])) { // has args
                         //convert array to arguments
                         args = JSON.parse(JSON.stringify(rules[field][rule]));
-                        if ( /\$[\w\[\]]*/.test(args[0]) ) {
-                            var foundVariables = args[0].match(/\$[\w\[\]]*/g);
+                        if ( /\$[\-\w\[\]]*/.test(args[0]) ) {
+                            var foundVariables = args[0].match(/\$[\-\w\[\]]*/g);
                             for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
                                 args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
                             }
@@ -10865,8 +11325,9 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
         }
-
-        var forEachField = function($form, fields, $fields, rules, cb, i) {
+        var allFields = JSON.parse(JSON.stringify(fields));
+        var allRules = ( typeof(rules) !=  'undefined' ) ? JSON.parse(JSON.stringify(rules)) : {};
+        var forEachField = function($form, allFields, allRules, fields, $fields, rules, cb, i) {
             
             
             
@@ -10886,34 +11347,75 @@ function ValidatorPlugin(rules, data, formId) {
                         continue;
                     }
                     
-                    //if ( $fields[field].tagName.toLowerCase() == 'input' && /(checkbox)/.test( $fields[field].getAttribute('type') ) && !$fields[field].checked ) {
+                    hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
+                    isInCase = false;
+                    
+                                        
                     if (
                         $fields[field].tagName.toLowerCase() == 'input' 
                         && /(checkbox)/.test($fields[field].getAttribute('type')) 
                         && !$fields[field].checked 
                         && typeof(rules[field]) == 'undefined' // just in case of rules inside cases
-                    ) {
-                        //if ( typeof(rules[field]) == 'undefined' && !$fields[field].checked || typeof(rules[field]) != 'undefined' && typeof(rules[field]['isRequired']) != 'undefined' && /(false)/.test(rules[field]['isRequired']) )
-                            continue;
+                    ) {                        
+                        continue;
                     }
 
-                    hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
-                    isInCase = false;
                     
                     
                     for (var c in rules) {
                         if (!/^\_case\_/.test(c) ) continue;
                         if ( typeof(rules[c].conditions) == 'undefined' ) continue;
                         if ( typeof(rules[c].conditions[0].rules) == 'undefined' ) continue;
-                        // enter cases condition
-                        if ( typeof(rules[c].conditions) != 'undefined' && Array.isArray(rules[c].conditions) ) {
-                            caseName = c.replace('_case_', '');
+                        
+                        
+                        // enter cases conditions
+                        if ( 
+                            typeof(rules[c].conditions) != 'undefined' 
+                            && Array.isArray(rules[c].conditions) 
+                        ) {
+                            caseName = c.replace('_case_', '');                            
+                            // if case exists but case field not existing
+                            if ( typeof($fields[caseName]) == 'undefined' ) {
+                                continue
+                            }
+                            
+                            // depending on the case value, replace/merge original rule with condition rule
+                            if ( typeof(allFields[caseName]) == 'undefined' ) {
+                                allFields[caseName] =  $fields[c.replace(/^\_case\_/, '')].value
+                            }
+                            caseValue = allFields[caseName];
+                            if (isGFFCtx) {
+                                if (fields[field] == "true")
+                                    caseValue = true;
+                                else if (fields[field] == "false")
+                                    caseValue = false;
+                            }
+                            // filtering conditions
                             for (var _c = 0, _cLen = rules[c].conditions.length; _c < _cLen; ++_c) {
                                 
+                                if (rules[c].conditions[_c].case != caseValue) {
+                                    continue;
+                                }
+                                
+                                // enter condition rules
                                 for (var _r in rules[c].conditions[_c].rules) {
                                     
-                                    if (field != _r )
+                                    // ok, not the current case but still, 
+                                    // we want to apply the validation when the field is not yet listed 
+                                    if (field != _r && !/^\//.test(_r) ) {
+                                        if ( 
+                                            typeof(fields[_r]) == 'undefined' 
+                                            &&  typeof(allFields[_r]) != 'undefined' 
+                                        ) {
+                                            fields[_r] = allFields[_r];
+                                            localRuleObj = ( typeof(rules[_r]) != 'undefined' ) ? rules[_r] : {}; 
+                                            rules[_r] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
+                                            
+                                            checkFieldAgainstRules(_r, rules, fields);
+                                        }
                                         continue;
+                                    }
+                                        
                                     
                                     if ( /^\//.test(_r) ) { // RegExp found
                                         re      = _r.match(/\/(.*)\//).pop();                                        
@@ -10923,22 +11425,33 @@ function ValidatorPlugin(rules, data, formId) {
                                         re      = new RegExp(re, flags);
                                         if ( re.test(field)  ) {    
                                             // depending on the case value, replace/merge original rule with condition rule
-                                            caseValue = $fields[c.replace(/^\_case\_/, '')].value;
-                                            if (isGFFCtx) {
-                                                if (fields[field] == "true")
-                                                    caseValue = true;
-                                                else if (fields[field] == "false")
-                                                    caseValue = false;
-                                            }
-                                            if ( rules[c].conditions[_c].case == caseValue ) {
+                                            // if ( typeof(allFields[caseField]) == 'undefined' ) {
+                                            //     allFields[caseField] =  $fields[c.replace(/^\_case\_/, '')].value
+                                            // }
+                                            // caseValue = allFields[caseField];
+                                            // if (isGFFCtx) {
+                                            //     if (fields[field] == "true")
+                                            //         caseValue = true;
+                                            //     else if (fields[field] == "false")
+                                            //         caseValue = false;
+                                            // }
+                                            if ( 
+                                                rules[c].conditions[_c].case == caseValue 
+                                                ||
+                                                // test for regexp 
+                                                /^\//.test(rules[c].conditions[_c].case) 
+                                                && new RegExp(rules[c].conditions[_c].case).test(caseValue)                                                
+                                            ) {
                                                 localRuleObj = ( typeof(rules[field]) != 'undefined' ) ? rules[field] : {}; 
                                                 rules[field] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
                                             }
-                                            // check each field against rule
-                                            checkFieldAgainstRules(field, rules, fields);
+                                            // check each field against rule only if rule exists
+                                            if ( typeof(rules[field]) != 'undefined' ) {
+                                                checkFieldAgainstRules(field, rules, fields);
+                                            }
                                                                 
-                                            isInCase = true;                                         
-                                            break;
+                                            //isInCase = true;                                         
+                                            //break;
                                         } 
                                     } else {
                                         if ( typeof(rules[c].conditions[_c].rules[_r]) != 'undefined' ) {
@@ -10949,7 +11462,12 @@ function ValidatorPlugin(rules, data, formId) {
                                                 console.warn('ignoring case `'+ c +'`: field `'+ +'` not found in your DOM');
                                                 continue;
                                             }
-                                            caseValue = $fields[caseField].value;
+                                            // by default
+                                            // if ( typeof(allFields[caseField]) == 'undefined' ) {
+                                            //     allFields[caseField] =  $fields[caseField].value
+                                            // }
+                                            // caseValue =  allFields[caseField];
+                                            // boolean caseValue
                                             if (
                                                 isGFFCtx 
                                                 && /^(true|false)$/i.test(caseValue) 
@@ -10959,16 +11477,25 @@ function ValidatorPlugin(rules, data, formId) {
                                             ) {
                                                 caseValue = ( /^(true)$/i.test(caseValue) ) ? true : false;
                                             }
-                                            if ( rules[c].conditions[_c].case == caseValue ) {
+                                            
+                                            if ( 
+                                                rules[c].conditions[_c].case == caseValue 
+                                                ||
+                                                // test for regexp 
+                                                /^\//.test(rules[c].conditions[_c].case) 
+                                                && new RegExp(rules[c].conditions[_c].case).test(caseValue)
+                                            ) {
                                                 localRuleObj = ( typeof(rules[field]) != 'undefined' ) ? rules[field] : {}; 
                                                 rules[field] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
                                             }
                                             
-                                            // check each field against rule
-                                            checkFieldAgainstRules(field, rules, fields);
+                                            // check each field against rule only if rule exists
+                                            if ( typeof(rules[field]) != 'undefined' ) {
+                                                checkFieldAgainstRules(field, rules, fields);
+                                            }
                                             
-                                            isInCase = true;
-                                            break;
+                                            //isInCase = true;
+                                            //break;
                                         }  
                                     }
                                 }
@@ -10980,66 +11507,12 @@ function ValidatorPlugin(rules, data, formId) {
                         // }                            
                     }
                     
-                    if (isInCase) continue;
-                    
+                    if (isInCase) continue;                
 
-                    //if (!hasCase) { // normal case
-                                                
-                        // if (typeof (rules[field]) == 'undefined') {
-                        //     // look for regexp aliases from rules
-                        //     skipTest = false;
-                        //     for (var _r in rules) {
-                        //         if ( /^\//.test(_r) ) { // RegExp found
-                        //             re      = _r.match(/\/(.*)\//).pop();                                        
-                        //             flags   = _r.replace('/'+ re +'/', '');
-                        //             // fix escaping "[" & "]"
-                        //             re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
-                        //             re      = new RegExp(re, flags);
-                        //             if ( re.test(field)  ) { 
-                        //                 skipTest = true;                                                
-                        //                 // create new entry    
-                        //                 rules[field] = rules[_r];                                   
-                        //                 break;
-                        //             } 
-                        //         }                                
-                        //     }    
-                            
-                        //     if ( !skipTest ) continue;
-                        // }
-
-
-                        // check each field against rule
+                    // check each field against rule only if rule exists
+                    if ( typeof(rules[field]) != 'undefined' ) {
                         checkFieldAgainstRules(field, rules, fields);
-                        // for (var rule in rules[field]) {
-                            
-                        //     // check for rule params
-                        //     try {
-
-                        //         if (Array.isArray(rules[field][rule])) { // has args
-                        //             //convert array to arguments
-                        //             args = JSON.parse(JSON.stringify(rules[field][rule]));
-                        //             if ( /\$[\w\[\]]*/.test(args[0]) ) {
-                        //                 var foundVariables = args[0].match(/\$[\w\[\]]*/g);
-                        //                 for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
-                        //                     args[0] = args[0].replace( foundVariables[v], d[foundVariables[v].replace('$', '')].value )
-                        //                 }
-                        //             }
-                        //             d[field][rule].apply(d[field], args);
-                        //         } else {
-                        //             d[field][rule](rules[field][rule]);
-                        //         }
-
-                        //         delete fields[field];
-
-                        //     } catch (err) {
-                        //         if (rule == 'conditions') {
-                        //             throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
-                        //         } else {
-                        //             throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
-                        //         }
-                        //     }
-                        // }
-                    //} // else {
+                    }                    
                         
                     if (hasCase) {
                         ++i; // add sub level
@@ -11051,8 +11524,9 @@ function ValidatorPlugin(rules, data, formId) {
                         
                         
                         for (var c = 0, cLen = conditions.length; c<cLen; ++c) {
-
-                            caseValue = fields[field];
+                            // by default
+                            //caseValue = fields[field];
+                            caseValue =  allFields[field];
 
                             if (isGFFCtx) {
                                 if (fields[field] == "true")
@@ -11062,12 +11536,23 @@ function ValidatorPlugin(rules, data, formId) {
                             }
 
                             //console.log(caseValue +' VS '+ conditions[c]['case'], "->", (caseValue == conditions[c]['case'] || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1) );
-                            if ( conditions[c]['case'] === caseValue || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1 || /^\//.test(conditions[c]['case']) ) {
+                            if ( 
+                                conditions[c]['case'] === caseValue 
+                                ||
+                                Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1 
+                                ||
+                                /^\//.test(conditions[c]['case']) 
+                            ) {
 
                                 //console.log('[fields ] ' + JSON.stringify(fields, null, 4));
                                 localRules = {};   
-                                // exclude case field if not declared in rules
-                                if ( typeof(conditions[c]['rules'][field]) == 'undefined' ) {
+                                // exclude case field if not declared in rules && not disabled
+                                if ( 
+                                    typeof(conditions[c]['rules'][field]) == 'undefined' 
+                                    && typeof(allFields[field]) == 'undefined'
+                                    ||
+                                    $fields[field].disabled 
+                                ) {
                                     conditions[c]['rules'][field] = { exclude: true }            
                                 }                             
                                 for (var f in conditions[c]['rules']) {
@@ -11096,8 +11581,22 @@ function ValidatorPlugin(rules, data, formId) {
                                                 }
                                                 
                                                 // we need to add it to fields list if not declared
-                                                if ( typeof(fields[localField]) == 'undefined' ) {
-                                                    fields[localField] = caseValue;
+                                                if ( 
+                                                    typeof(fields[localField]) == 'undefined' 
+                                                    && typeof($fields[localField]) != 'undefined' 
+                                                    && typeof($fields[localField].value) != 'undefined'
+                                                ) {
+                                                    fields[localField] = $fields[localField].value;//caseValue is not goo here
+                                                    if (isGFFCtx && /(true|false)/i.test(fields[localField] ) ) {
+                                                        if (fields[localField] == "true")
+                                                            fields[localField]  = true;
+                                                        else if (fields[localField] == "false")
+                                                            fields[localField]  = false;
+                                                    }
+                                                    d.addField(localField, fields[localField]);
+                                                    if ( typeof(allRules[localField]) != 'undefined' ) {
+                                                        localRules[localField] = merge(localRules[localField], allRules[localField])
+                                                    }
                                                 }
                                             }
                                         }
@@ -11120,8 +11619,26 @@ function ValidatorPlugin(rules, data, formId) {
                                         }
                                         
                                         // we need to add it to fields list if not declared
-                                        if ( typeof(fields[f]) == 'undefined' ) {
-                                            fields[f] = caseValue;
+                                        // if ( typeof(fields[f]) == 'undefined' ) {
+                                        //     fields[f] = caseValue;
+                                        // }
+                                        if ( 
+                                            typeof(fields[f]) == 'undefined' 
+                                            && typeof($fields[f]) != 'undefined' 
+                                            && typeof($fields[f].value) != 'undefined'
+                                        ) {
+                                            fields[f] = $fields[f].value;
+                                            if (isGFFCtx && /(true|false)/i.test(fields[f] ) ) {
+                                                if (fields[f] == "true")
+                                                    fields[f]  = true;
+                                                else if (fields[f] == "false")
+                                                    fields[f]  = false;
+                                            }                                           
+                                            
+                                            d.addField(f, fields[f]);
+                                            if ( typeof(allRules[f]) != 'undefined' ) {
+                                                localRules[f] = merge(localRules[f], allRules[f])
+                                            }
                                         }
                                     }                                    
                                 }
@@ -11130,9 +11647,9 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                                 ++subLevelRules; // add sub level
                                 if (isGFFCtx)
-                                    forEachField($form, fields, $fields, localRules, cb, i);
+                                    forEachField($form, allFields, allRules, fields, $fields, localRules, cb, i);
                                 else
-                                    return forEachField($form, fields, $fields, localRules, cb, i);
+                                    return forEachField($form, allFields, allRules, fields, $fields, localRules, cb, i);
                             }
                             
                         }
@@ -11213,17 +11730,16 @@ function ValidatorPlugin(rules, data, formId) {
 
         // 0 is the starting level
         if (isGFFCtx)
-            forEachField($form, fields, $fields, rules, cb, 0);
+            forEachField($form, allFields, allRules, fields, $fields, rules, cb, 0);
         else
-            return forEachField($form, fields, $fields, rules, cb, 0);
+            return forEachField($form, allFields, allRules, fields, $fields, rules, cb, 0);
     }
 
     var setupInstanceProto = function() {
 
+        instance.target                 = document;
         instance.setOptions             = setOptions;
         instance.getFormById            = getFormById;
-        instance.validateFormById       = validateFormById;
-        instance.target                 = document;
         instance.validateFormById       = validateFormById;
         instance.resetErrorsDisplay     = resetErrorsDisplay;
         instance.resetFields            = resetFields;
@@ -11271,7 +11787,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             foldingClass    : null,
             isUnfolded      : null,
             isXHR           : false,
-            isValidator     : false
+            isValidator     : false,
+            hasParsedUrls   : false
         };
 
         var bucket      = new Storage({bucket: 'gina'}) // <Bucket>
@@ -11423,21 +11940,22 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
         var loadData = function (section, data, ginaData) {
 
             var $currentForms = null;
-
             try {
                 var txt = $json.text();
                 if (txt == '' || txt == 'null' ) {
                     $json.text('Empty')
                 } else {
-                    jsonObject = JSON.parse(txt);
+                    jsonObject = JSON.parse( txt );
                     ginaJsonObject = JSON.parse($ginaJson.text());
+                    
                     $json.text('');
 
                     // backing up document data for restore action
                     if (!originalData) {
+                        
                         originalData = {
-                            jsonObject      : JSON.parse(JSON.stringify(jsonObject)),
-                            ginaJsonObject  : JSON.parse(JSON.stringify(ginaJsonObject))
+                            jsonObject      : JSON.parse(JSON.stringify( jsonObject) ),
+                            ginaJsonObject  : JSON.parse(JSON.stringify( ginaJsonObject) )
                         };
                         lastJsonObjectState = {}; // jsonObject.data
                         
@@ -11647,7 +12165,12 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         }
                     })
                 }
-            }            
+            }   
+            
+            if ( !section || section == 'el-xhr' && !self.hasParsedUrls) {
+                self.hasParsedUrls = (section && section == 'el-xhr' ) ? true : false;
+                parseUrls(section);
+            }                
         }
 
 
@@ -12042,7 +12565,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                 if ( typeof(obj[i]) == 'object' && !Array.isArray(obj[i]) && obj[i] !== null ) { // parse
                     //id += i + '-';
                     id += '-' + i.replace(/[^A-Za-z0-9_-]/g, '_');
-                    isEmptyClass = (obj[i].count() > 0 || ginaObj[i].count() > 0) ? '' : ' is-empty';
+                    isEmptyClass = (obj[i].count() > 0 || typeof(ginaObj[i]) != 'undefined' && ginaObj[i].count() > 0) ? '' : ' is-empty';
 
                     html += '<li class="gina-toolbar-object">';
                     html +=  '<a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( section, i.replace(/[^A-Za-z0-9_-]/g, '_') ) + isEmptyClass +'">'+ i +' <span>{ }</span></a>';
@@ -12054,7 +12577,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                 } else if ( Array.isArray(obj[i]) ) {
                     //id += i + '-';
                     id += '-' + i.replace(/[^A-Za-z0-9_-]/g, '_');
-                    isEmptyClass = (obj[i].length > 0 || ginaObj[i].length > 0) ? '' : ' is-empty';
+                    isEmptyClass = (obj[i].length > 0 || typeof(ginaObj[i]) != 'undefined' && ginaObj[i].length > 0) ? '' : ' is-empty';
 
                     html += '<li class="gina-toolbar-collection">';
                     html +=  '<a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( section, i.replace(/[^A-Za-z0-9_-]/g, '_') ) + isEmptyClass +'">'+ i +' <span>['+ obj[i].length +']</span></a>';
@@ -12142,7 +12665,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
         }
 
         var parseView = function (obj, ginaObj, elId, elIsXHR, $html, $root) {
-
+                        
             var id          = (elId != null) ? elId.replace(/[^A-Za-z0-9_-]/g, '_') : '';
             var section     = null;
             var isXHR       = ( typeof(elIsXHR) != 'undefined' && elIsXHR != null ) ? '-xhr' : '';
@@ -12344,6 +12867,49 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
             return parseObject(rules, rules, id, elIsXHR, section)
         }
+        
+        var parseUrls = function(section) {
+            
+            var $el = null;
+            var $currentPopin = (gina.hasPopinHandler) ? gina.popin.getActivePopin() : null;
+            var isPopinContext = ( gina.hasPopinHandler ) ? true : false;
+            if ( isPopinContext ) {
+                $el = $('#' + $currentPopin.id );
+            } else {
+                $el = $('body');
+            }
+            
+            // look for `404: `
+            var found = {}
+                , foundStr = null
+                , formMethod = null
+                , f = 0
+                , fLen = 0
+            ;
+            var matched = $el.html().match(/404\:\[(.+)\](.+)@(.+)\"/gm);
+            if (matched) {
+                f = 0; fLen = matched.length;
+                for (; f < fLen; ++f) {
+                    foundStr = matched[f].replace(/\"(.*)|\"/g, '');
+                    formMethod = foundStr.match(/\[(.*)\]/g, '')[0].replace(/\[|\]/g,'');
+                    
+                    routing.getRouteByUrl(foundStr, formMethod)
+                }
+            } 
+               
+            printLogs();
+            
+            //console.debug('popinIsActive: '+ isPopinContext +'isXHR: ', self.isXHR, ' -> ' + section, routing.notFound);
+        }
+        
+        var printLogs = function() {
+            fLen = routing.notFound.count();
+            if ( fLen > 0 ) {                
+                for (f in routing.notFound) {
+                    console.warn( '(x'+ routing.notFound[f].count +') ' + f + ' => ' + routing.notFound[f].message );
+                }
+            }
+        }
 
         var parseForms = function (obj, ginaObj, $html, i, $forms, len, elIsXHR) {
             
@@ -12396,8 +12962,13 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
                 if ( /^action$/.test(key) ) {
                     
-                    formMethod  = ( typeof(attributes['method']) != 'undefined' ) ? attributes['method'].nodeValue : undefined;                   
-                    routeObj    = routing.getRouteByUrl(val, formMethod);
+                    formMethod  = ( typeof(attributes['method']) != 'undefined' ) ? attributes['method'].nodeValue : undefined;   
+                    
+                    if (!formMethod) {
+                        console.warn('[ ToolbarFormHelper::UndefinedMethod : form `'+ attributes['id'].nodeValue +'` method attribute cannot be left undefined !');                        
+                    }
+                    
+                    routeObj    = routing.getRouteByUrl(val, formMethod);                    
 
                     if ( typeof(routeObj) == 'undefined' || !routeObj ) {
                         routeObj = {
@@ -12677,8 +13248,10 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             if (lastJsonObjectState && typeof (lastJsonObjectState.data) != 'undefined' ) {
                 originalData.jsonObject.data = lastJsonObjectState.data;
             }
-
+            
             loadData('data', originalData.jsonObject, originalData.ginaJsonObject);
+            self.hasParsedUrls = false;
+            routing.notFound = {};
         }
 
         
@@ -12695,12 +13268,13 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
     return Toolbar
 });
-define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpers/dateFormat', 'gina/toolbar' ], function (require) {
+define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpers/prototypes', 'helpers/dateFormat', 'gina/toolbar' ], function (require) {
     
     
     var eventsHandler   = require('utils/events'); // events handler
     var merge           = require('utils/merge');
     var dateFormat      = require('helpers/dateFormat')();    
+    var prototypes      = require('helpers/prototypes')({ dateFormat: dateFormat });
     var uuid            = require('vendor/uuid');
 
 
@@ -12715,7 +13289,7 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
         (function(window, nextTick, process, prefixes, i, p, fnc) {
             p = window[process] || (window[process] = {});
             while (!fnc && i < prefixes.length) {
-                fnc = window[prefixes[i++] + 'equestAnimationFrame'];
+                fnc = window[prefixes[i++] + 'requestAnimationFrame'];
             }
             p[nextTick] = p[nextTick] || (fnc && fnc.bind(window)) || window.setImmediate || window.setTimeout;
         })(window, 'nextTick', 'process', 'r webkitR mozR msR oR'.split(' '), 0);
@@ -12750,34 +13324,42 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
      * Custom object properties definition
      * */
 
-    Object.defineProperty( Date.prototype, 'format', {
-        writable:   false,
-        enumerable: false,
-        //If loaded several times, it can lead to an exception. That's why I put this.
-        configurable: true,
-        value: function(mask, utc){ return dateFormat.format(this, mask, utc) }
-    });
+    // Object.defineProperty( Date.prototype, 'format', {
+    //     writable:   false,
+    //     enumerable: false,
+    //     //If loaded several times, it can lead to an exception. That's why I put this.
+    //     configurable: true,
+    //     value: function(mask, utc){ return dateFormat.format(this, mask, utc) }
+    // });
+    
+    // Object.defineProperty( Date.prototype, 'addHours', {
+    //     writable:   false,
+    //     enumerable: false,
+    //     //If loaded several times, it can lead to an exception. That's why I put this.
+    //     configurable: true,
+    //     value: function(h){ return dateFormat.addHours(this, h) }
+    // });
 
 
-    Object.defineProperty( Object.prototype, 'count', {
-        writable: true,
-        enumerable: false,
-        //If loaded several times, it can lead to an exception. That's why I put this.
-        configurable: true,
-        value: function(){
-            try {
-                var self = this;
-                if (this instanceof String) self = JSON.parse(this);
-                var i = 0;
-                for (var prop in this)
-                    if (this.hasOwnProperty(prop)) ++i;
+    // Object.defineProperty( Object.prototype, 'count', {
+    //     writable: true,
+    //     enumerable: false,
+    //     //If loaded several times, it can lead to an exception. That's why I put this.
+    //     configurable: true,
+    //     value: function(){
+    //         try {
+    //             var self = this;
+    //             if (this instanceof String) self = JSON.parse(this);
+    //             var i = 0;
+    //             for (var prop in this)
+    //                 if (this.hasOwnProperty(prop)) ++i;
 
-                return i
-            } catch (err) {
-                return i
-            }
-        }
-    });
+    //             return i
+    //         } catch (err) {
+    //             return i
+    //         }
+    //     }
+    // });
 
 
     function construct(gina) {
@@ -12899,7 +13481,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @api public
 	 *
 	 */
-	module.exports.parser = __webpack_require__(8);
+	module.exports.parser = __webpack_require__(9);
 
 
 /***/ },
@@ -12911,12 +13493,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	 */
 
 	var transports = __webpack_require__(2);
-	var Emitter = __webpack_require__(17);
-	var debug = __webpack_require__(21)('engine.io-client:socket');
-	var index = __webpack_require__(28);
-	var parser = __webpack_require__(8);
-	var parseuri = __webpack_require__(29);
-	var parseqs = __webpack_require__(18);
+	var Emitter = __webpack_require__(18);
+	var debug = __webpack_require__(22)('engine.io-client:socket');
+	var index = __webpack_require__(29);
+	var parser = __webpack_require__(9);
+	var parseuri = __webpack_require__(30);
+	var parseqs = __webpack_require__(19);
 
 	/**
 	 * Module exports.
@@ -13052,9 +13634,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	 */
 
 	Socket.Socket = Socket;
-	Socket.Transport = __webpack_require__(7);
+	Socket.Transport = __webpack_require__(8);
 	Socket.transports = __webpack_require__(2);
-	Socket.parser = __webpack_require__(8);
+	Socket.parser = __webpack_require__(9);
 
 	/**
 	 * Creates transport of the given type.
@@ -13665,9 +14247,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	 */
 
 	var XMLHttpRequest = __webpack_require__(3);
-	var XHR = __webpack_require__(5);
-	var JSONP = __webpack_require__(25);
-	var websocket = __webpack_require__(26);
+	var XHR = __webpack_require__(6);
+	var JSONP = __webpack_require__(26);
+	var websocket = __webpack_require__(27);
 
 	/**
 	 * Export transports.
@@ -13722,6 +14304,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	// browser shim for xmlhttprequest module
 
 	var hasCORS = __webpack_require__(4);
+	var globalThis = __webpack_require__(5);
 
 	module.exports = function (opts) {
 	  var xdomain = opts.xdomain;
@@ -13752,7 +14335,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	  if (!xdomain) {
 	    try {
-	      return new self[['Active'].concat('Object').join('X')]('Microsoft.XMLHTTP');
+	      return new globalThis[['Active'].concat('Object').join('X')]('Microsoft.XMLHTTP');
 	    } catch (e) { }
 	  }
 	};
@@ -13783,6 +14366,21 @@ return /******/ (function(modules) { // webpackBootstrap
 
 /***/ },
 /* 5 */
+/***/ function(module, exports) {
+
+	module.exports = (function () {
+	  if (typeof self !== 'undefined') {
+	    return self;
+	  } else if (typeof window !== 'undefined') {
+	    return window;
+	  } else {
+	    return Function('return this')(); // eslint-disable-line no-new-func
+	  }
+	})();
+
+
+/***/ },
+/* 6 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* global attachEvent */
@@ -13792,10 +14390,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	 */
 
 	var XMLHttpRequest = __webpack_require__(3);
-	var Polling = __webpack_require__(6);
-	var Emitter = __webpack_require__(17);
-	var inherit = __webpack_require__(19);
-	var debug = __webpack_require__(21)('engine.io-client:polling-xhr');
+	var Polling = __webpack_require__(7);
+	var Emitter = __webpack_require__(18);
+	var inherit = __webpack_require__(20);
+	var debug = __webpack_require__(22)('engine.io-client:polling-xhr');
+	var globalThis = __webpack_require__(5);
 
 	/**
 	 * Module exports.
@@ -14190,7 +14789,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  if (typeof attachEvent === 'function') {
 	    attachEvent('onunload', unloadHandler);
 	  } else if (typeof addEventListener === 'function') {
-	    var terminationEvent = 'onpagehide' in self ? 'pagehide' : 'unload';
+	    var terminationEvent = 'onpagehide' in globalThis ? 'pagehide' : 'unload';
 	    addEventListener(terminationEvent, unloadHandler, false);
 	  }
 	}
@@ -14205,19 +14804,19 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 6 */
+/* 7 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/**
 	 * Module dependencies.
 	 */
 
-	var Transport = __webpack_require__(7);
-	var parseqs = __webpack_require__(18);
-	var parser = __webpack_require__(8);
-	var inherit = __webpack_require__(19);
-	var yeast = __webpack_require__(20);
-	var debug = __webpack_require__(21)('engine.io-client:polling');
+	var Transport = __webpack_require__(8);
+	var parseqs = __webpack_require__(19);
+	var parser = __webpack_require__(9);
+	var inherit = __webpack_require__(20);
+	var yeast = __webpack_require__(21);
+	var debug = __webpack_require__(22)('engine.io-client:polling');
 
 	/**
 	 * Module exports.
@@ -14456,15 +15055,15 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 7 */
+/* 8 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/**
 	 * Module dependencies.
 	 */
 
-	var parser = __webpack_require__(8);
-	var Emitter = __webpack_require__(17);
+	var parser = __webpack_require__(9);
+	var Emitter = __webpack_require__(18);
 
 	/**
 	 * Module exports.
@@ -14623,22 +15222,22 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 8 */
+/* 9 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/**
 	 * Module dependencies.
 	 */
 
-	var keys = __webpack_require__(9);
-	var hasBinary = __webpack_require__(10);
-	var sliceBuffer = __webpack_require__(12);
-	var after = __webpack_require__(13);
-	var utf8 = __webpack_require__(14);
+	var keys = __webpack_require__(10);
+	var hasBinary = __webpack_require__(11);
+	var sliceBuffer = __webpack_require__(13);
+	var after = __webpack_require__(14);
+	var utf8 = __webpack_require__(15);
 
 	var base64encoder;
 	if (typeof ArrayBuffer !== 'undefined') {
-	  base64encoder = __webpack_require__(15);
+	  base64encoder = __webpack_require__(16);
 	}
 
 	/**
@@ -14696,7 +15295,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * Create a blob api even for blob builder when vendor prefixes exist
 	 */
 
-	var Blob = __webpack_require__(16);
+	var Blob = __webpack_require__(17);
 
 	/**
 	 * Encodes a packet.
@@ -15234,7 +15833,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 9 */
+/* 10 */
 /***/ function(module, exports) {
 
 	
@@ -15259,7 +15858,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 10 */
+/* 11 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* global Blob File */
@@ -15268,7 +15867,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * Module requirements.
 	 */
 
-	var isArray = __webpack_require__(11);
+	var isArray = __webpack_require__(12);
 
 	var toString = Object.prototype.toString;
 	var withNativeBlob = typeof Blob === 'function' ||
@@ -15329,7 +15928,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 11 */
+/* 12 */
 /***/ function(module, exports) {
 
 	var toString = {}.toString;
@@ -15340,7 +15939,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 12 */
+/* 13 */
 /***/ function(module, exports) {
 
 	/**
@@ -15375,7 +15974,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 13 */
+/* 14 */
 /***/ function(module, exports) {
 
 	module.exports = after
@@ -15409,7 +16008,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 14 */
+/* 15 */
 /***/ function(module, exports) {
 
 	/*! https://mths.be/utf8js v2.1.2 by @mathias */
@@ -15625,7 +16224,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 15 */
+/* 16 */
 /***/ function(module, exports) {
 
 	/*
@@ -15698,7 +16297,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 16 */
+/* 17 */
 /***/ function(module, exports) {
 
 	/**
@@ -15804,7 +16403,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 17 */
+/* 18 */
 /***/ function(module, exports, __webpack_require__) {
 
 	
@@ -15920,6 +16519,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	      break;
 	    }
 	  }
+
+	  // Remove event specific arrays for event types that no
+	  // one is subscribed for to avoid memory leak.
+	  if (callbacks.length === 0) {
+	    delete this._callbacks['$' + event];
+	  }
+
 	  return this;
 	};
 
@@ -15933,8 +16539,13 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	Emitter.prototype.emit = function(event){
 	  this._callbacks = this._callbacks || {};
-	  var args = [].slice.call(arguments, 1)
+
+	  var args = new Array(arguments.length - 1)
 	    , callbacks = this._callbacks['$' + event];
+
+	  for (var i = 1; i < arguments.length; i++) {
+	    args[i - 1] = arguments[i];
+	  }
 
 	  if (callbacks) {
 	    callbacks = callbacks.slice(0);
@@ -15973,7 +16584,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 18 */
+/* 19 */
 /***/ function(module, exports) {
 
 	/**
@@ -16016,7 +16627,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 19 */
+/* 20 */
 /***/ function(module, exports) {
 
 	
@@ -16028,7 +16639,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 /***/ },
-/* 20 */
+/* 21 */
 /***/ function(module, exports) {
 
 	'use strict';
@@ -16102,7 +16713,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 21 */
+/* 22 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/* WEBPACK VAR INJECTION */(function(process) {'use strict';
@@ -16276,7 +16887,7 @@ return /******/ (function(modules) { // webpackBootstrap
 		}
 	}
 
-	module.exports = __webpack_require__(23)(exports);
+	module.exports = __webpack_require__(24)(exports);
 
 	var formatters = module.exports.formatters;
 
@@ -16291,10 +16902,10 @@ return /******/ (function(modules) { // webpackBootstrap
 			return '[UnexpectedJSONParseError]: ' + error.message;
 		}
 	};
-	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(22)))
+	/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(23)))
 
 /***/ },
-/* 22 */
+/* 23 */
 /***/ function(module, exports) {
 
 	// shim for using process in browser
@@ -16484,7 +17095,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 23 */
+/* 24 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -16503,7 +17114,7 @@ return /******/ (function(modules) { // webpackBootstrap
 		createDebug.disable = disable;
 		createDebug.enable = enable;
 		createDebug.enabled = enabled;
-		createDebug.humanize = __webpack_require__(24);
+		createDebug.humanize = __webpack_require__(25);
 
 		Object.keys(env).forEach(function (key) {
 			createDebug[key] = env[key];
@@ -16759,7 +17370,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	module.exports = setup;
 
 /***/ },
-/* 24 */
+/* 25 */
 /***/ function(module, exports) {
 
 	/**
@@ -16927,15 +17538,16 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 25 */
+/* 26 */
 /***/ function(module, exports, __webpack_require__) {
 
-	/* WEBPACK VAR INJECTION */(function(global) {/**
+	/**
 	 * Module requirements.
 	 */
 
-	var Polling = __webpack_require__(6);
-	var inherit = __webpack_require__(19);
+	var Polling = __webpack_require__(7);
+	var inherit = __webpack_require__(20);
+	var globalThis = __webpack_require__(5);
 
 	/**
 	 * Module exports.
@@ -16963,15 +17575,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	function empty () { }
 
 	/**
-	 * Until https://github.com/tc39/proposal-global is shipped.
-	 */
-	function glob () {
-	  return typeof self !== 'undefined' ? self
-	      : typeof window !== 'undefined' ? window
-	      : typeof global !== 'undefined' ? global : {};
-	}
-
-	/**
 	 * JSONP Polling constructor.
 	 *
 	 * @param {Object} opts.
@@ -16987,8 +17590,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  // we do this here (lazily) to avoid unneeded global pollution
 	  if (!callbacks) {
 	    // we need to consider multiple engines in the same page
-	    var global = glob();
-	    callbacks = global.___eio = (global.___eio || []);
+	    callbacks = globalThis.___eio = (globalThis.___eio || []);
 	  }
 
 	  // callback identifier
@@ -17170,22 +17772,21 @@ return /******/ (function(modules) { // webpackBootstrap
 	  }
 	};
 
-	/* WEBPACK VAR INJECTION */}.call(exports, (function() { return this; }())))
 
 /***/ },
-/* 26 */
+/* 27 */
 /***/ function(module, exports, __webpack_require__) {
 
 	/**
 	 * Module dependencies.
 	 */
 
-	var Transport = __webpack_require__(7);
-	var parser = __webpack_require__(8);
-	var parseqs = __webpack_require__(18);
-	var inherit = __webpack_require__(19);
-	var yeast = __webpack_require__(20);
-	var debug = __webpack_require__(21)('engine.io-client:websocket');
+	var Transport = __webpack_require__(8);
+	var parser = __webpack_require__(9);
+	var parseqs = __webpack_require__(19);
+	var inherit = __webpack_require__(20);
+	var yeast = __webpack_require__(21);
+	var debug = __webpack_require__(22)('engine.io-client:websocket');
 
 	var BrowserWebSocket, NodeWebSocket;
 
@@ -17197,7 +17798,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	if (typeof window === 'undefined') {
 	  try {
-	    NodeWebSocket = __webpack_require__(27);
+	    NodeWebSocket = __webpack_require__(28);
 	  } catch (e) { }
 	}
 
@@ -17270,19 +17871,23 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	  var uri = this.uri();
 	  var protocols = this.protocols;
-	  var opts = {
-	    agent: this.agent,
-	    perMessageDeflate: this.perMessageDeflate
-	  };
 
-	  // SSL options for Node.js client
-	  opts.pfx = this.pfx;
-	  opts.key = this.key;
-	  opts.passphrase = this.passphrase;
-	  opts.cert = this.cert;
-	  opts.ca = this.ca;
-	  opts.ciphers = this.ciphers;
-	  opts.rejectUnauthorized = this.rejectUnauthorized;
+	  var opts = {};
+
+	  if (!this.isReactNative) {
+	    opts.agent = this.agent;
+	    opts.perMessageDeflate = this.perMessageDeflate;
+
+	    // SSL options for Node.js client
+	    opts.pfx = this.pfx;
+	    opts.key = this.key;
+	    opts.passphrase = this.passphrase;
+	    opts.cert = this.cert;
+	    opts.ca = this.ca;
+	    opts.ciphers = this.ciphers;
+	    opts.rejectUnauthorized = this.rejectUnauthorized;
+	  }
+
 	  if (this.extraHeaders) {
 	    opts.headers = this.extraHeaders;
 	  }
@@ -17474,13 +18079,13 @@ return /******/ (function(modules) { // webpackBootstrap
 
 
 /***/ },
-/* 27 */
+/* 28 */
 /***/ function(module, exports) {
 
 	/* (ignored) */
 
 /***/ },
-/* 28 */
+/* 29 */
 /***/ function(module, exports) {
 
 	
@@ -17495,7 +18100,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 /***/ },
-/* 29 */
+/* 30 */
 /***/ function(module, exports) {
 
 	/**
@@ -18172,7 +18777,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             'isOpen'            : false,
             'close'             : null,
             '$forms'            : [],
-            'hasForm'           : false
+            'hasForm'           : false,
+            '$headers'             : [] // head elements for this popin
         };
 
         // imopring other plugins
@@ -18377,7 +18983,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     cancelEvent(event);
 
                     var _evt = event.target.id;
-
                     triggerEvent(gina, event.target, _evt, event.detail);
                 }
 
@@ -19092,9 +19697,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
         }
                
-        function getScript(source, callback) {
+        function getScript($popin, source, callback) {
+            // existing scripts
+            var scripts  = document.head.getElementsByTagName('script');            
+            // new script element
             var script = document.createElement('script');
-            var prior = document.getElementsByTagName('script')[0];
+            // index 0 if for the loader
+            var prior = document.getElementsByTagName('script')[1];
             script.async = 0;
         
             script.onload = script.onreadystatechange = function( _, isAbort ) {
@@ -19106,8 +19715,40 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 }
             };
         
-            script.src = source;
-            prior.parentNode.insertBefore(script, prior);
+            script.src = source;            
+            
+            var hostname = gina.config.hostname;
+            if ( gina.config.webroot != '' ) {
+                hostname += gina.config.webroot;
+            }
+            var s = 0
+                , sLen = scripts.length
+                , filename = source.substr( source.lastIndexOf(hostname)+hostname.length || 0)
+                , re = null
+            ;
+            if (sLen == 0) {
+                script.id = 'gina-popin-script-' + $popin.id;
+                prior.parentNode.insertBefore(script, prior);
+                $popin.$headers.push({ id: script.id});
+            } else {
+                var found = false;
+                for (; s<sLen; ++s) {
+                    if ( typeof(scripts[s].src) == 'undefined' || !scripts[s].src )
+                        continue;
+                    // insert only if not already loaded
+                    re = new RegExp(filename+'$');                
+                    if ( re.test(scripts[s].src) ) {
+                        found = true;
+                        break;
+                    }                                    
+                }
+                if (!found) {
+                    script.id = 'gina-popin-script-' + $popin.id;
+                    prior.parentNode.insertBefore(script, prior);
+                    // will be removed on close
+                    $popin.$headers.push({ id: script.id});
+                }
+            }                
         }
         
         /**
@@ -19147,7 +19788,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 // if ( ignoreList.indexOf(scripts[i].src) > -1 )
                 //     continue;
                 
-                getScript(scripts[i].src);               
+                getScript($popin, scripts[i].src);               
             }  
             
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
@@ -19300,6 +19941,19 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         ginaToolbar.restore();
 
                     instance.activePopinId  = null;
+                    if ( $popin.$headers.length > 0) {
+                        var s = 0
+                            , sLen = $popin.$headers.length
+                        ;
+                        try {
+                            for (; s<sLen; ++s) {
+                                document.getElementById( $popin.$headers[s].id ).remove(); 
+                            }
+                        } catch(err){
+                            console.warn('Could not remove script `'+ $popin.$headers[s].id +'`\n'+ err.stack)
+                        }
+                        $popin.$headers = [];                            
+                    }
                     triggerEvent(gina, $popin.target, 'close.'+ $popin.id, $popin);
                 }
             }            
@@ -19723,7 +20377,9 @@ require([
 
     "core",
     // helpers
+    "helpers/prototypes",
     "helpers/binding",
+    "helpers/dateFormat",
 
     // plugins
     "gina/link",
