@@ -728,7 +728,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 // is request from same domain ?
                 //options.headers['Origin']   = window.protocol+'//'+window.location.host;
                 //options.headers['Origin']   = '*';
-                //options.headers['Host']     = 'https://freelancer-app.fr.local:3154';
+                //options.headers['Host']     = 'https://domain.local:3154';
                 var isSameDomain = ( new RegExp(window.location.hostname).test(url) ) ? true : false;
                 if (!isSameDomain) {
                     // proxy external urls
@@ -862,35 +862,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                             // update toolbar
                             updateToolbar(result, resultIsObject);
-                            // var XHRData = result;
-                            // if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
-                            //     try {
-                            //         if ( !resultIsObject && XHRData.error && /^(\{|\[).test(XHRData.error) /)
-                            //             XHRData.error = JSON.parse(XHRData.error);
-
-                            //         // bad .. should not happen
-                            //         if ( typeof(XHRData.error) != 'undefined' && typeof(XHRData.error) == 'object' && typeof(XHRData.error) == 'object' ) {
-                            //             // by default
-                            //             var XHRDataNew = { 'status' : XHRData.status };
-                            //             // existing will be overriden by user
-                            //             for (xErr in XHRData.error) {
-                            //                 if ( !/^error$/.test(xErr ) ) {
-                            //                     XHRDataNew[xErr] = XHRData.error[xErr];
-                            //                 }
-                            //             }
-
-                            //             XHRDataNew.error = XHRData.error.error;
-
-                            //             XHRData = result = XHRDataNew
-                            //         }
-                                        
-                            //         XHRData.isXHRViewData = true;
-                            //         ginaToolbar.update("data-xhr", XHRData )
-                            //     } catch (err) {
-                            //         throw err
-                            //     }
-                            // }
-
 
                             triggerEvent(gina, $el, 'error.' + id, result)
                         }
@@ -981,7 +952,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var scripts  = document.head.getElementsByTagName('script');            
             // new script element
             var script = document.createElement('script');
-            // index 0 if for the loader
+            // index 0 is for the loader
             var prior = document.getElementsByTagName('script')[1];
             script.async = 0;
         

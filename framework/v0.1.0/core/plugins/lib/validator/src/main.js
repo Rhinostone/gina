@@ -578,6 +578,7 @@ function ValidatorPlugin(rules, data, formId) {
         var XHRData = null;
         var isAttachment = null; // handle download
         var hFormIsRequired = null;
+                
         
         options = (typeof (options) != 'undefined') ? merge(options, xhrOptions) : xhrOptions;
         
@@ -3077,6 +3078,13 @@ function ValidatorPlugin(rules, data, formId) {
                 var _id = event.target.getAttribute('id');
 
                 if ( result['isValid']() ) { // send if valid
+                    // Experimental
+                    // Inhertitance from previously posted form: merging datas with current form context
+                    // TODO - Get the inhereted data from LMDB Database using the form CSRF
+                    var inheritedData = instance.$forms[_id].target.getAttribute('data-gina-form-inherits-data') || null;
+                    if (inheritedData) {                         
+                        result['data'] = merge(result['data'],  JSON.parse(decodeURIComponent(inheritedData)) )
+                    }
                     // now sending to server
                     if (instance.$forms[_id]) {
                         instance.$forms[_id].send(result['data']);
