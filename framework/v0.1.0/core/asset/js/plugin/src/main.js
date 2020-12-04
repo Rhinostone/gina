@@ -19,6 +19,9 @@
  *      You have to passe your `jQuery` or your `DollarDom` context to Gina
  *      e.g.: 
  *          window['originalContext'] = window['jQuery']
+ *      
+ *      This can be achieved by overriding `window['originalContext']` before defining your handler
+ *       Default value will be jQuery
  *
  * */
 
@@ -67,6 +70,10 @@ function ready() {
                     // iframe case
                     if ( !window.$ && typeof(parent.window.$) != 'undefined' ) {
                         window.$ = parent.window.$;
+                    }
+                    // by default, but can be overriden in your handler (before the handler definition)
+                    if ( typeof(window.originalContext) == 'undefined' && typeof(window.$) != 'undefined' ) {
+                        window.originalContext = window.$
                     }
                     readyList[i].ctx = window.originalContext || $;// passes the user's orignalContext by default; if no orignalContext is set will try users'jQuery
                     readyList[i].fn.call(window, readyList[i].ctx, window.require);
