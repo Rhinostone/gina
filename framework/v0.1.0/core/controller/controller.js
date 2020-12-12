@@ -1,3 +1,4 @@
+"use strict";
 /*
  * This file is part of the gina package.
  * Copyright (c) 2016 Rhinostone <gina@rhinostone.com>
@@ -410,6 +411,7 @@ function SuperController(options) {
         , path              = null
         , plugin            = null
         , isWithoutLayout   = (local.options.isWithoutLayout) ? true : false
+        , layoutRoot        = null
     ;
         try {
             data = getData();
@@ -579,6 +581,7 @@ function SuperController(options) {
                             layout  = layout.toString();
                             // precompie in case of extends
                             if ( /\{\%(\s+extends|extends)/.test(layout) ) {
+                                //swig.invalidateCache();
                                 layout = swig.compile(layout, mapping)(data);
                             }
                         } catch(err) {
@@ -733,6 +736,7 @@ function SuperController(options) {
                                 
                                 layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');                                                                    
                                 layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+                                //swig.invalidateCache();
                                 layout = swig.compile(layout, mapping)(data);
                                 
 
@@ -765,7 +769,7 @@ function SuperController(options) {
                                 // escape special chars
                                 var blacklistRe = new RegExp('[\<\>]', 'g');
                                 data.page.data = JSON.parse(JSON.stringify(data.page.data).replace(blacklistRe, '\$&'));
-                                
+                                //swig.invalidateCache();
                                 layout = swig.compile(layout, mapping)(data);
                             } catch (err) {
                                 filename = local.options.template.html;
@@ -1032,7 +1036,7 @@ function SuperController(options) {
         
         var authority = ( typeof(local.req.headers['x-forwarded-proto']) != 'undefined' ) ? local.req.headers['x-forwarded-proto'] : local.options.conf.server.scheme;
         authority += '://'+ local.req.headers.host;
-        useWebroot = false;
+        var useWebroot = false;
         if ( !/^\/$/.test(local.options.conf.server.webroot) && local.options.conf.server.webroot.length > 0 && local.options.conf.hostname.replace(/\:\d+$/, '') == authority ) {
             useWebroot = true
         }
@@ -1445,26 +1449,35 @@ function SuperController(options) {
                     !/GET/i.test(req.method) 
                     || 
                     originalMethod && !/GET/i.test(originalMethod) 
-                ) { // trying to redirect using the wrong method ?
+                ) { // trying to redirect using the wrong method ?                    
                     
-                    
-                    //console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nA redirection is not permitted in this scenario.\nSwitching rendering mode: calling self.renderJSON({ location: "'+ path +'"})\nFrom now, you just need to catch the response with a frontend script.\n').message);
                     console.warn(new Error('Your are trying to redirect using the wrong method: `'+ req.method+'`.\nThis can often occur while redirecting from a controller to another controller or from a bundle to another.\nA redirection is not permitted in this scenario.\nD\'ont panic :)\nSwitching request method to `GET` method instead.\n').message);
-                    
-                    code = 303;
-                    
-                    // backing up oldParams
-                    var oldParams = local.req[req.method.toLowerCase()]
-                    
-                    method = local.req.method = self.setRequestMethod('GET', conf);                    
-                    var requestParams = req[req.method.toLowerCase()] || {};
-                    // merging new & olds params
-                    requestParams = merge(requestParams, oldParams);
-                    if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {
-                        //path += '?'+ encodeURIComponent(JSON.stringify(local.req[method.toLowerCase()]));                 
-                        path += '?'+ encodeURIComponent(JSON.stringify(requestParams));  
-                    }                    
+                    method = local.req.method = self.setRequestMethod('GET', conf);
+                    code = 303;                                   
                 }
+                
+                // backing up oldParams
+                var oldParams = local.req[req.method.toLowerCase()];
+                var requestParams = req[req.method.toLowerCase()] || {};
+                // merging new & olds params
+                requestParams = merge(requestParams, oldParams);
+                if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {
+                    // var newParams = '';
+                    // for (let n in requestParams) {
+                    //     if ( typeof(oldParams[n]) == 'undefined' || requestParams[n] != oldParams[n] ) {
+                    //         //newParams[n] = requestParams[n]
+                    //         newParams += n +'=' + requestParams[n] +'&';
+                    //     }
+                    // }
+                    // if ( newParams != '' ) {
+                    //     path += '?'+ newParams.substr(0, newParams.length-1);
+                    // }    
+                    if ( /\?/.test(path) ) {
+                        path += '&inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));  
+                    } else {
+                        path += '?inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));  
+                    }                    
+                } 
                     
                 var ext = 'html';
                 res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime[ext]);

@@ -1,14 +1,15 @@
+"use strict";
 /**
  * Express JS Server Integration
  * 
  */
 const fs        = require('fs'); 
-var express   = require('express');
+const express   = require('express');
 
-const lib = require('./../lib');
-const inherits = lib.inherits;
-const merge = lib.merge;
-const console = lib.logger;
+const lib       = require('./../lib');
+const inherits  = lib.inherits;
+const merge     = lib.merge;
+const console   = lib.logger;
 
 function ServerEngineClass(options) {
 
@@ -61,10 +62,14 @@ function ServerEngineClass(options) {
     express.createApplication = createApplication;
 
     //var app = express();
-    var app = null;
+    var app     = null
+        , http  = null
+        , https = null
+        , http2 = null
+    ;
     
     if ( /^http\/2/.test(options.protocol) ) {
-        var http2   = require('http2');
+        http2   = require('http2');
         switch (options.scheme) {
             case 'http':
                 var app = express({ allowHTTP1: allowHTTP1 });                
@@ -126,8 +131,8 @@ function ServerEngineClass(options) {
         
         switch (options.scheme) {
             case 'http':
-                var http    = require('http');
-                var app = express();
+                http    = require('http');
+                app = express();
                 
                 app.init = function(credentials) {
                     this.cache = {};
@@ -146,9 +151,9 @@ function ServerEngineClass(options) {
                 break;
                 
             case 'https':
-                var https   = require('https');          
+                https   = require('https');          
                             
-                var app = express(credentials);
+                app = express(credentials);
                 
                 app.init = function(credentials) {
                     this.cache = {};
@@ -173,8 +178,8 @@ function ServerEngineClass(options) {
         
             default:
             
-                var http    = require('http');
-                var app = express();
+                http    = require('http');
+                app     = express();
                 
                 app.init = function(credentials) {
                     this.cache = {};

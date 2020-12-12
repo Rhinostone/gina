@@ -1,3 +1,4 @@
+"use strict";
 var lib         = require('./../../lib') || require.cache[require.resolve('./../../lib')];
 var inherits    = lib.inherits;
 var Controller  = require('./controller');

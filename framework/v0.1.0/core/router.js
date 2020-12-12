@@ -1,3 +1,4 @@
+//"use strict";
 /*
  * This file is part of the gina package.
  * Copyright (c) 2016 Rhinostone <gina@rhinostone.com>

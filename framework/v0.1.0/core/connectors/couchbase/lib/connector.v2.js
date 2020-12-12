@@ -1,3 +1,4 @@
+//"use strict";
 var fs              = require('fs');
 var util            = require('util');
 var EventEmitter    = require('events').EventEmitter;
@@ -66,11 +67,11 @@ function Connector(dbString) {
             
             setTimeout( function onRetry(){
                 if ( typeof(next) != 'undefined' ) {
-                    self.connect(dbString, next)
+                    self.connect(dbString, next);
                 } else {
-                    self.connect(dbString)
+                    self.connect(dbString);
                 }
-            }, 5000)   
+            }, 5000);   
             
         };
         
@@ -189,7 +190,7 @@ function Connector(dbString) {
             
                               
             self.emit('ready', false, self.instance);  
-        }
+        };
         
         try {
             //console.debug('[ CONNECTOR ][ ' + local.bundle +' ] Now creating instance for '+ dbString.database +'...');            
@@ -222,7 +223,7 @@ function Connector(dbString) {
         }
             
         return conn;
-    }
+    };
 
     /**
      * init
@@ -237,7 +238,7 @@ function Connector(dbString) {
         try {
             dbString        = merge(dbString, local.options);
             local.options   = dbString;
-            local.bundle    = getConfig().bundle
+            local.bundle    = getConfig().bundle;
 
             console.info('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ][ ' + dbString.database +' ] authenticating to couchbase cluster @'+ dbString.protocol + dbString.host);
             
@@ -253,7 +254,7 @@ function Connector(dbString) {
             console.info('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ][ ' + dbString.database +' ] connecting to couchbase cluster @'+ dbString.protocol + dbString.host);
             
             self
-                .connect(dbString)
+                .connect(dbString);
                 // .on('error', function(err){
                 //     if (!self.reconnecting)
                 //         console.emerg('[ CONNECTOR ][ ' + local.bundle +' ][ '+ dbString.database +' ] Handshake aborted ! PLease check that Couchbase is running.\n',  err.message);                    
@@ -334,9 +335,9 @@ function Connector(dbString) {
 
         } catch (_err) {
             console.error(_err.stack);
-            self.emit('ready', _err, null)
+            self.emit('ready', _err, null);
         }
-    }
+    };
 
     
     /**
@@ -350,16 +351,16 @@ function Connector(dbString) {
         var options = local.options;
         if (options.keepAlive) {
             if ( self.pingId ) {
-                clearInterval(self.pingId )
+                clearInterval(self.pingId);
             }
 
             interval    = interval || options.pingInterval; // for a minute
             var value       = interval.match(/\d+/);
             var unit        = null; // will be seconds by default
             try {
-                unit = interval.match(/[a-z]+/i)[0]
+                unit = interval.match(/[a-z]+/i)[0];
             } catch(err) {
-                unit = 's'
+                unit = 's';
             }
 
             switch ( unit.toLowerCase() ) {
@@ -380,7 +381,7 @@ function Connector(dbString) {
                     break;
 
                 default: // seconds
-                    interval = value * 1000
+                    interval = value * 1000;
             }
 
             self.pingId = setInterval(function onTimeout(){
@@ -391,9 +392,9 @@ function Connector(dbString) {
                     self.instance.reconnected = false;
                     self.instance.reconnecting = true;
                     if ( typeof(next) != 'undefined' ) {
-                        self.connect(dbString, next)
+                        self.connect(dbString, ncb);
                     } else {
-                        self.connect(dbString)
+                        self.connect(dbString);
                     }
                     
                 } else {                    
@@ -401,21 +402,21 @@ function Connector(dbString) {
                 }
                                 
             }, interval);
-            ncb(cb)
+            ncb(cb);
         } else {
             console.debug('[ CONNECTOR ][ ' + local.bundle +' ] sent ping to couchbase ...');
             self.ping(interval, cb, ncb);
         }
-    }
+    };
 
     this.getInstance = function() {
-        return self.instance
-    }
+        return self.instance;
+    };
 
     this.onReady = function(cb) {
         self.once('ready', cb);
-        init(dbString)
-    }
-};
+        init(dbString);
+    };
+}
 util.inherits(Connector, EventEmitter);
 module.exports = Connector;

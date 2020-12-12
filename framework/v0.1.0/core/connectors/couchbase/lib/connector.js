@@ -1,3 +1,4 @@
+"use strict";
 var fs = require('fs');
 var gina            = require('../../../../core/gna');
 var utils           = gina.utils;

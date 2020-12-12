@@ -1,12 +1,11 @@
- /*
+//"use strict";
+/*
  * This file is part of the gina package.
  * Copyright (c) 2016 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-
-
 //Imports.
 var fs              = require('fs');
 var dns             = require('dns');
@@ -123,7 +122,6 @@ function Config(opt) {
                 
                 // getting server core config
                 var statusCodes     = null
-                    , statusCodes   = null
                     , mime          = null
                 ;
 
@@ -313,7 +311,7 @@ function Config(opt) {
 
             if ( !self.isStandalone ) {
                 if ( !bundle && typeof(self.bundle) != 'undefined' ) {
-                    var bundle = self.bundle
+                    bundle = self.bundle
                 }
                 
                                 
@@ -432,8 +430,9 @@ function Config(opt) {
         //Pushing default app first.        
         self.bundles.push(self.startingApp);//This is a JSON.push.
         var root = new _(self.executionPath).toUnixStyle();
+        var pkg  = null;
         try {
-            var pkg     = require(_(root + '/project.json')).bundles;
+            pkg = require(_(root + '/project.json')).bundles;
             // by default but may be overriden           
             masterPort = portsReverse[self.startingApp+'@'+self.projectName][env][projectConf.def_protocol][projectConf.def_scheme]
         } catch (err) {
@@ -448,7 +447,9 @@ function Config(opt) {
             , bundHasSettings = true
             , bundlesPath   = getPath('bundles')
             , protocol      = null
-            , scheme        = null;
+            , scheme        = null
+            , p             = null
+        ;
             
         for (var app in content) {
             //Checking if genuine app.
@@ -471,10 +472,10 @@ function Config(opt) {
                 if (
                     pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && GINA_ENV_IS_DEV
                 ) {
-                    var p = _(pkg[app].src);
+                    p = _(pkg[app].src);
                     content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
                 } else {
-                    var p = ( typeof(pkg[app].release.link) != 'undefined' ) ? _(pkg[app].release.link) : _(pkg[app].release.target);
+                    p = ( typeof(pkg[app].release.link) != 'undefined' ) ? _(pkg[app].release.link) : _(pkg[app].release.target);
                     content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
                 }
 
@@ -1085,7 +1086,7 @@ function Config(opt) {
             
             self.setRouting(bundle, env, routing);
             // reverse routing
-            for (var rule in routing) {
+            for (let rule in routing) {
                                 
                 if ( /\,/.test(routing[rule].url) ) { 
                     urls = routing[rule].url.split(/\,/g);                    
@@ -1226,7 +1227,7 @@ function Config(opt) {
                 
                 if (hasWebRoot) {
                     var staticToPublicPath = null;
-                    for (var p in files['statics']) {
+                    for (let p in files['statics']) {
                         staticToPublicPath =  wroot + p.replace( new RegExp('^'+ wroot), '/');
                         
                         if ( !/\./.test(staticToPublicPath.substr(staticToPublicPath.lastIndexOf('/') )) && !/\/$/.test(staticToPublicPath) )

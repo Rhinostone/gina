@@ -54,6 +54,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             'loadContent'       : null,
             'open'              : null,
             'isOpen'            : false,
+            'isRedirecting'     : false,
             'close'             : null,
             '$forms'            : [],
             'hasForm'           : false,
@@ -175,7 +176,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                 if ( !url && typeof( $el.getAttribute('data-gina-popin-url') ) != 'undefined') {
                     url = $el.getAttribute('data-gina-popin-url');
-
                 }
 
                 if (!url) {
@@ -305,7 +305,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                 e.preventDefault();
 
                                 if (!fired) {
-                                    fired = true;                                                                        
+                                    fired = true;                                                                     
                                     popinLoadContent(e.detail);   
                                 }
                             });
@@ -505,8 +505,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     
                     if ( 
                         typeof($buttonsTMP[b]) != 'undefined' 
-                        && !/(\#|\#.*)$/.test($buttonsTMP[b].href) // ignore href="#"                        
-                        && !$buttonsTMP[b].id // ignore href already bindded byr formValidator or the user
+                        && !/(\#|\#.*)$/.test($buttonsTMP[b].href) // ignore href="#"    
+                        // ignore href already bindded byr formValidator or the user                    
+                        && !$buttonsTMP[b].id
+                        ||
+                        typeof($buttonsTMP[b]) != 'undefined'
+                        && !/(\#|\#.*)$/.test($buttonsTMP[b].href) // ignore href="#"    
+                        && !/^(click\.|popin\.link)/.test($buttonsTMP[b].id)
                     ) {
                         $link.push($buttonsTMP[b]);
                         continue
@@ -550,20 +555,59 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             
             // link events
             i = 0; len = $link.length;
+            var _form = null, f = null, fLen = null;
+            var inheritedData = {}, _formData = null;
+            var domParserObject = new DOMParser(), currentId = null, found = null;
             for(; i < len; ++i) {
-
-                if (!$link[i]['id']) {
-
-                    evt = 'popin.link.'+ uuid.v4();
+                
+                if (!$link[i]['id'] || !/^popin\.link/.test($link[i]['id']) ) {
+                    evt = 'popin.link.'+ uuid.v4();                    
                     $link[i]['id'] =  $link[i].getAttribute('id') || evt;
-                    $link[i].setAttribute( 'id', evt);
-
+                    if ( !/^popin\.link/.test($link[i]['id']) ) {
+                        $link[i].setAttribute( 'data-gina-popin-link-id', evt);
+                        evt = $link[i]['id'];
+                    } else {
+                        $link[i].setAttribute( 'id', evt);
+                    }
                 } else {
                     evt = $link[i]['id'];
                 }
                 // if is disabled, stop propagation
                 if ( $link[i].getAttribute('disabled') != null ) {
                     continue;
+                }
+                
+                if ( !/^(null|\s*)$/.test($link[i].getAttribute('href')) ) {
+                    addListener(gina, $link[i], 'click', function(linkEvent) {
+                        linkEvent.preventDefault();
+                        
+                        $popin.isRedirecting = true;
+                        if ($popin.hasForm) {
+                            // Experimental - inheritedData
+                            // Inhertitance from previously request: merging datas with current form context
+                            // TODO - Get the inhereted data from LMDB Database using the form CSRF
+                            _form = $popin.target.getElementsByTagName('FORM');
+                            f = 0; fLen = _form.length;
+                            for (; f < fLen; ++f) {
+                                // check if current link is in form
+                                currentId = linkEvent.currentTarget.id;
+                                found = domParserObject.parseFromString(_form.item(f).innerHTML, 'text/html').getElementById(currentId) || false;
+                                if ( found ) {
+                                    _formData = _form[f].getAttribute('data-gina-form-inherits-data') || null;
+                                    // mergin GET data
+                                    inheritedData = merge(inheritedData, JSON.parse(decodeURIComponent(_formData)));
+                                }
+                            }
+                            
+                            // has already params ?
+                            if ( /\?/.test(linkEvent.currentTarget.href) ) {
+                                linkEvent.currentTarget.href += '&inheritedData=' + encodeURIComponent(JSON.stringify(inheritedData));
+                            } else {
+                                linkEvent.currentTarget.href += '?inheritedData=' + encodeURIComponent(JSON.stringify(inheritedData));
+                            }
+                        }
+                            
+                    })
                 }
 
                 if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $link[i].id ) {
@@ -736,7 +780,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     //url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
                     url = url.match(/^(https|http)\:/)[0] + '//corsacme.herokuapp.com/?'+ url;
                     //url = url.match(/^(https|http)\:/)[0] + '//cors-anywhere.herokuapp.com/' + url;
-                    //url = url.match(/^(https|http)\:/)[0] + '//cors-anywhere.herokuapp.com/' + url;
                     
                     //delete options.headers['X-Requested-With']
                 }   
@@ -806,18 +849,63 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         if( /^2/.test(xhr.status) ) {
 
                             try {
-                                var result = xhr.responseText;
-                                if ( /json$/.test( xhr.getResponseHeader("Content-Type") ) ) {
-                                    result = JSON.parse(xhr.responseText)
+                                var result          = xhr.responseText
+                                    , contentType   = xhr.getResponseHeader("Content-Type")
+                                    , isJsonContent = (/application\/json/.test( contentType )) ? true : false
+                                    , isRedirecting = true // by default
+                                ;
+                                if ( isJsonContent ) {
+                                    result = JSON.parse(xhr.responseText);
+                                    result.status = xhr.status;
+                                    result.contentType = contentType;
+                                    isRedirecting = false;
                                 }
                                 
 
                                 instance.eventData.success = result;
                                 
-                                if ( $popin.isOpen && !$popin.hasForm) {
-                                    popinLoadContent(result, true)                                    
+                                if ( !isJsonContent && $popin.isOpen && !$popin.hasForm) {                                    
+                                    popinLoadContent(result, isRedirecting)                                    
+                                // } else if (isJsonContent && $popin.hasForm) {
+                                //     //triggerEvent(gina, $el, 'success.' + id, result)
+                                //     triggerEvent(gina, $form, 'success.' + id, result);
                                 } else {
-                                    triggerEvent(gina, $el, 'loaded.' + id, result);
+                                    
+                                    if ( 
+                                        isJsonContent && typeof(result.location) != 'undefined' 
+                                        ||
+                                        isJsonContent && typeof(result.reload) != 'undefined' 
+                                    ) {
+                                        if (typeof(result.location) != 'undefined' ) {
+                                            var _target = '_self'; // by default
+                                            if ( typeof(result.target) != 'undefined' ) {
+                                                if ( /^(blank|self|parent|top)$/ ) {
+                                                    result.target = '_'+result.target;
+                                                }
+                                                _target = result.target
+                                            }
+                                            window.open(result.location, _target);
+                                            return;
+                                        }
+                                        
+                                        if (typeof(result.reload) != 'undefined' ) {
+                                            document.location.reload();
+                                            return;
+                                        }
+                                    }
+                                    
+                                    if ( !isJsonContent && $popin.hasForm) {
+                                        //$validatorInstance.handleXhrResponse(xhr, $forms[0], $forms[0].id, event, true);
+                                        //handleXhr(xhr, $el, options, require)
+                                        //return
+                                    }
+                                    if ( !isJsonContent ) {
+                                        triggerEvent(gina, $el, 'loaded.' + id, result);
+                                        return
+                                    }
+                                    
+                                    triggerEvent(gina, $forms[0], 'success.' + id, result);
+                                    
                                 }
                                 
                                 
@@ -832,7 +920,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                     'error' : err.description || err.stack
                                 };
                                 
-                                if ( /json$/.test( xhr.getResponseHeader("Content-Type") ) ) {
+                                if ( /application\/json/.test( xhr.getResponseHeader("Content-Type") ) ) {
                                     result.error = JSON.parse(xhr.responseText);
                                     resultIsObject = true
                                 }
@@ -852,7 +940,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                 'error' : xhr.responseText
                             };
 
-                            if ( /json$/.test( xhr.getResponseHeader("Content-Type") ) ) {
+                            if ( /application\/json/.test( xhr.getResponseHeader("Content-Type") ) ) {
                                 result.error = JSON.parse(xhr.responseText);
                                 resultIsObject = true
                             }
@@ -938,13 +1026,19 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             if ( !$popin.isOpen )
                 throw new Error('Popin `'+$popin.name+'` is not open !');
             
+            $popin.isRedirecting = ( typeof(isRedirecting) != 'undefined' ) ? isRedirecting : false;
+            if ( $popin.isRedirecting ) {
+                
+            }
+            
             var $el = $popin.target;
             $el.innerHTML = stringContent.trim(); 
             popinUnbind($popin.name, true);          
-            popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);            
+            popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
             
-            if ( typeof(isRedirecting) == 'undefined' || isRedirecting == false )
+            if ( !$popin.isRedirecting ) {
                 triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
+            } 
         }
                
         function getScript($popin, source, callback) {
@@ -1165,6 +1259,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             
             // by default
             if ( typeof($popin) != 'undefined' && $popin != null ) {
+                
+                // in case popinClose is called by the user e.g.: binding cancel/close with a <A> tag
+                // but at the same time, the <A> href is not empty -> redirection wanted in the HTML
+                // in this case, we want to ignore close
+                if ( $popin.isRedirecting )
+                    return;
+                
                 $el = $popin.target;
                 
                 removeListener(gina, $popin.target, 'ready.' + instance.id);

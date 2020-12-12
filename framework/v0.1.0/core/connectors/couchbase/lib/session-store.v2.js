@@ -1,3 +1,4 @@
+"use strict";
 /*!
  * Connect - Couchbase
  * Copyright(c) 2014 Christopher Mina <christopher.mina@gmail.com>
