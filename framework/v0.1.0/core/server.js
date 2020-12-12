@@ -1,3 +1,4 @@
+//"use strict";
 //Imports.
 var fs              = require('fs');
 var os              = require('os');
@@ -27,6 +28,7 @@ function Server(options) {
         router : null,
         hasViews: {}
     };
+    var Engine = null;
 
     this.conf = {
         core: {}
@@ -156,7 +158,6 @@ function Server(options) {
     }
 
     this.start = function(instance) {
-
         if (instance) {            
             self.instance       = instance;            
             //Router configuration.
@@ -169,7 +170,6 @@ function Server(options) {
             router.setServerInstance(instance);
         }
         
-
         onRequest()
     }
 
@@ -1221,8 +1221,6 @@ function Server(options) {
                                            
             });
         } else {
-            // var err = new Error(headers[':path']);
-            // err.status = 404;
             var status = 404;
             if ( /\/$/.test(headers[':path']) && this._options.template.assets[ headers[':path'] +'index.html' ].isAvailable   ) { // preview of directory is forbidden
                 status = 403;
@@ -1436,29 +1434,20 @@ function Server(options) {
                                              
                                         if (!this._isXMLRequest) {
                                             isPathMatchingUrl = true;
-                                            //request.url = request.url.replace(publicPathRe, '');
                                             if (headers[':path'] != request.url) {
-                                                //request.url = pathname =  headers[':path'] = headers[':path'].replace(publicPathRe, '');
-                                                request.url = headers[':path'];
-                                                isPathMatchingUrl = false;
+                                                request.url         = headers[':path'];
+                                                isPathMatchingUrl   = false;
                                             }
                                             
                                             // for new requests
                                             if (!isPathMatchingUrl) {
-                                                pathname = ( webroot.length > 1 && re.test(request.url) ) ? request.url.replace(re, '/') : request.url;
-                                                //filename = bundleConf.publicPath + pathname;
-                                                
-                                                isFilenameDir = (webroot == request.url) ? true: false;
+                                                pathname        = ( webroot.length > 1 && re.test(request.url) ) ? request.url.replace(re, '/') : request.url;                                                
+                                                isFilenameDir   = (webroot == request.url) ? true: false;
                                                 
                                                 if ( !isFilenameDir && !/404\.html/.test(filename) && fs.existsSync(filename) )
-                                                    isFilenameDir = fs.statSync(filename).isDirectory();
-                                                    //isFilenameDir = ( !/404\.html/.test(request.url) ) ? fs.statSync(filename).isDirectory() : false;
-                                                
+                                                    isFilenameDir = fs.statSync(filename).isDirectory();                                                
                                                 if (!isFilenameDir) {
-                                                    filename = this._getAssetFilenameFromUrl(bundleConf, pathname);
-                                                    //if (!/404\.html/.test(filename))
-                                                    //    isFilenameDir = fs.statSync(filename).isDirectory();
-                                                        
+                                                    filename = this._getAssetFilenameFromUrl(bundleConf, pathname);                                                        
                                                 }
                                                     
                                                 if ( !isFilenameDir && !fs.existsSync(filename) ) {
@@ -1468,7 +1457,6 @@ function Server(options) {
                                                                                                                                                 
                                                 
                                                 if ( isFilenameDir ) {
-                                                    //dirname = request.url;
                                                     dirname = bundleConf.publicPath + pathname;
                                                     filename =  dirname + 'index.html';
                                                     request.url += 'index.html';
@@ -1490,9 +1478,7 @@ function Server(options) {
                                                         stream.respond(header);
                                                         stream.end();
                                                     }
-                                                }// else {
-                                                //    throwError(response, 404, 'Page not found: \n' + pathname, next);
-                                                //}                                              
+                                                }                                            
                                             }
                                             
                                             contentType = getHead(response, filename);
@@ -1512,15 +1498,7 @@ function Server(options) {
                                                     url: request.url,
                                                     filename: filename
                                                 }
-                                            }/** else if ( typeof(self._options.template.assets[request.url]) == 'undefined' ) {
-                                                self._options.template.assets[request.url] = {
-                                                    ext: request.url.match(/\.([A-Za-z0-9]+)$/)[0],
-                                                    isAvailable: true,
-                                                    mime: contentType,
-                                                    url: request.url,
-                                                    filename: filename
-                                                }
-                                            }*/
+                                            }
                                                                                                                                    
                                             if (!fs.existsSync(filename)) return;
                                             isBinary = ( /text\/html/i.test(contentType) ) ? false : true;
@@ -1560,7 +1538,6 @@ function Server(options) {
                                     }    
                                 }
                                 
-                                //request = checkPreflightRequest(request);
                                 header  = completeHeaders(request, response, header);
                                 if (isBinary) {
                                     stream.respondWithFile(filename, header)
@@ -1989,7 +1966,7 @@ function Server(options) {
                             writeStreams[ws].on('finish', function() {
                                 this.close( function onUploaded(){
                                     --total;
-                                    console.debug('closing it : ' + total);
+                                    console.debug('closing writestreams : ' + total);
                                     
                                     if (total == 0) {
                                         loadBundleConfiguration(request, response, next, function onBundleConfigurationLoaded(err, bundle, pathname, config, req, res, next) {
@@ -2151,12 +2128,11 @@ function Server(options) {
     
     var processRequestData = function(request, response, next) {
         
-        var bodyStr = null;
+        var bodyStr = null, obj = null;
         // to compare with /core/controller/controller.js -> getParams()
         switch( request.method.toLowerCase() ) {
             case 'post':
-                var obj = {}, configuring = false;
-                
+                var configuring = false;                
                 if ( typeof(request.body) == 'string' ) {
                     // get rid of encoding issues
                     try {
@@ -2235,10 +2211,28 @@ function Server(options) {
                 break;
 
             case 'get':
-                if ( typeof(request.query) != 'undefined' && request.query.count() > 0 ) {
+                if ( typeof(request.query) != 'undefined' && request.query.count() > 0 ) {   
+                    if ( typeof(request.query.inheritedData) != 'undefined' ) {
+                        // try {
+                        //     bodyStr = decodeURIComponent(request.query.inheritedData); // it is already a string for sure
+                        // } catch (err) {
+                        //     bodyStr = request.query.inheritedData;
+                        // }
+                        // delete request.query.inheritedData;
+                        // // false & true case
+                        // if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                        //     bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                        // obj = JSON.parse(bodyStr);
+                        
+                        obj = parseBody(request.query.inheritedData);
+                        delete request.query.inheritedData;
+                        
+                        request.query = merge(request.query, obj);
+                        delete obj;
+                    }            
                     request.get = request.query;
                 }
-                // else, will be matching route params against url context instead once route is identified
+                // else, will be matching route params against url context instead, once route is identified
 
 
                 // cleaning
@@ -2250,7 +2244,6 @@ function Server(options) {
 
             case 'put':
                 // eg.: PUT /user/set/1
-                var obj = {};
                 if ( typeof(request.body) == 'string' ) {
                     // get rid of encoding issues
                     try {
@@ -2312,6 +2305,8 @@ function Server(options) {
                 request.post    = undefined;
                 request.delete  = undefined;
                 request.get     = undefined;
+                
+                delete obj;
                 break;
 
 
@@ -2320,7 +2315,7 @@ function Server(options) {
                     request.delete = request.query;
 
                 }
-                // else, matching route params against url context instead once route is identified
+                // else, matching route params against url context instead once, route is identified
 
                 request.post    = undefined;
                 request.put     = undefined;
@@ -2377,8 +2372,7 @@ function Server(options) {
         if ( typeof(conf) != 'undefined') {//for cacheless mode
             self.conf = conf;
         }
-
-        //var pathname    = url.parse(req.url, true).pathname;
+        
         var pathname    = req.url;
         var bundle      = self.appName; // by default
 
@@ -2434,19 +2428,19 @@ function Server(options) {
             , callback  = options.callback;
 
         //Reloading assets & files.
-        if (!cacheless) { // all but dev & debug
+        // if (!cacheless) { // all but dev & debug
             callback(err, bundle, pathname, options.config, req, res, next)
-        } else {
-            // config.refresh(bundle, function(err, routing) {
-            //     if (err) {
-            //         throwError(res, 500, 'Internal server error: \n' + (err.stack||err), next)
-            //     } else {
-                    //refreshing routing at the same time.
-            //        self.routing = routing;
-                    callback(err, bundle, pathname, options.config, req, res, next)
-            //    }
-            // })
-        }
+        // } else {
+        //     config.refresh(bundle, function(err, routing) {
+        //         if (err) {
+        //             throwError(res, 500, 'Internal server error: \n' + (err.stack||err), next)
+        //         } else {
+        //             refreshing routing at the same time.
+        //            self.routing = routing;
+        //             callback(err, bundle, pathname, options.config, req, res, next)
+        //        }
+        //     })
+        // }
     }
     
     // Express middleware portability when using another engine instead of expressjs
@@ -2484,7 +2478,6 @@ function Server(options) {
                     handleStatics(nextExpressMiddleware._staticProps, nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next);
                 }
                 
-                //handle(nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next, nextExpressMiddleware._bundle, nextExpressMiddleware._pathname, nextExpressMiddleware._config)
             } else {
                 nextExpressMiddleware.call(this, err, true)
             }                        
@@ -2548,7 +2541,6 @@ function Server(options) {
 
         //matched = routingUtils.getRouteByUrl(req.url, bundle, (req.method||req[':method']), req);
         
-        /***/
         req = checkPreflightRequest(req);
         var params      = {}
             , _routing  = {}
@@ -2588,9 +2580,7 @@ function Server(options) {
                 method = routing[name].method;
                 if ( /\,/.test( method ) && reMethod.test(method) ) {
                     method = req.method
-                }       
-                       
-                //if (method != req.method) continue;
+                }      
                 
                 //Preparing params to relay to the router.
                 params = {
@@ -2668,61 +2658,31 @@ function Server(options) {
                             break;
                         }
                     }
-                    
-                    //break;
                 }
             }
-        /***/
             
             
 
         if (matched) {
-            
-            if ( cacheless ) {
-                // config.refreshModels(params.bundle, self.env, function onModelRefreshed(err){
-                //     if (err) {
-                //         throwError(res, 500, err.msg||err.stack , next)
-                //     } else {
-                        
-                        if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
-                            nextExpressMiddleware._index        = 0;
-                            nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
-                            nextExpressMiddleware._request      = req;
-                            nextExpressMiddleware._response     = res;
-                            nextExpressMiddleware._next         = next;
-                            nextExpressMiddleware._nextAction   = 'route'
-                            
-                            nextExpressMiddleware()
-                        } else {
-                            router._server = self.instance;
-                            router.route(req, res, next, req.routing)
-                        }
-                        
-                //     }
-                // })
-            } else {                                
+            if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
+                nextExpressMiddleware._index        = 0;
+                nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
+                nextExpressMiddleware._request      = req;
+                nextExpressMiddleware._response     = res;
+                nextExpressMiddleware._next         = next;
+                nextExpressMiddleware._nextAction   = 'route'
                 
-                if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
-                    nextExpressMiddleware._index        = 0;
-                    nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
-                    nextExpressMiddleware._request      = req;
-                    nextExpressMiddleware._response     = res;
-                    nextExpressMiddleware._next         = next;
-                    nextExpressMiddleware._nextAction   = 'route'
-                    
-                    nextExpressMiddleware()
-                } else {
-                    router._server = self.instance;
-                    router.route(req, res, next, req.routing)
-                }
-            }
+                nextExpressMiddleware()
+            } else {
+                router._server = self.instance;
+                router.route(req, res, next, req.routing)
+            }            
         } else {
             throwError(res, 404, 'Page not found: \n' + pathname, next)
         }
     }
 
     var throwError = function(res, code, msg, next) {
-        
         
         var withViews       = local.hasViews[self.appName] || hasViews(self.appName);
         var isUsingTemplate = self.conf[self.appName][self.env].template;
@@ -2748,8 +2708,7 @@ function Server(options) {
             // updated filter on controller.js : 2020/09/25     
             //if (isXMLRequest || !withViews || !isUsingTemplate ) {
             if (isXMLRequest || !withViews || !isUsingTemplate || withViews && !isUsingTemplate ) {
-                // allowing this.throwError(err)
-                
+                // allowing this.throwError(err)                
                 if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
                     msg     = code.error;
                     code    = code.status;
@@ -2809,8 +2768,6 @@ function Server(options) {
                 } else {
                     res.writeHead(code, { 'content-type': 'text/html; charset='+ bundleConf.encoding } );
                 }
-                    
-                    
                     
                 header = completeHeaders(local.request, res, header);
                 if ( /http\/2/.test(protocol) ) {    

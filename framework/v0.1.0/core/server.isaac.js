@@ -1,9 +1,8 @@
+//"use strict";
 /**
  * Isaac Server Integration
  * 
  */
-
-
 const fs                    = require('fs');
 const {EventEmitter}        = require('events');
 const Eio                   = require('engine.io');
@@ -295,9 +294,7 @@ function ServerEngineClass(options) {
                       
                                 
                 cb(request, response);
-            }
-            
-            
+            }            
         });  
         
     }

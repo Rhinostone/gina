@@ -1,3 +1,4 @@
+//"use strict";
 /*
  * This file is part of the gina package.
  * Copyright (c) 2017 Rhinostone <gina@rhinostone.com>
@@ -17,7 +18,11 @@ var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
 var e               = new EventEmitter();
 
-var gna         = {core:{}};
+// by default
+var gna         = {
+    core:{},
+    os:{}
+};
 var Config      = require('./config');
 var config      = null;
 //var helpers     = require('./../helpers');
@@ -190,7 +195,7 @@ var env = projects[projectName]['dev_env']
     , isDev = (projects[projectName]['dev_env'] === projects[projectName]['def_env']) ? true: false;
 
 gna.env = process.env.NODE_ENV = env;
-gna.env.isWin32 = process.env.isWin32 = isWin32;
+gna.os.isWin32 = process.env.isWin32 = isWin32;
 
 //Cahceless is also defined in the main config : Config::isCacheless().
 process.env.IS_CACHELESS = isDev;

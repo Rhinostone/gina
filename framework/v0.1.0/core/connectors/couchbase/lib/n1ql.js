@@ -1,4 +1,4 @@
-//var utils       = require('gina').utils;
+"use strict";
 /**
  * @class N1QLEntity
  *

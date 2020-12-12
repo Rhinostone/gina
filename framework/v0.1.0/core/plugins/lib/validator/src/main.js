@@ -649,7 +649,8 @@ function ValidatorPlugin(rules, data, formId) {
         
         if (xhr) {
             // catching ready state cb
-            xhr.onreadystatechange = function (event) {
+            //handleXhrResponse(xhr, $target, id, $form, hFormIsRequired);
+            xhr.onreadystatechange = function (event) {   
                 
                 if (xhr.readyState == 2) { // responseType interception
                     isAttachment    = ( /^attachment\;/.test( xhr.getResponseHeader("Content-Disposition") ) ) ? true : false; 
@@ -1205,6 +1206,382 @@ function ValidatorPlugin(rules, data, formId) {
             $form.sent = true;
         }
     }
+    
+    // var handleXhrResponse = function(xhr, $target, id, $form, hFormIsRequired) {        
+        
+    //     var isAttachment = null
+    //         , result = null
+    //         , XHRData = null
+    //         , XHRView = null
+    //     ;
+    //     if (xhr.readyState == 2) { // responseType interception
+    //         isAttachment    = ( /^attachment\;/.test( xhr.getResponseHeader("Content-Disposition") ) ) ? true : false; 
+    //         // force blob response type
+    //         if ( !xhr.responseType && isAttachment ) {
+    //             xhr.responseType = 'blob';
+    //         }
+    //     }
+
+    //     if (xhr.readyState == 4) {
+    //         var blob            = null;
+    //         var contentType     = xhr.getResponseHeader("Content-Type");     
+                
+    //         // 200, 201, 201' etc ...
+    //         if( /^2/.test(xhr.status) ) {
+
+    //             try {
+                    
+                    
+    //                 // handling blob xhr download
+    //                 if ( /blob/.test(xhr.responseType) || isAttachment ) {
+    //                     if ( typeof(contentType) == 'undefined' || contentType == null) {
+    //                         contentType = 'application/octet-stream';
+    //                     }
+                        
+    //                     blob = new Blob([this.response], { type: contentType });
+                        
+    //                     //Create a link element, hide it, direct it towards the blob, and then 'click' it programatically
+    //                     var a = document.createElement('a');
+    //                     a.style = "display: none";
+    //                     document.body.appendChild(a);
+    //                     //Create a DOMString representing the blob and point the link element towards it
+    //                     var url = window.URL.createObjectURL(blob);
+    //                     a.href = url;
+    //                     var contentDisposition = xhr.getResponseHeader("Content-Disposition");
+    //                     a.download = contentDisposition.match('\=(.*)')[0].substr(1);
+    //                     //programatically click the link to trigger the download
+    //                     a.click();
+    //                     //release the reference to the file by revoking the Object URL
+    //                     window.URL.revokeObjectURL(url);
+                        
+    //                     result = {
+    //                         status : xhr.status,
+    //                         statusText: xhr.statusText,
+    //                         responseType: blob.type,
+    //                         type : blob.type,
+    //                         size : blob.size 
+    //                     }
+                        
+    //                 } else { // normal case
+    //                     result = xhr.responseText;                                
+    //                 }
+                    
+
+                    
+    //                 if ( /\/json/.test( contentType ) ) {
+    //                     result = JSON.parse(xhr.responseText);
+                        
+    //                     if ( typeof(result.status) == 'undefined' )
+    //                         result.status = xhr.status;
+    //                 }
+                    
+    //                 if ( /\/html/.test( contentType ) ) {
+                        
+    //                     result = {
+    //                         contentType : contentType,
+    //                         content     : xhr.responseText
+    //                     };
+                        
+    //                     if ( typeof(result.status) == 'undefined' )
+    //                         result.status = xhr.status;
+                            
+    //                     // if hasPopinHandler & popinIsBinded
+    //                     if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler ) {
+                            
+    //                         // select popin by id
+    //                         var $popin = gina.popin.getActivePopin();
+                            
+    //                         if ($popin) {
+                                                
+    //                             XHRData = {};
+    //                             // update toolbar
+                                    
+    //                             try {
+    //                                 XHRData = new DOMParser().parseFromString(result.content, 'text/html').getElementById('gina-without-layout-xhr-data');
+    //                                 XHRData = JSON.parse(decodeURIComponent(XHRData.value));
+                                    
+    //                                 XHRView = new DOMParser().parseFromString(result.content, 'text/html').getElementById('gina-without-layout-xhr-view');      
+    //                                 XHRView = JSON.parse(decodeURIComponent(XHRView.value));
+                                    
+    //                                 // update data tab                                                
+    //                                 if ( gina && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
+    //                                     window.ginaToolbar.update("data-xhr", XHRData);
+    //                                 }
+                                    
+    //                                 // update view tab
+                                    
+    //                                 if ( gina && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
+    //                                     window.ginaToolbar.update("view-xhr", XHRView);
+    //                                 }   
+
+    //                             } catch (err) {
+    //                                 throw err
+    //                             }
+                                
+                                
+    //                             $popin.loadContent(result.content);
+                                                                        
+    //                             result = XHRData;
+    //                             triggerEvent(gina, $target, 'success.' + id, result);
+                                
+    //                             return;
+    //                         }
+                            
+                            
+    //                     }
+    //                 }
+
+    //                 $form.eventData.success = result;
+
+    //                 XHRData = result;
+    //                 // update toolbar
+    //                 if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+    //                     try {
+    //                         // don't refresh for html datas
+    //                         if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+    //                             window.ginaToolbar.update("data-xhr", XHRData);
+    //                         }
+
+    //                     } catch (err) {
+    //                         throw err
+    //                     }
+    //                 }
+
+    //                 // intercept upload
+    //                 if ( /^gina\-upload/i.test(id) )
+    //                     onUpload(gina, $target, 'success', id, result);
+                        
+    //                 triggerEvent(gina, $target, 'success.' + id, result);                            
+                        
+    //                 if (hFormIsRequired)
+    //                     triggerEvent(gina, $target, 'success.' + id + '.hform', result);
+                    
+    //             } catch (err) {
+
+    //                 result = {
+    //                     status:  422,
+    //                     error : err.message,
+    //                     stack : err.stack
+
+    //                 };
+
+    //                 $form.eventData.error = result;
+                    
+
+    //                 XHRData = result;                            
+    //                 // update toolbar
+    //                 if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+    //                     try {
+
+    //                         if ( typeof(XHRData) != 'undefined' ) {
+    //                             window.ginaToolbar.update("data-xhr", XHRData);
+    //                         }
+
+    //                     } catch (err) {
+    //                         throw err
+    //                     }
+    //                 }
+                    
+    //                 // intercept upload
+    //                 if ( /^gina\-upload/i.test(id) )
+    //                     onUpload(gina, $target, 'error', id, result);
+                        
+    //                 triggerEvent(gina, $target, 'error.' + id, result);
+                    
+    //                 if (hFormIsRequired)
+    //                     triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+    //             }
+                
+    //             // handle redirect
+    //             if ( typeof(result) != 'undefined' && typeof(result.location) != 'undefined' ) {                        
+    //                 window.location.hash = ''; //removing hashtag 
+                        
+    //                 // if ( window.location.host == gina.config.hostname && /^(http|https)\:\/\//.test(result.location) ) { // same origin
+    //                 //     result.location = result.location.replace( new RegExp(gina.config.hostname), '' );
+    //                 // } else { // external - need to remove `X-Requested-With` from `options.headers`
+    //                     result.location = (!/^http/.test(result.location) && !/^\//.test(result.location) ) ? location.protocol +'//' + result.location : result.location;
+    //                 //}                        
+                    
+    //                 window.location.href = result.location;
+    //                 return;                        
+    //             }
+
+    //         } else if ( xhr.status != 0) {
+                
+    //             result = { 'status': xhr.status, 'message': '' };
+    //             // handling blob xhr error
+    //             if ( /blob/.test(xhr.responseType) ) {
+                                                
+    //                 blob = new Blob([this.response], { type: 'text/plain' });
+                    
+    //                 var reader = new FileReader(), blobError = '';
+                                                
+                    
+    //                 // This fires after the blob has been read/loaded.
+    //                 reader.addEventListener('loadend', (e) => {
+                        
+    //                     if ( /string/i.test(typeof(e.srcElement.result)) ) {
+    //                         blobError += e.srcElement.result;
+    //                         // try {
+    //                         //     result = merge( result, JSON.parse(blobError) )
+    //                         // } catch (err) {
+    //                         //     result = merge(result, err)
+    //                         // }
+
+    //                     } else if ( typeof(e.srcElement.result) == 'object' ) {
+    //                         result = merge(result, e.srcElement.result)
+    //                     } else {
+    //                         result.message += e.srcElement.result
+    //                     }
+                        
+    //                     // once ready
+    //                     if ( /2/.test(reader.readyState) ) {
+                            
+    //                         if ( /^(\{|\[)/.test( blobError ) ) {
+    //                             try {
+    //                                 result = merge( result, JSON.parse(blobError) )
+    //                             } catch(err) {
+    //                                 result = merge(result, err)
+    //                             }                                        
+    //                         }
+                            
+    //                         if (!result.message)
+    //                             delete result.message;
+                            
+    //                         $form.eventData.error = result;
+
+    //                         // forward appplication errors to forms.errors when available
+    //                         if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
+    //                             var formsErrors = {}, errCount = 0;
+    //                             for (var f in result.error.fields) {
+    //                                 ++errCount;
+    //                                 formsErrors[f] = { isApplicationValidationError: result.error.fields[f] };
+    //                             }
+
+    //                             if (errCount > 0) {
+    //                                 handleErrorsDisplay($form.target, formsErrors);
+    //                             }
+    //                         }
+
+    //                         // update toolbar
+    //                         XHRData = result;
+    //                         if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+    //                             try {
+    //                                 // update toolbar
+    //                                 window.ginaToolbar.update('data-xhr', XHRData );
+
+    //                             } catch (err) {
+    //                                 throw err
+    //                             }
+    //                         }
+                                                                                
+    //                         // intercept upload
+    //                         if ( /^gina\-upload/i.test(id) )
+    //                             onUpload(gina, $target, 'error', id, result);
+                                
+    //                         triggerEvent(gina, $target, 'error.' + id, result);                                    
+    //                         if (hFormIsRequired)
+    //                             triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                                
+    //                         return;
+    //                     }
+                        
+                            
+    //                 });
+
+    //                 // Start reading the blob as text.
+    //                 reader.readAsText(blob);
+                    
+    //             } else { // normal case
+                    
+    //                 if ( /^(\{|\[)/.test( xhr.responseText ) ) {
+
+    //                     try {
+    //                         result = merge( result, JSON.parse(xhr.responseText) )
+    //                     } catch (err) {
+    //                         result = merge(result, err)
+    //                     }
+
+    //                 } else if ( typeof(xhr.responseText) == 'object' ) {
+    //                     result = merge(result, xhr.responseText)
+    //                 } else {
+    //                     result.message = xhr.responseText
+    //                 }
+
+    //                 $form.eventData.error = result;
+
+    //                 // forward appplication errors to forms.errors when available
+    //                 if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
+    //                     var formsErrors = {}, errCount = 0;
+    //                     for (var f in result.error.fields) {
+    //                         ++errCount;
+    //                         formsErrors[f] = { isApplicationValidationError: result.error.fields[f] };
+    //                     }
+
+    //                     if (errCount > 0) {
+    //                         handleErrorsDisplay($form.target, formsErrors);
+    //                     }
+    //                 }
+
+    //                 // update toolbar
+    //                 XHRData = result;
+    //                 if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+    //                     try {
+    //                         // update toolbar
+    //                         window.ginaToolbar.update('data-xhr', XHRData );
+
+    //                     } catch (err) {
+    //                         throw err
+    //                     }
+    //                 }
+                                                
+
+    //                 // intercept upload
+    //                 if ( /^gina\-upload/i.test(id) )
+    //                     onUpload(gina, $target, 'error', id, result);
+                        
+    //                 triggerEvent(gina, $target, 'error.' + id, result);                            
+    //                 if (hFormIsRequired)
+    //                     triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                        
+                    
+                                                    
+    //             }
+
+                    
+    //         } /**else if ( xhr.readyState == 4 && xhr.status == 0 ) { // unknown error
+    //             // Consider also the request timeout
+    //             // Modern browser return readyState=4 and status=0 if too much time passes before the server response.
+    //             result = { 'status': 408, 'message': 'XMLHttpRequest Exception: unkown error' };
+    //             XHRData = result;
+    //             // update toolbar
+    //             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+    //                 try {
+    //                     // don't refresh for html datas
+    //                     if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+    //                         window.ginaToolbar.update("data-xhr", XHRData);
+    //                     }
+
+    //                 } catch (err) {
+    //                     throw err
+    //                 }
+    //             }
+                
+    //             // intercept upload
+    //             if ( /^gina\-upload/i.test(id) ) {
+    //                 result.message = 'XMLHttpRequest Exception: trying to render an unknwon file.'
+    //                 onUpload(gina, $target, 'error', id, result);
+    //             }
+    //             triggerEvent(gina, $target, 'error.' + id, result);
+                    
+    //             if (hFormIsRequired)
+    //                 triggerEvent(gina, $target, 'error.' + id + '.hform', result);
+                    
+    //             return;
+    //         }*/
+    //     } 
+            
+    // };
     
     var onUpload = function(gina, $target, status, id, data) {
                 
@@ -3078,7 +3455,7 @@ function ValidatorPlugin(rules, data, formId) {
                 var _id = event.target.getAttribute('id');
 
                 if ( result['isValid']() ) { // send if valid
-                    // Experimental
+                    // Experimental - inheritedData
                     // Inhertitance from previously posted form: merging datas with current form context
                     // TODO - Get the inhereted data from LMDB Database using the form CSRF
                     var inheritedData = instance.$forms[_id].target.getAttribute('data-gina-form-inherits-data') || null;
@@ -3927,6 +4304,7 @@ function ValidatorPlugin(rules, data, formId) {
         instance.resetFields            = resetFields;
         instance.handleErrorsDisplay    = handleErrorsDisplay;
         instance.send                   = send;
+        //instance.handleXhrResponse      = handleXhrResponse;
     }
 
     if (isGFFCtx) {

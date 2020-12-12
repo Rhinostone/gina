@@ -1,14 +1,19 @@
+//"use strict";
 // Imports.
 var fs              = require('fs');
 var util            = require('util');
 //var promisify       = require('util').promisify;
+var couchbase       = require('couchbase');
 
 var lib             = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var inherits        = lib.inherits;
 var merge           = lib.merge;
 var console         = lib.logger;
 
-
+//var N1qlQuery           = couchbase.N1qlQuery || null;
+// var N1qlStringQuery     = couchbase.N1qlStringQuery || null;
+// var ViewQuery           = couchbase.ViewQuery || null;
+// var uuid                = require('uuid');
 
 /**
  * Couchbase Class
@@ -177,6 +182,7 @@ function Couchbase(conn, infos) {
                 
                     
                 entities[entityName].prototype[name] = function() {
+                    var self = this;
                     var key     = null
                         , index = null
                         , i     = null
@@ -331,7 +337,8 @@ function Couchbase(conn, infos) {
                     // trick to set event on the fly
                     var trigger = 'N1QL:'+entityName.toLowerCase()+ '#'+ name;
 
-                    var self = this;
+                    //var self = this;
+                    
 
                     if (GINA_ENV_IS_DEV) {
                         var statement = (sdkVersion <= 2) ? query.options.statement : query;
@@ -422,7 +429,7 @@ function Couchbase(conn, infos) {
                                 }                                
                             }                            
                         }
-                    };
+                    }; // EO onQueryCallback
                     
                     self._isRegisteredFromProto = false;
                     var register = function (trigger, queryParams, onQueryCallback, cb) {                        
