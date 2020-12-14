@@ -1457,7 +1457,7 @@ function SuperController(options) {
                 }
                 
                 // backing up oldParams
-                var oldParams = local.req[req.method.toLowerCase()];
+                var oldParams = local.req[originalMethod.toLowerCase()];
                 var requestParams = req[req.method.toLowerCase()] || {};
                 // merging new & olds params
                 requestParams = merge(requestParams, oldParams);
