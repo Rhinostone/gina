@@ -3283,7 +3283,7 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( /checkbox/i.test($el.type) ) {
                             return updateCheckBox($el);
                         } else if ( /radio/i.test($el.type) ) {
-                            return updateRadio($el);
+                            return updateRadio($el, false, true);
                         }
                     }                    
                 }                        
