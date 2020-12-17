@@ -4858,6 +4858,7 @@ function Collection(content, options) {
      * .notIn(filter) // AND syntax
      * .notIn(filter1, filter2, filter3) // OR syntax
      * .notIn(filter, 'id') where `id` is the uuid used for the DIFF - `_uuid
+     * .noIn(collectionObj, 'id')
      * 
      * By default, Collection use its own internal `_uuid` to search and compare.
      * This mode is called `uuidSearchModeEnabled`, and it is by default set to `true`.
@@ -11158,7 +11159,7 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( /checkbox/i.test($el.type) ) {
                             return updateCheckBox($el);
                         } else if ( /radio/i.test($el.type) ) {
-                            return updateRadio($el);
+                            return updateRadio($el, false, true);
                         }
                     }                    
                 }                        
