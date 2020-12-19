@@ -960,11 +960,12 @@ function Config(opt) {
                     bundle: bundle
                 }
             }
-
+            
+            
             for (var rule in routing) {
                 
                 if (rule == 'webroot@'+ bundle) continue;
-                
+                                
                 localWroot  = wroot; // by default   
                       
                 if ( typeof(routing[rule].bundle) != 'undefined' && routing[rule].bundle != bundle ) {
@@ -1021,16 +1022,16 @@ function Config(opt) {
                 }                   
                                                 
                 // link route & template if hasViews - inly for GET methods
-                if ( hasViews && /get/i.test(routing[rule].method) && typeof(files['templates'][rule]) == 'undefined' ) {
-                    files['templates'][rule] = {}
+                if ( hasViews && /get/i.test(routing[rule].method) && typeof(files['templates'][rule.toLowerCase()]) == 'undefined' ) {
+                    files['templates'][rule.toLowerCase()] = {}
                 }
 
-                routing[rule +'@'+ bundle] = routing[rule];
+                routing[rule.toLowerCase() +'@'+ bundle] = routing[rule];
                 delete routing[rule];
                 
                 // default file name
-                file        = rule;
-                rule        = rule +'@'+ bundle;                
+                file        = rule.toLowerCase();
+                rule        = rule.toLowerCase() +'@'+ bundle;                
                   
 
                 routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse lookup
