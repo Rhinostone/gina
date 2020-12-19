@@ -127,8 +127,10 @@ function SwigFilters(conf) {
         config = {};
         if (/\@/.test(route) && typeof(base) == 'undefined') {
             var r = route.split(/\@/);
-            route = r[0];
+            route = r[0].toLowerCase();
             base = config.bundle = r[1];
+        } else {
+            route = route.toLowerCase();
         }
 
         // setting default config

@@ -261,10 +261,10 @@ function Server(options) {
                     tmp = tmpContent;
                     //Adding important properties; also done in core/config.
                     for (var rule in tmp){
-                        tmp[rule +'@'+ appName] = tmp[rule];
+                        tmp[rule.toLowerCase() +'@'+ appName] = tmp[rule];
                         delete tmp[rule];
-                        file = ruleShort = rule;
-                        rule = rule +'@'+ appName;
+                        file = ruleShort = rule.toLowerCase();
+                        rule = rule.toLowerCase() +'@'+ appName;
 
 
                         tmp[rule].bundle        = (tmp[rule].bundle) ? tmp[rule].bundle : apps[i]; // for reverse search

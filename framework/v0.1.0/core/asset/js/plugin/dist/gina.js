@@ -5993,6 +5993,7 @@ function Routing() {
         ;
         
         if ( !/\@/.test(rule) && typeof(bundle) != 'undefined' && bundle != null) {
+            rule = rule.toLowerCase()
             rule += '@' + bundle
         }
 
@@ -6013,7 +6014,7 @@ function Routing() {
             // getting scheme
             //scheme = ( /\:\/\//.test(rule) ) ? rule.split(/\:\/\//)[0] : config.bundlesConfiguration.conf[bundle][env].server.scheme;
 
-            rule = arr[0] +'@'+ bundle;
+            rule = arr[0].toLowerCase() +'@'+ bundle;
         }
         
         
