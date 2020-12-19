@@ -322,8 +322,8 @@ function SuperController(options) {
             try {
                 userLocales = locales.findOne({ lang: userLangCode }).content
             } catch (err) {
-                console.warn('language code `'+ userLangCode +'` not handled to setup locales: replacing by `en`');
-                userLocales = locales.findOne({ lang: 'en' }).content // by default
+                console.warn('language code `'+ userLangCode +'` not handled to setup locales: replacing by default: `'+ local.options.conf.content.settings.region.shortCode +'`');
+                userLocales = locales.findOne({ lang: local.options.conf.content.settings.region.shortCode }).content // by default
             }
 
             // user locales list
@@ -2691,8 +2691,8 @@ function SuperController(options) {
             try {
                 userLocales = locales.findOne({ lang: shortCountryCode }).content
             } catch (err) {
-                console.warn('language code `'+ shortCountryCode +'` not handled to setup locales: replacing by `en`');
-                userLocales = locales.findOne({ lang: 'en' }).content // by default
+                console.warn('language code `'+ shortCountryCode +'` not handled to setup locales: replacing by `'+ local.options.conf.content.settings.region.shortCode +'`');
+                userLocales = locales.findOne({ lang: local.options.conf.content.settings.region.shortCode }).content // by default
             }
         }
 
@@ -2712,12 +2712,13 @@ function SuperController(options) {
             } else if ( typeof(code) != 'undefined' ) (
                 console.warn('`'+ code +'` not supported : sticking with `short` code')
             )
-
+            
+            
             for ( var i = 0, len = userLocales.length; i< len; ++i ) {
 
                 if (userLocales[i][cde]) {
 
-                    name = userLocales[i].full || userLocales[i].officialName.short;
+                    name = userLocales[i].officialName.short || userLocales[i].full;
 
                     if ( name )
                         list[ userLocales[i][cde] ] = name;

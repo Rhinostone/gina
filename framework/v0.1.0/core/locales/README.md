@@ -1,5 +1,6 @@
 # Country Codes
-Ref.: https://github.com/datasets/country-codes
+Ref.: https://datahub.io/core/country-codes
+https://github.com/datasets/country-codes
 
 Comprehensive country code information, including ISO 3166 codes, ITU dialing
 codes, ISO 4217 currency codes, and many others. Provided as a [Simple Data
@@ -33,14 +34,48 @@ EDGAR codes are from [sec.gov](https://www.sec.gov/edgar/searchedgar/edgarstatec
 
 ## Building `dist` from resources
 
+### countries 
+https://github.com/stefangabos/world_countries/
+
 ### Region
-1) Download `country-codes.csv` from the repository
+1) Download `country-codes.csv` from the [repository](https://datahub.io/core/country-codes)
 2) Open it with `Numbers` or `Excel`, then export it as `resources/region.csv` using `;` separator
 3) Open a terminal to the current location and hit: 
 ``` tty
 node src/make --target=region --region=en
 ```
 A `dist/region/en.json` file will be created.
+
+__NB.: To keep the file updated__
+```tty
+ npm install data.js
+```
+```javascript
+const {Dataset} = require('data.js')
+
+const path = 'https://datahub.io/core/country-codes/datapackage.json'
+
+// We're using self-invoking function here as we want to use async-await syntax:
+;(async () => {
+  const dataset = await Dataset.load(path)
+  // get list of all resources:
+  for (const id in dataset.resources) {
+    console.log(dataset.resources[id]._descriptor.name)
+  }
+  // get all tabular data(if exists any)
+  for (const id in dataset.resources) {
+    if (dataset.resources[id]._descriptor.format === "csv") {
+      const file = dataset.resources[id]
+      // Get a raw stream
+      const stream = await file.stream()
+      // entire file as a buffer (be careful with large files!)
+      const buffer = await file.buffer
+      // print data
+      stream.pipe(process.stdout)
+    }
+  }
+})()
+```
 
 ### Currency
 1) Download [`codes-all.csv`](https://raw.githubusercontent.com/datasets/currency-codes/master/data/codes-all.csv)
