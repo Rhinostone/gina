@@ -15,8 +15,7 @@ function Make() {
     var self = {}, rec = {};
     
     var setup = function () {
-
-
+        
         var opt         = {}
             , filename  = null
             , targets   = [ 'currency', 'region' ]
@@ -74,7 +73,10 @@ function Make() {
         };
 
         if ( opt.region != 'en' ) {
-            rec.mapping[ 'official_name_' + opt.region ] = "officialName.short"
+            rec.mapping[ 'official_name_' + opt.region ] = JSON.parse(JSON.stringify(rec.mapping["official_name_en"]));
+            // remove default
+            delete rec.mapping["official_name_en"];
+            console.debug('region set to ', opt.region);
         }
 
         cleanMapping();
@@ -100,9 +102,10 @@ function Make() {
     }
 
     var cleanMapping = function() {
-        var newMapping = {};
-        for (var map in rec.mapping) {
-            newMapping[map.replace(/(^[\s]|((?![_-\s+a-zA-Z0-9]).)*)/g, '')] = rec.mapping[map]
+        var newMapping = {}, key = null;
+        for (let map in rec.mapping) {
+            key = map.replace(/(^[\s]|((?![_-\s+a-zA-Z0-9]).)*)/g, '');
+            newMapping[key] = rec.mapping[map]
         }
         rec.mapping = newMapping;
     }
