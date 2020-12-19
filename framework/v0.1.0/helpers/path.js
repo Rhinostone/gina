@@ -233,7 +233,7 @@ function PathHelper() {
             } catch (err) {
                 return false;
             }
-        } else { // suport for old version of nodejs
+        } else { // support for old version of nodejs
             return fs.existsSync(this.value)
         } 
     }
@@ -243,7 +243,7 @@ function PathHelper() {
             fs.access(this.value, fs.constants.F_OK, (err) => {
                 callback( (err) ? false: true )
             });
-        } else { // suport for old version of nodejs
+        } else { // support for old version of nodejs
             fs.exists(this.value, function(exists) {
                 callback(exists)
             })
@@ -259,7 +259,7 @@ function PathHelper() {
             } catch (err) {
                 return false
             }        
-        } else { // suport for old version of nodejs
+        } else { // support for old version of nodejs
             var canWrite = false
             try {
                 canWrite = (fs.statSync(this.value).mode & (fs.constants.S_IRUSR | fs.constants.S_IRGRP | fs.constants.S_IROTH));
@@ -275,7 +275,7 @@ function PathHelper() {
             fs.access(this.value, fs.constants.F_OK, (err) => {
                 callback( (err) ? false: true )
             });
-        } else { // suport for old version of nodejs
+        } else { // support for old version of nodejs
             fs.stat(this.value, function(err, stats) {
                 var canWrite = false;
                 if (!err && stats.mode & (fs.constants.S_IRUSR | fs.constants.S_IRGRP | fs.constants.S_IROTH)) {

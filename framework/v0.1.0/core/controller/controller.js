@@ -2689,9 +2689,9 @@ function SuperController(options) {
             var locales         = new Collection( getContext('gina').locales );
 
             try {
-                userLocales = locales.findOne({ lang: userLangCode }).content
+                userLocales = locales.findOne({ lang: shortCountryCode }).content
             } catch (err) {
-                console.warn('language code `'+ userLangCode +'` not handled to setup locales: replacing by `en`');
+                console.warn('language code `'+ shortCountryCode +'` not handled to setup locales: replacing by `en`');
                 userLocales = locales.findOne({ lang: 'en' }).content // by default
             }
         }
