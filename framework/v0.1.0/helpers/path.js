@@ -227,7 +227,12 @@ function PathHelper() {
     _.prototype.existsSync = function() {
         
         if ( typeof(fs.accessSync) != 'undefined' ) {
-            return fs.accessSync(this.value, fs.constants.F_OK);
+            try {
+                fs.accessSync(this.value, fs.constants.F_OK);
+                return true;
+            } catch (err) {
+                return false;
+            }
         } else { // suport for old version of nodejs
             return fs.existsSync(this.value)
         } 
@@ -248,7 +253,12 @@ function PathHelper() {
     _.prototype.isWritableSync = function() {
         
         if ( typeof(fs.accessSync) != 'undefined' ) {
-            return fs.accessSync(this.value, fs.constants.W_OK);
+            try {
+                fs.accessSync(this.value, fs.constants.W_OK);
+                return true    
+            } catch (err) {
+                return false
+            }        
         } else { // suport for old version of nodejs
             var canWrite = false
             try {
