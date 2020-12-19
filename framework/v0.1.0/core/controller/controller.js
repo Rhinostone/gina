@@ -2685,7 +2685,7 @@ function SuperController(options) {
         var userLocales = local.options.conf.locales;
 
         if ( typeof(shortCountryCode) != 'undefined' ) {
-
+            shortCountryCode = shortCountryCode.toLowerCase();
             var locales         = new Collection( getContext('gina').locales );
 
             try {
