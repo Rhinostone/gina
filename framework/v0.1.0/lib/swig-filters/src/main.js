@@ -78,6 +78,18 @@ function SwigFilters(conf) {
         return url
     }
     
+    // var getRouteDefinition = function(routing, rule, method) {
+    //     var routeObject = null;
+    //     for (r in routing) {
+    //         if ( r == rule && routing[r].method.toLowerCase() == method.toLowerCase() ) {
+    //             routeObject = routing[r];
+    //             break;
+    //         }
+    //     }
+        
+    //     return routeObject;
+    // }
+    
     /**
      * getUrl filter
      *
@@ -117,7 +129,12 @@ function SwigFilters(conf) {
             , rule              = null
             , url               = NaN
             , urlStr            = null
+            , method            = 'GET'
         ;
+        
+        if (ctx.options.method != 'undefined') {
+            method = ctx.options.method
+        }
             
         // if no route, returns current route
         if ( !route || typeof(route) == 'undefined') {
@@ -189,19 +206,20 @@ function SwigFilters(conf) {
 
         // rules are now unique per bundle : rule@bundle
         rule = route + '@' + config.bundle;
-        
-        
-        if ( typeof(routing[rule]) != 'undefined' ) { //found
-            url = routing[rule].url;
+        //var ruleObj = getRouteDefinition(routing, rule, method);
+        var ruleObj = routing[rule];
+        if ( typeof(ruleObj) != 'undefined' && ruleObj != null ) { //found
+                        
+            url = ruleObj.url;
             
-            if ( typeof(routing[rule].requirements) != 'undefined' ) {
+            if ( typeof(ruleObj.requirements) != 'undefined' ) {
                 var urls    = null
                     , i     = 0
                     , len   = null
                     , p     = null
                 ;
                 
-                for (p in routing[rule].requirements) {
+                for (p in ruleObj.requirements) {
                     
                     if ( /\,/.test(url) ) {
                         urls = url.split(/\,/g);

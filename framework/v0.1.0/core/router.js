@@ -172,14 +172,18 @@ function Router(env) {
         /**
         * EO Passport JS HTTP2 fix
         */
-        
-        var cacheless           = (process.env.IS_CACHELESS == 'false') ? false : true
-            , bundle            = local.bundle = params.bundle
-            , config            = new Config().getInstance()
-            , serverInstance    = self.getServerInstance()
-            , env               = config.env
-            , conf              = config[bundle][env]
-        ;
+       var serverInstance    = self.getServerInstance()
+        try {
+            var cacheless           = (process.env.IS_CACHELESS == 'false') ? false : true
+                , bundle            = local.bundle = params.bundle
+                , config            = new Config().getInstance()
+                , env               = config.env
+                , conf              = config[bundle][env]
+            ;
+        } catch (configErr) {            
+            serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (configErr.stack || configErr.message) );
+        }
+            
         
         local.cacheless     = cacheless;
         local.request       = request;

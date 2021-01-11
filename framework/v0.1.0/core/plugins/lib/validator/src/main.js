@@ -711,6 +711,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                                 if ( typeof(result.status) == 'undefined' )
                                     result.status = xhr.status;
+                                    
                             }
                             
                             if ( /\/html/.test( contentType ) ) {
@@ -724,8 +725,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     result.status = xhr.status;
                                     
                                 // if hasPopinHandler & popinIsBinded
-                                if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler ) {
-                                    
+                                if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler ) {                                    
                                     // select popin by id
                                     var $popin = gina.popin.getActivePopin();
                                     
@@ -764,11 +764,9 @@ function ValidatorPlugin(rules, data, formId) {
                                         
                                         return;
                                     }
-                                    
-                                    
                                 }
                             }
-
+                            
                             $form.eventData.success = result;
 
                             XHRData = result;
@@ -776,7 +774,7 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
                                     // don't refresh for html datas
-                                    if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+                                    if ( typeof(XHRData) != 'undefined' && /\/html|\/json/.test(contentType) ) {
                                         window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
@@ -2701,7 +2699,7 @@ function ValidatorPlugin(rules, data, formId) {
                     if ( typeof($form.rules[ $inputs[f].name ]) == 'undefined') {
                         $form.rules[ $inputs[f].name ] = {}
                     }
-                    // exclude gorups only if not required
+                    // exclude groups only if not required
                     if ( 
                         typeof($form.rules[ $inputs[f].name ].isRequired) == 'undefined'
                         ||  !$form.rules[ $inputs[f].name ].isRequired
@@ -3849,7 +3847,7 @@ function ValidatorPlugin(rules, data, formId) {
             // check each field against rule
             for (var rule in rules[field]) {
                 
-                if ( /^((is)\d+|is$)/.test(rule) ) { // is aliases                   
+                if ( /^((is)\d+|is$)/.test(rule) && typeof(d[field][rule]) == 'undefined' ) { // is aliases                   
                     d[field][rule] = function(){};
                     d[field][rule] = inherits(d[field][rule], d[field][ rule.replace(/\d+/, '') ]);
                     d[field][rule].setAlias = (function(alias) {

@@ -7069,7 +7069,7 @@ function FormValidatorUtil(data, $fields) {
          * */
         self[el]['is'] = function(condition, errorMessage, errorStack) {
             var isValid     = false;
-            var alias       = ( typeof(window) != 'undefined' ) ? window._currentValidatorAlias : 'is';
+            var alias       = ( typeof(window) != 'undefined' && typeof(window._currentValidatorAlias) != 'undefined' ) ? window._currentValidatorAlias : 'is';
             if ( typeof(window) != 'undefined'  && window._currentValidatorAlias)
                 delete window._currentValidatorAlias;
                 
@@ -8588,6 +8588,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                                 if ( typeof(result.status) == 'undefined' )
                                     result.status = xhr.status;
+                                    
                             }
                             
                             if ( /\/html/.test( contentType ) ) {
@@ -8601,8 +8602,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     result.status = xhr.status;
                                     
                                 // if hasPopinHandler & popinIsBinded
-                                if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler ) {
-                                    
+                                if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler ) {                                    
                                     // select popin by id
                                     var $popin = gina.popin.getActivePopin();
                                     
@@ -8641,11 +8641,9 @@ function ValidatorPlugin(rules, data, formId) {
                                         
                                         return;
                                     }
-                                    
-                                    
                                 }
                             }
-
+                            
                             $form.eventData.success = result;
 
                             XHRData = result;
@@ -8653,7 +8651,7 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
                                     // don't refresh for html datas
-                                    if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+                                    if ( typeof(XHRData) != 'undefined' && /\/html|\/json/.test(contentType) ) {
                                         window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
@@ -10578,7 +10576,7 @@ function ValidatorPlugin(rules, data, formId) {
                     if ( typeof($form.rules[ $inputs[f].name ]) == 'undefined') {
                         $form.rules[ $inputs[f].name ] = {}
                     }
-                    // exclude gorups only if not required
+                    // exclude groups only if not required
                     if ( 
                         typeof($form.rules[ $inputs[f].name ].isRequired) == 'undefined'
                         ||  !$form.rules[ $inputs[f].name ].isRequired
@@ -11726,7 +11724,7 @@ function ValidatorPlugin(rules, data, formId) {
             // check each field against rule
             for (var rule in rules[field]) {
                 
-                if ( /^((is)\d+|is$)/.test(rule) ) { // is aliases                   
+                if ( /^((is)\d+|is$)/.test(rule) && typeof(d[field][rule]) == 'undefined' ) { // is aliases                   
                     d[field][rule] = function(){};
                     d[field][rule] = inherits(d[field][rule], d[field][ rule.replace(/\d+/, '') ]);
                     d[field][rule].setAlias = (function(alias) {
@@ -20032,9 +20030,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                     if ( 
                                         isJsonContent && typeof(result.location) != 'undefined' 
                                         ||
-                                        isJsonContent && typeof(result.reload) != 'undefined' 
+                                        isJsonContent && typeof(result.reload) != 'undefined'
+                                        // ||
+                                        // isJsonContent && typeof(result.popin) != 'undefined'
                                     ) {
-                                        if (typeof(result.location) != 'undefined' ) {
+                                        if ( typeof(result.location) != 'undefined' ) {
                                             var _target = '_self'; // by default
                                             if ( typeof(result.target) != 'undefined' ) {
                                                 if ( /^(blank|self|parent|top)$/ ) {
@@ -20046,10 +20046,16 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                             return;
                                         }
                                         
-                                        if (typeof(result.reload) != 'undefined' ) {
+                                        if ( typeof(result.reload) != 'undefined' ) {
                                             document.location.reload();
                                             return;
                                         }
+                                        
+                                        // if ( typeof(result.popin) != 'undefined' ) {
+                                        //     if ( typeof(result.popin.close) != 'undefined' ) {
+                                        //         popinClose($popin.name);
+                                        //     }
+                                        // }
                                     }
                                     
                                     if ( !isJsonContent && $popin.hasForm) {
