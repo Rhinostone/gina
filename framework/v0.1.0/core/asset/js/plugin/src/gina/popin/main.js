@@ -874,9 +874,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                     if ( 
                                         isJsonContent && typeof(result.location) != 'undefined' 
                                         ||
-                                        isJsonContent && typeof(result.reload) != 'undefined' 
+                                        isJsonContent && typeof(result.reload) != 'undefined'
+                                        // ||
+                                        // isJsonContent && typeof(result.popin) != 'undefined'
                                     ) {
-                                        if (typeof(result.location) != 'undefined' ) {
+                                        if ( typeof(result.location) != 'undefined' ) {
                                             var _target = '_self'; // by default
                                             if ( typeof(result.target) != 'undefined' ) {
                                                 if ( /^(blank|self|parent|top)$/ ) {
@@ -888,10 +890,16 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                             return;
                                         }
                                         
-                                        if (typeof(result.reload) != 'undefined' ) {
+                                        if ( typeof(result.reload) != 'undefined' ) {
                                             document.location.reload();
                                             return;
                                         }
+                                        
+                                        // if ( typeof(result.popin) != 'undefined' ) {
+                                        //     if ( typeof(result.popin.close) != 'undefined' ) {
+                                        //         popinClose($popin.name);
+                                        //     }
+                                        // }
                                     }
                                     
                                     if ( !isJsonContent && $popin.hasForm) {
