@@ -2132,7 +2132,7 @@ function Server(options) {
         // to compare with /core/controller/controller.js -> getParams()
         switch( request.method.toLowerCase() ) {
             case 'post':
-                var configuring = false;                
+                var configuring = false, msg = null;                
                 if ( typeof(request.body) == 'string' ) {
                     // get rid of encoding issues
                     try {
@@ -2153,9 +2153,14 @@ function Server(options) {
                             // false & true case
                             if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
                                 bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-
-                            obj = parseBody(bodyStr);
                             
+                            try {
+                                obj = parseBody(bodyStr);
+                            } catch (err) {
+                                // ignore this one
+                                msg = '[ Could properly evaluate POST ] '+ request.url +'\n'+  err.stack;
+                                console.warn(msg);
+                            }
                             try {
                                 if (obj.count() == 0 && bodyStr.length > 1) {
                                     request.post = obj;
@@ -2164,13 +2169,15 @@ function Server(options) {
                                 }
                                 
                             } catch (err) {
-                                throwError(response, 500, err, next)
+                                //throwError(response, 500, err, next)                                
+                                msg = '[ Exception found for POST ] '+ request.url +'\n'+  err.stack;
+                                console.warn(msg);
                             }
                             
                         }
 
                     } catch (err) {
-                        var msg = '[ '+request.url+' ]\nCould not evaluate POST.\n'+ err.stack;
+                        msg = '[ Could properly evaluate POST ] '+ request.url +'\n'+  err.stack;
                         console.warn(msg);
                     }
 
@@ -2186,11 +2193,18 @@ function Server(options) {
 
                     obj = JSON.parse(bodyStr)
                 }
-
-                if ( obj.count() > 0 ) {
-                    // still need this to allow compatibility with express & connect middlewares
-                    request.body = request.post = obj;
+                
+                try {
+                    if ( obj.count() > 0 ) {
+                        // still need this to allow compatibility with express & connect middlewares
+                        request.body = request.post = obj;
+                    }
+                } catch (err) {
+                    msg = '[ Could complete POST ] '+ request.url +'\n'+ err.stack;
+                    console.error(msg);
+                    throwError(response, 500, err, next);                    
                 }
+                    
 
                 // see.: https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#POST
                 //     Responses to this method are not cacheable,

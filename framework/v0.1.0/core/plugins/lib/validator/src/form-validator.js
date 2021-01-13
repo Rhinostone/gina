@@ -8,8 +8,9 @@
  *
  * @param {object} data
  * @param {object} [ $fields ] - isGFFCtx only
+ * @param {object} [ xhrOptions ]
  * */
-function FormValidatorUtil(data, $fields) {
+function FormValidatorUtil(data, $fields, xhrOptions) {
 
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
 
@@ -17,9 +18,11 @@ function FormValidatorUtil(data, $fields) {
         throw new Error('No `Validator` instance found.\nTry:\nvar FormValidator = require("gina/validator"):\nvar formValidator = new FormValidator(...);')
 
     var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
+    var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
     var helpers         = (isGFFCtx) ? {} : require('../../../../../helpers');
     var dateFormat      = (isGFFCtx) ? require('helpers/dateFormat') : helpers.dateFormat;
-
+    
+    
     var local = {
         'errors': {},
         'keys': {
@@ -55,7 +58,8 @@ function FormValidatorUtil(data, $fields) {
         'isStringLength': 'Must have %s characters',
         'isStringMinLength': 'Should be at least %s characters',
         'isStringMaxLength': 'Should not be more than %s characters',
-        'isJsonWebToken': 'Must be a valid JSON Web Token'
+        'isJsonWebToken': 'Must be a valid JSON Web Token',
+        'query': 'Must be a valid response'
     };
 
     if (!data) {
@@ -64,6 +68,213 @@ function FormValidatorUtil(data, $fields) {
         // cloning
         var self  = JSON.parse( JSON.stringify(data) );
         local.data = JSON.parse( JSON.stringify(data) )
+    }
+    
+    
+    /**
+     * query
+     */
+    var query = function(options) {
+        
+        var xhr = null, _this = this;
+        // setting up AJAX
+        if (window.XMLHttpRequest) { // Mozilla, Safari, ...
+            xhr = new XMLHttpRequest();
+        } else if (window.ActiveXObject) { // IE
+            try {
+                xhr = new ActiveXObject("Msxml2.XMLHTTP");
+            } catch (e) {
+                try {
+                    xhr = new ActiveXObject("Microsoft.XMLHTTP");
+                }
+                catch (e) {}
+            }
+        }
+        
+        // forcing to sync mode
+        var queryOptions = { isSynchrone: false, headers: {} };       
+        var queryData = options.data || null, strData = null;
+        // replace placeholders by field values
+        strData = JSON.stringify(queryData);
+        if ( /\$/.test(strData) ) {
+            var variables = strData.match(/\$[-_\[\]a-z 0-9]+/g) || [];
+            var value = null, key = null;            
+            for (let i = 0, len = variables.length; i < len; i++) {
+                key = variables[i].replace(/\$/g, '');
+                //value = $fields[key].value;
+                re = new RegExp("\\"+ variables[i].replace(/\[|\]/g, '\\$&'), "g");
+                value = local.data[key];
+                strData = strData.replace( re, value );
+            }
+            
+        }
+        queryData = strData;            
+        // TODO - support regexp for validIf
+        var validIf = options.validIf || true;
+               
+        queryOptions = merge(queryOptions, options, xhrOptions);
+        delete queryOptions.data;
+        delete queryOptions.validIf;
+        
+        var enctype = queryOptions.headers['Content-Type'];
+        var result      = null
+            , $target   = this.target
+            , id        = $target .getAttribute('id')
+        ;
+               
+        // checking url
+        if (!/^http/.test(queryOptions.url) && /\@/.test(queryOptions.url) ) {
+            try {
+                var route = routing.getRoute(queryOptions.url);
+                queryOptions.url = route.toUrl();
+            } catch (routingError) {
+                throw routingError
+            }
+        }
+        
+        if ( queryOptions.withCredentials ) {
+            if ('withCredentials' in xhr) {
+                // XHR for Chrome/Firefox/Opera/Safari.
+                if (queryOptions.isSynchrone) {
+                    xhr.open(queryOptions.method, queryOptions.url, queryOptions.isSynchrone)
+                } else {
+                    xhr.open(queryOptions.method, queryOptions.url)
+                }
+            } else if ( typeof XDomainRequest != 'undefined' ) {
+                // XDomainRequest for IE.
+                xhr = new XDomainRequest();
+                // if (queryOptions.isSynchrone) {
+                //     xhr.open(queryOptions.method, queryOptions.url, queryOptions.isSynchrone);
+                // } else {
+                    xhr.open(queryOptions.method, queryOptions.url);
+                // }                
+            } else {
+                // CORS not supported.
+                xhr = null;
+                result = 'CORS not supported: the server is missing the header `"Access-Control-Allow-Credentials": true` ';
+                //triggerEvent(gina, $target, 'error.' + id, result);
+                throw new Error(result);
+            }
+            
+            if ( typeof(queryOptions.responseType) != 'undefined' ) {
+                /**
+                 * Note: We expect to remove support for synchronous use of XMLHTTPRequest() during page unloads in Chrome in version 88, 
+                 * scheduled to ship in January 2021.
+                 * The XMLHttpRequest2 spec was recently changed to prohibit sending a synchronous request when XMLHttpRequest.responseType
+                 */
+                xhr.responseType = queryOptions.responseType;
+            } else {
+                xhr.responseType = '';
+            }
+
+            xhr.withCredentials = true;
+        } else {
+            if (queryOptions.isSynchrone) {
+                xhr.open(queryOptions.method, queryOptions.url, queryOptions.isSynchrone)
+            } else {
+                xhr.open(queryOptions.method, queryOptions.url)
+            }
+        }
+        
+        // setting up headers -    all but Content-Type ; it will be set right before .send() is called
+        for (var hearder in queryOptions.headers) {
+            if (hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '')
+                continue;
+
+            xhr.setRequestHeader(hearder, queryOptions.headers[hearder]);
+        }        
+        if (typeof (enctype) != 'undefined' && enctype != null && enctype != '') {
+            xhr.setRequestHeader('Content-Type', enctype);
+        }
+        
+        if (xhr) {
+            
+            xhr.onload = function () {                
+                
+                var onResult = function(result) {
+            
+                    _this.value      = local['data'][_this.name] = _this.value.toLowerCase();
+        
+                    var isValid     = result.isValid || false;
+                    var errors      = self[_this['name']]['errors'] || {};
+                    
+                    var errorFields = ( typeof(result.error) != 'undefined' && typeof(result.error.fields) != 'undefined' ) ? result.error.fields : {};
+                    
+                    if (errorFields.count() > 0) {
+                        if ( !errors['query'] && _this.value == '' ) {
+                            isValid = true;
+                        }
+            
+                        if (!isValid) {
+                            if ( typeof(errorFields[_this.name]) != 'undefined') {
+                                local.errorLabels['query'] = errorFields[_this.name];
+                            }                    
+                            errors['query'] = replace(_this['error'] || local.errorLabels['query'], _this)
+                        }
+                        // if error tagged by a previous validation, remove it when isValid == true 
+                        else if ( isValid && typeof(errors['query']) != 'undefined' ) {
+                            delete errors['query'];
+                        }
+                        
+                        // To handle multiple errors from backend
+                        // for (var f in errorFields.length) {
+                        //     if ( !errors['query'] && _this.value == '' ) {
+                        //         isValid = true;
+                        //     }
+                
+                        //     if (!isValid) {
+                        //         errors['query'] = replace(_this['error'] || local.errorLabels['query'], _this)
+                        //     }
+                        //     // if error tagged by a previous validation, remove it when isValid == true 
+                        //     else if ( isValid && typeof(errors['query']) != 'undefined' ) {
+                        //         delete errors['query'];
+                        //     }
+                        // }
+                    }
+                            
+                    _this.valid = isValid;
+        
+                    if ( errors.count() > 0 )
+                        _this['errors'] = errors;                    
+                    
+                    var id = _this.target.id || _this.target.getAttribute('id');
+                    triggerEvent(gina, _this.target, 'asyncCompleted.' + id);
+                    return self[_this['name']]
+                }
+                
+                try {
+                    result = this.responseText;
+                    var contentType     = this.getResponseHeader("Content-Type");
+                    if ( /\/json/.test( contentType ) ) {
+                        result = JSON.parse(this.responseText);
+                        
+                        if ( typeof(result.status) == 'undefined' )
+                            result.status = this.status;
+                            
+                        //triggerEvent(gina, $target, 'success.' + id, result); 
+                        return onResult(result)
+                    } else {
+                        result = { 'status': xhr.status, 'message': '' };
+                        if ( /^(\{|\[)/.test( xhr.responseText ) ) {
+                            try {
+                                result = merge( result, JSON.parse(xhr.responseText) )
+                            } catch (err) {
+                                result = merge(result, err)
+                            }
+                        }
+                        return onResult(result)
+                    }
+                } catch (err) {
+                    throw err
+                }                    
+            }
+            
+            if (data) {
+                xhr.send( queryData ); // stringyfied
+            }  else {
+                xhr.send()
+            }                                    
+        }        
     }
 
 
@@ -847,6 +1058,8 @@ function FormValidatorUtil(data, $fields) {
             // list field to be purged
             local.excluded.push(this.name);
         }
+        
+        self[el]['query'] = query;
 
     } // EO for (var el in self)
     
@@ -887,7 +1100,7 @@ function FormValidatorUtil(data, $fields) {
                     errors[field] = self[field]['errors'];
             }
         }
-
+        
         return errors
     }
 
