@@ -40,6 +40,7 @@ function ValidatorPlugin(rules, data, formId) {
     var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
     var inherits        = (isGFFCtx) ? require('utils/inherits') : require('../../../../../lib/inherits');
     var FormValidator   = (isGFFCtx) ? require('utils/form-validator') : require('./form-validator');
+    //var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
 
     /** definitions */
     var instance    = { // isGFFCtx only
@@ -560,7 +561,8 @@ function ValidatorPlugin(rules, data, formId) {
 
         return this;
     }
-
+    
+    
 
     /**
      * send
@@ -3808,6 +3810,11 @@ function ValidatorPlugin(rules, data, formId) {
             , hasBeenValidated  = false
             , subLevelRules     = 0
             , rootFieldsCount   = fields.count()
+            , hasParsedAllRules = false         
+            , $asyncField       = null
+            , $asyncFieldId     = null
+            , asyncEvt          = null
+            , asyncCount        = 0
         ;
 
         if (isGFFCtx) {
@@ -3816,7 +3823,7 @@ function ValidatorPlugin(rules, data, formId) {
         }
         //console.log(fields, $fields);
 
-        var d = new FormValidator(fields, $fields), args = null;
+        var d = new FormValidator(fields, $fields, xhrOptions), args = null;
         var fieldErrorsAttributes = {};
         var re = null, flags = null;
         
@@ -3856,7 +3863,6 @@ function ValidatorPlugin(rules, data, formId) {
                 }            
                 // check for rule params
                 try {
-
                     if (Array.isArray(rules[field][rule])) { // has args
                         //convert array to arguments
                         args = JSON.parse(JSON.stringify(rules[field][rule]));
@@ -3868,7 +3874,27 @@ function ValidatorPlugin(rules, data, formId) {
                         }
                         d[field][rule].apply(d[field], args);
                     } else {
+                        if ( /query/.test(rule) ) {
+                            $asyncField     = $fields[field];
+                            $asyncFieldId   = $asyncField.getAttribute('id');
+                            asyncEvt        = 'asyncCompleted.'+ $asyncFieldId;
+                            if ( typeof(gina.events[asyncEvt]) == 'undefined' ) {
+                                ++asyncCount;
+                                addListener(gina, $asyncField, 'asyncCompleted.'+ $asyncFieldId, function(event) {
+                                    event.preventDefault();
+                                    --asyncCount;
+                                    var _asyncEvt = 'asyncCompleted.' + event.target.getAttribute('id');
+                                    // removing listner
+                                    removeListener(gina, event.target, _asyncEvt);
+                                    if ( hasParsedAllRules && asyncCount <= 0) {
+                                        triggerEvent(gina, $form, 'validated.' + id)
+                                    }
+                                });
+                            }                                
+                        }
+                        
                         d[field][rule](rules[field][rule]);
+                        
                     }
 
                     delete fields[field];
@@ -4220,9 +4246,8 @@ function ValidatorPlugin(rules, data, formId) {
             --subLevelRules;
 
             if (i <= 0 && subLevelRules < 0) {
-
+                
                 var errors = d['getErrors']();
-
                 // adding data attribute to handle display refresh
                 for (var field in errors) {
                     for (rule in errors[field]) {
@@ -4260,21 +4285,12 @@ function ValidatorPlugin(rules, data, formId) {
                 } catch (err) {
                     throw err
                 }
-
-                if (!hasBeenValidated) {
-
-                    hasBeenValidated = true;
-
+                hasParsedAllRules = true;
+                if (!hasBeenValidated && asyncCount <= 0) {
                     if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
-
-                        cb({
-                            'isValid'   : d['isValid'],
-                            'errors'    : errors,
-                            'data'      : data
-                        })
-
+                        triggerEvent(gina, $form, 'validated.' + id);
                     } else {
-
+                        hasBeenValidated = true;
                         return {
                             'isValid'   : d['isValid'],
                             'errors'    : errors,
@@ -4284,6 +4300,27 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
         }
+        
+        var evt = 'validated.' + id;
+        if (isGFFCtx && typeof(gina.events[evt]) == 'undefined' ) {
+            addListener(gina, $form, evt, function(event) {
+                event.preventDefault();
+                
+                if (!hasBeenValidated) {
+                    hasBeenValidated    = true;
+                    hasParsedAllRules   = false;
+                    asyncCount          = 0;
+                    cb({
+                        'isValid'   : d['isValid'],
+                        'errors'    : d['getErrors'](),
+                        'data'      : formatData( d['toData']() )
+                    });
+                    removeListener(gina, event.target, 'validated.' + event.target.id);
+                    return 
+                }                    
+            });
+        }
+            
 
         // 0 is the starting level
         if (isGFFCtx)
