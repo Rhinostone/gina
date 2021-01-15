@@ -8663,7 +8663,8 @@ function ValidatorPlugin(rules, data, formId) {
      * @param {object} [ options ] : { isSynchrone: true, withCredentials: true }
      * */
     var send = function(data, options) {
-
+        
+        
         var $target = this.target , id = $target.getAttribute('id');
         var $form   = instance.$forms[id] || this;
         var result  = null;
@@ -10755,6 +10756,7 @@ function ValidatorPlugin(rules, data, formId) {
             , $inputs   = $target.getElementsByTagName('input')
             // select
             , $select   = $target.getElementsByTagName('select')
+            , allFormGroupedElements = {}
             , formElementGroup = {}
             , formElementGroupTmp = null
             , formElementGroupItems = {}
@@ -10786,6 +10788,11 @@ function ValidatorPlugin(rules, data, formId) {
             
             formElementGroupTmp = $inputs[f].getAttribute('data-gina-form-element-group');
             if (formElementGroupTmp) {
+                allFormGroupedElements[elId] = {
+                    id      : elId,
+                    group   : formElementGroupTmp,
+                    target  : $inputs[f]
+                };
                 formElementGroup[ $inputs[f].name ] = new RegExp('^'+formElementGroupTmp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
                 if (withRules) {
                     if ( typeof($form.rules[ $inputs[f].name ]) == 'undefined') {
@@ -10801,19 +10808,41 @@ function ValidatorPlugin(rules, data, formId) {
                     
                 }
             }
-            
+            // handling groups dependencies
             if ( formElementGroup.count() > 0 ) {
+                var formElementGroupName = null, formElementGroupType = null, formElementIsIgnored = null;
                 for ( var g in formElementGroup ) {
                     if ($inputs[f].name == g) continue;
-                    
-                    if ( formElementGroup[g].test($inputs[f].name) ) {
+                    formElementGroupName =  $inputs[f].getAttribute('data-gina-form-element-group') || null;
+                    if ( formElementGroup[g].test($inputs[f].name) /**|| formElementGroup[g].test(formElementGroupName)*/ ) {
                         
-                        $inputs[f].disabled = true;
+                        // checkbox group init
+                        // if ( 
+                        //     formElementGroupName 
+                        //     && /checkbox|radio/i.test($inputs[formElementGroupName].getAttribute('type')) 
+                        // ) {
+                        //     //formElementIsIgnored = ($inputs[formElementGroupName].checked) ? false : true;
+                        //     $inputs[f].disabled = ($inputs[formElementGroupName].checked) ? false : true;
+                        // } else {
+                            //formElementIsIgnored = true;
+                            $inputs[f].disabled = true; // by default
+                        //}
+                        //$inputs[f].setAttribute('data-gina-form-element-is-ignored', formElementIsIgnored);
+                        
+                        // when child elements binded to ID
+                        // if ( 
+                        //     formElementGroupName
+                        //     && formElementGroup[g].test(formElementGroupName) 
+                        // ) {
+                        //     && /checkbox|radio/i.test($inputs[formElementGroupName].getAttribute('type'))
+                        // }
+                        
                         if ( typeof(formElementGroupItems[ g ]) == 'undefined' ) {
                             formElementGroupItems[ g ] = {}
                         }
                         formElementGroupItems[ g ][ $inputs[f].name ] = $inputs[f];
                     }
+                    
                 }
             }
             // file upload
@@ -11167,6 +11196,7 @@ function ValidatorPlugin(rules, data, formId) {
         };
         
         var selectedIndex = null, selectedValue = null;
+        
         for (var s = 0, sLen = $select.length; s < sLen; ++s) {
             elId = $select[s].getAttribute('id');
 
@@ -11175,6 +11205,15 @@ function ValidatorPlugin(rules, data, formId) {
             if (!elId) {
                 elId = 'select.' + uuid.v4();
                 $select[s].setAttribute('id', elId)
+            }
+            
+            formElementGroupTmp = $select[s].getAttribute('data-gina-form-element-group');
+            if (formElementGroupTmp) {
+                allFormGroupedElements[elId] = {
+                    id      : elId,
+                    group   : formElementGroupTmp,
+                    target  : $select[s]
+                };
             }
             
             addListener(gina, $select[s], 'change', function(event) {
@@ -11223,65 +11262,111 @@ function ValidatorPlugin(rules, data, formId) {
 
             }
         }        
-
+        
+        var handleCheckBoxGroupDependencies = function($form, $el, checkBoxGroup) {
+            // // group dependencies handling
+            // if ( checkBoxGroup ) {
+            //     var elGroup = formElementGroupItems[$el.name];
+            //     for ( var item in elGroup ) {  
+            //         if (withRules && typeof($form.rule[item]) == 'undefined' ) { 
+            //             $form.rule[item] = {}
+            //         } 
+            //         if ( /^true$/i.test($el.checked) ) {                 
+            //         //if ( /^true$/.test($el.value) ) {
+            //             elGroup[item].disabled = false;
+            //             if (withRules) {
+            //                 $form.rules[item].exclude = false;
+            //             }
+            //         } else {
+            //             elGroup[item].disabled = true;
+            //             if (withRules) {
+            //                 $form.rules[item].exclude = true;
+            //             }
+            //         }
+            //     }
+            // }
+            var item = $el.name;
+            if (withRules && typeof($form.rules[item]) == 'undefined' ) { 
+                $form.rules[item] = {}
+            } 
+            if ( /^true$/i.test($el.checked) ) {                 
+            //if ( /^true$/.test($el.value) ) {
+                //elGroup[item].disabled = false;
+                if (withRules) {
+                    $form.rules[item].exclude = false;
+                }
+            } else {
+                //elGroup[item].disabled = true;
+                if (withRules) {
+                    $form.rules[item].exclude = true;
+                }
+            }
+        };
         var updateCheckBox = function($el) {
 
             var checked     = $el.checked;
+            var localValue  = $el.getAttribute('value');
+            var isLocalValueBolean = ( /true|false/i.test(localValue) ) ? true : false;
+            
+            var checkBoxGroup = $el.getAttribute('data-gina-form-element-group') || null;
+            
             // set to checked if not checked: false -> true
             if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
                 // prevents ticking behavior
                 setTimeout(function () {
                     $el.checked = false;
+                    if (checkBoxGroup)
+                        return handleCheckBoxGroupDependencies($form, $el, checkBoxGroup)
                 }, 0);
-
-                $el.removeAttribute('checked');
-                $el.value = false;
-                $el.setAttribute('value', 'false');
                 
-                if ( typeof($el.getAttribute('data-value') != 'undefined' ) )
-                    $el.setAttribute('data-value', 'false');
+                $el.removeAttribute('checked');
+                if (isLocalValueBolean) {
+                    $el.value = false;
+                    $el.setAttribute('value', 'false');
+                    
+                    if ( typeof($el.getAttribute('data-value') != 'undefined' ) )
+                        $el.setAttribute('data-value', 'false');
+                }  
                                    
             } else {                
                 
                 // prevents ticking behavior
                 setTimeout(function () {
                     $el.checked = true;
+                    if (checkBoxGroup)
+                        return handleCheckBoxGroupDependencies($form, $el, checkBoxGroup)
                 }, 0);
 
                 $el.setAttribute('checked', 'checked');
                 //boolean exception handling
-                $el.value = true;
-                $el.setAttribute('value', 'true');
-                
-                if ( typeof($el.getAttribute('data-value') != 'undefined' ) )
-                    $el.setAttribute('data-value', 'true');
+                if (isLocalValueBolean) {
+                    $el.value = true;
+                    $el.setAttribute('value', 'true');
                     
+                    if ( typeof($el.getAttribute('data-value') != 'undefined' ) )
+                        $el.setAttribute('data-value', 'true');
+                }   
             }
             
-            // group dependencies handling
-            if ( $el.getAttribute('data-gina-form-element-group') ) {
-                var elGroup = formElementGroupItems[$el.name];
-                for ( var item in elGroup ) {  
-                    if (withRules && typeof($form.rule[item]) == 'undefined' ) { 
-                        $form.rule[item] = {}
-                    } 
-                    if ( /^true$/.test($el.checked) ) {                 
-                    //if ( /^true$/.test($el.value) ) {
-                        elGroup[item].disabled = false;
-                        if (withRules) {
-                            $form.rules[item].exclude = false;
-                        }
-                    } else {
-                        elGroup[item].disabled = true;
-                        if (withRules) {
-                            $form.rules[item].exclude = true;
-                        }
-                    }
-                }
-            }
+            
+                
             
         };
+        
+        var handleGroupDependencies = function($el) {
+            var extendedGroupName = $el.id;
+            // parse grouped elements: allFormGroupedElements
+            for (let id in allFormGroupedElements) {
+                if ( allFormGroupedElements[id].group === extendedGroupName ) {
+                    if ($el.checked) {
+                        allFormGroupedElements[id].target.disabled = false
+                    } else {
+                        allFormGroupedElements[id].target.disabled = true
+                    }                    
+                }
+            }
+        }
 
         var radioGroup = null;
         var updateRadio = function($el, isInit, isTriggedByUser) {
@@ -11297,11 +11382,16 @@ function ValidatorPlugin(rules, data, formId) {
                 if (radioGroup[r].id !== $el.id && checked) {
                     radioGroup[r].checked = false;
                     radioGroup[r].removeAttribute('checked');
+                    handleGroupDependencies(radioGroup[r])
                 }
             }
             
-            if (isInit)
+            
+            if (isInit) {
+                handleGroupDependencies($el);
                 return;
+            }
+                
             
 
             if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
@@ -11310,9 +11400,14 @@ function ValidatorPlugin(rules, data, formId) {
                 setTimeout(function () {
                     if (isTriggedByUser)
                         return;
-                    if (!$el.checked)
+                    //if (!$el.checked)
                         $el.checked = true;
                         $el.setAttribute('checked', 'checked');
+                        // When binding children element to the radio, you must used the radio.id as the element group
+                        // Because the name attribute of the radio can also be used to group multiple radio field
+                        // On master: <input type="radio" id="invoice-type-balance" name="action[addFromExisting]" value="balanceFlow">
+                        // On children: <input type="checkbox" data-gina-form-element-group="invoice-type-balance" value="someValue">
+                        handleGroupDependencies($el)
                 }, 0)
                 
             } else {
@@ -11321,9 +11416,10 @@ function ValidatorPlugin(rules, data, formId) {
                 setTimeout(function () {
                     if (isTriggedByUser)
                         return;
-                    if ($el.checked)
+                    //if ($el.checked)
                         $el.checked = false;
                         $el.removeAttribute('checked');
+                        handleGroupDependencies($el)
                 }, 0)
             }
 
@@ -12026,11 +12122,30 @@ function ValidatorPlugin(rules, data, formId) {
                                         
                     if (
                         $fields[field].tagName.toLowerCase() == 'input' 
-                        && /(checkbox)/.test($fields[field].getAttribute('type')) 
+                        && /(checkbox)/i.test($fields[field].getAttribute('type')) 
                         && !$fields[field].checked 
-                        && typeof(rules[field]) == 'undefined' // just in case of rules inside cases
-                    ) {                        
-                        continue;
+                        //&& typeof(rules[field]) == 'undefined' // just in case of rules inside cases
+                    ) {   
+                        if ( typeof(rules[field]) == 'undefined') {
+                            continue;
+                        }
+                        // let groupId = $fields[field].getAttribute('data-gina-form-element-group');
+                        // let isMemberOfGroup = (groupId) ? true : false;
+                        // // handle required case for groups
+                        // if ( rules[field].isRequired && isMemberOfGroup ) {
+                        //     // need at least one choice
+                        //     let foundOneChecked = false;
+                        //     for ( let _field in $fields) {
+                        //         if ( /checkbox/i.test($fields[_field].type) && $fields[_field].checked ) {
+                        //             foundOneChecked = true;
+                        //             break;
+                        //         }
+                        //     }
+                        //     if (foundOneChecked) {
+                        //         continue;
+                        //     }
+                        // }
+                        
                     }
 
                     
