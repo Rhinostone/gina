@@ -19,6 +19,10 @@
         "path": "{tmpPath}",
         "allowedExtensions": "*",
         "isMultipleAllowed": false
+        // optional sample
+        // ,
+        // "filePrefix": "$designId_",
+        // "subFolder": "/$ownerId_$companyId"
       }
     }
   },
