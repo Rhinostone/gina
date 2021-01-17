@@ -143,23 +143,30 @@
 
                 -->
                 <fieldset>
-                    <label><input type="checkbox" name="test" id=""> test</label>
-                    <div class="gina-toolbar-switch">
+
+                    <div>
+                        <label>
+                            <input type="checkbox" name="test" id="test">
+                            <span>Debug Mode</span>
+                        </label>
+                    </div>
+
+                    <!-- <div class="gina-toolbar-switch">
                         <input class="gina-toolbar-switch__input" type="checkbox" name="gina[toolbar][debug][forms]" id="gina-toolbar-debug-forms">
                         <label class="gina-toolbar-switch__label" for="gina-toolbar-debug-forms" aria-hidden="true">Debug Mode</label>
                         <div class="gina-toolbar-switch__marker" aria-hidden="true"></div>
-                    </div>
+                    </div> -->
 
-
+                    <hr>
                     
-                    <ul class="gina-toolbar-inline-list-group">
-                        <li class="gina-toolbar-list-group-item">
+                    <ul class="gina-toolbar-cols">
+                        <li>
                             <input type="radio" name="gina[toolbar][debug][forms][strategy]" value="frontendOnly" id="gina-toolbar-debug-forms-frontend" checked>
-                            <label class="list-title item-title js-item-active" for="gina-toolbar-debug-forms-frontend">Frontend</label>
+                            <label for="gina-toolbar-debug-forms-frontend">Frontend</label>
                         </li>
-                            <li class="gina-toolbar-list-group-item">
+                        <li>
                             <input type="radio" name="gina[toolbar][debug][forms][strategy]" value="server" id="gina-toolbar-debug-forms-server">
-                            <label class="list-title item-title js-item-active" for="gina-toolbar-debug-forms-server">Frontend + Server</label>
+                            <label for="gina-toolbar-debug-forms-server">Frontend + Server</label>
                         </li>
                     </ul>
                 </fieldset>

@@ -25,16 +25,16 @@ $code-hightlight: #323e41
 ////////////////////////////
 
 %reset
-  // clear: none
-  // float: none
-  // position: static
-  // margin: 0
-  // padding: 0
-  // border: 0
-  // outline: 0
-  // vertical-align: baseline
-  // background: none
-  // box-sizing: inherit
+  clear: none
+  float: none
+  position: static
+  margin: 0
+  padding: 0
+  border: 0
+  outline: 0
+  vertical-align: baseline
+  background: none
+  box-sizing: inherit
 
 .gina-toolbar *,
 .gina-toolbar *:before,
@@ -116,7 +116,7 @@ $code-hightlight: #323e41
     font-size: 12px
     font-weight: normal
 
-  input
+  input[type="text"]
     appearance: none
     color: $white
     font-size: 12px
@@ -590,6 +590,19 @@ $code-hightlight: #323e41
         color: $black
         background: $grey
 
+// Columns
+
+.gina-toolbar .gina-toolbar-cols
+    margin: 10px 0
+    display: flex
+    flex-wrap: nowrap
+    justify-content: flex-start
+
+    > *
+      margin-left: 10px
+
+      &:first-child
+        margin-left: 0
 
 
 // LOGS
