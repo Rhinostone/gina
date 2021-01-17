@@ -25,7 +25,7 @@ $ npm install -g sass-lint
 ```
 
 ```tty
-$ npm install -g csso
+$ npm install -g csso@2.2.1
 ```
 
 
