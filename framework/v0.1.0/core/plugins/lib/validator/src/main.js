@@ -3198,23 +3198,25 @@ function ValidatorPlugin(rules, data, formId) {
                     ) {
                         // init default state: disable all;
                         allFormGroupedElements[id].target.disabled = true;
-                        //$form.rules[ allFormGroupedElements[id].name ].exclude = true;
+                        // adding custom rule for this case
+                        if ( typeof($form.rules[ allFormGroupedElements[id].name ]) == 'undefined' ) {
+                            $form.rules[ allFormGroupedElements[id].name ] = {}
+                        }
+                        $form.rules[ allFormGroupedElements[id].name ].exclude = true;
                         
                         // triggered by click on the radio group                  
                         if (isCalledHasDependency) {
                             //console.log('In Group #1 ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled, allFormGroupedElements[id].name, checkBoxGroup, ' VS ', allFormGroupedElements[id].group);                            
                             allFormGroupedElements[id].target.disabled = (elIdIsChecked) ? false : true;
-                            //$form.rules[ allFormGroupedElements[id].name ].exclude = (elIdIsChecked) ? false : true;
+                            $form.rules[ allFormGroupedElements[id].name ].exclude = (elIdIsChecked) ? false : true;
                             //console.log('In Group #1 fixed to -> ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled);
-                            hasBeenUpdated = true;
                             continue;
                         }
                         // triggered by click on the checkbox
                         //console.log('In Group #2 ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled, allFormGroupedElements[id].name, checkBoxGroup, ' VS ', allFormGroupedElements[id].group);
                         allFormGroupedElements[id].target.disabled = excluded;
-                        //$form.rules[ allFormGroupedElements[id].name ].exclude = excluded;
+                        $form.rules[ allFormGroupedElements[id].name ].exclude = excluded;
                         //console.log('In Group #2 fixed to -> ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled);
-                        hasBeenUpdated = true;
                         continue;
                     }
                     //console.log('elId: '+elId, 'isCalledHasDependency:'+isCalledHasDependency, 'hasBeenUpdated:'+ hasBeenUpdated, 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled, allFormGroupedElements[id].name, 'elIdIsChecked:'+elIdIsChecked, 'inGroup:'+re.test(allFormGroupedElements[id].group) );
@@ -3317,14 +3319,17 @@ function ValidatorPlugin(rules, data, formId) {
             // init
             re = new RegExp(extendedGroupName);
             for (let id in allFormGroupedElements) {      
-                if (!/checkbox|radio/i.test(allFormGroupedElements[id].target.type))
+                if (!/checkbox|radio/i.test(allFormGroupedElements[id].target.type)) {
                     allFormGroupedElements[id].target.disabled = true;
+                    // adding custom rule for this case
+                    if ( typeof($form.rules[ allFormGroupedElements[id].name ]) == 'undefined' ) {
+                        $form.rules[ allFormGroupedElements[id].name ] = {}
+                    }
+                    $form.rules[ allFormGroupedElements[id].name ].exclude = true;
+                }
+                    
                  
-                // adding custom rule for this case
-                // if ( typeof($form.rules[ allFormGroupedElements[id].name ]) == 'undefined' ) {
-                //     $form.rules[ allFormGroupedElements[id].name ] = {}
-                // }
-                //$form.rules[ allFormGroupedElements[id].name ].exclude = true;
+                    
                 if ( 
                     re.test(allFormGroupedElements[id].group) 
                     ||
@@ -3332,13 +3337,17 @@ function ValidatorPlugin(rules, data, formId) {
                 ) { 
                     // init default
                     allFormGroupedElements[id].target.disabled = true;
+                    // adding custom rule for this case
+                    if ( typeof($form.rules[ allFormGroupedElements[id].name ]) == 'undefined' ) {
+                        $form.rules[ allFormGroupedElements[id].name ] = {}
+                    }
                     //$form.rules[ allFormGroupedElements[id].name ].exclude = true;
                     if (/true/i.test($el.checked)) {
                         allFormGroupedElements[id].target.disabled = false;
-                        //$form.rules[ allFormGroupedElements[id].name ].exclude = false;
+                        $form.rules[ allFormGroupedElements[id].name ].exclude = false;
                     } else {
                         allFormGroupedElements[id].target.disabled = true;                        
-                        //$form.rules[ allFormGroupedElements[id].name ].exclude = true;
+                        $form.rules[ allFormGroupedElements[id].name ].exclude = true;
                     }
                 }
             }
@@ -4115,6 +4124,15 @@ function ValidatorPlugin(rules, data, formId) {
                         //throw new Error('field `'+ field +'` found for your form rule ('+ $form.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule.')
                         console.warn('field `'+ field +'` found for your form rule ('+ $form.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule if this is a mistake.');
                         continue;
+                    }
+                    // 2021-01-17: fixing exclude defaullt override for `data-gina-form-element-group`
+                    if ( 
+                        $fields[field].getAttribute('data-gina-form-element-group')
+                        && typeof(rules[field].exclude) != 'undefined'
+                        && rules[field].exclude
+                        && !$fields[field].disabled
+                    ) {
+                        rules[field].exclude = false;
                     }
                     
                     hasCase = ( typeof(rules['_case_' + field]) != 'undefined' ) ? true : false;
