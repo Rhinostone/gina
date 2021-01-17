@@ -18,7 +18,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
         //console.log('Toolbar jquery is ', $.fn.jquery);
 
         var self = {
-            version         : '1.0.2',
+            version         : '1.0.3',
             foldingPaths    : {},
             foldingClass    : null,
             isUnfolded      : null,
@@ -119,7 +119,13 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     width           : '30',
                     panelId         : '#gina-toolbar-data',
                     isCollapsed     : true,
-                    isUnfolded      : []
+                    isUnfolded      : [],
+                    debug           : {
+                        forms: {
+                            active: false,
+                            strategy: 'frontend' // by default
+                        }
+                    }
                 };
                 // saving default settings
                 plugins.insert(settings);
@@ -309,9 +315,6 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         if ( typeof (jsonObject['el-xhr']) != 'undefined' ) {
                             lastJsonObjectState.data = JSON.parse(JSON.stringify(jsonObject[section]));
                         }
-
-                        
-                        
                     }
 
                     // -> isXHRViewData (from popin) : cleanup
