@@ -1,3 +1,5 @@
+@use "sass:color"
+
 $black: #111
 $dark-grey: #444
 $grey: #888
@@ -21,22 +23,23 @@ $code-hightlight: #323e41
 ////////////////////////////
 ////////// RESET ///////////
 ////////////////////////////
+
 %reset
-  clear: none
-  float: none
-  position: static
-  margin: 0
-  padding: 0
-  border: 0
-  outline: 0
-  vertical-align: baseline
-  background: none
-  box-sizing: inherit
+  // clear: none
+  // float: none
+  // position: static
+  // margin: 0
+  // padding: 0
+  // border: 0
+  // outline: 0
+  // vertical-align: baseline
+  // background: none
+  // box-sizing: inherit
 
 .gina-toolbar *,
 .gina-toolbar *:before,
 .gina-toolbar *:after
-  %reset
+  @extend %reset
 
 .gina-toolbar
   // all: initial
@@ -175,6 +178,91 @@ $code-hightlight: #323e41
   .gina-toolbar-input-file
     @extend .gina-toolbar-button
 
+
+// -------------------------------- 
+// File#: _1_switch
+// Title: Switch
+// Descr: Custom ON/OFF checkbox toggle
+// Usage: codyhouse.co/license
+// --------------------------------
+
+:root
+  // colors
+  --color-white: hsl(0, 0%, 100%)
+  --color-primary: hsl(220, 90%, 56%)
+  --color-contrast-higher: hsl(240, 8%, 12%)
+  --color-contrast-low: hsl(240, 1%, 83%)
+
+  // style
+  --switch-width: 64px
+  --switch-height: 32px
+  --switch-padding: 3px
+
+  // animation
+  --switch-animation-duration: 0.2s
+
+.gina-toolbar-switch
+  position: relative
+  display: inline-flex
+  flex-shrink: 0
+  align-items: center
+  width: var(--switch-width)
+  height: var(--switch-height)
+  border-radius: 50em
+  padding: var(--switch-padding) 0
+
+    // overflow: hidden
+
+.gina-toolbar-switch__input, .gina-toolbar-switch__label
+  position: absolute
+  left: 0
+  top: 0
+
+.gina-toolbar-switch__input
+  margin: 0
+  padding: 0
+  opacity: 0
+  height: 0
+  width: 0
+  pointer-events: none
+
+  &:checked + .gina-toolbar-switch__label
+    background-color: hsl(220, 90%, 56%)
+  
+  &:checked + .gina-toolbar-switch__label + .gina-toolbar-switch__marker
+    left: calc(100% - var(--switch-height) + var(--switch-padding))
+  
+  &:focus + .gina-toolbar-switch__label,
+  &:active + .gina-toolbar-switch__label
+    box-shadow: 0 0 0 2px color.adjust(hsl(240, 8%, 12%), $alpha: 0.08)
+  
+  &:checked:focus + .gina-toolbar-switch__label,
+  &:checked:active + .gina-toolbar-switch__label
+    box-shadow: 0 0 0 2px color.adjust(hsl(220, 90%, 56%), $alpha: 0.2)
+  
+.gina-toolbar-switch__label
+  width: 100%
+  height: 100%
+  color: transparent
+  user-select: none
+  background-color: hsl(240, 1%, 83%)
+  border-radius: inherit
+  z-index: 1
+  transition: var(--switch-animation-duration)
+  overflow: hidden
+
+.gina-toolbar-switch__marker
+  position: relative
+  background-color: #fff
+  width: calc(var(--switch-height) - var(--switch-padding) * 2)
+  height: calc(var(--switch-height) - var(--switch-padding) * 2)
+  border-radius: 50%
+  z-index: 2
+  pointer-events: none
+  box-shadow: var(--shadow-xs)
+  left: var(--switch-padding)
+  transition: left var(--switch-animation-duration)
+  will-change: left
 
 // Hide textarea used to copy value to clipboard
 .gina-toolbar-copy
