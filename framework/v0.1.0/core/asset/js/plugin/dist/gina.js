@@ -10799,21 +10799,24 @@ function ValidatorPlugin(rules, data, formId) {
                     target  : $inputs[f]
                 };
                 formElementGroup[ $inputs[f].name ] = new RegExp('^'+formElementGroupTmp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-                // Fix 2021-01-16: removed this part because it is overriding
-                // if (withRules) {
-                //     if ( typeof($form.rules[ $inputs[f].name ]) == 'undefined') {
-                //         $form.rules[ $inputs[f].name ] = {}
-                //     }
-                //     // By default exclude groups only if not required
-                //     // Those will be included if member of selected group
-                //     // See : handleGroupDependencies() 
-                //     if ( 
-                //         typeof($form.rules[ $inputs[f].name ].isRequired) == 'undefined'
-                //         ||  !$form.rules[ $inputs[f].name ].isRequired
-                //     ) {
-                //         $form.rules[ $inputs[f].name ].exclude = true;
-                //     }                    
-                // }
+                // Attention, this means that all dependening field will be
+                // ignored on validation, unless you write a rule that
+                // will override this behavior or else your fields won't be submited
+                // this behaviour only applies to Form Grouped Elements
+                if (withRules) {
+                    if ( typeof($form.rules[ $inputs[f].name ]) == 'undefined') {
+                        $form.rules[ $inputs[f].name ] = {}
+                    }
+                    // By default exclude groups only if not required
+                    // Those will be included if member of selected group
+                    // See : handleGroupDependencies() 
+                    if ( 
+                        typeof($form.rules[ $inputs[f].name ].isRequired) == 'undefined'
+                        ||  !$form.rules[ $inputs[f].name ].isRequired
+                    ) {
+                        $form.rules[ $inputs[f].name ].exclude = true;
+                    }                    
+                }
             }
             // handling groups dependencies
             if ( formElementGroup.count() > 0 ) {
