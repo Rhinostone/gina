@@ -222,8 +222,12 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                 isSynchrone: false,
                                 withCredentials: false
                             };                       
-                            options = merge($popin.options, options);                       
-                            popinLoad($popin.name, e.target.url, options);
+                            options = merge($popin.options, options);    
+                            var url = this.getAttribute('data-gina-popin-url');
+                            if (!url) {
+                                throw new Error('Popin `url` not defined, please check value for `data-gina-popin-url`');
+                            }
+                            popinLoad($popin.name, url, options);
                         });
 
 
