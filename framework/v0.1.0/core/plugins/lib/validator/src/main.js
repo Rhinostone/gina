@@ -3260,7 +3260,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             var checked     = $el.checked;
             var localValue  = $el.getAttribute('value');
-            var isLocalValueBolean = ( /true|false/i.test(localValue) ) ? true : false;
+            var isLocalBoleanValue = ( /true|false/i.test(localValue) ) ? true : false;
             
             var checkBoxGroup = $el.getAttribute('data-gina-form-element-group') || null;
             
@@ -3275,7 +3275,7 @@ function ValidatorPlugin(rules, data, formId) {
                 }, 0);
                 
                 $el.removeAttribute('checked');
-                if (isLocalValueBolean) {
+                if (isLocalBoleanValue) {
                     $el.value = false;
                     $el.setAttribute('value', 'false');
                     
@@ -3294,7 +3294,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 $el.setAttribute('checked', 'checked');
                 //boolean exception handling
-                if (isLocalValueBolean) {
+                if (isLocalBoleanValue) {
                     $el.value = true;
                     $el.setAttribute('value', 'true');
                     
@@ -3543,11 +3543,34 @@ function ValidatorPlugin(rules, data, formId) {
 
 
             // recover default state only on value === true || false || on
-            if ( typeof(type) != 'undefined' && type == 'checkbox' && /^(true|false|on)$/i.test($inputs[i].value) || typeof(type) != 'undefined' && type == 'checkbox' && !$inputs[i].getAttribute('value') ) {
-
-                if ( !/^(true|false|on)$/i.test($inputs[i].value)  ) {
-
-                    if ( !$inputs[i].checked || $inputs[i].checked == 'null' || $inputs[i].checked == 'false' || $inputs[i].checked == '' ) {
+            if ( 
+                typeof(type) != 'undefined' 
+                && type == 'checkbox' 
+                && /^(true|false|on)$/i.test($inputs[i].value) 
+                || 
+                typeof(type) != 'undefined' 
+                && type == 'checkbox' 
+                && !$inputs[i].getAttribute('value') 
+            ) {
+                let isLocalBoleanValue  = (/^(true|false|on)$/i.test($inputs[i].value)) ? true : false
+                    , inputName         = $inputs[i].getAttribute('name')
+                ;
+                if ( 
+                    typeof($form.rules) != 'undefined' 
+                    && typeof($form.rules[inputName]) != 'undefined'
+                    && typeof($form.rules[inputName].isBoolean) != 'undefined'
+                    && $form.rules[inputName].isBoolean
+                ) {
+                    isLocalBoleanValue = true;
+                }
+                
+                if ( isLocalBoleanValue || isLocalBoleanValue && !/^(true|false|on)$/i.test($inputs[i].value)  ) {
+                    if ( 
+                        !$inputs[i].checked 
+                        || $inputs[i].checked == 'null' 
+                        || $inputs[i].checked == 'false' 
+                        || $inputs[i].checked == '' 
+                    ) {
                         $inputs[i].value = false;
                         $inputs[i].setAttribute('value', false)
                     } else {
