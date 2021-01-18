@@ -12139,17 +12139,25 @@ function ValidatorPlugin(rules, data, formId) {
     }
     
     var getDynamisedRules = function(stringifiedRules, fields, $fields) {
-        var re = null, _field = null;
+        var re = null, _field = null, arrFields = [], a = 0;
+        // avoiding conflict like ["myfield", "myfield-name"]
+        // where once `myfield` is replaced for exemple with `1234`, you also get 1234-name left behind
+        // TODO - Replace this trick with a RegExp matching only the exact word
         for (let field in fields) {
-            _field = field.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&');
+            arrFields[a] = field;
+            a++;
+        }
+        arrFields.sort().reverse(); 
+        for (let i = 0, len = arrFields.length; i < len; i++) {
+            _field = arrFields[i].replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&');
             re = new RegExp('\\$'+_field, 'g');
-            stringifiedRules = stringifiedRules.replace(re, fields[field]);
+            stringifiedRules = stringifiedRules.replace(re, fields[arrFields[i]]);
         }
         if ( /\$(.*)/.test(stringifiedRules) ) {
-            for (let field in $fields) {
-                _field = field.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&');
+            for (let i = 0, len = arrFields.length; i < len; i++) {
+                _field = arrFields[i].replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&');
                 re = new RegExp('\\$'+_field, 'g');
-                stringifiedRules = stringifiedRules.replace(re, $fields[field].value || $fields[field].checked);
+                stringifiedRules = stringifiedRules.replace(re, $fields[arrFields[i]].value || $fields[arrFields[i]].checked);
             }
         }
         
