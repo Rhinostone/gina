@@ -858,9 +858,12 @@ function FormValidatorUtil(data, $fields, xhrOptions) {
                 errors['isRequired'] = replace(this.error || local.errorLabels['isRequired'], this)
             }
             // if error tagged by a previous vlaidation, remove it when isValid == true 
-            else if ( isValid && typeof(errors['isRequired']) != 'undefined' ) {
-                delete errors['isRequired'];
+            else if ( isValid ) {
+                if (typeof(errors['isRequired']) != 'undefined' )
+                    delete errors['isRequired'];
                 //delete errors['stack'];
+                if ( typeof(self[this.name]['errors']) != 'undefined' && typeof(self[this.name]['errors']['isRequired']) != 'undefined' )
+                    delete self[this.name]['errors']['isRequired'];
             }
 
             this.valid = isValid;

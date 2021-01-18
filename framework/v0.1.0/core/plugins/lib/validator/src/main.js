@@ -4540,80 +4540,86 @@ function ValidatorPlugin(rules, data, formId) {
             --subLevelRules;
 
             if (i <= 0 && subLevelRules < 0) {
-                
-                var errors = d['getErrors']();
-                // adding data attribute to handle display refresh
-                for (var field in errors) {
-                    for (rule in errors[field]) {
-                        if (!fieldErrorsAttributes[field]) {
-                            fieldErrorsAttributes[field] = ''
-                        }
-
-                        if (fieldErrorsAttributes[field].indexOf(rule) < 0)
-                            fieldErrorsAttributes[field] += rule +' ';
-                    }
-
-                    if (isGFFCtx)
-                        $fields[field].setAttribute('data-gina-form-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
-                }
-
-                //calling back
-                try {
-                    data = formatData( d['toData']() );
-
-                    if ( isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
-                        // update toolbar
-                        if (!gina.forms.sent)
-                            gina.forms.sent = {};
-
-                        //gina.forms.sent = data;
-                        //gina.forms.id   = id;
-
-                        var objCallback = {
-                            id      : id,
-                            sent    : data
-                        };
-
-                        window.ginaToolbar.update('forms', objCallback);
-                    }
-                } catch (err) {
-                    throw err
-                }
                 hasParsedAllRules = true;
                 if (!hasBeenValidated && asyncCount <= 0) {
+                    var evt = 'validated.' + id;         
+                    addListener(gina, $form, evt, function(event) {
+                        event.preventDefault();
+                        
+                        if (!hasBeenValidated) {
+                            hasBeenValidated    = true;
+                            hasParsedAllRules   = false;
+                            asyncCount          = 0;
+                                                
+                            var errors = d['getErrors']();
+                            // adding data attribute to handle display refresh
+                            for (var field in errors) {
+                                for (rule in errors[field]) {
+                                    if (!fieldErrorsAttributes[field]) {
+                                        fieldErrorsAttributes[field] = ''
+                                    }
+
+                                    if (fieldErrorsAttributes[field].indexOf(rule) < 0)
+                                        fieldErrorsAttributes[field] += rule +' ';
+                                }
+
+                                if (isGFFCtx)
+                                    $fields[field].setAttribute('data-gina-form-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
+                            }
+
+                            //calling back
+                            try {
+                                data = formatData( d['toData']() );
+
+                                if ( isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
+                                    // update toolbar
+                                    if (!gina.forms.sent)
+                                        gina.forms.sent = {};
+
+                                    //gina.forms.sent = data;
+                                    //gina.forms.id   = id;
+
+                                    var objCallback = {
+                                        id      : id,
+                                        sent    : data
+                                    };
+
+                                    window.ginaToolbar.update('forms', objCallback);
+                                }
+                            } catch (err) {
+                                throw err
+                            }
+                            
+                            
+                            cb({
+                                'isValid'   : d['isValid'],
+                                'errors'    : errors,
+                                'data'      : data
+                            });
+                            
+                            hasBeenValidated = false;
+                            errors = null;
+                            removeListener(gina, event.target, 'validated.' + event.target.id);
+                            removeListener(gina, $form, 'validat.' + event.target.id);
+                            return 
+                        }                    
+                    });
+                    
                     if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
-                        triggerEvent(gina, $form, 'validated.' + id);
+                        return triggerEvent(gina, $form, 'validated.' + id);
                     } else {
                         hasBeenValidated = true;
                         return {
                             'isValid'   : d['isValid'],
-                            'errors'    : errors,
-                            'data'      : data
+                            'errors'    : d['getErrors'](),
+                            'data'      : formatData( d['toData']() )
                         }
                     }
                 }
             }
         }
         
-        var evt = 'validated.' + id;
-        if (isGFFCtx && typeof(gina.events[evt]) == 'undefined' ) {
-            addListener(gina, $form, evt, function(event) {
-                event.preventDefault();
-                
-                if (!hasBeenValidated) {
-                    hasBeenValidated    = true;
-                    hasParsedAllRules   = false;
-                    asyncCount          = 0;
-                    cb({
-                        'isValid'   : d['isValid'],
-                        'errors'    : d['getErrors'](),
-                        'data'      : formatData( d['toData']() )
-                    });
-                    removeListener(gina, event.target, 'validated.' + event.target.id);
-                    return 
-                }                    
-            });
-        }
+        
             
 
         // 0 is the starting level
