@@ -31,23 +31,6 @@ function PrototypesHelper(instance) {
             
         }
     }
-        
-       
-    // Global proto
-    // if ( typeof(String.capitalize) == 'undefined' ) {
-    //     /**
-    //      * capitalize string
-    //      * @return {array} Return capitalized string
-    //      **/
-    //     Object.defineProperty( String.prototype, 'capitalize', {
-    //         writable:   false,
-    //         enumerable: false,
-    //         //If loaded several times, it can lead to an exception. That's why I put this.
-    //         configurable: true,
-    //         value: function(){ return this.charAt(0).toUpperCase() + this.slice(1) }
-    //     });
-    // }
-   
 
     if ( typeof(Array.clone) == 'undefined' ) {
         /**
