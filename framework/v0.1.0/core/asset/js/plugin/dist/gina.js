@@ -11369,11 +11369,35 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
         };
-        var updateCheckBox = function($el) {
+        var updateCheckBox = function($el, isInit) {
+            if ( typeof(isInit) == 'undefined' ) {
+                isInit = false;
+            }
+            
+            var triggerHandleCheckBoxGroupDependencies = function($el, checkBoxGroup, isExcluded) {
+                if (checkBoxGroup) {
+                    handleCheckBoxGroupDependencies($form, $el, checkBoxGroup);
+                } else {                        
+                    for (let id in allFormGroupedElements) {
+                        if ( 
+                            re.test(allFormGroupedElements[id].group)
+                            ||
+                            re.test(allFormGroupedElements[id].target.getAttribute('data-gina-form-element-group'))
+                        ) {
+                            allFormGroupedElements[id].target.disabled = isExcluded;    
+                        }
+                    }
+                } 
+            }
 
+            
+            var localValue  = $el.getAttribute('data-value') || $el.getAttribute('value') || $el.value;
+            var isLocalBoleanValue = ( /^(true|on|false)$/i.test(localValue) ) ? true : false;
+            localValue = (/^(true|on)$/.test(localValue)) ? true : localValue;
+            if (isInit && isLocalBoleanValue) {
+                $el.checked = localValue;
+            }
             var checked     = $el.checked;
-            var localValue  = $el.getAttribute('value');
-            var isLocalBoleanValue = ( /true|false/i.test(localValue) ) ? true : false;
             
             var checkBoxGroup   = $el.getAttribute('data-gina-form-element-group') || null;
             var re              = new RegExp($el.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&'));
@@ -11381,66 +11405,49 @@ function ValidatorPlugin(rules, data, formId) {
             if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
                 // prevents ticking behavior
-                setTimeout(function () {
-                    $el.checked = false;
-                    // means that the checkbox is member of another group
-                    if (checkBoxGroup) {
-                        handleCheckBoxGroupDependencies($form, $el, checkBoxGroup);
-                    } else {                        
-                        for (let id in allFormGroupedElements) {
-                            if ( 
-                                re.test(allFormGroupedElements[id].group)
-                                ||
-                                re.test(allFormGroupedElements[id].target.getAttribute('data-gina-form-element-group'))
-                            ) {
-                                allFormGroupedElements[id].target.disabled = true;    
-                            }
-                        }
-                    }                        
-                        
+                if (!isInit) {
+                    setTimeout(function () {
+                        $el.checked = false;
+                        // means that the checkbox is member of another group
+                        triggerHandleCheckBoxGroupDependencies($el, checkBoxGroup, true);
+                        updateGroupChildrenState($el);
+                    }, 0);
+                } else {
                     updateGroupChildrenState($el);
-                }, 0);
+                }
+                
                 
                 $el.removeAttribute('checked');
                 if (isLocalBoleanValue) {
                     $el.value = false;
                     $el.setAttribute('value', 'false');
-                    
                     if ( typeof($el.getAttribute('data-value') != 'undefined' ) )
                         $el.setAttribute('data-value', 'false');
-                }  
+                }
+                
                                    
             } else {                
                 
                 // prevents ticking behavior
-                setTimeout(function () {
-                    $el.checked = true;
-                    // means that the checkbox is member of another group
-                    if (checkBoxGroup) {
-                        handleCheckBoxGroupDependencies($form, $el, checkBoxGroup);
-                    } else {                        
-                        for (let id in allFormGroupedElements) {
-                            if ( 
-                                re.test(allFormGroupedElements[id].group)
-                                ||
-                                re.test(allFormGroupedElements[id].target.getAttribute('data-gina-form-element-group'))
-                            ) {
-                                allFormGroupedElements[id].target.disabled = false;    
-                            }
-                        }
-                    }   
+                if (!isInit) {
+                    setTimeout(function () {
+                        $el.checked = true;
+                        // means that the checkbox is member of another group
+                        triggerHandleCheckBoxGroupDependencies($el, checkBoxGroup, false);  
+                        updateGroupChildrenState($el);
+                    }, 0);
+                    $el.setAttribute('checked', 'checked');
+                } else {
                     updateGroupChildrenState($el);
-                }, 0);
-
-                $el.setAttribute('checked', 'checked');
-                //boolean exception handling
+                }
+                                
                 if (isLocalBoleanValue) {
                     $el.value = true;
-                    $el.setAttribute('value', 'true');
-                    
+                    $el.setAttribute('value', true);
                     if ( typeof($el.getAttribute('data-value') != 'undefined' ) )
-                        $el.setAttribute('data-value', 'true');
-                }   
+                        $el.setAttribute('data-value', true);
+                }
+                
             }            
         };
         
@@ -11494,7 +11501,7 @@ function ValidatorPlugin(rules, data, formId) {
                         $form.rules[ allFormGroupedElements[id].name ] = {}
                     }
                     
-                    if (/true/i.test($el.checked)) {
+                    if (/^(true|on)$/i.test($el.checked)) {
                         allFormGroupedElements[id].target.disabled = false;
                         $form.rules[ allFormGroupedElements[id].name ].exclude = false;
                     } else {
@@ -11707,59 +11714,19 @@ function ValidatorPlugin(rules, data, formId) {
                             allFormGroupedElements[childElement].target.disabled = true;
                         }
                     }                          
-                }
-                
-                let isLocalBoleanValue  = (/^(true|false|on)$/i.test($inputs[i].value)) ? true : false
-                    , inputName         = $inputs[i].getAttribute('name')
-                ;
-                if ( 
-                    typeof($form.rules) != 'undefined' 
-                    && typeof($form.rules[inputName]) != 'undefined'
-                    && typeof($form.rules[inputName].isBoolean) != 'undefined'
-                    && $form.rules[inputName].isBoolean
-                ) {
-                    isLocalBoleanValue = true;
-                }
-                
-                if ( isLocalBoleanValue || isLocalBoleanValue && !/^(true|false|on)$/i.test($inputs[i].value)  ) {
-                    if ( 
-                        !$inputs[i].checked 
-                        || $inputs[i].checked == 'null' 
-                        || $inputs[i].checked == 'false' 
-                        || $inputs[i].checked == '' 
-                    ) {
-                        $inputs[i].value = false;
-                        $inputs[i].setAttribute('value', false)
-                    } else {
-                        $inputs[i].value = true;
-                        $inputs[i].setAttribute('value', true)
-                    }                    
-                }
-                
+                }                
 
                 evt = 'change.'+ $inputs[i].id;
 
                 procced = function ($el, evt) {
 
                     // recover default state only on value === true || false
-                    addListener(gina, $el, evt, function(event) {
-                        
-                        var value = event.target.value || event.target.getAttribute('value') || event.target.getAttribute('data-value');
-                        
-                        if ( /^(true|false|on)$/i.test(value) ) {
-                            cancelEvent(event);
-                            // fixed inverted state
-                            $el.checked = !/true|on/.test(value) ? true : false;
-                            updateCheckBox(event.target);
-                        }
+                    addListener(gina, $el, evt, function(event) {                        
+                        updateCheckBox(event.target);
                     });
 
                     // default state recovery
-                    var value = $el.value || $el.getAttribute('value') || $el.getAttribute('data-value');
-                    if ( typeof(value) != 'undefined' && /^(true|on|false)$/.test(value) ) {
-                        $el.checked = /true|on/.test(value) ? true : false;
-                        updateCheckBox($el);
-                    }    
+                    updateCheckBox($el, true);   
                 }
 
                 if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
@@ -11795,8 +11762,6 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
 
-        //if (withRules) {
-
         evt = 'validate.' + _id;
         procced = function () {
             // attach form event
@@ -11830,9 +11795,8 @@ function ValidatorPlugin(rules, data, formId) {
         // cannot be binded twice
         if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == 'validate.' + _id ) {
             removeListener(gina, $form, evt, procced)
-        }// else {
-        //    procced()
-        //}
+        }
+        
         procced();
 
         var proccedToSubmit = function (evt, $submit) {
