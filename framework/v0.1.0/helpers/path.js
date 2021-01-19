@@ -1465,7 +1465,7 @@ function PathHelper() {
         if ( typeof(paths[name]) != "undefined" ) {
             return paths[name]
         } else {
-            return undefined
+            throw new Error('Path `'+ name+'` not found. Check the spelling or add a new one using setPath("'+name+'", "\/your\/new\/pathname")')
         }
     }
 

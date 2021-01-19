@@ -320,6 +320,9 @@ gna.getProjectConfiguration = function (callback){
             setContext('env', env);
             setContext('bundles', bundles);
             setPath('bundle', _(bundlePath, true));
+            setPath('helpers', _(bundlePath+'/helpers', true));
+            setPath('lib', _(bundlePath+'/lib', true));
+            setPath('models', _(bundlePath+'/models', true));
 
             callback(false, project);
         } catch (err) {
