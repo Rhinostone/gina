@@ -121,7 +121,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     isCollapsed     : true,
                     isUnfolded      : [],
                     debug           : {
-                        forms: {
+                        forms   : {
                             active: false,
                             strategy: 'frontend' // by default
                         }

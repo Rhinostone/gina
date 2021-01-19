@@ -862,8 +862,8 @@ function FormValidatorUtil(data, $fields, xhrOptions) {
                 if (typeof(errors['isRequired']) != 'undefined' )
                     delete errors['isRequired'];
                 //delete errors['stack'];
-                if ( typeof(self[this.name]['errors']) != 'undefined' && typeof(self[this.name]['errors']['isRequired']) != 'undefined' )
-                    delete self[this.name]['errors']['isRequired'];
+                // if ( typeof(self[this.name]['errors']) != 'undefined' && typeof(self[this.name]['errors']['isRequired']) != 'undefined' )
+                //     delete self[this.name]['errors']['isRequired'];
             }
 
             this.valid = isValid;

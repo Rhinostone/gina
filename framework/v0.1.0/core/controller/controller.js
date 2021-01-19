@@ -587,6 +587,7 @@ function SuperController(options) {
                         } catch(err) {
                             err.stack = 'Exception,  bad syntax or undefined data found: start investigating in '+ mapping.filename +'\n' + err.stack;
                             self.throwError(local.res, 500, err);
+                            return
                         }
                             
                             
