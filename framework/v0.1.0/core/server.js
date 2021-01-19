@@ -2227,16 +2227,16 @@ function Server(options) {
             case 'get':
                 if ( typeof(request.query) != 'undefined' && request.query.count() > 0 ) {   
                     if ( typeof(request.query.inheritedData) != 'undefined' ) {
-                        try {
-                            bodyStr = decodeURIComponent(request.query.inheritedData); // it is already a string for sure
-                        } catch (err) {
-                            bodyStr = request.query.inheritedData;
-                        }
-                        delete request.query.inheritedData;
-                        // false & true case
-                        if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
-                            bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-                        obj = JSON.parse(bodyStr);
+                        // try {
+                        //     bodyStr = decodeURIComponent(request.query.inheritedData); // it is already a string for sure
+                        // } catch (err) {
+                        //     bodyStr = request.query.inheritedData;
+                        // }
+                        // delete request.query.inheritedData;
+                        // // false & true case
+                        // if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                        //     bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                        // obj = JSON.parse(bodyStr);
                         
                         obj = parseBody(request.query.inheritedData);
                         delete request.query.inheritedData;
