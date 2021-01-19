@@ -3680,23 +3680,6 @@ function PrototypesHelper(instance) {
             
         }
     }
-        
-       
-    // Global proto
-    // if ( typeof(String.capitalize) == 'undefined' ) {
-    //     /**
-    //      * capitalize string
-    //      * @return {array} Return capitalized string
-    //      **/
-    //     Object.defineProperty( String.prototype, 'capitalize', {
-    //         writable:   false,
-    //         enumerable: false,
-    //         //If loaded several times, it can lead to an exception. That's why I put this.
-    //         configurable: true,
-    //         value: function(){ return this.charAt(0).toUpperCase() + this.slice(1) }
-    //     });
-    // }
-   
 
     if ( typeof(Array.clone) == 'undefined' ) {
         /**
@@ -11392,9 +11375,13 @@ function ValidatorPlugin(rules, data, formId) {
 
             
             var localValue  = $el.getAttribute('data-value') || $el.getAttribute('value') || $el.value;
-            var isLocalBoleanValue = ( /^(true|on|false)$/i.test(localValue) ) ? true : false;
             localValue = (/^(true|on)$/.test(localValue)) ? true : localValue;
+            if (localValue === '') {
+                localValue = false
+            }
+            var isLocalBoleanValue = ( /^(true|on|false)$/i.test(localValue) ) ? true : false;
             if (isInit && isLocalBoleanValue) {
+                
                 $el.checked = localValue;
             }
             var checked     = $el.checked;
