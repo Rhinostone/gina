@@ -21,7 +21,7 @@ function ValidatorPlugin(rules, data, formId) {
     var events      = ['ready', 'error', 'progress', 'submit', 'success', 'change', "destroy"];
 
     /** imports */
-    var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+    var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
     if (isGFFCtx) {
         require('utils/events');
         registerEvents(this.plugin, events);
@@ -37,10 +37,10 @@ function ValidatorPlugin(rules, data, formId) {
     }
 
     var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
-    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
-    var inherits        = (isGFFCtx) ? require('utils/inherits') : require('../../../../../lib/inherits');
+    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
+    var inherits        = (isGFFCtx) ? require('utils/inherits') : require('../../../../../lib/inherits');
     var FormValidator   = (isGFFCtx) ? require('utils/form-validator') : require('./form-validator');
-    //var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
+    //var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
 
     /** definitions */
     var instance    = { // isGFFCtx only
@@ -592,7 +592,7 @@ function ValidatorPlugin(rules, data, formId) {
         if (hFormIsRequired)
             listenToXhrEvents($form);
 
-        var url         = $target.getAttribute('action') || options.url;
+        var url         = $target.getAttribute('action') || options.url;
         var method      = $target.getAttribute('method') || options.method;
         method          = method.toUpperCase();
         options.method  = method;
@@ -2841,8 +2841,8 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                                 // adding virtual fields
                                 var fieldPrefix = 'files'; // by default
-                                var fieldName   = $el.getAttribute('data-gina-form-upload-prefix') || $el.name || $el.getAttribute('name');
-                                var fieldId     = $el.id || $el.getAttribute('id');
+                                var fieldName   = $el.getAttribute('data-gina-form-upload-prefix') || $el.name || $el.getAttribute('name');
+                                var fieldId     = $el.id || $el.getAttribute('id');
                                 
                                 var hasPreviewContainer = false;
                                 var previewContainer = $el.getAttribute('data-gina-form-upload-preview') || fieldId + '-preview';
@@ -2893,7 +2893,7 @@ function ValidatorPlugin(rules, data, formId) {
                                         fieldType   = formInputsFields[h].getAttribute('type');
                                         hiddenField = null;
                                         _name       = null, _userName = null;
-                                        errorField= formInputsFields[h].getAttribute('data-gina-form-upload-error') || fieldId + '-error' || null;
+                                        errorField= formInputsFields[h].getAttribute('data-gina-form-upload-error') || fieldId + '-error' || null;
                                         
                                         if (fieldType && /hidden/i.test(fieldType) ) {
                                             hiddenField = formInputsFields[h];
@@ -3271,7 +3271,7 @@ function ValidatorPlugin(rules, data, formId) {
             var checkBoxGroup   = $el.getAttribute('data-gina-form-element-group') || null;
             var re              = new RegExp($el.id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&'));
             // set to checked if not checked: false -> true
-            if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
+            if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
                 // prevents ticking behavior
                 setTimeout(function () {
@@ -3424,7 +3424,7 @@ function ValidatorPlugin(rules, data, formId) {
                 return;
             }
 
-            if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
+            if ( !checked || checked == 'null' || checked == 'false' || checked == '' ) {
 
                 // prevents ticking behavior
                 setTimeout(function () {
@@ -3480,7 +3480,7 @@ function ValidatorPlugin(rules, data, formId) {
                 ) {        
                     var isCaseIgnored = ( 
                                         event.target.getAttribute('for') 
-                                        || 
+                                        || 
                                         event.target.parentNode.getAttribute('for')
                                     ) ? true : false
                     ;          
@@ -3618,7 +3618,7 @@ function ValidatorPlugin(rules, data, formId) {
                     if ( 
                         !$inputs[i].checked 
                         || $inputs[i].checked == 'null' 
-                        || $inputs[i].checked == 'false' 
+                        || $inputs[i].checked == 'false' 
                         || $inputs[i].checked == '' 
                     ) {
                         $inputs[i].value = false;
@@ -3637,7 +3637,7 @@ function ValidatorPlugin(rules, data, formId) {
                     // recover default state only on value === true || false
                     addListener(gina, $el, evt, function(event) {
                         
-                        var value = event.target.value || event.target.getAttribute('value') || event.target.getAttribute('data-value');
+                        var value = event.target.value || event.target.getAttribute('value') || event.target.getAttribute('data-value');
                         
                         if ( /^(true|false|on)$/i.test(value) ) {
                             cancelEvent(event);
@@ -3648,7 +3648,7 @@ function ValidatorPlugin(rules, data, formId) {
                     });
 
                     // default state recovery
-                    var value = $el.value || $el.getAttribute('value') || $el.getAttribute('data-value');
+                    var value = $el.value || $el.getAttribute('value') || $el.getAttribute('data-value');
                     if ( typeof(value) != 'undefined' && /^(true|on|false)$/.test(value) ) {
                         $el.checked = /true|on/.test(value) ? true : false;
                         updateCheckBox($el);
@@ -3761,7 +3761,7 @@ function ValidatorPlugin(rules, data, formId) {
                     if (isDisabled) continue;
 
                     // TODO - add switch cases against tagName (checkbox/radio)
-                    if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
+                    if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
                         
                         
                         
@@ -3941,7 +3941,7 @@ function ValidatorPlugin(rules, data, formId) {
             if ( typeof(e.defaultPrevented) != 'undefined' && e.defaultPrevented )
                 return false;
 
-            if (withRules || isBinded) {
+            if (withRules || isBinded) {
                 cancelEvent(e);
             }
 
@@ -3972,7 +3972,7 @@ function ValidatorPlugin(rules, data, formId) {
                 if (isDisabled) continue;
 
                 // checkbox or radio
-                if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
+                if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
 
                     if ( $target[i].checked ) {
                         // if is boolean
@@ -4058,16 +4058,17 @@ function ValidatorPlugin(rules, data, formId) {
             a++;
         }
         arrFields.sort().reverse(); 
+        
         for (let i = 0, len = arrFields.length; i < len; i++) {
             _field = arrFields[i].replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&');
-            re = new RegExp('\\$'+_field, 'g');
-            stringifiedRules = stringifiedRules.replace(re, fields[arrFields[i]]);
+            re = new RegExp('\\$'+_field, 'g');            
+            stringifiedRules = stringifiedRules.replace(re, '\\"'+ fields[arrFields[i]] +'\\"');
         }
         if ( /\$(.*)/.test(stringifiedRules) ) {
             for (let i = 0, len = arrFields.length; i < len; i++) {
                 _field = arrFields[i].replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&');
                 re = new RegExp('\\$'+_field, 'g');
-                stringifiedRules = stringifiedRules.replace(re, $fields[arrFields[i]].value || $fields[arrFields[i]].checked);
+                stringifiedRules = stringifiedRules.replace(re, '\\"'+ $fields[arrFields[i]].value +'\\"' || $fields[arrFields[i]].checked);
             }
         }
         
@@ -4095,7 +4096,7 @@ function ValidatorPlugin(rules, data, formId) {
         ;
 
         if (isGFFCtx) {
-            id = $form.getAttribute('id') || $form.id;
+            id = $form.getAttribute('id') || $form.id;
             instance.$forms[id].fields = fields;
         }
         //console.log(fields, $fields);
@@ -4540,86 +4541,80 @@ function ValidatorPlugin(rules, data, formId) {
             --subLevelRules;
 
             if (i <= 0 && subLevelRules < 0) {
+                
+                var errors = d['getErrors']();
+                // adding data attribute to handle display refresh
+                for (var field in errors) {
+                    for (rule in errors[field]) {
+                        if (!fieldErrorsAttributes[field]) {
+                            fieldErrorsAttributes[field] = ''
+                        }
+
+                        if (fieldErrorsAttributes[field].indexOf(rule) < 0)
+                            fieldErrorsAttributes[field] += rule +' ';
+                    }
+
+                    if (isGFFCtx)
+                        $fields[field].setAttribute('data-gina-form-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
+                }
+
+                //calling back
+                try {
+                    data = formatData( d['toData']() );
+
+                    if ( isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
+                        // update toolbar
+                        if (!gina.forms.sent)
+                            gina.forms.sent = {};
+
+                        //gina.forms.sent = data;
+                        //gina.forms.id   = id;
+
+                        var objCallback = {
+                            id      : id,
+                            sent    : data
+                        };
+
+                        window.ginaToolbar.update('forms', objCallback);
+                    }
+                } catch (err) {
+                    throw err
+                }
                 hasParsedAllRules = true;
                 if (!hasBeenValidated && asyncCount <= 0) {
-                    var evt = 'validated.' + id;         
-                    addListener(gina, $form, evt, function(event) {
-                        event.preventDefault();
-                        
-                        if (!hasBeenValidated) {
-                            hasBeenValidated    = true;
-                            hasParsedAllRules   = false;
-                            asyncCount          = 0;
-                                                
-                            var errors = d['getErrors']();
-                            // adding data attribute to handle display refresh
-                            for (var field in errors) {
-                                for (rule in errors[field]) {
-                                    if (!fieldErrorsAttributes[field]) {
-                                        fieldErrorsAttributes[field] = ''
-                                    }
-
-                                    if (fieldErrorsAttributes[field].indexOf(rule) < 0)
-                                        fieldErrorsAttributes[field] += rule +' ';
-                                }
-
-                                if (isGFFCtx)
-                                    $fields[field].setAttribute('data-gina-form-errors', fieldErrorsAttributes[field].substr(0, fieldErrorsAttributes[field].length-1))
-                            }
-
-                            //calling back
-                            try {
-                                data = formatData( d['toData']() );
-
-                                if ( isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
-                                    // update toolbar
-                                    if (!gina.forms.sent)
-                                        gina.forms.sent = {};
-
-                                    //gina.forms.sent = data;
-                                    //gina.forms.id   = id;
-
-                                    var objCallback = {
-                                        id      : id,
-                                        sent    : data
-                                    };
-
-                                    window.ginaToolbar.update('forms', objCallback);
-                                }
-                            } catch (err) {
-                                throw err
-                            }
-                            
-                            
-                            cb({
-                                'isValid'   : d['isValid'],
-                                'errors'    : errors,
-                                'data'      : data
-                            });
-                            
-                            hasBeenValidated = false;
-                            errors = null;
-                            removeListener(gina, event.target, 'validated.' + event.target.id);
-                            removeListener(gina, $form, 'validat.' + event.target.id);
-                            return 
-                        }                    
-                    });
-                    
                     if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
-                        return triggerEvent(gina, $form, 'validated.' + id);
+                        triggerEvent(gina, $form, 'validated.' + id);
                     } else {
                         hasBeenValidated = true;
                         return {
                             'isValid'   : d['isValid'],
-                            'errors'    : d['getErrors'](),
-                            'data'      : formatData( d['toData']() )
+                            'errors'    : errors,
+                            'data'      : data
                         }
                     }
                 }
             }
         }
         
-        
+        var evt = 'validated.' + id;
+        if (isGFFCtx && typeof(gina.events[evt]) == 'undefined' ) {
+            addListener(gina, $form, evt, function(event) {
+                event.preventDefault();
+                
+                if (!hasBeenValidated) {
+                    hasBeenValidated    = true;
+                    hasParsedAllRules   = false;
+                    asyncCount          = 0;
+                    cb({
+                        'isValid'   : d['isValid'],
+                        'errors'    : d['getErrors'](),
+                        'data'      : formatData( d['toData']() )
+                    });
+                    removeListener(gina, event.target, 'validated.' + event.target.id);
+                    return 
+                }                    
+            });
+        }
             
 
         // 0 is the starting level
