@@ -3285,9 +3285,13 @@ function ValidatorPlugin(rules, data, formId) {
 
             
             var localValue  = $el.getAttribute('data-value') || $el.getAttribute('value') || $el.value;
-            var isLocalBoleanValue = ( /^(true|on|false)$/i.test(localValue) ) ? true : false;
             localValue = (/^(true|on)$/.test(localValue)) ? true : localValue;
+            if (localValue === '') {
+                localValue = false
+            }
+            var isLocalBoleanValue = ( /^(true|on|false)$/i.test(localValue) ) ? true : false;
             if (isInit && isLocalBoleanValue) {
+                
                 $el.checked = localValue;
             }
             var checked     = $el.checked;
