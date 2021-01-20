@@ -192,7 +192,7 @@ function Config(opt) {
                         if (err != null && err != false)
                             console.error('Error found while settings up locals' + err);
 
-                        self.emit('complete', err, self.bundlesConfiguration)
+                        self.emit('config#complete', err, self.bundlesConfiguration)
                     })
 
                 }, self.startingApp);//by default.
@@ -662,30 +662,89 @@ function Config(opt) {
         }
         return undefined
     }
+    
+    
+    var deepFreeze = function (obj) {
 
-    var parseFileConf = function(root, arr, obj, len, i, content) {
+        // On récupère les noms des propriétés définies sur obj
+        var propNames = Object.getOwnPropertyNames(obj);
+        
+        // On gèle les propriétés avant de geler l'objet
+        for(let name of propNames){
+            let value = obj[name];
+            obj[name] = value && typeof value === "object" ?
+            deepFreeze(value) : value;
+        }
+        
+        // On gèle l'objet initial
+        return Object.freeze(obj);
+    }
+
+    var parseFileConf = function(root, arr, obj, len, i, content, pathname) {
 
 
-        var key = arr[i];
+        key = arr[i];
         if (/\-/.test(key)) {
             key = key.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
         }
-
-        if (i == len - 1) { // end
-            if (!obj.hasOwnProperty(key)) {
-                obj[key] = content;
-            } else { // overiding exiting
-                obj[key] = merge(content, obj[key]);
+        
+        if ( i == 0 && Array.isArray(content)) {
+            var _key = '';
+            for (let _i = 0; _i < len; _i++) {
+                _key += arr[_i]
+                if (_i < len-1)
+                    _key += '.';
+            }
+            pathname = _key;
+        }
+        
+        if (i == len - 1) { // end            
+            if ( typeof(global._jsonConfig) == 'undefined' ) {
+                global._jsonConfig = {}
+            }
+            if ( typeof(global._jsonConfig[pathname]) == 'undefined' ) {
+                global._jsonConfig[pathname] = {}
+            }
+            // getConfig('app.key') should equal getConfig('app').key            
+            if (root.hasOwnProperty(pathname)) {
+                //
+                if (!obj.hasOwnProperty(key)) {
+                    //root[pathname] = content;
+                    content = deepFreeze(content);
+                    //global._jsonConfig[pathname] = content;
+                    //Object.freeze(global._jsonConfig[pathname]);
+                    root.__defineGetter__(pathname, function(){ return content });
+                } else {
+                    //root[pathname] = merge(content, root[pathname]);
+                    var _content = merge(content, root[pathname]);
+                    _content = deepFreeze(_content);
+                    //global._jsonConfig[pathname] = _content;
+                    //Object.freeze(global._jsonConfig[pathname]);
+                    root.__defineGetter__(pathname, function(){ return _content });
+                }
+                //obj[key] =  root[pathname]
+                obj.__defineGetter__(key, function() {
+                    return root[pathname]
+                    //return global._jsonConfig[pathname]
+                });
+                deepFreeze(obj[key]);             
+            } else {
+                // getConfig('app').key
+                if (!obj.hasOwnProperty(key)) {
+                    obj[key] = content;
+                } else { // overiding exiting
+                    obj[key] = merge(content, obj[key]);
+                }
             }
             return root
         }
 
         if (typeof (obj[key]) == 'undefined') {
 
-            obj[key] = {};
+            obj[key] = (Array.isArray(content)) ? [] : {};
             ++i;
 
-            return parseFileConf(root, arr, obj[key], len, i, content);
+            return parseFileConf(root, arr, obj[key], len, i, content, pathname);
         }
 
 
@@ -693,7 +752,7 @@ function Config(opt) {
 
             if (k == key) {
                 ++i;
-                return parseFileConf(root, arr, obj[key], len, i, content);
+                return parseFileConf(root, arr, obj[key], len, i, content, pathname);
             }
         }
     }
@@ -839,6 +898,9 @@ function Config(opt) {
                     if (exists) {
                         foundDevVersion = true;
                         jsonFile = requireJSON(_(filename, true));
+                        if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
+                            fileContent = []
+                        } 
                         fileContent = merge(jsonFile, fileContent);
                     }
 
@@ -863,7 +925,10 @@ function Config(opt) {
                 }
 
                 if (exists) {      
-                    jsonFile = requireJSON(_(filename, true));              
+                    jsonFile = requireJSON(_(filename, true));
+                    if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
+                        fileContent = []
+                    }             
                     fileContent = merge(fileContent, jsonFile);
                 } else {
                     console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
@@ -1597,6 +1662,7 @@ function Config(opt) {
 
         
         self.envConf[bundle][env] = conf[bundle][env];
+        
         ++b;
         if (b < bundles.length) {
             loadBundleConfig(bundles, b, callback, reload, collectedRules)
@@ -1819,7 +1885,7 @@ function Config(opt) {
 
 
         this.onReady = function(callback) {
-            self.once('complete', function(err, config) {
+            self.once('config#complete', function(err, config) {
                 callback(err, config)
             })
             return self

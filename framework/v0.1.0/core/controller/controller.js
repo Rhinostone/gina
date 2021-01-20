@@ -2663,8 +2663,11 @@ function SuperController(options) {
         if ( typeof(name) != 'undefined' ) {
             try {
                 // needs to be read only
-                config = JSON.parse(JSON.stringify(local.options.conf.content[name]));
-                return config
+                //config = JSON.parse(JSON.stringify(local.options.conf.content[name]));
+                //config = Object.freeze(local.options.conf.content[name]);
+                //Object.seal(local.options.conf.content[name]);
+                //Object.freeze(local.options.conf.content[name]);
+                return local.options.conf.content[name]
             } catch (err) {
                 return undefined
             }
