@@ -3291,8 +3291,13 @@ function ValidatorPlugin(rules, data, formId) {
             }
             var isLocalBoleanValue = ( /^(true|on|false)$/i.test(localValue) ) ? true : false;
             if (isInit && isLocalBoleanValue) {
-                
-                $el.checked = localValue;
+                // update checkbox initial state
+                if ( /^true$/i.test(localValue) && !$el.checked) {
+                    $el.checked = true;
+                } else {
+                    $el.checked = false;
+                }
+                //$el.checked = localValue;
             }
             var checked     = $el.checked;
             
@@ -3750,6 +3755,8 @@ function ValidatorPlugin(rules, data, formId) {
                                     rules[name] = { isBoolean: true };
                                 } else if ( typeof(rules[name]) != 'undefined' && typeof(rules[name].isBoolean) == 'undefined' ) {
                                     rules[name].isBoolean = true;
+                                    // forces it when field found in validation rules
+                                    rules[name].isRequired = true;
                                 }
 
                                 if ($target[i].type == 'radio') {
@@ -3766,6 +3773,7 @@ function ValidatorPlugin(rules, data, formId) {
                             } else {
                                 fields[name] = $target[i].value
                             }
+                            
                         }  else if ( // force validator to pass `false` if boolean is required explicitly
                             rules
                             && typeof(rules[name]) != 'undefined'
@@ -4195,17 +4203,13 @@ function ValidatorPlugin(rules, data, formId) {
                         && /(checkbox)/i.test($fields[field].getAttribute('type')) 
                     ) {
                         if ( 
-                            !$fields[field].checked 
+                            !$fields[field].checked && typeof(rules[field].isRequired) != 'undefined' && /^(false)$/i.test(rules[field].isRequired)
                             ||
                             $fields[field].disabled
-                        ) {      
-                            if ( typeof(rules[field]) == 'undefined' ) {
-                                rules[field] = {
-                                    exclude: true
-                                }
-                            } else {
-                                rules[field].exclude = true
-                            }                        
+                        ) {   
+                            rules[field] = {
+                                exclude: true
+                            }          
                                 
                         } else if ( !$fields[field].checked && typeof(rules[field]) == 'undefined' ) {     
                             continue;

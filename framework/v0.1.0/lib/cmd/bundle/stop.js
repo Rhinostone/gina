@@ -97,12 +97,7 @@ function Stop(opt, cmd) {
                         opt.notStopped.push(bundle + '@' + self.projectName);
                         end(opt, cmd, isBulkStop, bundleIndex)
                     }
-                    
-
-                })
-
-                
-
+                });
             })//EO isRealApp
         }
     }
@@ -119,7 +114,6 @@ function Stop(opt, cmd) {
                 
                 if ( typeof(error) != 'undefined') {
                     process.exit(1);
-                    return;
                 }
                 if (!opt.client.destroyed)
                     opt.client.emit('end');
@@ -129,7 +123,6 @@ function Stop(opt, cmd) {
         } else {
             if ( typeof(error) != 'undefined') {
                 process.exit(1);
-                return;
             }
             
             if (!opt.client.destroyed)
@@ -150,9 +143,8 @@ function Stop(opt, cmd) {
             , root = self.projects[self.projectName].path
             , bundleDir = null
             , bundlesPath = null
-            , bundleInit = null;
-
-
+            , bundleInit = null
+        ;
 
         try {
             //This is mostly for dev.
