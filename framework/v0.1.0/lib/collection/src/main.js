@@ -14,6 +14,8 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  * @param {object} [options]
  *
  * @return {object} instance
+ * 
+ * Collection.length will return result length : dont't use .count() which is going to include functions to the count
  *
  * Collection::find
  *  @param {object} filter
@@ -203,7 +205,6 @@ function Collection(content, options) {
                 , value             = null
                 , searchOptions     = localSearchOptions
                 , searchOptionRules = options.searchOptionRules
-                //, searchOptionRules = this._options.searchOptionRules
             ;
 
             var matched = null
@@ -243,6 +244,10 @@ function Collection(content, options) {
                     && /(<|>|=)/.test(filter) 
                     && !/undefined|function/.test(typeof(_content))
                 ) { // with operations
+                    let condition = _content + filter;
+                    if ( typeof(filter) == 'string' && typeof(_content) == 'string' ) {
+                        condition = '\"'+_content+'\"' + filter;
+                    }
                     // looking for a datetime ?
                     if (
                         /(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/.test(_content)
@@ -253,7 +258,7 @@ function Collection(content, options) {
                             ++matched;
                         }
 
-                    } else if (tryEval(_content + filter)) {
+                    } else if (tryEval(condition)) {
                         ++matched;
                     }
 
@@ -300,7 +305,7 @@ function Collection(content, options) {
 
                 return {
                     matched: matched
-                }
+                };
             }
 
             var searchThroughProp = function(filter, f, _content, matched) {
@@ -309,10 +314,7 @@ function Collection(content, options) {
                 field = field[field.length - 1];
                 re = new RegExp('("' + field + '":\\w+)');
                 
-                //var value = JSON.stringify(_content).match(re);
                 var value = null;
-                
-                //     value = JSON.stringify(_content).match(re);
                 
                 try {
                     if ( _content )
@@ -506,134 +508,52 @@ function Collection(content, options) {
      * @return {object} result
      * 
     */
-   instance['findOne'] = function() {
-    var key         = null // comparison key
-        , result    = null
-        , filters   = null
-        //, uuidSearchModeEnabled = true
-    ;
+    instance['findOne'] = function() {
+        var key         = null // comparison key
+            , result    = null
+            , filters   = null
+            //, uuidSearchModeEnabled = true
+        ;
 
-    if ( typeof(arguments[arguments.length-1]) == 'string' ) {
-        key = arguments[arguments.length - 1];
-        delete arguments[arguments.length - 1];
-        --arguments.length;
-    }
-    
-    // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
-    //     uuidSearchModeEnabled = arguments[arguments.length - 1]
-    //     delete arguments[arguments.length - 1];
-    //     --arguments.length;
-    // }
-    
-    if (arguments.length > 0) {
-        filters = arguments;
-    }
-    
-
-    if ( typeof(filters) == 'undefined' || !filters || typeof(filters) != 'object' ) {
-        throw new Error('[ Collection ][ findOne ] `filters` argument must be defined: Array or Filter Object(s) expected');
-    }
-
-    // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
-    //var currentResult = JSON.parse(JSON.stringify((Array.isArray(this)) ? this : content));
-    var currentResult = null;
-    var foundResults = null;
-    if ( Array.isArray(arguments[0]) ) {
-        foundResults = arguments[0];
-    } else {
-        foundResults = instance.find.apply(this, arguments) || [];
-    }
-    
-    if (foundResults.length > 0) {
-        currentResult = foundResults.limit(1).toRaw()[0];            
-    }
-
-    result          = currentResult;
-    return result
-}
-// instance['findOne'] = function(filter, options) {
-    
-//     if ( typeof(filter) !== 'object' ) {
-//         throw new Error('filter must be an object');
-//     } else {
+        if ( typeof(arguments[arguments.length-1]) == 'string' ) {
+            key = arguments[arguments.length - 1];
+            delete arguments[arguments.length - 1];
+            --arguments.length;
+        }
         
-//         var condition = filter.count()
-//             , i                 = 0
-//             , tmpContent        = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content))
-//             , result            = []
-//             , localeLowerCase   = '';
+        // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
+        //     uuidSearchModeEnabled = arguments[arguments.length - 1]
+        //     delete arguments[arguments.length - 1];
+        //     --arguments.length;
+        // }
+        
+        if (arguments.length > 0) {
+            filters = arguments;
+        }
+        
 
-//         var re          = null
-//         , reValidCount  = null
-//         , searchOptCount = null;
+        if ( typeof(filters) == 'undefined' || !filters || typeof(filters) != 'object' ) {
+            throw new Error('[ Collection ][ findOne ] `filters` argument must be defined: Array or Filter Object(s) expected');
+        }
 
-//         var optionsRules = {
-//             isCaseSensitive: {
-//                 false: {
-//                     re: '^%s$',
-//                     modifiers: 'i'
-//                 },
-//                 true: {
-//                     re: '^%s$'
-//                 }
-//             }
-//         }
+        // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
+        //var currentResult = JSON.parse(JSON.stringify((Array.isArray(this)) ? this : content));
+        var currentResult = null;
+        var foundResults = null;
+        if ( Array.isArray(arguments[0]) ) {
+            foundResults = arguments[0];
+        } else {
+            foundResults = instance.find.apply(this, arguments) || [];
+        }
+        
+        if (foundResults.length > 0) {
+            currentResult = foundResults.limit(1).toRaw()[0];            
+        }
 
-//         if (condition == 0) return null;
+        result          = currentResult;
+        return result
+    }
 
-//         for (var o in tmpContent) {
-//             for (var f in filter) {
-//                 if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
-
-//                 localeLowerCase = ( !/(boolean|number)/.test(typeof(filter[f])) ) ? filter[f].toLocaleLowerCase() : filter[f];
-//                 // NOT NULL case
-//                 if ( filter[f] && keywords.indexOf(localeLowerCase) > -1 && localeLowerCase == 'not null' && typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' && tmpContent[o][f] === filter[f] && tmpContent[o][f] != 'null' && tmpContent[o][f] != 'undefined' ) {
-//                     if (result.indexOf(tmpContent[o][f]) < 0 ) {
-//                         ++i;
-//                         if (i === condition) result = tmpContent[o]
-//                     }
-
-//                 } else if ( typeof(tmpContent[o][f]) != 'undefined' && typeof(tmpContent[o][f]) !== 'object' ) {
-                    
-//                     if ( typeof(options) != 'undefined' && typeof(options[f]) != 'undefined'  ) {
-//                         reValidCount    = 0;
-//                         searchOptCount  = options[f].count();
-                        
-//                         for (var opt in options[f]) {
-//                             optionsRules[opt][options[f][opt]].re = optionsRules[opt][options[f][opt]].re.replace(/\%s/, filter[f]);
-
-//                             if (optionsRules[opt][options[f][opt]].modifiers) {
-//                                 re = new RegExp(optionsRules[opt][options[f][opt]].re, optionsRules[opt][options[f][opt]].modifiers);   
-//                             } else {
-//                                 re = new RegExp(optionsRules[opt][options[f][opt]].re);
-//                             }
-                            
-//                             if ( re.test(tmpContent[o][f]) ) {
-//                                 ++reValidCount
-//                             }
-//                         }
-
-//                         if (reValidCount == searchOptCount) {
-//                             ++i;
-//                             if (i === condition) result = tmpContent[o]
-//                         }
-//                     } else if ( tmpContent[o][f] === filter[f] ) { // normal case
-//                         ++i;
-//                         if (i === condition) result = tmpContent[o]
-//                     }
-                    
-//                 } else if ( filter[f] === null && tmpContent[o][f] === null ) { // NULL case
-//                     ++i;
-//                     if (i === condition) result = tmpContent[o]
-//                 }
-//             }
-//         }
-//     }
-
-//     result.toRaw = instance.toRaw;
-
-//     return ( Array.isArray(result) && !result.length ) ? null : result
-// }
 
     instance['or'] = function () {
         arguments[arguments.length] = true;
@@ -661,6 +581,7 @@ function Collection(content, options) {
         result.orderBy  = instance.orderBy;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
+        
 
         return result
     }
@@ -838,6 +759,7 @@ function Collection(content, options) {
         result.orderBy  = instance.orderBy;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
+        
 
         return result
     }
@@ -868,6 +790,7 @@ function Collection(content, options) {
         result.notIn    = instance.notIn;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
+        
 
         return result
     }
@@ -959,6 +882,7 @@ function Collection(content, options) {
         result.notIn    = instance.notIn;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
+        
 
         return result
     }
@@ -1045,6 +969,7 @@ function Collection(content, options) {
         result.notIn    = instance.notIn;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
+        
 
         return result
     }
@@ -1072,15 +997,16 @@ function Collection(content, options) {
 
         var result = instance.notIn.apply(this, arguments);
 
-        result.limit = instance.limit;
-        result.find = instance.find;
-        result.findOne = instance.findOne;
-        result.insert = instance.insert;
-        result.update = instance.update;
-        result.replace = instance.replace;
-        result.orderBy = instance.orderBy;
-        result.notIn = instance.notIn;
-        result.toRaw = instance.toRaw;
+        result.limit    = instance.limit;
+        result.find     = instance.find;
+        result.findOne  = instance.findOne;
+        result.insert   = instance.insert;
+        result.update   = instance.update;
+        result.replace  = instance.replace;
+        result.orderBy  = instance.orderBy;
+        result.notIn    = instance.notIn;
+        result.toRaw    = instance.toRaw;
+        
 
         return result
     }
@@ -1334,12 +1260,13 @@ function Collection(content, options) {
         result.orderBy  = instance.orderBy;
         result.toRaw    = instance.toRaw;
         
+        
         return result
     };
 
     /**
      * toRaw
-     * Trasnform result into a clean format (without _uuid)
+     * Transform result into a clean format (without _uuid)
      *
      * @param {object|array} result
      * */
@@ -1354,7 +1281,8 @@ function Collection(content, options) {
 
         return JSON.parse(JSON.stringify(result))
     }
-
+    
+    
     return instance;
 };
 

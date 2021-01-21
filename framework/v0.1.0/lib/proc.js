@@ -47,6 +47,7 @@ var spawn       = require('child_process').spawn;
 var UtilsConfig = require( _(__dirname + '/config') );
 var inherits    = require( _(__dirname + '/inherits') );
 var console     = require( _(__dirname + '/logger') );
+var Collection  = require( _(__dirname + '/collection') );
 //var helpers     = require( _(__dirname + '/helpers') );
 
 //console.debug('[ FRAMEWORK ][ PROC ] path ? ', getPaths());
@@ -62,21 +63,20 @@ function Proc(bundle, proc, usePidFile){
     var e       = new Emitter();
 
     if ( typeof(usePidFile) == 'undefined') {
-        var usePidFile = true
+        usePidFile = true
     }
 
     //default path to store pid files.
     var pathObj = new _( GINA_RUNDIR + '/gina' );
 
     var self    = {
-        usePidFile  : usePidFile || false,
-        PID         : null,
+        PID         : proc.pid,
         path        : null,
         master      : false, //used only by master.
         bundle      : bundle,
         bundles     : [],
-        proc        : proc
-
+        proc        : proc,
+        usePidFile  : usePidFile
     };
 
     /**
@@ -267,7 +267,7 @@ function Proc(bundle, proc, usePidFile){
 
     var dismiss = function(pid, signal){
         if (pid == undefined) {
-            var pid = self.PID;
+            pid = self.PID;
         }
 
         try {
@@ -284,16 +284,21 @@ function Proc(bundle, proc, usePidFile){
                 if ( process.list[p].pid == pid && process.list[p].name != 'gina' ) {
                     index       = p;
                     pidPath     = _(GINA_RUNDIR + '/gina/' + process.list[p].pid);
-                    mountPath   =  _(getPath('mountPath') + '/' + process.list[p].name);
-
                     if ( fs.existsSync(pidPath) )
                         fs.unlinkSync( pidPath );
-
-                    if ( fs.existsSync(mountPath) )
-                        fs.unlinkSync( mountPath );
-
-                    // soft kill..
-                    process.kill(pid, signal);
+                    try {
+                        if ( typeof(process.isMinion) == 'undefined' ) {
+                            mountPath   =  _(getPath('mountPath') + '/' + process.list[p].name);
+                            if ( fs.existsSync(mountPath) )
+                                fs.unlinkSync( mountPath );
+                        }
+                        // soft kill..
+                        process.kill(pid, signal);
+                    } catch (err) {                        
+                        console.warn('[ FRAMEWORK ][ PROC ] Could not unmount process file `'+process.list[p].name+'`\n'+ err.stack);
+                    }
+                    
+                    
                 } else if ( process.list[p].pid == pid && process.list[p].name == 'gina' ) {
                     index       = p;
                     pidPath     = _(GINA_RUNDIR + '/gina/' + process.list[p].pid);
@@ -346,14 +351,14 @@ function Proc(bundle, proc, usePidFile){
                 fileStream.once('open', function(fd) {
                     fileStream.write(bundle);
                     fileStream.end();
-                    e.emit('proc#complete', false, PID)
+                    e.emit('proc#complete-'+self.PID, false, PID)
                 });
             } catch (err) {
-                e.emit('proc#complete', err)
+                e.emit('proc#complete-'+self.PID, err)
             }
 
         } else {
-            e.emit('proc#complete', new Error('encountered troubles while trying to save Process [ '+ PID +' ] file'))
+            e.emit('proc#complete-'+self.PID, new Error('encountered troubles while trying to save Process [ '+ PID +' ] file'))
         }
     };
 
@@ -405,20 +410,30 @@ function Proc(bundle, proc, usePidFile){
     };
 
     self.register = function(bundle, pid) {
-
-        if ( bundle == 'gina' || bundle != 'gina' && self.bundles.indexOf(bundle) == -1 ) {
-            
+        
+        var processCollection = new Collection(process.list);
+        var existingProcess = processCollection.findOne({ name: bundle, pid: pid });
+        // cleanup if found;
+        if (existingProcess) {
+            process.list = processCollection.delete({ name: bundle, pid: pid }, 'pid').toRaw();
+            dismiss(existingProcess.pid);
+            console.debug('[ FRAMEWORK ][ PROC ] Don\'t pannic ...');
+            existingProcess = null;
+        }
+        
+        
+        if ( bundle == 'gina'  || bundle != 'gina' && self.bundles.indexOf(bundle) == -1 ) {
+            console.debug('[ FRAMEWORK ][ PROC ] Now registering `'+bundle+'` with PID `'+ pid +'`');
             var list = {};
 
             var processRegistration = function () {
 
-                if (bundle != 'gina') {
+                if (bundle != 'gina' && !existingProcess) {
                     self.bundles.push(bundle);
                 }
-
+                
                 list['pid']     = pid;
                 list['name']    = bundle;
-
                 process.list.push(list);//Running bundles.
                 setContext('process.list', process.list);
                 process.pids[bundle] = pid;
@@ -427,8 +442,6 @@ function Proc(bundle, proc, usePidFile){
             };
 
             if (self.usePidFile) {
-                //var path    = pathObj.toString();
-
                 pathObj.mkdir( function(err, path){
                     console.debug('[ FRAMEWORK ][ PROC ] Path created ('+ path +') now saving PID ' + bundle);
                     //save file
@@ -455,7 +468,7 @@ function Proc(bundle, proc, usePidFile){
     self.dismiss = dismiss;
 
     self.onReady = function(cb) {
-        e.once('proc#complete', function(err, pid){
+        e.once('proc#complete-'+self.PID, function(err, pid){
             cb(err, pid)
         })
     }
