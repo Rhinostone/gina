@@ -109,7 +109,6 @@ function Restart(opt, cmd) {
         } else {
             if ( typeof(error) != 'undefined') {
                 process.exit(1);
-                return;
             }
             
             if (!opt.client.destroyed)

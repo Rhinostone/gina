@@ -92,16 +92,18 @@ function Collection(content, options) {
     content = (content) ? JSON.parse(JSON.stringify(content)) : []; // original content -> not to be touched
         
     // Indexing : uuids are generated for each entry
+    var searchIndex = [], idx = 0;
     for (var entry = 0, entryLen = content.length; entry < entryLen; ++entry) {
         if (!content[entry]) {
             content[entry] = {}
         }
         content[entry]._uuid = uuid.v4();
+        // To avoid duplicate entries
+        searchIndex[idx] = content[entry]._uuid;
+        ++idx;
     }
 
-    var instance = content;
-    //instance._options = options;
-    
+    var instance = content;    
     /**
      * Set local search option for the current collection method call
      * 
@@ -136,8 +138,8 @@ function Collection(content, options) {
         if (arguments.length > 3 || arguments.length < 3 && arguments.length > 1)
             throw new Error('argument length mismatch');
         
-        var i = 0
-            , len = arguments.length
+        var i       = 0
+            , len   = arguments.length
         ;
         
         if (arguments.length == 1) {
@@ -184,13 +186,24 @@ function Collection(content, options) {
             --arguments.length;
         }
 
-        var filtersStr  = JSON.stringify(arguments);
-        var filters     = JSON.parse(filtersStr);
-
-        if ( typeof(filters) != 'undefined' && typeof(filters) !== 'object' ) {
-            throw new Error('filter must be an object');
-        } else if ( typeof(filters) != 'undefined' && filters.count() > 0 ) {
+        var filtersStr      = null;
+        var filters         = null;
+        var filtersCount    = null;
+        try {
+            filtersStr      = JSON.stringify(arguments);
+            filters         = JSON.parse(filtersStr);
+            filtersCount    = filters.count();
+        } catch( filtersError) {
+            throw new Error('filter must be an object\n'+ filtersError.stack);  
+        } 
+        
+        if ( typeof(filters) != 'undefined' && filtersCount > 0 ) {
             
+            if (filtersCount > 1) {
+                withOrClause = true;
+                console.debug('withOrClause : ', withOrClause)
+            }
+                        
             var filter              = null
                 , condition         = null
                 , i                 = 0
@@ -357,7 +370,7 @@ function Collection(content, options) {
                         }
                     }
 
-                }
+                }                
 
                 return {
                     matched: matched
@@ -449,10 +462,15 @@ function Collection(content, options) {
                             }
                         }
 
-                        if (matched == condition) { // all conditions must be fulfilled to match                           
-
-                            result[i] = tmpContent[o];                            
-                            ++i;
+                        if (matched == condition ) { // all conditions must be fulfilled to match
+                            if (!withOrClause || withOrClause && result.indexOf(tmpContent[o]._uuid) < 0) {
+                                if (withOrClause)
+                                    console.debug('matched withOrClause : ', withOrClause);
+                                if (result.indexOf(tmpContent[o]._uuid) < 0) {
+                                    result[i] = tmpContent[o]; 
+                                }                                                           
+                                ++i;
+                            }                            
                         }
 
                     }
@@ -468,7 +486,8 @@ function Collection(content, options) {
         // TODO - remove this
         if (withOrClause) {
             // merging with previous result (this)
-            result  = merge(this, result, true)
+            //result  = merge(this, result, true)
+            
         }
 
         // chaining
