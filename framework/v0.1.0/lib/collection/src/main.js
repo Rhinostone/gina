@@ -60,7 +60,8 @@ function Collection(content, options) {
             }
         }
     };
-    
+    var withOrClause = false;
+    var notInSearchModeEnabled = false;
     
     var localSearchOptions  = null;
     
@@ -177,8 +178,8 @@ function Collection(content, options) {
 
     
     instance['find'] = function() {
-
-        var withOrClause = false;
+        // reset 
+        withOrClause = false;
         
         if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
             withOrClause = arguments[arguments.length-1];
@@ -200,9 +201,19 @@ function Collection(content, options) {
         if ( typeof(filters) != 'undefined' && filtersCount > 0 ) {
             
             if (filtersCount > 1) {
-                withOrClause = true;
-                console.debug('withOrClause : ', withOrClause)
+                withOrClause = true;                
             }
+            // checking filter : this should be forbidden -> { type: 'red', type: 'orange'}
+            // var filtersFields = null;
+            // for (let f = 0, fLen = filters.count(); f < fLen; f++) {
+            //     filtersFields = {};
+            //     for (let fField in filters[f]) {
+            //         if (  typeof(filtersFields[ fField ]) != 'undefined' ) {
+            //             throw new Error('Filter field can only be defined once inside a filter object !\n`Field '+ fField +'` is already defined : '+ filters[f])
+            //         }
+            //         filtersFields[ fField ] = true;
+            //     }
+            // }
                         
             var filter              = null
                 , condition         = null
@@ -463,14 +474,15 @@ function Collection(content, options) {
                         }
 
                         if (matched == condition ) { // all conditions must be fulfilled to match
-                            if (!withOrClause || withOrClause && result.indexOf(tmpContent[o]._uuid) < 0) {
-                                if (withOrClause)
-                                    console.debug('matched withOrClause : ', withOrClause);
-                                if (result.indexOf(tmpContent[o]._uuid) < 0) {
-                                    result[i] = tmpContent[o]; 
-                                }                                                           
+                            // `this` {Array} is the result of the previous search or the current content                             
+                            if (
+                                withOrClause && searchIndex.indexOf(tmpContent[o]._uuid) < 0 || notInSearchModeEnabled
+                                || !withOrClause
+                            ) {
+                                //console.debug('searchIndex ', searchIndex);
+                                result[i] = tmpContent[o];
                                 ++i;
-                            }                            
+                            }                          
                         }
 
                     }
@@ -485,7 +497,13 @@ function Collection(content, options) {
         
         // TODO - remove this
         if (withOrClause) {
-            // merging with previous result (this)
+            // merging with previous result
+            //console.debug('withOrClause: supposed to merge ? \nnotInSearchModeEnabled: '+notInSearchModeEnabled+'\nResult: ' +result)//+'\nThis: '+ this.toRaw();
+            if (!notInSearchModeEnabled) {
+                result  = merge(this, result);
+            }
+            // TODO - remove this part
+            // Removed this on 2021-01-21 because it was causing duplicate content
             //result  = merge(this, result, true)
             
         }
@@ -669,8 +687,11 @@ function Collection(content, options) {
         if ( Array.isArray(arguments[0]) ) {
             foundResults    = arguments[0];
         } else {
+            notInSearchModeEnabled = true;
             foundResults    = instance.find.apply(this, arguments) || [];
+            notInSearchModeEnabled = false;
         }
+        
         
         if (foundResults.length > 0) {
             
