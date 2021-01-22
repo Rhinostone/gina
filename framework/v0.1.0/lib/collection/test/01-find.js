@@ -8,30 +8,30 @@ var data = {
 
 
 var hotels = new Collection(data.hotels);
-var result = null, mocks = null;
+var result = null, mocks = null, query = null;
 
 exports['[ Instance is Array ]'] = function(test) {
 
     test.equal(Array.isArray(hotels), true);
     test.done()
 }
+// query = 'findHotelWhereCountryIsFrance';
+// exports['[ find limit ] Hotel WHERE country === `France`\n    [ limit ] 2 '] = function(test) {
 
-exports['[ find limit ] Hotel WHERE country === `France`\n    [ limit ] 2 '] = function(test) {
+//     result  = hotels
+//                 .find({ country: 'France' })
+//                 .limit(2)
+//                 .toRaw();
 
-    result  = hotels
-                .find({ country: 'France' })
-                .limit(2)
-                .toRaw();
-
-    mocks   = JSON.parse(fs.readFileSync(__dirname + '/data/result/' + collectionName +'/find/findHotelWhereCountryIsFrance.json'))
-                .splice(0, 2);
+//     mocks   = JSON.parse(fs.readFileSync(__dirname + '/data/result/' + collectionName +'/find/'+query+'json'))
+//                 .splice(0, 2);
     
-    test.equal(Array.isArray(result), true );
-    test.equal(result.length, mocks.length);
-    test.deepEqual(result, mocks);
+//     test.equal(Array.isArray(result), true );
+//     test.equal(result.length, mocks.length);
+//     test.deepEqual(result, mocks);
 
-    test.done()
-}
+//     test.done()
+// }
 
 exports['[ find notIn filters ] Hotel WHERE country NOTIN `United Kingdom` OR NOTIN `United States`'] = function(test) {
 

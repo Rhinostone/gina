@@ -3290,11 +3290,12 @@ function ValidatorPlugin(rules, data, formId) {
                 localValue = false
             }
             var isLocalBoleanValue = ( /^(true|on|false)$/i.test(localValue) ) ? true : false;
-            if (isInit && isLocalBoleanValue) {
+            if (isInit && isLocalBoleanValue) { // on checkbox init
                 // update checkbox initial state
+                // Value defines checked state by default
                 if ( /^true$/i.test(localValue) && !$el.checked) {
                     $el.checked = true;
-                } else {
+                } else if ( /^false$/i.test(localValue) && $el.checked) {
                     $el.checked = false;
                 }
                 //$el.checked = localValue;
@@ -4203,7 +4204,10 @@ function ValidatorPlugin(rules, data, formId) {
                         && /(checkbox)/i.test($fields[field].getAttribute('type')) 
                     ) {
                         if ( 
-                            !$fields[field].checked && typeof(rules[field].isRequired) != 'undefined' && /^(false)$/i.test(rules[field].isRequired)
+                            !$fields[field].checked
+                                && typeof(rules[field]) != 'undefined' 
+                                && typeof(rules[field].isRequired) != 'undefined' 
+                                && /^(false)$/i.test(rules[field].isRequired)
                             ||
                             $fields[field].disabled
                         ) {   
