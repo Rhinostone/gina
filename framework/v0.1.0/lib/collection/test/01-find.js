@@ -1,5 +1,11 @@
 var reporter    = require('nodeunit').reporters.default;
 var fs          = require('fs');
+
+
+var deepEqual = function(obj, obj2) {
+    return ( JSON.stringify(obj) === JSON.stringify(obj2) ) ? true: false;
+}
+
 var Collection  = require('../src/main');// Not needed if the framework installed
 var collectionName = 'hotel';
 var data = {
@@ -11,27 +17,48 @@ var hotels = new Collection(data.hotels);
 var result = null, mocks = null, query = null;
 
 exports['[ Instance is Array ]'] = function(test) {
-
     test.equal(Array.isArray(hotels), true);
     test.done()
 }
-// query = 'findHotelWhereCountryIsFrance';
-// exports['[ find limit ] Hotel WHERE country === `France`\n    [ limit ] 2 '] = function(test) {
 
-//     result  = hotels
-//                 .find({ country: 'France' })
-//                 .limit(2)
-//                 .toRaw();
+query = 'findHotelWhereCountryIsFrance';
+queryFile = fs.readFileSync(__dirname + '/data/result/' + collectionName +'/find/'+query+'.n1ql');
+exports['[ find limit ] Hotel WHERE country === `France`\n    [ limit ] 2 \n'+queryFile] = function(test) {
+    hotels = new Collection(data.hotels);
+    result  = hotels
+                .find({ country: 'France' })
+                .limit(2)
+                .toRaw();
 
-//     mocks   = JSON.parse(fs.readFileSync(__dirname + '/data/result/' + collectionName +'/find/'+query+'json'))
-//                 .splice(0, 2);
+    mocks   = JSON.parse(fs.readFileSync(__dirname + '/data/result/' + collectionName +'/find/'+query+'.json'));
     
-//     test.equal(Array.isArray(result), true );
-//     test.equal(result.length, mocks.length);
-//     test.deepEqual(result, mocks);
+    test.equal(Array.isArray(result), true );
+    test.equal(result.length, mocks.length);
+    //test.deepEqual(result, mocks);
+    
 
-//     test.done()
-// }
+    test.done();
+};
+
+query = 'findHotelWhereNameIs_Le Clos FleuriOrNameIsHotel d_Angleterre';
+queryFile = fs.readFileSync(__dirname + '/data/result/' + collectionName +'/find/'+query+'.n1ql');
+exports['[ find withOrClause ] \n'+queryFile] = function(test) {
+    
+    result  = hotels
+                .find(
+                    { type: 'hotel', name: 'Le Clos Fleuri' }
+                    , { type: 'hotel', name: "Hotel d'Angleterre" }
+                )
+                .toRaw();
+
+    mocks   = JSON.parse(fs.readFileSync(__dirname + '/data/result/' + collectionName +'/find/'+query+'.json'));
+    
+    test.equal(Array.isArray(result), true );
+    test.equal(result.length, mocks.length); // 2
+    test.equal(deepEqual(result, mocks), true);
+    
+    test.done();
+}
 
 exports['[ find notIn filters ] Hotel WHERE country NOTIN `United Kingdom` OR NOTIN `United States`'] = function(test) {
 
@@ -43,7 +70,8 @@ exports['[ find notIn filters ] Hotel WHERE country NOTIN `United Kingdom` OR NO
 
     test.equal(Array.isArray(result), true);
     test.equal(result.length, mocks.length);
-    test.deepEqual(result, mocks);
+    test.equal(deepEqual(result, mocks), true);
+    //test.deepEqual(result, mocks);
 
     test.done()
 }
