@@ -440,10 +440,10 @@ function Collection(content, options) {
                 }
                 
                 if (!/undefined|function/.test( typeof(tmpContent[o]))) {
-                    for (var l = 0, lLen = filters.count(); l<lLen; ++l) {
+                    for (let l = 0, lLen = filters.count(); l<lLen; ++l) {
                         filter = filters[l];
                         condition = filter.count();
-
+                        // for each condition 
                         matched = 0;
                         for (var f in filter) {
                             if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
@@ -467,25 +467,44 @@ function Collection(content, options) {
                                 }
 
                             } else { // normal case
-
-                                searchResult = search(filter[f], f, tmpContent[o][f], matched, searchOptionRules);
+                                                                    
+                                searchResult = search(filter[f], f, tmpContent[o][f], matched, searchOptionRules);    
+                                
+                                
                                 matched = searchResult.matched;
                             }
+                            
+                            
                         }
 
                         if (matched == condition ) { // all conditions must be fulfilled to match
                             // `this` {Array} is the result of the previous search or the current content                             
                             if (
-                                withOrClause && searchIndex.indexOf(tmpContent[o]._uuid) < 0 || notInSearchModeEnabled
+                                withOrClause 
+                                && notInSearchModeEnabled
+                                && searchIndex.indexOf(tmpContent[o]._uuid) < 0 
+                                || notInSearchModeEnabled
                                 || !withOrClause
                             ) {
                                 //console.debug('searchIndex ', searchIndex);
                                 result[i] = tmpContent[o];
                                 ++i;
-                            }                          
+                            } else if (
+                                withOrClause
+                                && !notInSearchModeEnabled
+                            ) {
+                                if (result.indexOf(tmpContent[o]._uuid) < 0) {
+                                    result[i] = tmpContent[o];
+                                    ++i;
+                                }   
+                            } else {
+                                result[i] = tmpContent[o];
+                                ++i;
+                            }
                         }
 
                     }
+                    
                 }
             }
         } else {
@@ -499,9 +518,9 @@ function Collection(content, options) {
         if (withOrClause) {
             // merging with previous result
             //console.debug('withOrClause: supposed to merge ? \nnotInSearchModeEnabled: '+notInSearchModeEnabled+'\nResult: ' +result)//+'\nThis: '+ this.toRaw();
-            if (!notInSearchModeEnabled) {
-                result  = merge(this, result);
-            }
+            // if (!notInSearchModeEnabled) {
+            //     result  = merge(this, result);
+            // }
             // TODO - remove this part
             // Removed this on 2021-01-21 because it was causing duplicate content
             //result  = merge(this, result, true)
