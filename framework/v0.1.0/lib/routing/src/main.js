@@ -273,10 +273,23 @@ function Routing() {
                 _data = {}; _ruleObj = {}; _rule = {}; str = '';                
                 urlVar.replace( new RegExp('[^'+ key +']','g'), function(){ str += arguments[0]  });                
                 _data[key]  = urlVal.replace( new RegExp(str, 'g'), '');
-                _ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));       
+                try {
+                    //_ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));
+                    _ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0])
+                } catch (err) {
+                    //try {
+                    //    ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0])
+                    //} catch (_err) {
+                        throw _err
+                    //}
+                }
+                //_ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));       
                 _rule[key]  = _ruleObj;                
                 _validator  = new Validator('routing', _data, null, _rule );
-                
+                if (_ruleObj.count() == 0 ) {
+                    console.error('Route validation failed '+ params.rule);
+                    return false;
+                }
                 for (rule in _ruleObj) {
                     if (Array.isArray(_ruleObj[rule])) { // has args
                         _validator[key][rule].apply(_validator[key], _ruleObj[rule])
