@@ -3282,10 +3282,14 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                 } 
             }
-
             
+            // Preventing jQuery setting `on` value when input is not checked
+            if (isInit && /^(on)$/i.test($el.value) && !$el.checked) {
+                $el.value = false
+            }
             var localValue  = $el.getAttribute('data-value') || $el.getAttribute('value') || $el.value;
             localValue = (/^(true|on)$/.test(localValue)) ? true : localValue;
+            
             if (localValue === '') {
                 localValue = false
             }
@@ -3483,7 +3487,7 @@ function ValidatorPlugin(rules, data, formId) {
             addListener(gina, $target, 'click', function(event) {
                 
                 var $el = event.target;
-                var isCustomSubmit = false;
+                var isCustomSubmit = false, isCaseIgnored = false;
                 if (
                     /(label)/i.test(event.target.tagName) 
                         && typeof(event.target.control) != 'undefined' 
@@ -3504,19 +3508,20 @@ function ValidatorPlugin(rules, data, formId) {
                     // if `event.target.control` not working on all browser,
                     // try to detect `for` attribute OR check if on of the label's event.target.children is an input & type == (checkbox|radio)
                     $el = event.target.control || event.target.parentNode.control;
-                    if ( 
-                        !$el.disabled 
-                        && /(checkbox|radio)/i.test($el.type) 
-                        && !isCaseIgnored
-                    ) {
-                        // apply checked choice : if true -> set to false, and if false -> set to true                        
-                        if ( /checkbox/i.test($el.type) ) {
-                            return updateCheckBox($el);
-                        } else if ( /radio/i.test($el.type) ) {
-                            return updateRadio($el, false, true);
-                        }
-                    }                    
-                }                        
+                                       
+                }
+                if ( 
+                    !$el.disabled 
+                    && /(checkbox|radio)/i.test($el.type) 
+                    && !isCaseIgnored
+                ) {
+                    // apply checked choice : if true -> set to false, and if false -> set to true                        
+                    if ( /checkbox/i.test($el.type) ) {
+                        return updateCheckBox($el);
+                    } else if ( /radio/i.test($el.type) ) {
+                        return updateRadio($el, false, true);
+                    }
+                }                       
                 
                 
                 // include only these elements for the binding

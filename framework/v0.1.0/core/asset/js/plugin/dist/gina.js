@@ -4644,9 +4644,7 @@ function Collection(content, options) {
 
                             } else { // normal case
                                                                     
-                                searchResult = search(filter[f], f, tmpContent[o][f], matched, searchOptionRules);    
-                                
-                                
+                                searchResult = search(filter[f], f, tmpContent[o][f], matched, searchOptionRules);                                
                                 matched = searchResult.matched;
                             }
                             
@@ -4654,7 +4652,8 @@ function Collection(content, options) {
                         }
 
                         if (matched == condition ) { // all conditions must be fulfilled to match
-                            // `this` {Array} is the result of the previous search or the current content                             
+                            // `this` {Array} is the result of the previous search or the current content
+                            // TODO - Add a switch                             
                             if (
                                 withOrClause 
                                 && notInSearchModeEnabled
@@ -4663,8 +4662,10 @@ function Collection(content, options) {
                                 || !withOrClause
                             ) {
                                 //console.debug('searchIndex ', searchIndex);
-                                result[i] = tmpContent[o];
-                                ++i;
+                                if (!withOrClause || withOrClause && result.indexOf(tmpContent[o]._uuid) < 0 || notInSearchModeEnabled) {
+                                    result[i] = tmpContent[o];
+                                    ++i;
+                                }
                             } else if (
                                 withOrClause
                                 && !notInSearchModeEnabled
@@ -4673,9 +4674,6 @@ function Collection(content, options) {
                                     result[i] = tmpContent[o];
                                     ++i;
                                 }   
-                            } else {
-                                result[i] = tmpContent[o];
-                                ++i;
                             }
                         }
 
@@ -5803,10 +5801,23 @@ function Routing() {
                 _data = {}; _ruleObj = {}; _rule = {}; str = '';                
                 urlVar.replace( new RegExp('[^'+ key +']','g'), function(){ str += arguments[0]  });                
                 _data[key]  = urlVal.replace( new RegExp(str, 'g'), '');
-                _ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));       
+                try {
+                    //_ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));
+                    _ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0])
+                } catch (err) {
+                    //try {
+                    //    ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0])
+                    //} catch (_err) {
+                        throw _err
+                    //}
+                }
+                //_ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));       
                 _rule[key]  = _ruleObj;                
                 _validator  = new Validator('routing', _data, null, _rule );
-                
+                if (_ruleObj.count() == 0 ) {
+                    console.error('Route validation failed '+ params.rule);
+                    return false;
+                }
                 for (rule in _ruleObj) {
                     if (Array.isArray(_ruleObj[rule])) { // has args
                         _validator[key][rule].apply(_validator[key], _ruleObj[rule])
@@ -6997,12 +7008,19 @@ function FormValidatorUtil(data, $fields, xhrOptions) {
         local.data = JSON.parse( JSON.stringify(data) )
     }
     
+    // TODO - One method for the front, and one for the server
+    // var queryFromFrontend = function(options) {
+        
+    // }
     
+    // var queryFromBackend = function(options) {
+        
+    // }    
     /**
      * query
      */
     var query = function(options) {
-        
+                        
         var xhr = null, _this = this;
         // setting up AJAX
         if (window.XMLHttpRequest) { // Mozilla, Safari, ...
@@ -11359,10 +11377,14 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                 } 
             }
-
             
+            // Preventing jQuery setting `on` value when input is not checked
+            if (isInit && /^(on)$/i.test($el.value) && !$el.checked) {
+                $el.value = false
+            }
             var localValue  = $el.getAttribute('data-value') || $el.getAttribute('value') || $el.value;
             localValue = (/^(true|on)$/.test(localValue)) ? true : localValue;
+            
             if (localValue === '') {
                 localValue = false
             }
@@ -11560,7 +11582,7 @@ function ValidatorPlugin(rules, data, formId) {
             addListener(gina, $target, 'click', function(event) {
                 
                 var $el = event.target;
-                var isCustomSubmit = false;
+                var isCustomSubmit = false, isCaseIgnored = false;
                 if (
                     /(label)/i.test(event.target.tagName) 
                         && typeof(event.target.control) != 'undefined' 
@@ -11581,19 +11603,20 @@ function ValidatorPlugin(rules, data, formId) {
                     // if `event.target.control` not working on all browser,
                     // try to detect `for` attribute OR check if on of the label's event.target.children is an input & type == (checkbox|radio)
                     $el = event.target.control || event.target.parentNode.control;
-                    if ( 
-                        !$el.disabled 
-                        && /(checkbox|radio)/i.test($el.type) 
-                        && !isCaseIgnored
-                    ) {
-                        // apply checked choice : if true -> set to false, and if false -> set to true                        
-                        if ( /checkbox/i.test($el.type) ) {
-                            return updateCheckBox($el);
-                        } else if ( /radio/i.test($el.type) ) {
-                            return updateRadio($el, false, true);
-                        }
-                    }                    
-                }                        
+                                       
+                }
+                if ( 
+                    !$el.disabled 
+                    && /(checkbox|radio)/i.test($el.type) 
+                    && !isCaseIgnored
+                ) {
+                    // apply checked choice : if true -> set to false, and if false -> set to true                        
+                    if ( /checkbox/i.test($el.type) ) {
+                        return updateCheckBox($el);
+                    } else if ( /radio/i.test($el.type) ) {
+                        return updateRadio($el, false, true);
+                    }
+                }                       
                 
                 
                 // include only these elements for the binding

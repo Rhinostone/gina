@@ -70,12 +70,19 @@ function FormValidatorUtil(data, $fields, xhrOptions) {
         local.data = JSON.parse( JSON.stringify(data) )
     }
     
+    // TODO - One method for the front, and one for the server
+    // var queryFromFrontend = function(options) {
+        
+    // }
     
+    // var queryFromBackend = function(options) {
+        
+    // }    
     /**
      * query
      */
     var query = function(options) {
-        
+                        
         var xhr = null, _this = this;
         // setting up AJAX
         if (window.XMLHttpRequest) { // Mozilla, Safari, ...

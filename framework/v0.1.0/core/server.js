@@ -2589,6 +2589,11 @@ function Server(options) {
                 //     routing[name].hostname = self.conf.routing[name].hostname = hostname;                     
                 // }
                 
+                // For debug only
+                // if ( name == 'name-of-targeted-rule@bundle') {
+                //     console.debug('checking: ', name);
+                // }
+                
                 if (routing[name].bundle != bundle) continue;
                 // method filter    
                 method = routing[name].method;

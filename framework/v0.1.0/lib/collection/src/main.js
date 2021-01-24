@@ -468,9 +468,7 @@ function Collection(content, options) {
 
                             } else { // normal case
                                                                     
-                                searchResult = search(filter[f], f, tmpContent[o][f], matched, searchOptionRules);    
-                                
-                                
+                                searchResult = search(filter[f], f, tmpContent[o][f], matched, searchOptionRules);                                
                                 matched = searchResult.matched;
                             }
                             
@@ -478,7 +476,8 @@ function Collection(content, options) {
                         }
 
                         if (matched == condition ) { // all conditions must be fulfilled to match
-                            // `this` {Array} is the result of the previous search or the current content                             
+                            // `this` {Array} is the result of the previous search or the current content
+                            // TODO - Add a switch                             
                             if (
                                 withOrClause 
                                 && notInSearchModeEnabled
@@ -487,8 +486,10 @@ function Collection(content, options) {
                                 || !withOrClause
                             ) {
                                 //console.debug('searchIndex ', searchIndex);
-                                result[i] = tmpContent[o];
-                                ++i;
+                                if (!withOrClause || withOrClause && result.indexOf(tmpContent[o]._uuid) < 0 || notInSearchModeEnabled) {
+                                    result[i] = tmpContent[o];
+                                    ++i;
+                                }
                             } else if (
                                 withOrClause
                                 && !notInSearchModeEnabled
@@ -497,9 +498,6 @@ function Collection(content, options) {
                                     result[i] = tmpContent[o];
                                     ++i;
                                 }   
-                            } else {
-                                result[i] = tmpContent[o];
-                                ++i;
                             }
                         }
 
