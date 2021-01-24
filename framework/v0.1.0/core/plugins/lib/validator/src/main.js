@@ -3898,6 +3898,7 @@ function ValidatorPlugin(rules, data, formId) {
             } else {
                 evt = $submit['id'];
             }
+            $form.submitTrigger = $submit['id'];
 
 
             if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $submit.id ) {
@@ -3918,6 +3919,13 @@ function ValidatorPlugin(rules, data, formId) {
                 , id        = $target.getAttribute('id')
                 , isBinded  = instance.$forms[id].binded
             ;
+            
+            // check submit trigger status
+            var submitTrigger = new DOMParser().parseFromString($target.innerHTML, 'text/html').getElementById($form.submitTrigger);
+            // prevent submit if disabled
+            if (submitTrigger.disabled) {
+                cancelEvent(e);
+            }
 
             // prevent event to be triggered twice
             if ( typeof(e.defaultPrevented) != 'undefined' && e.defaultPrevented )
