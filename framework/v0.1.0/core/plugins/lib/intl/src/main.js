@@ -5,8 +5,20 @@ function IntlPlugin() {
     var Collection  = Collection || require('utils/collection');
 
     var self = {
-        'options' : { }
+        options : {
+            isCaseSensitive: true,
+            locale: 'en' // by default
+        }
     };
+    
+    // load phrases
+    var phrases = {
+        'amendment' : {
+            _data : null,
+            en : 'amendment',
+            fr : 'avenant'
+        }
+    }
 
 };
 

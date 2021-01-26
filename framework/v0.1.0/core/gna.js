@@ -323,6 +323,7 @@ gna.getProjectConfiguration = function (callback){
             setPath('helpers', _(bundlePath+'/helpers', true));
             setPath('lib', _(bundlePath+'/lib', true));
             setPath('models', _(bundlePath+'/models', true));
+            setPath('controllers', _(bundlePath+'/controllers', true));
 
             callback(false, project);
         } catch (err) {

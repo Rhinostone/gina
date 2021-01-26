@@ -50,48 +50,6 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
         }
     }
 
-    /**
-     * Custom object properties definition
-     * */
-
-    // Object.defineProperty( Date.prototype, 'format', {
-    //     writable:   false,
-    //     enumerable: false,
-    //     //If loaded several times, it can lead to an exception. That's why I put this.
-    //     configurable: true,
-    //     value: function(mask, utc){ return dateFormat.format(this, mask, utc) }
-    // });
-    
-    // Object.defineProperty( Date.prototype, 'addHours', {
-    //     writable:   false,
-    //     enumerable: false,
-    //     //If loaded several times, it can lead to an exception. That's why I put this.
-    //     configurable: true,
-    //     value: function(h){ return dateFormat.addHours(this, h) }
-    // });
-
-
-    // Object.defineProperty( Object.prototype, 'count', {
-    //     writable: true,
-    //     enumerable: false,
-    //     //If loaded several times, it can lead to an exception. That's why I put this.
-    //     configurable: true,
-    //     value: function(){
-    //         try {
-    //             var self = this;
-    //             if (this instanceof String) self = JSON.parse(this);
-    //             var i = 0;
-    //             for (var prop in this)
-    //                 if (this.hasOwnProperty(prop)) ++i;
-
-    //             return i
-    //         } catch (err) {
-    //             return i
-    //         }
-    //     }
-    // });
-
-
     function construct(gina) {
 
         this.plugin         = 'gina';

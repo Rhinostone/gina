@@ -51,15 +51,14 @@ function getElementsByAttribute(attribute) {
 
 	proto.parseFromString = function(markup, type) {
 		if (/^\s*text\/html\s*(?:;|$)/i.test(type)) {
-			var
-			  doc = document.implementation.createHTMLDocument("")
-			;
-	      		if (markup.toLowerCase().indexOf('<!doctype') > -1) {
-        			doc.documentElement.innerHTML = markup;
-      			}
-      			else {
-        			doc.body.innerHTML = markup;
-      			}
+			var doc = document.implementation.createHTMLDocument("");
+			
+			if (markup.toLowerCase().indexOf('<!doctype') > -1) {
+				doc.documentElement.innerHTML = markup;
+			}
+			else {
+				doc.body.innerHTML = markup;
+			}
 			return doc;
 		} else {
 			return nativeParse.apply(this, arguments);
