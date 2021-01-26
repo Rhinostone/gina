@@ -44,27 +44,27 @@ function Routing() {
      *  }
      * 
      */
-    self.loadBundleRoutingConfiguration = function(options, filename) {
+    // self.loadBundleRoutingConfiguration = function(options, filename) {
         
-    }
+    // }
     
     /**
      * Get routing
      * 
      * @param {string} [bundle]
      */
-    self.getRouting = function(bundle) {
+    // self.getRouting = function(bundle) {
         
-    }
+    // }
     
     /**
      * Get reversed routing
      * 
      * @param {string} [bundle]
      */
-    self.getReverseRouting = function(bundle) {
+    // self.getReverseRouting = function(bundle) {
         
-    }
+    // }
 
     /**
      * Compare urls

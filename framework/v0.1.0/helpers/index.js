@@ -41,12 +41,17 @@ var helpers         = {}
     , amdDefined    = []
 ;
 
-var PrototypesHelper = null;
+var PrototypesHelper = null, PluginsHelper = null;
+// loading main helpers
 for (; f < len; ++f) {            
     if ( ! /^\./.test(files[f]) && files[f] != 'index.js') {
         helper          = files[f].replace(/.js/, '');
-        if (helper == 'prototypes') {
+        if (/prototypes/i.test(helper)) {
             PrototypesHelper = _require('./' + helper);
+            continue;
+        }
+        if (/plugins/i.test(helper)) {
+            PluginsHelper = _require('./' + helper);
             continue;
         }
         helpers[helper] = _require('./' + helper)();
@@ -56,6 +61,15 @@ for (; f < len; ++f) {
 new PrototypesHelper({
     dateFormat: helpers.dateFormat
 });
+
+// loading plugins helpers
+if ( 
+    typeof(getContext) != 'undefined'
+    && typeof(getContext().gina) != 'undefined' 
+) {
+    new PluginsHelper(getContext('gina').plugins);    
+}
+
 
 // Publish as node.js module
 module.exports = helpers;

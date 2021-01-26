@@ -2,26 +2,27 @@
  * FormValidatorUtil
  *
  * Dependencies:
- *  - utils/merge
  *  - utils/helpers
  *  - utils/helpers/dateFormat
+ *  - utils/merge
+ *  - utils/routing (for API calls)
  *
  * @param {object} data
  * @param {object} [ $fields ] - isGFFCtx only
- * @param {object} [ xhrOptions ]
+ * @param {object} [ xhrOptions ] - isGFFCtx only
+ * @param {object} [ fieldsSet ] - isGFFCtx only; required for when ginaFormLiveCheckEnabled
  * */
-function FormValidatorUtil(data, $fields, xhrOptions) {
+function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
 
     if (isGFFCtx && !$fields )
         throw new Error('No `Validator` instance found.\nTry:\nvar FormValidator = require("gina/validator"):\nvar formValidator = new FormValidator(...);')
-
+        
     var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
-    var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
     var helpers         = (isGFFCtx) ? {} : require('../../../../../helpers');
     var dateFormat      = (isGFFCtx) ? require('helpers/dateFormat') : helpers.dateFormat;
-    
+    var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
     
     var local = {
         'errors': {},
@@ -70,6 +71,22 @@ function FormValidatorUtil(data, $fields, xhrOptions) {
         local.data = JSON.parse( JSON.stringify(data) )
     }
     
+    var getElementByName = function($form, name) { // frontend only
+        var $foundElement   = null;
+        for (let f in fieldsSet) {
+            if (fieldsSet[f].name !== name) continue;
+            
+            $foundElement = new DOMParser()
+                .parseFromString($form.innerHTML , 'text/html')
+                .getElementById( fieldsSet[f].id );
+            break;
+        }
+        if ($foundElement)
+            return $foundElement;
+        
+        throw new Error('Field `'+ name +'` not found in fieldsSet');
+    }
+    
     // TODO - One method for the front, and one for the server
     // var queryFromFrontend = function(options) {
         
@@ -81,8 +98,20 @@ function FormValidatorUtil(data, $fields, xhrOptions) {
     /**
      * query
      */
-    var query = function(options) {
-                        
+    var query = function(options, errorMessage) {
+        // stop if 
+        //  - previous error detected        
+        if ( !self.isValid() ) {
+            var id = this.target.id || this.target.getAttribute('id');
+            // var errors      = self[this['name']]['errors'] || {};    
+            // errors['query'] = replace(this.error || errorMessage || local.errorLabels['query'], this);
+            
+            triggerEvent(gina, this.target, 'asyncCompleted.' + id);
+            return self[this.name];
+        }
+        //if ( self.getErrors().count() > 0 )
+        //    return self[this.name];
+            
         var xhr = null, _this = this;
         // setting up AJAX
         if (window.XMLHttpRequest) { // Mozilla, Safari, ...
@@ -101,6 +130,8 @@ function FormValidatorUtil(data, $fields, xhrOptions) {
         // forcing to sync mode
         var queryOptions = { isSynchrone: false, headers: {} };       
         var queryData = options.data || null, strData = null;
+        var isInlineValidation = (/^true$/i.test(this.target.form.dataset.ginaFormLiveCheckEnabled)) ? true : false; // TRUE if liveCheckEnabled
+                
         // replace placeholders by field values
         strData = JSON.stringify(queryData);
         if ( /\$/.test(strData) ) {
@@ -108,14 +139,18 @@ function FormValidatorUtil(data, $fields, xhrOptions) {
             var value = null, key = null;            
             for (let i = 0, len = variables.length; i < len; i++) {
                 key = variables[i].replace(/\$/g, '');
-                //value = $fields[key].value;
                 re = new RegExp("\\"+ variables[i].replace(/\[|\]/g, '\\$&'), "g");
-                value = local.data[key];
+                value = local.data[key] || null;
+                if (!value && isInlineValidation) {
+                    // Retrieving live value instead of using fieldsSet.value
+                    value = getElementByName(this.target.form, key).value;
+                }
+                
                 strData = strData.replace( re, value );
             }
-            
         }
-        queryData = strData;            
+        // cleanup before sending
+        queryData = strData.replace(/\\"/g, '');           
         // TODO - support regexp for validIf
         var validIf = options.validIf || true;
                
@@ -1068,7 +1103,11 @@ function FormValidatorUtil(data, $fields, xhrOptions) {
             // list field to be purged
             local.excluded.push(this.name);
         }
-        
+        /**
+         * Validation through API call
+         * Try to put this rule at the end to prevent sending
+         * a request to the remote host if previous rules failed
+         */
         self[el]['query'] = query;
 
     } // EO for (var el in self)
@@ -1090,15 +1129,7 @@ function FormValidatorUtil(data, $fields, xhrOptions) {
      * @return {boolean}
      * */
     self['isValid'] = function() {
-
-        var i = self['getErrors']().count();
-        var valid = true;
-
-        if (i > 0) {
-            valid = false;
-        }
-
-        return valid
+        return (self['getErrors']().count() > 0) ? false : true;
     }
 
     self['getErrors'] = function() {

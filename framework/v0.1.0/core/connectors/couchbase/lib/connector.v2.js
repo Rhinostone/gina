@@ -207,6 +207,10 @@ function Connector(dbString) {
             } else {
                 conn = await self.cluster.openBucket(dbString.database, function onBucketOpened(bErr) {
                     if (bErr) {
+                        if ( typeof(cb) == 'undefined' ) {
+                            console.error('*******************************************   Couchbase might be offline !   ***********************');
+                            console.emerg(bErr)
+                        }
                         cb(bErr)
                     } else {
                         conn.sdk        = sdk;

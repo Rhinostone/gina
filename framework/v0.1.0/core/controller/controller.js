@@ -2854,11 +2854,7 @@ function SuperController(options) {
             var msg             = code || null
                 , code          = res || 500
                 , res           = local.res;
-        } /**else if ( typeof(msg) != 'undefined' && msg instanceof Error ) {
-            var err = JSON.parse(JSON.stringify(msg));
-            msg = err.message;
-            code = 
-        }*/
+        }
         
                 
 
@@ -2906,7 +2902,8 @@ function SuperController(options) {
                 console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
                 res.end(JSON.stringify({
                     status: code,
-                    error: msg.error || msg,
+                    //errors: msg.error || msg.errors || msg,
+                    error: msg.error || msg.errors || msg,
                     stack: msg.stack
                 }));
                 return;
