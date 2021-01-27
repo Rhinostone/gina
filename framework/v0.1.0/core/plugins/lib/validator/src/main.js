@@ -189,6 +189,10 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
         _id = _id.replace(/\#/, '');
+        
+        if ( typeof(instance.$forms[_id]) != 'undefined' ) {
+            return instance.$forms[_id];
+        }
 
         // in case form is created on the fly and is not yet registered
         if (document.getElementById(_id) != null && typeof (instance['$forms'][_id]) == 'undefined') {
@@ -224,14 +228,16 @@ function ValidatorPlugin(rules, data, formId) {
             , rules = ( typeof(local.rules.count() > 0 ) ) ? local.rules : instance.rules
             , $target = null
         ;
-
-
+        
         if ( !instance['$forms'] ) {
             throw new Error('`$forms` collection not found')
         }
+        // Return existing when available
+        if ( typeof(_id) != 'undefined' && typeof(instance.$forms[_id]) != 'undefined' ) {
+            return instance.$forms[_id];
+        }
 
-
-        if ( typeof(_id) == 'undefined') {
+        if ( typeof(_id) == 'undefined' ) {
             if ( typeof(this.id) != 'undefined' && this.id != '' && this.id != null ) {
                 _id = this.id
             } else {
@@ -881,7 +887,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                             };
 
-                            $form.eventData.errors = result;
+                            $form.eventData.error = result;
                           
 
                             XHRData = result;                            
@@ -923,8 +929,8 @@ function ValidatorPlugin(rules, data, formId) {
                         }
 
                     } else if ( xhr.status != 0) {
-                        
-                        result = { 'status': xhr.status, 'message': '' };
+                        // XHR Error
+                        result = { 'status': xhr.status };
                         // handling blob xhr error
                         if ( /blob/.test(xhr.responseType) ) {
                                                         
@@ -964,7 +970,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     if (!result.message)
                                         delete result.message;
                                     // forward appplication errors to validator when available
-                                    $form.eventData.errors = result;
+                                    $form.eventData.error = result;
 
                                     
                                     // if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
@@ -1013,30 +1019,41 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( /^(\{|\[)/.test( xhr.responseText ) ) {
 
                                 try {
-                                    result = merge( result, JSON.parse(xhr.responseText) )
+                                    result = merge( JSON.parse(xhr.responseText), result )
                                 } catch (err) {
-                                    result = merge(result, err)
+                                    result = merge(err, result)
                                 }
 
                             } else if ( typeof(xhr.responseText) == 'object' ) {
-                                result = merge(result, xhr.responseText)
+                                result = merge(xhr.responseText, result)
                             } else {
                                 result.message = xhr.responseText
                             }
+                            
+                            // xhr error response
+                            $form.eventData.error = result;
 
-                            $form.eventData.errors = result;
-
-                            // forward appplication errors to forms.errors when available
-                            if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
+                            // Forward appplication errors to forms.errors when available
+                            // This aprt is meant for the Frontend Validation Errors Handling
+                            if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.fields && typeof(result.fields) == 'object') {
                                 var formsErrors = {}, errCount = 0;
-                                for (var f in result.error.fields) {
-                                    ++errCount;
-                                    formsErrors[f] = { isApplicationValidationError: result.error.fields[f] };
+                                var apiMessage = ( typeof(result.message) != 'undefined') ? result.message : null;
+                                for (let f in result.fields) {
+                                    //++errCount;
+                                    //formsErrors[f] = { isApplicationValidationError: result.fields[f] };
+                                    let errorObject = {};
+                                    errorObject[f] = {};
+                                    errorObject[f].isApiError = result.fields[f];
+                                    if ( apiMessage && !errorObject[f].isApiError) {
+                                        errorObject[f].isApiError = result.error; // Generic error
+                                    }
+                                    handleErrorsDisplay($form.target, errorObject, data, f);
+                                    
                                 }
 
-                                if (errCount > 0) {
-                                    handleErrorsDisplay($form.target, formsErrors);
-                                }
+                                // if (errCount > 0) {
+                                //     handleErrorsDisplay($form.target, formsErrors);
+                                // }
                             }
 
                             // update toolbar
@@ -1443,7 +1460,7 @@ function ValidatorPlugin(rules, data, formId) {
 
     //                 };
 
-    //                 $form.eventData.errors = result;
+    //                 $form.eventData.error = result;
                     
 
     //                 XHRData = result;                            
@@ -1526,7 +1543,7 @@ function ValidatorPlugin(rules, data, formId) {
     //                         if (!result.message)
     //                             delete result.message;
                             
-    //                         $form.eventData.errors = result;
+    //                         $form.eventData.error = result;
 
     //                         // forward appplication errors to forms.errors when available
     //                         if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
@@ -1586,7 +1603,7 @@ function ValidatorPlugin(rules, data, formId) {
     //                     result.message = xhr.responseText
     //                 }
 
-    //                 $form.eventData.errors = result;
+    //                 $form.eventData.error = result;
 
     //                 // forward appplication errors to forms.errors when available
     //                 if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
@@ -2191,7 +2208,7 @@ function ValidatorPlugin(rules, data, formId) {
                 // has rule ?
                 for (var f=0, len = $allForms.length; f<len; ++f) {
                     // preparing prototype (need at least an ID for this)
-
+                    
                     if ($allForms[f].getAttribute) {
                         id = $allForms[f].getAttribute('id') || 'form.' + uuid.v4();
                         if ( id !== $allForms[f].getAttribute('id') ) {
@@ -2675,7 +2692,7 @@ function ValidatorPlugin(rules, data, formId) {
         if (typeof(isOtherTagAllowe) == 'undefined' ) {
             isOtherTagAllowed = false;
         }
-        if ( /text|hidden/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
+        if ( /text|hidden|password/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
             var localRule = $form.rules[$el.name] || null;
             // data-gina-form-live-check-enabled                
             if ( $form.target.dataset.ginaFormLiveCheckEnabled && localRule && localRule.isRequired ) {
@@ -2700,7 +2717,7 @@ function ValidatorPlugin(rules, data, formId) {
                             //resetting error display
                             handleErrorsDisplay(event.target.form, {}, result.data, event.target.name);
                         } else {                                
-                            handleErrorsDisplay(event.target.form, result.errors, result.data, event.target.name);
+                            handleErrorsDisplay(event.target.form, result.error, result.data, event.target.name);
                         }
                         //updateSubmitTriggerState( event.target.form, isFormValid );
                         // data-gina-form-required-before-submit
@@ -3932,14 +3949,14 @@ function ValidatorPlugin(rules, data, formId) {
             addListener(gina, $target, evt, function(event) {
                 cancelEvent(event);
                                 
-                //var result = event['detail'] || $form.eventData.errors || $form.eventData.validation;
-                var result = $form.eventData.errors || $form.eventData.validation || event['detail'];
+                //var result = event['detail'] || $form.eventData.error || $form.eventData.validation;
+                var result = $form.eventData.error || $form.eventData.validation || event['detail'];
                 
-                handleErrorsDisplay(event['target'], result['errors'], result['data']);
+                handleErrorsDisplay(event['target'], result['fields']||result['error'], result['data']);
 
                 var _id = event.target.getAttribute('id');
 
-                if ( result['isValid']() ) { // send if valid
+                if ( typeof(result['isValid']) != 'undefined' && result['isValid']() ) { // send if valid
                     // Experimental - inheritedData
                     // Inhertitance from previously posted form: merging datas with current form context
                     // TODO - Get the inhereted data from LMDB Database using the form CSRF
@@ -4068,7 +4085,7 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( fields['_length'] == 0 ) { // nothing to validate
                     delete fields['_length'];
                     var result = {
-                        'errors'    : [],
+                        'error'     : [],
                         'isValid'   : function() { return true },
                         'data'      : formatData(fields)
                     };
@@ -4283,7 +4300,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 delete fields['_length'];
                 var result = {
-                    'errors'    : [],
+                    'error'     : [],
                     'isValid'   : function() { return true },
                     'data'      : formatData(fields)
                 };
@@ -5071,7 +5088,7 @@ function ValidatorPlugin(rules, data, formId) {
                         hasBeenValidated = true;
                         return {
                             'isValid'   : d['isValid'],
-                            'errors'    : errors,
+                            'error'     : errors,
                             'data'      : data
                         }
                     }
@@ -5091,7 +5108,7 @@ function ValidatorPlugin(rules, data, formId) {
                     var _cb = event.detail;
                     _cb({
                         'isValid'   : d['isValid'],
-                        'errors'    : d['getErrors'](),
+                        'error'     : d['getErrors'](),
                         'data'      : formatData( d['toData']() )
                     });
                     removeListener(gina, event.target, 'validated.' + event.target.id);

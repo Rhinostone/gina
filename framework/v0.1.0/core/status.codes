@@ -50,6 +50,14 @@
     "429": "Too Many Requests",
     "431": "Request Header Fields Too Large",
     "451": "Unavailable For Legal Reasons",
+    
+    // Extended Ngnix 4xx codes
+    "444": "No Response",
+    "495": "SSL Certificate Error",
+    "496": "SSL Certificate Required",
+    "497": "HTTP Request Sent to HTTPS Port",
+    "498": "Token expired/invalid",
+    "499": "Client Closed Request", 
 
     "500": "Internal Server Error",
     "501": "Not Implemented",

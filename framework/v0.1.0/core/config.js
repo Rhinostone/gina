@@ -127,8 +127,9 @@ function Config(opt) {
 
                 try {
                     var corePath = getPath('gina').core;
-                    statusCodes = fs.readFileSync( _( corePath + '/status.codes') ).toString();
-                    statusCodes = JSON.parse(statusCodes);
+                    //statusCodes = fs.readFileSync( _( corePath + '/status.codes') ).toString();
+                    //statusCodes = JSON.parse(statusCodes);
+                    statusCodes = requireJSON( _( corePath + '/status.codes') );
                     if ( typeof(statusCodes['_comment']) != 'undefined' )
                         delete statusCodes['_comment'];
 

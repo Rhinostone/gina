@@ -20,8 +20,9 @@ module.exports = function(loadedPlugins){
         switch (plugin) {
             case 'Validator':
                 // Global
-                if ( typeof(ValidatorError) == 'undefined')
-                    ValidatorError = require('./validator-error');
+                // TODO - load from `loadedPlugins[plugin].helpers { 'ApiError': 'api-error'}
+                if ( typeof(ApiError) == 'undefined')
+                    ApiError = require('./api-error');
                 break;
         
             default:
