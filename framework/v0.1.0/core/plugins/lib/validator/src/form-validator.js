@@ -60,7 +60,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         'isStringMinLength': 'Should be at least %s characters',
         'isStringMaxLength': 'Should not be more than %s characters',
         'isJsonWebToken': 'Must be a valid JSON Web Token',
-        'query': 'Must be a valid response'
+        'query': 'Must be a valid response',
+        'isApiError': 'Condition not satisfied'
     };
 
     if (!data) {
@@ -240,7 +241,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     var isValid     = result.isValid || false;
                     var errors      = self[_this['name']]['errors'] || {};
                     
-                    var errorFields = ( typeof(result.error) != 'undefined' && typeof(result.error.fields) != 'undefined' ) ? result.error.fields : {};
+                    var errorFields = ( typeof(result.error) != 'undefined' && typeof(result.fields) != 'undefined' ) ? result.fields : {};
                     
                     if (errorFields.count() > 0) {
                         if ( !errors['query'] && _this.value == '' ) {

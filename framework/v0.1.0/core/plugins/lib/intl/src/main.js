@@ -18,7 +18,7 @@ function IntlPlugin() {
             en : 'amendment',
             fr : 'avenant'
         }
-    }
+    };
 
 };
 

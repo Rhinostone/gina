@@ -24,6 +24,7 @@ var console         = lib.logger;
 var Collection      = lib.Collection;
 var swig            = require('swig');
 var SwigFilters     = lib.SwigFilters;
+var statusCodes     = requireJSON( _( getPath('gina').core + '/status.codes') );
 
 
 /**
@@ -1511,9 +1512,13 @@ function SuperController(options) {
                 // in case of query from another bundle waiting for a response  
                 var redirectObject = JSON.stringify({ status: code, headers: headInfos });         
                 res.end(redirectObject);
-                local.res.headersSent = true;// done for the render() method
-                console.info(local.req.method.toUpperCase() +' ['+code+'] '+ path);
+                try {
+                    local.res.headersSent = true;// done for the render() method
+                } catch(err){
+                    // ignoring the warning
+                }
                 
+                console.info(local.req.method.toUpperCase() +' ['+code+'] '+ path);
                 
                 if ( typeof(next) != 'undefined' )
                     next();
@@ -2823,7 +2828,7 @@ function SuperController(options) {
      * @return {void}
      * */
     this.throwError = function(res, code, msg) {
-
+        var errorObject = null; // to be returned
         // preventing multiple call of self.throwError() when controller is rendering from another required controller
         if (local.options.renderingStack.length > 1) {
             return false
@@ -2833,34 +2838,46 @@ function SuperController(options) {
         var fallback = null;
         
         if (arguments.length == 1 && typeof(res) == 'object' ) {
-            var code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
-                //, msg   = res.stack || res.message || res.error || res.fallback
-            var msg = {};
+            code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
+                //, errorObject   = res.stack || res.message || res.error || res.fallback
+            var standardErrorMessage = null;
+            if ( typeof(statusCodes[code]) != 'undefined' ) {
+                standardErrorMessage = statusCodes[code];
+            } else {
+                console.warn('[ ApiValidator ] statusCode `'+ code +'` not matching any definition in `'+_( getPath('gina').core + '/status.codes')+'`\nPlease contact the Gina dev team to add one if required');
+            }
+            errorObject = {};
 
             if ( res instanceof Error) {
-                msg.error   = res.message;
-                msg.stack   = res.stack;
+                errorObject.error   = standardErrorMessage || res.error || res.message;
+                errorObject.stack   = res.stack;
+                if (res.message && typeof(res.message) == 'string') {
+                    errorObject.message = res.message;
+                } else if (res.message) {
+                    console.warn('[ Controller ] Ignoring message because of the format.\n'+res.message)
+                }
+                    
             } else {
-                msg = JSON.parse(JSON.stringify(res))
+                // formated error
+                errorObject = JSON.parse(JSON.stringify(res))
             }
             
             if ( typeof(res.fallback) != 'undefined' ) {
                 fallback = res.fallback
             }
 
-            var res   = local.res;
+            res = local.res;
 
         } else if (arguments.length < 3) {
-            var msg             = code || null
-                , code          = res || 500
-                , res           = local.res;
+            msg           = code || null;
+            code          = res || 500;
+            res           = local.res;
         }
         
                 
 
         var req     = local.req;
         var next    = local.next;
-
         if (!res.headersSent) {
             //if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() ) {
             if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
@@ -2882,6 +2899,11 @@ function SuperController(options) {
                     msg     = code.error || code.message;
                     code    = code.status || 500;
                 }
+                if ( typeof(statusCodes[code]) != 'undefined' ) {
+                    standardErrorMessage = statusCodes[code];
+                } else {
+                    console.warn('[ ApiValidator ] statusCode `'+ code +'` not matching any definition in `'+_( getPath('gina').core + '/status.codes')+'`\nPlease contact the Gina dev team to add one if required');
+                }
 
                 if ( !req.headers['content-type'] ) {
                     req.headers['content-type'] = local.options.conf.server.coreConfiguration.mime['json']
@@ -2900,12 +2922,18 @@ function SuperController(options) {
                 }
 
                 console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
-                res.end(JSON.stringify({
-                    status: code,
-                    //errors: msg.error || msg.errors || msg,
-                    error: msg.error || msg.errors || msg,
-                    stack: msg.stack
-                }));
+                
+                if (!errorObject) {
+                    errorObject = {
+                        status: code,
+                        //errors: msg.error || msg.errors || msg,
+                        error: standardErrorMessage || msg.error || msg,
+                        message: msg.message || msg,
+                        stack: msg.stack
+                    }
+                }
+                
+                res.end(JSON.stringify(errorObject));
                 return;
             } else {
                 res.writeHead(code, { 'content-type': 'text/html'} );
