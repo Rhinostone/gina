@@ -4214,15 +4214,18 @@ function ValidatorPlugin(rules, data, formId) {
         // submit proxy
         addListener(gina, $target, evt, function(e) {
 
-            var $target     = e.target
-                , id        = $target.getAttribute('id')
-                , isBinded  = instance.$forms[id].binded
+            var $target             = e.target
+                , id                = $target.getAttribute('id')
+                , $formInstance     = instance.$forms[id]
+                , isBinded          = $form.binded
             ;
             
             // check submit trigger status
-            var submitTrigger = new DOMParser().parseFromString($target.innerHTML, 'text/html').getElementById($form.submitTrigger);
+            var submitTrigger = new DOMParser()
+                .parseFromString($target.innerHTML, 'text/html')
+                .getElementById($formInstance.submitTrigger);
             // prevent submit if disabled
-            if (submitTrigger.disabled) {
+            if ( submitTrigger && submitTrigger.disabled) {
                 cancelEvent(e);
             }
 
@@ -4388,7 +4391,7 @@ function ValidatorPlugin(rules, data, formId) {
         }
         // getting fields & values
         var $fields         = {}
-            , fields        = { '_length': 0 }
+            , fields        = {}//{ '_length': 0 }
             , id            = $form.id || $form.getAttribute('id')
             , name          = null
             , value         = 0
@@ -4516,8 +4519,9 @@ function ValidatorPlugin(rules, data, formId) {
                 $fields[name].setAttribute('data-gina-form-errors', '');
             }
             
-            ++fields['_length']
+            //++fields['_length']
         }// EO Parsing form elements
+        fields['_length'] = fields.count() || 0;
         
         return {
             '$fields'   : $fields,
@@ -4535,7 +4539,7 @@ function ValidatorPlugin(rules, data, formId) {
         if (isLiveCheckingOnASingleElement) {
             var ruleObj         = JSON.parse(stringifiedRules);
             var $currentForm    = $fields[Object.getOwnPropertyNames($fields)[0]].form;
-            var vInfos          = getFormValidationInfos($currentForm, ruleObj);//instance.$forms[$currentForm.id].rules
+            var vInfos          = getFormValidationInfos($currentForm, ruleObj);
             delete vInfos.fields._length;
             
             fields  = vInfos.fields;
