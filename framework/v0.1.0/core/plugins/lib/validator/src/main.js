@@ -4363,7 +4363,7 @@ function ValidatorPlugin(rules, data, formId) {
         }
         
         if ( typeof($formInstance.submitTrigger) == 'undefined') {
-            console.warn('This might be normal, so do not worry if this form is handled by your javascript\nGina could not complete `updateSubmitTriggerState()`: `submitTrigger` might not be attached to form instance`'+ $formInstance.id +'`\nTo disable this warning, You just need to disable `Form Live Checking on your form by adding to your <form>: `data-gina-form-live-check-enabled=false``')
+            console.warn('This might be normal, so do not worry if this form is handled by your javascript: `'+ $formInstance.id +'`\nGina could not complete `updateSubmitTriggerState()`: `submitTrigger` might not be attached to form instance `'+ $formInstance.id +'`\nTo disable this warning, You just need to disable `Form Live Checking on your form by adding to your <form>: `data-gina-form-live-check-enabled=false``')
         } else {
             if ( isFormValid ) { // show submitTrigger
                 document.getElementById($formInstance.submitTrigger).disabled = false;
