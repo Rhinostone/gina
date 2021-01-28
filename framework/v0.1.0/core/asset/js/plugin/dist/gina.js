@@ -12652,11 +12652,29 @@ function ValidatorPlugin(rules, data, formId) {
         }
     }
     
-    var getDynamisedRules = function(stringifiedRules, fields, $fields) {
+    var getDynamisedRules = function(stringifiedRules, fields, $fields, isLiveCheckingOnASingleElement) {
+        
+        // Because this could also be live check, if it is the case, we need all fields
+        // of the current form rule for variables replacement/evaluation. Since live check is
+        // meant to validate one field at the time, you could fall in a case where the current
+        // field should be compared with another field of the same form.
+        if (isLiveCheckingOnASingleElement) {
+            var ruleObj         = JSON.parse(stringifiedRules);
+            var $currentForm    = $fields[Object.getOwnPropertyNames($fields)[0]].form;
+            var vInfos          = getFormValidationInfos($currentForm, ruleObj);//instance.$forms[$currentForm.id].rules
+            delete vInfos.fields._length;
+            
+            fields  = vInfos.fields;
+            $fields = vInfos.$fields;
+        }
+        
+        
         var re = null, _field = null, arrFields = [], a = 0;
         // avoiding conflict like ["myfield", "myfield-name"]
         // where once `myfield` is replaced for exemple with `1234`, you also get 1234-name left behind
         // TODO - Replace this trick with a RegExp matching only the exact word
+        // TODO - test this one: 
+        //          \W(\$myfield-name)(?!-)\W
         for (let field in fields) {
             arrFields[a] = field;
             a++;
@@ -12694,7 +12712,12 @@ function ValidatorPlugin(rules, data, formId) {
                 
         var stringifiedRules = JSON.stringify(rules);
         if ( /\$(.*)/.test(stringifiedRules) ) {
-            rules = getDynamisedRules(stringifiedRules, fields, $fields)
+            var isLiveCheckingOnASingleElement = (
+                !/^form$/i.test($formOrElement.tagName)
+                && $fields.count() == 1
+                && /true/i.test($formOrElement.form.dataset.ginaFormLiveCheckEnabled)
+            ) ? true : false;
+            rules = getDynamisedRules(stringifiedRules, fields, $fields, isLiveCheckingOnASingleElement)
         }
         var id                  = null
             , evt               = null
@@ -20662,7 +20685,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         $popin['$forms'].push(_id);
 
                     $forms[i].close = popinClose;
-                    $validatorInstance.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
+                    $validatorInstance.validateFormById($forms[i].getAttribute('id')); //$forms[i]['id']
 
                     removeListener(gina, $popin.target, eventType);
                 }

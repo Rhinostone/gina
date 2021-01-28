@@ -461,7 +461,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         $popin['$forms'].push(_id);
 
                     $forms[i].close = popinClose;
-                    $validatorInstance.validateFormById($forms[i].getAttribute('id')) //$forms[i]['id']
+                    $validatorInstance.validateFormById($forms[i].getAttribute('id')); //$forms[i]['id']
 
                     removeListener(gina, $popin.target, eventType);
                 }
