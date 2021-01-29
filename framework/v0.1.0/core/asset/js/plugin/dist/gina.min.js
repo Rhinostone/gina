@@ -12130,7 +12130,7 @@ function ValidatorPlugin(rules, data, formId) {
                 fields  = validatorInfos.fields;
                 $fields = validatorInfos.$fields;
                 //rules   = validatorInfos.rules;
-                rules   = instance.$forms[$target.id].rules;
+                rules   = instance.$forms[id].rules;
                 
                 // for (var i = 0, len = $target.length; i<len; ++i) {
 
