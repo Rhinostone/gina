@@ -1742,17 +1742,23 @@ function ValidatorPlugin(rules, data, formId) {
                     && /^image/.test(files[f].mime)
                     && files[f].location != ''
                 ) {
-                    $img = document.createElement('IMG');
-                    $img.src = files[f].tmpUri;
-                    $img.width = files[f].width;
-                    $img.height = files[f].height;
+                    $img        = document.createElement('IMG');
+                    $img.src    = files[f].tmpUri;                    
+                    if (files[f].width) {
+                        $img.width  = files[f].width;
+                    }
+                    if (files[f].height) {
+                        $img.height = files[f].height;
+                    }
                     
                     $img.style.display = 'none';
                     maxWidth = $previewContainer.getAttribute('data-preview-max-width') || null;
-                    if ( maxWidth && $img.width > maxWidth ) {
+                    if ( $img.width && maxWidth && $img.width > maxWidth ) {
                         ratio = $img.width / maxWidth;
                         $img.width = maxWidth;
                         $img.height = $img.height / ratio;
+                    } else if (!$img.width && maxWidth ) {
+                        $img.width = maxWidth
                     }
                     
                     if ( /ul/i.test(uploadProperties.previewContainer.tagName) ) {
@@ -3991,7 +3997,7 @@ function ValidatorPlugin(rules, data, formId) {
                 var $fields         = {}
                     , fields        = { '_length': 0 }
                     , id            = $target.getAttribute('id')
-                    , rules         = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
+                    , rules         = ( typeof(instance.$forms[id]) != 'undefined' ) ? instance.$forms[id].rules : null
                     , name          = null
                     , value         = 0
                     , type          = null
