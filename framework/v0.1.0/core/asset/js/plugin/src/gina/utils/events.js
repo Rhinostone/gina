@@ -20,11 +20,20 @@ function addListener(target, element, name, callback) {
 
     gina.events[name] = ( typeof(element.id) != 'undefined' && typeof(element.id) != 'object' ) ? element.id : element.getAttribute('id')
 }
-
-function triggerEvent (target, element, name, args) {
+/**
+ * triggerEvent
+ * @param {object} target - targeted domain
+ * @param {object} element - HTMLFormElement 
+ * @param {string} name - event ID
+ * @param {object|array|string} args - details
+ * @param {object} [proxiedEvent]
+ */
+function triggerEvent (target, element, name, args, proxiedEvent) {
     if (typeof(element) != 'undefined' && element != null) {
-        var evt = null, isDefaultPrevented = false, isAttachedToDOM = false;
-
+        var evt = null, isDefaultPrevented = false, isAttachedToDOM = false, merge  = null;
+        if (proxiedEvent) {
+            merge = require('utils/merge');
+        }
         // done separately because it can be listen at the same time by the user & by gina
         if ( jQuery ) { //thru jQuery if detected
 
@@ -54,10 +63,11 @@ function triggerEvent (target, element, name, args) {
 
 
         }
-
+        
         if (window.CustomEvent || document.createEvent) {
-
-            if (window.CustomEvent) { // new method from ie9
+            
+            
+            if (window.CustomEvent) { // new method from ie9                
                 evt = new CustomEvent(name, {
                     'detail'    : args,
                     'bubbles'   : true,
@@ -77,6 +87,9 @@ function triggerEvent (target, element, name, args) {
                 evt['eventName'] = name;
 
             }
+            if (proxiedEvent) {                
+                evt = merge(evt, proxiedEvent);
+            }
 
             if ( typeof(evt.defaultPrevented) != 'undefined' && evt.defaultPrevented )
                 isDefaultPrevented = evt.defaultPrevented;
@@ -87,10 +100,16 @@ function triggerEvent (target, element, name, args) {
             }
 
         } else if (document.createEventObject) { // non standard
+            
             evt = document.createEventObject();
             evt.srcElement.id = element.id;
             evt.detail = args;
             evt.target = element;
+            
+            if (proxiedEvent) {                
+                evt = merge(evt, proxiedEvent);
+            }
+                            
             element.fireEvent('on' + name, evt)
         }
 

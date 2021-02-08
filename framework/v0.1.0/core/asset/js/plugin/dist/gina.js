@@ -2949,11 +2949,20 @@ function addListener(target, element, name, callback) {
 
     gina.events[name] = ( typeof(element.id) != 'undefined' && typeof(element.id) != 'object' ) ? element.id : element.getAttribute('id')
 }
-
-function triggerEvent (target, element, name, args) {
+/**
+ * triggerEvent
+ * @param {object} target - targeted domain
+ * @param {object} element - HTMLFormElement 
+ * @param {string} name - event ID
+ * @param {object|array|string} args - details
+ * @param {object} [proxiedEvent]
+ */
+function triggerEvent (target, element, name, args, proxiedEvent) {
     if (typeof(element) != 'undefined' && element != null) {
-        var evt = null, isDefaultPrevented = false, isAttachedToDOM = false;
-
+        var evt = null, isDefaultPrevented = false, isAttachedToDOM = false, merge  = null;
+        if (proxiedEvent) {
+            merge = require('utils/merge');
+        }
         // done separately because it can be listen at the same time by the user & by gina
         if ( jQuery ) { //thru jQuery if detected
 
@@ -2983,10 +2992,11 @@ function triggerEvent (target, element, name, args) {
 
 
         }
-
+        
         if (window.CustomEvent || document.createEvent) {
-
-            if (window.CustomEvent) { // new method from ie9
+            
+            
+            if (window.CustomEvent) { // new method from ie9                
                 evt = new CustomEvent(name, {
                     'detail'    : args,
                     'bubbles'   : true,
@@ -3006,6 +3016,9 @@ function triggerEvent (target, element, name, args) {
                 evt['eventName'] = name;
 
             }
+            if (proxiedEvent) {                
+                evt = merge(evt, proxiedEvent);
+            }
 
             if ( typeof(evt.defaultPrevented) != 'undefined' && evt.defaultPrevented )
                 isDefaultPrevented = evt.defaultPrevented;
@@ -3016,10 +3029,16 @@ function triggerEvent (target, element, name, args) {
             }
 
         } else if (document.createEventObject) { // non standard
+            
             evt = document.createEventObject();
             evt.srcElement.id = element.id;
             evt.detail = args;
             evt.target = element;
+            
+            if (proxiedEvent) {                
+                evt = merge(evt, proxiedEvent);
+            }
+                            
             element.fireEvent('on' + name, evt)
         }
 
@@ -8218,7 +8237,8 @@ function ValidatorPlugin(rules, data, formId) {
     var local = {
         rules: {}
     };
-
+    
+    var keyboardMapping = {};
 
     /**
      * XML Request - isGFFCtx only
@@ -10878,6 +10898,201 @@ function ValidatorPlugin(rules, data, formId) {
         return;
     }
     
+    
+    
+    var setSelectionRange = function($el, selectionStart, selectionEnd) {
+        if ($el.setSelectionRange) {
+            $el.focus();
+            $el.setSelectionRange(selectionStart, selectionEnd);
+        }
+        else if ($el.createTextRange) {
+            var range = $el.createTextRange();
+            range.collapse(true);
+            range.moveEnd  ('character', selectionEnd  );
+            range.moveStart('character', selectionStart);
+            range.select();
+        }
+    }
+    /**
+     * setCaretToPos
+     * If called after change of `readonly`, use `$el.blur()` before the call
+     * 
+     * @param {object} $el - HTMLElement
+     * @param {number} pos 
+     */
+    var setCaretToPos = function ($el, pos) {
+        setSelectionRange($el, pos, pos);
+    }
+    
+    var focusNextElement = function($el, isGoingBackward) {
+        // Add all elements we want to include in our selection
+        // Checkboxes and radios are just ignored: like for the default behavior
+        var focussableElements = 'a:not([disabled]), button:not([disabled]), input[type=text]:not([disabled]), select:not([disabled]), [tabindex]:not([disabled]):not([tabindex="-1"])';
+        if (document.activeElement && document.activeElement.form) {
+            var focussable = Array.prototype.filter.call(document.activeElement.form.querySelectorAll(focussableElements),
+            function (element) {
+                //Check for visibility while always include the current activeElement 
+                return element.offsetWidth > 0 || element.offsetHeight > 0 || element === document.activeElement
+            });
+            var index = focussable.indexOf(document.activeElement);
+            if(index > -1) {
+                var direcion = focussable[index + 1]; // By default, going forward
+                if (isGoingBackward) {
+                    direcion = focussable[index - 1]
+                }
+                var nextElement = direcion || focussable[0];
+                nextElement.focus();
+            }                    
+        }
+    }
+    /**
+     * handleAutoComplete
+     * This is a temporary fix to handle safari autocomplete/autosuggest
+     * Will be removed when Safari honores autocomplete="off" 
+     * @param {object} $el HTMLElement
+     */
+    var handleAutoComplete = function($el) {
+        $el.setAttribute('readonly', 'readonly');
+        addListener(gina, $el, 'focusout.'+ $el.id, function(event) {
+            event.preventDefault();
+            event.currentTarget.setAttribute('readonly', 'readonly');
+        });
+        addListener(gina, $el, 'focusin.'+ $el.id, function(event) {
+            event.preventDefault();
+            event.currentTarget.removeAttribute('readonly');            
+            
+            var evtName = 'keydown.'+ event.currentTarget.id;
+            // add once
+            if ( typeof(gina.events[evtName]) == 'undefined' ) {
+                addListener(gina, event.currentTarget, evtName, function(e) {
+                    e.preventDefault();
+                    var $_el = e.currentTarget;                    
+                    var str = e.currentTarget.value;
+                    var posStart = $_el.selectionStart, posEnd = $_el.selectionEnd;
+                    $_el.removeAttribute('readonly');
+                    //console.debug('pressed: '+ e.key+'('+ e.keyCode+')', ' S:'+posStart, ' E:'+posEnd, ' MAP: '+ JSON.stringify(keyboardMapping));
+                    switch (e.keyCode) {
+                        case 46: //Delete
+                        case 8: //Backspace
+                            if (posStart != posEnd) {
+                                $_el.value = str.substr(0, posStart) + str.substr(posEnd);
+                                if (posStart == 0) {
+                                    $_el.value = str.substr(posEnd);
+                                }
+                            } else if (posStart == 0) {
+                                $_el.value = str.substring(posStart+1);
+                            } else {
+                                $_el.value = str.substr(0, posStart-1) + str.substr(posEnd);
+                            }
+                            
+                            e.currentTarget.setAttribute('readonly', 'readonly');                            
+                            setTimeout(() => {
+                                $_el.removeAttribute('readonly');                                
+                                setTimeout(() => {
+                                    if (posStart != posEnd) {
+                                        setCaretToPos($_el, posStart);
+                                    } else if (posStart == 0) {
+                                        setCaretToPos($_el, posStart);
+                                    } else {
+                                        setCaretToPos($_el, posStart-1);
+                                    }
+                                }, 0)
+                                    
+                            }, 0);
+                            break;
+                        case 9: // Tab
+                            if (keyboardMapping[16] && keyboardMapping[9]) {
+                                focusNextElement($_el, true);
+                            } else {
+                                focusNextElement($_el);
+                            }                            
+                            break;
+                        case 13: // Enter    
+                        case 16: // Shift
+                            break;
+                        case 37: // ArrowLeft
+                            console.debug('moving left ', posStart-1);
+                            setCaretToPos($_el, posStart-1);                            
+                            break;
+                        case 39: // ArrowRight
+                            if (posStart+1 < str.length+1) {
+                                setCaretToPos($_el, posStart+1);
+                            }                            
+                            break;
+                        // Shortcuts
+                        case 17: //CTRL
+                        case 91: //CMD
+                            break;
+                        case 67: // to handle CMD+C (copy)
+                            if (
+                                keyboardMapping[67] && keyboardMapping[91] // mac osx
+                                ||
+                                keyboardMapping[67] && keyboardMapping[17] // windows
+                            ) {
+                                $_el.setSelectionRange(posStart, posEnd);
+                                document.execCommand("copy");
+                                break;
+                            }
+                        case 86: // to handle CMD+V (paste)
+                            if (
+                                keyboardMapping[86] && keyboardMapping[91] // mac osx
+                                ||
+                                keyboardMapping[86] && keyboardMapping[17] // windows
+                            ) {
+                                if (posStart != posEnd) {
+                                    $_el.value = $_el.value.replace(str.substring(posStart, posEnd), '');
+                                }
+                                setCaretToPos($_el, posStart);
+                                document.execCommand("paste");
+                                break;
+                            }
+                        case 88: // to handle CMD+X (cut)
+                            if (
+                                keyboardMapping[88] && keyboardMapping[91] // mac osx
+                                ||
+                                keyboardMapping[88] && keyboardMapping[17] // windows
+                            ) {
+                                $_el.setSelectionRange(posStart, posEnd);
+                                document.execCommand("cut");
+                                break;
+                            }
+                        case 90: // to handle CMD+Z (undo)
+                            if (
+                                keyboardMapping[90] && keyboardMapping[91] // mac osx
+                                ||
+                                keyboardMapping[90] && keyboardMapping[17] // windows
+                            ) {
+                                $_el.value = $_el.defaultValue;
+                                break;
+                            }
+                        default:
+                            // Replace selection
+                            if (posStart != posEnd) {
+                                $_el.value = str.substr(0, posStart) + e.key;
+                                if (posEnd-1 < str.length) {
+                                    $_el.value += str.substring(posEnd)
+                                }
+                            } else if (posStart == 0) {
+                                $_el.value = e.key + str.substring(posStart);
+                            } else {
+                                $_el.value = str.substr(0, posStart) + e.key + str.substr(posEnd);
+                            }
+                            e.currentTarget.setAttribute('readonly', 'readonly');
+                            // Force restore last caret position
+                            setTimeout(() => {
+                                $_el.removeAttribute('readonly');
+                                setTimeout(() => {
+                                    setCaretToPos($_el, posStart+1);
+                                }, 0);
+                                
+                            }, 0);
+                            break;
+                    } //EO Switch
+                });
+            }
+                
+        });
+    }
       
     var registerForLiveChecking = function($form, $el) {
         // Filter supported elements
@@ -10888,6 +11103,15 @@ function ValidatorPlugin(rules, data, formId) {
         switch ($el.tagName.toLowerCase()) {
             case 'input':
                 addLiveForInput($form, $el);
+                // Bypass Safari autocomplete
+                var isAutoCompleteField = $el.getAttribute('autocomplete');
+                if (
+                    /safari/i.test(navigator.userAgent)
+                    && isAutoCompleteField
+                    && /^(off|false)/i.test(isAutoCompleteField) 
+                ) {
+                    handleAutoComplete($el)
+                }
                 break;
         
             case 'textarea':
@@ -11868,7 +12092,77 @@ function ValidatorPlugin(rules, data, formId) {
                     triggerEvent(gina, $el, _evt, event.detail);
                 }
             });
-              
+            // keydown proxy     
+            addListener(gina, $target, 'keydown', function(event) {
+                var $el = event.target;
+                // prevent event to be triggered twice
+                if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+                return false;
+                                                
+                keyboardMapping[event.keyCode] = event.type == 'keydown';
+                
+                var _evt = $el.id;    
+                if (!_evt) return false;
+
+                if ( !/^keydown\./.test(_evt) ) {
+                    _evt = 'keydown.'+$el.id
+                }
+                if (gina.events[_evt]) {
+                    cancelEvent(event);
+                    triggerEvent(gina, $el, _evt, event.detail, event);
+                }
+            });
+            // keyup proxy - updating keyboardMapping     
+            addListener(gina, $target, 'keyup', function(event) {
+                var $el = event.target;
+                // prevent event to be triggered twice
+                if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+                return false;
+                
+                if (keyboardMapping[event.keyCode]) {
+                    delete keyboardMapping[event.keyCode]
+                }
+            });
+            
+            // focusin proxy            
+            addListener(gina, $target, 'focusin', function(event) {
+                var $el = event.target;
+                // prevent event to be triggered twice
+                if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+                return false;
+                
+                var _evt = $el.id;    
+                if (!_evt) return false;
+
+                if ( !/^focusin\./.test(_evt) ) {
+                    _evt = 'focusin.'+$el.id
+                }
+                if (gina.events[_evt]) {
+                    cancelEvent(event);
+                    
+                    triggerEvent(gina, $el, _evt, event.detail);
+                }
+            });
+            // focusout proxy            
+            addListener(gina, $target, 'focusout', function(event) {
+                var $el = event.target;
+                // prevent event to be triggered twice
+                if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+                return false;
+                
+                var _evt = $el.id;    
+                if (!_evt) return false;
+
+                if ( !/^focusout\./.test(_evt) ) {
+                    _evt = 'focusout.'+$el.id
+                }
+                if (gina.events[_evt]) {
+                    cancelEvent(event);
+                    
+                    triggerEvent(gina, $el, _evt, event.detail);
+                }
+            }); 
+            
             // change proxy            
             addListener(gina, $target, 'change', function(event) {
                 var $el = event.target;

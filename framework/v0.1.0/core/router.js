@@ -118,8 +118,11 @@ function Router(env) {
                 if (this._passport && this._passport.instance) {
                     property = this._passport.instance._userProperty || 'user';
                 }
-                
-                return (this[property]) ? true : false;
+                var isAuthenticated = (this[property]) ? true : false;
+                if (isAuthenticated) {
+                    request.session.user = this[property]
+                }
+                return isAuthenticated;
             };
         }
         
