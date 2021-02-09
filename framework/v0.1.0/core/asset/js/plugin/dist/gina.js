@@ -8118,7 +8118,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          */
         self[el]['query'] = query;
         
-        // Merging user validators        
+        // Merging user validators
+        // To debug, open inspector and look into `Extra Scripts`     
         if (hasUserValidators) {
             var userValidator = null, filename = null, virtualFileForDebug = null;
             try {                
@@ -9969,13 +9970,15 @@ function ValidatorPlugin(rules, data, formId) {
                     && files[f].location != ''
                 ) {
                     $img        = document.createElement('IMG');
-                    $img.src    = files[f].tmpUri;                    
-                    if (files[f].width) {
-                        $img.width  = files[f].width;
-                    }
-                    if (files[f].height) {
-                        $img.height = files[f].height;
-                    }
+                    $img.src    = files[f].tmpUri;
+                    
+                    // TODO - remove this; we don't want it by default, the dev can force it by hand if needed
+                    // if (files[f].width) {
+                    //     $img.width  = files[f].width;
+                    // }
+                    // if (files[f].height) {
+                    //     $img.height = files[f].height;
+                    // }
                     
                     $img.style.display = 'none';
                     maxWidth = $previewContainer.getAttribute('data-preview-max-width') || null;

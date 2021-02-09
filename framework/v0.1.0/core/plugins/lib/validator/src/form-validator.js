@@ -1162,7 +1162,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          */
         self[el]['query'] = query;
         
-        // Merging user validators        
+        // Merging user validators
+        // To debug, open inspector and look into `Extra Scripts`     
         if (hasUserValidators) {
             var userValidator = null, filename = null, virtualFileForDebug = null;
             try {                
