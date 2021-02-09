@@ -24,6 +24,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     var dateFormat      = (isGFFCtx) ? require('helpers/dateFormat') : helpers.dateFormat;
     var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
     
+    var hasUserValidators = (
+        typeof(gina.forms) != 'undefined' 
+        && typeof(gina.forms.validators) != 'undefined'
+    ) ? true : false;
+    
     var local = {
         'errors': {},
         'keys': {
@@ -87,6 +92,52 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         
         throw new Error('Field `'+ name +'` not found in fieldsSet');
     }
+    
+    /**
+     * bufferToString - Convert Buffer to String
+     * Will apply `Utf8Array` to `String`
+     * @param {array} arrayBuffer 
+     */
+    var bufferToString = function(arrayBuffer) {
+        // if (!isGFFCtx) {
+            
+        //     return Buffe
+        // }
+        var out     = null
+            , i     = null
+            , len   = null
+            , c     = null
+        ;
+        var char2 = null, char3 = null;
+
+        out = '';
+        len = arrayBuffer.length;
+        i   = 0;
+        while(i < len) {
+            c = arrayBuffer[i++];
+            switch (c >> 4) { 
+                case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7:
+                    // 0xxxxxxx
+                    out += String.fromCharCode(c);
+                    break;
+                case 12: case 13:
+                    // 110x xxxx   10xx xxxx
+                    char2 = arrayBuffer[i++];
+                    out += String.fromCharCode(((c & 0x1F) << 6) | (char2 & 0x3F));
+                    break;
+                case 14:
+                    // 1110 xxxx  10xx xxxx  10xx xxxx
+                    char2 = arrayBuffer[i++];
+                    char3 = arrayBuffer[i++];
+                    out += String.fromCharCode(((c & 0x0F) << 12) |
+                                ((char2 & 0x3F) << 6) |
+                                ((char3 & 0x3F) << 0));
+                    break;
+            }
+        }
+
+        return out;
+    };
     
     // TODO - One method for the front, and one for the server
     // var queryFromFrontend = function(options) {
@@ -1110,11 +1161,40 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          * a request to the remote host if previous rules failed
          */
         self[el]['query'] = query;
-
-    } // EO for (var el in self)
+        
+        // Merging user validators        
+        if (hasUserValidators) {
+            var userValidator = null, filename = null, virtualFileForDebug = null;
+            try {                
+                for (let v in gina.forms.validators) {
+                    
+                    // Blocking default validators overrive
+                    // if ( typeof(self[el][v]) != 'undefined' ) {
+                    //     continue;
+                    // }
+                    filename = '/validators/'+ v + '/main.js';
+                    // setting default local error
+                    local.errorLabels[v] = 'Condition not satisfied';
+                    // converting Buffer to string
+                    if ( isGFFCtx ) {
+                        //userValidatorError = String.fromCharCode.apply(null, new Uint16Array(gina.forms.validators[v].data));
+                        userValidator = bufferToString(gina.forms.validators[v].data);
+                        //userValidator += '\n//#sourceURL='+ v +'.js';
+                    } else {
+                        userValidator = gina.forms.validators[v].toString();
+                    }        
+                    self[el][v] = eval('(' + userValidator + ')\n//# sourceURL='+ v +'.js');
+                }
+            } catch (userValidatorError) {
+                throw new Error('[UserFormValidator] Could not evaluate: `'+ filename +'`\n'+userValidatorError.stack);
+            }
+        }
+    } // EO addField(el, value) 
     
-    for (var el in self) {
-        addField(el)
+    
+    for (let el in self) {        
+        // Adding fields & validators to context
+        addField(el);        
     }
     
     self['addField'] = function(el, value) {

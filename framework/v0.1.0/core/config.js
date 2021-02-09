@@ -1734,7 +1734,7 @@ function Config(opt) {
                                 if ( /\.json$/.test(filename) && !/validators\/(.*)$/i.test(filename) ) {
                                     forms[ k[k.length-1] ] = requireJSON(_(filename, true))
                                 } else if (/\main.js$/.test(filename)) { // ignore other files
-                                    forms[ previousKey ] = fs.readFileSync(_(filename, true))
+                                    forms[ previousKey ] = fs.readFileSync(_(filename, true));
                                 }
 
                             } catch(err) {
