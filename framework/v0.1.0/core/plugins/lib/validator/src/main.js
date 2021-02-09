@@ -2702,7 +2702,7 @@ function ValidatorPlugin(rules, data, formId) {
         if ( /text|hidden|password/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
             var localRule = $form.rules[$el.name] || null;
             // data-gina-form-live-check-enabled                
-            if ( $form.target.dataset.ginaFormLiveCheckEnabled && localRule && localRule.isRequired ) {
+            if ( $form.target.dataset.ginaFormLiveCheckEnabled && localRule /**&& localRule.isRequired*/ ) {
                                     
                 addListener(gina, $el, 'change.'+ $el.id, function(event) {
                     event.preventDefault();
