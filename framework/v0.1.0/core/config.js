@@ -1701,7 +1701,7 @@ function Config(opt) {
         if ( fs.existsSync(formsDir) ) {
             root = ''+formsDir;
             // browsing dir
-            var readDir = function (dir, forms, key) {
+            var readDir = function (dir, forms, key, previousKey) {
                 var files       = fs.readdirSync(dir)
                     , filename  = ''
                     , k         = null;
@@ -1711,17 +1711,15 @@ function Config(opt) {
                         filename = _(dir + '/' + files[i], true);
 
                         if ( fs.statSync(filename).isDirectory() ) {
-                            // ignore users validators/* directories
-                            if ( /validators$/i.test(filename) ) {
-                                continue;
-                            }
-                            
                             key += dir.replace(root, '') +'/'+ files[i] + '/';
                             k = key.split(/\//g);
                             forms[k[k.length-2]] = {};
-
-                            readDir( filename, forms[ k[k.length-2] ], key );
-
+                            // special case for user validators/* directories
+                            if ( /validators\/(.*)$/i.test(filename) ) {
+                                readDir( filename, forms, key, k[k.length-2] );
+                            } else {
+                                readDir( filename, forms[ k[k.length-2] ], key );
+                            }
                         } else {
 
                             key = files[i].replace('.json', '').replace(/\-/g, '.');
@@ -1732,7 +1730,12 @@ function Config(opt) {
                                 }
 
                                 k = key.split(/\//g);
-                                forms[ k[k.length-1] ] = requireJSON(_(filename, true))
+                                //forms[ k[k.length-1] ] = requireJSON(_(filename, true))
+                                if ( /\.json$/.test(filename) && !/validators\/(.*)$/i.test(filename) ) {
+                                    forms[ k[k.length-1] ] = requireJSON(_(filename, true))
+                                } else if (/\main.js$/.test(filename)) { // ignore other files
+                                    forms[ previousKey ] = fs.readFileSync(_(filename, true))
+                                }
 
                             } catch(err) {
                                 throw new Error('[ ' +filename + ' ] is malformed !!')
