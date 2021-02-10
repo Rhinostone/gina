@@ -1746,7 +1746,7 @@ function ValidatorPlugin(rules, data, formId) {
                     $img        = document.createElement('IMG');
                     $img.src    = files[f].tmpUri;
                     
-                    // TODO - remove this; we don't want it by default, the dev can force it by hand if needed
+                    // TODO - Remove this; we don't want it by default, the dev can force it by hand if needed
                     // if (files[f].width) {
                     //     $img.width  = files[f].width;
                     // }
@@ -1831,6 +1831,19 @@ function ValidatorPlugin(rules, data, formId) {
                 
             }
         }
+    }
+    
+    var onUploadReset = function($el) {
+        var fileElemId  = $el.getAttribute('data-gina-form-upload-target') || null;   
+        var $upload = null;
+        
+        if (fileElemId)
+            $upload = document.getElementById(fileElemId);
+        
+        if ($upload) {
+            console.debug('reset input files');
+            $upload.value = '';// force reset : != multiple
+        } 
     }
 
     
@@ -3015,8 +3028,9 @@ function ValidatorPlugin(rules, data, formId) {
         }
         
         // Live check by default - data-gina-form-live-check-enabled
-        $form.target.dataset.ginaFormLiveCheckEnabled = true;
-             
+        if ( typeof($form.target.dataset.ginaFormLiveCheckEnabled) == 'undefined' )
+            $form.target.dataset.ginaFormLiveCheckEnabled = true;
+        
 
         var withRules = false, rule = null, evt = '', procced = null;
 
@@ -3069,10 +3083,14 @@ function ValidatorPlugin(rules, data, formId) {
             , $htmlTarget = null
             , uploadTriggerId = null
             , $uploadTrigger = null
+            , uploadDeleteTriggerId = null
+            , $uploadDeleteTrigger = null
             , $upload       = null
             , $progress = null
         ;
-
+        
+        //$form.hasUploadCustomDeleteTrigger = false;
+        
         var elId = null;
         
         // BO Bingin textarea
@@ -3120,8 +3138,6 @@ function ValidatorPlugin(rules, data, formId) {
             
             // Adding live check
             registerForLiveChecking($form, $inputs[f]);
-            
-            
             
             formElementGroupTmp = $inputs[f].getAttribute('data-gina-form-element-group');
             if (formElementGroupTmp) {
@@ -3182,11 +3198,11 @@ function ValidatorPlugin(rules, data, formId) {
             // todo : progress bar
             // todo : on('success') -> preview
             if ( /^file$/i.test($inputs[f].type) ) {
+                // Binding upload trigger
                 // trigger is by default you {input.id} + '-trigger' 
                 // e.g.: <input type="file" id="my-upload" name="my-upload">
                 // => <button type="button" id="my-upload-trigger">Choose a file</button>
-                // But you can use atrtibute `data-gina-form-upload-trigger` to override it
-                
+                // But you can use atrtibute `data-gina-form-upload-trigger` to override it                
                 uploadTriggerId = $inputs[f].getAttribute('data-gina-form-upload-trigger');
                 if (!uploadTriggerId)
                     uploadTriggerId = $inputs[f].id + '-trigger';
@@ -3196,7 +3212,8 @@ function ValidatorPlugin(rules, data, formId) {
                 $htmlTarget = new DOMParser().parseFromString($target.innerHTML, 'text/html');
                 if (uploadTriggerId) {                    
                     $uploadTrigger = document.getElementById(uploadTriggerId);
-                }                    
+                    //$uploadTrigger = $htmlTarget.getElementById(uploadTriggerId);
+                }
                 // binding upload trigger
                 if ( $uploadTrigger ) {
                     $uploadTrigger.setAttribute('data-gina-form-upload-target', $inputs[f].id);
@@ -3222,6 +3239,32 @@ function ValidatorPlugin(rules, data, formId) {
                     // [0] is for a single file, when multiple == false
                     var files = $el.files;
                     if (!files.length ) return false;
+                    
+                    // Binding upload delete trigger
+                    // trigger is by default you {input.id} + '-delete-trigger' 
+                    // e.g.: <input type="file" id="my-upload" name="my-upload">
+                    // => <a href="/path/to/tmpfile/delete-action" id="my-upload-delete-trigger">Remove</a>
+                    // But you can use atrtibute `data-gina-form-upload-delete-trigger` to override it    
+                    uploadDeleteTriggerId = event.currentTarget.getAttribute('data-gina-form-upload-delete-trigger');
+                    if (!uploadDeleteTriggerId) {
+                        uploadDeleteTriggerId = event.currentTarget.id + '-delete-trigger';                        
+                    }                
+                    $uploadDeleteTrigger = null;
+                    if (uploadDeleteTriggerId) {                    
+                        $uploadDeleteTrigger = document.getElementById(uploadDeleteTriggerId);
+                    }
+                    // binding upload delete trigger
+                    if ( $uploadDeleteTrigger ) {
+                        //$uploadDeleteTrigger.setAttribute('data-gina-form-upload-target', $inputs[f].id);
+                        //removeListener(gina, $uploadDeleteTrigger, 'click');                        
+                        addListener(gina, $uploadDeleteTrigger, 'click', function(e) {
+                            e.preventDefault();
+                            var $el     = e.target;                            
+                            onUploadReset($el)                                    
+                        })
+                    } else {
+                        console.warn('[FormValidator::bindForm][upload]['+uploadTriggerId+'] : did not find `upload delete trigger`.\nPlease, make sure that your delete element ID is `'+ uploadDeleteTriggerId +'`, or add to you file input `data-gina-form-upload-delete-trigger="your-custom-id"`.');
+                    }
                     
                     // $progress = $($(this).parent().find('.progress'));
                     var url             = $el.getAttribute('data-gina-form-upload-action');      
