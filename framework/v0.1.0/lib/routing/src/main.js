@@ -280,7 +280,7 @@ function Routing() {
                     //try {
                     //    ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0])
                     //} catch (_err) {
-                        throw _err
+                        throw err
                     //}
                 }
                 //_ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));       
