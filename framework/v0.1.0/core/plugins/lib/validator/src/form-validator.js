@@ -24,10 +24,21 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     var dateFormat      = (isGFFCtx) ? require('helpers/dateFormat') : helpers.dateFormat;
     var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
     
-    var hasUserValidators = (
-        typeof(gina.forms) != 'undefined' 
-        && typeof(gina.forms.validators) != 'undefined'
-    ) ? true : false;
+    var hasUserValidators = function() {
+        
+        var _hasUserValidators = false, formsContext = null;
+        // backend validation check
+        if (!isGFFCtx) {
+            // TODO - retrieve bakcend forms context
+            formsContext = getContext('gina').forms || null;
+        } else if (isGFFCtx &&  typeof(gina.forms) != 'undefined') {
+            formsContext = gina.forms
+        }
+        if ( formsContext && typeof(formsContext.validators) != 'undefined' ) {
+            _hasUserValidators = true
+        }
+        return _hasUserValidators;
+    } 
     
     var local = {
         'errors': {},
@@ -1164,7 +1175,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         
         // Merging user validators
         // To debug, open inspector and look into `Extra Scripts`     
-        if (hasUserValidators) {
+        if ( hasUserValidators() ) {
             var userValidator = null, filename = null, virtualFileForDebug = null;
             try {                
                 for (let v in gina.forms.validators) {

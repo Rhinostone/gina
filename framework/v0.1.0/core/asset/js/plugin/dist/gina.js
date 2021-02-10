@@ -5815,20 +5815,20 @@ function Routing() {
                  *      "email": "validator::{ isEmail: true, isString: [7] }"
                  *  }
                  * 
-                 * e.g.: tested = new Validator('routing', _data, null, {email: {isEmail: true}} ).isEmail().valid;
+                 * e.g.: tested = new Validator('routing', _data, null, {email: {isEmail: true, subject: \"Anything\"}} ).isEmail().valid;
                  */ 
                 _data = {}; _ruleObj = {}; _rule = {}; str = '';                
-                urlVar.replace( new RegExp('[^'+ key +']','g'), function(){ str += arguments[0]  });                
+                urlVar.replace( new RegExp('[^'+ key +']','g'), function(){ str += arguments[0] });                
                 _data[key]  = urlVal.replace( new RegExp(str, 'g'), '');
                 try {
                     //_ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));
-                    _ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0])
+                    _ruleObj    = JSON.parse(
+                    regex.split(/::/).splice(1)[0]
+                        .replace(/([^\:\"\s+](\w+))\:/g, '"$1":') // { query: { validIf: true }} => { "query": { "validIf": true }}
+                        .replace(/([^\:\"\s+](\w+))\s+\:/g, '"$1":') // note the space between `validIf` & `:` { query: { validIf : true }} => { "query": { "validIf": true }}
+                    );                    
                 } catch (err) {
-                    //try {
-                    //    ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0])
-                    //} catch (_err) {
-                        throw _err
-                    //}
+                    throw err
                 }
                 //_ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));       
                 _rule[key]  = _ruleObj;                
@@ -6980,10 +6980,21 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     var dateFormat      = (isGFFCtx) ? require('helpers/dateFormat') : helpers.dateFormat;
     var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
     
-    var hasUserValidators = (
-        typeof(gina.forms) != 'undefined' 
-        && typeof(gina.forms.validators) != 'undefined'
-    ) ? true : false;
+    var hasUserValidators = function() {
+        
+        var _hasUserValidators = false, formsContext = null;
+        // backend validation check
+        if (!isGFFCtx) {
+            // TODO - retrieve bakcend forms context
+            formsContext = getContext('gina').forms || null;
+        } else if (isGFFCtx &&  typeof(gina.forms) != 'undefined') {
+            formsContext = gina.forms
+        }
+        if ( formsContext && typeof(formsContext.validators) != 'undefined' ) {
+            _hasUserValidators = true
+        }
+        return _hasUserValidators;
+    } 
     
     var local = {
         'errors': {},
@@ -8120,7 +8131,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         
         // Merging user validators
         // To debug, open inspector and look into `Extra Scripts`     
-        if (hasUserValidators) {
+        if ( hasUserValidators() ) {
             var userValidator = null, filename = null, virtualFileForDebug = null;
             try {                
                 for (let v in gina.forms.validators) {
@@ -9972,7 +9983,7 @@ function ValidatorPlugin(rules, data, formId) {
                     $img        = document.createElement('IMG');
                     $img.src    = files[f].tmpUri;
                     
-                    // TODO - remove this; we don't want it by default, the dev can force it by hand if needed
+                    // TODO - Remove this; we don't want it by default, the dev can force it by hand if needed
                     // if (files[f].width) {
                     //     $img.width  = files[f].width;
                     // }
@@ -10057,6 +10068,19 @@ function ValidatorPlugin(rules, data, formId) {
                 
             }
         }
+    }
+    
+    var onUploadReset = function($el) {
+        var fileElemId  = $el.getAttribute('data-gina-form-upload-target') || null;   
+        var $upload = null;
+        
+        if (fileElemId)
+            $upload = document.getElementById(fileElemId);
+        
+        if ($upload) {
+            console.debug('reset input files');
+            $upload.value = '';// force reset : != multiple
+        } 
     }
 
     
@@ -11241,8 +11265,9 @@ function ValidatorPlugin(rules, data, formId) {
         }
         
         // Live check by default - data-gina-form-live-check-enabled
-        $form.target.dataset.ginaFormLiveCheckEnabled = true;
-             
+        if ( typeof($form.target.dataset.ginaFormLiveCheckEnabled) == 'undefined' )
+            $form.target.dataset.ginaFormLiveCheckEnabled = true;
+        
 
         var withRules = false, rule = null, evt = '', procced = null;
 
@@ -11295,10 +11320,14 @@ function ValidatorPlugin(rules, data, formId) {
             , $htmlTarget = null
             , uploadTriggerId = null
             , $uploadTrigger = null
+            , uploadDeleteTriggerId = null
+            , $uploadDeleteTrigger = null
             , $upload       = null
             , $progress = null
         ;
-
+        
+        //$form.hasUploadCustomDeleteTrigger = false;
+        
         var elId = null;
         
         // BO Bingin textarea
@@ -11346,8 +11375,6 @@ function ValidatorPlugin(rules, data, formId) {
             
             // Adding live check
             registerForLiveChecking($form, $inputs[f]);
-            
-            
             
             formElementGroupTmp = $inputs[f].getAttribute('data-gina-form-element-group');
             if (formElementGroupTmp) {
@@ -11408,11 +11435,11 @@ function ValidatorPlugin(rules, data, formId) {
             // todo : progress bar
             // todo : on('success') -> preview
             if ( /^file$/i.test($inputs[f].type) ) {
+                // Binding upload trigger
                 // trigger is by default you {input.id} + '-trigger' 
                 // e.g.: <input type="file" id="my-upload" name="my-upload">
                 // => <button type="button" id="my-upload-trigger">Choose a file</button>
-                // But you can use atrtibute `data-gina-form-upload-trigger` to override it
-                
+                // But you can use atrtibute `data-gina-form-upload-trigger` to override it                
                 uploadTriggerId = $inputs[f].getAttribute('data-gina-form-upload-trigger');
                 if (!uploadTriggerId)
                     uploadTriggerId = $inputs[f].id + '-trigger';
@@ -11421,8 +11448,9 @@ function ValidatorPlugin(rules, data, formId) {
                 // `$htmlTarget` cannot be used if you need to add a listner on the searched element
                 $htmlTarget = new DOMParser().parseFromString($target.innerHTML, 'text/html');
                 if (uploadTriggerId) {                    
-                    $uploadTrigger = document.getElementById(uploadTriggerId);
-                }                    
+                    //$uploadTrigger = document.getElementById(uploadTriggerId);
+                    $uploadTrigger = $htmlTarget.getElementById(uploadTriggerId);
+                }
                 // binding upload trigger
                 if ( $uploadTrigger ) {
                     $uploadTrigger.setAttribute('data-gina-form-upload-target', $inputs[f].id);
@@ -11448,6 +11476,32 @@ function ValidatorPlugin(rules, data, formId) {
                     // [0] is for a single file, when multiple == false
                     var files = $el.files;
                     if (!files.length ) return false;
+                    
+                    // Binding upload delete trigger
+                    // trigger is by default you {input.id} + '-delete-trigger' 
+                    // e.g.: <input type="file" id="my-upload" name="my-upload">
+                    // => <a href="/path/to/tmpfile/delete-action" id="my-upload-delete-trigger">Remove</a>
+                    // But you can use atrtibute `data-gina-form-upload-delete-trigger` to override it    
+                    uploadDeleteTriggerId = event.currentTarget.getAttribute('data-gina-form-upload-delete-trigger');
+                    if (!uploadDeleteTriggerId) {
+                        uploadDeleteTriggerId = event.currentTarget.id + '-delete-trigger';                        
+                    }                
+                    $uploadDeleteTrigger = null;
+                    if (uploadDeleteTriggerId) {                    
+                        $uploadDeleteTrigger = document.getElementById(uploadDeleteTriggerId);
+                    }
+                    // binding upload delete trigger
+                    if ( $uploadDeleteTrigger ) {
+                        //$uploadDeleteTrigger.setAttribute('data-gina-form-upload-target', $inputs[f].id);
+                        //removeListener(gina, $uploadDeleteTrigger, 'click');                        
+                        addListener(gina, $uploadDeleteTrigger, 'click', function(e) {
+                            e.preventDefault();
+                            var $el     = e.target;                            
+                            onUploadReset($el)                                    
+                        })
+                    } else {
+                        console.warn('[FormValidator::bindForm][upload]['+uploadTriggerId+'] : did not find `upload delete trigger`.\nPlease, make sure that your delete element ID is `'+ uploadDeleteTriggerId +'`, or add to you file input `data-gina-form-upload-delete-trigger="your-custom-id"`.');
+                    }
                     
                     // $progress = $($(this).parent().find('.progress'));
                     var url             = $el.getAttribute('data-gina-form-upload-action');      
@@ -12947,8 +13001,8 @@ function ValidatorPlugin(rules, data, formId) {
                 /**if ( typeof(instance.$forms[id].submitTrigger) != 'undefined' &&  $form[i].form.id !== instance.$forms[id].submitTrigger ) {
                     console.warn('Form `submitTrigger` is already defined for your form `#'+ $form[i].form.id +'`: cannot attach `'+$form[i].id+'`');
                 } else */
-                if ( typeof(instance.$forms[id].submitTrigger) == 'undefined' ) {
-                    console.debug('attching submitTrigger: '+ $form[i].id);
+                if ( typeof(instance.$forms[id]) != 'undefined' && typeof(instance.$forms[id].submitTrigger) == 'undefined' ) {
+                    //console.debug('attching submitTrigger: '+ $form[i].id);
                     instance.$forms[id].submitTrigger = $form[i].id || $form[i].getAttribute('id');
                 } // else, skipping
             }

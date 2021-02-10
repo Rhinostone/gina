@@ -268,20 +268,20 @@ function Routing() {
                  *      "email": "validator::{ isEmail: true, isString: [7] }"
                  *  }
                  * 
-                 * e.g.: tested = new Validator('routing', _data, null, {email: {isEmail: true}} ).isEmail().valid;
+                 * e.g.: tested = new Validator('routing', _data, null, {email: {isEmail: true, subject: \"Anything\"}} ).isEmail().valid;
                  */ 
                 _data = {}; _ruleObj = {}; _rule = {}; str = '';                
-                urlVar.replace( new RegExp('[^'+ key +']','g'), function(){ str += arguments[0]  });                
+                urlVar.replace( new RegExp('[^'+ key +']','g'), function(){ str += arguments[0] });                
                 _data[key]  = urlVal.replace( new RegExp(str, 'g'), '');
                 try {
                     //_ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));
-                    _ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0])
+                    _ruleObj    = JSON.parse(
+                    regex.split(/::/).splice(1)[0]
+                        .replace(/([^\:\"\s+](\w+))\:/g, '"$1":') // { query: { validIf: true }} => { "query": { "validIf": true }}
+                        .replace(/([^\:\"\s+](\w+))\s+\:/g, '"$1":') // note the space between `validIf` & `:` { query: { validIf : true }} => { "query": { "validIf": true }}
+                    );                    
                 } catch (err) {
-                    //try {
-                    //    ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0])
-                    //} catch (_err) {
-                        throw err
-                    //}
+                    throw err
                 }
                 //_ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));       
                 _rule[key]  = _ruleObj;                
