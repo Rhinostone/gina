@@ -2617,9 +2617,12 @@ function Server(options) {
 
                 //Parsing for the right url.
                 try {     
-                    isRoute = routingUtils.compareUrls(params, routing[name].url, req);
-                        
+                    isRoute = routingUtils.compareUrls(params, routing[name].url, req);                        
                 } catch (err) {
+                    var msg = 'Internal server error.\nRule [ '+name+' ] needs your attention.\n';
+                    // TODO - Refactor `ApiError`to handle the following param
+                    // var e = new ApiError({ message: msg, stack: err.stack});
+                    // throwError(res, e)
                     throwError(res, 500, 'Internal server error.\nRule [ '+name+' ] needs your attention.\n'+ err.stack);
                     break;
                 }

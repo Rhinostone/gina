@@ -3211,8 +3211,8 @@ function ValidatorPlugin(rules, data, formId) {
                 // `$htmlTarget` cannot be used if you need to add a listner on the searched element
                 $htmlTarget = new DOMParser().parseFromString($target.innerHTML, 'text/html');
                 if (uploadTriggerId) {                    
-                    $uploadTrigger = document.getElementById(uploadTriggerId);
-                    //$uploadTrigger = $htmlTarget.getElementById(uploadTriggerId);
+                    //$uploadTrigger = document.getElementById(uploadTriggerId);
+                    $uploadTrigger = $htmlTarget.getElementById(uploadTriggerId);
                 }
                 // binding upload trigger
                 if ( $uploadTrigger ) {
@@ -4764,8 +4764,8 @@ function ValidatorPlugin(rules, data, formId) {
                 /**if ( typeof(instance.$forms[id].submitTrigger) != 'undefined' &&  $form[i].form.id !== instance.$forms[id].submitTrigger ) {
                     console.warn('Form `submitTrigger` is already defined for your form `#'+ $form[i].form.id +'`: cannot attach `'+$form[i].id+'`');
                 } else */
-                if ( typeof(instance.$forms[id].submitTrigger) == 'undefined' ) {
-                    console.debug('attching submitTrigger: '+ $form[i].id);
+                if ( typeof(instance.$forms[id]) != 'undefined' && typeof(instance.$forms[id].submitTrigger) == 'undefined' ) {
+                    //console.debug('attching submitTrigger: '+ $form[i].id);
                     instance.$forms[id].submitTrigger = $form[i].id || $form[i].getAttribute('id');
                 } // else, skipping
             }

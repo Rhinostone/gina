@@ -2837,7 +2837,7 @@ function SuperController(options) {
         // err.fallback must be a valide route object or a url string
         var fallback = null;
         
-        if (arguments.length == 1 && typeof(res) == 'object' ) {
+        if ( arguments.length == 1 && typeof(res) == 'object' ) {
             code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
                 //, errorObject   = res.stack || res.message || res.error || res.fallback
             var standardErrorMessage = null;
@@ -2943,7 +2943,17 @@ function SuperController(options) {
                 var msgString = '<h1 class="status">Error '+ code +'.</h1>';
                 var eCode = code.toString().substr(0,1);
                 
-                console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
+                // if (!errorObject) {
+                //     errorObject = {
+                //         status: code,
+                //         //errors: msg.error || msg.errors || msg,
+                //         error: standardErrorMessage || msg.error || msg,
+                //         message: msg.message || msg,
+                //         stack: msg.stack
+                //     }
+                // }
+                
+                console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] `this.'+ req.routing.param.control +'(...)` ['+res.statusCode +'] '+ req.url);
                 if ( typeof(msg) == 'object' ) {
 
                     if (msg.title) {
@@ -2973,7 +2983,16 @@ function SuperController(options) {
                     }
 
                 } else {
+                    // Generic error
+                    if (!msg && typeof(errorObject) != 'undefined' && typeof(errorObject.error) != 'undefined' ) {
+                        msg = errorObject.error
+                    }
                     msgString += '<pre class="'+ eCode +'xx message">'+ msg +'</pre>';
+                    var stack = null;
+                    if (typeof(errorObject) != 'undefined' && typeof(errorObject.stack) != 'undefined' ) {
+                        stack = errorObject.stack
+                        msgString += '<pre class="'+ eCode +'xx stack">'+ stack +'</pre>';
+                    }                    
                 }
 
                 res.end(msgString);
