@@ -1330,7 +1330,7 @@ function Config(opt) {
                 
                 var css     = {
                         name    : '',
-                        media   : 'screen',
+                        media   : 'all',
                         rel     : 'stylesheet',
                         type    : 'text/css',
                         url     : '',
