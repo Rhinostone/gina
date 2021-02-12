@@ -2989,7 +2989,7 @@ function SuperController(options) {
                     }
                     msgString += '<pre class="'+ eCode +'xx message">'+ msg +'</pre>';
                     var stack = null;
-                    if (typeof(errorObject) != 'undefined' && typeof(errorObject.stack) != 'undefined' ) {
+                    if ( errorObject && typeof(errorObject) != 'undefined' && typeof(errorObject.stack) != 'undefined' ) {
                         stack = errorObject.stack
                         msgString += '<pre class="'+ eCode +'xx stack">'+ stack +'</pre>';
                     }                    
