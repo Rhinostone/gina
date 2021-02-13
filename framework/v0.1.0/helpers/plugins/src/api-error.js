@@ -1,6 +1,7 @@
 //var console = require('./../../../lib/logger');
 var merge = require('./../../../lib/merge');
-var statusCodes = requireJSON( _( getPath('gina').core + '/status.codes') );
+var statusCodes = requireJSON(__dirname + '/../../../core/status.codes');
+//var statusCodes = requireJSON( _( getPath('gina').core + '/status.codes') );
 /**
  * 
  * Usage:

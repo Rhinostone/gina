@@ -246,9 +246,11 @@ function Proc(bundle, proc, usePidFile){
                 var bundle = self.bundle;
                 var env =  process.env.NODE_ENV || 'prod';
                 var pid = self.getPidByBundleName(bundle);
-
-
-                dismiss(process.list[process.list.count()-1].pid, "SIGKILL")
+                
+                var currentProcess = process.list[process.list.count()-1];
+                if ( typeof(currentProcess) != 'undefined' ) {
+                    dismiss(currentProcess.pid, "SIGKILL")
+                }
             });
 
             proc.on('SIGHUP', function(code){

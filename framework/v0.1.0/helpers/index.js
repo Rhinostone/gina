@@ -69,7 +69,11 @@ if (
 ) {
     new PluginsHelper(getContext('gina').plugins);    
 }
-
+// adding ApiError to helper in case Validator plugin is not loaded
+if ( typeof(getContext) != 'undefined' && typeof(ApiError) == 'undefined' /*&& typeof(helpers.ApiError) == 'undefined'*/ ) {
+    //helpers.ApiError = require('./plugins/src/api-error');
+    ApiError = require('./plugins/src/api-error');
+}
 
 // Publish as node.js module
 module.exports = helpers;
