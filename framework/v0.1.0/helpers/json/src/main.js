@@ -37,8 +37,11 @@ module.exports = function(){
         try {
             jsonStr = fs.readFileSync(filename).toString();
         } catch (err) {
-            console.emerg(err.stack);
-            process.exit(1);
+            if ( typeof(console.emerg) != 'undefined' ) {
+                console.emerg(err.stack);
+                process.exit(1);
+            }
+            throw err            
         }
         
         
@@ -70,8 +73,11 @@ module.exports = function(){
             var msg = (jsonStr.length > 400) ?  '...'+ jsonStr.substr(pos-200, 300) +'...' : jsonStr;
             
             var error = new Error('[ requireJSON ] could not parse `'+ filename +'`:' +'\n\rSomething is wrong arround this portion:\n\r'+msg+'<strong style="color:red">"</strong>\n\rPlease check your file: `'+ filename +'`'+ '\n\r<strong style="color:red">'+err.stack+'</strong>\n');       
-            console.emerg(error.message);
-            process.exit(1);
+            if ( typeof(console.emerg) != 'undefined' ) {
+                console.emerg(error.message);
+                process.exit(1);
+            }            
+            throw error;
         }               
     };
    

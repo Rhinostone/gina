@@ -84,10 +84,11 @@ function Math() {
      *  @param {object|string} err
      *  @param {string} checksum
      * */
-    this.checkSum = function(filename, algorithm, encoding, cb) {
+    this.checkSum = function(filename, algorithm, encoding, isCheckingFromData, cb) {
         var err = false, sum = null;
-
-        if ( /\./.test(filename) ) {
+        isCheckingFromData = ( typeof(isCheckingFromData) != 'undefined' ) ? isCheckingFromData : false;
+        
+        if ( !isCheckingFromData && /\./.test(filename) ) {
             fs.readFile(filename, function (err, data) {
                 sum = checkSum(data, algorithm, encoding);
                 if( sum instanceof Error) {
@@ -108,10 +109,28 @@ function Math() {
         }
     }
 
+    var objectToString = function(obj) {
+        var str = '';
+        if (Array.isArray(obj)) {
+            obj = JSON.stringify(obj.sort(), null, 0);
+        } else {
+            var arr = [], i = 0;
+            for (let k in obj) {
+                if ( /function/i.test(typeof(obj[k])) )
+                    continue;
+                arr[i] = k +':'+ obj[k];
+                ++i;
+            }
+            str = arr.sort().join(',');
+        }
+        
+        return str;
+    }
+    
     /**
      * Check sum from file or form data
      *
-     * @param {string} filename|data
+     * @param {string|ojbect|array} filename|data
      * @param {string} algorithm
      * @param {string} encoding
      *
@@ -120,12 +139,17 @@ function Math() {
     this.checkSumSync = function(filename, algorithm, encoding) {
         var sum = null;
         try {
+            
+            if ( typeof(filename) == 'object' ) {
+                filename = objectToString(filename);                
+            }
+            
             if ( /(\.[a-z]{3})$/.test(filename) ) { // must be a string
                 // from filename
                 sum = checkSum( fs.readFileSync(filename), algorithm, encoding )
             } else {
                 // from data
-                sum = checkSum( filename, algorithm, encoding )
+                sum = checkSum( filename, algorithm, encoding, true )
             }
 
             if (sum instanceof Error)
