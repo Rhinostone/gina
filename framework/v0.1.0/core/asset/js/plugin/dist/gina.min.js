@@ -4216,6 +4216,7 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  *  @param {object} filter
  *      eg.: { uid: 'someUID' }
  *      eg.: { type: 'not null', country: 'France' } // `AND` clause
+ *      NB.: To filter `not empty`, use { type: '!=""' }
  *      eg.: { country: 'The Hashemite Kingdom of Jordan' }, { country: 'Libanon'} // `OR` clause 
  *      eg.: { 'obj.prop': true }
  *      eg.: { 'contacts[*].name': 'Doe' } // `WITHIN` (array|collection) clause
