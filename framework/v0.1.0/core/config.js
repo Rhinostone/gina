@@ -1378,9 +1378,9 @@ function Config(opt) {
                             noneDefaultJs[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;                        
                         }                
                     }
-                    if ( section == 'document-send') {
-                        console.debug('document-send debug');
-                    }
+                    // if ( section == 'document-send') {
+                    //     console.debug('document-send debug');
+                    // }
                     if (!files['templates'][section].javascriptsExcluded) {
                         if ( /^_common$/.test(section) ) {
                             noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);    
