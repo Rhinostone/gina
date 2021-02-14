@@ -19,6 +19,7 @@ function Routing() {
     var isGFFCtx    = ((typeof (module) !== 'undefined') && module.exports) ? false :  true;
     var self        = {
         allowedMethods: ['get', 'post', 'put', 'delete'],
+        reservedParams: ['controle', 'file','title', 'namespace', 'path'],
         notFound: {}
     };    
         
@@ -552,7 +553,23 @@ function Routing() {
         if ( /\/$/.test(route.url) && route.url != '/' )
             route.url = route.url.substr(0, route.url.length-1);
                 
-        // recommanded for x-bundle coms
+        if ( /GET/i.test(route.method) ) {
+            var queryParams = '?', maskedUrl = routing[rule].url;
+            self.reservedParams;
+            for (let r in route.param) {
+                if ( self.reservedParams.indexOf(r) > -1 || new RegExp(route.param[r]).test(maskedUrl) )
+                    continue;
+                if (typeof(params[r]) != 'undefined' )
+                    queryParams += r +'='+ params[r]+ '&';
+            }
+            
+            if (queryParams.length > 1) {
+                queryParams = queryParams.substring(0, queryParams.length-1);
+                route.url += queryParams;
+            }
+        }
+        
+            // recommanded for x-bundle coms
         // leave `ignoreWebRoot` empty or set it to false for x-bundle coms
         route.toUrl = function (ignoreWebRoot) {
             
