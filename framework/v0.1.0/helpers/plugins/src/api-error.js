@@ -106,12 +106,15 @@ function ApiError(errorMessage, fieldName, errorStatus) {
                     }
                     error.path = path;
                 }
-                error.tag += stackObj.getFunctionName().replace(/\./g, ':') +'  '+stackObj.getLineNumber()+':'+stackObj.getColumnNumber();
+                var funcName = stackObj.getFunctionName();
+                error.tag += funcName.replace(/\./g, ':') +'  '+stackObj.getLineNumber()+':'+stackObj.getColumnNumber();
+                //error.fields[fieldName][funcName] = errorMessage;
             } catch (err) {
                 error.tag   = 'N/A';
                 error.stack = err.stack;
             }        
         } else {
+            //error.fields[fieldName]['isApiError'] = errorMessage;
             error.tag   = 'N/A';
         }     
          
