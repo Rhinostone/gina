@@ -318,6 +318,7 @@ function ValidatorPlugin(rules, data, formId) {
     var liveCheckErrors = {}; // Per Form & Per Element
     var handleErrorsDisplay = function($form, errors, data, fieldName) {
         
+        // Toolbar errors display
         if ( GINA_ENV_IS_DEV )
             var formsErrors = null;
         
@@ -332,7 +333,7 @@ function ValidatorPlugin(rules, data, formId) {
             $form.dataset.ginaFormIsRestting = false;
         } else {
             // Live check enabled ?
-            if ( /^(true)$/i.test($form.dataset.ginaFormLiveCheckEnabled) ) {
+            if ( /^(true)$/i.test($form.dataset.ginaFormLiveCheckEnabled) && typeof(fieldName) != 'undefined') {
                 if ( typeof(liveCheckErrors[$form.id]) == 'undefined') {
                     liveCheckErrors[$form.id] = {};
                 }            
@@ -438,6 +439,11 @@ function ValidatorPlugin(rules, data, formId) {
                         $err.setAttribute('class', 'form-item-error-message');
 
                         // injecting error messages
+                        // {
+                        //     field: {
+                        //         rule: errorMsg
+                        //     }
+                        // }
                         for (var e in errors[name]) {
                             $msg = document.createElement('p');
                             $msg.appendChild( document.createTextNode(errors[name][e]) );
@@ -1035,7 +1041,7 @@ function ValidatorPlugin(rules, data, formId) {
                             $form.eventData.error = result;
 
                             // Forward appplication errors to forms.errors when available
-                            // This aprt is meant for the Frontend Validation Errors Handling
+                            // This api error is meant for the Frontend Validation Errors Handling
                             if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.fields && typeof(result.fields) == 'object') {
                                 var formsErrors = {}, errCount = 0;
                                 var apiMessage = ( typeof(result.message) != 'undefined') ? result.message : null;
@@ -2825,7 +2831,9 @@ function ValidatorPlugin(rules, data, formId) {
         $el.setAttribute('readonly', 'readonly');
         addListener(gina, $el, 'focusout.'+ $el.id, function(event) {
             event.preventDefault();
-            event.currentTarget.setAttribute('readonly', 'readonly');
+            var $_el = event.currentTarget;
+            triggerEvent(gina, $_el, 'change.'+ $_el.id);
+            $_el.setAttribute('readonly', 'readonly');
         });
         addListener(gina, $el, 'focusin.'+ $el.id, function(event) {
             event.preventDefault();
