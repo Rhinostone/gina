@@ -1037,31 +1037,29 @@ function ValidatorPlugin(rules, data, formId) {
                                 result.message = xhr.responseText
                             }
                             
-                            // xhr error response
-                            $form.eventData.error = result;
-
+                            // xhr error response (caching)
+                            //$form.eventData.error = result;
                             // Forward appplication errors to forms.errors when available
                             // This api error is meant for the Frontend Validation Errors Handling
                             if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.fields && typeof(result.fields) == 'object') {
-                                var formsErrors = {}, errCount = 0;
+                                
                                 var apiMessage = ( typeof(result.message) != 'undefined') ? result.message : null;
+                                var newResultfields = {};
                                 for (let f in result.fields) {
-                                    //++errCount;
-                                    //formsErrors[f] = { isApplicationValidationError: result.fields[f] };
                                     let errorObject = {};
                                     errorObject[f] = {};
                                     errorObject[f].isApiError = result.fields[f];
                                     if ( apiMessage && !errorObject[f].isApiError) {
                                         errorObject[f].isApiError = result.error; // Generic error
                                     }
+                                    newResultfields[f] = errorObject[f];
                                     handleErrorsDisplay($form.target, errorObject, data, f);
                                     
                                 }
-
-                                // if (errCount > 0) {
-                                //     handleErrorsDisplay($form.target, formsErrors);
-                                // }
-                            }
+                                result.fields = newResultfields
+                            } 
+                            $form.eventData.error = result;
+                            
 
                             // update toolbar
                             XHRData = result;
@@ -4285,7 +4283,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                 //var result = event['detail'] || $form.eventData.error || $form.eventData.validation;
                 var result = $form.eventData.error || $form.eventData.validation || event['detail'];
-                
+                // TODO - Since $form.eventData.error is cached, add a TTL to clear it and allow re $validator.send()
                 handleErrorsDisplay(event['target'], result['fields']||result['error'], result['data']);
 
                 var _id = event.target.getAttribute('id');
@@ -4921,7 +4919,7 @@ function ValidatorPlugin(rules, data, formId) {
     var validate = function($formOrElement, fields, $fields, rules, cb) {
 
         delete fields['_length']; //cleaning
-                
+        
         var stringifiedRules = JSON.stringify(rules);
         if ( /\$(.*)/.test(stringifiedRules) ) {
             var isLiveCheckingOnASingleElement = (
@@ -5037,6 +5035,10 @@ function ValidatorPlugin(rules, data, formId) {
                 id = $formOrElement.getAttribute('id');
                 evt = 'validated.' + id;
                 instance.$forms[id].fields = fields;
+                // clear existing errors
+                if ( typeof($formOrElement.eventData) != 'undefined' && typeof($formOrElement.eventData.error) != 'undefined' ) {
+                    delete $formOrElement.eventData.error
+                }
                 d = new FormValidator(fields, $fields, xhrOptions);
             } else {
                 id = $formOrElement.form.id || $formOrElement.form.target.getAttribute('id') || $formOrElement.form.getAttribute('id');
