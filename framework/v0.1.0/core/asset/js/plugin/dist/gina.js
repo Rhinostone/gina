@@ -6100,8 +6100,9 @@ function Routing() {
         // eg.: {..., id: '/^\\s*$/'} => {..., id: ''} => /path/to/ becoming /path/to
         if ( /\/$/.test(route.url) && route.url != '/' )
             route.url = route.url.substr(0, route.url.length-1);
-                
-        if ( /GET/i.test(route.method) ) {
+        
+        // Completeting url with extra params e.g.: ?param1=val1&param2=val2
+        if ( /GET/i.test(route.method) && typeof(params) != 'undefined' ) {
             var queryParams = '?', maskedUrl = routing[rule].url;
             self.reservedParams;
             for (let r in route.param) {
