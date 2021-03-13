@@ -2081,7 +2081,9 @@ function ValidatorPlugin(rules, data, formId) {
             $elTMP = $form.target.getElementsByTagName('button');
             if ( $elTMP.length > 0 ) {
                 for(let i = 0, len = $elTMP.length; i < len; ++i) {
-                    if ($elTMP[i].type == 'submit')
+                    // if button is != type="submit", you will need to provide : data-gina-form-submit
+                    // TODO - On button binding, you can then provide data-gina-form-action & data-gina-form-method
+                    if ($elTMP[i].type == 'submit' || $elTMP[i].attributes.getNamedItem('data-gina-form-submit') )
                         $els.push($elTMP[i])
                 }
             }
@@ -2714,60 +2716,89 @@ function ValidatorPlugin(rules, data, formId) {
     }
     
     
-    var addLiveForInput = function($form, $el, isOtherTagAllowed) {
+    var addLiveForInput = function($form, $el, liveCheckTimer, isOtherTagAllowed) {
         if (typeof(isOtherTagAllowe) == 'undefined' ) {
             isOtherTagAllowed = false;
         }
-        if ( /text|hidden|password/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
+        if ( /text|hidden|password|number|date/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
             var localRule = $form.rules[$el.name] || null;
-            // data-gina-form-live-check-enabled                
+            // data-gina-form-live-check-enabled
+            // with local rule                
             if ( $form.target.dataset.ginaFormLiveCheckEnabled && localRule /**&& localRule.isRequired*/ ) {
-                                    
-                addListener(gina, $el, 'change.'+ $el.id, function(event) {
+                addEventListener(gina, $el, 'focusout.'+$el.id, function(event) {
                     event.preventDefault();
+                    clearTimeout(liveCheckTimer);
+                });
+                addListener(gina, $el, [ 'change.'+$el.id, 'keyup.'+$el.id ], function(event) {
+                    event.preventDefault();
+                    clearTimeout(liveCheckTimer);
                     
-                    // Do not validate `onChange` if `input value` === `orignal value`
-                    if (event.target.value === event.target.defaultValue && event.target.value != '') {
-                        //resetting error display
-                        handleErrorsDisplay(event.target.form, {}, null, event.target.name);
-                        return cancelEvent(event);
+                    var processEvent = function() {
+                        // Do not validate `onChange` if `input value` === `orignal value`
+                        if (event.target.value === event.target.defaultValue && event.target.value != '') {
+                            //resetting error display
+                            handleErrorsDisplay(event.target.form, {}, null, event.target.name);
+                            return cancelEvent(event);
+                        }
+                        
+                        var localField = {}, $localField = {};
+                        localField[event.target.name]     = event.target.value;
+                        $localField[event.target.name]    = event.target;
+                                                
+                        validate(event.target, localField, $localField, $form.rules, function onLiveValidation(result){
+                            var isFormValid = result.isValid();
+                            if (isFormValid) {
+                                //resetting error display
+                                handleErrorsDisplay(event.target.form, {}, result.data, event.target.name);
+                            } else {                                
+                                handleErrorsDisplay(event.target.form, result.error, result.data, event.target.name);
+                            }
+                            //updateSubmitTriggerState( event.target.form, isFormValid );
+                            // data-gina-form-required-before-submit
+                            //console.log('====>', result.isValid(), result);
+                            
+                            // Global check required: on all fields
+                            if (isFormValid) {
+                                var $gForm = event.target.form, gFields = null, $gFields = null, gRules = null;
+                                var gValidatorInfos = getFormValidationInfos($gForm, rules);
+                                gFields  = gValidatorInfos.fields;
+                                $gFields = gValidatorInfos.$fields;
+                                gRules   = instance.$forms[$gForm.id].rules;
+                                // Don't be tempted to revome fields that has already been validated
+                                validate($gForm, gFields, $gFields, gRules, function onSilentGlobalLiveValidation(gResult){
+                                    console.debug('onSilentGlobalLiveValidation: '+ gResult.isValid());
+                                    updateSubmitTriggerState( $gForm, gResult.isValid() );
+                                })
+                            } else {
+                                updateSubmitTriggerState( event.target.form, isFormValid );
+                            }
+                                
+                        })
                     }
                     
-                    var localField = {}, $localField = {};
-                    localField[event.target.name]     = event.target.value;
-                    $localField[event.target.name]    = event.target;
-                                            
-                    validate(event.target, localField, $localField, $form.rules, function onLiveValidation(result){
-                        var isFormValid = result.isValid();
-                        if (isFormValid) {
-                            //resetting error display
-                            handleErrorsDisplay(event.target.form, {}, result.data, event.target.name);
-                        } else {                                
-                            handleErrorsDisplay(event.target.form, result.error, result.data, event.target.name);
-                        }
-                        //updateSubmitTriggerState( event.target.form, isFormValid );
-                        // data-gina-form-required-before-submit
-                        //console.log('====>', result.isValid(), result);
+                    if ( /^keyup/i.test(event.type) ) {
+                        liveCheckTimer = setTimeout( function onLiveCheckTimer() {
+                            console.debug(' keyup ....');
+                            processEvent()
+                        }, 1000); 
+                    } else if (/^change/i.test(event.type)) {
+                        processEvent()
+                    }
                         
-                        // Global check required: on all fields
-                        if (isFormValid) {
-                            var $gForm = event.target.form, gFields = null, $gFields = null, gRules = null;
-                            var gValidatorInfos = getFormValidationInfos($gForm, rules);
-                            gFields  = gValidatorInfos.fields;
-                            $gFields = gValidatorInfos.$fields;
-                            gRules   = instance.$forms[$gForm.id].rules;
-                            // Don't be tempted to revome fields that has already been validated
-                            validate($gForm, gFields, $gFields, gRules, function onSilentGlobalLiveValidation(gResult){
-                                console.debug('onSilentGlobalLiveValidation: '+ gResult.isValid());
-                                updateSubmitTriggerState( $gForm, gResult.isValid() );
-                            })
-                        } else {
-                            updateSubmitTriggerState( event.target.form, isFormValid );
-                        }
-                            
-                    })
                 });
-            }
+            }/** else if ($form.target.dataset.ginaFormLiveCheckEnabled) {
+                // without local rule, so startig validation on the whole form instead
+                var $gForm = $form.target, gFields = null, $gFields = null, gRules = null;
+                var gValidatorInfos = getFormValidationInfos($form.target, rules);
+                gFields  = gValidatorInfos.fields;
+                $gFields = gValidatorInfos.$fields;
+                gRules   = instance.$forms[$form.id].rules;
+                // Don't be tempted to revome fields that has already been validated
+                validate($form.target, gFields, $gFields, gRules, function onSilentGlobalLiveValidationWithoutFieldRule(gResult){
+                    console.debug('onSilentGlobalLiveValidation without field rule: '+ gResult.isValid());
+                    updateSubmitTriggerState( $form, gResult.isValid() );
+                })
+            }*/
         }
         return;
     }
@@ -2825,10 +2856,12 @@ function ValidatorPlugin(rules, data, formId) {
      * Will be removed when Safari honores autocomplete="off" 
      * @param {object} $el HTMLElement
      */
-    var handleAutoComplete = function($el) {
+    var handleAutoComplete = function($el, liveCheckTimer) {
         $el.setAttribute('readonly', 'readonly');
         addListener(gina, $el, 'focusout.'+ $el.id, function(event) {
             event.preventDefault();
+            clearTimeout(liveCheckTimer);
+            
             var $_el = event.currentTarget;
             triggerEvent(gina, $_el, 'change.'+ $_el.id);
             $_el.setAttribute('readonly', 'readonly');
@@ -2842,6 +2875,8 @@ function ValidatorPlugin(rules, data, formId) {
             if ( typeof(gina.events[evtName]) == 'undefined' ) {
                 addListener(gina, event.currentTarget, evtName, function(e) {
                     e.preventDefault();
+                    clearTimeout(liveCheckTimer);
+                    
                     var $_el = e.currentTarget;                    
                     var str = e.currentTarget.value;
                     var posStart = $_el.selectionStart, posEnd = $_el.selectionEnd;
@@ -2975,10 +3010,10 @@ function ValidatorPlugin(rules, data, formId) {
         if ( !/^(input|textarea)$/i.test($el.tagName) ) {
             return
         }
-        
+        var liveCheckTimer = null
         switch ($el.tagName.toLowerCase()) {
             case 'input':
-                addLiveForInput($form, $el);
+                addLiveForInput($form, $el, liveCheckTimer);
                 // Bypass Safari autocomplete
                 var isAutoCompleteField = $el.getAttribute('autocomplete');
                 if (
@@ -2986,12 +3021,12 @@ function ValidatorPlugin(rules, data, formId) {
                     && isAutoCompleteField
                     && /^(off|false)/i.test(isAutoCompleteField) 
                 ) {
-                    handleAutoComplete($el)
+                    handleAutoComplete($el, liveCheckTimer)
                 }
                 break;
         
             case 'textarea':
-                addLiveForInput($form, $el, true);
+                addLiveForInput($form, $el, liveCheckTimer, true);
                 break;
             default:
                 break;
@@ -4028,6 +4063,16 @@ function ValidatorPlugin(rules, data, formId) {
                 if (keyboardMapping[event.keyCode]) {
                     delete keyboardMapping[event.keyCode]
                 }
+                
+                var _evt = $el.id;    
+                if (!_evt) return false;
+                if ( !/^keyup\./.test(_evt) ) {
+                    _evt = 'keyup.'+$el.id
+                }
+                if (gina.events[_evt]) {
+                    cancelEvent(event);
+                    triggerEvent(gina, $el, _evt, event.detail, event);
+                }
             });
             
             // focusin proxy            
@@ -4696,10 +4741,11 @@ function ValidatorPlugin(rules, data, formId) {
         } else {
             $formInstance = $formInstanceOrTarget;
         }
+        //if (!$formInstance) return;
         
         if ( typeof($formInstance.submitTrigger) == 'undefined') {
             console.warn('This might be normal, so do not worry if this form is handled by your javascript: `'+ $formInstance.id +'`\nGina could not complete `updateSubmitTriggerState()`: `submitTrigger` might not be attached to form instance `'+ $formInstance.id +'`\nTo disable this warning, You just need to disable `Form Live Checking on your form by adding to your <form>: `data-gina-form-live-check-enabled=false``')
-        } else {
+        } else if ( document.getElementById($formInstance.submitTrigger) ) {
             if ( isFormValid ) { // show submitTrigger
                 document.getElementById($formInstance.submitTrigger).disabled = false;
             } else { // hide submitTrigger
@@ -4868,8 +4914,9 @@ function ValidatorPlugin(rules, data, formId) {
         // of the current form rule for variables replacement/evaluation. Since live check is
         // meant to validate one field at the time, you could fall in a case where the current
         // field should be compared with another field of the same form.
-        if (isLiveCheckingOnASingleElement) {
-            var ruleObj         = JSON.parse(stringifiedRules);
+        var ruleObj = JSON.parse(stringifiedRules);
+        var stringifiedRulesTmp = JSON.stringify(ruleObj);
+        if (isLiveCheckingOnASingleElement) {            
             var $currentForm    = $fields[Object.getOwnPropertyNames($fields)[0]].form;
             var vInfos          = getFormValidationInfos($currentForm, ruleObj);
             delete vInfos.fields._length;
@@ -4889,18 +4936,51 @@ function ValidatorPlugin(rules, data, formId) {
             arrFields[a] = field;
             a++;
         }
-        arrFields.sort().reverse(); 
+        arrFields.sort().reverse();
+        
+        var getCastedValue = function(fieldName) {
+            if ( 
+                typeof(ruleObj[fieldName].isBoolean) != 'undefined'
+                || typeof(ruleObj[fieldName].isNumber) != 'undefined'
+                || typeof(ruleObj[fieldName].isInteger) != 'undefined'
+                || typeof(ruleObj[fieldName].isFloat) != 'undefined'
+                || typeof(ruleObj[fieldName].toFloat) != 'undefined'
+                || typeof(ruleObj[fieldName].toInteger) != 'undefined'
+            ) {
+                return fields[fieldName].replace(/\,/g, '.');
+            }
+            
+            return '\\"'+ fields[fieldName] +'\\"';
+        }
         
         for (let i = 0, len = arrFields.length; i < len; i++) {
             _field = arrFields[i].replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&');
-            re = new RegExp('\\$'+_field, 'g');            
-            stringifiedRules = stringifiedRules.replace(re, '\\"'+ fields[arrFields[i]] +'\\"');
+            re = new RegExp('\\$'+_field, 'g');
+            // default field value
+            let fieldValue = '\\"'+ fields[arrFields[i]] +'\\"';
+            let isInRule = re.test(stringifiedRulesTmp);
+            if ( isInRule && typeof(ruleObj[arrFields[i]]) != 'undefined' ) {
+                fieldValue = getCastedValue(arrFields[i]);
+            } else if ( isInRule ) {
+                throw new Error('`'+arrFields[i]+'` is used in a dynamic rule without definition. this could lead to an evaluation error.');
+            }
+                   
+            stringifiedRules = stringifiedRules.replace(re, fieldValue );
         }
         if ( /\$(.*)/.test(stringifiedRules) ) {
             for (let i = 0, len = arrFields.length; i < len; i++) {
                 _field = arrFields[i].replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&');
                 re = new RegExp('\\$'+_field, 'g');
-                stringifiedRules = stringifiedRules.replace(re, '\\"'+ $fields[arrFields[i]].value +'\\"' || $fields[arrFields[i]].checked);
+                // default field value
+                let fieldValue = '\\"'+ $fields[arrFields[i]].value +'\\"';
+                let isInRule = re.test(stringifiedRulesTmp);
+                if ( isInRule && typeof(ruleObj[arrFields[i]]) != 'undefined' ) {
+                    fieldValue = getCastedValue(arrFields[i]);
+                } else if ( isInRule ) {
+                    throw new Error('`'+arrFields[i]+'` is used in a dynamic rule without definition. this could lead to an evaluation error.');
+                }
+                
+                stringifiedRules = stringifiedRules.replace(re, fieldValue || $fields[arrFields[i]].checked);
             }
         }
         

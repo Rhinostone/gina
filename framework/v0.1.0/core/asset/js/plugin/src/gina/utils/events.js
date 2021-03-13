@@ -2,23 +2,43 @@ function registerEvents(plugin, events) {
     gina.registeredEvents[plugin] = events
 }
 
+/**
+ * addListener
+ * 
+ * @param {object} target 
+ * @param {object} element 
+ * @param {string|array} name 
+ * @param {callback} callback 
+ */
 function addListener(target, element, name, callback) {
+    
+    var registerListener = function(target, element, name, callback) {
+        if ( typeof(target.event) != 'undefined' && target.event.isTouchSupported && /^(click|mouseout|mouseover)/.test(name) && target.event[name].indexOf(element) == -1) {
+            target.event[name][target.event[name].length] = element
+        }
 
-    if ( typeof(target.event) != 'undefined' && target.event.isTouchSupported && /^(click|mouseout|mouseover)/.test(name) && target.event[name].indexOf(element) == -1) {
-        target.event[name][target.event[name].length] = element
+        if (typeof(element) != 'undefined' && element != null) {
+            if (element.addEventListener) {
+                element.addEventListener(name, callback, false)
+            } else if (element.attachEvent) {
+                element.attachEvent('on' + name, callback)
+            }
+        } else {
+            target.customEvent.addListener(name, callback)
+        }
+
+        gina.events[name] = ( typeof(element.id) != 'undefined' && typeof(element.id) != 'object' ) ? element.id : element.getAttribute('id')
     }
-
-    if (typeof(element) != 'undefined' && element != null) {
-        if (element.addEventListener) {
-            element.addEventListener(name, callback, false)
-        } else if (element.attachEvent) {
-            element.attachEvent('on' + name, callback)
+    
+    if ( Array.isArray(name) ) {
+        var i = 0, len = name.length;
+        for (; i < len; i++) {
+            registerListener(target, element, name[i], callback)
         }
     } else {
-        target.customEvent.addListener(name, callback)
+        registerListener(target, element, name, callback)
     }
-
-    gina.events[name] = ( typeof(element.id) != 'undefined' && typeof(element.id) != 'object' ) ? element.id : element.getAttribute('id')
+        
 }
 /**
  * triggerEvent
