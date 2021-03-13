@@ -748,7 +748,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
          * @param {object} [options]
          * */
         function popinLoad(name, url, options) {
-
+            // if no name defiend, get the current
+            if ( typeof(name) == 'undefined' ) {
+                if ( typeof(this.name) == 'undefined' ) {
+                    throw new Error('`$popin.name` needs to be defined !')
+                }
+                name = this.name;
+            }
             // popin object
             var $popin      = getPopinByName(name);
             var id          = $popin.id;

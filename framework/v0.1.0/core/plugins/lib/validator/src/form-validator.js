@@ -455,9 +455,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             
             if (!isValid) {
 
-                if ( /\$[-_\[\]a-z 0-9]+|^!\//i.test(condition) ) {
+                //if ( /\$[-_\[\]a-z 0-9]+|^!\//i.test(condition) ) {
+                // Fixed on 2021-03-13: $variable now replaced with real value beafore validation
+                if ( /[\!\=>\>\<a-z 0-9]+/i.test(condition) ) {
 
-                    var variables = condition.match(/\${0}[-_\[\]a-z0-9]+/ig); // without space(s)
+                    var variables = condition.match(/\${0}[-_,.\[\]a-z0-9]+/ig); // without space(s)
                     var compiledCondition = condition;
                     var re = null
                     for (var i = 0, len = variables.length; i < len; ++i) {
