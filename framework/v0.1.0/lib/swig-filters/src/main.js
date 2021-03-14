@@ -147,6 +147,13 @@ function SwigFilters(conf) {
             route = r[0].toLowerCase();
             base = config.bundle = r[1];
         } else {
+            if (
+                !/\@/.test(route)
+                && !/\.(.*)$/.test(route)
+                && typeof(base) == 'undefined'
+            ) {
+                base = config.bundle = ctx.options.conf.bundle;
+            }
             route = route.toLowerCase();
         }
 
