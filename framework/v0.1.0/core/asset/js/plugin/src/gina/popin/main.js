@@ -220,7 +220,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             // Non-Preflighted requests
                             var options = {                            
                                 isSynchrone: false,
-                                withCredentials: false
+                                withCredentials: false // by default
                             };                       
                             options = merge($popin.options, options);    
                             var url = this.getAttribute('data-gina-popin-url') || this.getAttribute('href');
@@ -775,10 +775,17 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             if ( typeof(options) == 'undefined' ) {
                 options = xhrOptions;
             } else {
+                // In order to inherit without overriding default xhrOptions
+                var isWithCredentials = xhrOptions.withCredentials;
                 options = merge(options, xhrOptions);
+                
+                options.withCredentials = isWithCredentials;
             }
             
-            if ( /^(http|https)\:/.test(url) && !new RegExp('^' + window.location.protocol + '//'+ window.location.host).test(url) ) {
+            if ( 
+                /^(http|https)\:/.test(url)
+                && !new RegExp('^' + window.location.protocol + '//'+ window.location.host).test(url) 
+            ) {
                 // is request from same domain ?
                 //options.headers['Origin']   = window.protocol+'//'+window.location.host;
                 //options.headers['Origin']   = '*';
@@ -786,13 +793,17 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 var isSameDomain = ( new RegExp(window.location.hostname).test(url) ) ? true : false;
                 if (!isSameDomain) {
                     // proxy external urls
-                    // TODO - instead of using `cors.io`, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
+                    // TODO - instead of using `cors.io` or similar services, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
                     //url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
                     url = url.match(/^(https|http)\:/)[0] + '//corsacme.herokuapp.com/?'+ url;
                     //url = url.match(/^(https|http)\:/)[0] + '//cors-anywhere.herokuapp.com/' + url;
                     
                     //delete options.headers['X-Requested-With']
-                }   
+                    
+                    // remove credentials on untrusted env
+                    // if forced by user options, it will be restored with $popin.options merge
+                    options.withCredentials = false;
+                }
             }
             options.url     = url;
             // updating popin options

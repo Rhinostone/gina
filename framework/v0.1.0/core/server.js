@@ -1247,9 +1247,9 @@ function Server(options) {
     /**
      * Default http/1.x statics handler - For http/2.x check the SuperController
      * @param {object} staticProps - Expected : .isStaticFilename & .firstLevel
-     * @param {*} request 
-     * @param {*} response 
-     * @param {*} next 
+     * @param {object} request 
+     * @param {object} response 
+     * @param {callback} next 
      */
     var handleStatics = function(staticProps, request, response, next) {        
         
