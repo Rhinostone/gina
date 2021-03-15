@@ -758,8 +758,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             // popin object
             var $popin      = getPopinByName(name);
             var id          = $popin.id;
-            
-            
+                        
             // popin element
             var $el         = document.getElementById(id) || null;
 
@@ -1056,9 +1055,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 throw new Error('Popin `'+$popin.name+'` is not open !');
             
             $popin.isRedirecting = ( typeof(isRedirecting) != 'undefined' ) ? isRedirecting : false;
-            if ( $popin.isRedirecting ) {
+            // if ( $popin.isRedirecting ) {
                 
-            }
+            // }
             
             var $el = $popin.target;
             $el.innerHTML = stringContent.trim(); 
@@ -1070,63 +1069,94 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             } 
         }
                
-        function getScript($popin, source, callback) {
-            // existing scripts
-            var scripts  = document.head.getElementsByTagName('script');            
-            // new script element
-            var script = document.createElement('script');
-            // index 0 is for the loader
-            var prior = document.getElementsByTagName('script')[1];
-            script.async = 0;
-        
-            script.onload = script.onreadystatechange = function( _, isAbort ) {
-                if(isAbort || !script.readyState || /loaded|complete/.test(script.readyState) ) {
-                    script.onload = script.onreadystatechange = null;
-                    script = undefined;
-        
-                    if(!isAbort && callback) setTimeout(callback, 0);
-                }
-            };
-        
-            script.src = source;            
+        function getScript(source) {
+        //function getScript($popin, source, callback) {
             
-            var hostname = gina.config.hostname;
-            if ( gina.config.webroot != '' ) {
-                hostname += gina.config.webroot;
-            }
-            var s = 0
-                , sLen = scripts.length
-                , filename = source.substr( source.lastIndexOf(hostname)+hostname.length || 0)
-                , re = null
-            ;
-            if (sLen == 0) {
-                script.id = 'gina-popin-script-' + $popin.id;
-                prior.parentNode.insertBefore(script, prior);
-                $popin.$headers.push({ id: script.id});
-            } else {
-                var found = false;
-                for (; s<sLen; ++s) {
-                    if ( typeof(scripts[s].src) == 'undefined' || !scripts[s].src )
-                        continue;
-                    // insert only if not already loaded
-                    re = new RegExp(filename+'$');                
-                    if ( re.test(scripts[s].src) ) {
-                        found = true;
-                        break;
-                    }                                    
-                }
-                if (!found) {
-                    script.id = 'gina-popin-script-' + $popin.id;
-                    prior.parentNode.insertBefore(script, prior);
-                    // will be removed on close
-                    $popin.$headers.push({ id: script.id});
-                }
-            }                
+            // then trigger scripts load
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', source, true);
+            xhr.setRequestHeader("Content-Type", "text/javascript");
+            xhr.onload = function () {
+                // var vScript = doc.createElement('script')
+                //     , vSrc = URL.createObjectURL(xhr.response)
+                // ;
+                // vScript.src = src;
+                // doc.body.appendChild(script);
+                eval(xhr.response);
+            };
+            xhr.send();
+            
+            // new script element
+            //var script = document.createElement('script');
+            // index 0 is for the loader
+            // var prior = document.getElementsByTagName('script')[1];
+            // script.async = 0;
+        
+            // script.onload = script.onreadystatechange = function( _, isAbort ) {
+            //     if(isAbort || !script.readyState || /loaded|complete/.test(script.readyState) ) {
+            //         script.onload = script.onreadystatechange = null;
+            //         script = undefined;
+        
+            //         if(!isAbort && callback) setTimeout(callback, 0);
+            //     }
+            // };
+        
+            //script.src = source;
+                       
+            
+            // var hostname = gina.config.hostname;
+            // if ( gina.config.webroot != '' ) {
+            //     hostname += gina.config.webroot;
+            // }
+            // var s = 0
+            //     , sLen = scripts.length
+            //     , filename = source.substr( source.lastIndexOf(hostname)+hostname.length || 0)
+            //     , re = null
+            // ;
+            // if (sLen == 0) {
+            //     script.id = 'gina-popin-script-' + $popin.id;
+            //     prior.parentNode.insertBefore(script, prior);
+            //     $popin.$headers.push({ id: script.id});
+            // } else {
+            //     var found = false;
+            //     for (; s<sLen; ++s) {
+            //         if ( typeof(scripts[s].src) == 'undefined' || !scripts[s].src )
+            //             continue;
+            //         // insert only if not already loaded
+            //         re = new RegExp(filename+'$');                
+            //         if ( re.test(scripts[s].src) ) {
+            //             found = true;
+            //             break;
+            //         }                                    
+            //     }
+            //     if (!found) {
+            //         script.id = 'gina-popin-script-' + $popin.id;
+            //         prior.parentNode.insertBefore(script, prior);
+            //         // will be removed on close
+            //         $popin.$headers.push({ id: script.id});
+            //     }
+            // }                
         }
         
         /**
          * popinOpen
-         *
+         * 
+         * If you get a x-origin error, check if you have `Vary` rule
+         * set in your policy : // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Vary
+         * 
+         * Add to your project/env.json the following rule
+         * { 
+         *  "$bundle" : {
+         *      "server": {
+         *          "response": {
+         *              // other definitions ...
+         * 
+         *              "vary": "Origin"
+         *          }
+         *      }
+         *  } 
+         * }
+         * 
          * Opens a popin by name
          *
          * @parama {string} name
@@ -1142,33 +1172,26 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             id = $popin.id;
             $el = document.getElementById(id);
             
-            // load external ressources
-            var globalScriptsList = document.getElementsByTagName('script');
-            var ignoreList  = [], s = 0;
-            var i = 0, len = globalScriptsList.length;
-            var scripts = $el.getElementsByTagName('script');
-                        
-            i = 0; len = scripts.length;
+            // load external ressources in order of declaration
+            // TODO - Add support for stylesheets
+            var globalScriptsList   = $popin.parentScripts
+                , scripts           = $el.getElementsByTagName('script')
+                //, globalStylesList  = $popin.parentStyles
+                , i                 = 0
+                , len               = scripts.length
+            ;
+            var domain = gina.config.hostname.replace(/(https|http|)\:\/\//, '').replace(/\:\d+$/, '');
+            var reDomain = new RegExp(domain+'\:\\d+\|'+domain);            
             for (;i < len; ++i) {
+                let filename = scripts[i].src
+                                .replace(/(https|http|)\:\/\//, '')
+                                .replace(reDomain, '');
                 // don't load if already in the global context
-                // if ( ignoreList.indexOf(scripts[i].src) > -1 )
-                //     continue;
-                
-                getScript($popin, scripts[i].src);            
+                if ( globalScriptsList.indexOf(filename) > -1 )
+                    continue;
+                getScript(scripts[i].src);
             }
-            // then trigger scripts load
-            // var xhr = new XMLHttpRequest();
-            // xhr.open('GET', scripts[1].src, true);
-            // xhr.setRequestHeader("Content-Type", "text/javascript");
-            // xhr.onload = function () {
-            //     // var vScript = doc.createElement('script')
-            //     //     , vSrc = URL.createObjectURL(xhr.response)
-            //     // ;
-            //     // vScript.src = src;
-            //     // doc.body.appendChild(script);
-            //     eval(xhr.response);
-            // };
-            // xhr.send();
+            //i = 0; len = styles.length
             
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
                        
@@ -1399,7 +1422,37 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 $popin.loadContent      = popinLoadContent;
                 $popin.open             = popinOpen;
                 $popin.close            = popinClose;
-                $popin.updateToolbar    = updateToolbar;  
+                $popin.updateToolbar    = updateToolbar;
+                
+                // Get main ressources
+                $popin.parentScripts    = [];
+                $popin.parentStyles     = [];
+                var domain = gina.config.hostname.replace(/(https|http|)\:\/\//, '').replace(/\:\d+$/, '');
+                var reDomain = new RegExp(domain+'\:\\d+\|'+domain);
+                // Parent scripts
+                var mainDocumentScripts = document.getElementsByTagName('script');
+                for (let s = 0, len = mainDocumentScripts.length; s < len; s++ ) {
+                    if (!mainDocumentScripts[s].src || mainDocumentScripts[s].src == '')
+                        continue;
+                    // Filename without domain
+                    let filename = mainDocumentScripts[s].src
+                                    .replace(/(https|http|)\:\/\//, '')
+                                    .replace(reDomain, '');
+                    $popin.parentScripts[s] = filename;
+                }
+                // Parent Styles
+                var mainDocumentStyles  = document.getElementsByTagName('link');                
+                for (let s = 0, len = mainDocumentStyles.length; s < len; s++ ) {
+                    if ( typeof(mainDocumentStyles[s].rel) == 'undefined' || !/stylesheet/i.test(mainDocumentStyles[s].rel) )
+                        continue;
+                    // Filename without domain
+                    let filename = mainDocumentStyles[s].href
+                                    .replace(/(https|http|)\:\/\//, '')
+                                    .replace(reDomain, '');
+                    $popin.parentStyles[s] = filename;
+                }
+                
+                
                 
                 instance.$popins[$popin.id] = $popin;
 
