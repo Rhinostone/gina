@@ -86,7 +86,7 @@ function CmdHelper(cmd, client, debug) {
                 delete require.cache[require.resolve(file)]
             }
 
-            cmdArguments = require(file);
+            cmdArguments = requireJSON(file);
         }
 
         var arr = [];
@@ -172,14 +172,14 @@ function CmdHelper(cmd, client, debug) {
             if ( typeof(require.cache[cmd.mainConfigPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.mainConfigPath)]
             }
-            cmd.mainConfig  = require( cmd.mainConfigPath );
+            cmd.mainConfig  = requireJSON( cmd.mainConfigPath );
 
             // projectsprojects
             cmd.projectConfigPath = _(GINA_HOMEDIR + '/projects.json', true);
             if ( typeof(require.cache[cmd.projectConfigPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.projectConfigPath)]
             }
-            cmd.projects    = require( cmd.projectConfigPath );
+            cmd.projects    = requireJSON( cmd.projectConfigPath );
 
             // bundles passed to the CMD
             cmd.bundles = ( typeof(cmd.bundles) == 'undefined' ) ? [] : cmd.bundles;
@@ -348,7 +348,7 @@ function CmdHelper(cmd, client, debug) {
             if ( typeof(require.cache[cmd.projectPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.projectPath)]
             }
-            cmd.projectData         = require(cmd.projectPath);
+            cmd.projectData         = requireJSON(cmd.projectPath);
             cmd.projectLocation     = cmd.projects[cmd.projectName].path;
             cmd.bundlesLocation     = _(cmd.projects[cmd.projectName].path +'/src', true);
             cmd.envPath             = _(cmd.projects[cmd.projectName].path + '/env.json', true);
@@ -365,7 +365,7 @@ function CmdHelper(cmd, client, debug) {
                 delete require.cache[require.resolve(cmd.envPath)]
             }
             console.debug('[ ConfigAssetsLoaderHelper ] envPath ', cmd.envPath);
-            cmd.envData = require(cmd.envPath);
+            cmd.envData = requireJSON(cmd.envPath);
 
             // updating envs list
             cmd.envs = [];
@@ -377,12 +377,12 @@ function CmdHelper(cmd, client, debug) {
             if ( typeof(require.cache[cmd.portsPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.portsPath)]
             }
-            cmd.portsData          = require(cmd.portsPath) || {};
+            cmd.portsData          = requireJSON(cmd.portsPath) || {};
             
             if ( typeof(require.cache[cmd.portsReversePath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.portsReversePath)]
             }
-            cmd.portsReverseData   = require(cmd.portsReversePath) || {};
+            cmd.portsReverseData   = requireJSON(cmd.portsReversePath) || {};
 
 
             
@@ -519,7 +519,7 @@ function CmdHelper(cmd, client, debug) {
             delete require.cache[require.resolve(cmd.portsPath)]
         }
 
-        ports = require(cmd.portsPath);
+        ports = requireJSON(cmd.portsPath);
                     
         // protocols list
         if (cmd.protocols.length == 0)
@@ -586,7 +586,7 @@ function CmdHelper(cmd, client, debug) {
             cmd.bundlesByProject[project] = {};
             if (fs.existsSync(cmd.projects[project].path) ) {
                 cmd.projects[project].exists    = true;
-                cmd.bundlesByProject[project]   = require(projectPropertiesPath).bundles;
+                cmd.bundlesByProject[project]   = requireJSON(projectPropertiesPath).bundles;
             } else {
                 cmd.projects[project].exists    = false;
             }

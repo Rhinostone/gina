@@ -1154,8 +1154,21 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 // if ( ignoreList.indexOf(scripts[i].src) > -1 )
                 //     continue;
                 
-                getScript($popin, scripts[i].src);               
-            }  
+                getScript($popin, scripts[i].src);            
+            }
+            // then trigger scripts load
+            // var xhr = new XMLHttpRequest();
+            // xhr.open('GET', scripts[1].src, true);
+            // xhr.setRequestHeader("Content-Type", "text/javascript");
+            // xhr.onload = function () {
+            //     // var vScript = doc.createElement('script')
+            //     //     , vSrc = URL.createObjectURL(xhr.response)
+            //     // ;
+            //     // vScript.src = src;
+            //     // doc.body.appendChild(script);
+            //     eval(xhr.response);
+            // };
+            // xhr.send();
             
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
                        

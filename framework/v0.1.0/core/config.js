@@ -65,7 +65,7 @@ function Config(opt) {
 
             if ( fs.existsSync(path) ) {
 
-                self.userConf = require(path);
+                self.userConf = requireJSON(path);
                 console.debug('Application config file loaded [' + path + ']');
             }
 
@@ -277,7 +277,7 @@ function Config(opt) {
      * @author      Rhinostone <gina@rhinostone.com>
      */
     this.Env = {
-        template : require('./template/conf/env.json'),
+        template : requireJSON(GINA_FRAMEWORK_DIR +'/core/template/conf/env.json'),
         load : function(callback) {
             loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
                 self.envConf            = envConf;
