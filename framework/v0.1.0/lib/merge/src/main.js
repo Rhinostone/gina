@@ -218,10 +218,7 @@ function Merge() {
             
         return target;
 
-    }
-    
-    
-
+    }    
 
     // Will not merge functions items: this is normal
     // Merging arrays is OK, but merging collections is still experimental        

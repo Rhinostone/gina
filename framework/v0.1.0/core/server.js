@@ -1544,8 +1544,9 @@ function Server(options) {
                                     stream.respond(header);
                                     stream.end(file);
                                 }
-                                
-                                return;
+                                // Fixed on march 15 2021 by removing the return
+                                // Could be the cause why the push is pending
+                                //return;
                             } else {
                                 
                                 completeHeaders(null, request, response);                                

@@ -1,7 +1,15 @@
 function registerEvents(plugin, events) {
     gina.registeredEvents[plugin] = events
 }
-
+function mergeEventProps(evt, proxiedEvent) {
+    for (let p in proxiedEvent) {
+        // add only missing props
+        if ( typeof(evt[p]) == 'undefined' ) {
+            evt[p] = proxiedEvent[p];
+        }
+    }
+    return evt;
+}
 /**
  * addListener
  * 
@@ -107,8 +115,9 @@ function triggerEvent (target, element, name, args, proxiedEvent) {
                 evt['eventName'] = name;
 
             }
-            if (proxiedEvent) {                
-                evt = merge(evt, proxiedEvent);
+            if (proxiedEvent) {
+                // merging props               
+                evt = mergeEventProps(evt, proxiedEvent);
             }
 
             if ( typeof(evt.defaultPrevented) != 'undefined' && evt.defaultPrevented )
@@ -126,15 +135,16 @@ function triggerEvent (target, element, name, args, proxiedEvent) {
             evt.detail = args;
             evt.target = element;
             
-            if (proxiedEvent) {                
-                evt = merge(evt, proxiedEvent);
+            if (proxiedEvent) {  
+                // merging props               
+                evt = mergeEventProps(evt, proxiedEvent);
             }
                             
-            element.fireEvent('on' + name, evt)
+            element.fireEvent('on' + name, evt);
         }
 
     } else {
-        target.customEvent.fire(name, args)
+        target.customEvent.fire(name, args);
     }
 }
 

@@ -48,7 +48,11 @@ function ready() {
                 if (readyList[i].name == 'gina') {
 
                     var scheduler = window.setInterval(function (i, readyList) {
-                        try {                            
+                        try {
+                            if ( typeof(readyList) == 'undefined' ) {
+                                // Fixing init bug in chrome
+                                readyList = window.readyList;
+                            }                            
                             readyList[i].ctx = window.gina;
                             result = readyList[i].fn.call(window, readyList[i].ctx, window.require);
 
@@ -56,11 +60,11 @@ function ready() {
                             if (result) {
                                 window.clearInterval(scheduler);
                                 ++i;
-                                handleEvent(i, readyList)
+                                handleEvent(i, readyList);
                             }
                         } catch (err) {
                             window.clearInterval(scheduler);
-                            throw err
+                            throw err;
                         }
 
                     }, 50, i, readyList);
@@ -78,7 +82,7 @@ function ready() {
                     readyList[i].ctx = window.originalContext || $;// passes the user's orignalContext by default; if no orignalContext is set will try users'jQuery
                     readyList[i].fn.call(window, readyList[i].ctx, window.require);
                     ++i;
-                    handleEvent(i, readyList)
+                    handleEvent(i, readyList);
                 }
 
             } else { // end
@@ -87,7 +91,7 @@ function ready() {
             }
         }
 
-        handleEvent(i, readyList)
+        handleEvent(i, readyList);
     }
 }
 
