@@ -181,7 +181,7 @@ function Add(opt, cmd) {
             delete require.cache[require.resolve(envDataPath)]
         }
 
-        var envData = require(envDataPath)
+        var envData = requireJSON(envDataPath)
             , portsData = require(portsPath)
             , portsReverseData = require(portsReversePath);
 

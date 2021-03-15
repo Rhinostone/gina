@@ -82,7 +82,7 @@ function Remove(opt, cmd) {
                 , ports = require(portsPath)
                 , portsReverse = require(portsReversePath)
                 , envsPath = _(projects[self.name].path +'/env.json')
-                , envs = require(envsPath);
+                , envs = requireJSON(envsPath);
 
 
             var patt = new RegExp("@"+ self.name +"/"+ env +"$");

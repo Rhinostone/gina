@@ -743,7 +743,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                             e.emit('error', error, request, response, next)
                                         } else {
                                             
-                                            instance.completeHeaders(request, response);                                            
+                                            instance.completeHeaders(null, request, response);                                            
                                             
                                             if ( typeof(request.isPreflightRequest) != 'undefined' && request.isPreflightRequest ) {
                                                 

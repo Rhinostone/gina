@@ -86,7 +86,7 @@ function SuperController(options) {
 
     var getInstance = function() {
         local.options = SuperController.instance._options = options;
-        return SuperController.instance
+        return SuperController.instance;
     }
 
     var hasViews = function() {
@@ -164,8 +164,9 @@ function SuperController(options) {
         
         if ( typeof(options.conf.content.routing[options.rule].param) !=  'undefined' ) {
             var str = 'page.'
-            , p = options.conf.content.routing[options.rule].param;
-            
+                , p = options.conf.content.routing[options.rule].param
+            ;
+                        
             for (var key in p) {
                 if ( p.hasOwnProperty(key) && !/^(control)$/.test(key) ) {
                     str += key + '.';
@@ -210,7 +211,7 @@ function SuperController(options) {
             if ( typeof(local.options.template) != 'undefined' ) {
                 ext = local.options.template.ext || ext;
             }
-            if( !/\./.test(ext) ) {
+            if ( !/\./.test(ext) ) {
                 ext = '.' + ext;
                 local.options.template.ext = ext
             }
@@ -288,7 +289,7 @@ function SuperController(options) {
             set('page.view.html.properties.mode.javascriptsDeferEnabled', local.options.template.javascriptsDeferEnabled);
             set('page.view.html.properties.mode.routeNameAsFilenameEnabled', local.options.template.routeNameAsFilenameEnabled);
             
-            var parameters = JSON.parse(JSON.stringify(req.getParams()));//merge(options.params, options.conf.content.routing[rule].param);
+            var parameters = JSON.parse(JSON.stringify(req.getParams()));
             parameters = merge(parameters, options.conf.content.routing[rule].param);
             // excluding default page properties
             delete parameters[0];            
@@ -301,8 +302,6 @@ function SuperController(options) {
 
             set('page.view.route', rule);
 
-            
-            
             
             var acceptLanguage = 'en-US'; // by default : language-COUNTRY
             if ( typeof(req.headers['accept-language']) != 'undefined' ) {
@@ -321,7 +320,7 @@ function SuperController(options) {
             var userLocales     = null;
 
             try {
-                userLocales = locales.findOne({ lang: userLangCode }).content
+                userLocales = locales.findOne({ lang: userLangCode }).content;
             } catch (err) {
                 console.warn('language code `'+ userLangCode +'` not handled to setup locales: replacing by default: `'+ local.options.conf.content.settings.region.shortCode +'`');
                 userLocales = locales.findOne({ lang: local.options.conf.content.settings.region.shortCode }).content // by default
@@ -345,11 +344,11 @@ function SuperController(options) {
         //TODO - detect when to use swig
         var dir = null;
         if (local.options.template || self.templates) {
-            dir = self.templates || local.options.template.templates
+            dir = self.templates || local.options.template.templates;
         }
         
         var swigOptions = {
-            autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape: false,
+            autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape : false,
             //loader: swig.loaders.fs(dir),
             cache: (local.options.cacheless) ? false : 'memory'
         };
@@ -358,8 +357,6 @@ function SuperController(options) {
         }
         swig.setDefaults(swigOptions);
         self.engine = swig;
-
-        
     }
     
     this.renderWithoutLayout = function (data, displayToolbar) {
@@ -613,10 +610,7 @@ function SuperController(options) {
                             
                             
                             var scripts = data.page.view.scripts;
-                            scripts = scripts
-                                        //.replace(/(defer\s)/g, '')
-                                        //.replace(/\s+\<script/g, '\n<script async')
-                                        .replace(/\s+\<script/g, '\n<script');
+                            scripts = scripts.replace(/\s+\<script/g, '\n<script');
                                         
                             // var stylesheets = data.page.view.stylesheets;
                             // stylesheets = stylesheets
@@ -1083,8 +1077,13 @@ function SuperController(options) {
             case 'css':
                 for (; r < rLen; ++r) { 
                     obj = resArr[r];
-                    if (useWebroot && !reURL.test(obj.url) )
+                    if (useWebroot && !reURL.test(obj.url) ) {
                         obj.url = local.options.conf.server.webroot + obj.url.substr(1);
+                    }
+                    // TODO - add support for cdn
+                    if (!/\:\/\//.test(obj.url) ) {
+                        obj.url = local.options.conf.hostname + obj.url;
+                    }   
                     
                     if (obj.media)
                         str += '\n\t\t<link href="'+ obj.url +'" media="'+ obj.media +'" rel="'+ obj.rel +'" type="'+ obj.type +'">';                    
@@ -1100,9 +1099,13 @@ function SuperController(options) {
                 
                 for (; r < rLen; ++r) {
                     obj = resArr[r];
-                    if (useWebroot && !reURL.test(obj.url) )
+                    if (useWebroot && !reURL.test(obj.url) ) {
                         obj.url = local.options.conf.server.webroot + obj.url.substr(1);
-                        
+                    }
+                    // TODO - add support for cdn    
+                    if (!/\:\/\//.test(obj.url) ) {
+                        obj.url = local.options.conf.hostname + obj.url;
+                    }
                     str += '\n\t\t<script'+ deferMode +' type="'+ obj.type +'" src="'+ obj.url +'"></script>'                    
                 }
                 

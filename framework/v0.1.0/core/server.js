@@ -948,7 +948,7 @@ function Server(options) {
     //     return header
     // }
     
-    var completeHeaders = function(request, response, responseHeaders) {
+    var completeHeaders = function(responseHeaders, request, response) {
         
         var resHeaders      = null
             , referer       = null
@@ -1081,7 +1081,7 @@ function Server(options) {
         }
     }
     
-    this.onHttp2Stream = function(stream, headers) {
+    this.onHttp2Stream = function(stream, headers, response) {
                 
         if (!stream.pushAllowed) { 
             //header = merge({ ':status': 200 }, response.getHeaders());
@@ -1212,7 +1212,7 @@ function Server(options) {
                 if (responseHeaders) {
                     header = merge(header, responseHeaders);
                 }
-                
+                header = completeHeaders(header, local.request, response);
                 pushStream.respondWithFile( 
                     asset.filename
                     , header
@@ -1338,7 +1338,7 @@ function Server(options) {
                                 header['expires'] = '0';  
                             }
                             request = checkPreflightRequest(request);
-                            header  = completeHeaders(request, response, header);
+                            header  = completeHeaders(header, request, response);
                             
                             if (!stream.destroyed) {
                                 stream.respond(header);
@@ -1348,7 +1348,7 @@ function Server(options) {
                         } else {
                             response.setHeader('location', request.url);
                             request = checkPreflightRequest(request);
-                            completeHeaders(request, response);
+                            completeHeaders(null, request, response);
                             if (cacheless) {
                                 response.writeHead(301, {                                    
                                     'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
@@ -1368,7 +1368,7 @@ function Server(options) {
                     delete require.cache[require.resolve(filename)];
                 
                 
-                fs.readFile(filename, bundleConf.encoding, function(err, file) {
+                fs.readFile(filename, bundleConf.encoding, function onStaticFileRead(err, file) {
                     if (err) {
                         throwError(response, 404, 'Page not found: \n' + pathname, next);                                               
                     } else if (!response.headersSent) {
@@ -1512,11 +1512,10 @@ function Server(options) {
                                                     filename: filename
                                                 }
                                             }
-                                            self.onHttp2Stream(stream, headers);
+                                            self.onHttp2Stream(stream, headers, response);
                                         }              
                                             
-                                    });
-                                    
+                                    }); // EO self.instance.on('stream' ..                                 
                                 } 
                                 
                                 
@@ -1538,7 +1537,7 @@ function Server(options) {
                                     }    
                                 }
                                 
-                                header  = completeHeaders(request, response, header);
+                                header  = completeHeaders(header, request, response);
                                 if (isBinary) {
                                     stream.respondWithFile(filename, header)
                                 } else {
@@ -1549,7 +1548,7 @@ function Server(options) {
                                 return;
                             } else {
                                 
-                                completeHeaders(request, response);                                
+                                completeHeaders(null, request, response);                                
                                 response.setHeader('content-type', contentType +'; charset='+ bundleConf.encoding);  
                                 // if (/\.(woff|woff2)$/i.test(filename) )  {
                                 //     response.setHeader("Transfer-Encoding", 'Identity')
@@ -2761,7 +2760,7 @@ function Server(options) {
 
                 console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url +'\n'+ msg);
                                 
-                header = completeHeaders(local.request, res, header);
+                header = completeHeaders(header, local.request, res);
                 if ( /http\/2/.test(protocol) ) {
                     stream.respond(header);
                     stream.end(JSON.stringify({
@@ -2791,7 +2790,7 @@ function Server(options) {
                     res.writeHead(code, { 'content-type': 'text/html; charset='+ bundleConf.encoding } );
                 }
                     
-                header = completeHeaders(local.request, res, header);
+                header = completeHeaders(header, local.request, res);
                 if ( /http\/2/.test(protocol) ) {    
                     stream.respond(header);
                     stream.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');

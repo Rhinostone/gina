@@ -55,7 +55,7 @@ function Add(opt, cmd) {
             self.envs.sort();
             // rollback infos
             self.envPath            = _(self.projects[self.name].path + '/env.json');
-            self.envData            = require(self.envPath);
+            self.envData            = requireJSON(self.envPath);
             self.projectPath        = _(self.projects[self.name].path + '/project.json', true);
             self.projectData        = require(self.projectPath);
 

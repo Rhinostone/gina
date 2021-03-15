@@ -189,7 +189,7 @@ AddBundle = function(conf, exports) {
             delete require.cache[require.resolve(_(workspace + '/project.json', true))];
             var project = require(_(workspace + '/project.json') );
             delete require.cache[require.resolve(_(workspace + '/env.json', true))];
-            var env = require(_(workspace + '/env.json') );
+            var env = requireJSON(_(workspace + '/env.json') );
             var isConform = true;
 
             var projectDataCmp = {
