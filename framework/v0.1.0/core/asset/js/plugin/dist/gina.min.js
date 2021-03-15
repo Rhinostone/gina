@@ -12418,7 +12418,7 @@ function ValidatorPlugin(rules, data, formId) {
                     triggerEvent(gina, $el, _evt, event.detail);
                 }
             });         
-            // click proxy            
+            // proxy click            
             addListener(gina, $target, 'click', function(event) {
                 
                 var $el = event.target;
@@ -21157,7 +21157,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         
                         if ( /^popin\.close\./.test(event.target.id) ) {
                             cancelEvent(event);
-        
+                            // Just in case we left the popin with a link:target = _blank
+                            $popin.isRedirecting = false;
                             popinClose($popin.name);
                         }
         
@@ -21206,7 +21207,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             for(; b < len; ++b) {
                                 if ( /gina-popin-close/.test($buttonsTMP[b].className) ) {
                                     $close[i] = $buttonsTMP[b];
-                                    ++i
+                                    ++i;
                                 }   
                             }
                         }
@@ -21235,9 +21236,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         
                         b = 0; len = $close.length;
                         for (; b < len; ++b) {
-                            removeListener(gina, $close[b], $close[b].getAttribute('id') )
+                            removeListener(gina, $close[b], $close[b].getAttribute('id') );
                         }
-        
+                        // Just in case we left the popin with a link:target = _blank
+                        $popin.isRedirecting = false;
                         popinClose($popin.name);
                     }
                     

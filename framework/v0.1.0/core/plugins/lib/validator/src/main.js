@@ -4133,7 +4133,7 @@ function ValidatorPlugin(rules, data, formId) {
                     triggerEvent(gina, $el, _evt, event.detail);
                 }
             });         
-            // click proxy            
+            // proxy click            
             addListener(gina, $target, 'click', function(event) {
                 
                 var $el = event.target;
