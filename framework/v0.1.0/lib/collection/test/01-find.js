@@ -76,6 +76,22 @@ exports['[ find notIn filters ] Hotel WHERE country NOTIN `United Kingdom` OR NO
     test.done()
 }
 
+exports['[ find notIn filters ] Hotel WHERE country NOTIN `United Kingdom` OR NOTIN `United States` Filtered By fields `city` and `id`'] = function(test) {
+
+    result  = hotels
+                .notIn({ country: 'United Kingdom' }, { country: 'United States' })
+                //.filter('id');
+                .filter(['city', 'id']);
+
+    mocks   = JSON.parse(fs.readFileSync(__dirname + '/data/result/' + collectionName + '/find/findHotelWhereCountryNotInUkOrNotInUsaFilteredOnIdAndCity.json'));
+
+    test.equal(Array.isArray(result), true);
+    test.equal(result.length, mocks.length);
+    test.equal(deepEqual(result, mocks), true);
+
+    test.done()
+}
+
 exports['[ find notIn Array ] Hotel WHERE country == `United Kingdom` AND city NOTIN `[ "Orange" ]`'] = function(test) {
 
     var excludedCity = hotels.find({ country: 'France', city: 'Orange' });
