@@ -4178,9 +4178,15 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( 
                     /(button|input)/i.test($el.tagName) && /(submit|checkbox|radio)/i.test($el.type)
                     || /a/i.test($el.tagName) && $el.attributes.getNamedItem('data-gina-form-submit')
+                    // You could also have a click on a child element like <a href="#"><span>click me</span></a>
+                    || /a/i.test($el.parentNode.tagName) && $el.parentNode.attributes.getNamedItem('data-gina-form-submit')
                 ) {
                     
-                    if ($el.attributes.getNamedItem('data-gina-form-submit')) {                        
+                    if (
+                        $el.attributes.getNamedItem('data-gina-form-submit')
+                        ||
+                        $el.parentNode.attributes.getNamedItem('data-gina-form-submit')
+                    ) {                        
                         isCustomSubmit = true;
                     }
                     
@@ -4537,7 +4543,15 @@ function ValidatorPlugin(rules, data, formId) {
                 /a/i.test($submit.tagName) 
                 && typeof($submit.dataset.ginaFormSubmit) != 'undefined'
                 && /^true$/i.test($submit.dataset.ginaFormSubmit)
+                ||
+                /a/i.test($submit.parentNode.tagName)
+                && typeof($submit.parentNode.dataset.ginaFormSubmit) != 'undefined'
+                && /^true$/i.test($submit.parentNode.dataset.ginaFormSubmit)
             ) {
+                if ( /a/i.test($submit.parentNode.tagName) ) {
+                    $submit = $submit.parentNode;
+                }
+                
                 if ( typeof($submit.id) == 'undefined' || typeof($submit.id) != 'undefined' && $submit.id == "" ) {
                     $submit.id = 'click.'+uuid.v4();
                     $submit.setAttribute('id', $submit.id);
@@ -4962,7 +4976,7 @@ function ValidatorPlugin(rules, data, formId) {
             if ( isInRule && typeof(ruleObj[arrFields[i]]) != 'undefined' ) {
                 fieldValue = getCastedValue(arrFields[i]);
             } else if ( isInRule ) {
-                throw new Error('`'+arrFields[i]+'` is used in a dynamic rule without definition. this could lead to an evaluation error.');
+                console.warn('`'+arrFields[i]+'` is used in a dynamic rule without definition. This could lead to an evaluation error. Casting `'+arrFields[i]+'` to `string`.');
             }
                    
             stringifiedRules = stringifiedRules.replace(re, fieldValue );
@@ -4977,7 +4991,7 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( isInRule && typeof(ruleObj[arrFields[i]]) != 'undefined' ) {
                     fieldValue = getCastedValue(arrFields[i]);
                 } else if ( isInRule ) {
-                    throw new Error('`'+arrFields[i]+'` is used in a dynamic rule without definition. this could lead to an evaluation error.');
+                    console.warn('`'+arrFields[i]+'` is used in a dynamic rule without definition. This could lead to an evaluation error. Casting `'+arrFields[i]+'` to `string`.');
                 }
                 
                 stringifiedRules = stringifiedRules.replace(re, fieldValue || $fields[arrFields[i]].checked);
@@ -5098,9 +5112,9 @@ function ValidatorPlugin(rules, data, formId) {
 
                 } catch (err) {
                     if (rule == 'conditions') {
-                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
+                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + err)
                     } else {
-                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
+                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + err)
                     }
                 }
             }

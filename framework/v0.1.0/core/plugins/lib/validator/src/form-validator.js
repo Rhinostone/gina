@@ -1051,44 +1051,80 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         /**
          * Check if date
          *
-         * @param {string} [mask] - by default "yyyy-mm-dd"
+         * @param {string|boolean} [mask] - by default "yyyy-mm-dd"
          *
          * @return {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
          * */
-        self[el]['isDate'] = function(mask) {
+        self[el]['isDate'] = function(mask) {                        
             var val         = this.value
                 , isValid   = false
                 , errors    = self[this['name']]['errors'] || {}
-                ;
-            if (!val) return self[this.name];
-
-            var m = mask.match(/[^\/\- ]+/g);
-            val = val.match(/[^\/\- ]+/g);
-            var dic = {}, d, len;
-            for (d=0, len=m.length; d<len; ++d) {
-                dic[m[d]] = val[d]
-            }
-            var newMask = 'yyyy-mm-dd';
-            for (var v in dic) {
-                newMask = newMask.replace(new RegExp(v, "g"), dic[v])
-            }
-
-            var date = this.value = local.data[this.name] = new Date(newMask);
-
-            if ( date instanceof Date ) {
-                isValid = true;
-            } else {
-                if ( !errors['isRequired'] && this.value == '' ) {
-                    isValid = true
-                } else {
+                , m         = null
+                , date      = null
+            ;
+            // Default validation on livecheck & invalid init value
+            if (!val || val == '' || /NaN|Invalid Date/i.test(val) ) {                
+                if ( /NaN|Invalid Date/i.test(val) ) {
+                    console.warn('[FormValidator::isDate] Provided value for field `'+ this.name +'` is not allowed: `'+ val +'`');
                     errors['isDate'] = replace(this.error || local.errorLabels['isDate'], this);
+                    
                 }
-
                 this.valid = isValid;
                 if ( errors.count() > 0 )
-                    this['errors'] = errors;
+                        this['errors'] = errors;     
+                        
+                return self[this.name];
+            }
+            
+            if ( 
+                typeof(mask) == 'undefined'
+                ||
+                typeof(mask) != 'undefined' && /true/i.test(mask)
+            ) {
+                mask = "yyyy-mm-dd"; // by default
+            }
+            
+            if (val instanceof Date) {
+                date = val.format(mask);
+            } else {
+                
+                try {
+                    m = mask.match(/[^\/\- ]+/g);
+                } catch (err) {
+                    throw new Error('[FormValidator::isDate] Provided mask not allowed: `'+ mask +'`');
+                }
+                
+                try {
+                    val = val.match(/[^\/\- ]+/g);
+                    var dic = {}, d, len;
+                    for (d=0, len=m.length; d<len; ++d) {
+                        dic[m[d]] = val[d]
+                    }
+                    var formatedDate = mask;
+                    for (var v in dic) {
+                        formatedDate = formatedDate.replace(new RegExp(v, "g"), dic[v])
+                    }
+                } catch (err) {
+                    throw new Error('[FormValidator::isDate] Provided value not allowed: `'+ val +'`' + err);
+                }
+                    
 
-                return self[this.name]
+                date = this.value = local.data[this.name] = new Date(formatedDate);
+                
+                if ( /Invalid Date/i.test(date) || !date instanceof Date ) {
+                    if ( !errors['isRequired'] && this.value == '' ) {
+                        isValid = true
+                    } else {
+                        errors['isDate'] = replace(this.error || local.errorLabels['isDate'], this);
+                    }
+
+                    this.valid = isValid;
+                    if ( errors.count() > 0 )
+                        this['errors'] = errors;
+
+                    return self[this.name]
+                }
+                isValid = true;
             }
 
             this.valid = isValid;

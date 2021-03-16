@@ -8106,44 +8106,80 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         /**
          * Check if date
          *
-         * @param {string} [mask] - by default "yyyy-mm-dd"
+         * @param {string|boolean} [mask] - by default "yyyy-mm-dd"
          *
          * @return {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
          * */
-        self[el]['isDate'] = function(mask) {
+        self[el]['isDate'] = function(mask) {                        
             var val         = this.value
                 , isValid   = false
                 , errors    = self[this['name']]['errors'] || {}
-                ;
-            if (!val) return self[this.name];
-
-            var m = mask.match(/[^\/\- ]+/g);
-            val = val.match(/[^\/\- ]+/g);
-            var dic = {}, d, len;
-            for (d=0, len=m.length; d<len; ++d) {
-                dic[m[d]] = val[d]
-            }
-            var newMask = 'yyyy-mm-dd';
-            for (var v in dic) {
-                newMask = newMask.replace(new RegExp(v, "g"), dic[v])
-            }
-
-            var date = this.value = local.data[this.name] = new Date(newMask);
-
-            if ( date instanceof Date ) {
-                isValid = true;
-            } else {
-                if ( !errors['isRequired'] && this.value == '' ) {
-                    isValid = true
-                } else {
+                , m         = null
+                , date      = null
+            ;
+            // Default validation on livecheck & invalid init value
+            if (!val || val == '' || /NaN|Invalid Date/i.test(val) ) {                
+                if ( /NaN|Invalid Date/i.test(val) ) {
+                    console.warn('[FormValidator::isDate] Provided value for field `'+ this.name +'` is not allowed: `'+ val +'`');
                     errors['isDate'] = replace(this.error || local.errorLabels['isDate'], this);
+                    
                 }
-
                 this.valid = isValid;
                 if ( errors.count() > 0 )
-                    this['errors'] = errors;
+                        this['errors'] = errors;     
+                        
+                return self[this.name];
+            }
+            
+            if ( 
+                typeof(mask) == 'undefined'
+                ||
+                typeof(mask) != 'undefined' && /true/i.test(mask)
+            ) {
+                mask = "yyyy-mm-dd"; // by default
+            }
+            
+            if (val instanceof Date) {
+                date = val.format(mask);
+            } else {
+                
+                try {
+                    m = mask.match(/[^\/\- ]+/g);
+                } catch (err) {
+                    throw new Error('[FormValidator::isDate] Provided mask not allowed: `'+ mask +'`');
+                }
+                
+                try {
+                    val = val.match(/[^\/\- ]+/g);
+                    var dic = {}, d, len;
+                    for (d=0, len=m.length; d<len; ++d) {
+                        dic[m[d]] = val[d]
+                    }
+                    var formatedDate = mask;
+                    for (var v in dic) {
+                        formatedDate = formatedDate.replace(new RegExp(v, "g"), dic[v])
+                    }
+                } catch (err) {
+                    throw new Error('[FormValidator::isDate] Provided value not allowed: `'+ val +'`' + err);
+                }
+                    
 
-                return self[this.name]
+                date = this.value = local.data[this.name] = new Date(formatedDate);
+                
+                if ( /Invalid Date/i.test(date) || !date instanceof Date ) {
+                    if ( !errors['isRequired'] && this.value == '' ) {
+                        isValid = true
+                    } else {
+                        errors['isDate'] = replace(this.error || local.errorLabels['isDate'], this);
+                    }
+
+                    this.valid = isValid;
+                    if ( errors.count() > 0 )
+                        this['errors'] = errors;
+
+                    return self[this.name]
+                }
+                isValid = true;
             }
 
             this.valid = isValid;
@@ -12516,9 +12552,15 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( 
                     /(button|input)/i.test($el.tagName) && /(submit|checkbox|radio)/i.test($el.type)
                     || /a/i.test($el.tagName) && $el.attributes.getNamedItem('data-gina-form-submit')
+                    // You could also have a click on a child element like <a href="#"><span>click me</span></a>
+                    || /a/i.test($el.parentNode.tagName) && $el.parentNode.attributes.getNamedItem('data-gina-form-submit')
                 ) {
                     
-                    if ($el.attributes.getNamedItem('data-gina-form-submit')) {                        
+                    if (
+                        $el.attributes.getNamedItem('data-gina-form-submit')
+                        ||
+                        $el.parentNode.attributes.getNamedItem('data-gina-form-submit')
+                    ) {                        
                         isCustomSubmit = true;
                     }
                     
@@ -12875,7 +12917,15 @@ function ValidatorPlugin(rules, data, formId) {
                 /a/i.test($submit.tagName) 
                 && typeof($submit.dataset.ginaFormSubmit) != 'undefined'
                 && /^true$/i.test($submit.dataset.ginaFormSubmit)
+                ||
+                /a/i.test($submit.parentNode.tagName)
+                && typeof($submit.parentNode.dataset.ginaFormSubmit) != 'undefined'
+                && /^true$/i.test($submit.parentNode.dataset.ginaFormSubmit)
             ) {
+                if ( /a/i.test($submit.parentNode.tagName) ) {
+                    $submit = $submit.parentNode;
+                }
+                
                 if ( typeof($submit.id) == 'undefined' || typeof($submit.id) != 'undefined' && $submit.id == "" ) {
                     $submit.id = 'click.'+uuid.v4();
                     $submit.setAttribute('id', $submit.id);
@@ -13300,7 +13350,7 @@ function ValidatorPlugin(rules, data, formId) {
             if ( isInRule && typeof(ruleObj[arrFields[i]]) != 'undefined' ) {
                 fieldValue = getCastedValue(arrFields[i]);
             } else if ( isInRule ) {
-                throw new Error('`'+arrFields[i]+'` is used in a dynamic rule without definition. this could lead to an evaluation error.');
+                console.warn('`'+arrFields[i]+'` is used in a dynamic rule without definition. This could lead to an evaluation error. Casting `'+arrFields[i]+'` to `string`.');
             }
                    
             stringifiedRules = stringifiedRules.replace(re, fieldValue );
@@ -13315,7 +13365,7 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( isInRule && typeof(ruleObj[arrFields[i]]) != 'undefined' ) {
                     fieldValue = getCastedValue(arrFields[i]);
                 } else if ( isInRule ) {
-                    throw new Error('`'+arrFields[i]+'` is used in a dynamic rule without definition. this could lead to an evaluation error.');
+                    console.warn('`'+arrFields[i]+'` is used in a dynamic rule without definition. This could lead to an evaluation error. Casting `'+arrFields[i]+'` to `string`.');
                 }
                 
                 stringifiedRules = stringifiedRules.replace(re, fieldValue || $fields[arrFields[i]].checked);
@@ -13436,9 +13486,9 @@ function ValidatorPlugin(rules, data, formId) {
 
                 } catch (err) {
                     if (rule == 'conditions') {
-                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + (err.stack | err.message))
+                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()` where `conditions` must be a `collection` (Array)\nStack:\n' + err)
                     } else {
-                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + (err.stack | err.message))
+                        throw new Error('[ ginaFormValidator ] could not evaluate `' + field + '->' + rule + '()`\nStack:\n' + err)
                     }
                 }
             }
