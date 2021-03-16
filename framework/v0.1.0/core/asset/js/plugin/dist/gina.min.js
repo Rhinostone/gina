@@ -4858,7 +4858,7 @@ function Collection(content, options) {
         result.orderBy  = instance.orderBy;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
-        
+        result.filter   = instance.filter;
 
         return result
     }
@@ -5039,7 +5039,7 @@ function Collection(content, options) {
         result.orderBy  = instance.orderBy;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
-        
+        result.filter   = instance.filter;
 
         return result
     }
@@ -5070,7 +5070,7 @@ function Collection(content, options) {
         result.notIn    = instance.notIn;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
-        
+        result.filter   = instance.filter;
 
         return result
     }
@@ -5162,7 +5162,7 @@ function Collection(content, options) {
         result.notIn    = instance.notIn;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
-        
+        result.filter   = instance.filter;
 
         return result
     }
@@ -5249,7 +5249,7 @@ function Collection(content, options) {
         result.notIn    = instance.notIn;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
-        
+        result.filter   = instance.filter;
 
         return result
     }
@@ -5286,7 +5286,7 @@ function Collection(content, options) {
         result.orderBy  = instance.orderBy;
         result.notIn    = instance.notIn;
         result.toRaw    = instance.toRaw;
-        
+        result.filter   = instance.filter;
 
         return result
     }
@@ -5539,7 +5539,7 @@ function Collection(content, options) {
         result.delete   = instance.delete;
         result.orderBy  = instance.orderBy;
         result.toRaw    = instance.toRaw;
-        
+        result.filter   = instance.filter;
         
         return result
     };
@@ -5548,9 +5548,9 @@ function Collection(content, options) {
      * toRaw
      * Transform result into a clean format (without _uuid)
      *
-     * @param {object|array} result
+     * @return {array} result
      * */
-    instance['toRaw'] = function(result) {
+    instance['toRaw'] = function() {
 
         var result = ( Array.isArray(this) ) ? this : content;
         // cleanup
@@ -5560,6 +5560,59 @@ function Collection(content, options) {
         }
 
         return JSON.parse(JSON.stringify(result))
+    }
+    
+    /**
+     * filter
+     * Reduce record propName
+     * @param {string|array} filter
+     *  e.g: 'id'
+     *  e.g: ['id', 'name']
+     *
+     * @return {array} rawFilteredResult
+     * */
+     instance['filter'] = function(filter) {
+        
+        if ( typeof(filter) == 'undefined' ) {
+            throw new Error('`filter` parametter must be a string or an array.');
+        }
+        var result = ( Array.isArray(this) ) ? this : content;
+        if ( !result.length ) {
+            return []
+        }
+        var i = 0, len = result.length;
+        var rawFilteredResult = [], fCount = 0;
+                
+        if ( Array.isArray(filter) ) {
+            var f = null, fLen = filter.length, wrote = null;
+            for (; i < len; ++i) {
+                wrote = false;
+                f = 0;
+                for (; f < fLen; ++f) {
+                    if ( typeof(result[i][ filter[f] ]) != 'undefined' ) {
+                        if ( typeof(rawFilteredResult[fCount]) == 'undefined' ) {
+                            rawFilteredResult[fCount] = {}
+                        }
+                        rawFilteredResult[fCount][ filter[f] ] = result[i][ filter[f] ];
+                        wrote = true;
+                    }
+                }
+                if (wrote)
+                    ++fCount;
+            }
+        } else {
+            for (; i < len; ++i) {
+                if ( typeof(result[i][filter]) != 'undefined' ) {
+                    if ( typeof(rawFilteredResult[fCount]) == 'undefined' ) {
+                        rawFilteredResult[fCount] = {}
+                    }
+                    rawFilteredResult[fCount][filter] = result[i][filter];
+                    ++fCount;
+                }
+            }
+        }            
+
+        return JSON.parse(JSON.stringify(rawFilteredResult))
     }
     
     
