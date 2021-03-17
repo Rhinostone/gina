@@ -564,10 +564,15 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var _form = null, f = null, fLen = null;
             var inheritedData = {}, _formData = null;
             var domParserObject = new DOMParser(), currentId = null, found = null;
+            var linkType = null;
             for(; i < len; ++i) {
                 
                 if (!$link[i]['id'] || !/^popin\.link/.test($link[i]['id']) ) {
-                    evt = 'popin.link.'+ uuid.v4();                    
+                    // jsut in case
+                    if ( typeof($link[i]['href']) == 'undefined' ) {
+                        $link[i]['href'] = '#';
+                    }                    
+                    evt = 'popin.link.' + uuid.v4();                    
                     $link[i]['id'] =  $link[i].getAttribute('id') || evt;
                     if ( !/^popin\.link/.test($link[i]['id']) ) {
                         $link[i].setAttribute( 'data-gina-popin-link-id', evt);
@@ -924,11 +929,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                         // }
                                     }
                                     
-                                    if ( !isJsonContent && $popin.hasForm) {
+                                    //if ( !isJsonContent && $popin.hasForm) {
                                         //$validatorInstance.handleXhrResponse(xhr, $forms[0], $forms[0].id, event, true);
                                         //handleXhr(xhr, $el, options, require)
                                         //return
-                                    }
+                                    //}
                                     if ( !isJsonContent ) {
                                         triggerEvent(gina, $el, 'loaded.' + id, result);
                                         return
@@ -938,8 +943,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                     
                                 }
                                 
-                                
-                                updateToolbar(result);
+                                if (GINA_ENV_IS_DEV)
+                                    updateToolbar(result);
 
                             } catch (err) {
                                 
@@ -956,8 +961,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                 }
 
                                 instance.eventData.error = result;
-                                
-                                updateToolbar(result, resultIsObject);
+                                if (GINA_ENV_IS_DEV)
+                                    updateToolbar(result, resultIsObject);
 
                                 triggerEvent(gina, $el, 'error.' + id, result)
                             }
@@ -979,7 +984,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             
 
                             // update toolbar
-                            updateToolbar(result, resultIsObject);
+                            if (GINA_ENV_IS_DEV)
+                                updateToolbar(result, resultIsObject);
 
                             triggerEvent(gina, $el, 'error.' + id, result)
                         }
@@ -1216,7 +1222,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             instance.activePopinId = $popin.id;
 
             // update toolbar
-            updateToolbar();
+            if (GINA_ENV_IS_DEV)
+                updateToolbar();
             // var XHRData = document.getElementById('gina-without-layout-xhr-data');
             // if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
             //     try {
@@ -1348,7 +1355,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     gina.popinIsBinded      = false;                
 
                     // restore toolbar
-                    if ( gina && typeof(window.ginaToolbar) == "object" )
+                    if ( GINA_ENV_IS_DEV && gina &&  typeof(window.ginaToolbar) == "object" )
                         ginaToolbar.restore();
 
                     instance.activePopinId  = null;
@@ -1424,7 +1431,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 $popin.loadContent      = popinLoadContent;
                 $popin.open             = popinOpen;
                 $popin.close            = popinClose;
-                $popin.updateToolbar    = updateToolbar;
+                if (GINA_ENV_IS_DEV)
+                    $popin.updateToolbar    = updateToolbar;
                 
                 // Get main ressources
                 $popin.parentScripts    = [];

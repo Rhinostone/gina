@@ -950,24 +950,46 @@ function PathHelper() {
         var self = this;
         //Enter dir & start rm.
         var p = self.value;
+        if ( typeof(fs.access) != 'undefined' ) {
+            fs.access(this.value, fs.constants.F_OK, (err) => {
+                var exists = (err) ? false: true;
+                if ( !exists ) {
+                    var err = new Error(' mv() - source [ '+p+' ] does not exists !');
+                    console.error(err);
+                    if ( !callback ) {
+                        throw err
+                    }
+                    callback(err)
+                } else {
+                    mv(self, target)
+                        .onComplete( function(err, path){
+                            if (p == path && typeof(callback) != 'undefined') {
+                                callback(err)
+                            }
+                        })
+                }
+            });
+        } else { // support for old version of nodejs
+            fs.exists(p, function(exists){
+                if ( !exists ) {
+                    var err = new Error(' mv() - source [ '+p+' ] does not exists !');
+                    console.error(err);
+                    if ( !callback ) {
+                        throw err
+                    }
+                    callback(err)
+                } else {
+                    mv(self, target)
+                        .onComplete( function(err, path){
+                            if (p == path && typeof(callback) != 'undefined') {
+                                callback(err)
+                            }
+                        })
+                }
+            })
+        } 
 
-        fs.exists(p, function(exists){
-            if ( !exists ) {
-                var err = new Error(' mv() - source [ '+p+' ] does not exists !');
-                console.error(err);
-                if ( !callback ) {
-                    throw err
-                }
-                callback(err)
-            } else {
-                mv(self, target)
-                    .onComplete( function(err, path){
-                        if (p == path && typeof(callback) != 'undefined') {
-                            callback(err)
-                        }
-                    })
-            }
-        })
+            
     }
 
     var mv = function(self, target) {

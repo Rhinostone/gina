@@ -59,7 +59,7 @@ $ java -jar /usr/local/lib/compiler.jar --formatting=SINGLE_QUOTES --compilation
 ### Building loader
 
 ```tty
-$ cd ${project}/node_modules/gina/framework/v.0.1.0/core/asset/js/plugin
+$ cd /usr/local/node_modules/gina/node_modules/gina/framework/v.0.1.0/core/asset/js/plugin
 ```
 
 ```tty

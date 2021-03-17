@@ -476,7 +476,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             triggerEvent(gina, $form, 'error.' + id, errors)
 
-            if ( isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
+            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
                 // update toolbar
                 if (!gina.forms.errors)
                     gina.forms.errors = {};
@@ -488,7 +488,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 window.ginaToolbar.update('forms', objCallback);
             }
-        } else if ( isGFFCtx && typeof(window.ginaToolbar) == 'object') { // reset toolbar form errors
+        } else if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == 'object') { // reset toolbar form errors
             if (!gina.forms.errors)
                 gina.forms.errors = {};
 
@@ -500,7 +500,7 @@ function ValidatorPlugin(rules, data, formId) {
                 window.ginaToolbar.update('forms', objCallback);
         }
 
-        if (gina && isGFFCtx && typeof(window.ginaToolbar) == "object" && data) {
+        if (gina && GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == "object" && data) {
             
             try {
                 // update toolbar
@@ -835,13 +835,13 @@ function ValidatorPlugin(rules, data, formId) {
                                             XHRView = JSON.parse(decodeURIComponent(XHRView.value));
                                             
                                             // update data tab                                                
-                                            if ( gina && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
+                                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
                                                 window.ginaToolbar.update("data-xhr", XHRData);
                                             }
                                             
                                             // update view tab
                                             
-                                            if ( gina && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
+                                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
                                                 window.ginaToolbar.update("view-xhr", XHRView);
                                             }   
 
@@ -867,7 +867,7 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
                                     // don't refresh for html datas
-                                    if ( typeof(XHRData) != 'undefined' && /\/html|\/json/.test(contentType) ) {
+                                    if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html|\/json/.test(contentType) ) {
                                         window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
@@ -902,7 +902,7 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
 
-                                    if ( typeof(XHRData) != 'undefined' ) {
+                                    if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' ) {
                                         window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
@@ -994,7 +994,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                                     // update toolbar
                                     XHRData = result;
-                                    if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                                    if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                         try {
                                             // update toolbar
                                             window.ginaToolbar.update('data-xhr', XHRData );
@@ -1063,7 +1063,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                             // update toolbar
                             XHRData = result;
-                            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
                                     // update toolbar
                                     window.ginaToolbar.update('data-xhr', XHRData );
@@ -1096,7 +1096,7 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                             try {
                                 // don't refresh for html datas
-                                if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+                                if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
                                     window.ginaToolbar.update("data-xhr", XHRData);
                                 }
 
@@ -1284,7 +1284,7 @@ function ValidatorPlugin(rules, data, formId) {
                 //     if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                 //         try {
                 //
-                //             if ( typeof(XHRData) != 'undefined' ) {
+                //             if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' ) {
                 //                 window.ginaToolbar.update("data-xhr", XHRData);
                 //             }
                 //
@@ -1404,13 +1404,13 @@ function ValidatorPlugin(rules, data, formId) {
     //                                 XHRView = JSON.parse(decodeURIComponent(XHRView.value));
                                     
     //                                 // update data tab                                                
-    //                                 if ( gina && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
+    //                                 if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
     //                                     window.ginaToolbar.update("data-xhr", XHRData);
     //                                 }
                                     
     //                                 // update view tab
                                     
-    //                                 if ( gina && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
+    //                                 if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
     //                                     window.ginaToolbar.update("view-xhr", XHRView);
     //                                 }   
 
@@ -1438,7 +1438,7 @@ function ValidatorPlugin(rules, data, formId) {
     //                 if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
     //                     try {
     //                         // don't refresh for html datas
-    //                         if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+    //                         if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
     //                             window.ginaToolbar.update("data-xhr", XHRData);
     //                         }
 
@@ -1473,7 +1473,7 @@ function ValidatorPlugin(rules, data, formId) {
     //                 if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
     //                     try {
 
-    //                         if ( typeof(XHRData) != 'undefined' ) {
+    //                         if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' ) {
     //                             window.ginaToolbar.update("data-xhr", XHRData);
     //                         }
 
@@ -1565,7 +1565,7 @@ function ValidatorPlugin(rules, data, formId) {
 
     //                         // update toolbar
     //                         XHRData = result;
-    //                         if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+    //                         if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
     //                             try {
     //                                 // update toolbar
     //                                 window.ginaToolbar.update('data-xhr', XHRData );
@@ -1625,7 +1625,7 @@ function ValidatorPlugin(rules, data, formId) {
 
     //                 // update toolbar
     //                 XHRData = result;
-    //                 if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+    //                 if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
     //                     try {
     //                         // update toolbar
     //                         window.ginaToolbar.update('data-xhr', XHRData );
@@ -1658,7 +1658,7 @@ function ValidatorPlugin(rules, data, formId) {
     //             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
     //                 try {
     //                     // don't refresh for html datas
-    //                     if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+    //                     if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
     //                         window.ginaToolbar.update("data-xhr", XHRData);
     //                     }
 
@@ -1826,9 +1826,8 @@ function ValidatorPlugin(rules, data, formId) {
                                     $previewContainer.appendChild($img);
                                 }
                                 fadeIn($img);
-                            } else if ( previewKey == 'tmpUri' ) { // without preview
-                                
-                            }
+                            }/** else if ( previewKey == 'tmpUri' ) { // without preview                                
+                            }*/
                         }                        
                     }                  
                 } // EO for 
@@ -4577,7 +4576,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ( !onclickAttribute && !isSubmitType) {
                     $submit.setAttribute('onclick', 'return false;')
-                } else if ( !/return false/ && !isSubmitType) {
+                } else if ( !/return false/i.test(onclickAttribute) && !isSubmitType) {
                     if ( /\;$/.test(onclickAttribute) ) {
                         onclickAttribute += 'return false;'
                     } else {
@@ -5519,7 +5518,7 @@ function ValidatorPlugin(rules, data, formId) {
                 try {
                     data = formatData( d['toData']() );
 
-                    if ( isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
+                    if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
                         // update toolbar
                         if (!gina.forms.sent)
                             gina.forms.sent = {};

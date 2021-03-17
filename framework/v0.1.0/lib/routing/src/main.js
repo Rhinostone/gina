@@ -556,7 +556,7 @@ function Routing() {
         // Completeting url with extra params e.g.: ?param1=val1&param2=val2
         if ( /GET/i.test(route.method) && typeof(params) != 'undefined' ) {
             var queryParams = '?', maskedUrl = routing[rule].url;
-            self.reservedParams;
+            //self.reservedParams;
             for (let r in route.param) {
                 if ( self.reservedParams.indexOf(r) > -1 || new RegExp(route.param[r]).test(maskedUrl) )
                     continue;
