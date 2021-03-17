@@ -514,7 +514,7 @@ function Collection(content, options) {
         localSearchOptions = null;
         
         // TODO - remove this
-        if (withOrClause) {
+        //if (withOrClause) {
             // merging with previous result
             //console.debug('withOrClause: supposed to merge ? \nnotInSearchModeEnabled: '+notInSearchModeEnabled+'\nResult: ' +result)//+'\nThis: '+ this.toRaw();
             // if (!notInSearchModeEnabled) {
@@ -522,9 +522,8 @@ function Collection(content, options) {
             // }
             // TODO - remove this part
             // Removed this on 2021-01-21 because it was causing duplicate content
-            //result  = merge(this, result, true)
-            
-        }
+            //result  = merge(this, result, true)            
+        //}
 
         // chaining
         //result._options         = instance._options;
@@ -1065,6 +1064,7 @@ function Collection(content, options) {
         result.notIn    = instance.notIn;
         result.toRaw    = instance.toRaw;
         result.filter   = instance.filter;
+        result.delete   = this.delete;
 
         return result
     }

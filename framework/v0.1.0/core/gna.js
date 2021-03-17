@@ -153,7 +153,7 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
             process.argv.splice(2);
             
     } catch (error) {
-        console.error('[ FRAMEWORK ][ configurationError ] ', error.stack | error.message | error)
+        console.error('[ FRAMEWORK ][ configurationError ] ', error.stack || error.message || error);
     }
 }
 

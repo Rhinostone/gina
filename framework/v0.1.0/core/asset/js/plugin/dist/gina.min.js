@@ -4736,7 +4736,7 @@ function Collection(content, options) {
         localSearchOptions = null;
         
         // TODO - remove this
-        if (withOrClause) {
+        //if (withOrClause) {
             // merging with previous result
             //console.debug('withOrClause: supposed to merge ? \nnotInSearchModeEnabled: '+notInSearchModeEnabled+'\nResult: ' +result)//+'\nThis: '+ this.toRaw();
             // if (!notInSearchModeEnabled) {
@@ -4744,9 +4744,8 @@ function Collection(content, options) {
             // }
             // TODO - remove this part
             // Removed this on 2021-01-21 because it was causing duplicate content
-            //result  = merge(this, result, true)
-            
-        }
+            //result  = merge(this, result, true)            
+        //}
 
         // chaining
         //result._options         = instance._options;
@@ -5287,6 +5286,7 @@ function Collection(content, options) {
         result.notIn    = instance.notIn;
         result.toRaw    = instance.toRaw;
         result.filter   = instance.filter;
+        result.delete   = this.delete;
 
         return result
     }
@@ -6184,7 +6184,7 @@ function Routing() {
         // Completeting url with extra params e.g.: ?param1=val1&param2=val2
         if ( /GET/i.test(route.method) && typeof(params) != 'undefined' ) {
             var queryParams = '?', maskedUrl = routing[rule].url;
-            self.reservedParams;
+            //self.reservedParams;
             for (let r in route.param) {
                 if ( self.reservedParams.indexOf(r) > -1 || new RegExp(route.param[r]).test(maskedUrl) )
                     continue;
@@ -8166,7 +8166,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
                 date = this.value = local.data[this.name] = new Date(formatedDate);
                 
-                if ( /Invalid Date/i.test(date) || !date instanceof Date ) {
+                if ( /Invalid Date/i.test(date) || !(date instanceof Date) ) {
                     if ( !errors['isRequired'] && this.value == '' ) {
                         isValid = true
                     } else {
@@ -8850,7 +8850,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             triggerEvent(gina, $form, 'error.' + id, errors)
 
-            if ( isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
+            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
                 // update toolbar
                 if (!gina.forms.errors)
                     gina.forms.errors = {};
@@ -8862,7 +8862,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 window.ginaToolbar.update('forms', objCallback);
             }
-        } else if ( isGFFCtx && typeof(window.ginaToolbar) == 'object') { // reset toolbar form errors
+        } else if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == 'object') { // reset toolbar form errors
             if (!gina.forms.errors)
                 gina.forms.errors = {};
 
@@ -8874,7 +8874,7 @@ function ValidatorPlugin(rules, data, formId) {
                 window.ginaToolbar.update('forms', objCallback);
         }
 
-        if (gina && isGFFCtx && typeof(window.ginaToolbar) == "object" && data) {
+        if (gina && GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == "object" && data) {
             
             try {
                 // update toolbar
@@ -9209,13 +9209,13 @@ function ValidatorPlugin(rules, data, formId) {
                                             XHRView = JSON.parse(decodeURIComponent(XHRView.value));
                                             
                                             // update data tab                                                
-                                            if ( gina && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
+                                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
                                                 window.ginaToolbar.update("data-xhr", XHRData);
                                             }
                                             
                                             // update view tab
                                             
-                                            if ( gina && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
+                                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
                                                 window.ginaToolbar.update("view-xhr", XHRView);
                                             }   
 
@@ -9241,7 +9241,7 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
                                     // don't refresh for html datas
-                                    if ( typeof(XHRData) != 'undefined' && /\/html|\/json/.test(contentType) ) {
+                                    if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html|\/json/.test(contentType) ) {
                                         window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
@@ -9276,7 +9276,7 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
 
-                                    if ( typeof(XHRData) != 'undefined' ) {
+                                    if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' ) {
                                         window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
@@ -9368,7 +9368,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                                     // update toolbar
                                     XHRData = result;
-                                    if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                                    if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                         try {
                                             // update toolbar
                                             window.ginaToolbar.update('data-xhr', XHRData );
@@ -9437,7 +9437,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                             // update toolbar
                             XHRData = result;
-                            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
                                 try {
                                     // update toolbar
                                     window.ginaToolbar.update('data-xhr', XHRData );
@@ -9470,7 +9470,7 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                             try {
                                 // don't refresh for html datas
-                                if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+                                if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
                                     window.ginaToolbar.update("data-xhr", XHRData);
                                 }
 
@@ -9658,7 +9658,7 @@ function ValidatorPlugin(rules, data, formId) {
                 //     if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
                 //         try {
                 //
-                //             if ( typeof(XHRData) != 'undefined' ) {
+                //             if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' ) {
                 //                 window.ginaToolbar.update("data-xhr", XHRData);
                 //             }
                 //
@@ -9778,13 +9778,13 @@ function ValidatorPlugin(rules, data, formId) {
     //                                 XHRView = JSON.parse(decodeURIComponent(XHRView.value));
                                     
     //                                 // update data tab                                                
-    //                                 if ( gina && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
+    //                                 if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
     //                                     window.ginaToolbar.update("data-xhr", XHRData);
     //                                 }
                                     
     //                                 // update view tab
                                     
-    //                                 if ( gina && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
+    //                                 if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
     //                                     window.ginaToolbar.update("view-xhr", XHRView);
     //                                 }   
 
@@ -9812,7 +9812,7 @@ function ValidatorPlugin(rules, data, formId) {
     //                 if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
     //                     try {
     //                         // don't refresh for html datas
-    //                         if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+    //                         if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
     //                             window.ginaToolbar.update("data-xhr", XHRData);
     //                         }
 
@@ -9847,7 +9847,7 @@ function ValidatorPlugin(rules, data, formId) {
     //                 if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
     //                     try {
 
-    //                         if ( typeof(XHRData) != 'undefined' ) {
+    //                         if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' ) {
     //                             window.ginaToolbar.update("data-xhr", XHRData);
     //                         }
 
@@ -9939,7 +9939,7 @@ function ValidatorPlugin(rules, data, formId) {
 
     //                         // update toolbar
     //                         XHRData = result;
-    //                         if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+    //                         if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
     //                             try {
     //                                 // update toolbar
     //                                 window.ginaToolbar.update('data-xhr', XHRData );
@@ -9999,7 +9999,7 @@ function ValidatorPlugin(rules, data, formId) {
 
     //                 // update toolbar
     //                 XHRData = result;
-    //                 if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+    //                 if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
     //                     try {
     //                         // update toolbar
     //                         window.ginaToolbar.update('data-xhr', XHRData );
@@ -10032,7 +10032,7 @@ function ValidatorPlugin(rules, data, formId) {
     //             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
     //                 try {
     //                     // don't refresh for html datas
-    //                     if ( typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+    //                     if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
     //                         window.ginaToolbar.update("data-xhr", XHRData);
     //                     }
 
@@ -10200,9 +10200,8 @@ function ValidatorPlugin(rules, data, formId) {
                                     $previewContainer.appendChild($img);
                                 }
                                 fadeIn($img);
-                            } else if ( previewKey == 'tmpUri' ) { // without preview
-                                
-                            }
+                            }/** else if ( previewKey == 'tmpUri' ) { // without preview                                
+                            }*/
                         }                        
                     }                  
                 } // EO for 
@@ -12951,7 +12950,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ( !onclickAttribute && !isSubmitType) {
                     $submit.setAttribute('onclick', 'return false;')
-                } else if ( !/return false/ && !isSubmitType) {
+                } else if ( !/return false/i.test(onclickAttribute) && !isSubmitType) {
                     if ( /\;$/.test(onclickAttribute) ) {
                         onclickAttribute += 'return false;'
                     } else {
@@ -13893,7 +13892,7 @@ function ValidatorPlugin(rules, data, formId) {
                 try {
                     data = formatData( d['toData']() );
 
-                    if ( isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
+                    if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
                         // update toolbar
                         if (!gina.forms.sent)
                             gina.forms.sent = {};
@@ -21470,10 +21469,15 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var _form = null, f = null, fLen = null;
             var inheritedData = {}, _formData = null;
             var domParserObject = new DOMParser(), currentId = null, found = null;
+            var linkType = null;
             for(; i < len; ++i) {
                 
                 if (!$link[i]['id'] || !/^popin\.link/.test($link[i]['id']) ) {
-                    evt = 'popin.link.'+ uuid.v4();                    
+                    // jsut in case
+                    if ( typeof($link[i]['href']) == 'undefined' ) {
+                        $link[i]['href'] = '#';
+                    }                    
+                    evt = 'popin.link.' + uuid.v4();                    
                     $link[i]['id'] =  $link[i].getAttribute('id') || evt;
                     if ( !/^popin\.link/.test($link[i]['id']) ) {
                         $link[i].setAttribute( 'data-gina-popin-link-id', evt);
@@ -21830,11 +21834,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                         // }
                                     }
                                     
-                                    if ( !isJsonContent && $popin.hasForm) {
+                                    //if ( !isJsonContent && $popin.hasForm) {
                                         //$validatorInstance.handleXhrResponse(xhr, $forms[0], $forms[0].id, event, true);
                                         //handleXhr(xhr, $el, options, require)
                                         //return
-                                    }
+                                    //}
                                     if ( !isJsonContent ) {
                                         triggerEvent(gina, $el, 'loaded.' + id, result);
                                         return
@@ -21844,8 +21848,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                     
                                 }
                                 
-                                
-                                updateToolbar(result);
+                                if (GINA_ENV_IS_DEV)
+                                    updateToolbar(result);
 
                             } catch (err) {
                                 
@@ -21862,8 +21866,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                 }
 
                                 instance.eventData.error = result;
-                                
-                                updateToolbar(result, resultIsObject);
+                                if (GINA_ENV_IS_DEV)
+                                    updateToolbar(result, resultIsObject);
 
                                 triggerEvent(gina, $el, 'error.' + id, result)
                             }
@@ -21885,7 +21889,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             
 
                             // update toolbar
-                            updateToolbar(result, resultIsObject);
+                            if (GINA_ENV_IS_DEV)
+                                updateToolbar(result, resultIsObject);
 
                             triggerEvent(gina, $el, 'error.' + id, result)
                         }
@@ -22122,7 +22127,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             instance.activePopinId = $popin.id;
 
             // update toolbar
-            updateToolbar();
+            if (GINA_ENV_IS_DEV)
+                updateToolbar();
             // var XHRData = document.getElementById('gina-without-layout-xhr-data');
             // if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
             //     try {
@@ -22254,7 +22260,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     gina.popinIsBinded      = false;                
 
                     // restore toolbar
-                    if ( gina && typeof(window.ginaToolbar) == "object" )
+                    if ( GINA_ENV_IS_DEV && gina &&  typeof(window.ginaToolbar) == "object" )
                         ginaToolbar.restore();
 
                     instance.activePopinId  = null;
@@ -22330,7 +22336,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 $popin.loadContent      = popinLoadContent;
                 $popin.open             = popinOpen;
                 $popin.close            = popinClose;
-                $popin.updateToolbar    = updateToolbar;
+                if (GINA_ENV_IS_DEV)
+                    $popin.updateToolbar    = updateToolbar;
                 
                 // Get main ressources
                 $popin.parentScripts    = [];
@@ -22796,7 +22803,10 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                        
                         // globals
                         window['GINA_ENV']          = '{{ GINA_ENV }}';
-                        window['GINA_ENV_IS_DEV']   = '{{ GINA_ENV_IS_DEV }}';
+                        window['GINA_ENV_IS_DEV']   = /true/i.test('{{ GINA_ENV_IS_DEV }}') ? true : false;
+                        if ( typeof(location.search) != 'undefined' && /debug\=/i.test(window.location.search) ) {
+                            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /true/i.test(window.location.search.match(/debug=(true|false)/)[0].split(/\=/)[1]) ? true: false;  
+                        }
 
                         gina["setOptions"](options);
                         gina["isFrameworkLoaded"]       = true;
