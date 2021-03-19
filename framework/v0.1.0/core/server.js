@@ -1762,8 +1762,15 @@ function Server(options) {
                     // -> https://github.com/mscdex/busboy
                     var opt = self.conf[self.appName][self.env].content.settings.upload;
                     // checking size
-                    var maxSize     = parseInt(opt.maxFieldsSize);
+                    var maxSize     = parseInt(opt.maxFieldsSize);                    
                     var fileSize    = request.headers["content-length"]/1024/1024; //MB
+                    var hasAutoTmpCleanupTimeout = (
+                        typeof(opt.autoTmpCleanupTimeout) != 'undefined' 
+                        &&  opt.autoTmpCleanupTimeout != ''
+                        &&  opt.autoTmpCleanupTimeout != 0
+                        &&  !/false/i.test(opt.autoTmpCleanupTimeout)
+                    ) ? true : false; 
+                    var autoTmpCleanupTimeout = (!hasAutoTmpCleanupTimeout) ? null : opt.autoTmpCleanupTimeout; //ms
 
                     if (fileSize > maxSize) {
                         return throwError(response, 431, 'Attachment exceeded maximum file size [ '+ opt.maxFieldsSize +' ]');                        
@@ -1945,7 +1952,16 @@ function Server(options) {
                                 path: tmpFilename
                             });
                             
-                            // write to /tmp
+                            // /tmp autoTmpCleanupTimeout
+                            if (autoTmpCleanupTimeout) {
+                                setTimeout((tmpFilename) => {
+                                    console.debug('[ BUNDLE ][ '+self.appName+' ][ server ][ upload ] Now removing `'+ tmpFilename +'` from tmp');
+                                    var tmpFilename = new _(tmpFilename);
+                                    if (tmpFilename.existsSync())
+                                        tmpFilename.rmSync();
+                                }, autoTmpCleanupTimeout, tmpFilename);
+                            }
+                            
                             // if (fs.existsSync(tmpFilename))
                             //     fs.unlinkSync(tmpFilename);
                             
@@ -1985,117 +2001,8 @@ function Server(options) {
                             });
                         }
                     });
-
-                
+                    
                     request.pipe(busboy);
-
-
-                    
-                    // request.body = '';
-                    // request.on('data', function(chunk) { // for this to work, don't forget the name attr for you form elements
-                        
-                    //     request.body += Buffer.from(new Uint8Array(chunk))
-                    //     // if (!files[data.name]) {
-                    //     //     files[data.name] = Object.assign({}, struct, chunk);
-                    //     //     files[data.name].data = [];
-                    //     // }
-                        
-                    //     // //convert the ArrayBuffer to Buffer 
-                    //     // data.data = Buffer.from(new Uint8Array(data.data));
-                    //     // //save the data 
-                    //     // files[data.name].data.push(data.data);
-                    //     // files[data.name].slice++;
-
-                    //     // if (files[data.name].slice * 100000 >= files[data.name].size) {
-                    //     //     var fileBuffer = Buffer.concat(files[data.name].data);
-
-                    //     //     fs.write(_(uploadDir +'/' + data.name), fileBuffer, (err) => {
-                    //     //         delete files[data.name];
-                    //     //         request.files = files;
-                    //     //         //if (err) return socket.emit('upload error');
-                    //     //         request.emit('end');
-                    //     //     });
-                    //     // }
-                    // });
-
-                    
-                    /**
-                    var i = 0, form = new multiparty.Form(opt);
-                    
-                    form.parse(request, function(err, fields, files) {
-                        if (err) {
-                            throwError(response, 400, err.stack||err.message);
-                            return
-                        }
-
-                        if ( request.method.toLowerCase() === 'post') {
-                            for (i in fields) {
-
-                                // false & true case
-                                if ( /^(false|true|on)$/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
-                                    fields[i][0] = ( /^(true|on)$/.test( fields[i][0] ) ) ? true : false;
-
-                                // should be: request.post[i] = fields[i];
-                                request.post[i] = fields[i][0]; // <-- to fixe on multiparty
-                            }
-                        } else if ( request.method.toLowerCase() === 'get') {
-                            for (i in fields) {
-
-                                // false & true case
-                                if ( /^(false|true|on)$/.test( fields[i][0] ) && typeof(fields[i][0]) == 'string' )
-                                    fields[i][0] = ( /^(true|on)$/.test( fields[i][0] ) ) ? true : false;
-
-                                // should be: request.get[i] = fields[i];
-                                request.get[i] = fields[i][0]; // <-- to fixe on multiparty
-                            }
-                        }
-
-                        request.files = [];
-                        var f = 0;
-                        for (var i in files) {
-                            // should be: request.files[i] = files[i];
-                            //request.files[i] = files[i][0]; // <-- to fixe on multiparty
-                            
-                            
-                            request.files[f] = {
-                                name                : files[i][f].fieldName,
-                                originalFilename    : files[i][f].originalFilename,
-                                size                : files[i][f].size,
-                                source              : files[i][f].path,
-                            }
-
-                            if ( typeof(files[i][f].headers) != 'undefined' ) {
-
-                                request.files[f].headers = files[i][f].headers;
-
-                                if (files[i][f].headers['content-type'])
-                                    request.files[f].type = files[i][f].headers['content-type'];
-
-                                if (files[i][f].headers['content-length']) {
-                                    files[i][f].headers['content-length'] = parseInt(files[i][f].headers['content-length']);
-
-                                    request.files[f].size = files[i][f].headers['content-length'];
-                                }
-                                    
-                            }
-
-                            ++f
-                        }
-
-                        if (request.fields) delete request.fields; // <- not needed anymore
-
-                        loadBundleConfiguration(request, response, next, function (err, bundle, pathname, config, req, res, next) {
-                            if (!req.handled) {
-                                req.handled = true;
-                                if (err) {
-                                    if (!res.headersSent)
-                                        throwError(response, 500, 'Internal server error\n' + err.stack, next)
-                                } else {
-                                    handle(req, res, next, bundle, pathname, config)
-                                }
-                            }
-                        })
-                    })*/
                 } else {
                                        
 

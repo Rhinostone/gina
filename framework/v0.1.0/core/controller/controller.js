@@ -2820,6 +2820,8 @@ function SuperController(options) {
             self.throwError(err)
         } 
     }
+    
+    
 
     /**
      * Throw error

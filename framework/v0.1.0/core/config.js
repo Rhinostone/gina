@@ -787,6 +787,7 @@ function Config(opt) {
             , exists        = false
             , protocol      = null
             , scheme        = null
+            , tmpSettings   = {}
         ;
         
 
@@ -861,11 +862,14 @@ function Config(opt) {
             , jsonFile  = null
             , e         = null
         ;
-        for (; c < cLen; ++c) {
-
+        for (; c < cLen; ++c) {            
             foundDevVersion = false;
 
             fName = configFiles[c];
+            // tmp settings - because we need it now
+            if ( /^settings\./.test(fName) ) {
+                tmpSettings = merge(tmpSettings, requireJSON(_(appPath + '/config/'+ fName)));
+            }
             if (/^\./.test(fName) || /\.dev\.json$/.test(fName) || !/\.json$/.test(fName)  )
                 continue;
 
@@ -1024,6 +1028,37 @@ function Config(opt) {
                         code: 302
                     },
                     bundle: bundle
+                }
+            }
+            
+            // upload routes
+            if ( 
+                typeof(tmpSettings.upload) != 'undefined'
+                && typeof(tmpSettings.upload.groups) != 'undefined'
+                && tmpSettings.upload.groups.count() > 0
+            ) {
+                if ( typeof(routing['upload-to-tmp-xml@'+ bundle]) == 'undefined' ) {
+                    routing['upload-to-tmp-xml@'+ bundle] = {
+                        "_comment": "Will store file to the project tmp dir",
+                        "url": "/upload",
+                        "method": "POST",
+                        "param": {
+                            "control": "uploadToTmp",
+                            "title": "Upload file"
+                        }
+                    }
+                }
+                
+                if ( typeof(routing['upload-delete-from-tmp-xml@'+ bundle]) == 'undefined' ) {
+                    routing['upload-delete-from-tmp-xml@'+ bundle] = {
+                        "_comment": "Will remove file from the project tmp dir",
+                        "url": "/upload/delete",
+                        "method": "POST",
+                        "param": {
+                          "control": "deleteFromTmp",
+                          "title": "Delete uploaded file"
+                        }
+                    }
                 }
             }
             
