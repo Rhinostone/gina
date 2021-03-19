@@ -19,7 +19,9 @@
     // but you will have to setup a cron to remove files from tmp dir
     // eg.: (int) 5000 for 5 sec
     // eg.: (string) 10m for 10 minutes
-    "autoTmpCleanupTimeout": 5000,
+    // eg.: (int) 0 to disable autoTmpCleanupTimeout
+    // eg.: (boolean) false to disable autoTmpCleanupTimeout 
+    "autoTmpCleanupTimeout": false,
     // You need to set groups in order to enable uploads
     "groups": {
       "untagged": {

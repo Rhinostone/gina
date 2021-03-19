@@ -1077,73 +1077,16 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             } 
         }
                
-        function getScript(source) {
-        //function getScript($popin, source, callback) {
-            
+        function getScript(source) {            
             // then trigger scripts load
-            var xhr = new XMLHttpRequest();
+            //var xhr = new XMLHttpRequest();
+            var xhr = setupXhr();
             xhr.open('GET', source, true);
             xhr.setRequestHeader("Content-Type", "text/javascript");
             xhr.onload = function () {
-                // var vScript = doc.createElement('script')
-                //     , vSrc = URL.createObjectURL(xhr.response)
-                // ;
-                // vScript.src = src;
-                // doc.body.appendChild(script);
                 eval(xhr.response);
             };
-            xhr.send();
-            
-            // new script element
-            //var script = document.createElement('script');
-            // index 0 is for the loader
-            // var prior = document.getElementsByTagName('script')[1];
-            // script.async = 0;
-        
-            // script.onload = script.onreadystatechange = function( _, isAbort ) {
-            //     if(isAbort || !script.readyState || /loaded|complete/.test(script.readyState) ) {
-            //         script.onload = script.onreadystatechange = null;
-            //         script = undefined;
-        
-            //         if(!isAbort && callback) setTimeout(callback, 0);
-            //     }
-            // };
-        
-            //script.src = source;
-                       
-            
-            // var hostname = gina.config.hostname;
-            // if ( gina.config.webroot != '' ) {
-            //     hostname += gina.config.webroot;
-            // }
-            // var s = 0
-            //     , sLen = scripts.length
-            //     , filename = source.substr( source.lastIndexOf(hostname)+hostname.length || 0)
-            //     , re = null
-            // ;
-            // if (sLen == 0) {
-            //     script.id = 'gina-popin-script-' + $popin.id;
-            //     prior.parentNode.insertBefore(script, prior);
-            //     $popin.$headers.push({ id: script.id});
-            // } else {
-            //     var found = false;
-            //     for (; s<sLen; ++s) {
-            //         if ( typeof(scripts[s].src) == 'undefined' || !scripts[s].src )
-            //             continue;
-            //         // insert only if not already loaded
-            //         re = new RegExp(filename+'$');                
-            //         if ( re.test(scripts[s].src) ) {
-            //             found = true;
-            //             break;
-            //         }                                    
-            //     }
-            //     if (!found) {
-            //         script.id = 'gina-popin-script-' + $popin.id;
-            //         prior.parentNode.insertBefore(script, prior);
-            //         // will be removed on close
-            //         $popin.$headers.push({ id: script.id});
-            //     }
-            // }                
+            xhr.send();                
         }
         
         /**

@@ -2985,9 +2985,9 @@ function addListener(target, element, name, callback) {
 function triggerEvent (target, element, name, args, proxiedEvent) {
     if (typeof(element) != 'undefined' && element != null) {
         var evt = null, isDefaultPrevented = false, isAttachedToDOM = false, merge  = null;
-        if (proxiedEvent) {
-            merge = require('utils/merge');
-        }
+        // if (proxiedEvent) {
+        //     merge = require('utils/merge');
+        // }
         // done separately because it can be listen at the same time by the user & by gina
         if ( jQuery ) { //thru jQuery if detected
 
@@ -3092,6 +3092,78 @@ function cancelEvent(event) {
     }
 }
 
+function setupXhr(options) {
+    var xhr = null;
+    if (window.XMLHttpRequest) { // Mozilla, Safari, ...
+        xhr = new XMLHttpRequest();
+    } else if (window.ActiveXObject) { // IE
+        try {
+            xhr = new ActiveXObject("Msxml2.XMLHTTP");
+        } catch (e) {
+            try {
+                xhr = new ActiveXObject("Microsoft.XMLHTTP");
+            }
+            catch (e) {}
+        }
+    }
+    if ( typeof(options) != 'undefined' ) {
+        if ( !options.url || typeof(options.url) == 'undefined' ) {
+            throw new Error('Missing `options.url`');
+        }
+        if ( typeof(options.method) == 'undefined' ) {
+            options.method = 'GET';
+        }
+        options.method = options.method.toUpperCase();
+        
+        if ( options.withCredentials ) {
+            if ('withCredentials' in xhr) {
+                // XHR for Chrome/Firefox/Opera/Safari.
+                if (options.isSynchrone) {
+                    xhr.open(options.method, options.url, options.isSynchrone)
+                } else {
+                    xhr.open(options.method, options.url)
+                }
+            } else if ( typeof XDomainRequest != 'undefined' ) {
+                // XDomainRequest for IE.
+                xhr = new XDomainRequest();
+                xhr.open(options.method, options.url);
+            } else {
+                // CORS not supported.
+                xhr = null;
+                result = 'CORS not supported: the server is missing the header `"Access-Control-Allow-Credentials": true` ';
+                triggerEvent(gina, $target, 'error.' + id, result);
+
+                return;
+            }
+            
+            if ( typeof(options.responseType) != 'undefined' ) {
+                xhr.responseType = options.responseType;
+            } else {
+                xhr.responseType = '';
+            }
+
+            xhr.withCredentials = true;
+        } else {
+            if (options.isSynchrone) {
+                xhr.open(options.method, options.url, options.isSynchrone);
+            } else {
+                xhr.open(options.method, options.url);
+            }
+        }
+
+        // setting up headers -    all but Content-Type ; it will be set right before .send() is called
+        for (var hearder in options.headers) {
+             //if ( hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '') {
+             //    options.headers[hearder] = enctype
+             //}
+            if (hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '')
+                continue;
+
+            xhr.setRequestHeader(hearder, options.headers[hearder]);
+        }
+    }
+    return xhr;
+}
 
 /**
  * handleXhr
@@ -3105,7 +3177,7 @@ function handleXhr(xhr, $el, options, require) {
     if (!xhr)
         throw new Error('No `xhr` object initiated');
     
-    var merge   = require('utils/merge');
+    //var merge   = require('utils/merge');
     
     var blob            = null
         , isAttachment  = null // handle download
@@ -10291,21 +10363,20 @@ function ValidatorPlugin(rules, data, formId) {
             , filesToBeRemoved      = []
         ;
         
-        for (let i = 0, len = childNodes.length; i < len; i++) {            
-            // if (isInLiElement) {                
-            // } else {
-            //    childNode = childNodes[i];
-            // }
-            //childNode.remove();
+        for (let i = 0, len = childNodes.length; i < len; i++) {
+            // only look for IMG tags
             if ( /img/i.test(childNodes[i].tagName) ) {                   
                 childNodeFile           = childNodes[i].getAttribute('data-upload-original-filename');
+                filesToBeRemoved.push(childNodeFile);
                 childNodeFilePreview    = childNodes[i].getAttribute('data-upload-preview-original-filename');
-                             
+                if (childNodeFilePreview) {
+                    filesToBeRemoved.push(childNodeFilePreview);
+                }
+                         
                 let tmpPath = null;
                 // remove file from input.files
                 for (let f = 0, fLen = files.length; f < fLen; f++) {
-                    if (files[f].name == childNodeFile) {
-                        console.debug('removing ', childNodeFile, childNodes[i]);                            
+                    if (files[f].name == childNodeFile) {                          
                         // get resetLink element
                         $resetLink      = document.getElementById( childNodes[i].getAttribute('data-upload-reset-link-id') );
                         // hide reset link & image
@@ -10315,8 +10386,8 @@ function ValidatorPlugin(rules, data, formId) {
                         // remove file from input.files                        
                         files.splice(f, 1);
                         // Since `$uploadTrigger.files` isFrozen & isSealed
-                        $uploadTrigger.customFiles = files;
-                        $uploadTrigger.value = files.join(', C:\\fakepath\\');
+                        $uploadTrigger.customFiles  = files;
+                        $uploadTrigger.value        = files.join(', C:\\fakepath\\');
                         
                         // update form files for validation & submit/send
                         let re = new RegExp('^'+($uploadTrigger.name+'['+f+']').replace(/\-|\[|\]|\./g, '\\$&'));
@@ -10336,8 +10407,11 @@ function ValidatorPlugin(rules, data, formId) {
                                 }
                             }
                         }
-                        
-                        
+                        // remove file from the server - filesToBeRemoved
+                        let url = $uploadTrigger.getAttribute('data-gina-form-upload-reset-action');                
+                        let xhr = setupXhr({url: url, method: 'POST', isSynchrone: true });
+                        //handleXhr(xhr);
+                        xhr.send(JSON.stringify({ files: filesToBeRemoved }));
                                                 
                         // when there is no more files to preview, restore input file visibility
                         // display upload input
@@ -10362,33 +10436,10 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                 } // EO for
                 
-                // remove file from the server
-                
-                //tmpPath = 
                 
             }
             
         }
-        
-            
-        
-        
-        // remove event
-        // removeListener(gina, $uploadResetTrigger, 'click', function onUploadResetTriggerEventRemoved() {
-        //     // remove the delete element
-        //     $uploadResetTrigger.remove();
-            
-        //     // when there is no more files to preview, restore input file visibility
-        //     // display upload input
-        //     if ( /none/i.test(window.getComputedStyle($uploadTrigger).display) ) {
-        //         // eg.: visibility could be delegated to a parent element such as label or a div               
-        //         if ( /none/i.test($uploadTrigger.parentElement.style.display) ) {
-        //             $uploadTrigger.parentElement.style.display = 'block';
-        //             return;
-        //         }
-        //         $uploadTrigger.style.display = 'block';
-        //     }
-        // });
     }
     
     var onUploadDelete = function($uploadTrigger, $uploadDeleteTrigger) {
@@ -22222,73 +22273,16 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             } 
         }
                
-        function getScript(source) {
-        //function getScript($popin, source, callback) {
-            
+        function getScript(source) {            
             // then trigger scripts load
-            var xhr = new XMLHttpRequest();
+            //var xhr = new XMLHttpRequest();
+            var xhr = setupXhr();
             xhr.open('GET', source, true);
             xhr.setRequestHeader("Content-Type", "text/javascript");
             xhr.onload = function () {
-                // var vScript = doc.createElement('script')
-                //     , vSrc = URL.createObjectURL(xhr.response)
-                // ;
-                // vScript.src = src;
-                // doc.body.appendChild(script);
                 eval(xhr.response);
             };
-            xhr.send();
-            
-            // new script element
-            //var script = document.createElement('script');
-            // index 0 is for the loader
-            // var prior = document.getElementsByTagName('script')[1];
-            // script.async = 0;
-        
-            // script.onload = script.onreadystatechange = function( _, isAbort ) {
-            //     if(isAbort || !script.readyState || /loaded|complete/.test(script.readyState) ) {
-            //         script.onload = script.onreadystatechange = null;
-            //         script = undefined;
-        
-            //         if(!isAbort && callback) setTimeout(callback, 0);
-            //     }
-            // };
-        
-            //script.src = source;
-                       
-            
-            // var hostname = gina.config.hostname;
-            // if ( gina.config.webroot != '' ) {
-            //     hostname += gina.config.webroot;
-            // }
-            // var s = 0
-            //     , sLen = scripts.length
-            //     , filename = source.substr( source.lastIndexOf(hostname)+hostname.length || 0)
-            //     , re = null
-            // ;
-            // if (sLen == 0) {
-            //     script.id = 'gina-popin-script-' + $popin.id;
-            //     prior.parentNode.insertBefore(script, prior);
-            //     $popin.$headers.push({ id: script.id});
-            // } else {
-            //     var found = false;
-            //     for (; s<sLen; ++s) {
-            //         if ( typeof(scripts[s].src) == 'undefined' || !scripts[s].src )
-            //             continue;
-            //         // insert only if not already loaded
-            //         re = new RegExp(filename+'$');                
-            //         if ( re.test(scripts[s].src) ) {
-            //             found = true;
-            //             break;
-            //         }                                    
-            //     }
-            //     if (!found) {
-            //         script.id = 'gina-popin-script-' + $popin.id;
-            //         prior.parentNode.insertBefore(script, prior);
-            //         // will be removed on close
-            //         $popin.$headers.push({ id: script.id});
-            //     }
-            // }                
+            xhr.send();                
         }
         
         /**
