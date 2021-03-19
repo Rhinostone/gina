@@ -211,7 +211,26 @@ function ValidatorPlugin(rules, data, formId) {
             $form = this.$forms[_id];
         }
 
-        return $form
+        return $form;
+    }
+    
+    /**
+     * isPopinContext
+     * 
+     * @return {boolean} isPopinContext
+     */
+    var isPopinContext = function() {
+        var isPopinInUse = false, $activePopin = null;
+        
+        if ( gina.hasPopinHandler && gina.popinIsBinded ) {
+            $activePopin = gina.popin.getActivePopin();
+        }
+        
+        if ( $activePopin && $activePopin.isOpen ) {
+            isPopinInUse = true;
+        }
+        
+        return isPopinInUse;
     }
 
 
@@ -1700,14 +1719,14 @@ function ValidatorPlugin(rules, data, formId) {
             throw new Error('No uploadProperties found !!');
         // parent form
         var $mainForm = uploadProperties.$form;
+        var $uploadTriger = document.getElementById(uploadProperties.uploadTriggerId);
         var searchArr   = null
             , name      = null
             , $previewContainer     = null
             , files                 = data.files || []
             , $error                = null
         ;
-        
-        // reset previwContainer
+        // reset previewContainer
         if ( uploadProperties.hasPreviewContainer ) {                
             $previewContainer = document.getElementById(uploadProperties.previewContainer.id);
             if ($previewContainer)
@@ -1747,8 +1766,11 @@ function ValidatorPlugin(rules, data, formId) {
                     && /^image/.test(files[f].mime)
                     && files[f].location != ''
                 ) {
-                    $img        = document.createElement('IMG');
+                    let $img    = document.createElement('IMG');
                     $img.src    = files[f].tmpUri;
+                    $img.style.display = 'none';
+                    $img.setAttribute('data-upload-original-filename', files[f][key].originalFilename);
+                    
                     
                     // TODO - Remove this; we don't want it by default, the dev can force it by hand if needed
                     // if (files[f].width) {
@@ -1758,7 +1780,6 @@ function ValidatorPlugin(rules, data, formId) {
                     //     $img.height = files[f].height;
                     // }
                     
-                    $img.style.display = 'none';
                     maxWidth = $previewContainer.getAttribute('data-preview-max-width') || null;
                     if ( $img.width && maxWidth && $img.width > maxWidth ) {
                         ratio = $img.width / maxWidth;
@@ -1808,10 +1829,47 @@ function ValidatorPlugin(rules, data, formId) {
                             }
                             
                             // with preview
-                            if ( previewKey == 'tmpUri' && uploadProperties.hasPreviewContainer ) {                                
-                                $img = document.createElement('IMG');
+                            if ( previewKey == 'tmpUri' && uploadProperties.hasPreviewContainer ) {   
+                                
+                                // creating reset link
+                                let resetLinkId = $previewContainer.id.replace(/\-preview/, '-'+f+'-reset-trigger');
+                                let resetLinkNeedToBeAdded = false;
+                                let $resetLink = document.getElementById(resetLinkId);
+                                let defaultClassNameArr = ['reset','js-upload-reset'];
+                                if (!$resetLink) {
+                                    resetLinkNeedToBeAdded      = true;
+                                    $resetLink                  = document.createElement('A');
+                                    $resetLink.href             = '#';
+                                    $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                                    $resetLink.className        = defaultClassNameArr.join(' ');                                    
+                                    $resetLink.id               = resetLinkId;
+                                } else {
+                                    if ( /a/i.test($resetLink.tagName) ) {
+                                        $resetLink.href             = '#';
+                                    }
+                                    if ( !$resetLink.innerHTML || $resetLink.innerHTML == '' ) {
+                                        $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                                    }
+                                    if ( typeof($resetLink.className) == 'undefined' ) {
+                                        $resetLink.className = "";
+                                    }
+                                    let classNameArr = merge($resetLink.className.split(/\s+/g), defaultClassNameArr);
+                                    $resetLink.className    = classNameArr.join(' ');
+                                }
+                                $resetLink.style.display    = 'none';
+                                    
+                                
+                                // creating IMG tag
+                                let $img = document.createElement('IMG');
                                 $img.src = files[f][key].tmpUri;
                                 $img.style.display = 'none';
+                                // retrieve img `originalFilename` (not the preview img[key] `originalFilename`)
+                                // these 2 metadatas will be used to remove files from the server
+                                $img.setAttribute('data-upload-original-filename', files[f].originalFilename);
+                                $img.setAttribute('data-upload-preview-original-filename', files[f][key].originalFilename);
+                                // in order to retrieve and remove reset link
+                                $img.setAttribute('data-upload-reset-link-id', $resetLink.id);
+                                
                                 maxWidth = $previewContainer.getAttribute('data-preview-max-width') || null;
                                 if ( maxWidth ) {
                                     $img.width = maxWidth
@@ -1821,13 +1879,20 @@ function ValidatorPlugin(rules, data, formId) {
                                     $li = document.createElement('LI');
                                     $li.className = 'item';
                                     $li.appendChild($img);
+                                    if (resetLinkNeedToBeAdded)
+                                        $li.appendChild($resetLink);
+                                    
                                     $previewContainer.appendChild($li);                                
                                 } else {
                                     $previewContainer.appendChild($img);
+                                    if (resetLinkNeedToBeAdded)
+                                        $previewContainer.appendChild($resetLink);
                                 }
                                 fadeIn($img);
-                            }/** else if ( previewKey == 'tmpUri' ) { // without preview                                
-                            }*/
+                                // bind reset trigger
+                                bindUploadResetOrDeleteTrigger('reset', $uploadTriger, f);
+                                fadeIn($resetLink);
+                            }
                         }                        
                     }                  
                 } // EO for 
@@ -1836,17 +1901,129 @@ function ValidatorPlugin(rules, data, formId) {
         }
     }
     
-    var onUploadReset = function($el) {
-        var fileElemId  = $el.getAttribute('data-gina-form-upload-target') || null;   
-        var $upload = null;
+    var onUploadReset = function($uploadTrigger, $uploadResetTrigger) {
+        console.debug('reset input files');
+        var uploadPreviewId  = $uploadTrigger.id +'-preview';
+        var $uploadPreview   = document.getElementById(uploadPreviewId);
+        var isInLiElement = false;
+        if ( /ul/i.test($uploadPreview.tagName) ) {
+            isInLiElement = true;
+        }
+        var childNodeFile           = null
+            , childNodeFilePreview  = null
+            , childNodes            = $uploadPreview.childNodes
+            , $resetLink            = null
+            , files                 = $uploadTrigger.customFiles
+            , filesToBeRemoved      = []
+        ;
         
-        if (fileElemId)
-            $upload = document.getElementById(fileElemId);
+        for (let i = 0, len = childNodes.length; i < len; i++) {            
+            // if (isInLiElement) {                
+            // } else {
+            //    childNode = childNodes[i];
+            // }
+            //childNode.remove();
+            if ( /img/i.test(childNodes[i].tagName) ) {                   
+                childNodeFile           = childNodes[i].getAttribute('data-upload-original-filename');
+                childNodeFilePreview    = childNodes[i].getAttribute('data-upload-preview-original-filename');
+                             
+                let tmpPath = null;
+                // remove file from input.files
+                for (let f = 0, fLen = files.length; f < fLen; f++) {
+                    if (files[f].name == childNodeFile) {
+                        console.debug('removing ', childNodeFile, childNodes[i]);                            
+                        // get resetLink element
+                        $resetLink      = document.getElementById( childNodes[i].getAttribute('data-upload-reset-link-id') );
+                        // hide reset link & image
+                        $resetLink.style.display = 'none';
+                        childNodes[i].style.display = 'none';
+                                                                        
+                        // remove file from input.files                        
+                        files.splice(f, 1);
+                        // Since `$uploadTrigger.files` isFrozen & isSealed
+                        $uploadTrigger.customFiles = files;
+                        $uploadTrigger.value = files.join(', C:\\fakepath\\');
+                        
+                        // update form files for validation & submit/send
+                        let re = new RegExp('^'+($uploadTrigger.name+'['+f+']').replace(/\-|\[|\]|\./g, '\\$&'));
+                        for ( let d = 0, dLen = $uploadTrigger.form.length; d < dLen; d++) {
+                            if ( re.test($uploadTrigger.form[d].name) ) {
+                                $uploadTrigger.form[d].remove();
+                                dLen--;
+                                d--;
+                                //update toolbar
+                                if (gina && GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == "object" ) {            
+                                    try {
+                                        // update toolbar
+                                        window.ginaToolbar.update('data-xhr', {files: files});                        
+                                    } catch (err) {
+                                        throw err
+                                    }
+                                }
+                            }
+                        }
+                        
+                        
+                                                
+                        // when there is no more files to preview, restore input file visibility
+                        // display upload input
+                        if ( /none/i.test(window.getComputedStyle($uploadTrigger).display) ) {
+                            // eg.: visibility could be delegated to a parent element such as label or a div               
+                            if ( /none/i.test($uploadTrigger.parentElement.style.display) ) {
+                                $uploadTrigger.parentElement.style.display = 'block';
+                                return;
+                            }
+                            $uploadTrigger.style.display = 'block';
+                        }
+                        
+                        // remove reset link event
+                        removeListener(gina, $uploadResetTrigger, 'click', function onUploadResetTriggerEventRemoved() {
+                            // remove link & image - must be done last
+                            $resetLink.remove();
+                            childNodes[i].remove();
+                        });                     
+                        len--;
+                        i--;
+                        break;
+                    }
+                } // EO for
+                
+                // remove file from the server
+                
+                //tmpPath = 
+                
+            }
+            
+        }
         
-        if ($upload) {
-            console.debug('reset input files');
-            $upload.value = '';// force reset : != multiple
-        } 
+            
+        
+        
+        // remove event
+        // removeListener(gina, $uploadResetTrigger, 'click', function onUploadResetTriggerEventRemoved() {
+        //     // remove the delete element
+        //     $uploadResetTrigger.remove();
+            
+        //     // when there is no more files to preview, restore input file visibility
+        //     // display upload input
+        //     if ( /none/i.test(window.getComputedStyle($uploadTrigger).display) ) {
+        //         // eg.: visibility could be delegated to a parent element such as label or a div               
+        //         if ( /none/i.test($uploadTrigger.parentElement.style.display) ) {
+        //             $uploadTrigger.parentElement.style.display = 'block';
+        //             return;
+        //         }
+        //         $uploadTrigger.style.display = 'block';
+        //     }
+        // });
+    }
+    
+    var onUploadDelete = function($uploadTrigger, $uploadDeleteTrigger) {
+        console.debug('delete input files');
+        
+        // remove event
+        removeListener(gina, $uploadResetTrigger, 'click');        
+        // remove the delete element
+        $uploadResetTrigger.remove();
     }
 
     
@@ -3033,6 +3210,53 @@ function ValidatorPlugin(rules, data, formId) {
         
         
     }
+    
+    /**
+     * bindUploadResetOrDeleteTrigger
+     * 
+     * @param {string} bindingType
+     * @param {object} $uploadTrigger - HTMLFormElement
+     * @param {number} index
+     * 
+     */
+     var bindUploadResetOrDeleteTrigger = function(bindingType, $uploadTrigger, index) {
+                    
+        // Binding upload delete trigger
+        // trigger is by default you {input.id} + '-delete-trigger' 
+        // e.g.: <input type="file" id="my-upload" name="my-upload">
+        // => <a href="/path/to/tmpfile/delete-action" id="my-upload-delete-trigger">Remove</a>
+        // But you can use atrtibute `data-gina-form-upload-delete-trigger` to override it                    
+        var uploadResetOrDeleteTriggerId = $uploadTrigger.id + '-' +index+ '-'+bindingType+'-trigger';
+        var $uploadResetOrDeleteTrigger = document.getElementById(uploadResetOrDeleteTriggerId);    
+        if (!$uploadResetOrDeleteTrigger) {
+            uploadResetOrDeleteTriggerId = $uploadTrigger.getAttribute('data-gina-form-upload-'+ '-' +index+ +bindingType+'-trigger');
+            $uploadResetOrDeleteTrigger = document.getElementById(uploadResetOrDeleteTriggerId);
+        }
+                            
+        if ( 
+            $uploadResetOrDeleteTrigger 
+            && typeof($uploadResetOrDeleteTrigger.isBinded) == 'undefined' 
+            || 
+            $uploadResetOrDeleteTrigger 
+            && typeof($uploadResetOrDeleteTrigger.isBinded) != 'undefined' 
+            && !/true/i.test($uploadResetOrDeleteTrigger.isBinded) 
+        ) {
+            //$uploadResetOrDeleteTrigger.setAttribute('data-gina-form-upload-target', $inputs[f].id);
+            //removeListener(gina, $uploadResetOrDeleteTrigger, 'click');                        
+            addListener(gina, $uploadResetOrDeleteTrigger, 'click', function(e) {
+                e.preventDefault();
+                                                             
+                onUploadReset($uploadTrigger, e.currentTarget);
+            });
+            $uploadResetOrDeleteTrigger.isBinded = true;
+        } else {
+            console.warn('[FormValidator::bindForm][upload]['+$uploadTrigger.id+'] : did not find `upload '+bindingType+' trigger`.\nPlease, make sure that your delete element ID is `'+ uploadResetOrDeleteTriggerId +'-'+bindingType+'-trigger`, or add to your file input ('+ $uploadTrigger.id +') -> `data-gina-form-upload-'+bindingType+'-trigger="your-custom-id"` definition.');
+        }
+    }
+    
+    var bindUpload = function($input) {
+        
+    }
 
 
     /**
@@ -3108,6 +3332,8 @@ function ValidatorPlugin(rules, data, formId) {
             , id            = null
             // submit lock
             , isRequiredBeforeSubmit = null
+            // a|links
+            , $a            = $target.getElementsByTagName('a')
             // input: checkbox, radio
             , $inputs       = $target.getElementsByTagName('input')
             // textarea
@@ -3120,23 +3346,36 @@ function ValidatorPlugin(rules, data, formId) {
             , formElementGroupTmp = null
             , formElementGroupItems = {}
             // file upload
-            , $htmlTarget = null
-            , uploadTriggerId = null
-            , $uploadTrigger = null
-            , uploadDeleteTriggerId = null
-            , $uploadDeleteTrigger = null
-            , $upload       = null
+            , $htmlTarget = null            
             , $progress = null
         ;
-        
-        //$form.hasUploadCustomDeleteTrigger = false;
-        
+                
         var elId = null;
         
-        // BO Bingin textarea
+        // BO Binding a
+        for (let f = 0, len = $a.length; f < len; ++f) {
+            let isPopinClick = false, hrefAttr = $a[f].getAttribute('href');
+            if ( !hrefAttr || hrefAttr == '' ) {
+                // Preventing popin auto to redirect to current/host page url
+                $a[f].setAttribute('href', '#');
+                isPopinClick = true;
+            }
+            elId = $a[f].getAttribute('id');
+            if (!elId || elId == '') {
+                elId = 'click.'; // by default
+                if ( isPopinContext() ) {
+                    elId = ( isPopinClick ) ? 'popin.click.' : 'popin.link.';
+                }
+                elId += uuid.v4();
+                $a[f].setAttribute('id', elId)
+            }
+        }
+        // EO Binding a
+        
+        // BO Binding textarea
         for (let f = 0, len = $textareas.length; f < len; ++f) {
             elId = $textareas[f].getAttribute('id');
-            if (!elId) {
+            if (!elId || elId == '') {
                 elId = 'textareas.' + uuid.v4();
                 $textareas[f].setAttribute('id', elId)
             }
@@ -3154,12 +3393,12 @@ function ValidatorPlugin(rules, data, formId) {
             // Adding live check
             registerForLiveChecking($form, $textareas[f]);
         }
-        // EO Bingin textarea
+        // EO Binding textarea
         
         // BO Binding input       
         for (let f = 0, len = $inputs.length; f < len; ++f) {
             elId = $inputs[f].getAttribute('id');
-            if (!elId) {
+            if (!elId || elId == '') {
                 elId = 'input.' + uuid.v4();
                 $inputs[f].setAttribute('id', elId)
             }
@@ -3237,17 +3476,20 @@ function ValidatorPlugin(rules, data, formId) {
             // todo : data-gina-file-autosend="false" when false, don't trigger the sending to the backend
             // todo : progress bar
             // todo : on('success') -> preview
-            if ( /^file$/i.test($inputs[f].type) ) {
+            if ( /^file$/i.test($inputs[f].type) ) {                
                 // Binding upload trigger
                 // trigger is by default you {input.id} + '-trigger' 
                 // e.g.: <input type="file" id="my-upload" name="my-upload">
                 // => <button type="button" id="my-upload-trigger">Choose a file</button>
                 // But you can use atrtibute `data-gina-form-upload-trigger` to override it                
-                uploadTriggerId = $inputs[f].getAttribute('data-gina-form-upload-trigger');
+                var uploadTriggerId = $inputs[f].getAttribute('data-gina-form-upload-trigger');
                 if (!uploadTriggerId)
                     uploadTriggerId = $inputs[f].id + '-trigger';
                     
-                $uploadTrigger = null;
+                var $upload             = null
+                    , $oldTmpFiles      = null
+                    , $uploadTrigger    = null
+                ;
                 // `$htmlTarget` cannot be used if you need to add a listner on the searched element
                 $htmlTarget = new DOMParser().parseFromString($target.innerHTML, 'text/html');
                 if (uploadTriggerId) {                    
@@ -3271,40 +3513,26 @@ function ValidatorPlugin(rules, data, formId) {
                         }                                     
                     });
                 }
+                                                
+                
+                // // bind reset trigger
+                // bindUploadResetOrDeleteTrigger('reset', $inputs[f]);                
+                // // bind delete trigger
+                // bindUploadResetOrDeleteTrigger('delete', $inputs[f]);
                 
                 // binding file element == $upload
                 addListener(gina, $inputs[f], 'change', function(event) {
                     event.preventDefault();
-                    var $el     = event.target;
+                    var $el     = event.currentTarget;
                     // [0] is for a single file, when multiple == false
+                    //var files = Array.from($el.files);
                     var files = $el.files;
+                    // used for validation & onUploadReset
+                    $el.customFiles = Array.from(files);
                     if (!files.length ) return false;
                     
-                    // Binding upload delete trigger
-                    // trigger is by default you {input.id} + '-delete-trigger' 
-                    // e.g.: <input type="file" id="my-upload" name="my-upload">
-                    // => <a href="/path/to/tmpfile/delete-action" id="my-upload-delete-trigger">Remove</a>
-                    // But you can use atrtibute `data-gina-form-upload-delete-trigger` to override it    
-                    uploadDeleteTriggerId = event.currentTarget.getAttribute('data-gina-form-upload-delete-trigger');
-                    if (!uploadDeleteTriggerId) {
-                        uploadDeleteTriggerId = event.currentTarget.id + '-delete-trigger';                        
-                    }                
-                    $uploadDeleteTrigger = null;
-                    if (uploadDeleteTriggerId) {                    
-                        $uploadDeleteTrigger = document.getElementById(uploadDeleteTriggerId);
-                    }
-                    // binding upload delete trigger
-                    if ( $uploadDeleteTrigger ) {
-                        //$uploadDeleteTrigger.setAttribute('data-gina-form-upload-target', $inputs[f].id);
-                        //removeListener(gina, $uploadDeleteTrigger, 'click');                        
-                        addListener(gina, $uploadDeleteTrigger, 'click', function(e) {
-                            e.preventDefault();
-                            var $el     = e.target;                            
-                            onUploadReset($el)                                    
-                        })
-                    } else {
-                        console.warn('[FormValidator::bindForm][upload]['+uploadTriggerId+'] : did not find `upload delete trigger`.\nPlease, make sure that your delete element ID is `'+ uploadDeleteTriggerId +'`, or add to you file input `data-gina-form-upload-delete-trigger="your-custom-id"`.');
-                    }
+                    
+                                     
                     
                     // $progress = $($(this).parent().find('.progress'));
                     var url             = $el.getAttribute('data-gina-form-upload-action');      
@@ -3316,17 +3544,12 @@ function ValidatorPlugin(rules, data, formId) {
                     var errorField    = null;
                     
                     if (files.length > 0) {
-                        // create form if not exists
-                        var $activePopin = null;
-                        var $uploadForm = null;
-                        var isPopinContext = false;
-                        if ( gina.hasPopinHandler && gina.popinIsBinded ) {
-                            $activePopin = gina.popin.getActivePopin();
-                        }
                         
-                        if ( $activePopin && $activePopin.isOpen ) {
-                            isPopinContext = true;
+                        // create form if not exists                        
+                        var $uploadForm = null, $activePopin = null;                        
+                        if ( isPopinContext() ) {
                             // getting active popin
+                            $activePopin = gina.popin.getActivePopin();
                             $activePopin.$target = new DOMParser().parseFromString($activePopin.target.outerHTML, 'text/html');
                             // binding to DOM
                             $activePopin.$target.getElementById($activePopin.id).innerHTML = document.getElementById($activePopin.id).innerHTML;
@@ -3337,13 +3560,33 @@ function ValidatorPlugin(rules, data, formId) {
                         }
                         
                         if ( !$uploadForm ) {
-                            $uploadForm = (isPopinContext) ? $activePopin.$target.createElement('form') : document.createElement('form');
+                            $uploadForm = (isPopinContext()) 
+                                            ? $activePopin.$target.createElement('form') 
+                                            : document.createElement('form');
 
                             // adding form attributes
                             $uploadForm.id       = uploadFormId;
                             $uploadForm.action   = url;
                             $uploadForm.enctype  = 'multipart/form-data';
                             $uploadForm.method   = 'POST';
+                            // adding oldTmpFiles
+                            var oldTmpFilesId = uploadTriggerId.replace(/\-trigger/, '') +'-old-tmp-files';
+                            $oldTmpFiles = $htmlTarget.getElementById(oldTmpFilesId);
+                            if (!$oldTmpFiles) {
+                                $oldTmpFiles = $htmlTarget.createElement('input');
+                                $oldTmpFiles.type = 'hidden';
+                                $oldTmpFiles.id = oldTmpFilesId;
+                                $oldTmpFiles.name = $htmlTarget.getElementById(uploadTriggerId.replace(/\-trigger/, '')).name + '[oldTmpFiles]';
+                                $oldTmpFiles.value = '[]';
+                                $oldTmpFiles.add = function(file) {
+                                    if ( /^\[\]$/.test(this.value) ) {
+                                        this.value = this.value.replace(/\]$/, '\"' + file +'\"]');
+                                    } else {
+                                        this.value = this.value.replace(/\]$/, ', \"' + file +'\"]');
+                                    }                            
+                                }
+                                $uploadForm.appendChild($oldTmpFiles )
+                            }
                                                         
                             
                             if ( typeof($el.form) != 'undefined' ) {
@@ -3355,7 +3598,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                                 var hasPreviewContainer = false;
                                 var previewContainer = $el.getAttribute('data-gina-form-upload-preview') || fieldId + '-preview';
-                                previewContainer = (isPopinContext)
+                                previewContainer = (isPopinContext())
                                                         ? $activePopin.$target.getElementById(previewContainer)
                                                         : document.getElementById(previewContainer); 
                                                         
@@ -3393,7 +3636,8 @@ function ValidatorPlugin(rules, data, formId) {
                                 ;
                                 
                                 for (var _f = 0, _fLen = files.length; _f < _fLen; ++_f) { // for each file                                    
-                                    
+                                    // binding upload reset trigger
+                                    bindUploadResetOrDeleteTrigger('reset', $el, f);   
                                     hiddenFields[_f] = null;
                                     subPrefix = fieldPrefix + '['+ _f +']';
                                     _nameRe = new RegExp('^'+subPrefix.replace(/\[/g, '\\[').replace(/\]/g, '\\]'));
@@ -3461,8 +3705,6 @@ function ValidatorPlugin(rules, data, formId) {
                                     // completing by adding non-declared mandatoring fields in the DOM: all but preview
                                     for (var m = 0, mLen = mandatoryFields.length; m < mLen; ++m) {
                                         // optional, must be set by user
-                                        //if ( mandatoryFields[m] == 'preview' )
-                                        //    continue;
                                         // needs recheck     
                                         if (!hiddenFields[_f] )
                                             hiddenFields[_f] = {};
@@ -3485,16 +3727,15 @@ function ValidatorPlugin(rules, data, formId) {
                                     
                                 } // EO for files
                                 
-                                //$uploadForm.uploadProperties = {
                                 $uploadForm.uploadProperties = {                                    
                                     id                  : $el.form.id || $el.getAttribute('id'),
+                                    uploadTriggerId     : $el.id,
                                     $form               : $el.form,
-                                    //$form               : $form,
                                     errorField          : errorField,
                                     mandatoryFields     : mandatoryFields,
                                     uploadFields        : hiddenFields,
                                     hasPreviewContainer : hasPreviewContainer,
-                                    isPopinContext      : isPopinContext
+                                    isPopinContext      : isPopinContext()
                                 };
                                 if (hasPreviewContainer) {
                                     $uploadForm.uploadProperties.previewContainer = previewContainer;
@@ -3512,8 +3753,8 @@ function ValidatorPlugin(rules, data, formId) {
                                 $uploadForm.setAttribute('data-gina-form-event-on-submit-error', 'onGenericXhrResponse');
                             
                             
-                            // adding for to current doccument
-                            if (isPopinContext) {
+                            // adding for to current document
+                            if (isPopinContext()) {
                                 //$activePopin.$target.appendChild($uploadForm)
                                 document.getElementById($activePopin.id).appendChild($uploadForm)
                             } else {
@@ -3530,6 +3771,7 @@ function ValidatorPlugin(rules, data, formId) {
                             var file = null;          
                             for (var l = 0, lLen = files.length; l < lLen; ++l) {
                                 file = files[l];
+                                $oldTmpFiles.add(file.name);
                                 formData.append(fileId, file, file.name);
                             }
                             
@@ -3596,10 +3838,8 @@ function ValidatorPlugin(rules, data, formId) {
                             
                         } catch (formErr) {
                             throw formErr;
-                        }
-                        
+                        }                        
                     }
-                    
                 });
                 
                 
@@ -3616,7 +3856,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             if (elId && /^gina\-toolbar/.test(elId)) continue;
 
-            if (!elId) {
+            if (!elId || elId == '') {
                 elId = 'select.' + uuid.v4();
                 $select[s].setAttribute('id', elId)
             }

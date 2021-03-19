@@ -234,7 +234,7 @@ function PathHelper() {
                 return false;
             }
         } else { // support for old version of nodejs
-            return fs.existsSync(this.value)
+            return fs.existsSync(this.value);
         } 
     }
 
