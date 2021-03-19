@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Gina.Utils.cmd
- * Copyright (c) 2017 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2009-2021 Rhinostone <gina@rhinostone.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
