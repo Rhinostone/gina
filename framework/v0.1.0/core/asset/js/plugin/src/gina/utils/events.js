@@ -59,9 +59,9 @@ function addListener(target, element, name, callback) {
 function triggerEvent (target, element, name, args, proxiedEvent) {
     if (typeof(element) != 'undefined' && element != null) {
         var evt = null, isDefaultPrevented = false, isAttachedToDOM = false, merge  = null;
-        if (proxiedEvent) {
-            merge = require('utils/merge');
-        }
+        // if (proxiedEvent) {
+        //     merge = require('utils/merge');
+        // }
         // done separately because it can be listen at the same time by the user & by gina
         if ( jQuery ) { //thru jQuery if detected
 
@@ -166,6 +166,78 @@ function cancelEvent(event) {
     }
 }
 
+function setupXhr(options) {
+    var xhr = null;
+    if (window.XMLHttpRequest) { // Mozilla, Safari, ...
+        xhr = new XMLHttpRequest();
+    } else if (window.ActiveXObject) { // IE
+        try {
+            xhr = new ActiveXObject("Msxml2.XMLHTTP");
+        } catch (e) {
+            try {
+                xhr = new ActiveXObject("Microsoft.XMLHTTP");
+            }
+            catch (e) {}
+        }
+    }
+    if ( typeof(options) != 'undefined' ) {
+        if ( !options.url || typeof(options.url) == 'undefined' ) {
+            throw new Error('Missing `options.url`');
+        }
+        if ( typeof(options.method) == 'undefined' ) {
+            options.method = 'GET';
+        }
+        options.method = options.method.toUpperCase();
+        
+        if ( options.withCredentials ) {
+            if ('withCredentials' in xhr) {
+                // XHR for Chrome/Firefox/Opera/Safari.
+                if (options.isSynchrone) {
+                    xhr.open(options.method, options.url, options.isSynchrone)
+                } else {
+                    xhr.open(options.method, options.url)
+                }
+            } else if ( typeof XDomainRequest != 'undefined' ) {
+                // XDomainRequest for IE.
+                xhr = new XDomainRequest();
+                xhr.open(options.method, options.url);
+            } else {
+                // CORS not supported.
+                xhr = null;
+                result = 'CORS not supported: the server is missing the header `"Access-Control-Allow-Credentials": true` ';
+                triggerEvent(gina, $target, 'error.' + id, result);
+
+                return;
+            }
+            
+            if ( typeof(options.responseType) != 'undefined' ) {
+                xhr.responseType = options.responseType;
+            } else {
+                xhr.responseType = '';
+            }
+
+            xhr.withCredentials = true;
+        } else {
+            if (options.isSynchrone) {
+                xhr.open(options.method, options.url, options.isSynchrone);
+            } else {
+                xhr.open(options.method, options.url);
+            }
+        }
+
+        // setting up headers -    all but Content-Type ; it will be set right before .send() is called
+        for (var hearder in options.headers) {
+             //if ( hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '') {
+             //    options.headers[hearder] = enctype
+             //}
+            if (hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '')
+                continue;
+
+            xhr.setRequestHeader(hearder, options.headers[hearder]);
+        }
+    }
+    return xhr;
+}
 
 /**
  * handleXhr
@@ -179,7 +251,7 @@ function handleXhr(xhr, $el, options, require) {
     if (!xhr)
         throw new Error('No `xhr` object initiated');
     
-    var merge   = require('utils/merge');
+    //var merge   = require('utils/merge');
     
     var blob            = null
         , isAttachment  = null // handle download

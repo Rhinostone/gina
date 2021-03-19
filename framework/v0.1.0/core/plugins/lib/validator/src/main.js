@@ -1917,21 +1917,20 @@ function ValidatorPlugin(rules, data, formId) {
             , filesToBeRemoved      = []
         ;
         
-        for (let i = 0, len = childNodes.length; i < len; i++) {            
-            // if (isInLiElement) {                
-            // } else {
-            //    childNode = childNodes[i];
-            // }
-            //childNode.remove();
+        for (let i = 0, len = childNodes.length; i < len; i++) {
+            // only look for IMG tags
             if ( /img/i.test(childNodes[i].tagName) ) {                   
                 childNodeFile           = childNodes[i].getAttribute('data-upload-original-filename');
+                filesToBeRemoved.push(childNodeFile);
                 childNodeFilePreview    = childNodes[i].getAttribute('data-upload-preview-original-filename');
-                             
+                if (childNodeFilePreview) {
+                    filesToBeRemoved.push(childNodeFilePreview);
+                }
+                         
                 let tmpPath = null;
                 // remove file from input.files
                 for (let f = 0, fLen = files.length; f < fLen; f++) {
-                    if (files[f].name == childNodeFile) {
-                        console.debug('removing ', childNodeFile, childNodes[i]);                            
+                    if (files[f].name == childNodeFile) {                          
                         // get resetLink element
                         $resetLink      = document.getElementById( childNodes[i].getAttribute('data-upload-reset-link-id') );
                         // hide reset link & image
@@ -1941,8 +1940,8 @@ function ValidatorPlugin(rules, data, formId) {
                         // remove file from input.files                        
                         files.splice(f, 1);
                         // Since `$uploadTrigger.files` isFrozen & isSealed
-                        $uploadTrigger.customFiles = files;
-                        $uploadTrigger.value = files.join(', C:\\fakepath\\');
+                        $uploadTrigger.customFiles  = files;
+                        $uploadTrigger.value        = files.join(', C:\\fakepath\\');
                         
                         // update form files for validation & submit/send
                         let re = new RegExp('^'+($uploadTrigger.name+'['+f+']').replace(/\-|\[|\]|\./g, '\\$&'));
@@ -1962,8 +1961,11 @@ function ValidatorPlugin(rules, data, formId) {
                                 }
                             }
                         }
-                        
-                        
+                        // remove file from the server - filesToBeRemoved
+                        let url = $uploadTrigger.getAttribute('data-gina-form-upload-reset-action');                
+                        let xhr = setupXhr({url: url, method: 'POST', isSynchrone: true });
+                        //handleXhr(xhr);
+                        xhr.send(JSON.stringify({ files: filesToBeRemoved }));
                                                 
                         // when there is no more files to preview, restore input file visibility
                         // display upload input
@@ -1988,33 +1990,10 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                 } // EO for
                 
-                // remove file from the server
-                
-                //tmpPath = 
                 
             }
             
         }
-        
-            
-        
-        
-        // remove event
-        // removeListener(gina, $uploadResetTrigger, 'click', function onUploadResetTriggerEventRemoved() {
-        //     // remove the delete element
-        //     $uploadResetTrigger.remove();
-            
-        //     // when there is no more files to preview, restore input file visibility
-        //     // display upload input
-        //     if ( /none/i.test(window.getComputedStyle($uploadTrigger).display) ) {
-        //         // eg.: visibility could be delegated to a parent element such as label or a div               
-        //         if ( /none/i.test($uploadTrigger.parentElement.style.display) ) {
-        //             $uploadTrigger.parentElement.style.display = 'block';
-        //             return;
-        //         }
-        //         $uploadTrigger.style.display = 'block';
-        //     }
-        // });
     }
     
     var onUploadDelete = function($uploadTrigger, $uploadDeleteTrigger) {
