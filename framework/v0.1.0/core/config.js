@@ -1037,8 +1037,8 @@ function Config(opt) {
                 && typeof(tmpSettings.upload.groups) != 'undefined'
                 && tmpSettings.upload.groups.count() > 0
             ) {
-                if ( typeof(routing['upload-to-tmp-xml@'+ bundle]) == 'undefined' ) {
-                    routing['upload-to-tmp-xml@'+ bundle] = {
+                if ( typeof(routing['upload-to-tmp-xml']) == 'undefined' ) {
+                    routing['upload-to-tmp-xml'] = {
                         "_comment": "Will store file to the project tmp dir",
                         "url": "/upload",
                         "method": "POST",
@@ -1049,8 +1049,8 @@ function Config(opt) {
                     }
                 }
                 
-                if ( typeof(routing['upload-delete-from-tmp-xml@'+ bundle]) == 'undefined' ) {
-                    routing['upload-delete-from-tmp-xml@'+ bundle] = {
+                if ( typeof(routing['upload-delete-from-tmp-xml']) == 'undefined' ) {
+                    routing['upload-delete-from-tmp-xml'] = {
                         "_comment": "Will remove file from the project tmp dir",
                         "url": "/upload/delete",
                         "method": "POST",
