@@ -16,7 +16,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
         this.plugin = 'popin';
 
-        var events  = ['loaded', 'ready', 'open', 'close', 'destroy', 'success', 'error', 'progress'];
+        var events  = ['init', 'loaded', 'ready', 'open', 'close', 'click', 'destroy', 'success', 'error', 'progress'];
         registerEvents(this.plugin, events);
 
         var self = { // local use only
@@ -433,8 +433,45 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         
                         b = 0; len = $close.length;
                         for (; b < len; ++b) {
-                            removeListener(gina, $close[b], $close[b].getAttribute('id') );
+                            let $el = $close[b];
+                            let eId = $el.getAttribute('id');
+                            for (let e = 0, eLen = events.length; e < eLen; e++) {
+                                let evt = events[e];
+                                if ( typeof(gina.events[ evt ]) != 'undefined' && gina.events[ evt ] == eId ) {
+                                    removeListener(gina, $el, evt);
+                                }
+                                if ( typeof(gina.events[ eId ]) != 'undefined' && gina.events[ eId ] == eId ) {                       
+                                    removeListener(gina, $el, eId);
+                                }
+                                
+                                if ( typeof(gina.events[ evt +'.'+ eId ]) != 'undefined' && gina.events[ evt +'.'+ eId ] == eId ) {
+                                    removeListener(gina, $el, evt +'.'+ eId);
+                                }
+                                
+                                if ( typeof(gina.events[ evt +'.'+ eId ]) != 'undefined' && gina.events[ evt +'.'+ eId ] == evt +'.'+ eId ) {
+                                    removeListener(gina, $el, evt +'.'+ eId);
+                                }
+                            }
+                            
+                            
+                            //removeListener(gina, $close[b], $close[b].getAttribute('id') );
                         }
+                        
+                        // div with click
+                        // var $elTMP = $form.target.getElementsByTagName('div');
+                        // if ( $elTMP.length > 0 ) {
+                        //     for(let i = 0, len = $elTMP.length; i < len; ++i) {
+                        //         $els.push( $elTMP[i] )
+                        //     }
+                        // }
+                        // // label with click
+                        // $elTMP = $form.target.getElementsByTagName('label');
+                        // if ( $elTMP.length > 0 ) {
+                        //     for(let i = 0, len = $elTMP.length; i < len; ++i) {
+                        //         $els.push( $elTMP[i] )
+                        //     }
+                        // }
+                        
                         // Just in case we left the popin with a link:target = _blank
                         $popin.isRedirecting = false;
                         popinClose($popin.name);

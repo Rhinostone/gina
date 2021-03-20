@@ -965,13 +965,15 @@ function Server(options) {
             responseHeaders = {};
         }
         
-        resHeaders  = conf.server.response.header;
+        // Copy to avoid override
+        resHeaders  = JSON.parse(JSON.stringify(conf.server.response.header));
         if ( typeof(request.routing) == 'undefined' ) {
             request.routing = {
                 'url': request.url,
                 'method': request.method
             }
         }
+        // Should not override main server.response.header.methods
         resHeaders['access-control-allow-methods'] = request.routing.method.replace(/(\,\s+|\,)/g, ', ').toUpperCase();                                            
         
                                                     
@@ -2406,16 +2408,31 @@ function Server(options) {
     };
     
     var checkPreflightRequest = function(request) {
-        // See https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
-        var config                          = self.conf[self.appName][self.env]
-            , method                        = ( /http\/2/.test(config.server.protocol) ) ? request.headers[':method'] : request.method
-            , reMethod                      = new RegExp(method, 'i')
+        var config = self.conf[self.appName][self.env];
+        // by default, if not set in `${projectPath}/env.json`
+        var corsMethod = 'GET, POST, HEAD';
+        // See https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS        
+        if ( 
+            typeof(config.server.response.header['access-control-allow-methods']) != 'undefined' 
+            &&
+            config.server.response.header['access-control-allow-methods'] != ''
+        ) {
+            // as defined in `${projectPath}/env.json`
+            corsMethod = config.server.response.header['access-control-allow-methods'];
+        }
+        
+        var method                          = ( /http\/2/.test(config.server.protocol) ) ? request.headers[':method'] : request.method
+            //, reMethod                      = new RegExp(method, 'i')
+            , reAccessAllowMethod           = new RegExp('(' + corsMethod.replace(/\,\s+|\s+\,|\,/g, '|') +')', 'i')
             // preflight support - conditions required
             , isPreflightRequest            = ( 
                     // must meet all the following conditions
                     /OPTIONS/i.test(method) 
                     && typeof(request.headers['access-control-request-method']) != 'undefined'
-                    && /(GET|POST|PUT|DELETE|HEAD)/i.test(request.headers['access-control-request-method']) 
+                    
+                    // as defined in `${projectPath}/env.json`,
+                    // request method must match: config.server.response.header['access-control-allow-methods']
+                    && reAccessAllowMethod.test(request.headers['access-control-request-method'])
                     && typeof(request.headers['access-control-request-headers']) != 'undefined'       
                 ) ? true : false
             , accessControlRequestHeaders   = null

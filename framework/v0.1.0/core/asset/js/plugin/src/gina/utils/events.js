@@ -740,6 +740,9 @@ function removeListener(target, element, name, callback) {
         // removed ------> [name];
         delete gina.events[name]
     }
+    if ( typeof(callback) != 'undefined' ) {
+        callback()
+    }
 }
 
 
