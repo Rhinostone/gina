@@ -24,7 +24,22 @@ function ValidatorPlugin(rules, data, formId) {
     /**
      * validator event handler - isGFFCtx only
      * */
-    var events      = ['ready', 'error', 'progress', 'submit', 'success', 'reset', 'change', "destroy"];
+    var events      = [
+                        'init', // form or popin init
+                        'ready',
+                        'error',
+                        'progress',
+                        'submit',
+                        'success',
+                        'reset',
+                        'change',
+                        'keydown', // for autocomplete
+                        'keyup', // for autocomplete
+                        'focusout',
+                        'focusin',
+                        'validate', // for form livecheck (validation)
+                        'destroy'
+                    ];
 
     /** imports */
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
@@ -1439,6 +1454,7 @@ function ValidatorPlugin(rules, data, formId) {
                         }
                         continue;
                     }
+                    //fieldsObjectList[key].value = (/object/i.test(typeof(files[f][key])) ) ? JSON.stringify( files[f][key] ) : files[f][key];
                     fieldsObjectList[key].value = files[f][key];
                     // update submited $fields ??
                     
@@ -1897,7 +1913,7 @@ function ValidatorPlugin(rules, data, formId) {
                 for(let i = 0, len = $elTMP.length; i < len; ++i) {
                     // if button is != type="submit", you will need to provide : data-gina-form-submit
                     // TODO - On button binding, you can then provide data-gina-form-action & data-gina-form-method
-                    if ($elTMP[i].type == 'submit' || $elTMP[i].attributes.getNamedItem('data-gina-form-submit') )
+                    //if ($elTMP[i].type == 'submit' || $elTMP[i].attributes.getNamedItem('data-gina-form-submit') )
                         $els.push($elTMP[i])
                 }
             }
@@ -1906,38 +1922,97 @@ function ValidatorPlugin(rules, data, formId) {
             $elTMP = $form.target.getElementsByTagName('a');
             if ( $elTMP.length > 0 ) {
                 for(let i = 0, len = $elTMP.length; i < len; ++i) {
-                    if ( $elTMP[i].attributes.getNamedItem('data-gina-form-submit') || /^click\./.test( $elTMP[i].attributes.getNamedItem('id') ) || /^link\./.test( $elTMP[i].attributes.getNamedItem('id') ) )
+                    //if ( $elTMP[i].attributes.getNamedItem('data-gina-form-submit') || /^click\./.test( $elTMP[i].attributes.getNamedItem('id') ) || /^link\./.test( $elTMP[i].attributes.getNamedItem('id') ) )
                         $els.push($elTMP[i])
                 }
             }
 
-            // checkbox & radio
+            // checkbox & radio & file, text, date .. ALL BUT hidden
             $elTMP = $form.target.getElementsByTagName('input');
             if ( $elTMP.length > 0 ) {
-                for(let i = 0, len = $elTMP.length; i < len; ++i) {
-                    if ($elTMP[i].type == 'checkbox' || $elTMP[i].type == 'radio' )
-                        $els.push( $elTMP[i] )
+                for (let i = 0, len = $elTMP.length; i < len; ++i) {
+                    if ( !/^(hidden)$/i.test($elTMP[i].type) )
+                        $els.push( $elTMP[i] );
+                        
+                    if (/^(file)$/i.test($elTMP[i].type)) {
+                        // special case
+                        // vForm has to be handle here, it does not exist in the document context
+                        let vFormId = $elTMP[i].getAttribute('data-gina-form-virtual');
+                        if ( vFormId ) {
+                            let $vForm = getFormById(vFormId).target;
+                            if ($vForm) {
+                                $els.push( $vForm );
+                                for (let e = 0, eLen = events.length; e < eLen; e++) {
+                                    let evt = events[e];  
+                                    if ( typeof(gina.events[ evt +'.'+ vFormId + '.hform' ]) != 'undefined' && gina.events[ evt +'.'+ vFormId + '.hform' ] == vFormId ) {                                        
+                                        removeListener(gina, $vForm, evt +'.'+ vFormId + '.hform')
+                                    } 
+                                } 
+                            }
+                                                               
+                        }
+                        
+                    }
                 }
             }
-
+            
+            // textarea
+            $elTMP = $form.target.getElementsByTagName('textarea');
+            if ( $elTMP.length > 0 ) {
+                for(let i = 0, len = $elTMP.length; i < len; ++i) {
+                    $els.push( $elTMP[i] )
+                }
+            }
+            
+            
+            // forms inside main form
+            $elTMP = $form.target.getElementsByTagName('form');
+            if ( $elTMP.length > 0 ) {
+                for(let i = 0, len = $elTMP.length; i < len; ++i) {
+                    $els.push( $elTMP[i] )
+                }
+            }
+            // main form
+            $els.push( $form.target );
             for (let i = 0, len = $els.length; i < len; ++i) {
 
                 $el = $els[i];
-
-                if ($el.type == 'submit') {
-
-                    evt = $el.getAttribute('id');
-                    if ( typeof(gina.events[ evt ]) != 'undefined' )
-                        removeListener(gina, $el, gina.events[ evt ]);
-
-                } else {
-
-                    evt ='click.' + $el.getAttribute('id');
-                    if ( typeof(gina.events[ evt ]) != 'undefined' )
+                let eId = $el.getAttribute('id');
+                for (let e = 0, eLen = events.length; e < eLen; e++) {
+                    let evt = events[e];                    
+                    if ( typeof(gina.events[ evt ]) != 'undefined' && gina.events[ evt ] == eId ) {                       
                         removeListener(gina, $el, evt);
+                    }
+                    if ( typeof(gina.events[ eId ]) != 'undefined' && gina.events[ eId ] == eId ) {                       
+                        removeListener(gina, $el, eId);
+                    }
+                    
+                    if ( typeof(gina.events[ evt +'.'+ eId ]) != 'undefined' && gina.events[ evt +'.'+ eId ] == eId ) {                        
+                        removeListener(gina, $el, evt +'.'+ eId);
+                    }
+                    
+                    if ( typeof(gina.events[ evt +'.'+ eId ]) != 'undefined' && gina.events[ evt +'.'+ eId ] == evt +'.'+ eId ) {                        
+                        removeListener(gina, $el, evt +'.'+ eId);
+                    }
+                    
+                    if ( typeof(gina.events[ evt +'.'+ eId + '.hform' ]) != 'undefined' && gina.events[ evt +'.'+ eId + '.hform' ] == eId ) {                        
+                        removeListener(gina, evt +'.'+ eId + '.hform');
+                    }
                 }
-            }
 
+                // if ($el.type == 'submit' || $el.type == 'file' ) {
+                    // evt = $el.getAttribute('id');
+                    // if ( typeof(gina.events[ evt ]) != 'undefined' )
+                    //     removeListener(gina, $el, gina.events[ evt ]);
+                // } else {
+
+                //     evt ='click.' + $el.getAttribute('id');
+                //     if ( typeof(gina.events[ evt ]) != 'undefined' )
+                //         removeListener(gina, $el, evt);
+                // }
+            }
+            
+            $els = null; $el = null; $elTMP = null; evt = null;
             $form.binded = false;
 
             addListener(gina, $form.target, 'destroy.' + _id, function(event) {
@@ -3134,7 +3209,6 @@ function ValidatorPlugin(rules, data, formId) {
                 // bindUploadResetOrDeleteTrigger(bindingType, $uploadTrigger, index);
                 // eg.: document-files-0-preview; if $inputs[f].id === `document-files-0`
                 var $previewContainer = $htmlTarget.getElementById(uploadTriggerId + '-preview');
-                console.debug('checking visibility..');
                 if ( 
                     $previewContainer 
                     && $uploadTrigger
@@ -3166,17 +3240,11 @@ function ValidatorPlugin(rules, data, formId) {
                             }                              
                         } else if ( /img/i.test($els[i].tagName) ) {
                             $img = $els[i];
-                            $deleteLink = document.getElementById(uploadTriggerId + '-'+i+'-delete-trigger');
-                            // retrieve img `originalFilename` (not the preview img[key] `originalFilename`)
-                            // these 2 metadatas will be used to remove files from the server
+                            deleteLinkId = document.getElementById(uploadTriggerId + '-'+i+'-delete-trigger');
                             let file = $img.src.substr($img.src.lastIndexOf('/')+1);
-                            // $img.setAttribute('data-upload-file', file);                            
-                            // //$img.setAttribute('data-upload-preview-original-filename', files[f][key].originalFilename);
-                            // // in order to retrieve and remove reset link
-                            // $img.setAttribute('data-upload-'+bindingType+'-link-id', $deleteLink.id);
                             $uploadTrigger.customFiles.push({
                                 name: file,
-                                deleteLinkId: $deleteLink.id
+                                deleteLinkId: deleteLinkId
                             });
                             // bind reset trigger
                             bindUploadResetOrDeleteTrigger(bindingType, $uploadTrigger, index);
@@ -3206,6 +3274,9 @@ function ValidatorPlugin(rules, data, formId) {
                 // }
                                                 
                 // binding file element == $upload
+                // setTimeout(() => {
+                //     removeListner(gina, $inputs[f], 'change');
+                // }, 0); 
                 addListener(gina, $inputs[f], 'change', function(event) {
                     event.preventDefault();
                     var $el     = event.currentTarget;
@@ -3223,7 +3294,8 @@ function ValidatorPlugin(rules, data, formId) {
                     var url             = $el.getAttribute('data-gina-form-upload-action');      
                     var name            = $el.getAttribute('name');
                     var fileId          = name;                    
-                    var uploadFormId    = 'gina-upload-' + name.replace(/\[/g, '-').replace(/\]/g, '' + $form.id); 
+                    var uploadFormId    = 'gina-upload-' + name.replace(/\[/g, '-').replace(/\]/g, '-' + $form.id);
+                    $el.setAttribute('data-gina-form-virtual', uploadFormId);
                     var eventOnSuccess  = $el.getAttribute('data-gina-form-upload-on-success');
                     var eventOnError    = $el.getAttribute('data-gina-form-upload-on-error');
                     var errorField    = null;
@@ -3245,9 +3317,14 @@ function ValidatorPlugin(rules, data, formId) {
                         }
                         
                         if ( !$uploadForm ) {
-                            $uploadForm = (isPopinContext()) 
+                            
+                            $uploadForm = getFormById(uploadFormId);
+                            if (!$uploadForm) {
+                                $uploadForm = (isPopinContext()) 
                                             ? $activePopin.$target.createElement('form') 
                                             : document.createElement('form');
+                            }
+                            
 
                             // adding form attributes
                             $uploadForm.id       = uploadFormId;
