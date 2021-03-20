@@ -2415,7 +2415,7 @@ function Server(options) {
                     // must meet all the following conditions
                     /OPTIONS/i.test(method) 
                     && typeof(request.headers['access-control-request-method']) != 'undefined'
-                    && /(GET|POST|HEAD)/i.test(request.headers['access-control-request-method']) 
+                    && /(GET|POST|PUT|DELETE|HEAD)/i.test(request.headers['access-control-request-method']) 
                     && typeof(request.headers['access-control-request-headers']) != 'undefined'       
                 ) ? true : false
             , accessControlRequestHeaders   = null
