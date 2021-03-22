@@ -3666,6 +3666,9 @@ function removeListener(target, element, name, callback) {
         // removed ------> [name];
         delete gina.events[name]
     }
+    if ( typeof(callback) != 'undefined' ) {
+        callback()
+    }
 }
 
 
@@ -5732,6 +5735,48 @@ function Routing() {
         Validator = plugins.Validator;
     }
     
+    /**
+     * Get url props
+     * Used to retrieve additional properties for routes with redirect flag for example
+     * 
+     * @param {string} [bundle]
+     * @param {string} [env] 
+     * 
+     * @return {object} urlProps - { .host, .hostname, .webroot }
+     */
+    self.getUrlProps = function(bundle, env) {
+        var config = null, urlProps = {}, _route = null;
+        if (isGFFCtx) {
+            // TODO - add support to get from env
+            config = window.gina.config;
+            // by default
+            urlProps.hostname = config.hostname;
+            if ( typeof(bundle) != 'undefined' ) {
+                // get from webroot
+                _route = routing.getRoute('webroot@'+ bundle);
+                urlProps.hostname   = _route.hostname;
+                urlProps.host       = _route.host;
+                urlProps.webroot    = _route.webroot;
+            }            
+        } else {
+            config = getContext('gina').config;
+            if ( typeof(getContext('argvFilename')) != 'undefined' ) {
+                config.getRouting = getContext('gina').Config.instance.getRouting
+            }
+            if ( typeof(bundle) == 'undefined' ) {
+                bundle      = config.bundle;
+            }
+            if ( typeof(env) == 'undefined' ) {
+                env      = config.env;
+            }
+            
+            urlProps.hostname   = config.envConf[bundle][env].hostname;
+            urlProps.host       = config.envConf[bundle][env].host;
+            urlProps.webroot    = config.envConf[bundle][env].server.webroot;
+        }
+        
+        return urlProps;
+    }
     
     /**
      * Load bundle routing configuration
@@ -5781,6 +5826,10 @@ function Routing() {
         if ( typeof(request) == 'undefined' ) {
             request = { routing: {} }
         }
+        // Sample debug break for specific rule
+        // if ( params.rule == 'my-specific-rule@bundle' ) {
+        //     console.debug('passed '+ params.rule);
+        // }
 
         if ( /\,/.test(url) ) {
             var i               = 0
@@ -5794,13 +5843,12 @@ function Routing() {
 
             while (i < len && !foundRoute.past) {
                 foundRoute = parseRouting(params, urls[i], request);
-                //if ( foundRoute.past ) break;
-                ++i
+                ++i;
             }
 
             return foundRoute
         } else {
-            return parseRouting(params, url, request)
+            return parseRouting(params, url, request);
         }
     }
 
@@ -5813,13 +5861,13 @@ function Routing() {
      * @private
      * */
     var hasParams = function(pathname) {
-        return (/:/.test(pathname)) ? true : false
+        return (/:/.test(pathname)) ? true : false;
     }
 
     /**
      * Parse routing for mathcing url
      *
-     * @param {object} params
+     * @param {object} params - `params` is the same `request.routing` that can be retried in controller with: req.routin
      * @param {string} url
      * @param {object} request
      *
@@ -5839,18 +5887,44 @@ function Routing() {
         ;
         
         //attaching routing description for this request
-        //request.routing = params; // can be retried in controller with: req.routing        
-        if ( typeof(params.requirements) != 'undefined' && typeof(request.get) != 'undefined' ) {            
-            for (var p in request.get) {
+        var method = params.method.toLowerCase();
+        var hasAlreadyBeenScored = false;
+        if ( 
+            typeof(params.requirements) != 'undefined'
+            && /get|delete/.test(method)
+            && typeof(request[method]) != 'undefined'
+        ) {            
+            // `delete` methods don't have a body
+            // So, request.delete is {} by default
+            if ( method == 'delete' && uRe.length === uRo.length ) {
+                for (let p = 0, pLen = uRo.length; p < pLen; p++) {
+                    if (uRe[p] === uRo[p]) {    
+                        ++score;                    
+                        continue;
+                    }
+                    let condition = params.requirements[uRo[p].substr(1)];
+                    if (
+                        /^:/.test(uRo[p]) 
+                        && typeof(condition)  != 'undefined'
+                        && new RegExp(params.requirements[uRo[p]]).test(uRe[p])
+                    ) {
+                        ++score;
+                        request[method][uRo[p].substr(1)] = uRe[p];    
+                    }  
+                }
+                hasAlreadyBeenScored = true;           
+            }
+            
+            for (let p in request[method]) {
                 if ( typeof(params.requirements[p]) != 'undefined' && uRo.indexOf(':' + p) < 0 ) {
                     uRo[uRoCount] = ':' + p; ++uRoCount;
-                    uRe[uReCount] = request.get[p]; ++uReCount;
+                    uRe[uReCount] = request[method][p]; ++uReCount;
                     ++maxLen;
                 }
             }
         }
         
-        if (uRe.length === uRo.length) {
+        if (!hasAlreadyBeenScored && uRe.length === uRo.length) {
             for (; i < maxLen; ++i) {
                 if (uRe[i] === uRo[i]) {
                     ++score
@@ -6146,11 +6220,11 @@ function Routing() {
         
         var config = null;
         if (isGFFCtx) {
-            config = window.gina.config
+            config = window.gina.config;
         } else {
-            config = getContext('gina').config
+            config = getContext('gina').config;
             if ( typeof(getContext('argvFilename')) != 'undefined' ) {
-                config.getRouting = getContext('gina').Config.instance.getRouting
+                config.getRouting = getContext('gina').Config.instance.getRouting;
             }
         }
         
@@ -6274,8 +6348,13 @@ function Routing() {
         // leave `ignoreWebRoot` empty or set it to false for x-bundle coms
         route.toUrl = function (ignoreWebRoot) {
             
-            var wroot       = this.webroot
-                , hostname  = this.hostname
+            var urlProps = null;
+            if ( /^redirect$/i.test(this.param.control) ) {
+                urlProps = self.getUrlProps(this.bundle, (env||GINA_ENV));
+            }
+            
+            var wroot       = this.webroot || urlProps.webroot
+                , hostname  = this.hostname || urlProps.hostname
                 , path      = this.url
             ;
             
@@ -8470,7 +8549,22 @@ function ValidatorPlugin(rules, data, formId) {
     /**
      * validator event handler - isGFFCtx only
      * */
-    var events      = ['ready', 'error', 'progress', 'submit', 'success', 'reset', 'change', "destroy"];
+    var events      = [
+                        'init', // form or popin init
+                        'ready',
+                        'error',
+                        'progress',
+                        'submit',
+                        'success',
+                        'reset',
+                        'change',
+                        'keydown', // for autocomplete
+                        'keyup', // for autocomplete
+                        'focusout',
+                        'focusin',
+                        'validate', // for form livecheck (validation)
+                        'destroy'
+                    ];
 
     /** imports */
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
@@ -8493,7 +8587,7 @@ function ValidatorPlugin(rules, data, formId) {
     var inherits        = (isGFFCtx) ? require('utils/inherits') : require('../../../../../lib/inherits');
     var FormValidator   = (isGFFCtx) ? require('utils/form-validator') : require('./form-validator');
     //var Collection      = (isGFFCtx) ? require('utils/collection') : require('../../../../../lib/collection');
-    //var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
+    var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
     
     /** definitions */
     var instance    = { 
@@ -9771,383 +9865,7 @@ function ValidatorPlugin(rules, data, formId) {
             $form.sent = true;
         }
     }
-    
-    // var handleXhrResponse = function(xhr, $target, id, $form, hFormIsRequired) {        
         
-    //     var isAttachment = null
-    //         , result = null
-    //         , XHRData = null
-    //         , XHRView = null
-    //     ;
-    //     if (xhr.readyState == 2) { // responseType interception
-    //         isAttachment    = ( /^attachment\;/.test( xhr.getResponseHeader("Content-Disposition") ) ) ? true : false; 
-    //         // force blob response type
-    //         if ( !xhr.responseType && isAttachment ) {
-    //             xhr.responseType = 'blob';
-    //         }
-    //     }
-
-    //     if (xhr.readyState == 4) {
-    //         var blob            = null;
-    //         var contentType     = xhr.getResponseHeader("Content-Type");     
-                
-    //         // 200, 201, 201' etc ...
-    //         if( /^2/.test(xhr.status) ) {
-
-    //             try {
-                    
-                    
-    //                 // handling blob xhr download
-    //                 if ( /blob/.test(xhr.responseType) || isAttachment ) {
-    //                     if ( typeof(contentType) == 'undefined' || contentType == null) {
-    //                         contentType = 'application/octet-stream';
-    //                     }
-                        
-    //                     blob = new Blob([this.response], { type: contentType });
-                        
-    //                     //Create a link element, hide it, direct it towards the blob, and then 'click' it programatically
-    //                     var a = document.createElement('a');
-    //                     a.style = "display: none";
-    //                     document.body.appendChild(a);
-    //                     //Create a DOMString representing the blob and point the link element towards it
-    //                     var url = window.URL.createObjectURL(blob);
-    //                     a.href = url;
-    //                     var contentDisposition = xhr.getResponseHeader("Content-Disposition");
-    //                     a.download = contentDisposition.match('\=(.*)')[0].substr(1);
-    //                     //programatically click the link to trigger the download
-    //                     a.click();
-    //                     //release the reference to the file by revoking the Object URL
-    //                     window.URL.revokeObjectURL(url);
-                        
-    //                     result = {
-    //                         status : xhr.status,
-    //                         statusText: xhr.statusText,
-    //                         responseType: blob.type,
-    //                         type : blob.type,
-    //                         size : blob.size 
-    //                     }
-                        
-    //                 } else { // normal case
-    //                     result = xhr.responseText;                                
-    //                 }
-                    
-
-                    
-    //                 if ( /\/json/.test( contentType ) ) {
-    //                     result = JSON.parse(xhr.responseText);
-                        
-    //                     if ( typeof(result.status) == 'undefined' )
-    //                         result.status = xhr.status;
-    //                 }
-                    
-    //                 if ( /\/html/.test( contentType ) ) {
-                        
-    //                     result = {
-    //                         contentType : contentType,
-    //                         content     : xhr.responseText
-    //                     };
-                        
-    //                     if ( typeof(result.status) == 'undefined' )
-    //                         result.status = xhr.status;
-                            
-    //                     // if hasPopinHandler & popinIsBinded
-    //                     if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler ) {
-                            
-    //                         // select popin by id
-    //                         var $popin = gina.popin.getActivePopin();
-                            
-    //                         if ($popin) {
-                                                
-    //                             XHRData = {};
-    //                             // update toolbar
-                                    
-    //                             try {
-    //                                 XHRData = new DOMParser().parseFromString(result.content, 'text/html').getElementById('gina-without-layout-xhr-data');
-    //                                 XHRData = JSON.parse(decodeURIComponent(XHRData.value));
-                                    
-    //                                 XHRView = new DOMParser().parseFromString(result.content, 'text/html').getElementById('gina-without-layout-xhr-view');      
-    //                                 XHRView = JSON.parse(decodeURIComponent(XHRView.value));
-                                    
-    //                                 // update data tab                                                
-    //                                 if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
-    //                                     window.ginaToolbar.update("data-xhr", XHRData);
-    //                                 }
-                                    
-    //                                 // update view tab
-                                    
-    //                                 if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
-    //                                     window.ginaToolbar.update("view-xhr", XHRView);
-    //                                 }   
-
-    //                             } catch (err) {
-    //                                 throw err
-    //                             }
-                                
-                                
-    //                             $popin.loadContent(result.content);
-                                                                        
-    //                             result = XHRData;
-    //                             triggerEvent(gina, $target, 'success.' + id, result);
-                                
-    //                             return;
-    //                         }
-                            
-                            
-    //                     }
-    //                 }
-
-    //                 $form.eventData.success = result;
-
-    //                 XHRData = result;
-    //                 // update toolbar
-    //                 if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
-    //                     try {
-    //                         // don't refresh for html datas
-    //                         if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
-    //                             window.ginaToolbar.update("data-xhr", XHRData);
-    //                         }
-
-    //                     } catch (err) {
-    //                         throw err
-    //                     }
-    //                 }
-
-    //                 // intercept upload
-    //                 if ( /^gina\-upload/i.test(id) )
-    //                     onUpload(gina, $target, 'success', id, result);
-                        
-    //                 triggerEvent(gina, $target, 'success.' + id, result);                            
-                        
-    //                 if (hFormIsRequired)
-    //                     triggerEvent(gina, $target, 'success.' + id + '.hform', result);
-                    
-    //             } catch (err) {
-
-    //                 result = {
-    //                     status:  422,
-    //                     error : err.message,
-    //                     stack : err.stack
-
-    //                 };
-
-    //                 $form.eventData.error = result;
-                    
-
-    //                 XHRData = result;                            
-    //                 // update toolbar
-    //                 if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
-    //                     try {
-
-    //                         if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' ) {
-    //                             window.ginaToolbar.update("data-xhr", XHRData);
-    //                         }
-
-    //                     } catch (err) {
-    //                         throw err
-    //                     }
-    //                 }
-                    
-    //                 // intercept upload
-    //                 if ( /^gina\-upload/i.test(id) )
-    //                     onUpload(gina, $target, 'error', id, result);
-                        
-    //                 triggerEvent(gina, $target, 'error.' + id, result);
-                    
-    //                 if (hFormIsRequired)
-    //                     triggerEvent(gina, $target, 'error.' + id + '.hform', result);
-    //             }
-                
-    //             // handle redirect
-    //             if ( typeof(result) != 'undefined' && typeof(result.location) != 'undefined' ) {                        
-    //                 window.location.hash = ''; //removing hashtag 
-                        
-    //                 // if ( window.location.host == gina.config.hostname && /^(http|https)\:\/\//.test(result.location) ) { // same origin
-    //                 //     result.location = result.location.replace( new RegExp(gina.config.hostname), '' );
-    //                 // } else { // external - need to remove `X-Requested-With` from `options.headers`
-    //                     result.location = (!/^http/.test(result.location) && !/^\//.test(result.location) ) ? location.protocol +'//' + result.location : result.location;
-    //                 //}                        
-                    
-    //                 window.location.href = result.location;
-    //                 return;                        
-    //             }
-
-    //         } else if ( xhr.status != 0) {
-                
-    //             result = { 'status': xhr.status, 'message': '' };
-    //             // handling blob xhr error
-    //             if ( /blob/.test(xhr.responseType) ) {
-                                                
-    //                 blob = new Blob([this.response], { type: 'text/plain' });
-                    
-    //                 var reader = new FileReader(), blobError = '';
-                                                
-                    
-    //                 // This fires after the blob has been read/loaded.
-    //                 reader.addEventListener('loadend', (e) => {
-                        
-    //                     if ( /string/i.test(typeof(e.srcElement.result)) ) {
-    //                         blobError += e.srcElement.result;
-    //                         // try {
-    //                         //     result = merge( result, JSON.parse(blobError) )
-    //                         // } catch (err) {
-    //                         //     result = merge(result, err)
-    //                         // }
-
-    //                     } else if ( typeof(e.srcElement.result) == 'object' ) {
-    //                         result = merge(result, e.srcElement.result)
-    //                     } else {
-    //                         result.message += e.srcElement.result
-    //                     }
-                        
-    //                     // once ready
-    //                     if ( /2/.test(reader.readyState) ) {
-                            
-    //                         if ( /^(\{|\[)/.test( blobError ) ) {
-    //                             try {
-    //                                 result = merge( result, JSON.parse(blobError) )
-    //                             } catch(err) {
-    //                                 result = merge(result, err)
-    //                             }                                        
-    //                         }
-                            
-    //                         if (!result.message)
-    //                             delete result.message;
-                            
-    //                         $form.eventData.error = result;
-
-    //                         // forward appplication errors to forms.errors when available
-    //                         if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
-    //                             var formsErrors = {}, errCount = 0;
-    //                             for (var f in result.error.fields) {
-    //                                 ++errCount;
-    //                                 formsErrors[f] = { isApplicationValidationError: result.error.fields[f] };
-    //                             }
-
-    //                             if (errCount > 0) {
-    //                                 handleErrorsDisplay($form.target, formsErrors);
-    //                             }
-    //                         }
-
-    //                         // update toolbar
-    //                         XHRData = result;
-    //                         if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
-    //                             try {
-    //                                 // update toolbar
-    //                                 window.ginaToolbar.update('data-xhr', XHRData );
-
-    //                             } catch (err) {
-    //                                 throw err
-    //                             }
-    //                         }
-                                                                                
-    //                         // intercept upload
-    //                         if ( /^gina\-upload/i.test(id) )
-    //                             onUpload(gina, $target, 'error', id, result);
-                                
-    //                         triggerEvent(gina, $target, 'error.' + id, result);                                    
-    //                         if (hFormIsRequired)
-    //                             triggerEvent(gina, $target, 'error.' + id + '.hform', result);
-                                
-    //                         return;
-    //                     }
-                        
-                            
-    //                 });
-
-    //                 // Start reading the blob as text.
-    //                 reader.readAsText(blob);
-                    
-    //             } else { // normal case
-                    
-    //                 if ( /^(\{|\[)/.test( xhr.responseText ) ) {
-
-    //                     try {
-    //                         result = merge( result, JSON.parse(xhr.responseText) )
-    //                     } catch (err) {
-    //                         result = merge(result, err)
-    //                     }
-
-    //                 } else if ( typeof(xhr.responseText) == 'object' ) {
-    //                     result = merge(result, xhr.responseText)
-    //                 } else {
-    //                     result.message = xhr.responseText
-    //                 }
-
-    //                 $form.eventData.error = result;
-
-    //                 // forward appplication errors to forms.errors when available
-    //                 if ( typeof(result) != 'undefined' && typeof(result.error) != 'undefined' &&  result.error.fields && typeof(result.error.fields) == 'object') {
-    //                     var formsErrors = {}, errCount = 0;
-    //                     for (var f in result.error.fields) {
-    //                         ++errCount;
-    //                         formsErrors[f] = { isApplicationValidationError: result.error.fields[f] };
-    //                     }
-
-    //                     if (errCount > 0) {
-    //                         handleErrorsDisplay($form.target, formsErrors);
-    //                     }
-    //                 }
-
-    //                 // update toolbar
-    //                 XHRData = result;
-    //                 if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
-    //                     try {
-    //                         // update toolbar
-    //                         window.ginaToolbar.update('data-xhr', XHRData );
-
-    //                     } catch (err) {
-    //                         throw err
-    //                     }
-    //                 }
-                                                
-
-    //                 // intercept upload
-    //                 if ( /^gina\-upload/i.test(id) )
-    //                     onUpload(gina, $target, 'error', id, result);
-                        
-    //                 triggerEvent(gina, $target, 'error.' + id, result);                            
-    //                 if (hFormIsRequired)
-    //                     triggerEvent(gina, $target, 'error.' + id + '.hform', result);
-                        
-                    
-                                                    
-    //             }
-
-                    
-    //         } /**else if ( xhr.readyState == 4 && xhr.status == 0 ) { // unknown error
-    //             // Consider also the request timeout
-    //             // Modern browser return readyState=4 and status=0 if too much time passes before the server response.
-    //             result = { 'status': 408, 'message': 'XMLHttpRequest Exception: unkown error' };
-    //             XHRData = result;
-    //             // update toolbar
-    //             if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
-    //                 try {
-    //                     // don't refresh for html datas
-    //                     if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
-    //                         window.ginaToolbar.update("data-xhr", XHRData);
-    //                     }
-
-    //                 } catch (err) {
-    //                     throw err
-    //                 }
-    //             }
-                
-    //             // intercept upload
-    //             if ( /^gina\-upload/i.test(id) ) {
-    //                 result.message = 'XMLHttpRequest Exception: trying to render an unknwon file.'
-    //                 onUpload(gina, $target, 'error', id, result);
-    //             }
-    //             triggerEvent(gina, $target, 'error.' + id, result);
-                    
-    //             if (hFormIsRequired)
-    //                 triggerEvent(gina, $target, 'error.' + id + '.hform', result);
-                    
-    //             return;
-    //         }*/
-    //     } 
-            
-    // };
-    
     var onUpload = function(gina, $target, status, id, data) {
                 
         var uploadProperties = $target.uploadProperties || null;
@@ -10164,7 +9882,7 @@ function ValidatorPlugin(rules, data, formId) {
         if ( !uploadProperties )
             throw new Error('No uploadProperties found !!');
         // parent form
-        var $mainForm = uploadProperties.$form;
+        // var $mainForm = uploadProperties.$form;
         var $uploadTriger = document.getElementById(uploadProperties.uploadTriggerId);
         var searchArr   = null
             , name      = null
@@ -10197,15 +9915,41 @@ function ValidatorPlugin(rules, data, formId) {
         } else if(!$error && status != 'success') {
             throw new Error(errMsg)
         } else {
-            
                         
             var fieldsObjectList = null
                 , $li   = null
-                , $img = null
                 , maxWidth = null
                 , ratio = null
             ;
             for (var f = 0, fLen = files.length; f<fLen; ++f) {
+                
+                // creating reset link
+                let resetLinkId = $previewContainer.id.replace(/\-preview/, '-'+f+'-reset-trigger');
+                let resetLinkNeedToBeAdded = false;
+                let $resetLink = document.getElementById(resetLinkId);
+                let defaultClassNameArr = ['reset','js-upload-reset'];
+                if (!$resetLink) {
+                    resetLinkNeedToBeAdded      = true;
+                    $resetLink                  = document.createElement('A');
+                    $resetLink.href             = '#';
+                    $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                    $resetLink.className        = defaultClassNameArr.join(' ');                                    
+                    $resetLink.id               = resetLinkId;
+                } else {
+                    if ( /a/i.test($resetLink.tagName) ) {
+                        $resetLink.href             = '#';
+                    }
+                    if ( !$resetLink.innerHTML || $resetLink.innerHTML == '' ) {
+                        $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                    }
+                    if ( typeof($resetLink.className) == 'undefined' ) {
+                        $resetLink.className = "";
+                    }
+                    let classNameArr = merge($resetLink.className.split(/\s+/g), defaultClassNameArr);
+                    $resetLink.className    = classNameArr.join(' ');
+                }                                
+                $resetLink.style.display    = 'none';
+                
                 // image preview
                 if ( typeof(files[f].preview) == 'undefined' 
                     && uploadProperties.hasPreviewContainer 
@@ -10215,8 +9959,8 @@ function ValidatorPlugin(rules, data, formId) {
                     let $img    = document.createElement('IMG');
                     $img.src    = files[f].tmpUri;
                     $img.style.display = 'none';
-                    $img.setAttribute('data-upload-original-filename', files[f][key].originalFilename);
-                    
+                    $img.setAttribute('data-upload-original-filename', files[f].originalFilename);
+                    $img.setAttribute('data-upload-reset-link-id', $resetLink.id);
                     
                     // TODO - Remove this; we don't want it by default, the dev can force it by hand if needed
                     // if (files[f].width) {
@@ -10263,6 +10007,7 @@ function ValidatorPlugin(rules, data, formId) {
                         }
                         continue;
                     }
+                    //fieldsObjectList[key].value = (/object/i.test(typeof(files[f][key])) ) ? JSON.stringify( files[f][key] ) : files[f][key];
                     fieldsObjectList[key].value = files[f][key];
                     // update submited $fields ??
                     
@@ -10277,32 +10022,32 @@ function ValidatorPlugin(rules, data, formId) {
                             // with preview
                             if ( previewKey == 'tmpUri' && uploadProperties.hasPreviewContainer ) {   
                                 
-                                // creating reset link
-                                let resetLinkId = $previewContainer.id.replace(/\-preview/, '-'+f+'-reset-trigger');
-                                let resetLinkNeedToBeAdded = false;
-                                let $resetLink = document.getElementById(resetLinkId);
-                                let defaultClassNameArr = ['reset','js-upload-reset'];
-                                if (!$resetLink) {
-                                    resetLinkNeedToBeAdded      = true;
-                                    $resetLink                  = document.createElement('A');
-                                    $resetLink.href             = '#';
-                                    $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
-                                    $resetLink.className        = defaultClassNameArr.join(' ');                                    
-                                    $resetLink.id               = resetLinkId;
-                                } else {
-                                    if ( /a/i.test($resetLink.tagName) ) {
-                                        $resetLink.href             = '#';
-                                    }
-                                    if ( !$resetLink.innerHTML || $resetLink.innerHTML == '' ) {
-                                        $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
-                                    }
-                                    if ( typeof($resetLink.className) == 'undefined' ) {
-                                        $resetLink.className = "";
-                                    }
-                                    let classNameArr = merge($resetLink.className.split(/\s+/g), defaultClassNameArr);
-                                    $resetLink.className    = classNameArr.join(' ');
-                                }
-                                $resetLink.style.display    = 'none';
+                                // // creating reset link
+                                // let resetLinkId = $previewContainer.id.replace(/\-preview/, '-'+f+'-reset-trigger');
+                                // let resetLinkNeedToBeAdded = false;
+                                // let $resetLink = document.getElementById(resetLinkId);
+                                // let defaultClassNameArr = ['reset','js-upload-reset'];
+                                // if (!$resetLink) {
+                                //     resetLinkNeedToBeAdded      = true;
+                                //     $resetLink                  = document.createElement('A');
+                                //     $resetLink.href             = '#';
+                                //     $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                                //     $resetLink.className        = defaultClassNameArr.join(' ');                                    
+                                //     $resetLink.id               = resetLinkId;
+                                // } else {
+                                //     if ( /a/i.test($resetLink.tagName) ) {
+                                //         $resetLink.href             = '#';
+                                //     }
+                                //     if ( !$resetLink.innerHTML || $resetLink.innerHTML == '' ) {
+                                //         $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                                //     }
+                                //     if ( typeof($resetLink.className) == 'undefined' ) {
+                                //         $resetLink.className = "";
+                                //     }
+                                //     let classNameArr = merge($resetLink.className.split(/\s+/g), defaultClassNameArr);
+                                //     $resetLink.className    = classNameArr.join(' ');
+                                // }                                
+                                // $resetLink.style.display    = 'none';
                                     
                                 
                                 // creating IMG tag
@@ -10325,36 +10070,56 @@ function ValidatorPlugin(rules, data, formId) {
                                     $li = document.createElement('LI');
                                     $li.className = 'item';
                                     $li.appendChild($img);
-                                    if (resetLinkNeedToBeAdded)
-                                        $li.appendChild($resetLink);
+                                    // if (resetLinkNeedToBeAdded)
+                                    //     $li.appendChild($resetLink);
                                     
                                     $previewContainer.appendChild($li);                                
                                 } else {
                                     $previewContainer.appendChild($img);
-                                    if (resetLinkNeedToBeAdded)
-                                        $previewContainer.appendChild($resetLink);
+                                    // if (resetLinkNeedToBeAdded)
+                                    //     $previewContainer.appendChild($resetLink);
                                 }
                                 fadeIn($img);
-                                // bind reset trigger
-                                bindUploadResetOrDeleteTrigger('reset', $uploadTriger, f);
-                                fadeIn($resetLink);
+                                // // bind reset trigger
+                                // bindUploadResetOrDeleteTrigger('reset', $uploadTriger, f);
+                                // fadeIn($resetLink);
                             }
                         }                        
                     }                  
                 } // EO for 
                 
-            }
+                if (uploadProperties.hasPreviewContainer) {
+                    if ( /ul/i.test(uploadProperties.previewContainer.tagName) ) {
+                        $li = document.createElement('LI');
+                        $li.className = 'item';
+                        if (resetLinkNeedToBeAdded)
+                            $li.appendChild($resetLink);                        
+                        $previewContainer.appendChild($li);                                
+                    } else {                        
+                        if (resetLinkNeedToBeAdded)
+                            $previewContainer.appendChild($resetLink);
+                    }
+                }
+                // bind reset trigger
+                bindUploadResetOrDeleteTrigger('reset', $uploadTriger, f);
+                fadeIn($resetLink);
+            } // EO for f
         }
     }
     
-    var onUploadReset = function($uploadTrigger, $uploadResetTrigger) {
-        console.debug('reset input files');
-        var uploadPreviewId  = $uploadTrigger.id +'-preview';
-        var $uploadPreview   = document.getElementById(uploadPreviewId);
-        var isInLiElement = false;
-        if ( /ul/i.test($uploadPreview.tagName) ) {
-            isInLiElement = true;
-        }
+    /**
+     * onUploadResetOrDelete
+     * 
+     * @param {object} $uploadTrigger 
+     * @param {string} bindingType - `reset` or `delete`
+     * @returns 
+     */
+    var onUploadResetOrDelete = function($uploadTrigger, bindingType) {
+        console.debug(bindingType + ' input files');
+        var isOnResetMode       = ( /reset/i.test(bindingType) ) ? true : false
+            , uploadPreviewId   = $uploadTrigger.id +'-preview'
+            , $uploadPreview    = document.getElementById(uploadPreviewId);
+        
         var childNodeFile           = null
             , childNodeFilePreview  = null
             , childNodes            = $uploadPreview.childNodes
@@ -10365,34 +10130,49 @@ function ValidatorPlugin(rules, data, formId) {
         
         for (let i = 0, len = childNodes.length; i < len; i++) {
             // only look for IMG tags
-            if ( /img/i.test(childNodes[i].tagName) ) {                   
-                childNodeFile           = childNodes[i].getAttribute('data-upload-original-filename');
-                filesToBeRemoved.push(childNodeFile);
-                childNodeFilePreview    = childNodes[i].getAttribute('data-upload-preview-original-filename');
-                if (childNodeFilePreview) {
-                    filesToBeRemoved.push(childNodeFilePreview);
+            if ( /img/i.test(childNodes[i].tagName) ) {
+                if (isOnResetMode) {
+                    childNodeFile           =  childNodes[i].getAttribute('data-upload-original-filename');
+                    filesToBeRemoved.push(childNodeFile);
+                    childNodeFilePreview    = childNodes[i].getAttribute('data-upload-preview-original-filename');
+                    if (childNodeFilePreview) {
+                        filesToBeRemoved.push(childNodeFilePreview);
+                    }
+                } else {
+                    let file = childNodes[i].src.substr(childNodes[i].src.lastIndexOf('/')+1);
+                    childNodeFile = file;
+                    filesToBeRemoved.push(childNodeFile);
                 }
-                         
-                let tmpPath = null;
+                
                 // remove file from input.files
-                for (let f = 0, fLen = files.length; f < fLen; f++) {
+                for (let f = 0, fLen = files.length; f < fLen; f++) {                    
                     if (files[f].name == childNodeFile) {                          
                         // get resetLink element
-                        $resetLink      = document.getElementById( childNodes[i].getAttribute('data-upload-reset-link-id') );
-                        // hide reset link & image
+                        if (isOnResetMode) {
+                            $resetLink      = document.getElementById( childNodes[i].getAttribute('data-upload-'+ bindingType +'-link-id') );
+                        } else {
+                            $resetLink      = document.getElementById( files[f].deleteLinkId );
+                        }
+                        
+                        // hide reset or delete link & image
                         $resetLink.style.display = 'none';
                         childNodes[i].style.display = 'none';
-                                                                        
+                         
                         // remove file from input.files                        
                         files.splice(f, 1);
                         // Since `$uploadTrigger.files` isFrozen & isSealed
                         $uploadTrigger.customFiles  = files;
-                        $uploadTrigger.value        = files.join(', C:\\fakepath\\');
+                        if (isOnResetMode) {
+                            $uploadTrigger.value        = files.join(', C:\\fakepath\\');
+                        }                        
                         
                         // update form files for validation & submit/send
                         let re = new RegExp('^'+($uploadTrigger.name+'['+f+']').replace(/\-|\[|\]|\./g, '\\$&'));
                         for ( let d = 0, dLen = $uploadTrigger.form.length; d < dLen; d++) {
-                            if ( re.test($uploadTrigger.form[d].name) ) {
+                            // data-gina-form-upload-is-locked
+                            // this exception prevent `tagged datas` to be deleted on image delete
+                            let isLocked = $uploadTrigger.form[d].dataset.ginaFormUploadIsLocked || false;
+                            if ( re.test($uploadTrigger.form[d].name) && !/true/i.test(isLocked) ) {
                                 $uploadTrigger.form[d].remove();
                                 dLen--;
                                 d--;
@@ -10407,11 +10187,45 @@ function ValidatorPlugin(rules, data, formId) {
                                 }
                             }
                         }
-                        // remove file from the server - filesToBeRemoved
-                        let url = $uploadTrigger.getAttribute('data-gina-form-upload-reset-action');                
-                        let xhr = setupXhr({url: url, method: 'POST', isSynchrone: true });
+                        // remove file from the server - filesToBeRemoved                        
+                        let url = $uploadTrigger.getAttribute('data-gina-form-upload-'+ bindingType +'-action');
+                        if ( !url || typeof(url) == 'undefined' || url == '' || /404/.test(url) ) {
+                            throw new Error('input file `'+ $uploadTrigger.id +'` error: `data-gina-form-upload-'+bindingType+'-action` is required. You need to provide a valide url.');
+                        }
+                        let method = $uploadTrigger.getAttribute('data-gina-form-upload-'+ bindingType +'-method');
+                        if ( !method || typeof(method) == 'undefined' || method == '') {                            
+                            if (isOnResetMode) {
+                                method = 'POST';
+                            } else {
+                                method = (filesToBeRemoved.length > 1) ? 'POST': 'DELETE';
+                                console.warn('`data-gina-form-upload-'+ bindingType +'-method` was not defined. Switching to `'+ method +'` by default.');    
+                            }
+                        } else {
+                            method = method.toUpperCase();
+                        }
+                        let isSynchrone = $uploadTrigger.getAttribute('data-gina-form-upload-'+ bindingType +'-is-synchrone');
+                        if ( /null/i.test(isSynchrone) || typeof(method) == 'undefined' || method == '' ) {
+                            isSynchrone = true;
+                        }
+                        
+                        let xhrOptions = {
+                            url: url,
+                            method: method,
+                            isSynchrone: isSynchrone,
+                            headers : {
+                                // to upload, use `multipart/form-data` for `enctype`
+                                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                // cross domain is enabled by default, but you need to setup `Access-Control-Allow-Origin`
+                                'X-Requested-With': 'XMLHttpRequest' // in case of cross domain origin
+                            }
+                        };
+                        let xhr = setupXhr(xhrOptions);
                         //handleXhr(xhr);
-                        xhr.send(JSON.stringify({ files: filesToBeRemoved }));
+                        if ( /GET|DELETE/i.test(method) ) {
+                            xhr.send();
+                        } else {
+                            xhr.send(JSON.stringify({ files: filesToBeRemoved }));
+                        }                        
                                                 
                         // when there is no more files to preview, restore input file visibility
                         // display upload input
@@ -10435,23 +10249,9 @@ function ValidatorPlugin(rules, data, formId) {
                         break;
                     }
                 } // EO for
-                
-                
             }
-            
         }
-    }
-    
-    var onUploadDelete = function($uploadTrigger, $uploadDeleteTrigger) {
-        console.debug('delete input files');
-        
-        // remove event
-        removeListener(gina, $uploadResetTrigger, 'click');        
-        // remove the delete element
-        $uploadResetTrigger.remove();
-    }
-
-    
+    }    
 
     /**
      * Convert <Uint8Array|Uint16Array|Uint32Array> to <String>
@@ -10684,7 +10484,7 @@ function ValidatorPlugin(rules, data, formId) {
                 for(let i = 0, len = $elTMP.length; i < len; ++i) {
                     // if button is != type="submit", you will need to provide : data-gina-form-submit
                     // TODO - On button binding, you can then provide data-gina-form-action & data-gina-form-method
-                    if ($elTMP[i].type == 'submit' || $elTMP[i].attributes.getNamedItem('data-gina-form-submit') )
+                    //if ($elTMP[i].type == 'submit' || $elTMP[i].attributes.getNamedItem('data-gina-form-submit') )
                         $els.push($elTMP[i])
                 }
             }
@@ -10693,38 +10493,97 @@ function ValidatorPlugin(rules, data, formId) {
             $elTMP = $form.target.getElementsByTagName('a');
             if ( $elTMP.length > 0 ) {
                 for(let i = 0, len = $elTMP.length; i < len; ++i) {
-                    if ( $elTMP[i].attributes.getNamedItem('data-gina-form-submit') || /^click\./.test( $elTMP[i].attributes.getNamedItem('id') ) || /^link\./.test( $elTMP[i].attributes.getNamedItem('id') ) )
+                    //if ( $elTMP[i].attributes.getNamedItem('data-gina-form-submit') || /^click\./.test( $elTMP[i].attributes.getNamedItem('id') ) || /^link\./.test( $elTMP[i].attributes.getNamedItem('id') ) )
                         $els.push($elTMP[i])
                 }
             }
 
-            // checkbox & radio
+            // checkbox & radio & file, text, date .. ALL BUT hidden
             $elTMP = $form.target.getElementsByTagName('input');
             if ( $elTMP.length > 0 ) {
-                for(let i = 0, len = $elTMP.length; i < len; ++i) {
-                    if ($elTMP[i].type == 'checkbox' || $elTMP[i].type == 'radio' )
-                        $els.push( $elTMP[i] )
+                for (let i = 0, len = $elTMP.length; i < len; ++i) {
+                    if ( !/^(hidden)$/i.test($elTMP[i].type) )
+                        $els.push( $elTMP[i] );
+                        
+                    if (/^(file)$/i.test($elTMP[i].type)) {
+                        // special case
+                        // vForm has to be handle here, it does not exist in the document context
+                        let vFormId = $elTMP[i].getAttribute('data-gina-form-virtual');
+                        if ( vFormId ) {
+                            let $vForm = getFormById(vFormId).target;
+                            if ($vForm) {
+                                $els.push( $vForm );
+                                for (let e = 0, eLen = events.length; e < eLen; e++) {
+                                    let evt = events[e];  
+                                    if ( typeof(gina.events[ evt +'.'+ vFormId + '.hform' ]) != 'undefined' && gina.events[ evt +'.'+ vFormId + '.hform' ] == vFormId ) {                                        
+                                        removeListener(gina, $vForm, evt +'.'+ vFormId + '.hform')
+                                    } 
+                                } 
+                            }
+                                                               
+                        }
+                        
+                    }
                 }
             }
-
+            
+            // textarea
+            $elTMP = $form.target.getElementsByTagName('textarea');
+            if ( $elTMP.length > 0 ) {
+                for(let i = 0, len = $elTMP.length; i < len; ++i) {
+                    $els.push( $elTMP[i] )
+                }
+            }
+            
+            
+            // forms inside main form
+            $elTMP = $form.target.getElementsByTagName('form');
+            if ( $elTMP.length > 0 ) {
+                for(let i = 0, len = $elTMP.length; i < len; ++i) {
+                    $els.push( $elTMP[i] )
+                }
+            }
+            // main form
+            $els.push( $form.target );
             for (let i = 0, len = $els.length; i < len; ++i) {
 
                 $el = $els[i];
-
-                if ($el.type == 'submit') {
-
-                    evt = $el.getAttribute('id');
-                    if ( typeof(gina.events[ evt ]) != 'undefined' )
-                        removeListener(gina, $el, gina.events[ evt ]);
-
-                } else {
-
-                    evt ='click.' + $el.getAttribute('id');
-                    if ( typeof(gina.events[ evt ]) != 'undefined' )
+                let eId = $el.getAttribute('id');
+                for (let e = 0, eLen = events.length; e < eLen; e++) {
+                    let evt = events[e];                    
+                    if ( typeof(gina.events[ evt ]) != 'undefined' && gina.events[ evt ] == eId ) {                       
                         removeListener(gina, $el, evt);
+                    }
+                    if ( typeof(gina.events[ eId ]) != 'undefined' && gina.events[ eId ] == eId ) {                       
+                        removeListener(gina, $el, eId);
+                    }
+                    
+                    if ( typeof(gina.events[ evt +'.'+ eId ]) != 'undefined' && gina.events[ evt +'.'+ eId ] == eId ) {                        
+                        removeListener(gina, $el, evt +'.'+ eId);
+                    }
+                    
+                    if ( typeof(gina.events[ evt +'.'+ eId ]) != 'undefined' && gina.events[ evt +'.'+ eId ] == evt +'.'+ eId ) {                        
+                        removeListener(gina, $el, evt +'.'+ eId);
+                    }
+                    
+                    if ( typeof(gina.events[ evt +'.'+ eId + '.hform' ]) != 'undefined' && gina.events[ evt +'.'+ eId + '.hform' ] == eId ) {                        
+                        removeListener(gina, evt +'.'+ eId + '.hform');
+                    }
                 }
-            }
 
+                // if ($el.type == 'submit' || $el.type == 'file' ) {
+                    // evt = $el.getAttribute('id');
+                    // if ( typeof(gina.events[ evt ]) != 'undefined' )
+                    //     removeListener(gina, $el, gina.events[ evt ]);
+                // } else {
+
+                //     evt ='click.' + $el.getAttribute('id');
+                //     if ( typeof(gina.events[ evt ]) != 'undefined' )
+                //         removeListener(gina, $el, evt);
+                // }
+            }
+            
+            $els = null; $el = null; $elTMP = null; evt = null;
             $form.binded = false;
 
             addListener(gina, $form.target, 'destroy.' + _id, function(event) {
@@ -11639,18 +11498,20 @@ function ValidatorPlugin(rules, data, formId) {
     /**
      * bindUploadResetOrDeleteTrigger
      * 
-     * @param {string} bindingType
+     * @param {string} bindingType - `reset`or `delete`
      * @param {object} $uploadTrigger - HTMLFormElement
      * @param {number} index
      * 
      */
      var bindUploadResetOrDeleteTrigger = function(bindingType, $uploadTrigger, index) {
                     
-        // Binding upload delete trigger
+        // Binding upload reset or delete trigger
+        // var $currentForm = $uploadTrigger.form;
+        // for (let i = 0, len = $currentForm.length; )
         // trigger is by default you {input.id} + '-delete-trigger' 
         // e.g.: <input type="file" id="my-upload" name="my-upload">
         // => <a href="/path/to/tmpfile/delete-action" id="my-upload-delete-trigger">Remove</a>
-        // But you can use atrtibute `data-gina-form-upload-delete-trigger` to override it                    
+        // But you can use atrtibute `data-gina-form-upload-delete-trigger` to override it              
         var uploadResetOrDeleteTriggerId = $uploadTrigger.id + '-' +index+ '-'+bindingType+'-trigger';
         var $uploadResetOrDeleteTrigger = document.getElementById(uploadResetOrDeleteTriggerId);    
         if (!$uploadResetOrDeleteTrigger) {
@@ -11665,13 +11526,11 @@ function ValidatorPlugin(rules, data, formId) {
             $uploadResetOrDeleteTrigger 
             && typeof($uploadResetOrDeleteTrigger.isBinded) != 'undefined' 
             && !/true/i.test($uploadResetOrDeleteTrigger.isBinded) 
-        ) {
-            //$uploadResetOrDeleteTrigger.setAttribute('data-gina-form-upload-target', $inputs[f].id);
-            //removeListener(gina, $uploadResetOrDeleteTrigger, 'click');                        
-            addListener(gina, $uploadResetOrDeleteTrigger, 'click', function(e) {
+        ) {                                  
+            addListener(gina, $uploadResetOrDeleteTrigger, 'click', function onUploadResetOrDeleteTriggerClick(e) {
                 e.preventDefault();
                                                              
-                onUploadReset($uploadTrigger, e.currentTarget);
+                onUploadResetOrDelete($uploadTrigger, bindingType);
             });
             $uploadResetOrDeleteTrigger.isBinded = true;
         } else {
@@ -11679,10 +11538,49 @@ function ValidatorPlugin(rules, data, formId) {
         }
     }
     
-    var bindUpload = function($input) {
+    var checkUploadUrlActions = function($el, $errorContainer) {
         
+        var checkAction = function($el, action, $errorContainer) {
+            var defaultRoute = null;
+            switch (action) {
+                case 'data-gina-form-upload-action':
+                    defaultRoute = 'upload-to-tmp-xml';
+                    break;
+                case 'data-gina-form-upload-reset-action':
+                    defaultRoute = 'upload-delete-from-tmp-xml';
+                    break;
+            }
+            var uploadActionUrl = $el.getAttribute(action);
+            if (!uploadActionUrl || uploadActionUrl == '' ) {
+                if (!defaultRoute)
+                    console.warn('`'+ action +'` definition not found for `'+ $el.id + '`. Trying to get default route.');
+                var additionalErrorDetails = null;
+                try {
+                    if (defaultRoute)
+                        uploadActionUrl = routing.getRoute(defaultRoute);
+                } catch (err) {
+                    additionalErrorDetails = err;
+                }
+                
+                if (uploadActionUrl) {
+                    console.info('Ignore previous warnings regarding upload. I have found a default `'+action+'` route: `'+ defaultRoute +'@'+ uploadActionUrl.bundle +'`');
+                    $el.setAttribute('data-gina-form-upload-action', uploadActionUrl.toUrl());
+                } else {
+                    var errMsg = '`'+ action +'` needs to be defined to procced for your `input[type=file]` with ID `'+ $el.id +'`\n'+ additionalErrorDetails +'\n';
+                    if ($errorContainer) {
+                        $errorContainer.innerHTML += errMsg.replace(/(\n|\r)/g, '<br>');
+                    }
+                    console.error(errMsg);
+                }                    
+            }
+        }
+        // checking upload-action
+        checkAction($el, 'data-gina-form-upload-action', $errorContainer);
+        // checking upload-reset-action
+        checkAction($el, 'data-gina-form-upload-reset-action', $errorContainer);
+        // checking upload-delete-action
+        checkAction($el, 'data-gina-form-upload-delete-action', $errorContainer);
     }
-
 
     /**
      * bindForm
@@ -11897,7 +11795,7 @@ function ValidatorPlugin(rules, data, formId) {
                     
                 }
             }
-            // file upload
+            // Binding upload file
             // todo : data-gina-file-autosend="false" when false, don't trigger the sending to the backend
             // todo : progress bar
             // todo : on('success') -> preview
@@ -11909,7 +11807,7 @@ function ValidatorPlugin(rules, data, formId) {
                 // But you can use atrtibute `data-gina-form-upload-trigger` to override it                
                 var uploadTriggerId = $inputs[f].getAttribute('data-gina-form-upload-trigger');
                 if (!uploadTriggerId)
-                    uploadTriggerId = $inputs[f].id + '-trigger';
+                    uploadTriggerId = $inputs[f].id;
                     
                 var $upload             = null
                     , $oldTmpFiles      = null
@@ -11918,41 +11816,93 @@ function ValidatorPlugin(rules, data, formId) {
                 // `$htmlTarget` cannot be used if you need to add a listner on the searched element
                 $htmlTarget = new DOMParser().parseFromString($target.innerHTML, 'text/html');
                 if (uploadTriggerId) {                    
-                    //$uploadTrigger = document.getElementById(uploadTriggerId);
-                    $uploadTrigger = $htmlTarget.getElementById(uploadTriggerId);
+                    $uploadTrigger = document.getElementById(uploadTriggerId);
+                    //$uploadTrigger = $htmlTarget.getElementById(uploadTriggerId);
                 }
+                var $errorContainer = document.getElementById($inputs[f].id + '-error');
+                checkUploadUrlActions($inputs[f], $errorContainer );                
+                
+                // check default UploadResetOrDeleteTrigger state
+                // required to bind delete - look for all delete triggers
+                // $deleteTriggers = [];                
+                // bindUploadResetOrDeleteTrigger(bindingType, $uploadTrigger, index);
+                // eg.: document-files-0-preview; if $inputs[f].id === `document-files-0`
+                var $previewContainer = $htmlTarget.getElementById(uploadTriggerId + '-preview');
+                if ( 
+                    $previewContainer 
+                    && $uploadTrigger
+                    && !/none/i.test(window.getComputedStyle($previewContainer).display)
+                    // for safety
+                    && !/none/i.test($previewContainer.parentElement.style.display)
+                ) {
+                    
+                    var $deleteLink = null, index = 0, bindingType = 'delete'; 
+                    console.debug('preview is visible ...');
+                    $uploadTrigger.customFiles = [];
+                    $uploadTrigger.form = $target;
+                    var $els = $previewContainer.childNodes;
+                    for (let i = 0, len = $els.length; i < len; i++) {
+                        let $img = null;
+                        if ( /ul/i.test($els[i].tagName) ) {
+                            for (let e = 0, eLen = $els[i].length; e < eLen; e++) {
+                                //let $li = new DOMParser().parseFromString($els[i].innerHTML, 'text/html');
+                                let $li = $$els[i];
+                                for (let l = 0, lLen = $li.length; l < lLen; l++) {
+                                    if ( /img/i.test($li[l]) ) {
+                                        $img = $li[l];
+                                        $img.setAttribute('');
+                                        
+                                        index++;
+                                    }
+                                }
+                                
+                            }                              
+                        } else if ( /img/i.test($els[i].tagName) ) {
+                            $img = $els[i];
+                            deleteLinkId = uploadTriggerId + '-'+index+'-delete-trigger';
+                            let file = $img.src.substr($img.src.lastIndexOf('/')+1);
+                            $uploadTrigger.customFiles.push({
+                                name: file,
+                                deleteLinkId: deleteLinkId
+                            });
+                            // bind reset trigger
+                            bindUploadResetOrDeleteTrigger(bindingType, $uploadTrigger, index);
+                            
+                            index++;
+                        }
+                    }
+                }
+                
                 // binding upload trigger
-                if ( $uploadTrigger ) {
-                    $uploadTrigger.setAttribute('data-gina-form-upload-target', $inputs[f].id);
-                    addListener(gina, $uploadTrigger, 'click', function(event) {
-                        event.preventDefault();
-                        var $el     = event.target;
+                // if ( $uploadTrigger ) {
+                //     $uploadTrigger.setAttribute('data-gina-form-upload-target', $inputs[f].id);
+                //     addListener(gina, $uploadTrigger, 'click', function(event) {
+                //         event.preventDefault();
+                //         var $el     = event.target;
                          
-                        var fileElemId  = $el.getAttribute('data-gina-form-upload-target') || null;   
-                        if (fileElemId)
-                            $upload = document.getElementById(fileElemId);
+                //         var fileElemId  = $el.getAttribute('data-gina-form-upload-target') || null;   
+                //         if (fileElemId)
+                //             $upload = document.getElementById(fileElemId);
                         
-                        if ($upload) {
-                            $upload.value = '';// force reset : != multiple
-                            triggerEvent(gina, $upload, 'click', event.detail);  
-                        }                                     
-                    });
-                }
+                //         if ($upload) {
+                //             removeListener(gina, $upload, 'click');
+                //             $upload.value = '';// force reset : != multiple
+                //             triggerEvent(gina, $upload, 'click', event.detail);
+                //         }                                     
+                //     });
+                // }
                                                 
-                
-                // // bind reset trigger
-                // bindUploadResetOrDeleteTrigger('reset', $inputs[f]);                
-                // // bind delete trigger
-                // bindUploadResetOrDeleteTrigger('delete', $inputs[f]);
-                
                 // binding file element == $upload
+                // setTimeout(() => {
+                //     removeListner(gina, $inputs[f], 'change');
+                // }, 0); 
                 addListener(gina, $inputs[f], 'change', function(event) {
                     event.preventDefault();
                     var $el     = event.currentTarget;
                     // [0] is for a single file, when multiple == false
                     //var files = Array.from($el.files);
                     var files = $el.files;
-                    // used for validation & onUploadReset
+                    // used for validation & onUploadResetOrDelete
                     $el.customFiles = Array.from(files);
                     if (!files.length ) return false;
                     
@@ -11963,7 +11913,8 @@ function ValidatorPlugin(rules, data, formId) {
                     var url             = $el.getAttribute('data-gina-form-upload-action');      
                     var name            = $el.getAttribute('name');
                     var fileId          = name;                    
-                    var uploadFormId    = 'gina-upload-' + name.replace(/\[/g, '-').replace(/\]/g, '' + $form.id); 
+                    var uploadFormId    = 'gina-upload-' + name.replace(/\[/g, '-').replace(/\]/g, '-' + $form.id);
+                    $el.setAttribute('data-gina-form-virtual', uploadFormId);
                     var eventOnSuccess  = $el.getAttribute('data-gina-form-upload-on-success');
                     var eventOnError    = $el.getAttribute('data-gina-form-upload-on-error');
                     var errorField    = null;
@@ -11985,9 +11936,14 @@ function ValidatorPlugin(rules, data, formId) {
                         }
                         
                         if ( !$uploadForm ) {
-                            $uploadForm = (isPopinContext()) 
+                            
+                            $uploadForm = getFormById(uploadFormId);
+                            if (!$uploadForm) {
+                                $uploadForm = (isPopinContext()) 
                                             ? $activePopin.$target.createElement('form') 
                                             : document.createElement('form');
+                            }
+                            
 
                             // adding form attributes
                             $uploadForm.id       = uploadFormId;
@@ -12022,8 +11978,8 @@ function ValidatorPlugin(rules, data, formId) {
                                 var fieldId     = $el.id || $el.getAttribute('id');
                                 
                                 var hasPreviewContainer = false;
-                                var previewContainer = $el.getAttribute('data-gina-form-upload-preview') || fieldId + '-preview';
-                                previewContainer = (isPopinContext())
+                                var previewContainer    = $el.getAttribute('data-gina-form-upload-preview') || fieldId + '-preview';
+                                previewContainer        = (isPopinContext())
                                                         ? $activePopin.$target.getElementById(previewContainer)
                                                         : document.getElementById(previewContainer); 
                                                         
@@ -12041,6 +11997,7 @@ function ValidatorPlugin(rules, data, formId) {
                                         'name'
                                         , 'group'
                                         , 'originalFilename'
+                                        , 'ext'
                                         , 'encoding'
                                         , 'size'
                                         , 'height' // will be removed depending on the mime type
@@ -12062,7 +12019,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                                 for (var _f = 0, _fLen = files.length; _f < _fLen; ++_f) { // for each file                                    
                                     // binding upload reset trigger
-                                    bindUploadResetOrDeleteTrigger('reset', $el, f);   
+                                    bindUploadResetOrDeleteTrigger('reset', $el, _f);   
                                     hiddenFields[_f] = null;
                                     subPrefix = fieldPrefix + '['+ _f +']';
                                     _nameRe = new RegExp('^'+subPrefix.replace(/\[/g, '\\[').replace(/\]/g, '\\]'));
@@ -12076,16 +12033,12 @@ function ValidatorPlugin(rules, data, formId) {
                                         if (fieldType && /hidden/i.test(fieldType) ) {
                                             hiddenField = formInputsFields[h];
                                             
-                                            _name = ( /\[\w+\]$/i.test(hiddenField.name) ) ? hiddenField.name.match(/\[\w+\]$/)[0].replace(/\[|\]/g, '') : hiddenField.name;
-                                            // _altId = hiddenField.getAttribute('id');
-                                            // if ( !_altId ) {
-                                            //     _altId = 'input.' + uuid.v4();
-                                            //     hiddenField.id = _altId;
-                                            //     hiddenField.setAttribute('id', _altId);
-                                            // }
-                                            // _name = _altId;
-                                            
-                                            _userName = ( /\[\w+\]$/i.test(hiddenField.name) ) ? hiddenField.name.match(/\[\w+\]$/)[0].replace(/\[|\]/g, '') : hiddenField.name;
+                                            _name       = ( /\[\w+\]$/i.test(hiddenField.name) ) 
+                                                        ? hiddenField.name.match(/\[\w+\]$/)[0].replace(/\[|\]/g, '') 
+                                                        : hiddenField.name;                                                                                        
+                                            _userName   = ( /\[\w+\]$/i.test(hiddenField.name) ) 
+                                                        ? hiddenField.name.match(/\[\w+\]$/)[0].replace(/\[|\]/g, '') 
+                                                        : hiddenField.name;
                                             
                                             // mandatory informations
                                             if (
@@ -21212,7 +21165,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
         this.plugin = 'popin';
 
-        var events  = ['loaded', 'ready', 'open', 'close', 'destroy', 'success', 'error', 'progress'];
+        var events  = ['init', 'loaded', 'ready', 'open', 'close', 'click', 'destroy', 'success', 'error', 'progress'];
         registerEvents(this.plugin, events);
 
         var self = { // local use only
@@ -21629,8 +21582,45 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         
                         b = 0; len = $close.length;
                         for (; b < len; ++b) {
-                            removeListener(gina, $close[b], $close[b].getAttribute('id') );
+                            let $el = $close[b];
+                            let eId = $el.getAttribute('id');
+                            for (let e = 0, eLen = events.length; e < eLen; e++) {
+                                let evt = events[e];
+                                if ( typeof(gina.events[ evt ]) != 'undefined' && gina.events[ evt ] == eId ) {
+                                    removeListener(gina, $el, evt);
+                                }
+                                if ( typeof(gina.events[ eId ]) != 'undefined' && gina.events[ eId ] == eId ) {                       
+                                    removeListener(gina, $el, eId);
+                                }
+                                
+                                if ( typeof(gina.events[ evt +'.'+ eId ]) != 'undefined' && gina.events[ evt +'.'+ eId ] == eId ) {
+                                    removeListener(gina, $el, evt +'.'+ eId);
+                                }
+                                
+                                if ( typeof(gina.events[ evt +'.'+ eId ]) != 'undefined' && gina.events[ evt +'.'+ eId ] == evt +'.'+ eId ) {
+                                    removeListener(gina, $el, evt +'.'+ eId);
+                                }
+                            }
+                            
+                            
+                            //removeListener(gina, $close[b], $close[b].getAttribute('id') );
                         }
+                        
+                        // div with click
+                        // var $elTMP = $form.target.getElementsByTagName('div');
+                        // if ( $elTMP.length > 0 ) {
+                        //     for(let i = 0, len = $elTMP.length; i < len; ++i) {
+                        //         $els.push( $elTMP[i] )
+                        //     }
+                        // }
+                        // // label with click
+                        // $elTMP = $form.target.getElementsByTagName('label');
+                        // if ( $elTMP.length > 0 ) {
+                        //     for(let i = 0, len = $elTMP.length; i < len; ++i) {
+                        //         $els.push( $elTMP[i] )
+                        //     }
+                        // }
+                        
                         // Just in case we left the popin with a link:target = _blank
                         $popin.isRedirecting = false;
                         popinClose($popin.name);
