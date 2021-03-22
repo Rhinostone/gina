@@ -1397,6 +1397,34 @@ function ValidatorPlugin(rules, data, formId) {
                 , ratio = null
             ;
             for (var f = 0, fLen = files.length; f<fLen; ++f) {
+                
+                // creating reset link
+                let resetLinkId = $previewContainer.id.replace(/\-preview/, '-'+f+'-reset-trigger');
+                let resetLinkNeedToBeAdded = false;
+                let $resetLink = document.getElementById(resetLinkId);
+                let defaultClassNameArr = ['reset','js-upload-reset'];
+                if (!$resetLink) {
+                    resetLinkNeedToBeAdded      = true;
+                    $resetLink                  = document.createElement('A');
+                    $resetLink.href             = '#';
+                    $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                    $resetLink.className        = defaultClassNameArr.join(' ');                                    
+                    $resetLink.id               = resetLinkId;
+                } else {
+                    if ( /a/i.test($resetLink.tagName) ) {
+                        $resetLink.href             = '#';
+                    }
+                    if ( !$resetLink.innerHTML || $resetLink.innerHTML == '' ) {
+                        $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                    }
+                    if ( typeof($resetLink.className) == 'undefined' ) {
+                        $resetLink.className = "";
+                    }
+                    let classNameArr = merge($resetLink.className.split(/\s+/g), defaultClassNameArr);
+                    $resetLink.className    = classNameArr.join(' ');
+                }                                
+                $resetLink.style.display    = 'none';
+                
                 // image preview
                 if ( typeof(files[f].preview) == 'undefined' 
                     && uploadProperties.hasPreviewContainer 
@@ -1406,8 +1434,8 @@ function ValidatorPlugin(rules, data, formId) {
                     let $img    = document.createElement('IMG');
                     $img.src    = files[f].tmpUri;
                     $img.style.display = 'none';
-                    $img.setAttribute('data-upload-original-filename', files[f][key].originalFilename);
-                    
+                    $img.setAttribute('data-upload-original-filename', files[f].originalFilename);
+                    $img.setAttribute('data-upload-reset-link-id', $resetLink.id);
                     
                     // TODO - Remove this; we don't want it by default, the dev can force it by hand if needed
                     // if (files[f].width) {
@@ -1469,32 +1497,32 @@ function ValidatorPlugin(rules, data, formId) {
                             // with preview
                             if ( previewKey == 'tmpUri' && uploadProperties.hasPreviewContainer ) {   
                                 
-                                // creating reset link
-                                let resetLinkId = $previewContainer.id.replace(/\-preview/, '-'+f+'-reset-trigger');
-                                let resetLinkNeedToBeAdded = false;
-                                let $resetLink = document.getElementById(resetLinkId);
-                                let defaultClassNameArr = ['reset','js-upload-reset'];
-                                if (!$resetLink) {
-                                    resetLinkNeedToBeAdded      = true;
-                                    $resetLink                  = document.createElement('A');
-                                    $resetLink.href             = '#';
-                                    $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
-                                    $resetLink.className        = defaultClassNameArr.join(' ');                                    
-                                    $resetLink.id               = resetLinkId;
-                                } else {
-                                    if ( /a/i.test($resetLink.tagName) ) {
-                                        $resetLink.href             = '#';
-                                    }
-                                    if ( !$resetLink.innerHTML || $resetLink.innerHTML == '' ) {
-                                        $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
-                                    }
-                                    if ( typeof($resetLink.className) == 'undefined' ) {
-                                        $resetLink.className = "";
-                                    }
-                                    let classNameArr = merge($resetLink.className.split(/\s+/g), defaultClassNameArr);
-                                    $resetLink.className    = classNameArr.join(' ');
-                                }
-                                $resetLink.style.display    = 'none';
+                                // // creating reset link
+                                // let resetLinkId = $previewContainer.id.replace(/\-preview/, '-'+f+'-reset-trigger');
+                                // let resetLinkNeedToBeAdded = false;
+                                // let $resetLink = document.getElementById(resetLinkId);
+                                // let defaultClassNameArr = ['reset','js-upload-reset'];
+                                // if (!$resetLink) {
+                                //     resetLinkNeedToBeAdded      = true;
+                                //     $resetLink                  = document.createElement('A');
+                                //     $resetLink.href             = '#';
+                                //     $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                                //     $resetLink.className        = defaultClassNameArr.join(' ');                                    
+                                //     $resetLink.id               = resetLinkId;
+                                // } else {
+                                //     if ( /a/i.test($resetLink.tagName) ) {
+                                //         $resetLink.href             = '#';
+                                //     }
+                                //     if ( !$resetLink.innerHTML || $resetLink.innerHTML == '' ) {
+                                //         $resetLink.innerHTML        = $uploadTriger.getAttribute('data-gina-form-upload-reset-label') || 'Reset';
+                                //     }
+                                //     if ( typeof($resetLink.className) == 'undefined' ) {
+                                //         $resetLink.className = "";
+                                //     }
+                                //     let classNameArr = merge($resetLink.className.split(/\s+/g), defaultClassNameArr);
+                                //     $resetLink.className    = classNameArr.join(' ');
+                                // }                                
+                                // $resetLink.style.display    = 'none';
                                     
                                 
                                 // creating IMG tag
@@ -1517,25 +1545,40 @@ function ValidatorPlugin(rules, data, formId) {
                                     $li = document.createElement('LI');
                                     $li.className = 'item';
                                     $li.appendChild($img);
-                                    if (resetLinkNeedToBeAdded)
-                                        $li.appendChild($resetLink);
+                                    // if (resetLinkNeedToBeAdded)
+                                    //     $li.appendChild($resetLink);
                                     
                                     $previewContainer.appendChild($li);                                
                                 } else {
                                     $previewContainer.appendChild($img);
-                                    if (resetLinkNeedToBeAdded)
-                                        $previewContainer.appendChild($resetLink);
+                                    // if (resetLinkNeedToBeAdded)
+                                    //     $previewContainer.appendChild($resetLink);
                                 }
                                 fadeIn($img);
-                                // bind reset trigger
-                                bindUploadResetOrDeleteTrigger('reset', $uploadTriger, f);
-                                fadeIn($resetLink);
+                                // // bind reset trigger
+                                // bindUploadResetOrDeleteTrigger('reset', $uploadTriger, f);
+                                // fadeIn($resetLink);
                             }
                         }                        
                     }                  
                 } // EO for 
                 
-            }
+                if (uploadProperties.hasPreviewContainer) {
+                    if ( /ul/i.test(uploadProperties.previewContainer.tagName) ) {
+                        $li = document.createElement('LI');
+                        $li.className = 'item';
+                        if (resetLinkNeedToBeAdded)
+                            $li.appendChild($resetLink);                        
+                        $previewContainer.appendChild($li);                                
+                    } else {                        
+                        if (resetLinkNeedToBeAdded)
+                            $previewContainer.appendChild($resetLink);
+                    }
+                }
+                // bind reset trigger
+                bindUploadResetOrDeleteTrigger('reset', $uploadTriger, f);
+                fadeIn($resetLink);
+            } // EO for f
         }
     }
     
@@ -1601,7 +1644,10 @@ function ValidatorPlugin(rules, data, formId) {
                         // update form files for validation & submit/send
                         let re = new RegExp('^'+($uploadTrigger.name+'['+f+']').replace(/\-|\[|\]|\./g, '\\$&'));
                         for ( let d = 0, dLen = $uploadTrigger.form.length; d < dLen; d++) {
-                            if ( re.test($uploadTrigger.form[d].name) ) {
+                            // data-gina-form-upload-is-locked
+                            // this exception prevent `tagged datas` to be deleted on image delete
+                            let isLocked = $uploadTrigger.form[d].dataset.ginaFormUploadIsLocked || false;
+                            if ( re.test($uploadTrigger.form[d].name) && !/true/i.test(isLocked) ) {
                                 $uploadTrigger.form[d].remove();
                                 dLen--;
                                 d--;
@@ -2934,11 +2980,13 @@ function ValidatorPlugin(rules, data, formId) {
      */
      var bindUploadResetOrDeleteTrigger = function(bindingType, $uploadTrigger, index) {
                     
-        // Binding upload delete trigger
+        // Binding upload reset or delete trigger
+        // var $currentForm = $uploadTrigger.form;
+        // for (let i = 0, len = $currentForm.length; )
         // trigger is by default you {input.id} + '-delete-trigger' 
         // e.g.: <input type="file" id="my-upload" name="my-upload">
         // => <a href="/path/to/tmpfile/delete-action" id="my-upload-delete-trigger">Remove</a>
-        // But you can use atrtibute `data-gina-form-upload-delete-trigger` to override it                    
+        // But you can use atrtibute `data-gina-form-upload-delete-trigger` to override it              
         var uploadResetOrDeleteTriggerId = $uploadTrigger.id + '-' +index+ '-'+bindingType+'-trigger';
         var $uploadResetOrDeleteTrigger = document.getElementById(uploadResetOrDeleteTriggerId);    
         if (!$uploadResetOrDeleteTrigger) {
@@ -3286,7 +3334,7 @@ function ValidatorPlugin(rules, data, formId) {
                             }                              
                         } else if ( /img/i.test($els[i].tagName) ) {
                             $img = $els[i];
-                            deleteLinkId = document.getElementById(uploadTriggerId + '-'+i+'-delete-trigger');
+                            deleteLinkId = uploadTriggerId + '-'+index+'-delete-trigger';
                             let file = $img.src.substr($img.src.lastIndexOf('/')+1);
                             $uploadTrigger.customFiles.push({
                                 name: file,
@@ -3446,7 +3494,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                                 for (var _f = 0, _fLen = files.length; _f < _fLen; ++_f) { // for each file                                    
                                     // binding upload reset trigger
-                                    bindUploadResetOrDeleteTrigger('reset', $el, f);   
+                                    bindUploadResetOrDeleteTrigger('reset', $el, _f);   
                                     hiddenFields[_f] = null;
                                     subPrefix = fieldPrefix + '['+ _f +']';
                                     _nameRe = new RegExp('^'+subPrefix.replace(/\[/g, '\\[').replace(/\]/g, '\\]'));
