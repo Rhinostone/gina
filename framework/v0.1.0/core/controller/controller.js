@@ -2656,6 +2656,94 @@ function SuperController(options) {
             return param
         }
     }
+    
+    /**
+     * Forward request 
+     * Allowing x-bundle forward
+     * Attention: this is a work in progres, do not use it yet
+     * 
+     * @param {object} req 
+     * @param {object} res 
+     * @param {callback} next 
+     * @returns 
+     */
+    this.forward = function(req, res, next) {
+        var route   = req.routing;
+        if ( typeof(route.param.url) == 'undefined' || /^(null|\s*)$/.test(route.param.url) ) {
+            self.throwError( new Error('`route.param.url` must be defiend in your route: `'+ route.rule +'`') );
+            return;
+        }        
+        
+        var param = {};
+        for (let p in route.param) {
+            if ( /^(url|urlIndex|control|file|title|bundle|project|hostname|port|path|method)$/.test(p) ) {
+                continue;
+            }
+            param[p] = route.param[p]
+        }
+        var routeObj = null;
+        if ( typeof(route.param.urlIndex) != 'undefined' ) {
+            routeObj = lib.routing.getRoute(route.param.url, param, route.param.urlIndex);
+        } else {
+            routeObj = lib.routing.getRoute(route.param.url, param);
+        }
+        var ca = self.getConfig('settings').server.credentials.ca;
+        var hostname = null, port = null, path = null;
+        // by default
+        var project = local.options.conf.projectName;
+        if ( typeof(route.param.project) != 'undefined' && /^(null|\s*)$/.test(route.param.project) ) {
+            project = route.param.project;
+        } // TODO - add support for project pointer : getContext('gina').projects[project]
+        if (/\@(.*)$/.test(route.param.url)) {
+            var targetedBundle = route.param.url.substr(route.param.url.lastIndexOf('@')+1);
+            hostname    = targetedBundle +'@'+ project;
+            port        = hostname;
+            var webroot = getContext('gina').config.envConf[targetedBundle][local.options.conf.env].server.webroot;
+            path        = (/\/$/.test(webroot)) ? webroot.substr(0, webroot.length-1) : webroot;
+        } else {
+            hostname    = route.param.hostname;
+            port        = route.param.port;
+            path        = route.param.port;
+        }
+        
+        var method = null;
+        if ( typeof(route.param.method) != 'undefined' ) {
+            method = route.param.method.toLowerCase();
+        } else {
+            method = req.method.toLowerCase();
+        }
+                
+        var opt = {
+            ca: ca,
+            hostname: hostname,
+            port: port,
+            path: path,
+            method: method
+        }
+        if (GINA_ENV_IS_DEV) {
+            opt.rejectUnauthorized = false;
+        }
+                
+        var obj = req[ req.method.toLowerCase() ];
+        // if ( req.files != 'undefined' ) {
+        //     obj.files = req.files;
+        // }
+        self.query(opt, obj, function onForward(err, result){
+            if (err) {
+                self.throwError(err);
+                return;
+            }
+            
+            // TODO - filter : redirect & location
+            
+            // if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
+                self.renderJSON(result)
+            // } else {
+            //     self.render(result)
+            // }            
+        });
+    }
+    
 
     /**
      * Get config

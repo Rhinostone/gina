@@ -990,16 +990,13 @@ function Config(opt) {
                         
             //setting app param
             var r = null, rLen = null, urls = null;
-            // creating default rule for auto redirect: / => /webroot
+            // creating default rule for auto redirect: / => /webroot            
             if (
                 hasWebRoot 
-                && webrootAutoredirect 
                 && wroot != '/'
                 && typeof(routing['webroot@'+ bundle]) == 'undefined'
-            ) {                
+            ) {   
                 routing['webroot@'+ bundle] = {
-                    //url: wroot +','+ wroot.substring(0, wroot.length-1),
-                    url: '/,'+ wroot.substring(0, wroot.length-1),
                     method: 'GET, POST, PUT, DELETE, HEAD',
                     middleware: [],
                     param: {
@@ -1008,26 +1005,42 @@ function Config(opt) {
                         path: wroot,
                         code: 302
                     },
-                    bundle: bundle
+                    bundle: bundle,
+                    host: conf[bundle][env].host,
+                    hostname: conf[bundle][env].server.scheme +'://'+ conf[bundle][env].host +':'+ conf[bundle][env].port[conf[bundle][env].server.protocol][conf[bundle][env].server.scheme],
+                    webroot: wroot
                 }
-            } else if (
-                hasWebRoot 
-                && !webrootAutoredirect 
-                && wroot != '/'
-                && typeof(routing['webroot@'+ bundle]) == 'undefined'
-            ) {
-                routing['webroot@'+ bundle] = {
-                    //url: wroot +','+ wroot.substring(0, wroot.length-1),
-                    url: wroot.substring(0, wroot.length-1),
-                    method: 'GET, POST, PUT, DELETE, HEAD',
-                    middleware: [],
-                    param: {
-                        control: "redirect",
-                        ignoreWebRoot: true,
-                        path: wroot,
-                        code: 302
-                    },
-                    bundle: bundle
+                // default hostname
+                if (webrootAutoredirect) {    
+                    routing['webroot@'+ bundle].url = '/,'+ wroot.substring(0, wroot.length-1);       
+                    // routing['webroot@'+ bundle] = {
+                    //     //url: wroot +','+ wroot.substring(0, wroot.length-1),
+                    //     url: '/,'+ wroot.substring(0, wroot.length-1),
+                    //     method: 'GET, POST, PUT, DELETE, HEAD',
+                    //     middleware: [],
+                    //     param: {
+                    //         control: "redirect",
+                    //         ignoreWebRoot: true,
+                    //         path: wroot,
+                    //         code: 302
+                    //     },
+                    //     bundle: bundle
+                    // }
+                } else if (!webrootAutoredirect) {
+                    routing['webroot@'+ bundle].url = wroot.substring(0, wroot.length-1);
+                    // routing['webroot@'+ bundle] = {
+                    //     //url: wroot +','+ wroot.substring(0, wroot.length-1),
+                    //     url: wroot.substring(0, wroot.length-1),
+                    //     method: 'GET, POST, PUT, DELETE, HEAD',
+                    //     middleware: [],
+                    //     param: {
+                    //         control: "redirect",
+                    //         ignoreWebRoot: true,
+                    //         path: wroot,
+                    //         code: 302
+                    //     },
+                    //     bundle: bundle
+                    // }
                 }
             }
             
@@ -1037,7 +1050,7 @@ function Config(opt) {
                 && typeof(tmpSettings.upload.groups) != 'undefined'
                 && tmpSettings.upload.groups.count() > 0
             ) {
-                if ( typeof(routing['upload-to-tmp-xml']) == 'undefined' ) {
+                if ( typeof(routing['upload-to-tmp-xml@'+ bundle]) == 'undefined' ) {
                     routing['upload-to-tmp-xml'] = {
                         "_comment": "Will store file to the project tmp dir",
                         "url": "/upload",
@@ -1049,7 +1062,7 @@ function Config(opt) {
                     }
                 }
                 
-                if ( typeof(routing['upload-delete-from-tmp-xml']) == 'undefined' ) {
+                if ( typeof(routing['upload-delete-from-tmp-xml@'+ bundle]) == 'undefined' ) {
                     routing['upload-delete-from-tmp-xml'] = {
                         "_comment": "Will remove file from the project tmp dir",
                         "url": "/upload/delete",
