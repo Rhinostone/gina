@@ -1744,7 +1744,7 @@ function Server(options) {
                 
             } else { // not a static request                
                 self._isStatic  = false;
-                                                
+                // init content                                
                 request.body    = ( typeof(request.body) != 'undefined' ) ? request.body : {};
                 request.get     = {};
                 request.post    = {};
@@ -1753,6 +1753,7 @@ function Server(options) {
                 request.files   = [];
                 //request.patch = {}; ???
                 //request.cookies = {}; // ???
+                //request.copy ???
                 
                          
                 
@@ -2540,7 +2541,7 @@ function Server(options) {
                 };
 
                 //Parsing for the right url.
-                try {     
+                try {                    
                     isRoute = routingUtils.compareUrls(params, routing[name].url, req);                        
                 } catch (err) {
                     var msg = 'Internal server error.\nRule [ '+name+' ] needs your attention.\n';

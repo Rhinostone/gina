@@ -32,6 +32,48 @@ function Routing() {
         Validator = plugins.Validator;
     }
     
+    /**
+     * Get url props
+     * Used to retrieve additional properties for routes with redirect flag for example
+     * 
+     * @param {string} [bundle]
+     * @param {string} [env] 
+     * 
+     * @return {object} urlProps - { .host, .hostname, .webroot }
+     */
+    self.getUrlProps = function(bundle, env) {
+        var config = null, urlProps = {}, _route = null;
+        if (isGFFCtx) {
+            // TODO - add support to get from env
+            config = window.gina.config;
+            // by default
+            urlProps.hostname = config.hostname;
+            if ( typeof(bundle) != 'undefined' ) {
+                // get from webroot
+                _route = routing.getRoute('webroot@'+ bundle);
+                urlProps.hostname   = _route.hostname;
+                urlProps.host       = _route.host;
+                urlProps.webroot    = _route.webroot;
+            }            
+        } else {
+            config = getContext('gina').config;
+            if ( typeof(getContext('argvFilename')) != 'undefined' ) {
+                config.getRouting = getContext('gina').Config.instance.getRouting
+            }
+            if ( typeof(bundle) == 'undefined' ) {
+                bundle      = config.bundle;
+            }
+            if ( typeof(env) == 'undefined' ) {
+                env      = config.env;
+            }
+            
+            urlProps.hostname   = config.envConf[bundle][env].hostname;
+            urlProps.host       = config.envConf[bundle][env].host;
+            urlProps.webroot    = config.envConf[bundle][env].server.webroot;
+        }
+        
+        return urlProps;
+    }
     
     /**
      * Load bundle routing configuration
@@ -81,6 +123,10 @@ function Routing() {
         if ( typeof(request) == 'undefined' ) {
             request = { routing: {} }
         }
+        // Sample debug break for specific rule
+        // if ( params.rule == 'my-specific-rule@bundle' ) {
+        //     console.debug('passed '+ params.rule);
+        // }
 
         if ( /\,/.test(url) ) {
             var i               = 0
@@ -94,13 +140,12 @@ function Routing() {
 
             while (i < len && !foundRoute.past) {
                 foundRoute = parseRouting(params, urls[i], request);
-                //if ( foundRoute.past ) break;
-                ++i
+                ++i;
             }
 
             return foundRoute
         } else {
-            return parseRouting(params, url, request)
+            return parseRouting(params, url, request);
         }
     }
 
@@ -113,13 +158,13 @@ function Routing() {
      * @private
      * */
     var hasParams = function(pathname) {
-        return (/:/.test(pathname)) ? true : false
+        return (/:/.test(pathname)) ? true : false;
     }
 
     /**
      * Parse routing for mathcing url
      *
-     * @param {object} params
+     * @param {object} params - `params` is the same `request.routing` that can be retried in controller with: req.routin
      * @param {string} url
      * @param {object} request
      *
@@ -139,18 +184,44 @@ function Routing() {
         ;
         
         //attaching routing description for this request
-        //request.routing = params; // can be retried in controller with: req.routing        
-        if ( typeof(params.requirements) != 'undefined' && typeof(request.get) != 'undefined' ) {            
-            for (var p in request.get) {
+        var method = params.method.toLowerCase();
+        var hasAlreadyBeenScored = false;
+        if ( 
+            typeof(params.requirements) != 'undefined'
+            && /get|delete/.test(method)
+            && typeof(request[method]) != 'undefined'
+        ) {            
+            // `delete` methods don't have a body
+            // So, request.delete is {} by default
+            if ( method == 'delete' && uRe.length === uRo.length ) {
+                for (let p = 0, pLen = uRo.length; p < pLen; p++) {
+                    if (uRe[p] === uRo[p]) {    
+                        ++score;                    
+                        continue;
+                    }
+                    let condition = params.requirements[uRo[p].substr(1)];
+                    if (
+                        /^:/.test(uRo[p]) 
+                        && typeof(condition)  != 'undefined'
+                        && new RegExp(params.requirements[uRo[p]]).test(uRe[p])
+                    ) {
+                        ++score;
+                        request[method][uRo[p].substr(1)] = uRe[p];    
+                    }  
+                }
+                hasAlreadyBeenScored = true;           
+            }
+            
+            for (let p in request[method]) {
                 if ( typeof(params.requirements[p]) != 'undefined' && uRo.indexOf(':' + p) < 0 ) {
                     uRo[uRoCount] = ':' + p; ++uRoCount;
-                    uRe[uReCount] = request.get[p]; ++uReCount;
+                    uRe[uReCount] = request[method][p]; ++uReCount;
                     ++maxLen;
                 }
             }
         }
         
-        if (uRe.length === uRo.length) {
+        if (!hasAlreadyBeenScored && uRe.length === uRo.length) {
             for (; i < maxLen; ++i) {
                 if (uRe[i] === uRo[i]) {
                     ++score
@@ -446,11 +517,11 @@ function Routing() {
         
         var config = null;
         if (isGFFCtx) {
-            config = window.gina.config
+            config = window.gina.config;
         } else {
-            config = getContext('gina').config
+            config = getContext('gina').config;
             if ( typeof(getContext('argvFilename')) != 'undefined' ) {
-                config.getRouting = getContext('gina').Config.instance.getRouting
+                config.getRouting = getContext('gina').Config.instance.getRouting;
             }
         }
         
@@ -574,8 +645,13 @@ function Routing() {
         // leave `ignoreWebRoot` empty or set it to false for x-bundle coms
         route.toUrl = function (ignoreWebRoot) {
             
-            var wroot       = this.webroot
-                , hostname  = this.hostname
+            var urlProps = null;
+            if ( /^redirect$/i.test(this.param.control) ) {
+                urlProps = self.getUrlProps(this.bundle, (env||GINA_ENV));
+            }
+            
+            var wroot       = this.webroot || urlProps.webroot
+                , hostname  = this.hostname || urlProps.hostname
                 , path      = this.url
             ;
             

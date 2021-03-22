@@ -2964,6 +2964,50 @@ function ValidatorPlugin(rules, data, formId) {
             console.warn('[FormValidator::bindForm][upload]['+$uploadTrigger.id+'] : did not find `upload '+bindingType+' trigger`.\nPlease, make sure that your delete element ID is `'+ uploadResetOrDeleteTriggerId +'-'+bindingType+'-trigger`, or add to your file input ('+ $uploadTrigger.id +') -> `data-gina-form-upload-'+bindingType+'-trigger="your-custom-id"` definition.');
         }
     }
+    
+    var checkUploadUrlActions = function($el, $errorContainer) {
+        
+        var checkAction = function($el, action, $errorContainer) {
+            var defaultRoute = null;
+            switch (action) {
+                case 'data-gina-form-upload-action':
+                    defaultRoute = 'upload-to-tmp-xml';
+                    break;
+                case 'data-gina-form-upload-reset-action':
+                    defaultRoute = 'upload-delete-from-tmp-xml';
+                    break;
+            }
+            var uploadActionUrl = $el.getAttribute(action);
+            if (!uploadActionUrl || uploadActionUrl == '' ) {
+                if (!defaultRoute)
+                    console.warn('`'+ action +'` definition not found for `'+ $el.id + '`. Trying to get default route.');
+                var additionalErrorDetails = null;
+                try {
+                    if (defaultRoute)
+                        uploadActionUrl = routing.getRoute(defaultRoute);
+                } catch (err) {
+                    additionalErrorDetails = err;
+                }
+                
+                if (uploadActionUrl) {
+                    console.info('Ignore previous warnings regarding upload. I have found a default `'+action+'` route: `'+ defaultRoute +'@'+ uploadActionUrl.bundle +'`');
+                    $el.setAttribute('data-gina-form-upload-action', uploadActionUrl.toUrl());
+                } else {
+                    var errMsg = '`'+ action +'` needs to be defined to procced for your `input[type=file]` with ID `'+ $el.id +'`\n'+ additionalErrorDetails +'\n';
+                    if ($errorContainer) {
+                        $errorContainer.innerHTML += errMsg.replace(/(\n|\r)/g, '<br>');
+                    }
+                    console.error(errMsg);
+                }                    
+            }
+        }
+        // checking upload-action
+        checkAction($el, 'data-gina-form-upload-action', $errorContainer);
+        // checking upload-reset-action
+        checkAction($el, 'data-gina-form-upload-reset-action', $errorContainer);
+        // checking upload-delete-action
+        checkAction($el, 'data-gina-form-upload-delete-action', $errorContainer);
+    }
 
     /**
      * bindForm
@@ -3202,6 +3246,8 @@ function ValidatorPlugin(rules, data, formId) {
                     $uploadTrigger = document.getElementById(uploadTriggerId);
                     //$uploadTrigger = $htmlTarget.getElementById(uploadTriggerId);
                 }
+                var $errorContainer = document.getElementById($inputs[f].id + '-error');
+                checkUploadUrlActions($inputs[f], $errorContainer );                
                 
                 // check default UploadResetOrDeleteTrigger state
                 // required to bind delete - look for all delete triggers
