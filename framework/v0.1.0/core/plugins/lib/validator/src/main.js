@@ -3285,7 +3285,6 @@ function ValidatorPlugin(rules, data, formId) {
                     uploadTriggerId = $inputs[f].id;
                     
                 var $upload             = null
-                    , $oldTmpFiles      = null
                     , $uploadTrigger    = null
                 ;
                 // `$htmlTarget` cannot be used if you need to add a listner on the searched element
@@ -3425,24 +3424,7 @@ function ValidatorPlugin(rules, data, formId) {
                             $uploadForm.action   = url;
                             $uploadForm.enctype  = 'multipart/form-data';
                             $uploadForm.method   = 'POST';
-                            // adding oldTmpFiles
-                            var oldTmpFilesId = uploadTriggerId.replace(/\-trigger/, '') +'-old-tmp-files';
-                            $oldTmpFiles = $htmlTarget.getElementById(oldTmpFilesId);
-                            if (!$oldTmpFiles) {
-                                $oldTmpFiles = $htmlTarget.createElement('input');
-                                $oldTmpFiles.type = 'hidden';
-                                $oldTmpFiles.id = oldTmpFilesId;
-                                $oldTmpFiles.name = $htmlTarget.getElementById(uploadTriggerId.replace(/\-trigger/, '')).name + '[oldTmpFiles]';
-                                $oldTmpFiles.value = '[]';
-                                $oldTmpFiles.add = function(file) {
-                                    if ( /^\[\]$/.test(this.value) ) {
-                                        this.value = this.value.replace(/\]$/, '\"' + file +'\"]');
-                                    } else {
-                                        this.value = this.value.replace(/\]$/, ', \"' + file +'\"]');
-                                    }                            
-                                }
-                                $uploadForm.appendChild($oldTmpFiles )
-                            }
+                            
                                                         
                             
                             if ( typeof($el.form) != 'undefined' ) {
@@ -3624,7 +3606,6 @@ function ValidatorPlugin(rules, data, formId) {
                             var file = null;          
                             for (var l = 0, lLen = files.length; l < lLen; ++l) {
                                 file = files[l];
-                                $oldTmpFiles.add(file.name);
                                 formData.append(fileId, file, file.name);
                             }
                             
