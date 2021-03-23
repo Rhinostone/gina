@@ -269,10 +269,18 @@ function Collection(content, options) {
                     && /(<|>|=)/.test(filter) 
                     && !/undefined|function/.test(typeof(_content))
                 ) { // with operations
+                    let originalFilter = filter;
                     let condition = _content + filter;
                     if ( typeof(filter) == 'string' && typeof(_content) == 'string' ) {
+                        let comparedValue = filter.replace(/^(<=|>=|!==|!=|===|!==)/g, '');
+                        if ( typeof(_content) == 'string' && !/^\"(.*)\"$/.test(comparedValue) ) {
+                            filter = filter.replace(comparedValue, '\"'+ comparedValue + '\"');
+                        }
                         condition = '\"'+_content+'\"' + filter;
+                        // restoring in case of datetime eval
+                        filter = originalFilter;
                     }
+                    
                     // looking for a datetime ?
                     if (
                         /(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/.test(_content)
@@ -540,6 +548,7 @@ function Collection(content, options) {
         result.orderBy          = instance.orderBy;
         result.delete           = instance.delete;
         result.toRaw            = instance.toRaw;
+        result.filter           = instance.filter;
 
         return result
     }
