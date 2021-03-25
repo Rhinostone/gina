@@ -184,28 +184,54 @@ function Routing() {
         ;
         
         //attaching routing description for this request
-        var method = params.method.toLowerCase();
+        var method = request.method.toLowerCase();
+        var paramMethod = params.method.toLowerCase();
+                    
         var hasAlreadyBeenScored = false;
         if ( 
             typeof(params.requirements) != 'undefined'
-            && /get|delete/.test(method)
+            && /get|delete/i.test(method)
             && typeof(request[method]) != 'undefined'
+            ||
+            // GET request is in fact in this case a DELETE request
+            typeof(params.requirements) != 'undefined'
+            && /get/i.test(method)
+            && /delete/i.test(paramMethod)
         ) {            
+            if ( /get/i.test(method) && /delete/i.test(paramMethod) ) {
+                method = paramMethod;
+                //request.method = method.toUpperCase();
+            }
             // `delete` methods don't have a body
             // So, request.delete is {} by default
+            // if ( method == 'delete'){
+            //     console.debug('debug method delete '+ params.rule);
+            // }
             if ( method == 'delete' && uRe.length === uRo.length ) {
+                
+                if ( typeof(request[method]) == 'undefined' ) {
+                    request[method] = {};
+                }
                 for (let p = 0, pLen = uRo.length; p < pLen; p++) {
                     if (uRe[p] === uRo[p]) {    
                         ++score;                    
                         continue;
                     }
-                    let condition = params.requirements[uRo[p].substr(1)];
+                    let _key = uRo[p].substr(1);
+                    if ( typeof(params.requirements[_key]) == 'undefined' ) {
+                        continue;
+                    }
+                    let condition = params.requirements[_key];
+                    if ( /^\//.test(condition) ) {
+                        condition = condition.substr(1, condition.lastIndexOf('/')-1);
+                    }
                     if (
                         /^:/.test(uRo[p]) 
-                        && typeof(condition)  != 'undefined'
-                        && new RegExp(params.requirements[uRo[p]]).test(uRe[p])
+                        && typeof(condition) != 'undefined'
+                        && new RegExp(condition).test(uRe[p])
                     ) {
                         ++score;
+                        
                         request[method][uRo[p].substr(1)] = uRe[p];    
                     }  
                 }

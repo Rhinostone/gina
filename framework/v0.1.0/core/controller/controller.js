@@ -840,6 +840,9 @@ function SuperController(options) {
         if (local.options.renderingStack.length > 1) {
             return false
         }
+        if ( self.isProcessingError ) {
+           return; 
+        }
 
         var request     = local.req;
         var response    = local.res;
@@ -1918,6 +1921,7 @@ function SuperController(options) {
         if (local.options.renderingStack.length > 1) {
             return false
         }
+        self.isProcessingError = false; // by default
        
         var queryData           = {}
             , defaultOptions    = local.query.options
@@ -2921,6 +2925,7 @@ function SuperController(options) {
      * @return {void}
      * */
     this.throwError = function(res, code, msg) {
+        self.isProcessingError = true;
         var errorObject = null; // to be returned
         // preventing multiple call of self.throwError() when controller is rendering from another required controller
         if (local.options.renderingStack.length > 1) {
@@ -2942,6 +2947,7 @@ function SuperController(options) {
             errorObject = {};
 
             if ( res instanceof Error) {
+                errorObject.status   = code;
                 errorObject.error   = standardErrorMessage || res.error || res.message;
                 errorObject.stack   = res.stack;
                 if (res.message && typeof(res.message) == 'string') {
@@ -2972,8 +2978,9 @@ function SuperController(options) {
         var req     = local.req;
         var next    = local.next;
         if (!res.headersSent) {
-            //if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() ) {
-            if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
+            // DELETE request methods don't normaly use a view,
+            // but if we are calling it from a view, we should render the error back to the view
+            if ( self.isXMLRequest() || !hasViews() && !/delete/i.test(req.method) || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
                 // faaback interception
                 if ( fallback ) {            
                     if ( typeof(fallback) == 'string' ){ // string url: user provided
