@@ -329,6 +329,10 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
             
+            if ( typeof(this.isPopinContext) != 'undefined' && /true/i.test(this.isPopinContext) ) {
+                $target.isPopinContext = this.isPopinContext;
+            }
+            
             if ($target && !$form.binded)
                 bindForm($target, rule);
         }
@@ -853,7 +857,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     
                                 // if hasPopinHandler & popinIsBinded
                                 if ( typeof(gina.popin) != 'undefined' && gina.hasPopinHandler ) {                                    
-                                    // select popin by id
+                                    // select popin current active popin
                                     var $popin = gina.popin.getActivePopin();
                                     
                                     if ($popin) {
@@ -910,10 +914,43 @@ function ValidatorPlugin(rules, data, formId) {
                                 }
                             }
 
-                            // intercept upload
+                            // intercepts upload
                             if ( /^gina\-upload/i.test(id) )
                                 onUpload(gina, $target, 'success', id, result);
-                                
+                            
+                            // intercepts result.popin (from controller)
+                            if ( 
+                                typeof(gina.popin) != 'undefined'
+                                && gina.hasPopinHandler
+                                && typeof(result.popin) != 'undefined'
+                            ) {
+                                var $popin = gina.popin.getActivePopin();
+                                if ( !$popin ) {
+                                    if ( typeof(result.popin.name) == 'undefined' ) {
+                                        throw new Error('To get a `$popin` instance, you need at list a `popin.name`.');
+                                    }
+                                    $popin = gina.popin.getPopinByName(result.popin.name);
+                                    if ( !$popin ) {
+                                        throw new Error('Popin with name: `'+ result.popin.name +'` not found.')
+                                    }
+                                }
+                                // if ( typeof(result.popin.id) != 'undefined' ) {                                    
+                                // }
+                                if ( typeof(result.popin.close) != 'undefined' ) {
+                                    $popin.close();
+                                }
+                                if ( typeof(result.popin.location) != 'undefined' ) {                                    
+                                    $popin.isRedirecting = true;
+                                    $popin.url = result.popin.location;
+                                    
+                                    $popin.load($popin.name, $popin.url, $popin.options);
+                                    if (!$popin.isOpen) {
+                                        $popin.open(result.popin.name) 
+                                    }
+                                    return;
+                                }
+                            }
+                            
                             triggerEvent(gina, $target, 'success.' + id, result);                            
                                 
                             if (hFormIsRequired)
@@ -3150,24 +3187,24 @@ function ValidatorPlugin(rules, data, formId) {
                 
         var elId = null;
         
-        // BO Binding a
-        for (let f = 0, len = $a.length; f < len; ++f) {
-            let isPopinClick = false, hrefAttr = $a[f].getAttribute('href');
-            if ( !hrefAttr || hrefAttr == '' ) {
-                // Preventing popin auto to redirect to current/host page url
-                $a[f].setAttribute('href', '#');
-                isPopinClick = true;
-            }
-            elId = $a[f].getAttribute('id');
-            if (!elId || elId == '') {
-                elId = 'click.'; // by default
-                if ( isPopinContext() ) {
-                    elId = ( isPopinClick ) ? 'popin.click.' : 'popin.link.';
-                }
-                elId += uuid.v4();
-                $a[f].setAttribute('id', elId)
-            }
-        }
+        // BO Binding a - not needed anymore since popin is binding link before binding child forms
+        // for (let f = 0, len = $a.length; f < len; ++f) {
+        //     let isPopinClick = false, hrefAttr = $a[f].getAttribute('href');
+        //     if ( !hrefAttr || hrefAttr == '' ) {
+        //         // Preventing popin auto to redirect to current/host page url
+        //         $a[f].setAttribute('href', '#');
+        //         isPopinClick = true;
+        //     }
+        //     elId = $a[f].getAttribute('id');
+        //     if (!elId || elId == '') {
+        //         elId = 'click.'; // by default
+        //         if ( $target.isPopinContext ) {
+        //             elId = ( isPopinClick ) ? 'popin.click.' : 'popin.link.';
+        //         }
+        //         elId += uuid.v4();
+        //         $a[f].setAttribute('id', elId)
+        //     }
+        // }
         // EO Binding a
         
         // BO Binding textarea

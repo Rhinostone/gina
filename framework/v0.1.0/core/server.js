@@ -2559,10 +2559,17 @@ function Server(options) {
                     // comparing routing method VS request.url method
                     isMethodAllowed = reMethod.test(_routing.method);
                     if (!isMethodAllowed) {
-                        throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.url+'` is expecting `' + _routing.method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
-                        break;
-                    } else {
-
+                        // Exception - Method override
+                        if ( /get/i.test(req.method) && /delete/i.test(_routing.method) ) {
+                            console.debug('ignoring case request.method[GET] on routing.method[DELETE]');
+                            req.method = _routing.method;
+                            isMethodAllowed = true;
+                        } else {
+                            throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.url+'` is expecting `' + _routing.method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
+                            break;
+                        }                        
+                    }// else {
+                        
                         // handling GET method exception - if no param found
                         var methods = ['get', 'delete'], method = req.method.toLowerCase();
                         var p = null;
@@ -2604,7 +2611,7 @@ function Server(options) {
                             
                             break;
                         }
-                    }
+                    //}
                 }
             }
             

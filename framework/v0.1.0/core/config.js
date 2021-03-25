@@ -1151,7 +1151,12 @@ function Config(opt) {
                 routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse lookup
                 // route file
                 if (!routing[rule].param) continue;
-                routing[rule].param.file = ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
+                //routing[rule].param.file = ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
+                if ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' && /delete/i.test(routing[rule].method )) {
+                    console.warn('`DELETE` method result should not be rendererd into a file');
+                } else if ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) == 'undefined' /**&& !/delete/i.test(routing[rule].method)*/) {
+                    routing[rule].param.file = file
+                }
 
                 // by default, method is inherited from the request.method
                 if (
