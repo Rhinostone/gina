@@ -2042,7 +2042,7 @@ function Server(options) {
         // to compare with /core/controller/controller.js -> getParams()
         switch( request.method.toLowerCase() ) {
             case 'post':
-                var configuring = false, msg = null;                
+                var configuring = false, msg = null, isPostSet = false;                
                 if ( typeof(request.body) == 'string' ) {
                     // get rid of encoding issues
                     try {
@@ -2066,24 +2066,27 @@ function Server(options) {
                             
                             try {
                                 obj = parseBody(bodyStr);
+                                request.post = obj;
+                                isPostSet = true;
                             } catch (err) {
                                 // ignore this one
                                 msg = '[ Could properly evaluate POST ] '+ request.url +'\n'+  err.stack;
                                 console.warn(msg);
                             }
-                            try {
-                                if (obj.count() == 0 && bodyStr.length > 1) {
-                                    request.post = obj;
-                                } else {
-                                    request.post = JSON.parse(bodyStr)
+                            if (!isPostSet) {
+                                try {
+                                    if (obj.count() == 0 && bodyStr.length > 1) {
+                                        request.post = obj;
+                                    } else {
+                                        request.post = JSON.parse(bodyStr)
+                                    }
+                                    
+                                } catch (err) {
+                                    //throwError(response, 500, err, next)                                
+                                    msg = '[ Exception found for POST ] '+ request.url +'\n'+  err.stack;
+                                    console.warn(msg);
                                 }
-                                
-                            } catch (err) {
-                                //throwError(response, 500, err, next)                                
-                                msg = '[ Exception found for POST ] '+ request.url +'\n'+  err.stack;
-                                console.warn(msg);
                             }
-                            
                         }
 
                     } catch (err) {
@@ -2724,9 +2727,12 @@ function Server(options) {
                 }
                     
                 header = completeHeaders(header, local.request, res);
-                if ( /http\/2/.test(protocol) ) {    
+                if ( /http\/2/.test(protocol) ) {
+                    // TODO - Check if the stream has not been closed before sending response
+                    // if (stream && !stream.destroyed) {                      
                     stream.respond(header);
                     stream.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                    // }
                     return;
                 } else {                    
                     return res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
