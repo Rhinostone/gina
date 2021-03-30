@@ -172,6 +172,20 @@ function Router(env) {
             };
         }
         
+        // for redirect with `hidden inheritedData`
+        if ( /get/i.test(request.method) && typeof(request.session) != 'undefined' ) {
+            var userSession = request.session.user || request.session;
+            if ( typeof(userSession.inheritedData) != 'undefined' ) {
+                if (!request.get) {
+                    request.get = {};
+                }
+                request.get = merge(request.get, userSession.inheritedData);
+                
+                // if not persisted ... means that if you refresh the current page, `inheritedData` will be lost
+                delete userSession.inheritedData;
+            }
+        }
+        
         /**
         * EO Passport JS HTTP2 fix
         */

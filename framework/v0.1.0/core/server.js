@@ -2157,8 +2157,8 @@ function Server(options) {
                         request.query = merge(request.query, obj);
                         delete obj;
                     }            
-                    request.get = request.query;
-                }
+                    request.get = request.query;                    
+                }                
                 // else, will be matching route params against url context instead, once route is identified
 
 
