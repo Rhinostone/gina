@@ -514,7 +514,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             triggerEvent(gina, $form, 'error.' + id, errors)
 
-            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
+            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                 // update toolbar
                 if (!gina.forms.errors)
                     gina.forms.errors = {};
@@ -526,7 +526,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                 window.ginaToolbar.update('forms', objCallback);
             }
-        } else if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == 'object') { // reset toolbar form errors
+        } else if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar) { // reset toolbar form errors
             if (!gina.forms.errors)
                 gina.forms.errors = {};
 
@@ -538,7 +538,7 @@ function ValidatorPlugin(rules, data, formId) {
                 window.ginaToolbar.update('forms', objCallback);
         }
 
-        if (gina && GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == "object" && data) {
+        if (gina && GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && data) {
             
             try {
                 // update toolbar
@@ -902,7 +902,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                             XHRData = result;
                             // update toolbar
-                            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                            if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                 try {
                                     // don't refresh for html datas
                                     if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html|\/json/.test(contentType) ) {
@@ -970,7 +970,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                             XHRData = result;                            
                             // update toolbar
-                            if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                            if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                 try {
 
                                     if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' ) {
@@ -1065,7 +1065,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                                     // update toolbar
                                     XHRData = result;
-                                    if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                                    if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                         try {
                                             // update toolbar
                                             window.ginaToolbar.update('data-xhr', XHRData );
@@ -1134,7 +1134,7 @@ function ValidatorPlugin(rules, data, formId) {
 
                             // update toolbar
                             XHRData = result;
-                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                 try {
                                     // update toolbar
                                     window.ginaToolbar.update('data-xhr', XHRData );
@@ -1164,7 +1164,7 @@ function ValidatorPlugin(rules, data, formId) {
                         result = { 'status': 408, 'message': 'XMLHttpRequest Exception: unkown error' };
                         XHRData = result;
                         // update toolbar
-                        if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                        if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                             try {
                                 // don't refresh for html datas
                                 if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
@@ -1352,7 +1352,7 @@ function ValidatorPlugin(rules, data, formId) {
                     
                 // } catch (err) {
                 //     XHRData = result;
-                //     if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+                //     if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                 //         try {
                 //
                 //             if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' ) {
@@ -1689,7 +1689,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 dLen--;
                                 d--;
                                 //update toolbar
-                                if (gina && GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == "object" ) {            
+                                if (gina && GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {            
                                     try {
                                         // update toolbar
                                         window.ginaToolbar.update('data-xhr', {files: files});                        
@@ -5629,7 +5629,7 @@ function ValidatorPlugin(rules, data, formId) {
                 try {
                     data = formatData( d['toData']() );
 
-                    if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) == 'object' ) {
+                    if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                         // update toolbar
                         if (!gina.forms.sent)
                             gina.forms.sent = {};

@@ -676,7 +676,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             // update toolbar errors
             var $popin = getActivePopin();
             
-            if ( gina && typeof(window.ginaToolbar) == 'object' && typeof(result) != 'undefined' && typeof(resultIsObject) != 'undefined' && result ) {
+            if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && typeof(result) != 'undefined' && typeof(resultIsObject) != 'undefined' && result ) {
                 
                 var XHRData = result;
                 
@@ -729,7 +729,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 XHRData = document.getElementById('gina-without-layout-xhr-data');
             }
             
-            if ( gina && typeof(window.ginaToolbar) == 'object' && XHRData ) {
+            if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                 try {
 
                     if ( typeof(XHRData.value) != 'undefined' && XHRData.value ) {
@@ -753,7 +753,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 XHRView = document.getElementById('gina-without-layout-xhr-view');
             }
             
-            if ( gina && typeof(window.ginaToolbar) == 'object' && XHRView ) {
+            if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRView ) {
                 try {
 
                     if ( typeof(XHRView.value) != 'undefined' && XHRView.value ) {
@@ -1215,7 +1215,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             if (GINA_ENV_IS_DEV)
                 updateToolbar();
             // var XHRData = document.getElementById('gina-without-layout-xhr-data');
-            // if ( gina && typeof(window.ginaToolbar) == "object" && XHRData ) {
+            // if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
             //     try {
 
             //         if ( typeof(XHRData.value) != 'undefined' && XHRData.value ) {
@@ -1232,7 +1232,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             // }
 
             // var XHRView = document.getElementById('gina-without-layout-xhr-view');
-            // if ( gina && typeof(window.ginaToolbar) == "object" && XHRView ) {
+            // if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRView ) {
             //     try {
 
             //         if ( typeof(XHRView.value) != 'undefined' && XHRView.value ) {
@@ -1345,7 +1345,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     gina.popinIsBinded      = false;                
 
                     // restore toolbar
-                    if ( GINA_ENV_IS_DEV && gina &&  typeof(window.ginaToolbar) == "object" )
+                    if ( GINA_ENV_IS_DEV && gina &&  typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar )
                         ginaToolbar.restore();
 
                     instance.activePopinId  = null;

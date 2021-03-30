@@ -1479,12 +1479,33 @@ function SuperController(options) {
                     // }
                     // if ( newParams != '' ) {
                     //     path += '?'+ newParams.substr(0, newParams.length-1);
-                    // }    
+                    // }
+                    var inheritedData = null;
                     if ( /\?/.test(path) ) {
-                        path += '&inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));  
+                        inheritedData = '&inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));  
                     } else {
-                        path += '?inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));  
-                    }                    
+                        inheritedData = '?inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));  
+                    }  
+                    
+                    // if redirecting from a xhrRequest
+                    if ( self.isXMLRequest() ) {
+                        // `requestParams` should be stored in the session to avoid passing datas in clear
+                        var redirectObj = { location: path };
+                        if (requestParams.count() > 0)  {
+                            var userSession = req.session.user || req.session;
+                            if ( userSession ) {
+                                // will be reused for server.js on `case : 'GET'`
+                                userSession.inheritedData = requestParams;
+                            } else { // will be passed in clear
+                                redirectObj.location += inheritedData;
+                            }
+                        }
+                        
+                        self.renderJSON(redirectObj);
+                        return;
+                    }
+                    
+                    path += inheritedData;
                 } 
                     
                 var ext = 'html';
@@ -2936,7 +2957,6 @@ function SuperController(options) {
                 session = local.req.session.user;
             }
             if (!session) {
-                //self.throwError(new ApiError('`session` is required', 424));
                 return false;
             }
         }
