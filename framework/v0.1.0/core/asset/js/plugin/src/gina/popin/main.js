@@ -169,7 +169,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 name    = $el.getAttribute(attr);
                 if ( $el.tagName == 'A' ) {
                     url = $el.getAttribute('href');
-                    if (url == '' || url =='#' || /\#/.test(url) ) {
+                    if (url == '' || url =='#' || /\#/.test(url) ) {
                         url = null
                     }
                 }
@@ -479,8 +479,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     
                 });
             }
-
-            
+            // detecting form in popin
+            if ( /<form/i.test($el.innerHTML) && typeof($validatorInstance) != 'undefined' && $validatorInstance ) {
+                $popin.hasForm = true;
+            }
             
             // binding popin close & links (& its target attributes)
             var $close          = []
@@ -576,8 +578,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var inheritedData = {}, _formData = null;
             var domParserObject = new DOMParser(), currentId = null, found = null;
             var linkType = null;
-            for(; i < len; ++i) {
-                
+            for (; i < len; ++i) {                
                 if (!$link[i]['id'] || !/^popin\.link/.test($link[i]['id']) ) {
                     // jsut in case
                     if ( typeof($link[i]['href']) == 'undefined' ) {
@@ -635,38 +636,39 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $link[i].id ) {
                     register('link', evt, $link[i])
                 }
+                               
                 
-                
-                // bind with formValidator if forms are found
-                if ( /<form/i.test($el.innerHTML) && typeof($validatorInstance) != 'undefined' && $validatorInstance ) {
-                    var _id = null;
-                    var $forms = $el.getElementsByTagName('form');
-                    i = 0; len = $forms.length;
-                    for(; i < len; ++i) {
-
-                        if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
-                            _id = $forms[i].getAttribute('id') || 'form.' + uuid.v4();
-                            $forms[i].setAttribute('id', _id);// just in case
-                            $forms[i]['id'] = _id
-                        } else {
-                            _id = $forms[i]['id']
-                        }
-
-                        //console.log('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
-                        if ($popin['$forms'].indexOf(_id) < 0)
-                            $popin['$forms'].push(_id);
-
-                        $forms[i].close = popinClose;
-                        $validatorInstance.isPopinContext = true;
-                        $validatorInstance.validateFormById($forms[i].getAttribute('id')); //$forms[i]['id']
-
-                        removeListener(gina, $popin.target, eventType);
-                    }
-                    
-                    $popin.hasForm = true;
-                }
-            }          
+            } // EO for(; i < len; ++i)          
             
+            // bind with formValidator if forms are found
+            if ($popin.hasForm) {
+            //if ( /<form/i.test($el.innerHTML) && typeof($validatorInstance) != 'undefined' && $validatorInstance ) {
+                var _id = null;
+                var $forms = $el.getElementsByTagName('form');
+                i = 0; len = $forms.length;
+                for(; i < len; ++i) {
+
+                    if ( !$forms[i]['id'] || typeof($forms[i]) != 'string' ) {
+                        _id = $forms[i].getAttribute('id') || 'form.' + uuid.v4();
+                        $forms[i].setAttribute('id', _id);// just in case
+                        $forms[i]['id'] = _id
+                    } else {
+                        _id = $forms[i]['id']
+                    }
+
+                    //console.log('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
+                    if ($popin['$forms'].indexOf(_id) < 0)
+                        $popin['$forms'].push(_id);
+
+                    $forms[i].close = popinClose;
+                    $validatorInstance.isPopinContext = true;
+                    $validatorInstance.validateFormById($forms[i].getAttribute('id')); //$forms[i]['id']
+
+                    removeListener(gina, $popin.target, eventType);
+                }
+                
+                //$popin.hasForm = true;
+            }
             
         }
         

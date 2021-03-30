@@ -1712,6 +1712,7 @@ function Config(opt) {
             scheme = conf[bundle][env].server.scheme;
         }
         
+        conf[bundle][env].server.supportedRequestMethods = conf[bundle][env].content.settings.server.supportedRequestMethods;
         conf[bundle][env].hostname = scheme + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
 
         

@@ -2490,6 +2490,11 @@ function SuperController(options) {
                                   self.throwError(data)
                               }  
                         } else {
+                            // required when control is used in an halted state
+                            // Ref.: resumeHaltedRequest()
+                            if ( self.isHaltedRequest() && typeof(local.onHaltedRequestResumed) != 'undefined' ) {
+                                local.onHaltedRequestResumed(false);
+                            }
                             callback( false, data )                        
                         }
                         return;
@@ -2524,17 +2529,17 @@ function SuperController(options) {
                     if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
                         self.emit('query#complete', data)
                     } else {
+                        // required when control is used in an halted state
+                        // Ref.: resumeHaltedRequest()
+                        if ( self.isHaltedRequest() && typeof(local.onHaltedRequestResumed) != 'undefined' ) {
+                            local.onHaltedRequestResumed(false);
+                        }
                         self.emit('query#complete', false, data)
                     }
                 }      
                 
                 client.close();
             });
-                
-            
-            // if (!/GET|DELETE/i.test(options[':method'])) {
-            //     req.end(body);
-            // }
             
             if (!endStream) {
                 req.end(body);
@@ -2562,6 +2567,12 @@ function SuperController(options) {
                         if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined') {
                             cb(data)
                         } else {
+                            // required when control is used in an halted state
+                            // Ref.: resumeHaltedRequest()
+                            if ( self.isHaltedRequest() && typeof(local.onHaltedRequestResumed) != 'undefined' ) {
+                                local.onHaltedRequestResumed(err);
+                            }
+                            
                             cb(err, data)
                         }
                     } catch (e) {
@@ -2912,6 +2923,91 @@ function SuperController(options) {
             self.throwError(err)
         } 
     }
+        
+    this.isHaltedRequest = function(session) {
+        // trying to retrieve session since it is optional
+        if ( typeof(session) == 'undefined' ) {
+            session = null;
+            if ( typeof(local.req.session) && typeof(local.req.session.haltedRequest) != 'undefined' ) {
+                session = local.req.session;
+            }
+            // passport
+            if (!session && typeof(local.req.session.user) != 'undefined' && typeof(local.req.session.user.haltedRequest) != 'undefined' ) {
+                session = local.req.session.user;
+            }
+            if (!session) {
+                self.throwError(new ApiError('`session` is required', 424));
+                return;
+            }
+        }
+        
+        return (typeof(session.haltedRequest) != 'undefined' ) ? true : false;
+    }
+    
+    /**
+     * resumeHaltedRequest
+     * Used to resume an halted request
+     * Requirements :
+     *  - a middleware attaching `haltedRequest` to userSession
+     * OR
+     * - a persistant object where `haltedRequest` is attached
+     * 
+     * @param {object} req 
+     * @param {object} res 
+     * @param {callback|null} next
+     * @param {object} userSession
+     */
+    this.resumeHaltedRequest = function(req, res, next, userSession/**, requiredControllerOrNamespace*/) {
+        var haltedRequest = null;        
+        if (
+            typeof(userSession) == 'undefined' 
+            ||
+            typeof(userSession) != 'undefined' 
+            && typeof(userSession.haltedRequest) == 'undefined' 
+        ) {
+            var error = new ApiError('`userSession.haltedRequest` is required', 424);
+            self.throwError(error);
+            return;
+        }
+        // request methods cleanup
+        // checkout /framework/{verrsion}/core/template/conf/(settings.json).server.supportedRequestMethods
+        var serverSupportedMethods = local.options.conf.server.supportedRequestMethods;
+        for (let method in serverSupportedMethods) {
+            delete req[method]; 
+        }
+               
+        var haltedRequest   = userSession.haltedRequest;
+        var data            = haltedRequest.data || {};
+        var url             = lib.routing.getRoute(haltedRequest.routing.rule, haltedRequest.params).url;
+        var requiredController = self; // by default;
+        if ( req.routing.namespace != haltedRequest.routing.namespace ) {
+            try {
+                requiredController = self.requireController(haltedRequest.routing.namespace, self._options );
+            } catch (err) {
+                self.throwError(err);
+            }            
+        }
+        req.routing     = haltedRequest.routing;
+        req.method      = haltedRequest.method;
+        req[haltedRequest.method] = data;
+        
+        
+        if ( /GET/i.test(req.method) ) { 
+            if ( typeof(userSession.haltedRequest) != 'undefined' ) {
+                delete userSession.haltedRequest;
+            }
+            delete userSession.haltedRequest;
+            userSession.haltedRequestUrlResumed = url;
+            requiredController.redirect(url, true);
+        } else {
+            local.onHaltedRequestResumed = function(err) {
+                if (!err) {                    
+                    delete userSession.haltedRequest;
+                }
+            }
+            requiredController[req.routing.param.control](req, res, local.onHaltedRequestResumed);
+        }              
+    }
     
     
 
@@ -3005,10 +3101,16 @@ function SuperController(options) {
                     console.warn('[ ApiValidator ] statusCode `'+ code +'` not matching any definition in `'+_( getPath('gina').core + '/status.codes')+'`\nPlease contact the Gina dev team to add one if required');
                 }
 
-                if ( !req.headers['content-type'] ) {
-                    req.headers['content-type'] = local.options.conf.server.coreConfiguration.mime['json']
-                }
-                // Internet Explorer override
+                // if ( !local.res.getHeaders()['content-type'] /**!req.headers['content-type'] */  ) {
+                //     // Internet Explorer override
+                //     if ( typeof(req.headers['user-agent']) != 'undefined' && /msie/i.test(req.headers['user-agent']) ) {
+                //         res.writeHead(code, "content-type", "text/plain")
+                //     } else {
+                //         res.writeHead(code, { 'content-type': local.options.conf.server.coreConfiguration.mime['json']} );
+                //     }
+                // }
+                
+                // TODO - test with internet explorer then remove this if working
                 if ( typeof(req.headers['user-agent']) != 'undefined' ) {
                     if ( /msie/i.test(req.headers['user-agent']) ) {
                         res.writeHead(code, "content-type", "text/plain")
@@ -3018,7 +3120,7 @@ function SuperController(options) {
                 } else if ( typeof(req.headers['content-type']) != 'undefined' ) {
                     res.writeHead(code, { 'content-type': req.headers['content-type']} )
                 } else {
-                    res.writeHead(code, "content-type", local.options.conf.server.coreConfiguration.mime['json'])
+                    res.writeHead(code, "content-type", local.options.conf.server.coreConfiguration.mime['json']+ '; charset='+ local.options.conf.encoding);
                 }
 
                 console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url);

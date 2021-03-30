@@ -6,6 +6,17 @@
       "privateKey": "{projectPath}/ssl/server.key",
       "certificate": "{projectPath}/ssl/server.crt",
       "allowHTTP1": true
+    },
+    // refers to server.js, lib.routing & controller.js
+    "supportedRequestMethods": {
+      "body": {},
+      "get": {},
+      "post": {},
+      "put": {},
+      "delete": {},
+      "files": []
+      // https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods
+      // ? connect, head, options, trace, patch, cookies, copy
     }
   },
   "upload": {
