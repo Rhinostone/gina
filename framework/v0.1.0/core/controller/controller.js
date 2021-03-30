@@ -2936,8 +2936,8 @@ function SuperController(options) {
                 session = local.req.session.user;
             }
             if (!session) {
-                self.throwError(new ApiError('`session` is required', 424));
-                return;
+                //self.throwError(new ApiError('`session` is required', 424));
+                return false;
             }
         }
         
