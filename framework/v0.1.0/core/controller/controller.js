@@ -1470,16 +1470,7 @@ function SuperController(options) {
                 // merging new & olds params
                 requestParams = merge(requestParams, oldParams);
                 if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {
-                    // var newParams = '';
-                    // for (let n in requestParams) {
-                    //     if ( typeof(oldParams[n]) == 'undefined' || requestParams[n] != oldParams[n] ) {
-                    //         //newParams[n] = requestParams[n]
-                    //         newParams += n +'=' + requestParams[n] +'&';
-                    //     }
-                    // }
-                    // if ( newParams != '' ) {
-                    //     path += '?'+ newParams.substr(0, newParams.length-1);
-                    // }
+                    
                     var inheritedData = null;
                     if ( /\?/.test(path) ) {
                         inheritedData = '&inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));  
@@ -1490,7 +1481,7 @@ function SuperController(options) {
                     // if redirecting from a xhrRequest
                     if ( self.isXMLRequest() ) {
                         // `requestParams` should be stored in the session to avoid passing datas in clear
-                        var redirectObj = { location: path };
+                        var redirectObj = { location: path, isXhrRedirect: true };
                         if (requestParams.count() > 0)  {
                             var userSession = req.session.user || req.session;
                             if ( userSession ) {
@@ -2445,10 +2436,9 @@ function SuperController(options) {
                 console.error(error.stack||error.message);
                 // you can get here if :
                 //  - you are trying to query using: `enctype="multipart/form-data"`
-                if ( typeof(callback) != 'undefined' ) {
-                    
-                    callback(error)
-
+                //  - server responded with an error
+                if ( typeof(callback) != 'undefined' ) {                    
+                    callback(error);
                 } else {
                     error = {
                         status    : 500,
@@ -2483,7 +2473,11 @@ function SuperController(options) {
                 if ( typeof(callback) != 'undefined' ) {
                     if ( typeof(data) == 'string' && /^(\{|%7B|\[{)|\[\]/.test(data) ) {
                         try {
-                            data = JSON.parse(data)
+                            data = JSON.parse(data);
+                            // just in case
+                            if ( typeof(data.status) == 'undefined' ) {
+                                
+                            }
                         } catch (err) {
                             data = {
                                 status    : 500,
@@ -2506,7 +2500,7 @@ function SuperController(options) {
                         
                         if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
                               if ( /^5/.test(data.status)  ) {
-                                  callback(data)  
+                                  return callback(data)  
                               } else {
                                   self.throwError(data)
                               }  
@@ -2516,9 +2510,9 @@ function SuperController(options) {
                             if ( self.isHaltedRequest() && typeof(local.onHaltedRequestResumed) != 'undefined' ) {
                                 local.onHaltedRequestResumed(false);
                             }
-                            callback( false, data )                        
+                            return callback( false, data )                        
                         }
-                        return;
+                        
                     } catch (e) {
                         var infos = local.options, controllerName = infos.controller.substr(infos.controller.lastIndexOf('/'));
                         var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
@@ -2977,7 +2971,12 @@ function SuperController(options) {
      * @param {callback|null} next
      * @param {object} userSession
      */
+    local.haltedRequestUrlResumed = false;
     this.resumeHaltedRequest = function(req, res, next, userSession/**, requiredControllerOrNamespace*/) {
+        
+        if (local.haltedRequestUrlResumed)
+            return;
+        
         var haltedRequest = null;        
         if (
             typeof(userSession) == 'undefined' 
@@ -3011,7 +3010,7 @@ function SuperController(options) {
         req.method      = haltedRequest.method;
         req[haltedRequest.method] = data;
         
-        
+        local.haltedRequestUrlResumed = true;
         if ( /GET/i.test(req.method) ) { 
             if ( typeof(userSession.haltedRequest) != 'undefined' ) {
                 delete userSession.haltedRequest;
@@ -3023,6 +3022,7 @@ function SuperController(options) {
             local.onHaltedRequestResumed = function(err) {
                 if (!err) {                    
                     delete userSession.haltedRequest;
+                    delete userSession.inheritedData;
                 }
             }
             requiredController[req.routing.param.control](req, res, local.onHaltedRequestResumed);
