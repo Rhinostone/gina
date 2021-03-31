@@ -8225,7 +8225,21 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          * isString()       -> validate if value is string
          * isString(10)     -> validate if value is at least 10 chars length
          * isString(0, 45)  -> no minimum length, but validate if value is maximum 45 chars length
-         *
+         * NB.:
+         * In your JSON rule ;
+         * {
+         *  "password": {
+         *      "isRequired": true,
+         * 
+         *      "isString": true // Means that we just want a string and we don't care of its length
+         *      // OR
+         *      "isString": 7 // Means at least 7 chars length
+         *      // OR
+         *      "isString": [7, 40] // Means at least 7 chars length and maximum 40 chars length
+         *      // OR
+         *      "isString": [7] // Means is strickly equal to 7 chars length, same as [7,7]
+         *  }
+         * }
          * @param {number|undefined} [ minLength ]
          * @param {number} [ maxLength ]
          * */
@@ -9478,15 +9492,14 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( /^gina\-upload/i.test(id) )
                                 onUpload(gina, $target, 'success', id, result);
                             
-                            // intercepts result.popin (from controller)
+                            // intercepts result.popin & popin redirect (from controller)
                             if ( 
                                 typeof(gina.popin) != 'undefined'
                                 && gina.hasPopinHandler
-                                && typeof(result.popin) != 'undefined'
                             ) {
                                 var $popin = gina.popin.getActivePopin();
                                 if ( !$popin ) {
-                                    if ( typeof(result.popin.name) == 'undefined' ) {
+                                    if ( typeof(result.popin) != 'undefined' && typeof(result.popin.name) == 'undefined' ) {
                                         throw new Error('To get a `$popin` instance, you need at list a `popin.name`.');
                                     }
                                     $popin = gina.popin.getPopinByName(result.popin.name);
@@ -9494,20 +9507,56 @@ function ValidatorPlugin(rules, data, formId) {
                                         throw new Error('Popin with name: `'+ result.popin.name +'` not found.')
                                     }
                                 }
-                                // if ( typeof(result.popin.id) != 'undefined' ) {                                    
-                                // }
-                                if ( typeof(result.popin.close) != 'undefined' ) {
+                                var popinName = $popin.name; // by default
+                                if ( 
+                                    typeof(result.popin) != 'undefined' 
+                                    && typeof(result.popin.close) != 'undefined'
+                                ) {
+                                    $popin.isRedirecting = false;
                                     $popin.close();
                                 }
-                                if ( typeof(result.popin.location) != 'undefined' ) {                                    
-                                    $popin.isRedirecting = true;
-                                    $popin.url = result.popin.location;
+                                
+                                if ( 
+                                    typeof(result.popin) != 'undefined'
+                                    && typeof(result.popin.location) != 'undefined'
+                                    ||
+                                    typeof(result.popin) != 'undefined'
+                                    && typeof(result.popin.url) != 'undefined'
+                                    ||
+                                    typeof(result.location) != 'undefined'
+                                ) { 
                                     
-                                    $popin.load($popin.name, $popin.url, $popin.options);
-                                    if (!$popin.isOpen) {
-                                        $popin.open(result.popin.name) 
+                                    var _target = '_self'; // by default
+                                    if ( typeof(result.popin) != 'undefined' && typeof(result.popin.target) != 'undefined' ) {
+                                        if ( /^(blank|self|parent|top)$/ ) {
+                                            result.popin.target = '_'+result.popin.target;
+                                        }
+                                        _target = result.popin.target
+                                    }                                   
+                                    $popin.isRedirecting = true;
+                                    //var popinUrl = (typeof(result.popin) != 'undefined') ? result.popin.location : result.location;
+                                    var popinUrl = result.location || result.popin.location || result.popin.url;
+                                    if ( 
+                                        typeof(result.popin) != 'undefined'
+                                        && typeof(result.popin.name) != 'undefined'
+                                        && popinName != result.popin.name
+                                    ) {
+                                        $popin.close();
+                                        $popin = gina.popin.getPopinByName(popinName);
+                                        if ( !$popin ) {
+                                            throw new Error('Popin with name `'+ popinName+'` not found !');
+                                        }
+                                        $popin.load($popin.name, popinUrl, $popin.options);
+                                    } else {
+                                        $popin.load($popin.name, popinUrl, $popin.options);
                                     }
-                                    return;
+                                    
+                                    return setTimeout( function onPopinredirect($popin){
+                                        if (!$popin.isOpen) {
+                                            $popin.open();
+                                            return;
+                                        }
+                                    }, 50, $popin);
                                 }
                             }
                             
@@ -12808,6 +12857,7 @@ function ValidatorPlugin(rules, data, formId) {
                 
                 var $el = event.target;
                 var isCustomSubmit = false, isCaseIgnored = false;
+                                
                 if (
                     /(label)/i.test(event.target.tagName) 
                         && typeof(event.target.control) != 'undefined' 
@@ -21478,7 +21528,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                     if ( new RegExp( '^popin.click.gina-popin-' + instance.id).test(_evt) )
                         triggerEvent(gina, event.target, _evt, event.detail);
-
                 }
             });
 
@@ -22155,6 +22204,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                         // isJsonContent && typeof(result.popin) != 'undefined'
                                     ) {
                                         if ( typeof(result.location) != 'undefined' ) {
+                                            
+                                            
                                             var _target = '_self'; // by default
                                             if ( typeof(result.target) != 'undefined' ) {
                                                 if ( /^(blank|self|parent|top)$/ ) {
@@ -22162,6 +22213,28 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                                 }
                                                 _target = result.target
                                             }
+                                            
+                                            // special case of location without having the popin open
+                                            // can occure while tunnelling
+                                            if ( /^_self$/.test(_target) ) {
+                                                var popinUrl = null;
+                                                if ( typeof(result.popin) != 'undefined' ) {
+                                                    popinUrl = result.popin.location || result.popin.url;
+                                                } else {
+                                                    popinUrl = result.location;
+                                                }
+                                                
+                                                $popin
+                                                    .load( $popin.name, popinUrl, $popin.options );
+                                                return setTimeout( function onPopinredirect($popin){
+                                                    if (!$popin.isOpen) {
+                                                        $popin.open();
+                                                        return;
+                                                    }
+                                                }, 50, $popin);
+                                            }
+                                            
+                                            
                                             window.open(result.location, _target);
                                             return;
                                         }
@@ -22171,11 +22244,12 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                             return;
                                         }
                                         
-                                        // if ( typeof(result.popin) != 'undefined' ) {
-                                        //     if ( typeof(result.popin.close) != 'undefined' ) {
-                                        //         popinClose($popin.name);
-                                        //     }
-                                        // }
+                                        if ( typeof(result.popin) != 'undefined' ) {
+                                            if ( typeof(result.popin.close) != 'undefined' ) {
+                                                $popin.isRedirecting = false;
+                                                popinClose($popin.name);
+                                            }
+                                        }
                                     }
                                     
                                     //if ( !isJsonContent && $popin.hasForm) {
@@ -22517,11 +22591,21 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
          * */
         function popinClose(name) {
             
-            var $popin = ( typeof(name) != 'undefined') ? getPopinByName(name) : getActivePopin();
+            var $popin = null;
+            if ( typeof(name) == 'undefined' && /^true$/.test(this.isOpen) ) {
+                name    = this.name;
+                $popin  = this;
+            } else {
+                $popin  = getPopinByName(name) || getActivePopin();
+                name    = $popin.name;
+            }
+            //var $popin = ( typeof(name) != 'undefined') ? getPopinByName(name) : getActivePopin();
             var $el = null;
             if ( !$popin && typeof(name) != 'undefined' ) {
                throw new Error('Popin `'+name+'` not found !');
             }
+            if (!$popin.isOpen)
+                return;
             
             // by default
             if ( typeof($popin) != 'undefined' && $popin != null ) {

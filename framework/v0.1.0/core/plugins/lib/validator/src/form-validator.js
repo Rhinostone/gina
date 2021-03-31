@@ -984,7 +984,21 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          * isString()       -> validate if value is string
          * isString(10)     -> validate if value is at least 10 chars length
          * isString(0, 45)  -> no minimum length, but validate if value is maximum 45 chars length
-         *
+         * NB.:
+         * In your JSON rule ;
+         * {
+         *  "password": {
+         *      "isRequired": true,
+         * 
+         *      "isString": true // Means that we just want a string and we don't care of its length
+         *      // OR
+         *      "isString": 7 // Means at least 7 chars length
+         *      // OR
+         *      "isString": [7, 40] // Means at least 7 chars length and maximum 40 chars length
+         *      // OR
+         *      "isString": [7] // Means is strickly equal to 7 chars length, same as [7,7]
+         *  }
+         * }
          * @param {number|undefined} [ minLength ]
          * @param {number} [ maxLength ]
          * */
