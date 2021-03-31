@@ -276,7 +276,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                     if ( new RegExp( '^popin.click.gina-popin-' + instance.id).test(_evt) )
                         triggerEvent(gina, event.target, _evt, event.detail);
-
                 }
             });
 
@@ -953,6 +952,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                         // isJsonContent && typeof(result.popin) != 'undefined'
                                     ) {
                                         if ( typeof(result.location) != 'undefined' ) {
+                                            
+                                            
                                             var _target = '_self'; // by default
                                             if ( typeof(result.target) != 'undefined' ) {
                                                 if ( /^(blank|self|parent|top)$/ ) {
@@ -960,6 +961,28 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                                 }
                                                 _target = result.target
                                             }
+                                            
+                                            // special case of location without having the popin open
+                                            // can occure while tunnelling
+                                            if ( /^_self$/.test(_target) ) {
+                                                var popinUrl = null;
+                                                if ( typeof(result.popin) != 'undefined' ) {
+                                                    popinUrl = result.popin.location || result.popin.url;
+                                                } else {
+                                                    popinUrl = result.location;
+                                                }
+                                                
+                                                $popin
+                                                    .load( $popin.name, popinUrl, $popin.options );
+                                                return setTimeout( function onPopinredirect($popin){
+                                                    if (!$popin.isOpen) {
+                                                        $popin.open();
+                                                        return;
+                                                    }
+                                                }, 50, $popin);
+                                            }
+                                            
+                                            
                                             window.open(result.location, _target);
                                             return;
                                         }
@@ -969,11 +992,12 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                             return;
                                         }
                                         
-                                        // if ( typeof(result.popin) != 'undefined' ) {
-                                        //     if ( typeof(result.popin.close) != 'undefined' ) {
-                                        //         popinClose($popin.name);
-                                        //     }
-                                        // }
+                                        if ( typeof(result.popin) != 'undefined' ) {
+                                            if ( typeof(result.popin.close) != 'undefined' ) {
+                                                $popin.isRedirecting = false;
+                                                popinClose($popin.name);
+                                            }
+                                        }
                                     }
                                     
                                     //if ( !isJsonContent && $popin.hasForm) {
@@ -1315,11 +1339,21 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
          * */
         function popinClose(name) {
             
-            var $popin = ( typeof(name) != 'undefined') ? getPopinByName(name) : getActivePopin();
+            var $popin = null;
+            if ( typeof(name) == 'undefined' && /^true$/.test(this.isOpen) ) {
+                name    = this.name;
+                $popin  = this;
+            } else {
+                $popin  = getPopinByName(name) || getActivePopin();
+                name    = $popin.name;
+            }
+            //var $popin = ( typeof(name) != 'undefined') ? getPopinByName(name) : getActivePopin();
             var $el = null;
             if ( !$popin && typeof(name) != 'undefined' ) {
                throw new Error('Popin `'+name+'` not found !');
             }
+            if (!$popin.isOpen)
+                return;
             
             // by default
             if ( typeof($popin) != 'undefined' && $popin != null ) {
