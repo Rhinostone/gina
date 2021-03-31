@@ -2016,17 +2016,20 @@ function SuperController(options) {
             , protocol  = null
             , scheme    = null
         ;
-        
-        // if (/\:\/\//.test(options.hostname)) {
-        //     var hArr = options.host.split('://');
+        // cleanup options.path
+        if (/\:\/\//.test(options.path)) {
+            
+            var hArr    = options.path.split(/^(https|http)\:\/\//);
+            var domain  = hArr[1] +'://';
+            var host    = hArr[2].split(/\//)[0];
+            var port    = parseInt(host.split(/\:/)[1] || 80);
 
-        //     options.protocol = hArr[0];
-
-        //     var pArr = hArr[1].split(/\//g);
-
-        //     options.port = pArr.pop();
-        //     options.host = hArr[0]
-        // }
+            options.port = port;
+            options.host = domain + host.replace(':'+port, '');
+            options.path = options.path
+                                .replace(options.host, '')
+                                .replace(':'+port, '');
+        }
         
         // retrieve protocol & scheme: if empty, take the bundles protocol
         protocol    = options.protocol || ctx.gina.config.envConf[ctx.bundle][ctx.env].server.protocol;// bundle servers's protocol by default

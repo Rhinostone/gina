@@ -918,7 +918,7 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( /^gina\-upload/i.test(id) )
                                 onUpload(gina, $target, 'success', id, result);
                             
-                            // intercepts result.popin & popin redirect (from controller)
+                            // intercepts result.popin & popin redirect (from SuperController::redirect() )
                             var isXhrRedirect = false;
                             if (
                                 typeof(result.isXhrRedirect) != 'undefined'
