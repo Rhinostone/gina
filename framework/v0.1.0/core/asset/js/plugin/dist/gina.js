@@ -9355,7 +9355,7 @@ function ValidatorPlugin(rules, data, formId) {
         if (xhr) {
             // catching ready state cb
             //handleXhrResponse(xhr, $target, id, $form, hFormIsRequired);
-            xhr.onreadystatechange = function (event) {   
+            xhr.onreadystatechange = function onValidationCallback(event) {   
                 
                 if (xhr.readyState == 2) { // responseType interception
                     isAttachment    = ( /^attachment\;/.test( xhr.getResponseHeader("Content-Disposition") ) ) ? true : false; 
@@ -9492,16 +9492,28 @@ function ValidatorPlugin(rules, data, formId) {
                             if ( /^gina\-upload/i.test(id) )
                                 onUpload(gina, $target, 'success', id, result);
                             
-                            // intercepts result.popin & popin redirect (from controller)
+                            // intercepts result.popin & popin redirect (from SuperController::redirect() )
+                            var isXhrRedirect = false;
+                            if (
+                                typeof(result.isXhrRedirect) != 'undefined'
+                                && /^true$/i.test(result.isXhrRedirect)
+                            ) {
+                                isXhrRedirect = true;
+                            }
                             if ( 
                                 typeof(gina.popin) != 'undefined'
                                 && gina.hasPopinHandler
+                                && typeof(result.popin) != 'undefined'
+                                ||
+                                typeof(gina.popin) != 'undefined'
+                                && gina.hasPopinHandler
+                                && typeof(result.location) != 'undefined'
+                                && isXhrRedirect
                             ) {
                                 var $popin = gina.popin.getActivePopin();
-                                if ( !$popin ) {
+                                if ( !$popin && typeof(result.popin) != 'undefined' ) {
                                     if ( typeof(result.popin) != 'undefined' && typeof(result.popin.name) == 'undefined' ) {
-                                        console.warn(new Error('To get a `$popin` instance, you need at list a `popin.name`.'));
-                                        return;
+                                        throw new Error('To get a `$popin` instance, you need at list a `popin.name`.');
                                     }
                                     $popin = gina.popin.getPopinByName(result.popin.name);
                                     if ( !$popin ) {
