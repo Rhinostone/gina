@@ -9500,7 +9500,8 @@ function ValidatorPlugin(rules, data, formId) {
                                 var $popin = gina.popin.getActivePopin();
                                 if ( !$popin ) {
                                     if ( typeof(result.popin) != 'undefined' && typeof(result.popin.name) == 'undefined' ) {
-                                        throw new Error('To get a `$popin` instance, you need at list a `popin.name`.');
+                                        console.warn(new Error('To get a `$popin` instance, you need at list a `popin.name`.'));
+                                        return;
                                     }
                                     $popin = gina.popin.getPopinByName(result.popin.name);
                                     if ( !$popin ) {
