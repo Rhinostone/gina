@@ -946,13 +946,14 @@ function ValidatorPlugin(rules, data, formId) {
                                         throw new Error('Popin with name: `'+ result.popin.name +'` not found.')
                                     }
                                 }
-                                var popinName = $popin.name; // by default
+                                
                                 if ( 
                                     typeof(result.popin) != 'undefined' 
                                     && typeof(result.popin.close) != 'undefined'
                                 ) {
                                     $popin.isRedirecting = false;
                                     $popin.close();
+                                    delete result.popin;
                                 }
                                 
                                 if ( 
@@ -963,8 +964,14 @@ function ValidatorPlugin(rules, data, formId) {
                                     && typeof(result.popin.url) != 'undefined'
                                     ||
                                     typeof(result.location) != 'undefined'
+                                    && isXhrRedirect
                                 ) { 
-                                    
+                                    var popinName = null;
+                                    if ( $popin ) {
+                                        popinName = $popin.name; // by default
+                                        $popin.isRedirecting = true;
+                                    }
+                                     
                                     var _target = '_self'; // by default
                                     if ( typeof(result.popin) != 'undefined' && typeof(result.popin.target) != 'undefined' ) {
                                         if ( /^(blank|self|parent|top)$/ ) {
@@ -972,7 +979,7 @@ function ValidatorPlugin(rules, data, formId) {
                                         }
                                         _target = result.popin.target
                                     }                                   
-                                    $popin.isRedirecting = true;
+                                    
                                     //var popinUrl = (typeof(result.popin) != 'undefined') ? result.popin.location : result.location;
                                     var popinUrl = result.location || result.popin.location || result.popin.url;
                                     if ( 
@@ -980,22 +987,24 @@ function ValidatorPlugin(rules, data, formId) {
                                         && typeof(result.popin.name) != 'undefined'
                                         && popinName != result.popin.name
                                     ) {
-                                        $popin.close();
+                                        if ($popin)
+                                            $popin.close();
                                         $popin = gina.popin.getPopinByName(popinName);
                                         if ( !$popin ) {
                                             throw new Error('Popin with name `'+ popinName+'` not found !');
                                         }
                                         $popin.load($popin.name, popinUrl, $popin.options);
-                                    } else {
+                                    } else if ($popin) {
                                         $popin.load($popin.name, popinUrl, $popin.options);
                                     }
-                                    
-                                    return setTimeout( function onPopinredirect($popin){
-                                        if (!$popin.isOpen) {
-                                            $popin.open();
-                                            return;
-                                        }
-                                    }, 50, $popin);
+                                    if ($popin) {
+                                        return setTimeout( function onPopinredirect($popin){
+                                            if (!$popin.isOpen) {
+                                                $popin.open();
+                                                return;
+                                            }
+                                        }, 50, $popin);
+                                    } 
                                 }
                             }
                             

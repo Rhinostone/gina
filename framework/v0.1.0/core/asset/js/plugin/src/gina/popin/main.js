@@ -951,8 +951,23 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                         // ||
                                         // isJsonContent && typeof(result.popin) != 'undefined'
                                     ) {
-                                        if ( typeof(result.location) != 'undefined' ) {
+                                        var isXhrRedirect = false;
+                                        if (
+                                            typeof(result.isXhrRedirect) != 'undefined'
+                                            && /^true$/i.test(result.isXhrRedirect)
+                                        ) {
+                                            isXhrRedirect = true;
+                                        }
+                                        if ( typeof(result.location) != 'undefined' && isXhrRedirect ) {
                                             
+                                            if ( 
+                                                typeof(result.popin) != 'undefined' 
+                                                && typeof(result.popin.close) != 'undefined'
+                                            ) {
+                                                $popin.isRedirecting = false;
+                                                $popin.close();
+                                                delete result.popin;
+                                            }
                                             
                                             var _target = '_self'; // by default
                                             if ( typeof(result.target) != 'undefined' ) {
