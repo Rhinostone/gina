@@ -80,6 +80,23 @@ module.exports = function(){
             throw error;
         }               
     };
+    
+    /**
+     * escapeJSON
+     * Escape special characters
+     * @return {string} jsonStr
+     * */
+     escapeJSON = function(jsonStr){
+         try {
+             return jsonStr
+                        .replace(/\n/g, "\\n")
+                        .replace(/\r/g, "\\r")
+                        .replace(/\t/g, "\\t")
+                    ;
+         } catch (err) {         
+            throw err;
+         }
+     }
    
 
 };//EO JSONHelper.
