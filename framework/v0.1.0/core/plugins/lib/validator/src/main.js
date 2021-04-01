@@ -2045,7 +2045,7 @@ function ValidatorPlugin(rules, data, formId) {
                     // if button is != type="submit", you will need to provide : data-gina-form-submit
                     // TODO - On button binding, you can then provide data-gina-form-action & data-gina-form-method
                     //if ($elTMP[i].type == 'submit' || $elTMP[i].attributes.getNamedItem('data-gina-form-submit') )
-                        $els.push($elTMP[i])
+                    $els.push($elTMP[i])
                 }
             }
 
@@ -2054,7 +2054,7 @@ function ValidatorPlugin(rules, data, formId) {
             if ( $elTMP.length > 0 ) {
                 for(let i = 0, len = $elTMP.length; i < len; ++i) {
                     //if ( $elTMP[i].attributes.getNamedItem('data-gina-form-submit') || /^click\./.test( $elTMP[i].attributes.getNamedItem('id') ) || /^link\./.test( $elTMP[i].attributes.getNamedItem('id') ) )
-                        $els.push($elTMP[i])
+                    $els.push($elTMP[i])
                 }
             }
 
@@ -4339,14 +4339,32 @@ function ValidatorPlugin(rules, data, formId) {
                     || /a/i.test($el.tagName) && $el.attributes.getNamedItem('data-gina-form-submit')
                     // You could also have a click on a child element like <a href="#"><span>click me</span></a>
                     || /a/i.test($el.parentNode.tagName) && $el.parentNode.attributes.getNamedItem('data-gina-form-submit')
-                ) {
-                    
+                ) {                    
+                    var namedItem = $el.attributes.getNamedItem('data-gina-form-submit');
+                    var parentNamedItem = $el.parentNode.attributes.getNamedItem('data-gina-form-submit');
                     if (
-                        $el.attributes.getNamedItem('data-gina-form-submit')
+                        namedItem
                         ||
-                        $el.parentNode.attributes.getNamedItem('data-gina-form-submit')
+                        parentNamedItem 
                     ) {                        
                         isCustomSubmit = true;
+                        // Get others attribute and override current form attribute                        
+                        var newFormMethod = null;
+                        if (namedItem) {
+                            newFormMethod = $el.getAttribute('data-gina-form-submit-method');
+                        } else {
+                            newFormMethod = $el.parentNode.getAttribute('data-gina-form-submit-method');
+                        }
+                        if (newFormMethod) {
+                            // Backup originalMethod
+                            
+                            // Rewrite current method
+                            if (namedItem && $el.form) {
+                                $el.form.setAttribute('method', newFormMethod);
+                            } else if ($el.parentNode.form) {
+                                $el.parentNode.form.setAttribute('method', newFormMethod);
+                            }
+                        }
                     }
                     
                     if ( typeof($el.id) == 'undefined' || !$el.getAttribute('id') ) {
