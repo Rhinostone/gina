@@ -224,6 +224,9 @@ function Routing() {
                     let condition = params.requirements[_key];
                     if ( /^\//.test(condition) ) {
                         condition = condition.substr(1, condition.lastIndexOf('/')-1);
+                    } else if ( /^validator\:\:/.test(condition) && fitsWithRequirements(uRo[p], uRe[p], params, request) ) {
+                        ++score;
+                        continue;
                     }
                     if (
                         /^:/.test(uRo[p]) 
@@ -246,6 +249,7 @@ function Routing() {
                 }
             }
         }
+        
         
         if (!hasAlreadyBeenScored && uRe.length === uRo.length) {
             for (; i < maxLen; ++i) {

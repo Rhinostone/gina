@@ -1,7 +1,7 @@
 //"use strict";
 // Imports.
 var fs              = require('fs');
-var util            = require('util');
+//var util            = require('util');
 //var promisify       = require('util').promisify;
 var couchbase       = require('couchbase');
 
@@ -9,11 +9,6 @@ var lib             = require('./../../../lib') || require.cache[require.resolve
 var inherits        = lib.inherits;
 var merge           = lib.merge;
 var console         = lib.logger;
-
-//var N1qlQuery           = couchbase.N1qlQuery || null;
-// var N1qlStringQuery     = couchbase.N1qlStringQuery || null;
-// var ViewQuery           = couchbase.ViewQuery || null;
-// var uuid                = require('uuid');
 
 /**
  * Couchbase Class

@@ -3000,7 +3000,11 @@ function SuperController(options) {
                
         var haltedRequest   = userSession.haltedRequest;
         var data            = haltedRequest.data || {};
-        var url             = lib.routing.getRoute(haltedRequest.routing.rule, haltedRequest.params).url;
+        var dataAsParams    = {};
+        if (data.count() > 0){
+            dataAsParams = JSON.parse(JSON.stringify(haltedRequest.data));
+        }
+        var url             = lib.routing.getRoute(haltedRequest.routing.rule, haltedRequest.params||dataAsParams).url;
         var requiredController = self; // by default;
         if ( req.routing.namespace != haltedRequest.routing.namespace ) {
             try {
