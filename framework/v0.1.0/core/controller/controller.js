@@ -1467,10 +1467,13 @@ function SuperController(options) {
                 // backing up oldParams
                 var oldParams = local.req[originalMethod.toLowerCase()];
                 var requestParams = req[req.method.toLowerCase()] || {};
+                // revove errors
+                if ( typeof(requestParams) != 'undefined' && typeof(requestParams.error) != 'undefined' ) {
+                    delete requestParams.error;
+                }
                 // merging new & olds params
-                requestParams = merge(requestParams, oldParams);
-                if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {
-                    
+                requestParams = merge(requestParams, oldParams);                
+                if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {                    
                     var inheritedData = null;
                     if ( /\?/.test(path) ) {
                         inheritedData = '&inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));  
