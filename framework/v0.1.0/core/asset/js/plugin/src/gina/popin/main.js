@@ -204,7 +204,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             cancelEvent(e);
 
                             var fired = false;
-                            $popin.on('loaded', function (e) {
+                            addListener(gina, $popin.target, 'loaded.'+$popin.id, function(e) {
                                 e.preventDefault();
 
                                 if (!fired) {
@@ -345,10 +345,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         //console.debug('This is a link', event.target);
                         var linkTarget = event.target.getAttribute('target');
                         if ( linkTarget != null && linkTarget != '' ) {                            
-                            window.open(linkHref, event.target.getAttribute('target'));
+                            var _window = window.open(linkHref, event.target.getAttribute('target'));
+                            // _window.onload = function onWindowLoad() {
+                            //     var $popin = getActivePopin();                             
+                            //     triggerEvent(gina, $popin, 'loaded.' + id);
+                            // }
                         } else { // else, inside viewbox
-                            // TODO - Integrate https://github.com/box/viewer.js#loading-a-simple-viewer
-                            
+                            // TODO - Integrate https://github.com/box/viewer.js#loading-a-simple-viewer                            
                             triggerEvent(gina, event.target, event.currentTarget.id, $popin);
                         }
                         
@@ -1198,7 +1201,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             
             if ( !$popin.isRedirecting ) {
                 triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
-            } 
+            } else {
+                triggerEvent(gina, instance.target, 'loaded.' + $popin.id, $popin);
+            }
         }
                
         function getScript(source) {            
@@ -1569,7 +1574,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         var init = function(options) {
             
             setupInstanceProto();
-            instance.on('init', function(event) {
+            //instance.on('init', function(event) {
+            addListener(gina, instance.target, 'init.'+instance.id, function(e) {
                 
                 var $newPopin = null;
                 var popinId = 'gina-popin-' + instance.id +'-'+ options['name'];
