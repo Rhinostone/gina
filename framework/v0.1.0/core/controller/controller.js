@@ -1468,9 +1468,9 @@ function SuperController(options) {
                 var oldParams = local.req[originalMethod.toLowerCase()];
                 var requestParams = req[req.method.toLowerCase()] || {};
                 // revove errors
-                if ( typeof(requestParams) != 'undefined' && typeof(requestParams.error) != 'undefined' ) {
-                    delete requestParams.error;
-                }
+                // if ( typeof(requestParams) != 'undefined' && typeof(requestParams.error) != 'undefined' ) {
+                //     delete requestParams.error;
+                // }
                 // merging new & olds params
                 requestParams = merge(requestParams, oldParams);                
                 if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {                    
@@ -1487,7 +1487,7 @@ function SuperController(options) {
                         var redirectObj = { location: path, isXhrRedirect: true };
                         if (requestParams.count() > 0)  {
                             var userSession = req.session.user || req.session;
-                            if ( userSession ) {
+                            if ( userSession && local.haltedRequestUrlResumed ) {
                                 // will be reused for server.js on `case : 'GET'`
                                 userSession.inheritedData = requestParams;
                             } else { // will be passed in clear
@@ -1605,6 +1605,7 @@ function SuperController(options) {
         var defaultOptions = { 
             // file name i  you want to rename the file
             file: null,
+            fileSize: null,
             // only if you want to store locally the downloaded file
             toLocalDir: false, // this option will disable attachment download
             // content-disposition (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Disposition)
@@ -1699,12 +1700,16 @@ function SuperController(options) {
         browser.get(requestOptions, function(response) {
 
             local.res.setHeader('content-type', contentType + '; charset='+ local.options.conf.encoding);
-            local.res.setHeader('content-disposition', opt.contentDisposition); 
-            //local.res.setHeader('content-length', dataLength);  
+            local.res.setHeader('content-disposition', opt.contentDisposition);
+            if (opt.fileSize) {
+                local.res.setHeader('content-length', opt.fileSize);
+            }
+            //local.res.setHeader('content-length', opt.fileSize);
+            // local.res.setHeader('cache-control', 'must-revalidate'); 
+            // local.res.setHeader('pragma', 'must-revalidate'); 
             
             // response.on('end', function onResponsePipeEnd(){
-                
-            //     //self.renderJSON({ url: url});
+            //     self.renderJSON({ url: url});
             //     //local.res.end( Buffer.from(data) );
             //     //local.res.headersSent = true;       
                 
@@ -1715,7 +1720,6 @@ function SuperController(options) {
             // });
             
             response.pipe(local.res);
-            return;
         });
         
         return;

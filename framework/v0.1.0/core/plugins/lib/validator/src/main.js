@@ -3272,7 +3272,7 @@ function ValidatorPlugin(rules, data, formId) {
                 $textareas[f].setAttribute('id', elId)
             }
             if (!$form.fieldsSet[ elId ]) {
-                let defaultValue = $textareas[f].value;
+                let defaultValue = $textareas[f].value || '';
                 if (/$(on|true|fasle)$/i.test(defaultValue)) {
                     defaultValue = (/$(on|true)$/i.test(defaultValue)) ? true : false;
                 }
