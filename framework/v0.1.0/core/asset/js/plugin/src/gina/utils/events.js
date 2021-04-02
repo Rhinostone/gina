@@ -802,6 +802,8 @@ function on(event, cb) {
 
                 if (cb)
                     cb(e, data);
+                
+                //triggerEvent(gina, e.currentTarget, e.type);
             });
 
             if (this.initialized && !this.isReady)
