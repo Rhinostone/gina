@@ -1,9 +1,10 @@
-define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/events' ], function (require) {
+define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/routing', 'utils/events' ], function (require) {
 
     var $       = require('jquery');
     $.noConflict();
     var uuid    = require('vendor/uuid');
     var merge   = require('utils/merge');
+    var routing = require('utils/routing');
 
     require('utils/events'); // events
 
@@ -292,6 +293,12 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 $el.innerHTML = e.detail.trim();
             
             var register = function (type, evt, $element) {
+                var isLink = $element.getAttribute('data-gina-popin-is-link');
+                isLink = ( /^true$/i.test(isLink) ) ? true : false;
+                if ( type == 'link' && !isLink) {
+                    // like a form action, so gina will not follow the href and the event will be prevented
+                    type = 'action';
+                }
                 // attach submit events
                 addListener(gina, $element, evt, function(event) {
 
@@ -329,22 +336,26 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 
                 addListener(gina, $element, 'click', function(event) {
                     cancelEvent(event);
-                    
+                    // ignore disabled
                     if ( event.target.getAttribute('disabled') != null && event.target.getAttribute('disabled') != 'false' ) {
                         return false;
                     }
-                    
+                    // NB.: `type == 'action'` will be handled by the form validator
                     if ( type == 'link' ) {
-                        
-                        if ( event.target.getAttribute('target') != null && event.target.getAttribute('target') != '' ) {
-                            window.open(event.target.getAttribute('href'), event.target.getAttribute('target'));
+                        //console.debug('This is a link', event.target);
+                        var linkTarget = event.target.getAttribute('target');
+                        if ( linkTarget != null && linkTarget != '' ) {                            
+                            window.open(linkHref, event.target.getAttribute('target'));
                         } else { // else, inside viewbox
                             // TODO - Integrate https://github.com/box/viewer.js#loading-a-simple-viewer
                             
                             triggerEvent(gina, event.target, event.currentTarget.id, $popin);
                         }
                         
-                    } else { // close
+                    } /**else if ( type == 'action' ) {
+                        // rewrite form attributes
+                        //console.debug('This is an action ', event.target);
+                    }*/ else { // close
                         
                         if ( typeof(event.target.id) == 'undefined' ) {
                             event.target.setAttribute('id', evt +'.'+ uuid.v4() );
@@ -360,15 +371,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         
                         if ( /^popin\.click\./.test(event.target.id) ) {
                             cancelEvent(event);
-                            //console.log('popin.click !! ', event.target);
                             var _evt = event.target.id;
         
                             if ( new RegExp( '^popin.click.gina-popin-' + instance.id).test(_evt) )
                                 triggerEvent(gina, event.target, _evt, event.detail);
         
                         }
-                    }
-                    
+                    }                    
                 });
                     
             };
@@ -575,35 +584,66 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             i = 0; len = $link.length;
             var _form = null, f = null, fLen = null;
             var inheritedData = {}, _formData = null;
-            var domParserObject = new DOMParser(), currentId = null, found = null;
-            var linkType = null;
-            for (; i < len; ++i) {                
-                if (!$link[i]['id'] || !/^popin\.link/.test($link[i]['id']) ) {
-                    // jsut in case
-                    if ( typeof($link[i]['href']) == 'undefined' ) {
-                        $link[i]['href'] = '#';
-                    }                    
-                    evt = 'popin.link.' + uuid.v4();                    
-                    $link[i]['id'] =  $link[i].getAttribute('id') || evt;
-                    if ( !/^popin\.link/.test($link[i]['id']) ) {
-                        $link[i].setAttribute( 'data-gina-popin-link-id', evt);
-                        evt = $link[i]['id'];
-                    } else {
-                        $link[i].setAttribute( 'id', evt);
-                    }
-                } else {
-                    evt = $link[i]['id'];
-                }
+            var domParserObject = new DOMParser()
+                , currentId     = null
+                , found         = null
+                , aHref         = null
+                , isSubmitLink  = null
+                , isLink        = null
+            ;
+            
+            for (; i < len; ++i) {
                 // if is disabled, stop propagation
                 if ( $link[i].getAttribute('disabled') != null ) {
                     continue;
                 }
+                
+                $link[i]['id'] =  ( /^null$/i.test($link[i].getAttribute('id')) ) ? null : $link[i].getAttribute('id');               
+                if (!$link[i]['id'] || !/^popin\.link/.test($link[i]['id']) || !/^popin\.click/.test($link[i]['id']) ) {
+                                        
+                    // just in case
+                    isLink = true;
+                    aHref = $link[i].getAttribute('href');
+                    if (!aHref || aHref == '' || aHref == '#' ) {
+                        if (aHref != '#')
+                            $link[i].setAttribute('href', '#');
+                        isLink = false;
+                    }
+                    // link or action ?                    
+                    if (/^null$/i.test($link[i]['id'])) {
+                        if ( isLink ) {
+                            evt = 'popin.link.' + uuid.v4();
+                            $link[i].setAttribute('data-gina-popin-is-link', true);
+                        } else {
+                            evt = 'popin.click.' + uuid.v4();
+                            $link[i].setAttribute('data-gina-popin-is-link', false);
+                        }
+                    } else {
+                        evt = $link[i]['id'];
+                    }
+                    
+                    $link[i]['id'] = evt;                    
+                    $link[i].setAttribute( 'id', evt);
+                    
+                } else {
+                    evt = $link[i]['id'];
+                }
+                
+                // ignore `isSubmitLink == true`
+                // will be handled by validator
+                isSubmitLink = $link[i].getAttribute('data-gina-form-submit');
+                isSubmitLink = ( isSubmitLink && /^true$/i.test(isSubmitLink) ) ? true : false;                    
+                if (isSubmitLink) {
+                    continue;
+                }
+                
                 
                 if ( !/^(null|\s*)$/.test($link[i].getAttribute('href')) ) {
                     addListener(gina, $link[i], 'click', function(linkEvent) {
                         linkEvent.preventDefault();
                         
                         $popin.isRedirecting = true;
+                        
                         if ($popin.hasForm) {
                             // Experimental - inheritedData
                             // Inhertitance from previously request: merging datas with current form context
@@ -622,13 +662,14 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                             }
                             
                             // has already params ?
-                            if ( /\?/.test(linkEvent.currentTarget.href) ) {
-                                linkEvent.currentTarget.href += '&inheritedData=' + encodeURIComponent(JSON.stringify(inheritedData));
-                            } else {
-                                linkEvent.currentTarget.href += '?inheritedData=' + encodeURIComponent(JSON.stringify(inheritedData));
-                            }
+                            if ( inheritedData.count() > 0 ) {
+                                if ( /\?/.test(linkEvent.currentTarget.href) ) {
+                                    linkEvent.currentTarget.href += '&inheritedData=' + encodeURIComponent(JSON.stringify(inheritedData));
+                                } else {
+                                    linkEvent.currentTarget.href += '?inheritedData=' + encodeURIComponent(JSON.stringify(inheritedData));
+                                }
+                            }                                
                         }
-                            
                     })
                 }
 
@@ -641,7 +682,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             
             // bind with formValidator if forms are found
             if ($popin.hasForm) {
-            //if ( /<form/i.test($el.innerHTML) && typeof($validatorInstance) != 'undefined' && $validatorInstance ) {
                 var _id = null;
                 var $forms = $el.getElementsByTagName('form');
                 i = 0; len = $forms.length;
@@ -655,7 +695,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         _id = $forms[i]['id']
                     }
 
-                    //console.log('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
+                    //console.debug('pushing ', _id, $forms[i]['id'], typeof($forms[i]['id']), $forms[i].getAttribute('id'));
                     if ($popin['$forms'].indexOf(_id) < 0)
                         $popin['$forms'].push(_id);
 
@@ -665,8 +705,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                     removeListener(gina, $popin.target, eventType);
                 }
-                
-                //$popin.hasForm = true;
             }
             
         }
@@ -938,18 +976,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                     ||
                                     !isJsonContent && $popin.isOpen && isRedirecting
                                 ) {                                    
-                                    popinLoadContent(result, isRedirecting)                                    
-                                // } else if (isJsonContent && $popin.hasForm) {
-                                //     //triggerEvent(gina, $el, 'success.' + id, result)
-                                //     triggerEvent(gina, $form, 'success.' + id, result);
+                                    popinLoadContent(result, isRedirecting);
                                 } else {
                                     
                                     if ( 
                                         isJsonContent && typeof(result.location) != 'undefined' 
                                         ||
                                         isJsonContent && typeof(result.reload) != 'undefined'
-                                        // ||
-                                        // isJsonContent && typeof(result.popin) != 'undefined'
                                     ) {
                                         var isXhrRedirect = false;
                                         if (
@@ -999,6 +1032,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                             
                                             
                                             window.open(result.location, _target);
+                                            return;
+                                        }
+                                        
+                                        if ( typeof(result.location) != 'undefined' ) {
+                                            document.location = result.location;
                                             return;
                                         }
                                         
@@ -1145,14 +1183,14 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         function popinLoadContent(stringContent, isRedirecting) {
             
             var $popin = getActivePopin(); 
-            if ( !$popin.isOpen )
+            if ( !$popin ) {                
+                return;
+            }
+            if (!$popin.isOpen)
                 throw new Error('Popin `'+$popin.name+'` is not open !');
-            
-            $popin.isRedirecting = ( typeof(isRedirecting) != 'undefined' ) ? isRedirecting : false;
-            // if ( $popin.isRedirecting ) {
                 
-            // }
-            
+            $popin.isRedirecting = ( typeof(isRedirecting) != 'undefined' ) ? isRedirecting : false;
+                        
             var $el = $popin.target;
             $el.innerHTML = stringContent.trim(); 
             popinUnbind($popin.name, true);          

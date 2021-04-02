@@ -107,7 +107,7 @@ function ApiError(errorMessage, fieldName, errorStatus) {
                     error.path = path;
                 }
                 var funcName = stackObj.getFunctionName();
-                error.tag += funcName.replace(/\./g, ':') +'  '+stackObj.getLineNumber()+':'+stackObj.getColumnNumber();
+                error.tag += funcName.replace(/\./g, ':') +'  :'+stackObj.getLineNumber()+':'+stackObj.getColumnNumber();
                 //error.fields[fieldName][funcName] = errorMessage;
             } catch (err) {
                 error.tag   = 'N/A';
