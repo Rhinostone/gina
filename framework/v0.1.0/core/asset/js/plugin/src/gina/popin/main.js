@@ -1398,6 +1398,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 $popin  = this;
             } else {
                 $popin  = getPopinByName(name) || getActivePopin();
+                if (!$popin)
+                    return;
+                    
                 name    = $popin.name;
             }
             //var $popin = ( typeof(name) != 'undefined') ? getPopinByName(name) : getActivePopin();
