@@ -423,12 +423,21 @@ function Router(env) {
                         return function (request, response, next) { // getting rid of the controller context
                             var Setup = require(_(setupFile, true));
 
-                            // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
-                            // inheriting SuperController functions & objects
-
-                            // exporting config & common methods
+                            
+                            // Inheriting SuperController functions & objects                            
+                            // Exporting config & common methods
                             Setup.engine                = controller.engine;
+                            // This is working, but too heavy
+                            // TODO- Allow user to target selected methods to be exported
+                            // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
+                            // for ( let f in controller) {
+                            //     if ( typeof(controller[f]) != 'function' ) {
+                            //         continue;
+                            //     }
+                            //     Setup[f] = controller[f];
+                            // }
                             Setup.getConfig             = controller.getConfig;
+                            Setup.checkBundleStatus     = controller.checkBundleStatus;
                             Setup.getLocales            = controller.getLocales;
                             Setup.getFormsRules         = controller.getFormsRules;
                             Setup.throwError            = serverInstance.throwError;
@@ -440,6 +449,7 @@ function Router(env) {
                             Setup.isWithCredentials     = controller.isWithCredentials,
                             Setup.isCacheless           = controller.isCacheless;
                             Setup.requireController     = controller.requireController;
+                            
 
                             Setup.apply(Setup, arguments);
 
@@ -550,9 +560,18 @@ function Router(env) {
                         // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
 
 
-                        // exporting config & common methods
-                        //Middleware.engine             = controller.engine;
+                        // Exporting config & common methods
+                        // This is working, but too heavy
+                        // TODO- Allow user to target selected methods to be exported
+                        // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
+                        // for ( let f in controller) {
+                        //     if ( typeof(controller[f]) != 'function' ) {
+                        //         continue;
+                        //     }
+                        //     Middleware.prototype[f] = controller[f];
+                        // }
                         Middleware.prototype.getConfig              = controller.getConfig;
+                        Middleware.prototype.checkBundleStatus      = controller.checkBundleStatus;
                         Middleware.prototype.getLocales             = controller.getLocales;
                         Middleware.prototype.getFormsRules          = controller.getFormsRules;
                         Middleware.prototype.throwError             = controller.throwError;

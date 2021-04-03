@@ -1467,10 +1467,7 @@ function SuperController(options) {
                 // backing up oldParams
                 var oldParams = local.req[originalMethod.toLowerCase()];
                 var requestParams = req[req.method.toLowerCase()] || {};
-                // revove errors
-                // if ( typeof(requestParams) != 'undefined' && typeof(requestParams.error) != 'undefined' ) {
-                //     delete requestParams.error;
-                // }
+                
                 // merging new & olds params
                 requestParams = merge(requestParams, oldParams);                
                 if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {                    
@@ -1585,6 +1582,32 @@ function SuperController(options) {
 
                     movefiles(i, res, files, cb)
                 })
+        }
+    }
+    
+    this.getBundleStatus = function(req, res, next) {
+        self.renderJSON({
+            status: 200,
+            isAlive: true,
+            message: 'I am alive !'
+        });
+    }
+    
+    this.checkBundleStatus = async function(bundle, cb) {   
+        var opt     = self.getConfig('app').proxy[bundle];
+        var route   = lib.routing.getRoute('bundle-status@'+bundle);
+        opt.method  = 'GET';
+        opt.path    = route.url;
+        var response = { isAlive: false }, error = false;
+        await util.promisify(self.query)(opt, {})
+            .then( function onQueryResponse(_status) {
+                response = _status
+            });
+            
+        if (cb) {
+            cb(error, response);
+        } else {
+            return response;
         }
     }
     

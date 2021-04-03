@@ -990,6 +990,14 @@ function Config(opt) {
                         
             //setting app param
             var r = null, rLen = null, urls = null;
+            // bundle status
+            routing['bundle-status'] = {
+                "url": "/bundle-status",
+                "method": "GET",
+                "param": {
+                    "control": "getBundleStatus"
+                }
+            };
             // creating default rule for auto redirect: / => /webroot            
             if (
                 hasWebRoot 
@@ -1012,35 +1020,9 @@ function Config(opt) {
                 }
                 // default hostname
                 if (webrootAutoredirect) {    
-                    routing['webroot@'+ bundle].url = '/,'+ wroot.substring(0, wroot.length-1);       
-                    // routing['webroot@'+ bundle] = {
-                    //     //url: wroot +','+ wroot.substring(0, wroot.length-1),
-                    //     url: '/,'+ wroot.substring(0, wroot.length-1),
-                    //     method: 'GET, POST, PUT, DELETE, HEAD',
-                    //     middleware: [],
-                    //     param: {
-                    //         control: "redirect",
-                    //         ignoreWebRoot: true,
-                    //         path: wroot,
-                    //         code: 302
-                    //     },
-                    //     bundle: bundle
-                    // }
+                    routing['webroot@'+ bundle].url = '/,'+ wroot.substring(0, wroot.length-1);
                 } else if (!webrootAutoredirect) {
                     routing['webroot@'+ bundle].url = wroot.substring(0, wroot.length-1);
-                    // routing['webroot@'+ bundle] = {
-                    //     //url: wroot +','+ wroot.substring(0, wroot.length-1),
-                    //     url: wroot.substring(0, wroot.length-1),
-                    //     method: 'GET, POST, PUT, DELETE, HEAD',
-                    //     middleware: [],
-                    //     param: {
-                    //         control: "redirect",
-                    //         ignoreWebRoot: true,
-                    //         path: wroot,
-                    //         code: 302
-                    //     },
-                    //     bundle: bundle
-                    // }
                 }
             }
             
