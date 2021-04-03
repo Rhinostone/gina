@@ -992,10 +992,10 @@ function Config(opt) {
             var r = null, rLen = null, urls = null;
             // bundle status
             routing['bundle-status'] = {
-                "url": "/bundle-status",
-                "method": "GET",
-                "param": {
-                    "control": "getBundleStatus"
+                url: '/bundle-status',
+                method: 'GET',
+                param: {
+                    control: 'getBundleStatus'
                 }
             };
             // creating default rule for auto redirect: / => /webroot            
@@ -1017,7 +1017,7 @@ function Config(opt) {
                     host: conf[bundle][env].host,
                     hostname: conf[bundle][env].server.scheme +'://'+ conf[bundle][env].host +':'+ conf[bundle][env].port[conf[bundle][env].server.protocol][conf[bundle][env].server.scheme],
                     webroot: wroot
-                }
+                };
                 // default hostname
                 if (webrootAutoredirect) {    
                     routing['webroot@'+ bundle].url = '/,'+ wroot.substring(0, wroot.length-1);
