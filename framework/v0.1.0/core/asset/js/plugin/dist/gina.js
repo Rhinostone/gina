@@ -9567,8 +9567,11 @@ function ValidatorPlugin(rules, data, formId) {
                                         && typeof(result.popin.name) != 'undefined'
                                         && popinName != result.popin.name
                                     ) {
+                                        //$popin = gina.popin.getActivePopin();
                                         if ($popin)
                                             $popin.close();
+                                            
+                                        popinName = result.popin.name;
                                         $popin = gina.popin.getPopinByName(popinName);
                                         if ( !$popin ) {
                                             throw new Error('Popin with name `'+ popinName+'` not found !');

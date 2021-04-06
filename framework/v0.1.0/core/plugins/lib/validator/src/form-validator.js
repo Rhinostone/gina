@@ -1194,9 +1194,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          * */
         self[el]['trim'] = function(isApplicable) {
             if ( typeof(isApplicable) == 'boolean' && isApplicable ) {
-                this.value = this.value.replace(/^\s+|\s+$/, '');
-                local.data[this.name] = this.value;
-
+                //if ( typeof(this.value) == 'string' ) {
+                    this.value = this.value.replace(/^\s+|\s+$/, '');
+                    local.data[this.name] = this.value;
+                //}
                 return self[this.name]
             }
         }
