@@ -21,6 +21,7 @@ function mergeEventProps(evt, proxiedEvent) {
 function addListener(target, element, name, callback) {
     
     var registerListener = function(target, element, name, callback) {
+                
         if ( typeof(target.event) != 'undefined' && target.event.isTouchSupported && /^(click|mouseout|mouseover)/.test(name) && target.event[name].indexOf(element) == -1) {
             target.event[name][target.event[name].length] = element
         }
@@ -38,13 +39,22 @@ function addListener(target, element, name, callback) {
         gina.events[name] = ( typeof(element.id) != 'undefined' && typeof(element.id) != 'object' ) ? element.id : element.getAttribute('id')
     }
     
-    if ( Array.isArray(name) ) {
-        var i = 0, len = name.length;
+    var i = 0, len = null;
+    if ( Array.isArray(name) ) {  
+        len = name.length;      
         for (; i < len; i++) {
             registerListener(target, element, name[i], callback)
         }
     } else {
-        registerListener(target, element, name, callback)
+        if ( Array.isArray(element) ) {
+            len = element.length;
+            for (; i < len; i++) {
+                let evtName =  ( /\.$/.test(name) ) ? name + element[i].id : name;
+                registerListener(target, element[i], evtName, callback);
+            }
+        } else {
+            registerListener(target, element, name, callback);
+        }        
     }
         
 }
