@@ -27,10 +27,10 @@ function ValidatorPlugin(rules, data, formId) {
     var events      = [
                         'init', // form or popin init
                         'ready',
+                        'success',
                         'error',
                         'progress',
                         'submit',
-                        'success',
                         'reset',
                         'change',
                         'keydown', // for autocomplete
@@ -38,6 +38,7 @@ function ValidatorPlugin(rules, data, formId) {
                         'focusout',
                         'focusin',
                         'validate', // for form livecheck (validation)
+                        'validated', // for form livecheck (validation)
                         'destroy'
                     ];
 
@@ -94,6 +95,7 @@ function ValidatorPlugin(rules, data, formId) {
         'target'                : (isGFFCtx) ? document : null, // by default
 
         'binded'                : false,
+        'unbinded'              : false,
         'withUserBindings'      : false,
         'rules'                 : {},
         'setOptions'            : null,
@@ -2027,9 +2029,7 @@ function ValidatorPlugin(rules, data, formId) {
             $form = this;
         }
 
-        if ($form) {
-            // remove existing listeners
-            $form = unbindForm($form);
+        if ($form) {            
 
             addListener(gina, $form.target, 'destroy.' + _id, function(event) {
 
@@ -2039,6 +2039,9 @@ function ValidatorPlugin(rules, data, formId) {
                 removeListener(gina, event.currentTarget, event.type);
                 removeListener(gina, event.currentTarget,'destroy');
             });
+            
+            // remove existing listeners
+            $form = unbindForm($form);
 
             //triggerEvent(gina, instance['$forms'][_id].target, 'destroy.' + _id);
             triggerEvent(gina, $form.target, 'destroy.' + _id);
@@ -2129,6 +2132,7 @@ function ValidatorPlugin(rules, data, formId) {
                 $validator.handleErrorsDisplay  = handleErrorsDisplay;
                 $validator.submit               = submit;
                 $validator.send                 = send;
+                $validator.reBind               = reBindForm;
                 $validator.destroy              = destroy;
 
                 var id          = null
@@ -2653,38 +2657,11 @@ function ValidatorPlugin(rules, data, formId) {
     }
     
     var addLiveForInput = function($form, $el, liveCheckTimer, isOtherTagAllowed) {
-        if (typeof(isOtherTagAllowe) == 'undefined' ) {
+        if (typeof(isOtherTagAllowed) == 'undefined' ) {
             isOtherTagAllowed = false;
         }
         if ( /^(radio|text|hidden|password|number|date)$/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
-            // Adding observer for hidden fileds
-            //if ( /hidden/i.test($el.type) ) {
-                // // Credits to `Maciej Swist` @https://stackoverflow.com/questions/42427606/event-when-input-value-is-changed-by-javascript
-                // var descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
-                // var inputSetter = descriptor.set;
-
-                // //Then modify the "setter" of the value to notify when the value is changed:
-                // descriptor.set = function(val) {
-                //     //changing to native setter to prevent the loop while setting the value
-                //     Object.defineProperty(this, 'value', {set:inputSetter});
-                //     this.value = val;
-
-                //     //Custom code triggered when $el.value is set
-                //     console.log('Value set: '+val);
-                //     var _evt = 'change.' + $el.id;
-                //     if ( typeof(gina.events[_evt]) != 'undefined' ) {
-                //         console.debug('trigger event on: ', $el.name, _evt);
-                //         triggerEvent(gina, $el, _evt, val);
-                //     }
-                //     //changing back to custom setter
-                //     Object.defineProperty(this, 'value', descriptor);   
-                // }
-
-                //Last add the new "value" descriptor to the $el element                
-                //Object.defineProperty($el, 'value', descriptor);
-                
-            //}
-            
+                        
             var localRule = $form.rules[$el.name] || null;
             // data-gina-form-live-check-enabled
             // with local rule                
@@ -2992,20 +2969,12 @@ function ValidatorPlugin(rules, data, formId) {
         if ( !/^(input|textarea)$/i.test($el.tagName) ) {
             return
         }
+        // Mutation obeserver - all but type == files
+        if ( !/^file$/i.test($el.type) ) {
+            setObserver($el);
+        }        
         var liveCheckTimer = null
         switch ($el.tagName.toLowerCase()) {
-            // case 'input':
-            //     addLiveForInput($form, $el, liveCheckTimer);
-            //     // Bypass Safari autocomplete
-            //     var isAutoCompleteField = $el.getAttribute('autocomplete');
-            //     if (
-            //         /safari/i.test(navigator.userAgent)
-            //         && isAutoCompleteField
-            //         && /^(off|false)/i.test(isAutoCompleteField) 
-            //     ) {
-            //         handleAutoComplete($el, liveCheckTimer)
-            //     }
-            //     break;
         
             case 'textarea':
                 addLiveForInput($form, $el, liveCheckTimer, true);
@@ -3114,6 +3083,20 @@ function ValidatorPlugin(rules, data, formId) {
         checkAction($el, 'data-gina-form-upload-delete-action', $errorContainer);
     }
     
+    /**
+     * reBindForm
+     * 
+     * @param {object} HTMLElement
+     * @param {object} rules
+     * @return {object} formValidatorInstance
+     */
+    var reBindForm = function($target, rules) {
+        var formInstance = unbindForm($target);
+        bindForm(formInstance.target, rules);
+        
+        return formInstance;
+    }
+    
     var unbindForm = function($target) {
         var $form   = null
             , _id   = null
@@ -3153,7 +3136,9 @@ function ValidatorPlugin(rules, data, formId) {
             removeListener(gina, $form, 'error.' + _id + '.hform');
 
         removeListener(gina, $form, 'validate.' + _id);
+        removeListener(gina, $form, 'validated.' + _id);
         removeListener(gina, $form, 'submit.' + _id);
+        removeListener(gina, $form, 'reset.' + _id);
         
         
 
@@ -3169,7 +3154,6 @@ function ValidatorPlugin(rules, data, formId) {
             for(let i = 0, len = $elTMP.length; i < len; ++i) {
                 // if button is != type="submit", you will need to provide : data-gina-form-submit
                 // TODO - On button binding, you can then provide data-gina-form-action & data-gina-form-method
-                //if ($elTMP[i].type == 'submit' || $elTMP[i].attributes.getNamedItem('data-gina-form-submit') )
                 $els.push($elTMP[i])
             }
         }
@@ -3178,7 +3162,6 @@ function ValidatorPlugin(rules, data, formId) {
         $elTMP = $form.target.getElementsByTagName('a');
         if ( $elTMP.length > 0 ) {
             for(let i = 0, len = $elTMP.length; i < len; ++i) {
-                //if ( $elTMP[i].attributes.getNamedItem('data-gina-form-submit') || /^click\./.test( $elTMP[i].attributes.getNamedItem('id') ) || /^link\./.test( $elTMP[i].attributes.getNamedItem('id') ) )
                 $els.push($elTMP[i])
             }
         }
@@ -3217,17 +3200,14 @@ function ValidatorPlugin(rules, data, formId) {
                         let evt = events[e] +'.'+ $elTMP[i].id;
                         if ( typeof(gina.events[ evt ]) != 'undefined' && gina.events[ evt ] == $elTMP[i].id ) {                                        
                             removeListener(gina, $elTMP[i], evt);
-                            //continue;
                         }
                         evt = events[e];
                         if ( typeof(gina.events[ evt ]) != 'undefined' && gina.events[ evt ] == $elTMP[i].id ) {                                        
                             removeListener(gina, $elTMP[i], evt);
-                            //continue;
                         }
                         evt = $elTMP[i].id;
                         if ( typeof(gina.events[ evt ]) != 'undefined' && gina.events[ evt ] == $elTMP[i].id ) {                                        
                             removeListener(gina, $elTMP[i], evt);
-                            //continue;
                         }
                     }
                 }
@@ -3257,24 +3237,30 @@ function ValidatorPlugin(rules, data, formId) {
             $el = $els[i];
             let eId = $el.getAttribute('id');
             for (let e = 0, eLen = events.length; e < eLen; e++) {
-                let evt = events[e];                    
-                if ( typeof(gina.events[ evt ]) != 'undefined' && gina.events[ evt ] == eId ) {                       
-                    removeListener(gina, $el, evt);
-                }
-                if ( typeof(gina.events[ eId ]) != 'undefined' && gina.events[ eId ] == eId ) {                       
-                    removeListener(gina, $el, eId);
+                let evt = events[e];
+                let eventName = evt;               
+                if ( typeof(gina.events[ eventName ]) != 'undefined' && gina.events[ eventName ] == eId ) {                       
+                    removeListener(gina, $el, eventName);
                 }
                 
-                if ( typeof(gina.events[ evt +'.'+ eId ]) != 'undefined' && gina.events[ evt +'.'+ eId ] == eId ) {                        
-                    removeListener(gina, $el, evt +'.'+ eId);
+                eventName = eId;
+                if ( typeof(gina.events[ eventName ]) != 'undefined' && gina.events[ eventName ] == eId ) {                       
+                    removeListener(gina, $el, eventName);
                 }
                 
-                if ( typeof(gina.events[ evt +'.'+ eId ]) != 'undefined' && gina.events[ evt +'.'+ eId ] == evt +'.'+ eId ) {                        
-                    removeListener(gina, $el, evt +'.'+ eId);
+                eventName = evt +'.'+ eId;
+                if ( typeof(gina.events[ eventName ]) != 'undefined' && gina.events[ eventName ] == eId ) {                        
+                    removeListener(gina, $el, eventName);
                 }
                 
-                if ( typeof(gina.events[ evt +'.'+ eId + '.hform' ]) != 'undefined' && gina.events[ evt +'.'+ eId + '.hform' ] == eId ) {                        
-                    removeListener(gina, evt +'.'+ eId + '.hform');
+                eventName = evt +'.'+ eId;
+                if ( typeof(gina.events[ eventName ]) != 'undefined' && gina.events[ eventName ] == eventName ) {                        
+                    removeListener(gina, $el, eventName);
+                }
+                
+                eventName = evt +'.'+ eId + '.hform';
+                if ( typeof(gina.events[ eventName ]) != 'undefined' && gina.events[ eventName ] == eId ) {                        
+                    removeListener(gina, $el, eventName);
                 }
             }
 
@@ -3371,7 +3357,7 @@ function ValidatorPlugin(rules, data, formId) {
             , isRequiredBeforeSubmit = null
             // a|links
             , $a            = $target.getElementsByTagName('a')
-            // input: checkbox, radio, hidden, text, files
+            // input: checkbox, radio, hidden, text, files, number, date
             , $inputs       = $target.getElementsByTagName('input')
             // textarea
             , $textareas    = $target.getElementsByTagName('textarea')
@@ -3450,11 +3436,6 @@ function ValidatorPlugin(rules, data, formId) {
                     name: $inputs[f].name || null,
                     value: defaultValue || null
                 }
-            }
-            
-            // Mutation obeserver - all bu type == files
-            if ( !/^file$/i.test($inputs[f].type) ) {
-                setObserver($inputs[f]);
             }
             
             // Adding live check
@@ -4944,7 +4925,7 @@ function ValidatorPlugin(rules, data, formId) {
         }// BO binding submit button
 
         evt = 'submit';
-
+        
         // submit proxy
         addListener(gina, $target, evt, function(e) {
 
@@ -5642,8 +5623,7 @@ function ValidatorPlugin(rules, data, formId) {
                                             }
                                             caseRules = null;                           
                                             // reset binding
-                                            var $_formObj = unbindForm($_form);
-                                            bindForm($_formObj.target, customRules);
+                                            reBindForm($_form, customRules);
                                         }
                                     }
                                 }
