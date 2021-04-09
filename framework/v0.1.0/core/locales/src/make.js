@@ -73,7 +73,7 @@ function Make() {
         };
 
         if ( opt.region != 'en' ) {
-            rec.mapping[ 'official_name_' + opt.region ] = JSON.parse(JSON.stringify(rec.mapping["official_name_en"]));
+            rec.mapping[ 'official_name_' + opt.region ] = JSON.clone(rec.mapping["official_name_en"]);
             // remove default
             delete rec.mapping["official_name_en"];
             console.debug('region set to ', opt.region);
@@ -159,7 +159,7 @@ function Make() {
 
                     if (o === key) {
 
-                        var _args = JSON.parse(JSON.stringify(args));
+                        var _args = JSON.clone(args);
                         _args.splice(0, 1);
 
                         for (var a = i, aLen = _args.length; a < aLen; ++a) {

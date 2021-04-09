@@ -386,7 +386,7 @@ function CmdHelper(cmd, client, debug) {
 
 
             
-            ports = JSON.parse(JSON.stringify(cmd.portsData)); 
+            ports = JSON.clone(cmd.portsData); 
             cmd.protocols = [];
             cmd.schemes = [];
             var re = null;

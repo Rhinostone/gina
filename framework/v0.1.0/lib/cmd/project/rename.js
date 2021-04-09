@@ -91,8 +91,8 @@ function Rename(opt, cmd) {
             delete self.projects[local.source];
 
             // renaming & update ports
-            var ports               = JSON.parse(JSON.stringify(self.portsData))
-                , portsReverse      = JSON.parse(JSON.stringify(self.portsReverseData))
+            var ports               = JSON.clone(self.portsData)
+                , portsReverse      = JSON.clone(self.portsReverseData)
                 , re                = null
                 , projectValue      = null
                 , portsReverseStr   = null

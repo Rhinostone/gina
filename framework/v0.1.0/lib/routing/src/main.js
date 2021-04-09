@@ -593,7 +593,7 @@ function Routing() {
             throw new Error('[ RoutingHelper::getRouting(rule, params) ] : `' +rule + '` not found !')
         }
 
-        var route = JSON.parse(JSON.stringify(routing[rule]));
+        var route = JSON.clone(routing[rule]);
         var variable    = null
             , regex     = null
             , urls      = null
@@ -878,7 +878,7 @@ function Routing() {
                     rule                : routing[name].originalRule || name,
                     param               : routing[name].param,
                     //middleware: routing[name].middleware,
-                    middleware          : JSON.parse(JSON.stringify(routing[name].middleware)),
+                    middleware          : JSON.clone(routing[name].middleware),
                     bundle              : routing[name].bundle,
                     isXMLRequest        : isXMLRequest
                 };
@@ -891,7 +891,7 @@ function Routing() {
 
                     if (isRoute.past) {
 
-                        route = JSON.parse(JSON.stringify(routing[name]));
+                        route = JSON.clone(routing[name]);
                         route.name = name;
 
                         matched = true;

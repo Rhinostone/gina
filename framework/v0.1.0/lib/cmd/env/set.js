@@ -24,7 +24,7 @@ function Set(opt, cmd){
         self.target = _(GINA_HOMEDIR +'/' + GINA_RELEASE + '/settings.json');
         self.settings = require(self.target);
 
-        var modified = false, argv = JSON.parse(JSON.stringify(process.argv));
+        var modified = false, argv = JSON.clone(process.argv);
 
         for (var i in argv) {
             if ( /^(\-\-)(?=)/.test(argv[i]) ) {
@@ -34,25 +34,24 @@ function Set(opt, cmd){
         }
 
         if (modified)
-            save(self.settings, self.target)
-    }
+            save(self.settings, self.target);
+    };
 
     var set = function(arr) {
         if ( typeof(arr[1]) == 'undefined' ) {
-            delete self.settings[arr[0].replace(/\-\-/, '').replace(/\-/, '_')]
+            delete self.settings[arr[0].replace(/\-\-/, '').replace(/\-/, '_')];
         } else {
-            self.settings[arr[0].replace(/\-\-/, '').replace(/\-/, '_')] = arr[1] || ''
+            self.settings[arr[0].replace(/\-\-/, '').replace(/\-/, '_')] = arr[1] || '';
         }
-    }
+    };
 
     var save = function(data, target) {
         lib.generator.createFileFromDataSync(
             data,
             target
-        )
+        );
     };
 
-    init()
-};
-
-module.exports = Set
+    init();
+}
+module.exports = Set;

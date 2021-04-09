@@ -104,7 +104,7 @@ function StoragePlugin(options) {
 
         try {
             //backing up collections
-            var tmpCollections  = JSON.parse(JSON.stringify(collections));
+            var tmpCollections  = JSON.clone(collections);
             var index           = this['_index'];
             var collection      = this['_collection'];
             var bucket          = this['_bucket'];
@@ -376,7 +376,7 @@ function StoragePlugin(options) {
         if ( typeof(filter) !== 'object' ) {
             throw new Error('filter must be an object');
         } else {
-            var content     = JSON.parse(JSON.stringify( collections[ this['_collection'] ] ))
+            var content     = JSON.clone( collections[ this['_collection'] ] )
                 //, condition = filter.count()
                 , i         = 0
                 , found     = [];

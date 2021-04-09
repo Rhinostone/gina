@@ -1,3 +1,4 @@
+'use strict';
 if ( typeof(module) !== 'undefined' && module.exports ) {
     var lib = require('../../index');
 }
@@ -79,9 +80,9 @@ function Collection(content, options) {
     var keywords    = ['not null']; // TODO - null, exists (`true` if property is defined)
     var tryEval     = function(condition) {
         try {
-            return eval(condition)
+            return eval(condition);
         } catch(err) {
-            throw new Error('Could not evaluate condition `'+ condition +'`.\n' + err.stack )
+            throw new Error('Could not evaluate condition `'+ condition +'`.\n' + err.stack );
         }
     }
 
@@ -91,13 +92,13 @@ function Collection(content, options) {
     if ( !Array.isArray(content) )
         throw new Error('`new Collection([content] [, options] )`: `content` argument must be an Array !');
 
-    content = (content) ? JSON.parse(JSON.stringify(content)) : []; // original content -> not to be touched
+    content = (content) ? JSON.clone(content) : []; // original content -> not to be touched
         
     // Indexing : uuids are generated for each entry
     var searchIndex = [], idx = 0;
     for (var entry = 0, entryLen = content.length; entry < entryLen; ++entry) {
         if (!content[entry]) {
-            content[entry] = {}
+            content[entry] = {};
         }
         content[entry]._uuid = uuid.v4();
         // To avoid duplicate entries
@@ -219,8 +220,8 @@ function Collection(content, options) {
             var filter              = null
                 , condition         = null
                 , i                 = 0
-                //, tmpContent        = ( Array.isArray(this) && !withOrClause) ? this : JSON.parse(JSON.stringify(content))
-                , tmpContent        = ( Array.isArray(this) ) ? this : JSON.parse(JSON.stringify(content))
+                //, tmpContent        = ( Array.isArray(this) && !withOrClause) ? this : JSON.clone(content)
+                , tmpContent        = ( Array.isArray(this) ) ? this : JSON.clone(content)
                 , resultObj         = {}
                 , result            = []
                 , localeLowerCase   = ''
@@ -600,7 +601,7 @@ function Collection(content, options) {
         }
 
         // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
-        //var currentResult = JSON.parse(JSON.stringify((Array.isArray(this)) ? this : content));
+        //var currentResult = JSON.clone( (Array.isArray(this)) ? this : content );
         var currentResult = null;
         var foundResults = null;
         if ( Array.isArray(arguments[0]) ) {
@@ -630,7 +631,7 @@ function Collection(content, options) {
             throw new Error('[Collection::result->limit(resultLimit)] : `resultLimit` parametter must by a `number`')
         }
 
-        var result = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+        var result = Array.isArray(this) ? this : JSON.clone(content);
 
         //resultLimit
         result = result.splice(0, resultLimit);
@@ -707,7 +708,7 @@ function Collection(content, options) {
         }
 
         // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
-        var currentResult = JSON.parse(JSON.stringify( (Array.isArray(this)) ? this : content) );
+        var currentResult = JSON.clone( (Array.isArray(this)) ? this : content );
         
         var foundResults = null;
         if ( Array.isArray(arguments[0]) ) {
@@ -770,7 +771,7 @@ function Collection(content, options) {
                 }
             } else if ( typeof(currentResult[c]) == 'undefined' ) { //empty source case
                 // means that since we don't have a source to compare, current === found
-                currentResult = JSON.parse(JSON.stringify(foundResults));                
+                currentResult = JSON.clone(foundResults);
                 
             } else { // search based on provided filters
                 // for every single result found        
@@ -781,7 +782,7 @@ function Collection(content, options) {
                     c = 0; cLen = currentResult.length;
                     for (; c < cLen; ++c) { // current results                        
                 
-                        if (typeof (currentResult[c]) != 'undefined') {
+                        if ( typeof (currentResult[c]) != 'undefined' ) {
                             
                             // for each filter
                             fullFiltersMatched = 0;  
@@ -910,7 +911,7 @@ function Collection(content, options) {
         }
 
         // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
-        //var currentResult = JSON.parse(JSON.stringify((Array.isArray(this)) ? this : content));
+        //var currentResult = JSON.clone( (Array.isArray(this)) ? this : content );
         var currentResult = null;
         var foundResults = null;
         if ( Array.isArray(arguments[0]) ) {
@@ -919,11 +920,11 @@ function Collection(content, options) {
             foundResults = instance.find.apply(this, arguments) || [];
         }
         
-        result = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+        result = Array.isArray(this) ? this : JSON.clone(content);
         if (foundResults.length > 0 ) {          
             var arr = foundResults.toRaw();
             for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
-                arr[a] = merge( JSON.parse(JSON.stringify(set) ), arr[a]);
+                arr[a] = merge( JSON.clone(set), arr[a]);
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
                     if ( typeof(result[r][key]) == 'undefined' && key == '_uuid' && typeof(result[r]['id']) != 'undefined' ) {
                         key = 'id';
@@ -995,7 +996,7 @@ function Collection(content, options) {
         }
 
         // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
-        //var currentResult = JSON.parse(JSON.stringify((Array.isArray(this)) ? this : content));
+        //var currentResult = JSON.clone( (Array.isArray(this)) ? this : content );
         var currentResult = null;
         var foundResults = null;
         if ( Array.isArray(arguments[0]) ) {
@@ -1004,11 +1005,11 @@ function Collection(content, options) {
             foundResults = instance.find.apply(this, arguments) || [];
         }
         
-        result = Array.isArray(this) ? this : JSON.parse(JSON.stringify(content));
+        result = Array.isArray(this) ? this : JSON.clone(content);
         if (foundResults.length > 0 ) {          
             var arr = foundResults.toRaw();
             for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
-                arr[a] = JSON.parse(JSON.stringify(set));
+                arr[a] = JSON.clone(set);
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
                     if ( typeof(result[r][key]) == 'undefined' && key == '_uuid' && typeof(result[r]['id']) != 'undefined' ) {
                         key = 'id';
@@ -1101,7 +1102,7 @@ function Collection(content, options) {
             }
         }
 
-        var variableContent = (Array.isArray(this)) ? this : JSON.parse(JSON.stringify(content));
+        var variableContent = (Array.isArray(this)) ? this : JSON.clone(content);
         return sortResult(filter, variableContent.toRaw())
     }
 
@@ -1133,10 +1134,12 @@ function Collection(content, options) {
 
         var condition           = filter.count()
             , sortOp            = {}
+            , multiSortOp       = null
+            , sortRecursive     = null
             , key               = null
             , prop              = null
             , result            = []
-            ;
+        ;
 
         if (condition == 0) return null;
 
@@ -1346,7 +1349,7 @@ function Collection(content, options) {
                 delete result[i]._uuid;
         }
 
-        return JSON.parse(JSON.stringify(result))
+        return JSON.clone(result);
     }
     
     /**
@@ -1399,7 +1402,7 @@ function Collection(content, options) {
             }
         }            
 
-        return JSON.parse(JSON.stringify(rawFilteredResult))
+        return JSON.clone(rawFilteredResult);
     }
     
     

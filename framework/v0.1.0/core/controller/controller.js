@@ -133,7 +133,7 @@ function SuperController(options) {
      * Check if env is running cacheless
      * */
     this.isCacheless = function() {
-        return local.options.cacheless
+        return local.options.cacheless;
     }
 
     this.setOptions = function(req, res, next, options) {
@@ -202,14 +202,22 @@ function SuperController(options) {
         if ( typeof(local.options.template) != 'undefined' && typeof(local.options.control) != 'undefined' ) {
 
 
-            var  action     = local.options.control
-                , rule      = local.options.rule
-                , ext       = 'html'
-                , namespace = local.options.namespace || '';
+            var  action             = local.options.control
+                , rule              = local.options.rule
+                , ext               = 'html'
+                , isWithoutLayout   = false // by default
+                , namespace         = local.options.namespace || '';
 
 
             if ( typeof(local.options.template) != 'undefined' ) {
                 ext = local.options.template.ext || ext;
+                if (
+                    typeof(local.options.template.layout) == 'undefined'
+                    || /^false$/.test(local.options.template.layout)
+                    || local.options.template.layout == ''
+                ) {
+                    isWithoutLayout = true;
+                }
             }
             if ( !/\./.test(ext) ) {
                 ext = '.' + ext;
@@ -222,7 +230,7 @@ function SuperController(options) {
                     local.options.file = 'index'
                 }
     
-                if ( typeof(local.options.isWithoutLayout) == 'undefined' ) {
+                if ( typeof(local.options.isWithoutLayout) == 'undefined' || !isWithoutLayout ) {
                     local.options.isWithoutLayout = false;
                 }
     
@@ -288,8 +296,8 @@ function SuperController(options) {
             set('page.view.url', req.url);
             set('page.view.html.properties.mode.javascriptsDeferEnabled', local.options.template.javascriptsDeferEnabled);
             set('page.view.html.properties.mode.routeNameAsFilenameEnabled', local.options.template.routeNameAsFilenameEnabled);
-            
-            var parameters = JSON.parse(JSON.stringify(req.getParams()));
+                        
+            var parameters = JSON.clone(req.getParams());
             parameters = merge(parameters, options.conf.content.routing[rule].param);
             // excluding default page properties
             delete parameters[0];            
@@ -363,12 +371,12 @@ function SuperController(options) {
 
         // preventing multiple call of self.renderWithoutLayout() when controller is rendering from another required controller
         if (local.options.renderingStack.length > 1) {
-            return false
+            return false;
         }
 
         local.options.isWithoutLayout = true;
         
-        self.render(data, displayToolbar)
+        self.render(data, displayToolbar);
     }
 
     /**
@@ -429,7 +437,7 @@ function SuperController(options) {
             template = local.options.rule.replace('\@'+ local.options.bundle, '');
             var localTemplateConf = local.options.template;
             if ( isWithoutLayout ) {
-                localTemplateConf = JSON.parse(JSON.stringify(local.options.template));
+                localTemplateConf = JSON.clone(local.options.template);
                 localTemplateConf.javascripts = new Collection(localTemplateConf.javascripts).find({ isCommon: false}, { isCommon: true, name: 'gina' });
                 localTemplateConf.stylesheets = new Collection(localTemplateConf.stylesheets).find({ isCommon: false}, { isCommon: true, name: 'gina' }); 
             }
@@ -631,10 +639,18 @@ function SuperController(options) {
                         }
 
                         // adding plugins
-                        if (hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout && local.options.debugMode || hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout && typeof(local.options.debugMode) == 'undefined' || hasViews() && local.options.debugMode ) {                            
+                        if (
+                            hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout 
+                            && local.options.debugMode 
+                            || 
+                            hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout 
+                            && typeof(local.options.debugMode) == 'undefined' 
+                            || 
+                            hasViews() && local.options.debugMode 
+                        ) {                            
 
                             layout = ''
-                                + '{%- set ginaDataInspector                    = JSON.parse(JSON.stringify(page)) -%}'
+                                + '{%- set ginaDataInspector                    = JSON.clone(page) -%}'
                                 + '{%- set ginaDataInspector.view.assets        = {} -%}'
                                 + '{%- set ginaDataInspector.view.scripts       = "ignored-by-toolbar" -%}'
                                 + '{%- set ginaDataInspector.view.stylesheets   = "ignored-by-toolbar" -%}'
@@ -643,8 +659,8 @@ function SuperController(options) {
                                 
                             plugin = '\t'
                                 + '{# Gina Toolbar #}'
-                                + '{%- set userDataInspector                    = JSON.parse(JSON.stringify(page)) -%}'
-                                + '{%- set userDataInspector.view.scripts        = "ignored-by-toolbar"  -%}'
+                                + '{%- set userDataInspector                    = JSON.clone(page) -%}'
+                                + '{%- set userDataInspector.view.scripts       = "ignored-by-toolbar"  -%}'
                                 + '{%- set userDataInspector.view.stylesheets   = "ignored-by-toolbar"  -%}'
                                 + '{%- set userDataInspector.view.assets        = '+ JSON.stringify(assets) +' -%}'
                                 + '{%- include "'+ getPath('gina').core +'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector } -%}'
@@ -682,7 +698,7 @@ function SuperController(options) {
                                 delete data.page.view.stylesheets;                                
                             }
                             // means that we don't want GFF context or we already have it loaded
-                            viewInfos = JSON.parse(JSON.stringify(data.page.view));
+                            viewInfos = JSON.clone(data.page.view);
                             if ( !isWithoutLayout )
                                 viewInfos.assets = assets;
 
@@ -764,6 +780,7 @@ function SuperController(options) {
                             try {
                                 // escape special chars
                                 var blacklistRe = new RegExp('[\<\>]', 'g');
+                                // DO NOT REPLACE IT BY JSON.clone() !!!!
                                 data.page.data = JSON.parse(JSON.stringify(data.page.data).replace(blacklistRe, '\$&'));
                                 //swig.invalidateCache();
                                 layout = swig.compile(layout, mapping)(data);
@@ -1972,7 +1989,7 @@ function SuperController(options) {
         ;
 
         // options must be used as a copy in case of multiple calls of self.query(options, ...)
-        options = merge(JSON.parse(JSON.stringify(options)), defaultOptions);
+        options = merge(JSON.clone(options), defaultOptions);
         
         for (var o in options) {//cleaning
             if ( typeof(options[o]) == 'undefined' || options[o] == undefined) {
@@ -2122,7 +2139,7 @@ function SuperController(options) {
     
     var handleHTTP1ClientRequest = function(browser, options, callback) {
         
-        var altOpt = JSON.parse(JSON.stringify(options));
+        var altOpt = JSON.clone(options);
         
         altOpt.protocol = options.scheme;
         altOpt.hostname = options.host;
@@ -2672,8 +2689,8 @@ function SuperController(options) {
     var getParams = function(req) {
 
         req.getParams = function() {
-            // copy
-            var params = JSON.parse(JSON.stringify(req.params));
+            // Clone
+            var params = JSON.clone(req.params);
             switch( req.method.toLowerCase() ) {
                 case 'get':
                     params = merge(params, req.get, true);
@@ -2696,8 +2713,8 @@ function SuperController(options) {
         }
 
         req.getParam = function(name) {
-            // copy
-            var param = null, params = JSON.parse(JSON.stringify(req.params));
+            
+            var param   = null;            
             switch( req.method.toLowerCase() ) {
                 case 'get':
                     param = req.get[name];
@@ -2817,22 +2834,21 @@ function SuperController(options) {
      * TODO - Protect result
      * */
     this.getConfig = function(name) {
-        var config = null;
-
         if ( typeof(name) != 'undefined' ) {
             try {
                 // needs to be read only
-                //config = JSON.parse(JSON.stringify(local.options.conf.content[name]));
+                //config = JSON.clone(local.options.conf.content[name]);
                 //config = Object.freeze(local.options.conf.content[name]);
                 //Object.seal(local.options.conf.content[name]);
                 //Object.freeze(local.options.conf.content[name]);
-                return local.options.conf.content[name]
+                return local.options.conf.content[name];
             } catch (err) {
-                return undefined
+                return undefined;
             }
         } else {
-            config = JSON.stringify(local.options.conf);
-            return JSON.parse(config)
+            // config = JSON.stringify(local.options.conf);
+            // return JSON.parse(config)
+            return JSON.clone(local.options.conf);
         }
     }
 
@@ -2910,19 +2926,17 @@ function SuperController(options) {
             if ( typeof(formId) != 'undefined' ) {
                 try {
                     formId = formId.replace(/\-/g, '.');
-                    return JSON.parse(JSON.stringify(local.options.conf.content.forms)).rules[formId]
+                    return JSON.clone(local.options.conf.content.forms).rules[formId];
                 } catch (ruleErr) {
                     self.throwError(ruleErr)
                 }
             } else {
                 try {
-                    return JSON.parse(JSON.stringify(local.options.conf.content.forms)).rules
+                    return JSON.clone(local.options.conf.content.forms).rules
                 } catch ( ruleErr ) {
                     self.throwError(ruleErr)
-                }
-                
+                }                
             }
-
         } catch (err) {
             self.throwError(local.res, 500, err)
         }
@@ -3031,8 +3045,8 @@ function SuperController(options) {
         var haltedRequest   = userSession.haltedRequest;
         var data            = haltedRequest.data || {};
         var dataAsParams    = {};
-        if (data.count() > 0){
-            dataAsParams = JSON.parse(JSON.stringify(haltedRequest.data));
+        if (data.count() > 0) {
+            dataAsParams = JSON.clone(haltedRequest.data);
         }
         var url             = lib.routing.getRoute(haltedRequest.routing.rule, haltedRequest.params||dataAsParams).url;
         var requiredController = self; // by default;
@@ -3080,6 +3094,7 @@ function SuperController(options) {
     this.throwError = function(res, code, msg) {
         self.isProcessingError = true;
         var errorObject = null; // to be returned
+        
         // preventing multiple call of self.throwError() when controller is rendering from another required controller
         if (local.options.renderingStack.length > 1) {
             return false
@@ -3092,6 +3107,7 @@ function SuperController(options) {
             code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
                 //, errorObject   = res.stack || res.message || res.error || res.fallback
             var standardErrorMessage = null;
+            
             if ( typeof(statusCodes[code]) != 'undefined' ) {
                 standardErrorMessage = statusCodes[code];
             } else {
@@ -3111,7 +3127,7 @@ function SuperController(options) {
                     
             } else {
                 // formated error
-                errorObject = JSON.parse(JSON.stringify(res))
+                errorObject = JSON.clone(res)
             }
             
             if ( typeof(res.fallback) != 'undefined' ) {
@@ -3126,10 +3142,9 @@ function SuperController(options) {
             res           = local.res;
         }
         
-                
-
-        var req     = local.req;
-        var next    = local.next;
+        var responseHeaders = res.getHeaders() || local.res.getHeaders();
+        var req             = local.req;
+        var next            = local.next;
         if (!res.headersSent) {
             // DELETE request methods don't normaly use a view,
             // but if we are calling it from a view, we should render the error back to the view
@@ -3170,12 +3185,13 @@ function SuperController(options) {
                 // TODO - test with internet explorer then remove this if working
                 if ( typeof(req.headers['user-agent']) != 'undefined' ) {
                     if ( /msie/i.test(req.headers['user-agent']) ) {
-                        res.writeHead(code, "content-type", "text/plain")
+                        res.writeHead(code, "content-type", "text/plain");
                     } else {
-                        res.writeHead(code, { 'content-type': req.headers['content-type']} )
+                        
+                        res.writeHead(code, { 'content-type': responseHeaders['content-type']} );
                     }
-                } else if ( typeof(req.headers['content-type']) != 'undefined' ) {
-                    res.writeHead(code, { 'content-type': req.headers['content-type']} )
+                } else if ( typeof(responseHeaders['content-type']) != 'undefined' ) {
+                    res.writeHead(code, { 'content-type': responseHeaders['content-type']} )
                 } else {
                     res.writeHead(code, "content-type", local.options.conf.server.coreConfiguration.mime['json']+ '; charset='+ local.options.conf.encoding);
                 }

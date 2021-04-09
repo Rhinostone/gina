@@ -4,7 +4,7 @@ function Url(env, routes) {
 
     var init = function() {
         self.base = '';
-        self.routes = JSON.parse(JSON.stringify(routes));
+        self.routes = JSON.clone(routes);
 
         if (typeof(env.fqdn) != 'undefined' && env.fqdn != null) {
             self.base = (/^http:\/\//.test(env.fqdn)) ? env.fqdn : 'http://'+env.fqdn

@@ -90,8 +90,8 @@ function Remove(opt, cmd) {
     var end = function(removed) {
         
         // removing ports
-        var ports               = JSON.parse(JSON.stringify(self.portsData))
-            , portsReverse      = JSON.parse(JSON.stringify(self.portsReverseData))
+        var ports               = JSON.clone(self.portsData)
+            , portsReverse      = JSON.clone(self.portsReverseData)
             , reversePortValue  = null
             , re                = null
         ;

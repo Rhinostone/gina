@@ -148,13 +148,16 @@ function Router(env) {
                     
                     var self = this;
                     this._passport.instance._sm.logIn(this, user, function(err) {
-                    if (err) { self[property] = null; return done(err); }
+                    if (err) { 
+                        self[property] = null;
+                        return done(err); 
+                    }
                     done();
                     });
                 } else {
                     done && done();
                 }
-            }
+            };
         }
         
         if ( typeof(request._passport) != 'undefined' && (typeof(request.logOut) == 'undefined' ||  typeof(request.logout) == 'undefined') ) {
@@ -189,18 +192,22 @@ function Router(env) {
         /**
         * EO Passport JS HTTP2 fix
         */
-       var serverInstance    = self.getServerInstance()
+       
+       var serverInstance   = self.getServerInstance();
+       var config               = null
+            , conf              = null
+            , bundle            = null
+            , env               = null
+            , cacheless         = (process.env.IS_CACHELESS == 'false') ? false : true
+       ;
         try {
-            var cacheless           = (process.env.IS_CACHELESS == 'false') ? false : true
-                , bundle            = local.bundle = params.bundle
-                , config            = new Config().getInstance()
-                , env               = config.env
-                , conf              = config[bundle][env]
-            ;
+            config      = new Config().getInstance();
+            bundle      = local.bundle = params.bundle;
+            env         = config.env;
+            conf        = config[bundle][env];            
         } catch (configErr) {            
             serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (configErr.stack || configErr.message) );
-        }
-            
+        }  
         
         local.cacheless     = cacheless;
         local.request       = request;
@@ -209,7 +216,7 @@ function Router(env) {
         local.isStandalone  = conf.isStandalone;     
         
         if (cacheless) {
-            refreshCoreDependencies()
+            refreshCoreDependencies();
         }
                        
 
@@ -221,7 +228,8 @@ function Router(env) {
         ];        
         
         
-        if (reservedActions.indexOf(action) > -1) serverInstance.throwError(response, 500, '[ this.'+action+' ] is reserved for the framework');
+        if (reservedActions.indexOf(action) > -1)
+            serverInstance.throwError(response, 500, '[ this.'+action+' ] is reserved for the framework');
         
         // Routing object
         var routerObj = {
@@ -250,30 +258,35 @@ function Router(env) {
         
             
         //Getting superCleasses & extending it with super Models.
-        var controllerFile         = {}
-            , setupFile            = {}
-            , Controller           = {}
+        var mainControllerFile          = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js'
+            , controllerFile            = null
+            , setupFile                 = null
+            , MainController            = {} // controller.js
+            , Controller                = {} // controller.namespace.js
+            , hasControllerNamespace    = (namespace) ? true : false
         ;
 
         // TODO -  ?? merge all controllers into a single file while building for other env than `dev`
 
-        setupFile     = conf.bundlesPath +'/'+ bundle + '/controllers/setup.js';
+        setupFile = conf.bundlesPath +'/'+ bundle + '/controllers/setup.js';
         var filename = '';
-        if (namespace) {
+        if (hasControllerNamespace) {
             filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.'+ namespace +'.js';
             if ( !fs.existsSync(filename) ) {                
-                console.warn('namespace `'+ namespace +'` found, but no `'+filename+'` to load: just ignore this message if this is ok with you');
+                hasControllerNamespace = false;
+                console.warn('Namespace `'+ namespace +'` found, but no `'+filename+'` to load: just ignore this message if this is ok with you');                
                 filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
+                console.info('Switching to default controller: '+ mainControllerFile);
             }
         } else {
-            filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
+            filename = mainControllerFile;
         }
         controllerFile = filename;
 
         
         // default param setting
         if ( !params.rule ) {
-            params.rule = params.name
+            params.rule = params.name;
         }
         var templateName = params.rule.replace('\@'+ bundle, '') || '_common';
         
@@ -284,23 +297,21 @@ function Router(env) {
         var options = {
             // view namespace first
             namespace       : params.param.namespace || namespace,
-            control: params.param.control,
-            controller: controllerFile,
+            control         : params.param.control,
+            controller      : controllerFile,
             //controller: '<span class="gina-bundle-name">' + bundle +'</span>/controllers/controller.js',
             file: actionFile,
             //bundle          : bundle,//module
-            bundlePath: conf.bundlesPath + '/' + bundle,
-            rootPath: self.executionPath,
-            conf: JSON.parse(JSON.stringify(conf)),
+            bundlePath      : conf.bundlesPath + '/' + bundle,
+            rootPath        : self.executionPath,
+            // We don't want to keep original conf untouched
+            conf            : JSON.clone(conf),
             //instance: self.serverInstance,
             template: (routeHasViews) ? conf.content.templates[templateName] : undefined,
             isUsingTemplate: local.isUsingTemplate,
             cacheless: cacheless,
-            //rule            : params.rule,
             path: params.param.path || null, // user custom path : namespace should be ignored | left blank
             assets: {}
-            //isXMLRequest    : params.isXMLRequest,
-            //withCredentials : false
         };
 
         
@@ -317,13 +328,17 @@ function Router(env) {
                 hasSetup = true;
 
             if (cacheless) {
-
+                if (hasControllerNamespace) {
+                    delete require.cache[require.resolve(_(mainControllerFile, true))];
+                }
                 delete require.cache[require.resolve(_(controllerFile, true))];
 
                 if ( hasSetup )
                     delete require.cache[require.resolve(_(setupFile, true))];
             }
-
+            if (hasControllerNamespace) {
+                MainController = require(_(mainControllerFile, true));
+            }
             Controller = require(_(controllerFile, true));
 
         } catch (err) {
@@ -336,8 +351,13 @@ function Router(env) {
         
         // about to contact Controller ...
         try {
+            if (hasControllerNamespace) {
+                MainController = inherits(MainController, SuperController);
+                Controller      = inherits(Controller, MainController, SuperController);
+            } else {
+                Controller      = inherits(Controller, SuperController);
+            }
             
-            Controller      = inherits(Controller, SuperController);
             
             var controller  = new Controller(options);                        
             controller.name = options.control;            
@@ -406,12 +426,11 @@ function Router(env) {
                     
                     controller.requireController = requireController;
                                         
-                    return controller
-
+                    return controller;
                 } catch (err) {
                     serverInstance.throwError(response, 500, err );
                 }
-            }
+            };
             
             controller.requireController = requireController;
 
@@ -444,7 +463,7 @@ function Router(env) {
                             Setup.redirect              = controller.redirect;
                             Setup.render                = controller.render;
                             Setup.renderJSON            = controller.renderJSON;
-                            Setup.renderWithoutLayout   = controller.renderWithoutLayout
+                            Setup.renderWithoutLayout   = controller.renderWithoutLayout;
                             Setup.isXMLRequest          = controller.isXMLRequest;
                             Setup.isWithCredentials     = controller.isWithCredentials,
                             Setup.isCacheless           = controller.isCacheless;
@@ -578,7 +597,7 @@ function Router(env) {
                         Middleware.prototype.redirect               = controller.redirect;
                         Middleware.prototype.render                 = controller.render;
                         Middleware.prototype.renderJSON             = controller.renderJSON;
-                        Middleware.prototype.renderWithoutLayout    = controller.renderWithoutLayout
+                        Middleware.prototype.renderWithoutLayout    = controller.renderWithoutLayout;
                         Middleware.prototype.isXMLRequest           = controller.isXMLRequest;
                         Middleware.prototype.isWithCredentials      = controller.isWithCredentials;
                         Middleware.prototype.isCacheless            = controller.isCacheless;

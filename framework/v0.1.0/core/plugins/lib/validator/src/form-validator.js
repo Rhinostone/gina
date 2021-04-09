@@ -613,7 +613,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 , errors = self[this['name']]['errors'] || {}
             ;
 
-            if ( errors['isRequired'] && this.value == false ) {
+            if ( errors['isRequired'] && this.value == false) {
                 isValid = true;
                 delete errors['isRequired'];
                 this['errors'] = errors;
@@ -1085,7 +1085,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 }
                 this.valid = isValid;
                 if ( errors.count() > 0 )
-                        this['errors'] = errors;     
+                    this['errors'] = errors;     
                         
                 return self[this.name];
             }
@@ -1215,9 +1215,16 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
                 return self[this.name]
             }
-
+            this.isExcluded = false;
             // list field to be purged
-            local.excluded.push(this.name);
+            if ( local.excluded.indexOf(this.name) < 0) {
+                local.excluded.push(this.name);
+                this.isExcluded = true;
+            }
+                
+                
+            // remove existing errors
+            return self[this.name];
         }
         /**
          * Validation through API call

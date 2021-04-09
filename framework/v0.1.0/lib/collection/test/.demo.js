@@ -5,7 +5,7 @@ var resultMock = ['a', 'b', 'c'];
 function Query() { 
     
     var self    = this, local = {};
-    var result  = local.result = JSON.parse(JSON.stringify(resultMock)); 
+    var result  = local.result = JSON.clone(resultMock); 
 
     this.find = function() {
         var result = ( Array.isArray(this) ) ? this : local.result;
@@ -13,26 +13,26 @@ function Query() {
         result.limit = self.limit;
         result.toRaw = self.toRaw;
 
-        return result
-    }
+        return result;
+    };
 
     this.limit = function(limit) {
 
-        var result = JSON.parse(JSON.stringify(local.result));
+        var result = JSON.clone(local.result);
 
         result = result.splice(0, limit);
         result.find = self.find;
         result.toRaw = self.toRaw;
 
-        return result
-    }
+        return result;
+    };
 
     this.toRaw = function() {
 
         var result = (Array.isArray(this)) ? this : local.result;
         
-        return JSON.parse(JSON.stringify(result));
-    }
+        return JSON.clone(result);
+    };
 
 
     return this.find(); 

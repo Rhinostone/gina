@@ -27,12 +27,14 @@ function ValidatorPlugin(rules, data, formId) {
     var events      = [
                         'init', // form or popin init
                         'ready',
+                        'registered',
                         'success',
                         'error',
                         'progress',
                         'submit',
                         'reset',
                         'change',
+                        'changed',
                         'keydown', // for autocomplete
                         'keyup', // for autocomplete
                         'focusout',
@@ -575,7 +577,7 @@ function ValidatorPlugin(rules, data, formId) {
         }
         
         if (!$form) {
-            throw new Error('[ FormValidator::resetErrorsDisplay([ formId | <form> ]) ] `'+$formOrFormId+'` not found')
+            throw new Error('[ FormValidator::resetErrorsDisplay([ formId | <form> ]) ] `'+$formOrFormId+'` not found')
         }
                 
         // if ( typeof($form) == 'undefined' ) {
@@ -1270,7 +1272,7 @@ function ValidatorPlugin(rules, data, formId) {
                     'progress': percentComplete
                 };
                 
-                //console.log('xhr progress ', percentComplete);
+                //console.debug('xhr progress ', percentComplete);
 
                 $form.eventData.onprogress = result;
 
@@ -1387,7 +1389,7 @@ function ValidatorPlugin(rules, data, formId) {
                             triggerEvent(gina, $target, 'error.' + id + '.hform', err);
                     }
                 }
-                //console.log('sending -> ', data);
+                //console.debug('sending -> ', data);
                 //try {
                 if (!hasBinaries) {
                 //     var intervalID = null;
@@ -1897,7 +1899,7 @@ function ValidatorPlugin(rules, data, formId) {
         //     //     'progress': percentComplete
         //     // };
             
-        //     console.log('progress', percentComplete);
+        //     console.debug('progress', percentComplete);
 
         //     //$form.eventData.onprogress = result;
 
@@ -1913,7 +1915,7 @@ function ValidatorPlugin(rules, data, formId) {
             //     percentComplete = e.loaded / e.total;
             //     percentComplete = parseInt(percentComplete * 100);
                 
-            //     console.log('progress', percentComplete);
+            //     console.debug('progress', percentComplete);
             // }
                                     
 
@@ -2054,13 +2056,16 @@ function ValidatorPlugin(rules, data, formId) {
 
     var checkForRulesImports = function (rules) {
         // check if rules has imports & replace
-        var rulesStr = JSON.stringify(rules, null, 4);
-        var importedRules = rulesStr.match(/(\"@import\s+[a-z A-Z 0-9/.]+\")/g);
+        var rulesStr        = JSON.stringify(rules);
+        var importedRules   = rulesStr.match(/(\"@import\s+[a-z A-Z 0-9/.]+\")/g);
+        // TODO - complete mergingRules integration
+        var mergingRules     = rulesStr.match(/(\"_merging(.*))(\s+\:|\:)(.*)(\",|\")/g)
+        var isMerging       = false;
         if (!instance.rules) {
             instance.rules = {}
         }
         if (importedRules && importedRules.length > 0) {
-            var ruleArr = [], rule = {}, tmpRule = null;
+            var ruleArr = [], rule = {}, tmpRule = null, re = null;
             for (let r = 0, len = importedRules.length; r<len; ++r) {
                 ruleArr = importedRules[r].replace(/(@import\s+|\"|\')/g, '').split(/\s/g);
                 // [""@import client/form", ""@import project26/edit demo/edit"]
@@ -2069,16 +2074,44 @@ function ValidatorPlugin(rules, data, formId) {
                     tmpRule = ruleArr[i].replace(/\//g, '.');
                     if ( typeof(instance.rules[ tmpRule ]) != 'undefined' ) {
                         rule = merge(rule, instance.rules[ tmpRule ]);                        
-                        //rule._imported_from = ruleArr;
+                        //rule['@import_' + tmpRule.replace(/\./g, '_')] = ruleArr[i];
                     } else {
                         console.warn('[formValidator:rules] <@import error> on `'+importedRules[r]+'`: rule `'+ruleArr[i]+'` not found. Ignoring.');
                         continue;
                     }
                 }
-                //console.log('replacing ', importedRules[r]);
-                rulesStr = rulesStr.replace(importedRules[r], JSON.stringify(rule));
-                instance.rules = JSON.parse( JSON.stringify(instance.rules).replace( new RegExp(importedRules[r], 'g'), JSON.stringify(rule)) );
-                //console.log('str ', rulesStr);
+                //console.debug('replacing ', importedRules[r]);
+                re = new RegExp(importedRules[r]);
+                isMerging = ( mergingRules && re.test(mergingRules.join()) ) ? true : false;
+                if( isMerging ) {
+                    
+                    for (let m = 0, mLen = mergingRules.length; m < mLen; m++) {
+                        if ( re.test(mergingRules[m]) ) {                            
+                            let tmpStr = JSON.stringify(rule);
+                            tmpStr = tmpStr.substr(1, tmpStr.length-1);// removing ->{ ... }<-
+                            // is last ?
+                            if (m < mLen-1) {
+                                tmpStr += ','
+                            }
+                            try {
+                                
+                                rulesStr = rulesStr.replace( mergingRules[m], tmpStr); 
+                                instance.rules = JSON.parse(  JSON.stringify(instance.rules).replace( mergingRules[m], tmpStr)  );
+                                //instance.rules = JSON.parse(  JSON.stringify(instance.rules).replace( new RegExp(mergingRules[m], 'g'), tmpStr)  );
+                            } catch (error) {
+                                throw error
+                            }
+                            
+                            //JSON.parse(rulesStr.substr(0, rulesStr.indexOf(mergingRules[m])) + rulesStr.substr(mergingRules[m].length) )
+                            //instance.rules = JSON.parse( JSON.stringify(instance.rules).replace( new RegExp(mergingRules[m], 'g'), tmpStr) );                 
+                        }
+                    }
+                    
+                } else {
+                    rulesStr = rulesStr.replace(importedRules[r], JSON.stringify(rule));
+                    instance.rules = JSON.parse( JSON.stringify(instance.rules).replace( new RegExp(importedRules[r], 'g'), JSON.stringify(rule)) );
+                }                
+                //console.debug('str ', rulesStr);
                 rule = {}
 
             }
@@ -2110,7 +2143,6 @@ function ValidatorPlugin(rules, data, formId) {
                         rules = checkForRulesImports(rules);
                         // making copy
                         if ( typeof(gina.forms.rules) == 'undefined' || !gina.forms.rules) {
-                            //gina.forms.rules = JSON.parse(JSON.stringify(rules));
                             gina.forms.rules = rules
                         } else { // inherits
                             gina.forms.rules = merge(rules, gina.forms.rules);
@@ -2122,7 +2154,7 @@ function ValidatorPlugin(rules, data, formId) {
                 }
                 
                 if ( !local.rules.count() )
-                    local.rules = JSON.parse(JSON.stringify(instance.rules));
+                    local.rules = JSON.clone(instance.rules);
 
                 $validator.setOptions           = setOptions;
                 $validator.getFormById          = getFormById;
@@ -2132,6 +2164,8 @@ function ValidatorPlugin(rules, data, formId) {
                 $validator.handleErrorsDisplay  = handleErrorsDisplay;
                 $validator.submit               = submit;
                 $validator.send                 = send;
+                $validator.unbind               = unbindForm;
+                $validator.bind                 = bindForm;
                 $validator.reBind               = reBindForm;
                 $validator.destroy              = destroy;
 
@@ -2366,7 +2400,7 @@ function ValidatorPlugin(rules, data, formId) {
             rules = instance.rules[ruleName]
         }
         
-        var ruleObj = JSON.parse(JSON.stringify(rules))
+        var ruleObj = JSON.clone(rules)
             , re = new RegExp('^'+ruleName)
             , propRe = new RegExp('^'+ruleName +'.')
             , propName = null
@@ -2642,7 +2676,7 @@ function ValidatorPlugin(rules, data, formId) {
             this.value = val;
 
             //Custom code triggered when $el.value is set
-            console.log('Value set: '+val);
+            console.debug('Value set: '+val);
             var _evt = 'change.' + this.id;
             if ( typeof(gina.events[_evt]) != 'undefined' ) {
                 console.debug('trigger event on: ', this.name, _evt);
@@ -2660,88 +2694,140 @@ function ValidatorPlugin(rules, data, formId) {
         if (typeof(isOtherTagAllowed) == 'undefined' ) {
             isOtherTagAllowed = false;
         }
-        if ( /^(radio|text|hidden|password|number|date)$/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
+        if ( /^(radio|checkbox|text|hidden|password|number|date)$/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
                         
             var localRule = $form.rules[$el.name] || null;
             // data-gina-form-live-check-enabled
             // with local rule                
             if ( $form.target.dataset.ginaFormLiveCheckEnabled && localRule /**&& localRule.isRequired*/ ) {
-                addEventListener(gina, $el, 'focusout.'+$el.id, function(event) {
-                    event.preventDefault();
-                    clearTimeout(liveCheckTimer);
-                });
-                var eventsList = [], _evt = null, _e = 0;
-                _evt = 'change.'+$el.id;
-                if ( typeof(gina.events[_evt]) == 'undefined' ) {
-                    eventsList[_e] = _evt;
-                    ++_e;
-                }
-                _evt = 'keyup.'+$el.id;
-                if ( typeof(gina.events[_evt]) == 'undefined' ) {
-                    eventsList[_e] = _evt;
-                    ++_e;
+                
+                var eventsList = [], _evt = null, _e = 0;                
+                if ( !/^(radio|checkbox)$/i.test($el.type) ) {
+                    addEventListener(gina, $el, 'focusout.'+$el.id, function(event) {
+                        event.preventDefault();
+                        clearTimeout(liveCheckTimer);
+                    });
+                    
+                    _evt = 'change.'+$el.id;
+                    if ( typeof(gina.events[_evt]) == 'undefined' ) {
+                        eventsList[_e] = _evt;
+                        ++_e;
+                    }
+                    
+                    _evt = 'keyup.'+$el.id;
+                    if ( typeof(gina.events[_evt]) == 'undefined' ) {
+                        eventsList[_e] = _evt;
+                        ++_e;
+                    }
+                } else {
+                    if ( /^(checkbox)$/i.test($el.type) ) {
+                        _evt = 'changed.'+$el.id;
+                    } else {
+                        _evt = 'change.'+$el.id;
+                    }
+                    
+                    if ( typeof(gina.events[_evt]) == 'undefined' ) {
+                        eventsList[_e] = _evt;
+                        ++_e;
+                    }
                 }
                 
                 if (eventsList.length > 0) {
-                    addListener(gina, $el, [ 'change.'+$el.id, 'keyup.'+$el.id ], function(event) {
-                        event.preventDefault();
-                        clearTimeout(liveCheckTimer);
+                    var once = false;
+                    addListener(gina, $el, eventsList, function(event) {
+                    //addListener(gina, $el, [ 'change.'+$el.id, 'keyup.'+$el.id ], function(event) {                        
+                        event.preventDefault();                        
+                        clearTimeout(liveCheckTimer);                        
+                        if ( !once && /^changed\./i.test(event.type) || !once && event.target.type == 'radio' ) {
+                            once = true;
+                        } else if (once && /^changed\./i.test(event.type) || once && event.target.type == 'radio' ) {                            
+                            return false;
+                        }                        
                         var processEvent = function() {
                             console.debug('processing: ' + event.target.name+ '/'+ event.target.id);
                             
                             // Do not validate `onChange` if `input value` === `orignal value`
-                            if (event.target.value === event.target.defaultValue && event.target.value != '') {
+                            if (
+                                // ignoring checkbox & radio because value for both have already changed
+                                !/^(radio|checkbox)$/i.test(event.target.type) 
+                                && event.target.value === event.target.defaultValue
+                                && event.target.value != ''
+                            ) {
+                                cancelEvent(event);
                                 //resetting error display
-                                handleErrorsDisplay(event.target.form, {}, null, event.target.name);
+                                handleErrorsDisplay(event.target.form, {}, null, event.target.name);                                
                                 return cancelEvent(event);
                             }
                             
-                            var localField = {}, $localField = {};
-                            localField[event.target.name]     = event.target.value;
-                            $localField[event.target.name]    = event.target;
-                                                    
-                            validate(event.target, localField, $localField, $form.rules, function onLiveValidation(result){
-                                var isFormValid = result.isValid();
-                                //console.debug('onSilentPreGlobalLiveValidation: '+ isFormValid, result);
-                                if (isFormValid) {
-                                    //resetting error display
-                                    handleErrorsDisplay(event.target.form, {}, result.data, event.target.name);
-                                } else {                                
-                                    handleErrorsDisplay(event.target.form, result.error, result.data, event.target.name);
-                                }
-                                //updateSubmitTriggerState( event.target.form, isFormValid );
-                                // data-gina-form-required-before-submit
-                                //console.log('====>', result.isValid(), result);
+                            
+                            
+                            // $form.reBindForm( $form.target, $form.rules, function($form) {
+                                var localField = {}, $localField = {};
+                                localField[event.target.name]     = event.target.value;
+                                $localField[event.target.name]    = event.target;
                                 
-                                // Global check required: on all fields
-                                if (isFormValid) {
-                                    var $gForm = event.target.form, gFields = null, $gFields = null, gRules = null;
-                                    var gValidatorInfos = getFormValidationInfos($gForm, rules);
-                                    gFields  = gValidatorInfos.fields;
-                                    $gFields = gValidatorInfos.$fields;
-                                    gRules   = instance.$forms[$gForm.id].rules;
-                                    // Don't be tempted to revome fields that has already been validated
-                                    validate($gForm, gFields, $gFields, gRules, function onSilentGlobalLiveValidation(gResult){
-                                        console.debug('onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
-                                        updateSubmitTriggerState( $gForm, gResult.isValid() );
-                                    })
-                                } else {
-                                    updateSubmitTriggerState( event.target.form, isFormValid );
-                                }
+                                validate(event.target, localField, $localField, $form.rules, function onLiveValidation(result){
+                                    var isFormValid = result.isValid();
+                                    //console.debug('onSilentPreGlobalLiveValidation: '+ isFormValid, result);
+                                    if (isFormValid) {
+                                        //resetting error display
+                                        handleErrorsDisplay(event.target.form, {}, result.data, event.target.name);
+                                    } else {                                
+                                        handleErrorsDisplay(event.target.form, result.error, result.data, event.target.name);
+                                    }
+                                    //updateSubmitTriggerState( event.target.form, isFormValid );
+                                    // data-gina-form-required-before-submit
+                                    //console.debug('====>', result.isValid(), result);
                                     
-                            });
+                                    // Global check required: on all fields
+                                    // if (isFormValid) {
+                                        var $gForm = event.target.form, gFields = null, $gFields = null, gRules = null;
+                                        var gValidatorInfos = getFormValidationInfos($gForm, rules);
+                                        gFields  = gValidatorInfos.fields;
+                                        $gFields = gValidatorInfos.$fields;
+                                        gRules   = instance.$forms[$gForm.id].rules;
+                                        // Don't be tempted to revome fields that has already been validated
+                                        validate($gForm, gFields, $gFields, gRules, function onSilentGlobalLiveValidation(gResult){
+                                            console.debug('onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
+                                            updateSubmitTriggerState( $gForm, gResult.isValid() );
+                                            once = false;
+                                        })
+                                    // } else {
+                                    //     updateSubmitTriggerState( event.target.form, isFormValid );
+                                    //     once = false;
+                                    // }
+                                        
+                                });
+                            // });
+                                                    
                             
                             return;
                         }
                         
-                        if ( /^keyup/i.test(event.type) ) {
+                        // radio & checkbox only
+                        if ( /^changed\./i.test(event.type) || /^change\./i.test(event.type) && event.target.type == 'radio') {
+                            var i = 0;
+                            return function(once, i) {
+                                if (i > 0) return;
+                                ++i;
+                                return setTimeout(() => {
+                                    console.debug(' changed .... '+$el.id);
+                                    processEvent();
+                                }, 0);                 
+                                
+                            }(once, i)
+                                                          
+                        }
+                        // other inputs & textareas
+                        else if ( /^keyup\./i.test(event.type) ) {
                             liveCheckTimer = setTimeout( function onLiveCheckTimer() {
                                 console.debug(' keyup .... '+$el.id);
                                 processEvent()
                             }, 1000); 
-                        } else if (/^change/i.test(event.type)) {
+                        }                        
+                        else if (/^change\./i.test(event.type) && !/^(checkbox)$/i.test(event.target.type) ) {
                             console.debug(' change .... '+$el.id);
-                            processEvent()                        
+                            processEvent();
                         }                        
                     });
                 }
@@ -2966,7 +3052,11 @@ function ValidatorPlugin(rules, data, formId) {
       
     var registerForLiveChecking = function($form, $el) {
         // Filter supported elements
-        if ( !/^(input|textarea)$/i.test($el.tagName) ) {
+        if ( 
+            !/^(input|textarea)$/i.test($el.tagName)
+            ||
+            typeof(gina.events['registered.' + $el.id]) != 'undefined'
+        ) {
             return
         }
         // Mutation obeserver - all but type == files
@@ -2992,8 +3082,7 @@ function ValidatorPlugin(rules, data, formId) {
                 }
                 break;
         }
-        
-        
+        gina.events['registered.' + $el.id] = $el.id;
     }
     
     /**
@@ -3090,10 +3179,17 @@ function ValidatorPlugin(rules, data, formId) {
      * @param {object} rules
      * @return {object} formValidatorInstance
      */
-    var reBindForm = function($target, rules) {
+    var reBindForm = function($target, rules, cb) {
+        // Unbind form
         var formInstance = unbindForm($target);
+        // reset errors
+        //resetErrorsDisplay(formInstance.id);        
+        // Bind
         bindForm(formInstance.target, rules);
         
+        if ( cb ) {
+            return cb(formInstance); 
+        }
         return formInstance;
     }
     
@@ -3238,10 +3334,20 @@ function ValidatorPlugin(rules, data, formId) {
             let eId = $el.getAttribute('id');
             for (let e = 0, eLen = events.length; e < eLen; e++) {
                 let evt = events[e];
-                let eventName = evt;               
+                let eventName = evt; 
+                // remove proxy
+                // if ( typeof(gina.events[ evt ]) != 'undefined' ) {                       
+                //     removeListener(gina, $el, evt);
+                // }                
+                             
                 if ( typeof(gina.events[ eventName ]) != 'undefined' && gina.events[ eventName ] == eId ) {                       
                     removeListener(gina, $el, eventName);
                 }
+                
+                // eventName = evt +'._case_'+ $el.name;
+                // if ( typeof(gina.events[ eventName ]) != 'undefined') {                       
+                //     removeListener(gina, $el, eventName);
+                // } 
                 
                 eventName = eId;
                 if ( typeof(gina.events[ eventName ]) != 'undefined' && gina.events[ eventName ] == eId ) {                       
@@ -3262,21 +3368,15 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( typeof(gina.events[ eventName ]) != 'undefined' && gina.events[ eventName ] == eId ) {                        
                     removeListener(gina, $el, eventName);
                 }
-            }
-
-            // if ($el.type == 'submit' || $el.type == 'file' ) {
-                // evt = $el.getAttribute('id');
-                // if ( typeof(gina.events[ evt ]) != 'undefined' )
-                //     removeListener(gina, $el, gina.events[ evt ]);
-            // } else {
-
-            //     evt ='click.' + $el.getAttribute('id');
-            //     if ( typeof(gina.events[ evt ]) != 'undefined' )
-            //         removeListener(gina, $el, evt);
-            // }
-        }
+            }// EO for events
+        } //EO for $els
         
         $els = null; $el = null; $elTMP = null; evt = null;
+        // reset error display
+        //resetErrorsDisplay($form);
+        // or
+        // $form.target.dataset.ginaFormIsRestting = true;
+        // handleErrorsDisplay($form.target, {});
         $form.binded = false;
         
         return $form;
@@ -4018,20 +4118,20 @@ function ValidatorPlugin(rules, data, formId) {
                     
                     // triggered by click on the radio group                  
                     if (isCalledHasDependency) {
-                        //console.log('In Group #1 ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled, allFormGroupedElements[id].name, checkBoxGroup, ' VS ', allFormGroupedElements[id].group);                            
+                        //console.debug('In Group #1 ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled, allFormGroupedElements[id].name, checkBoxGroup, ' VS ', allFormGroupedElements[id].group);                            
                         allFormGroupedElements[id].target.disabled = (elIdIsChecked) ? false : true;
                         $form.rules[ allFormGroupedElements[id].name ].exclude = (elIdIsChecked) ? false : true;
-                        //console.log('In Group #1 fixed to -> ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled);
+                        //console.debug('In Group #1 fixed to -> ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled);
                         continue;
                     }
                     // triggered by click on the checkbox
-                    //console.log('In Group #2 ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled, allFormGroupedElements[id].name, checkBoxGroup, ' VS ', allFormGroupedElements[id].group);
+                    //console.debug('In Group #2 ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled, allFormGroupedElements[id].name, checkBoxGroup, ' VS ', allFormGroupedElements[id].group);
                     allFormGroupedElements[id].target.disabled = excluded;
                     $form.rules[ allFormGroupedElements[id].name ].exclude = excluded;
-                    //console.log('In Group #2 fixed to -> ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled);
+                    //console.debug('In Group #2 fixed to -> ', 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled);
                     continue;
                 }
-                //console.log('elId: '+elId, 'isCalledHasDependency:'+isCalledHasDependency, 'hasBeenUpdated:'+ hasBeenUpdated, 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled, allFormGroupedElements[id].name, 'elIdIsChecked:'+elIdIsChecked, 'inGroup:'+re.test(allFormGroupedElements[id].group) );
+                //console.debug('elId: '+elId, 'isCalledHasDependency:'+isCalledHasDependency, 'hasBeenUpdated:'+ hasBeenUpdated, 'excluded:'+excluded, 'disabled:'+allFormGroupedElements[id].target.disabled, allFormGroupedElements[id].name, 'elIdIsChecked:'+elIdIsChecked, 'inGroup:'+re.test(allFormGroupedElements[id].group) );
                 
             }
             
@@ -4110,7 +4210,6 @@ function ValidatorPlugin(rules, data, formId) {
                 } else if ( /^false$/i.test(localValue) && $el.checked) {
                     $el.checked = false;
                 }
-                //$el.checked = localValue;
             }
             var checked     = $el.checked;
             
@@ -4163,7 +4262,7 @@ function ValidatorPlugin(rules, data, formId) {
                         $el.setAttribute('data-value', true);
                 }
                 
-            }            
+            }
         };
         
         var updateGroupChildrenState = function($groupMaster) {
@@ -4264,10 +4363,6 @@ function ValidatorPlugin(rules, data, formId) {
                     }                        
                     $el.checked = true;
                     $el.setAttribute('checked', 'checked');
-                    // evt = 'change.'+ $el.id;
-                    // if ( typeof(gina.events[evt]) == 'undefined' ) {
-                    //     triggerEvent(gina, $el, evt, $el.value);
-                    // }
                 }, 0)
                 
             } else {
@@ -4280,10 +4375,6 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                     $el.checked = false;
                     $el.removeAttribute('checked');
-                    // evt = 'change.'+ $el.id;
-                    // if ( typeof(gina.events[evt]) == 'undefined' ) {
-                    //     triggerEvent(gina, $el, evt, $el.value);
-                    // }    
                 }, 0)
             }
 
@@ -4401,10 +4492,11 @@ function ValidatorPlugin(rules, data, formId) {
             });
             // focusout proxy            
             addListener(gina, $target, 'focusout', function(event) {
+                // Never preventDefault from a proxy listner
                 var $el = event.target;
                 // prevent event to be triggered twice
                 if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
-                return false;
+                    return false;
                 
                 var _evt = $el.id;    
                 if (!_evt) return false;
@@ -4419,8 +4511,9 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }); 
             
-            // change proxy            
+            // change proxy
             addListener(gina, $target, 'change', function(event) {
+                // Never preventDefault from a proxy listner
                 var $el = event.target;
                 // prevent event to be triggered twice
                 if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
@@ -4434,14 +4527,17 @@ function ValidatorPlugin(rules, data, formId) {
                 }
                 if (gina.events[_evt]) {
                     cancelEvent(event);
-                    
                     triggerEvent(gina, $el, _evt, event.detail);
                 }
             });         
-            // proxy click            
-            addListener(gina, $target, 'click', function(event) {
-                
+            // click proxy              
+            addListener(gina, $target, 'click', function(event) {                
+                // Never preventDefault from a proxy listner                
                 var $el = event.target;
+                // prevent event to be triggered twice
+                // if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+                //     return false;
+                    
                 var isCustomSubmit = false, isCaseIgnored = false;
                                 
                 if (
@@ -4537,6 +4633,7 @@ function ValidatorPlugin(rules, data, formId) {
                             !$el.disabled 
                             && /(checkbox|radio)/i.test($el.type) 
                         ) {
+                            //event.stopPropagation();                        
                             // apply checked choice : if true -> set to false, and if false -> set to true                        
                             if ( /checkbox/i.test($el.type) ) {
                                 return updateCheckBox($el);
@@ -4605,12 +4702,13 @@ function ValidatorPlugin(rules, data, formId) {
                 }                
 
                 evt = 'change.'+ $inputs[i].id;
-
                 procced = function ($el, evt) {
 
-                    // recover default state only on value === true || false
+                    // recover default state only on value === true || false                    
                     addListener(gina, $el, evt, function(event) {                        
                         updateCheckBox(event.target);
+                        
+                        triggerEvent(gina, event.target, 'changed.'+ event.target.id);                        
                     });
 
                     // default state recovery
@@ -4632,10 +4730,10 @@ function ValidatorPlugin(rules, data, formId) {
                 procced = function ($el, evt) {
                     addListener(gina, $el, evt, function(event) {
                         cancelEvent(event);
-                        
                         updateRadio(event.target);
+                        
+                        //triggerEvent(gina, event.target, 'changed.'+ event.target.id);   
                     });
-
 
                     updateRadio($el, true);
                 }
@@ -4688,7 +4786,7 @@ function ValidatorPlugin(rules, data, formId) {
         procced();
 
         var proccedToSubmit = function (evt, $submit) {
-            // console.log('placing submit ', evt, $submit);
+            //console.debug('placing submit ', evt, $submit);
             // attach submit events
             addListener(gina, $submit, evt, function(event) {
                 // start validation
@@ -4895,7 +4993,7 @@ function ValidatorPlugin(rules, data, formId) {
             }
 
             if ($submit.tagName == 'A') { // without this test, XHR callback is ignored
-                //console.log('a#$buttons ', $buttonsTMP[b]);
+                //console.debug('a#$buttons ', $buttonsTMP[b]);
                 onclickAttribute    = $submit.getAttribute('onclick');
                 isSubmitType        = $submit.getAttribute('data-gina-form-submit');
 
@@ -5402,7 +5500,7 @@ function ValidatorPlugin(rules, data, formId) {
                 try {
                     if (Array.isArray(rules[field][rule])) { // has args
                         //convert array to arguments
-                        args = JSON.parse(JSON.stringify(rules[field][rule]));
+                        args = JSON.clone(rules[field][rule]);
                         if ( /\$[\-\w\[\]]*/.test(args[0]) ) {
                             var foundVariables = args[0].match(/\$[\-\w\[\]]*/g);
                             for (var v = 0, vLen = foundVariables.length; v < vLen; ++v) {
@@ -5447,7 +5545,7 @@ function ValidatorPlugin(rules, data, formId) {
         }
         
         
-        //console.log(fields, $fields);
+        //console.debug(fields, $fields);
         var d = null;//FormValidator instance
         var fieldErrorsAttributes = {};
         if (isGFFCtx) { // Live check if frontend only for now
@@ -5470,18 +5568,16 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
         
-        var allFields = JSON.parse(JSON.stringify(fields));
-        var allRules = ( typeof(rules) !=  'undefined' ) ? JSON.parse(JSON.stringify(rules)) : {};
-        var forEachField = function($formOrElement, allFields, allRules, fields, $fields, rules, cb, i) {
-            
-            
+        var allFields = JSON.clone(fields);
+        var allRules = ( typeof(rules) !=  'undefined' ) ? JSON.clone(rules) : {};
+        var forEachField = function($formOrElement, allFields, allRules, fields, $fields, rules, cb, i) {            
             
             var hasCase = false, isInCase = null, conditions = null;
             var caseValue = null, caseType = null;
             var localRules = null, caseName = null;
             var localRuleObj = null, skipTest = null;
 
-            //console.log('parsing ', fields, $fields, rules);
+            //console.debug('parsing ', fields, $fields, rules);
             if ( typeof(rules) != 'undefined' ) { // means that no rule is set or found
                 
                 for (var field in fields) {
@@ -5554,6 +5650,7 @@ function ValidatorPlugin(rules, data, formId) {
                             // Watch changes in case the value is modified
                             // A mutation observer was previously defined in case of hidden field when value has been mutated with javascript
                             // Ref.: liveCheck; look for comment `// Adding observer for hidden fileds`
+                            /**
                             let caseEvent = 'change._case_' + caseName;
                             if ( typeof(gina.events[caseEvent]) == 'undefined' ) {
                                 
@@ -5578,10 +5675,22 @@ function ValidatorPlugin(rules, data, formId) {
                                         // rebind & restart validation in silent mode
                                         var $_form = $el.form;
                                         if ($_form) {
-                                            // copy rules in order to avoid override
-                                            var customRules = JSON.parse(JSON.stringify(rules));
+                                            // backup `originalRules` in order to avoid override
+                                            var formInstance = instance['$forms'][$_form.id];
+                                            var customRules = {};
                                             var caseRules = {};
                                             var _conditions = [];
+                                            if ( typeof(formInstance.originaRules) == 'undefined' ) {
+                                                formInstance.originaRules = JSON.clone(rules);
+                                            } else {
+                                                //customRules = merge(rules, formInstance.originaRules);
+                                                //customRules = JSON.clone(formInstance.originaRules);
+                                                caseRules = JSON.clone(formInstance.originaRules);
+                                            }
+                                            //var customRules = JSON.clone(formInstance.originaRules);
+                                            
+                                            //var customRules = JSON.clone(rules);
+                                            
                                             if ( typeof(rules[c]) != 'undefined' && typeof(rules[c].conditions) != 'undefined' ) {
                                                 _conditions = rules[c].conditions;
                                             } else if (typeof(rules['_case_'+_caseName]) != 'undefined' && typeof(rules['_case_'+_caseName].conditions) != 'undefined') {
@@ -5597,6 +5706,7 @@ function ValidatorPlugin(rules, data, formId) {
                                                     ) {
                                                         // Inherited first
                                                         caseRules = merge(_conditions[_ci].rules, caseRules);
+                                                        //caseRules = _conditions[_ci].rules;
                                                     }
                                                 }                                                
                                             } else {
@@ -5608,20 +5718,43 @@ function ValidatorPlugin(rules, data, formId) {
                                                 ) {
                                                     // Inherited first
                                                     caseRules = merge(_conditions[0].rules, caseRules);
+                                                    //caseRules = _conditions[0].rules;
                                                 } else {
                                                     var _filter = {};
                                                     _filter['case'] = fields[_caseName];
-                                                    caseRules = new Collection(_conditions).findOne(_filter).rules;
+                                                    try {
+                                                        caseRules = merge(new Collection(_conditions).findOne(_filter).rules, caseRules)
+                                                        //caseRules = new Collection(_conditions).findOne(_filter).rules
+                                                        //caseRules = new Collection(_conditions).findOne(_filter).rules;
+                                                    } catch (err) {
+                                                        console.warn('Trying to eval undeclared or misconfigured case `"_case_'+ _caseName +'"`: `'+ fields[_caseName] +'`.\Now Skipping it, please check your rules and fix it if needed.');
+                                                        // else -> caseRules = {}
+                                                    }
+                                                    
                                                     _filter = null;
                                                 }   
                                             }
                                             _conditions = null;
                                             
+                                            
+                                            
                                             // Setting up new validation rules
                                             for (let _f in caseRules) {
-                                                customRules[_f] = caseRules[_f];
+                                                // if ( typeof(customRules[_f]) == 'undefined' ) {
+                                                    customRules[_f] = caseRules[_f];
+                                                // } else {
+                                                //     // do not override customRules
+                                                //     customRules[_f] = merge(customRules[_f], caseRules[_f]);
+                                                // }
+                                                
                                             }
-                                            caseRules = null;                           
+                                            // formInstance._current_caseName = _caseName;
+                                            // if ( typeof(formInstance._current_case) == 'undefined' ) {
+                                            //     formInstance._current_case = {};
+                                            // }
+                                            // formInstance._current_case[_caseName] = customRules;
+                                            
+                                            caseRules = null;
                                             // reset binding
                                             reBindForm($_form, customRules);
                                         }
@@ -5632,130 +5765,37 @@ function ValidatorPlugin(rules, data, formId) {
                                 //console.debug('placing event on ', $fields[caseName].name, caseEvent)
                                 // We need to bind the case event and the input event at the same time 
                                 // search for grouped els
-                                var grpName = $fields[caseName].name;
-                                var selectedEls = [], sl = 0;
-                                if ( $formOrElement.length > 1 ) {
-                                    for (let g = 0, gLen = $formOrElement.length; g < gLen; g++) {
-                                        if ( 
-                                            $formOrElement[g].name ==  grpName
-                                            && $formOrElement[g].type == $fields[caseName].type
-                                            && $formOrElement[g].id != $fields[caseName].id
-                                        ) {
-                                            selectedEls[sl] = $formOrElement[g];
-                                            ++sl;
-                                        }
-                                    }
-                                }
-                                var $elementToBind = (selectedEls.length > 0) ? selectedEls : $fields[caseName];
+                                // var grpName = $fields[caseName].name;
+                                // var selectedEls = [], sl = 0;
+                                // if ( $formOrElement.length > 1 ) {
+                                //     for (let g = 0, gLen = $formOrElement.length; g < gLen; g++) {
+                                //         if ( 
+                                //             $formOrElement[g].name ==  grpName
+                                //             && $formOrElement[g].type == $fields[caseName].type
+                                //             && $formOrElement[g].id != $fields[caseName].id
+                                //         ) {
+                                //             selectedEls[sl] = $formOrElement[g];
+                                //             ++sl;
+                                //         }
+                                //     }
+                                // }                                
                                 // This portion of code is used for case value change
-                                addListener(gina, $elementToBind, 'change.', function(event) {
-                                    event.preventDefault();
-                                    console.debug('Now rebinding on ', event.currentTarget.name +'=='+ event.currentTarget.value );
-                                    redefineRulingContext(event.currentTarget, rules, c);
+                                // var $elementToBind = (selectedEls.length > 0) ? selectedEls : $fields[caseName]; 
+                                //     addListener(gina, $elementToBind, 'change.', function(event) {
+                                //         event.preventDefault();
+                                //         console.debug('Now rebinding on ', event.currentTarget.name +' == '+ event.currentTarget.value );
+                                //         redefineRulingContext(event.currentTarget, rules, c);
+                                //     });
                                     
-                                    
-                                    
-                                    // var _caseName = event.currentTarget.name;
-                                    // if ( allFields[_caseName] != event.currentTarget.value ) {
-                                    //     console.debug('case `'+ _caseName +'` is changing from ', allFields[_caseName], ' to ', event.currentTarget.value );
-                                        
-                                    //     if ( typeof(fields) == 'undefined') {
-                                    //         var fields = {};
-                                    //     }
-                                    //     var _val = event.currentTarget.value;
-                                    //     if ( /^(true|false)$/i.test(_val) ) {
-                                    //         _val = (/^(true)$/i.test(_val)) ? true : false;
-                                    //     }                                        
-                                    //     if ( /^\d+$/.test(_val) ) {
-                                    //         _val = parseInt(_val);
-                                    //     }
-                                    //     // Saving case current value
-                                    //     allFields[_caseName] = fields[_caseName] = _val;
-                                                                                
-                                    //     // rebind & restart validation in silent mode
-                                    //     var $_form = event.currentTarget.form;
-                                    //     if ($_form) {
-                                    //         // copy rules in order to avoid override
-                                    //         var customRules = JSON.parse(JSON.stringify(rules));
-                                    //         var caseRules = {};
-                                    //         var _conditions = rules[c].conditions;
-                                    //         if (_conditions.length > 1) { // more than one condition
-                                    //             for (let _ci = 0, _ciLen = _conditions.length; _ci < _ciLen; _ci++) {
-                                    //                 if ( 
-                                    //                     Array.isArray(_conditions[_ci].case)
-                                    //                     && _conditions[_ci].case.indexOf(fields[_caseName]) > -1
-                                    //                     ||
-                                    //                     _conditions[_ci].case == fields[_caseName]
-                                    //                 ) {
-                                    //                     // Inherited first
-                                    //                     caseRules = merge(_conditions[_ci].rules, caseRules);
-                                    //                 }
-                                    //             }
-                                    //             _conditions = null;
-                                    //         } else {
-                                    //             var _filter = {};
-                                    //             _filter['case'] = fields[_caseName];
-                                    //             caseRules = new Collection(rules[c].conditions).findOne(_filter).rules;
-                                    //             _filter = null;
-                                    //         }
-                                            
-                                    //         // Setting up new validation rules
-                                    //         for (let _f in caseRules) {
-                                    //             customRules[_f] = caseRules[_f];
-                                    //         }                             
-                                    //         // reset binding
-                                    //         var $_formObj = unbindForm($_form);
-                                    //         bindForm($_formObj.target, customRules);
-                                    //     }
-                                    // }
-                                });
-                                              
+                                // handles _case_* change; also useful if your are using radio tabs as cases triggers
                                 addListener(gina, $fields[caseName], [ caseEvent, 'change.'+$fields[caseName].id ], function(event) {
                                     event.preventDefault();
-                                    
+                                    console.debug('First rebinding on ', event.currentTarget.name +' == '+ event.currentTarget.value );
                                     redefineRulingContext(event.currentTarget, rules, c);
-                                    // var _caseName = event.currentTarget.name;
-                                    // if ( allFields[_caseName] != event.currentTarget.value ) {
-                                    //     console.debug('case `'+ _caseName +'` is changing from ', allFields[_caseName], ' to ', event.currentTarget.value );
-                                        
-                                    //     if ( typeof(fields) == 'undefined') {
-                                    //         var fields = {};
-                                    //     }
-                                    //     var _val = event.currentTarget.value;
-                                    //     if ( /^(true|false)$/i.test(_val) ) {
-                                    //         _val = (/^(true)$/i.test(_val)) ? true : false;
-                                    //     }                                        
-                                    //     if ( /^\d+$/.test(_val) ) {
-                                    //         _val = parseInt(_val);
-                                    //     }
-                                        
-                                    //     allFields[_caseName] = fields[_caseName] = _val;
-                                        
-                                                                                
-                                    //     // rebind & restart validation in silent mode
-                                    //     var $_form = event.currentTarget.form;
-                                    //     if ($_form) {
-                                    //         var _filter = {};
-                                    //         _filter['case'] = fields[_caseName];
-                                    //         var caseRules = new Collection(rules[c].conditions).findOne(_filter).rules;
-                                    //         console.debug('merging form rules');
-                                    //         var customRules = JSON.parse(JSON.stringify(rules));
-                                    //         for (let _f in caseRules) {
-                                    //             if ( typeof(customRules[_f]) == 'undefined' ) {
-                                    //                 customRules[_f] = caseRules[_f]
-                                    //             } else {
-                                    //                 customRules[_f] = merge(customRules[_f], caseRules[_f]);
-                                    //             }
-                                    //         }                             
-                                    //         // reset binding
-                                    //         var $_formObj = unbindForm($_form);
-                                    //         bindForm($_formObj.target, customRules);
-                                    //     }
-                                    // }
-                                    
                                 });
                                 
-                            }
+                            } // EO caseEvent
+                            */
                             caseValue = allFields[caseName];
                             if (isGFFCtx) {
                                 if (fields[field] == "true")
@@ -5790,7 +5830,6 @@ function ValidatorPlugin(rules, data, formId) {
                                             checkFieldAgainstRules(_r, rules, fields);
                                             continue;
                                         }
-                                        //continue;
                                     }
                                         
                                     
@@ -5865,12 +5904,10 @@ function ValidatorPlugin(rules, data, formId) {
                                             }
                                             
                                             // check each field against rule only if rule exists 2/3
-                                            if ( caseName != _r && typeof(rules[_r]) != 'undefined' ) {
+                                            //if ( caseName != _r && typeof(rules[_r]) != 'undefined' ) {
+                                            if ( caseName != _r && typeof(rules[_r]) != 'undefined' && typeof(fields[_r]) != 'undefined' ) {
                                                 checkFieldAgainstRules(_r, rules, fields);
                                             }
-                                            
-                                            //isInCase = true;
-                                            //break;
                                         }  
                                     }
                                 }
@@ -5906,7 +5943,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     caseValue = false;
                             }
 
-                            //console.log(caseValue +' VS '+ conditions[c]['case'], "->", (caseValue == conditions[c]['case'] || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1) );
+                            //console.debug(caseValue +' VS '+ conditions[c]['case'], "->", (caseValue == conditions[c]['case'] || Array.isArray(conditions[c]['case']) && conditions[c]['case'].indexOf(caseValue) > -1) );
                             if ( 
                                 conditions[c]['case'] === caseValue 
                                 ||
@@ -5915,7 +5952,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 /^\//.test(conditions[c]['case']) 
                             ) {
 
-                                //console.log('[fields ] ' + JSON.stringify(fields, null, 4));
+                                //console.debug('[fields ] ' + JSON.stringify(fields, null, 4));
                                 localRules = {};   
                                 // exclude case field if not declared in rules && not disabled
                                 if ( 
@@ -5927,7 +5964,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     conditions[c]['rules'][field] = { exclude: true }            
                                 }                             
                                 for (var f in conditions[c]['rules']) {
-                                    //console.log('F: ', f, '\nrule: '+ JSON.stringify(conditions[c]['rules'][f], null, 2));
+                                    //console.debug('F: ', f, '\nrule: '+ JSON.stringify(conditions[c]['rules'][f], null, 2));
                                     if ( /^\//.test(f) ) { // RegExp found
 
                                         re      = f.match(/\/(.*)\//).pop();                                        

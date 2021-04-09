@@ -86,7 +86,7 @@ function Server(options) {
             var serverOpt = {};
             var ioServerOpt = null;
             if ( typeof(options.conf[self.appName][self.env].content.settings.ioServer) != 'undefined' ) {
-                ioServerOpt = JSON.parse(JSON.stringify(options.conf[self.appName][self.env].content.settings.ioServer)) 
+                ioServerOpt = JSON.clone(options.conf[self.appName][self.env].content.settings.ioServer); 
             }
                     
                
@@ -348,7 +348,7 @@ function Server(options) {
                         }
 
                         if ( self.isStandalone && tmp[rule]) {
-                            standaloneTmp[rule] = JSON.parse(JSON.stringify(tmp[rule]))
+                            standaloneTmp[rule] = JSON.clone(tmp[rule]);
                         }
                     }// EO for
 
@@ -966,7 +966,7 @@ function Server(options) {
         }
         
         // Copy to avoid override
-        resHeaders  = JSON.parse(JSON.stringify(conf.server.response.header));
+        resHeaders  = JSON.clone(conf.server.response.header);
         if ( typeof(request.routing) == 'undefined' ) {
             request.routing = {
                 'url': request.url,
@@ -2536,8 +2536,8 @@ function Server(options) {
                     namespace           : routing[name].namespace || undefined,
                     url                 : unescape(pathname), /// avoid %20
                     rule                : routing[name].originalRule || name,
-                    param               : JSON.parse(JSON.stringify(routing[name].param)),
-                    middleware          : JSON.parse(JSON.stringify(routing[name].middleware)),
+                    param               : JSON.clone(routing[name].param),
+                    middleware          : JSON.clone(routing[name].middleware),
                     bundle              : routing[name].bundle,
                     isXMLRequest        : req.isXMLRequest,
                     isWithCredentials   : req.isWithCredentials
@@ -2656,7 +2656,7 @@ function Server(options) {
                 message: msg
             }
         } else {
-            err = JSON.parse(JSON.stringify(msg))
+            err = JSON.clone(msg);
         }
         
         if (!res.headersSent) {

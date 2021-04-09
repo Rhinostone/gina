@@ -19,10 +19,9 @@ function Help(opt, cmd) {
         if ( !isCmdConfigured() ) return false;
 
 
-        getHelp()
-    }
+        getHelp();
+    };
 
-    init()
-};
-
-module.exports = Help
+    init();
+}
+module.exports = Help;

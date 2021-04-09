@@ -113,7 +113,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         }
 
         var proxyClick = function($childNode, $el, evt) {
-
+            //if ( )
             addListener(gina, $childNode, 'click', function(e) {
                 cancelEvent(e);
 
@@ -289,8 +289,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var $el = e.target;
             var eventType = e.type;
                         
-            if ( typeof(e.detail) != 'undefined' )
+            if ( 
+                typeof(e.detail) != 'undefined' 
+                && typeof(e.detail.trim) == 'function' 
+            ) {
                 $el.innerHTML = e.detail.trim();
+            }
+                
             
             var register = function (type, evt, $element) {
                 var isLink = $element.getAttribute('data-gina-popin-is-link');
@@ -1195,7 +1200,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             $popin.isRedirecting = ( typeof(isRedirecting) != 'undefined' ) ? isRedirecting : false;
                         
             var $el = $popin.target;
-            $el.innerHTML = stringContent.trim(); 
+            // if ( 
+            //     typeof(stringContent) != 'undefined' 
+            //     && typeof(stringContent.trim) == 'function' 
+            // ) {
+                $el.innerHTML = stringContent.trim(); 
+            // }
+            
             popinUnbind($popin.name, true);          
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
             

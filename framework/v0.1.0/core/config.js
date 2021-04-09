@@ -12,6 +12,7 @@ var dns             = require('dns');
 var util            = require('util');
 var Events          = require('events');
 var EventEmitter    = require('events').EventEmitter;
+var locales         = require('./locales');
 var lib             = require('./../lib');
 var merge           = lib.merge;
 var inherits        = lib.inherits;
@@ -140,7 +141,8 @@ function Config(opt) {
 
                     self.envConf.core = {
                         statusCodes : statusCodes,
-                        mime        : mime
+                        mime        : mime,
+                        locales     : locales
                     };
 
                 } catch(err) {
@@ -1356,7 +1358,7 @@ function Config(opt) {
 
 
             if (hasViews && typeof(files['templates']) == 'undefined') {
-                files['templates'] = JSON.parse(JSON.stringify(defaultViews))
+                files['templates'] = JSON.clone(defaultViews)
             }
             
             if ( typeof(files['templates']) != 'undefined' ) {
@@ -1395,17 +1397,17 @@ function Config(opt) {
                 ;                   
                 for (var section in files['templates']) {
                                                                                                       
-                    // updating javascripts & css order                        
-                    noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.parse(JSON.stringify(files['templates'][section].javascripts)) : [];  
-                    noneDefaultCss  = (files['templates'][section].stylesheets) ? JSON.parse(JSON.stringify(files['templates'][section].stylesheets)) : [];                                       
+                    // updating javascripts & css order
+                    noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.clone(files['templates'][section].javascripts) : [];                    
+                    noneDefaultCss  = (files['templates'][section].stylesheets) ? JSON.clone(files['templates'][section].stylesheets) : [];                                       
                     
                     if ( Array.isArray(noneDefaultJs) && noneDefaultJs.length > 0 && typeof(noneDefaultJs[0].url) == 'undefined' ) {
-                        tTmp    = JSON.parse(JSON.stringify(noneDefaultJs));
+                        tTmp    = JSON.clone(noneDefaultJs);
                         t       = 0;
                         tLen    = tTmp.length;
                         noneDefaultJs = [];
                         for (; t < tLen; ++t) {
-                            noneDefaultJs[t]        = JSON.parse(JSON.stringify(js));
+                            noneDefaultJs[t]        = JSON.clone(js);
                             //url                     = ( !reWebroot.test(tTmp[t]) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(tTmp[t]) ) ? tTmp[t].substr(1) : tTmp[t] ) : tTmp[t];                               
                             url                     = tTmp[t];
                             noneDefaultJs[t].url    = url;                                
@@ -1470,12 +1472,12 @@ function Config(opt) {
                     
                     
                     if ( Array.isArray(noneDefaultCss) && noneDefaultCss.length > 0 && typeof(noneDefaultCss[0].url) == 'undefined' ) {
-                        tTmp    = JSON.parse(JSON.stringify(noneDefaultCss));
+                        tTmp    = JSON.clone(noneDefaultCss);
                         t       = 0;
                         tLen    = tTmp.length;
                         noneDefaultCss = [];
                         for (; t < tLen; ++t) {
-                            noneDefaultCss[t]           = JSON.parse(JSON.stringify(css));                            
+                            noneDefaultCss[t]           = JSON.clone(css);                            
                             url                         = tTmp[t];
                             noneDefaultCss[t].url       = url;                                
                             noneDefaultCss[t].name      = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');

@@ -271,11 +271,11 @@ function Add(opt, cmd) {
             hasPastProtocolAndSchemeCheck(self.defaultProtocol, self.defaultScheme, true);              
             
             // get user protocols list
-            var protocols = JSON.parse(JSON.stringify(self.protocols));
+            var protocols = JSON.clone(self.protocols);
             // get user schemes list
-            var schemes = JSON.parse(JSON.stringify(self.schemes));
+            var schemes = JSON.clone(self.schemes);
                         
-            var projectConfig   = JSON.parse(JSON.stringify(self.projects)); 
+            var projectConfig   = JSON.clone(self.projects);
                             
             // if ( protocols.indexOf(protocol) < 0 ) {
             //     protocols.push(protocol);
@@ -289,8 +289,8 @@ function Add(opt, cmd) {
             // }
                         
             //console.debug('about to update project ports conf\n\rBundles: '+ JSON.stringify(self.projectData, null, 4));
-            var ports               = JSON.parse(JSON.stringify(self.portsData)) // cloning
-                , portsReverse      = JSON.parse(JSON.stringify(self.portsReverseData)) // cloning
+            var ports               = JSON.clone(self.portsData) // cloning
+                , portsReverse      = JSON.clone(self.portsReverseData) // cloning
                 , portsList         = local.ports
                 , isPortUsed        = false
                 , envs              = self.envs
@@ -300,11 +300,11 @@ function Add(opt, cmd) {
             ;
             
             if ( typeof(ports[defaultProtocol]) == 'undefined' ) {
-                ports[defaultProtocol] = {}
+                ports[defaultProtocol] = {};
             }
             
             if ( typeof(ports[defaultProtocol][defaultScheme]) == 'undefined' ) {
-                ports[defaultProtocol][defaultScheme] = {}
+                ports[defaultProtocol][defaultScheme] = {};
             }
     
             // to fixe bundle settings inconsistency
