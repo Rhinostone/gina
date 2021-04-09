@@ -17,7 +17,7 @@ var scan        = require('../port/inc/scan');
 function Add(opt, cmd) {
 
     var self    = {}
-    , local     = {
+        , local     = {
             // bundle index while searching or browsing
             b : 0,
             bundle : null,
@@ -192,8 +192,8 @@ function Add(opt, cmd) {
 
         loadAssets();
 
-        var ports               = JSON.parse(JSON.stringify(self.portsData)) // cloning
-            , portsReverse      = JSON.parse(JSON.stringify(self.portsReverseData)) // cloning
+        var ports               = JSON.clone(self.portsData) // cloning
+            , portsReverse      = JSON.clone(self.portsReverseData) // cloning
             , portsList         = local.ports
             , envs              = self.envs
             , i                 = 0
@@ -310,7 +310,7 @@ function Add(opt, cmd) {
      * */
     var saveProjectFile = function(callback) {
 
-        var data = JSON.parse(JSON.stringify(self.projectData, null, 4));
+        var data = JSON.clone(self.projectData);
 
         var version = '0.0.1';
         data.bundles[local.bundle] = {
@@ -350,7 +350,7 @@ function Add(opt, cmd) {
 
         var e               = 0
             // working with copies in case of rollback
-            , content       = JSON.parse(JSON.stringify(self.envData))
+            , content       = JSON.clone(self.envData)
         ;
 
 

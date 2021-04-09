@@ -47,12 +47,14 @@ function addListener(target, element, name, callback) {
         }
     } else {
         if ( Array.isArray(element) ) {
+            i = 0;
             len = element.length;
             for (; i < len; i++) {
                 let evtName =  ( /\.$/.test(name) ) ? name + element[i].id : name;
                 registerListener(target, element[i], evtName, callback);
             }
         } else {
+            name =  ( /\.$/.test(name) ) ? name + element.id : name;
             registerListener(target, element, name, callback);
         }        
     }
@@ -738,12 +740,57 @@ function removeListener(target, element, name, callback) {
 
     if (typeof(element) != 'undefined' && element != null) {
         if (element.removeEventListener) {
-            element.removeEventListener(name, callback, false)
+            //element.removeEventListener(name, callback, false);
+            if ( Array.isArray(element) ) {
+                i = 0;
+                len = element.length;
+                for (; i < len; i++) {
+                    let evtName =  ( /\.$/.test(name) ) ? name + element[i].id : name;
+                    element.removeEventListener(evtName, callback, false);
+                    if ( typeof(gina.events[evtName]) != 'undefined' ) {
+                        // removed ------> [evtName];
+                        delete gina.events[evtName]
+                    }
+                }
+            } else {
+                name =  ( /\.$/.test(name) ) ? name + element.id : name;
+                element.removeEventListener(name, callback, false);
+            } 
         } else if (element.attachEvent) {
-            element.detachEvent('on' + name, callback)
+            //element.detachEvent('on' + name, callback);
+            if ( Array.isArray(element) ) {
+                i = 0;
+                len = element.length;
+                for (; i < len; i++) {
+                    let evtName =  ( /\.$/.test(name) ) ? name + element[i].id : name;
+                    element.detachEvent('on' + evtName, callback);
+                    if ( typeof(gina.events[evtName]) != 'undefined' ) {
+                        // removed ------> [evtName];
+                        delete gina.events[evtName]
+                    }
+                }
+            } else {
+                name =  ( /\.$/.test(name) ) ? name + element.id : name;
+                element.detachEvent('on' + name, callback);
+            } 
         }
     } else {
-        target.customEvent.removeListener(name, callback)
+        //target.customEvent.removeListener(name, callback)
+        if ( Array.isArray(element) ) {
+            i = 0;
+            len = element.length;
+            for (; i < len; i++) {
+                let evtName =  ( /\.$/.test(name) ) ? name + element[i].id : name;
+                target.customEvent.removeListener(evtName, callback);
+                if ( typeof(gina.events[evtName]) != 'undefined' ) {
+                    // removed ------> [evtName];
+                    delete gina.events[evtName]
+                }
+            }
+        } else {
+            name =  ( /\.$/.test(name) ) ? name + element.id : name;
+            target.customEvent.removeListener(name, callback)
+        } 
     }
 
     if ( typeof(gina.events[name]) != 'undefined' ) {

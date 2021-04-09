@@ -1,3 +1,4 @@
+'use strict';
 function Merge() {
 
     var newTarget           = []
@@ -181,7 +182,7 @@ function Merge() {
                                         }
                                     }
 
-                                    target[ name ] = clone
+                                    target[ name ] = clone;
                                 }
 
                             } else if (copy !== undefined) {
@@ -191,7 +192,7 @@ function Merge() {
                                     && src != null
                                     && src !== copy && !override
                                 ) {
-                                    target[ name ] = src
+                                    target[ name ] = src;
                                 } else {
                                     target[ name ] = copy;
                                 }
@@ -218,7 +219,7 @@ function Merge() {
             
         return target;
 
-    }    
+    };
 
     // Will not merge functions items: this is normal
     // Merging arrays is OK, but merging collections is still experimental        
@@ -228,26 +229,28 @@ function Merge() {
         
         var newTargetIds = []
             , keyComparison = browse.getKeyComparison()
-            , a = null
-            , i = 0
+            , a             = null
+            , aLen          = null
+            , i             = 0
         ;
 
         if (override) {
 
             // if collection, comparison will be done uppon the `id` attribute by default unless you call .setKeyComparison('someField')
             if (
-                typeof(options[0]) == 'object' && typeof(options[0][keyComparison]) != 'undefined'
-                && typeof(target[0]) == 'object' && typeof(target[0][keyComparison]) != 'undefined'
+                typeof(options[0]) == 'object'
+                && typeof(options[0][keyComparison]) != 'undefined'
+                && typeof(target[0]) == 'object' 
+                && typeof(target[0][keyComparison]) != 'undefined'
             ) {
 
-                newTarget =  (Array.isArray(target)) ? Array.from(target) : JSON.parse(JSON.stringify(target));
+                newTarget =  (Array.isArray(target)) ? Array.from(target) : JSON.clone(target);
                 for (var nt = 0, ntLen = newTarget.length; nt < ntLen; ++nt) {
                     newTargetIds.push(newTarget[nt][keyComparison]);
                 }
                 
-                var _options    = JSON.parse(JSON.stringify(options));
-                
-                var index = 0;
+                var _options    = JSON.clone(options);                
+                var index       = 0;
                 a = 0;
                 aLen = _options.length;
                 for (var n = next || 0, nLen = target.length; n < nLen; ++n) {
@@ -267,14 +270,14 @@ function Merge() {
                             if (newTargetIds.indexOf(_options[a][keyComparison]) > -1) {
                                 
                                 newTarget[index] = _options[a];
-                                ++index
+                                ++index;
                                 
                             } else if (newTargetIds.indexOf(_options[a][keyComparison]) == -1) {
 
                                 newTargetIds.push(_options[a][keyComparison]);                                
                                 //newTarget.push(_options[a]);
                                 newTarget[index] = _options[a];
-                                ++index
+                                ++index;
                             }
 
                             break label;
@@ -289,16 +292,16 @@ function Merge() {
 
                 newTargetIds = [];
 
-                return newTarget
+                return newTarget;
 
             } else { // normal case `arrays` or merging from a blank collection
-                return options
+                return options;
             }
         }
 
         if ( options.length == 0 &&  target.length > 0 ) {
             newTarget = target;
-            return newTarget
+            return newTarget;
         }
 
         if ( target.length == 0 && options.length > 0) {
@@ -330,8 +333,8 @@ function Merge() {
                 && typeof(target[0][keyComparison]) != 'undefined'
             ) {
 
-                newTarget       = (Array.isArray(target)) ? Array.from(target) : JSON.parse(JSON.stringify(target));
-                var _options    = JSON.parse(JSON.stringify(options));
+                newTarget       = (Array.isArray(target)) ? Array.from(target) : JSON.clone(target);
+                var _options    = JSON.clone(options);
                 var next        = null;
                 
                 i = 0;
@@ -376,7 +379,7 @@ function Merge() {
 
                 }
 
-                return newTarget
+                return newTarget;
 
 
             } else { // normal case `arrays`

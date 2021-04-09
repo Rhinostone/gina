@@ -187,9 +187,9 @@ function Add(opt, cmd) {
 
 
         var e = 0
-            , content = JSON.parse(JSON.stringify(envData))
-            , ports = JSON.parse(JSON.stringify(portsData))
-            , portsReverse = JSON.parse(JSON.stringify(portsReverseData))
+            , content = JSON.clone(envData)
+            , ports = JSON.clone(portsData)
+            , portsReverse = JSON.clone(portsReverseData)
             , patt
             , p
             , found = false;
@@ -253,7 +253,7 @@ function Add(opt, cmd) {
         var e = 0
             , modified = false
             , envs = self.envs
-            , projects = JSON.parse(JSON.stringify(self.projects));
+            , projects = JSON.clone(self.projects);
         // to ~/.gina/projects.json
         for (; e<envs.length; ++e) {
             if (projects[self.name].envs.indexOf(envs[e]) < 0 ) {

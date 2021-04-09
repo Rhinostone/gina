@@ -186,6 +186,7 @@ require([
     "utils/dom",
     "utils/events",
     "utils/effects",
+    "utils/polyfill",
     "utils/inherits",
     //"utils/merge",
     "utils/form-validator",

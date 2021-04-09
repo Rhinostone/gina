@@ -49,7 +49,7 @@ var isLoadedThroughCLI      = false; // with gina
 var isLoadedThroughWorker   = false;
 
 //copy & backup for utils/cmd/app.js.
-var tmp         = JSON.parse(JSON.stringify(process.argv)); // by default
+var tmp         = JSON.clone(process.argv); // by default
 var projectName = null;
 
 // filter $ node.. o $ gina  with or without env

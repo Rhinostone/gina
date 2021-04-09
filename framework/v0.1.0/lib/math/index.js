@@ -1,3 +1,4 @@
+//'use strict';
 /*
  * This file is part of the gina package.
  * Copyright (c) 2009-2021 Rhinostone <gina@rhinostone.com>
@@ -18,7 +19,7 @@ var crypto      = require('crypto');
  * @api public
  * */
 
-function Math() {
+function MathHelper() {
 
     var self = this;
 
@@ -48,9 +49,9 @@ function Math() {
      *
      *  @return {number} result
      * */
-    this.operate = function(computation) {
-        return new Function('return ' + computation)()
-    }
+    self.operate = function(computation) {
+        return new Function('return ' + computation)();
+    };
 
     /**
      * Checksum
@@ -67,11 +68,11 @@ function Math() {
             return crypto
                 .createHash(algorithm || 'md5')
                 .update(str, 'utf8')
-                .digest(encoding || 'hex')
+                .digest(encoding || 'hex');
         } catch (err) {
-            return err
+            return err;
         }
-    }
+    };
 
     /**
      * Checksum
@@ -84,28 +85,28 @@ function Math() {
      *  @param {object|string} err
      *  @param {string} checksum
      * */
-    this.checkSum = function(filename, algorithm, encoding, isCheckingFromData, cb) {
+    self.checkSum = async function(filename, algorithm, encoding, isCheckingFromData, cb) {
         var err = false, sum = null;
         isCheckingFromData = ( typeof(isCheckingFromData) != 'undefined' ) ? isCheckingFromData : false;
         
         if ( !isCheckingFromData && /\./.test(filename) ) {
-            fs.readFile(filename, function (err, data) {
-                sum = checkSum(data, algorithm, encoding);
+            fs.readFile(filename, async function (err, data) {
+                sum = await checkSum(data, algorithm, encoding);
                 if( sum instanceof Error) {
                     err = sum;
-                    sum = undefined
+                    sum = undefined;
                 }
 
-                cb(err, sum)
+                cb(err, sum);
             })
         } else {
-            sum = checkSum(filename, algorithm, encoding);
+            sum = await checkSum(filename, algorithm, encoding);
             if( sum instanceof Error) {
                 err = sum;
-                sum = undefined
+                sum = undefined;
             }
 
-            cb(err, sum)
+            cb(err, sum);
         }
     }
 
@@ -125,7 +126,7 @@ function Math() {
         }
         
         return str;
-    }
+    };
     
     /**
      * Check sum from file or form data
@@ -136,7 +137,7 @@ function Math() {
      *
      * @return {string} checksum
      * */
-    this.checkSumSync = function(filename, algorithm, encoding) {
+    self.checkSumSync = function(filename, algorithm, encoding) {
         var sum = null;
         try {
             
@@ -155,17 +156,17 @@ function Math() {
             if (sum instanceof Error)
                 throw sum;
             else
-                return sum
+                return sum;
 
         } catch (err) {
             //console.error(err.stack||err.message);
             //return undefined
-            throw err
+            throw err;
         }
-    }
+    };
 
     // for big files only: > 1Mb
-    //this.checkSumBig= function(filename, cb) {
+    //self.checkSumBig= function(filename, cb) {
     //    var hash = crypto.createHash('md5');
     //    var encryption = encryption || 'sha1';
     //
@@ -180,6 +181,6 @@ function Math() {
     //}
 
     //init();
-    return this
+    return self;
 }
-module.exports = Math()
+module.exports = MathHelper();

@@ -1,11 +1,10 @@
-
+'use strict';
 var merge = require('../../merge');
 
 function FileContainer(opt) {
-    var init = function() {}
-
-    ;
-    init(opt)
-};
-
-module.exports = FileContainer
+    var init = function() {
+        
+    };
+    init(opt);
+}
+module.exports = FileContainer;

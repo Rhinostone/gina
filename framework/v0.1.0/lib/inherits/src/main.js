@@ -1,3 +1,4 @@
+'use strict';
 /**
  * This file is part of the gina package.
  * Copyright (c) 2009-2021 Rhinostone <gina@rhinostone.com>
@@ -5,7 +6,6 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-'use strict';
 
 /**
  * @class Inherits
@@ -24,7 +24,6 @@ function Inherits(a, b) {
      * */
     var init = function(a, b) {
         var err = check(a, b);
-
 
         if (!err) {
 
@@ -45,52 +44,52 @@ function Inherits(a, b) {
 
                             //makes it compatible with node.js classes like EventEmitter
                             for (var prop in b.prototype) {
-                                if (!this[prop] /**&& prop != 'instance'*/) {// all but instances
-                                    this[prop] = b.prototype[prop]
+                                if (!this[prop]) {
+                                    this[prop] = b.prototype[prop];
                                 }
                             }
 
                             b.apply(this, arguments);
                             cache.apply(this, arguments);
                         }
-                    }
+                    };
                 }
 
             }(a, b));
 
             //makes it compatible with node.js classes like EventEmitter
             if (a.prototype == undefined) {
-                a.prototype = {}
+                a.prototype = {};
             }
 
             if (b.prototype == undefined) {
-                b.prototype = {}
+                b.prototype = {};
             }
 
             a.prototype = Object.create(b.prototype, {});
             z.prototype = Object.create(a.prototype, {}); //{ name: { writable: true, configurable: true, value: name }
 
-            return z
+            return z;
         } else {
-            throw new Error(err)
+            throw new Error(err);
         }
-    }
+    };
 
     var check = function(a, b) {
         if ( typeof(a) == 'undefined' || typeof(b) == 'undefined') {
             return 'inherits(a, b): neither [ a ] nor [ b ] can\'t be undefined or null'
         }
-        return false
-    }
+        return false;
+    };
 
-    return init
-};
+    return init;
+}
 
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    module.exports = Inherits()
+    module.exports = Inherits();
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define( function() { return Inherits() })
+    define( function() { return Inherits(); });
 }

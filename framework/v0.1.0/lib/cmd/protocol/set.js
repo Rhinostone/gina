@@ -30,7 +30,7 @@ function Set(opt, cmd) {
         // backup in case of rolllover
         local.ports         = requireJSON(_(self.portsPath));
         local.portsReverse  = requireJSON(_(self.portsReversePath));        
-        local.mainConfig    = JSON.parse(JSON.stringify(self.mainConfig));
+        local.mainConfig    = JSON.clone(self.mainConfig);
 
         
         // find available port
@@ -44,12 +44,12 @@ function Set(opt, cmd) {
 
             if (err) {
                 console.error(err.stack|err.message);
-                process.exit(1)
+                process.exit(1);
             }
 
 
             for (var p = 0; p < ports.length; ++p) {
-                local.portsAvailable.push(ports[p])
+                local.portsAvailable.push(ports[p]);
             }
 
             local.portsAvailable.sort();
@@ -58,33 +58,33 @@ function Set(opt, cmd) {
             if (!self.name && !self.projectName) {
                 // this case is allways catched excepted for `LIST` command
             } else if (self.projectName && isDefined(self.projectName) && !self.name) {
-                local.projectConfig = JSON.parse(JSON.stringify(self.projects));
-                check('project')
+                local.projectConfig = JSON.clone(self.projects);
+                check('project');
             } else if (typeof (self.name) != 'undefined' && isValidName(self.name)) {
-                local.projectConfig = JSON.parse(JSON.stringify(self.projects));
-                check('bunlde')
+                local.projectConfig = JSON.clone(self.projects);
+                check('bunlde');
             } else {
                 console.error('[ ' + self.name + ' ] is not a valid project name.');
-                process.exit(1)
+                process.exit(1);
             }
-        })        
-    }
+        });        
+    };
 
     //  check if bundle is defined
     var isDefined = function(name) {
         if (typeof (self.projects[name]) != 'undefined') {
-            return true
+            return true;
         }
-        return false
-    }
+        return false;
+    };
 
     var isValidName = function(name) {
         if (name == undefined) return false;
 
         self.name = name.replace(/\@/, '');
         var patt = /^[a-z0-9_.]/;
-        return patt.test(self.name)
-    }
+        return patt.test(self.name);
+    };
 
     var check = function(actionType) {
         
@@ -94,7 +94,7 @@ function Set(opt, cmd) {
             , list      = ''
             , choices   = {} // protocol choice
             , choices2  = {} // scheme choice
-            , opt = JSON.parse(JSON.stringify(self.protocolsAvailable))
+            , opt = JSON.clone(self.protocolsAvailable)
         ;
         
         opt.push('cancel');
@@ -135,7 +135,7 @@ function Set(opt, cmd) {
                     
                         // to the next question
                         list = '';
-                        opt = JSON.parse(JSON.stringify(self.schemesAvailable));
+                        opt = JSON.clone(self.schemesAvailable);
                         opt.push('cancel');
                         
                         for (var p = 0, len = opt.length; p < len; ++p) {
@@ -186,7 +186,7 @@ function Set(opt, cmd) {
                     } else {
                         if ( /^(c|cancel)$/.test(choice2) ) {
                             rl.clearLine();
-                            rl.close()
+                            rl.close();
                         } else {
                             console.log('Please, write '+ self.schemesAvailable.join(', ') +' or "c" (cancel) to proceed.');
                             rl.prompt();    
@@ -208,7 +208,7 @@ function Set(opt, cmd) {
             //setBundleOnly('http/2')
             
             
-    }
+    };
 
 
     var setProjectOnly = function(protocol, scheme) {
@@ -217,21 +217,21 @@ function Set(opt, cmd) {
         // are selected protocol & scheme allowed ?        
         if ( self.protocolsAvailable.indexOf(protocol) < 0 ) {
             console.error('Scheme [ '+scheme+' ] is not an allowed scheme: check your framework configuration (~/main.json)');
-            process.exit(1)
+            process.exit(1);
         }
         if ( self.schemesAvailable.indexOf(scheme) < 0 ) {
             console.error('Scheme [ '+scheme+' ] is not an allowed scheme: check your framework configuration (~/main.json)');
-            process.exit(1)
+            process.exit(1);
         }
   
         
         // get user protocols list
-        var protocols = JSON.parse(JSON.stringify(self.protocols));
+        var protocols = JSON.clone(self.protocols);
         // get user schemes list
-        var schemes = JSON.parse(JSON.stringify(self.schemes));
+        var schemes = JSON.clone(self.schemes);
         
         
-        var projectConfig   = JSON.parse(JSON.stringify(local.projectConfig)); 
+        var projectConfig   = JSON.clone(local.projectConfig);
                         
         if ( protocols.indexOf(protocol) < 0 ) {
             protocols.push(protocol);
@@ -259,8 +259,8 @@ function Set(opt, cmd) {
         var bundles = self.bundles;
         var envs    = self.envs;
         
-        var ports           = JSON.parse(JSON.stringify(local.ports));
-        var portsReverse    = JSON.parse(JSON.stringify(local.portsReverse));
+        var ports           = JSON.clone(local.ports);
+        var portsReverse    = JSON.clone(local.portsReverse);
                
         // to fixe bundle settings inconsistency
         var bundleConfig    = null;        
@@ -268,10 +268,10 @@ function Set(opt, cmd) {
         var bundleSettingsUpdate = false;
        
         if ( typeof(ports[protocol]) == 'undefined' ) {
-            ports[protocol] = {}
+            ports[protocol] = {};
         }
         if ( typeof(ports[protocol][scheme]) == 'undefined' ) {
-            ports[protocol][scheme] = {}
+            ports[protocol][scheme] = {};
         }               
             
         // setup new for the whole project            
@@ -429,19 +429,19 @@ function Set(opt, cmd) {
         // are selected protocol & scheme allowed ?        
         if ( self.protocolsAvailable.indexOf(protocol) < 0 ) {
             console.error('Protocol [ '+scheme+' ] is not an allowed protocol: check your framework configuration (~/main.json)');
-            process.exit(1)
+            process.exit(1);
         }
         if ( self.schemesAvailable.indexOf(scheme) < 0 ) {
             console.error('Scheme [ '+scheme+' ] is not an allowed scheme: check your framework configuration (~/main.json)');
-            process.exit(1)
+            process.exit(1);
         }               
         
         // get user protocols list
-        var protocols = JSON.parse(JSON.stringify(self.protocols));
+        var protocols = JSON.clone(self.protocols);
         // get user schemes list
-        var schemes = JSON.parse(JSON.stringify(self.schemes));
+        var schemes = JSON.clone(self.schemes);
         
-        var projectConfig   = JSON.parse(JSON.stringify(local.projectConfig)); 
+        var projectConfig   = JSON.clone(local.projectConfig);
                         
         if ( protocols.indexOf(protocol) < 0 ) {
             protocols.push(protocol);
@@ -463,13 +463,13 @@ function Set(opt, cmd) {
         //var bundles = self.bundles;
         var envs            = self.envs;
         var re              = new RegExp('\@'+ self.projectName +'$', '');
-        var ports           = JSON.parse(JSON.stringify(local.ports));
-        var portsReverse    = JSON.parse(JSON.stringify(local.portsReverse));
+        var ports           = JSON.clone(local.ports);
+        var portsReverse    = JSON.clone(local.portsReverse);
         if ( typeof(ports[protocol]) == 'undefined' ) {
-            ports[protocol] = {}
+            ports[protocol] = {};
         }
         if ( typeof(ports[protocol][scheme]) == 'undefined' ) {
-            ports[protocol][scheme] = {}
+            ports[protocol][scheme] = {};
         }
 
         var bundleConfig = self.bundlesByProject[self.projectName][self.name];        
@@ -589,28 +589,28 @@ function Set(opt, cmd) {
         
             //restore env.json
             if ( typeof(local.envDataWrote) == 'undefined' ) {
-                lib.generator.createFileFromDataSync(self.envData, self.envPath)
+                lib.generator.createFileFromDataSync(self.envData, self.envPath);
             }
             //restore project.json
             if ( typeof(local.projectDataWrote) == 'undefined' ) {
                 if ( typeof(self.projectData.bundles[local.bundle]) != 'undefined') {
-                    delete self.projectData.bundles[local.bundle]
+                    delete self.projectData.bundles[local.bundle];
                 }
-                lib.generator.createFileFromDataSync(self.projectData, self.projectConfigPath)
+                lib.generator.createFileFromDataSync(self.projectData, self.projectConfigPath);
             }
 
             //restore ports.json
             if ( typeof(local.portsDataWrote) == 'undefined' ) {
-                lib.generator.createFileFromDataSync(self.portsData, self.portsPath)
+                lib.generator.createFileFromDataSync(self.portsData, self.portsPath);
             }
 
             //restore ports.reverse.json
             if ( typeof(local.portsReverseDataWrote) == 'undefined' ) {
-                lib.generator.createFileFromDataSync(self.portsReverseData, self.portsReversePath)
+                lib.generator.createFileFromDataSync(self.portsReverseData, self.portsReversePath);
             }
 
 
-            process.exit(1)
+            process.exit(1);
         };
 
         // var bundle = new _(local.source);
@@ -626,7 +626,6 @@ function Set(opt, cmd) {
         // }
     };
 
-    init()
-};
-
-module.exports = Set
+    init();
+}
+module.exports = Set;

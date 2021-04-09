@@ -196,8 +196,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     if (!originalData) {
                         
                         originalData = {
-                            jsonObject      : JSON.parse(JSON.stringify( jsonObject) ),
-                            ginaJsonObject  : JSON.parse(JSON.stringify( ginaJsonObject) )
+                            jsonObject      : JSON.clone(jsonObject),
+                            ginaJsonObject  : JSON.clone( ginaJsonObject)
                         };
                         lastJsonObjectState = {}; // jsonObject.data
                         
@@ -313,7 +313,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         
                         // also update original data to handle restore action
                         if ( typeof (jsonObject['el-xhr']) != 'undefined' ) {
-                            lastJsonObjectState.data = JSON.parse(JSON.stringify(jsonObject[section]));
+                            lastJsonObjectState.data = JSON.clone(jsonObject[section]);
                         }
                     }
 

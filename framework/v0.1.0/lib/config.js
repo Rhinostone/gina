@@ -31,19 +31,19 @@ function ConfigUtil() {
 
         if ( !ConfigUtil.instance ) {
             try {
-                self.paths = getContext('paths')
+                self.paths = getContext('paths');
             } catch (err) {
-                self.paths = {}
+                self.paths = {};
             }
 
             var path = new _(__dirname).toUnixStyle();
             self.__dirname =  _( path.substring(0, (path.length - 4)) );
 
             ConfigUtil.instance = self;
-            return self
+            return self;
         } else {
             self = ConfigUtil.instance;
-            return ConfigUtil.instance
+            return ConfigUtil.instance;
         }
     }
 
@@ -481,7 +481,6 @@ function ConfigUtil() {
         }
     }
 
-    return init()
-};
-
-module.exports = ConfigUtil
+    return init();
+}
+module.exports = ConfigUtil;

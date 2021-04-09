@@ -174,8 +174,6 @@ function SwigFilters(conf) {
                 var mainConf = getContext('gina').Config.instance;
                 // is real bundle ?
                 if ( mainConf.allBundles.indexOf(base) > -1 ) {
-                    // needs a copy in case of confi override
-                    //routing         = JSON.parse(JSON.stringify(config.routing));
                     // config override
                     config          = mainConf.Env.getConf(base, mainConf.env);
                     

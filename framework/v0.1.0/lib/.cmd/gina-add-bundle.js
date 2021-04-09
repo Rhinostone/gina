@@ -110,7 +110,7 @@ AddBundle = function(opt, project, env, bundle) {
      *
      * */
     var saveProjectFile = function(callback) {
-        var data = JSON.parse(JSON.stringify(self.projectData, null, 4));
+        var data = JSON.clone(self.projectData, null, 4);
         data.bundles[self.bundle] = {
             "comment" : "Your comment goes here.",
             "tag" : "001",

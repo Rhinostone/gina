@@ -9,7 +9,7 @@ function Unset(opt, cmd){
         self.target     = _(GINA_HOMEDIR +'/' + GINA_RELEASE + '/settings.json');
         self.settings   = require(self.target);
 
-        var modified = false, argv = JSON.parse(JSON.stringify(process.argv));
+        var modified = false, argv = JSON.clone(process.argv);
 
         for (var i in argv) {
             if ( /^(\-\-)/.test(argv[i]) ) {

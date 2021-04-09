@@ -1,3 +1,4 @@
+'use strict';
 /**
  * This file is part of the gina package.
  * Copyright (c) 2009-2021 Rhinostone <gina@rhinostone.com>
@@ -5,8 +6,6 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-//'use strict';
-
 // Imports
 var util            = require('util');
 var EventEmitter    = require('events').EventEmitter;
@@ -170,8 +169,8 @@ function Logger(opt) {
 
                 if ( /(?:\\[rnt]|[\r\n\t])/.test(args[i]) ) { // special replacement for mixed string
                     args[i] = args[i]
-                        .replace(/(?:\\[rn]|[\r\n])/g, String.fromCharCode(10)) // \r should be 13, but will be 10 because of the terminal                            
-                        .replace(/(?:\\[t]|[\t])/g, String.fromCharCode(09))
+                        .replace(/(?:\\[rn]|[\r\n])/g, String.fromCharCode('10')) // \r should be 13, but will be 10 because of the terminal                            
+                        .replace(/(?:\\[t]|[\t])/g, String.fromCharCode('09'))
                     ;
                     /** 
                      *  Oct   Dec   Hex   Char
@@ -273,7 +272,7 @@ function Logger(opt) {
         }
 
         str += (isArray) ? ' ]' : '}';
-        return str + ' '
+        return str + ' ';
     }
 
 //    /**
@@ -326,12 +325,12 @@ function Logger(opt) {
             }
         } catch(e) {
             setDefaultLevels(opt);
-            self.error('Cannot set type: ', e.stack|| e.message)
+            self.error('Cannot set type: ', e.stack|| e.message);
         }
     }
 
     self.getLogger = function(details) {
-        console.debug('getting logger')
+        console.debug('getting logger');
     }
 
     self.log = function() {
@@ -342,18 +341,17 @@ function Logger(opt) {
 
             if (args[i] instanceof Object) {
                 //console.log("\n...", args[i], args[i].toString());
-                content += JSON.stringify(args[i], null, '\t')
+                content += JSON.stringify(args[i], null, '\t');
             } else {
                 content += args[i]
             }
         }
        
         if (content != '')
-            process.stdout.write(content + '\n')
-    }
+            process.stdout.write(content + '\n');
+    };
 
 
     return init(opt);
-};
-
-module.exports = Logger()
+}
+module.exports = Logger();
