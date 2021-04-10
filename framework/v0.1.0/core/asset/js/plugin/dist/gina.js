@@ -3933,6 +3933,35 @@ function PrototypesHelper(instance) {
         JSON.clone = clone;
         
     }
+    
+    if ( typeof(JSON.escape) == 'undefined' ) {
+        /**
+         * JSON.escape
+         * Escape special characters
+         * 
+         * Changes made here must be reflected in: 
+         *  - gina/utils/prototypes.js
+         *  - gina/framework/version/helpers/prototypes.js
+         *  - gina/framework/version/core/asset/js/plugin/src/gina/utils/polyfill.js
+         * 
+         * @param {object} jsonStr
+         * 
+         * @return {object} escaped JSON string
+         **/
+         var escape = function(jsonStr){
+            try {
+                return jsonStr
+                           .replace(/\n/g, "\\n")
+                           .replace(/\r/g, "\\r")
+                           .replace(/\t/g, "\\t")
+                       ;
+            } catch (err) {         
+               throw err;
+            }
+        };
+        
+        JSON.escape = escape;
+    }
         
 
     if ( typeof(Array.toString) == 'undefined' ) {
@@ -23554,6 +23583,35 @@ if ( typeof(JSON.clone) == 'undefined' ) {
     
     // Performences issue
     //return JSON.parse(JSON.stringify(source));
+}
+
+if ( typeof(JSON.escape) == 'undefined' ) {
+    /**
+     * JSON.escape
+     * Escape special characters
+     * 
+     * Changes made here must be reflected in: 
+     *  - gina/utils/prototypes.js
+     *  - gina/framework/version/helpers/prototypes.js
+     *  - gina/framework/version/core/asset/js/plugin/src/gina/utils/polyfill.js
+     * 
+     * @param {object} jsonStr
+     * 
+     * @return {object} escaped JSON string
+     **/
+     var escape = function(jsonStr){
+        try {
+            return jsonStr
+                       .replace(/\n/g, "\\n")
+                       .replace(/\r/g, "\\r")
+                       .replace(/\t/g, "\\t")
+                   ;
+        } catch (err) {         
+           throw err;
+        }
+    };
+    
+    JSON.escape = escape;
 };
 define("utils/polyfill", function(){});
 
