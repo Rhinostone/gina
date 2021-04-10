@@ -3187,8 +3187,11 @@ function SuperController(options) {
                     if ( /msie/i.test(req.headers['user-agent']) ) {
                         res.writeHead(code, "content-type", "text/plain");
                     } else {
-                        
-                        res.writeHead(code, { 'content-type': responseHeaders['content-type']} );
+                        var contentType = ( responseHeaders && responseHeaders['content-type'])
+                                         ? responseHeaders['content-type']
+                                         : local.options.conf.server.coreConfiguration.mime['json']+ '; charset='+ local.options.conf.encoding
+                        ;
+                        res.writeHead(code, { 'content-type': contentType } );
                     }
                 } else if ( typeof(responseHeaders['content-type']) != 'undefined' ) {
                     res.writeHead(code, { 'content-type': responseHeaders['content-type']} )
