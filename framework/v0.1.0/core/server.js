@@ -2471,7 +2471,7 @@ function Server(options) {
         return request
     }
 
-    var handle = function(req, res, next, bundle, pathname, config) {
+    var handle = async function(req, res, next, bundle, pathname, config) {
         
         var matched             = false
             , isRoute           = {}
@@ -2545,7 +2545,7 @@ function Server(options) {
 
                 //Parsing for the right url.
                 try {                    
-                    isRoute = routingUtils.compareUrls(params, routing[name].url, req);                        
+                    isRoute = await routingUtils.compareUrls(params, routing[name].url, req, res, next);                        
                 } catch (err) {
                     var msg = 'Internal server error.\nRule [ '+name+' ] needs your attention.\n';
                     // TODO - Refactor `ApiError`to handle the following param
