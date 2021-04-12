@@ -1977,7 +1977,11 @@ function SuperController(options) {
     this.query = function(options, data, callback) {
 
         // preventing multiple call of self.query() when controller is rendering from another required controller
-        if (local.options.renderingStack.length > 1) {
+        if ( 
+            typeof(local.options) != 'undefined'
+            && typeof(local.options.renderingStack) != 'undefined'
+            && local.options.renderingStack.length > 1
+        ) {
             return false
         }
         self.isProcessingError = false; // by default
@@ -2041,7 +2045,7 @@ function SuperController(options) {
 
         
         // Internet Explorer override
-        if ( /msie/i.test(local.req.headers['user-agent']) ) {
+        if ( local.req != null && /msie/i.test(local.req.headers['user-agent']) ) {
             options.headers['content-type'] = 'text/plain';
         } else {
             options.headers['content-type'] = local.options.conf.server.coreConfiguration.mime['json'];
@@ -2526,7 +2530,8 @@ function SuperController(options) {
                             data = JSON.parse(data);
                             // just in case
                             if ( typeof(data.status) == 'undefined' ) {
-                                
+                                console.warn('Response status code is `undefined`: switching to `200`');
+                                data.status = 200;
                             }
                         } catch (err) {
                             data = {
@@ -2557,7 +2562,7 @@ function SuperController(options) {
                         } else {
                             // required when control is used in an halted state
                             // Ref.: resumeHaltedRequest()
-                            if ( self.isHaltedRequest() && typeof(local.onHaltedRequestResumed) != 'undefined' ) {
+                            if ( self && self.isHaltedRequest() && typeof(local.onHaltedRequestResumed) != 'undefined' ) {
                                 local.onHaltedRequestResumed(false);
                             }
                             return callback( false, data )                        
@@ -2990,11 +2995,11 @@ function SuperController(options) {
         // trying to retrieve session since it is optional
         if ( typeof(session) == 'undefined' ) {
             session = null;
-            if ( typeof(local.req.session) && typeof(local.req.session.haltedRequest) != 'undefined' ) {
+            if ( typeof(local.req.session) != 'undefined' && typeof(local.req.session.haltedRequest) != 'undefined' ) {
                 session = local.req.session;
             }
             // passport
-            if (!session && typeof(local.req.session.user) != 'undefined' && typeof(local.req.session.user.haltedRequest) != 'undefined' ) {
+            if (!session && typeof(local.req.session) != 'undefined' && typeof(local.req.session.user) != 'undefined' && typeof(local.req.session.user.haltedRequest) != 'undefined' ) {
                 session = local.req.session.user;
             }
             if (!session) {

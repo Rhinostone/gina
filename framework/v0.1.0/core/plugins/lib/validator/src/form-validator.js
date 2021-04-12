@@ -79,12 +79,12 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         'query': 'Must be a valid response',
         'isApiError': 'Condition not satisfied'
     };
-
+    var self  = null;
     if (!data) {
         throw new Error('missing data param')
     } else {
         // cloning
-        var self  = JSON.parse( JSON.stringify(data) );
+        self  = JSON.parse( JSON.stringify(data) );
         local.data = JSON.parse( JSON.stringify(data) )
     }
     
@@ -151,17 +151,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     };
     
     // TODO - One method for the front, and one for the server
-    // var queryFromFrontend = function(options) {
-        
-    // }
-    
-    // var queryFromBackend = function(options) {
-        
-    // }    
-    /**
-     * query
-     */
-    var query = function(options, errorMessage) {
+    var queryFromFrontend = function(options, errorMessage) {
         // stop if 
         //  - previous error detected        
         if ( !self.isValid() ) {
@@ -172,8 +162,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             triggerEvent(gina, this.target, 'asyncCompleted.' + id);
             return self[this.name];
         }
-        //if ( self.getErrors().count() > 0 )
-        //    return self[this.name];
+        
             
         var xhr = null, _this = this;
         // setting up AJAX
@@ -233,7 +222,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 var route = routing.getRoute(queryOptions.url);
                 queryOptions.url = route.toUrl();
             } catch (routingError) {
-                throw routingError
+                throw routingError;
             }
         }
         
@@ -344,7 +333,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     
                     var id = _this.target.id || _this.target.getAttribute('id');
                     triggerEvent(gina, _this.target, 'asyncCompleted.' + id);
-                    return self[_this['name']]
+                    return self[_this['name']];
                 }
                 
                 try {
@@ -362,24 +351,124 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                         result = { 'status': xhr.status, 'message': '' };
                         if ( /^(\{|\[)/.test( xhr.responseText ) ) {
                             try {
-                                result = merge( result, JSON.parse(xhr.responseText) )
+                                result = merge( result, JSON.parse(xhr.responseText) );
                             } catch (err) {
-                                result = merge(result, err)
+                                result = merge(result, err);
                             }
                         }
-                        return onResult(result)
+                        return onResult(result);
                     }
                 } catch (err) {
-                    throw err
+                    throw err;
                 }                    
             }
             
             if (data) {
                 xhr.send( queryData ); // stringyfied
             }  else {
-                xhr.send()
+                xhr.send();
             }                                    
-        }        
+        }
+    }
+    
+    var queryFromBackend = async function(options, request, response, next) {
+        var Config = require(_(GINA_FRAMEWORK_DIR +'/core/config.js', true));
+        var config      = new Config().getInstance();
+        
+        var opt     = null
+            //appConf.proxy.<bundle>;
+            , rule  = null
+            , bundle = null
+            , currentBundle = getContext('bundle')
+        ;
+        // trying to retrieve proxy conf
+        if ( /\@/.test(options.url) ) {
+            var attr = options.url.split(/@/); 
+            rule = attr[0];
+            bundle = attr[1];
+            opt = getConfig( currentBundle, 'app' ).proxy[bundle];
+            attr = null;
+        } else {
+            // TODO - handle else; when it is an external domain/url
+            throw new Error('external url/domain not  handled at this moment, please contact us if you need support for it.')
+        }
+        var route       = routing.getRoute(options.url, options.data);
+        var env         = config.env;
+        var conf        = config[bundle][env]; 
+        if (!opt) {
+            opt = {       
+                "ca"        : options.ca,
+                "hostname"  : options.hostname,        
+                "port"      : options.port,   
+                "path"      : options.path
+            };
+        }
+        
+        var controllerOptions = {
+            // view namespace first
+            // namespace       : params.param.namespace || namespace,
+            //control         : route.param.control,
+            // controller      : controllerFile,
+            //controller: '<span class="gina-bundle-name">' + bundle +'</span>/controllers/controller.js',
+            //file: route.param.file, // matches rule name by default
+            //bundle          : bundle,//module
+            // bundlePath      : conf.bundlesPath + '/' + bundle,
+            // rootPath        : self.executionPath,
+            // We don't want to keep original conf untouched
+            conf            : JSON.clone(conf),
+            //instance: self.serverInstance,
+            //template: (routeHasViews) ? conf.content.templates[templateName] : undefined,
+            //isUsingTemplate: local.isUsingTemplate,
+            cacheless: conf.cacheless //,
+            //path: params.param.path || null, // user custom path : namespace should be ignored | left blank
+            //assets: {}
+        };
+        var params = {
+            method              : route.method,
+            requirements        : route.requirements,
+            namespace           : route.namespace || undefined,
+            url                 : unescape(route.url), /// avoid %20
+            rule                : rule + '@' + bundle,
+            param               : JSON.clone(route.param),
+            middleware          : JSON.clone(route.middleware),
+            bundle              : route.bundle,
+            isXMLRequest        : request.isXMLRequest,
+            isWithCredentials   : request.isWithCredentials
+        };
+        controllerOptions = merge(controllerOptions, params);
+        controllerOptions.conf.content.routing[controllerOptions.rule].param = params.param;
+        var Controller = require(_(GINA_FRAMEWORK_DIR +'/core/controller/controller.js'), true);
+        var controller = new Controller(controllerOptions);
+        controller.name = route.param.control;            
+        //controller.serverInstance = serverInstance;
+        controller.setOptions(request, response, next, controllerOptions);
+        
+        
+        opt.method  = options.method;
+        opt.path    = route.url;
+        var data = ( typeof(options.data) == 'object' && options.data.count() > 0 )
+                ? options.data
+                : {};
+                
+        var util            = require('util');
+        var promisify       = util.promisify;
+        var result = { isValid: false };
+        await promisify(controller.query)(opt, data)
+            .then(function onResult(_result) {
+                result = _result;
+            });
+            
+        return result;
+    };
+        
+    /**
+     * query
+     */
+    var query = null;
+    if (isGFFCtx) {
+        query = queryFromFrontend;
+    } else {
+        query = queryFromBackend;
     }
 
 

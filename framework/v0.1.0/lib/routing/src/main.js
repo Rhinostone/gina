@@ -115,13 +115,15 @@ function Routing() {
      * @param {object} params - Route params containing the given url to be compared with
      * @param {string|array} url - routing.json url
      * @param {object} [request]
+     * @param {object} [response] - only used for query validation
+     * @param {object} [next] - only used for query validation
      *
      * @return {object|false} foundRoute
      * */
-    self.compareUrls = function(params, url, request) {
+    self.compareUrls = async function(params, url, request, response, next) {
         
         if ( typeof(request) == 'undefined' ) {
-            request = { routing: {} }
+            request = { routing: {} };
         }
         // Sample debug break for specific rule
         // if ( params.rule == 'my-specific-rule@bundle' ) {
@@ -139,15 +141,15 @@ function Routing() {
 
 
             while (i < len && !foundRoute.past) {
-                foundRoute = parseRouting(params, urls[i], request);
+                foundRoute = await parseRouting(params, urls[i], request, response, next);
                 ++i;
             }
 
-            return foundRoute
+            return foundRoute;
         } else {
-            return parseRouting(params, url, request);
+            return await parseRouting(params, url, request, response, next);
         }
-    }
+    };
 
     /**
      * Check if rule has params
@@ -159,7 +161,7 @@ function Routing() {
      * */
     var hasParams = function(pathname) {
         return (/:/.test(pathname)) ? true : false;
-    }
+    };
 
     /**
      * Parse routing for mathcing url
@@ -167,11 +169,13 @@ function Routing() {
      * @param {object} params - `params` is the same `request.routing` that can be retried in controller with: req.routin
      * @param {string} url
      * @param {object} request
+     * @param {object} [response] - Only used for query validation
+     * @param {object} [next] - Only used for query validation
      *
      * @return {object} foundRoute
      *
      * */
-    var parseRouting = function(params, url, request) {
+    var parseRouting = async function(params, url, request, response, next) {
 
         var uRe             = params.url.split(/\//)
             , uRo           = url.split(/\//)
@@ -198,17 +202,14 @@ function Routing() {
             && /get/i.test(method)
             && /delete/i.test(paramMethod)
         ) {            
+            
             if ( /get/i.test(method) && /delete/i.test(paramMethod) ) {
                 method = paramMethod;
-                //request.method = method.toUpperCase();
             }
             // `delete` methods don't have a body
             // So, request.delete is {} by default
-            // if ( method == 'delete'){
-            //     console.debug('debug method delete '+ params.rule);
-            // }
-            if ( method == 'delete' && uRe.length === uRo.length ) {
-                
+            if ( /^(delete)$/i.test(method) && uRe.length === uRo.length ) { 
+                // just in case
                 if ( typeof(request[method]) == 'undefined' ) {
                     request[method] = {};
                 }
@@ -224,7 +225,7 @@ function Routing() {
                     let condition = params.requirements[_key];
                     if ( /^\//.test(condition) ) {
                         condition = condition.substr(1, condition.lastIndexOf('/')-1);
-                    } else if ( /^validator\:\:/.test(condition) && fitsWithRequirements(uRo[p], uRe[p], params, request) ) {
+                    } else if ( /^validator\:\:/.test(condition) && await fitsWithRequirements(uRo[p], uRe[p], params, request, response, next) ) {
                         ++score;
                         continue;
                     }
@@ -233,19 +234,21 @@ function Routing() {
                         && typeof(condition) != 'undefined'
                         && new RegExp(condition).test(uRe[p])
                     ) {
-                        ++score;
-                        
+                        ++score;                        
                         request[method][uRo[p].substr(1)] = uRe[p];    
-                    }  
+                    }
                 }
                 hasAlreadyBeenScored = true;           
             }
             
+            
             for (let p in request[method]) {
                 if ( typeof(params.requirements[p]) != 'undefined' && uRo.indexOf(':' + p) < 0 ) {
                     uRo[uRoCount] = ':' + p; ++uRoCount;
-                    uRe[uReCount] = request[method][p]; ++uReCount;
-                    ++maxLen;
+                    uRe[uReCount] = request[method][p];
+                    ++uReCount;
+                    if (!hasAlreadyBeenScored && uRe.length === uRo.length)
+                        ++maxLen;                    
                 }
             }
         }
@@ -254,9 +257,9 @@ function Routing() {
         if (!hasAlreadyBeenScored && uRe.length === uRo.length) {
             for (; i < maxLen; ++i) {
                 if (uRe[i] === uRo[i]) {
-                    ++score
-                } else if (score == i && hasParams(uRo[i]) && fitsWithRequirements(uRo[i], uRe[i], params, request)) {
-                    ++score
+                    ++score;
+                } else if (score == i && hasParams(uRo[i]) && await fitsWithRequirements(uRo[i], uRe[i], params, request, response, next)) {
+                    ++score;
                 }
             }
         }
@@ -264,17 +267,20 @@ function Routing() {
         foundRoute.past     = (score === maxLen) ? true : false;
         
         if (foundRoute.past) {
-            //attaching routing description for this request
-            request.routing = params; // can be retried in controller with: req.routing
+            // attaching routing description for this request
+            //request.routing = params; // can be retried in controller with: req.routing
+            // && replacing placeholders
+            request.routing = checkRouteParams(params, request[method]);
             foundRoute.request  = request;
         }
         
 
-        return foundRoute
-    }
+        return foundRoute;
+    };
 
     /**
      * Fits with requiremements
+     * This is for server side use only
      * http://en.wikipedia.org/wiki/Regular_expression
      *
      * @param {string} urlVar
@@ -285,12 +291,11 @@ function Routing() {
      *
      * @private
      * */
-    var fitsWithRequirements = function(urlVar, urlVal, params, request) {
+    var fitsWithRequirements = async function(urlVar, urlVal, params, request, response, next) {
         //var isValid = new Validator('routing', { email: "contact@gina.io"}, null, {email: {isEmail: true}} ).isEmail().valid;
         var matched     = -1
             , _param    = urlVar.match(/\:\w+/g)
             , regex     = new RegExp(urlVar, 'g')
-            //, regex     = eval('/' + urlVar.replace(/\//g,'\\/') +'/g')
             , re        = null
             , flags     = null
             , key       = null
@@ -319,8 +324,14 @@ function Routing() {
         }
         
         //  if custom file, file rewrite
-        if (params.param.file && regex.test(params.param.file)) {            
-            params.param.file = params.param.file.replace(regex, urlVal);            
+        // if (params.param.file && regex.test(params.param.file)) {            
+        //     params.param.file = params.param.file.replace(regex, urlVal);            
+        // }
+        // file is handle like url replacement (path is like pathname)
+        if (typeof (params.param.file) != 'undefined' && /:/.test(params.param.file)) {
+            var _regex = new RegExp('(:'+urlVar+'/|:'+urlVar+'$)', 'g'); 
+            replacement.variable = urlVal;        
+            params.param.file = params.param.file.replace( _regex, replacement );
         }
 
         //  if custom title, title rewrite
@@ -356,14 +367,15 @@ function Routing() {
 
             key     = _param[matched].substr(1);
             // escaping `\` characters
-            regex   = ( /\\/.test(params.requirements[key]) ) ? params.requirements[key].replace(/\\/, '') : params.requirements[key];
-
+            // TODO - remove comment : all regex requirement must start with `/`
+            //regex   = ( /\\/.test(params.requirements[key]) ) ? params.requirements[key].replace(/\\/, '') : params.requirements[key];
+            regex = params.requirements[key];
             if (/^\//.test(regex)) {
                 re      = regex.match(/\/(.*)\//).pop();
                 flags   = regex.replace('/' + re + '/', '');                
 
                 tested  = new RegExp(re, flags).test(urlVal)
-            } else if ( /^validator\:\:/.test(regex) ) {
+            } else if ( /^validator\:\:/.test(regex) && urlVal) {
                 /**
                  * "requirements" : {
                  *      "id" : "/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i",
@@ -383,9 +395,18 @@ function Routing() {
                         .replace(/([^\:\"\s+](\w+))\s+\:/g, '"$1":') // note the space between `validIf` & `:` { query: { validIf : true }} => { "query": { "validIf": true }}
                     );                    
                 } catch (err) {
-                    throw err
+                    throw err;
                 }
                 //_ruleObj    = JSON.parse(regex.split(/::/).splice(1)[0].replace(/([^\W+ true false])+(\w+)/g, '"$&"'));       
+                if (typeof(_ruleObj.query) != 'undefined' && typeof(_ruleObj.query.data) != 'undefined') {
+                    // since we only have one param
+                    // :var1 == :var1
+                    if ( urlVar == _ruleObj.query.data[ Object.keys(_ruleObj.query.data)[0] ] ) {
+                        _ruleObj.query.data[ Object.keys(_ruleObj.query.data)[0] ] = _data[key];
+                        // Set in case it is not found
+                        request.params[key] = _data[key];
+                    }
+                }
                 _rule[key]  = _ruleObj;                
                 _validator  = new Validator('routing', _data, null, _rule );
                 if (_ruleObj.count() == 0 ) {
@@ -394,14 +415,14 @@ function Routing() {
                 }
                 for (rule in _ruleObj) {
                     if (Array.isArray(_ruleObj[rule])) { // has args
-                        _validator[key][rule].apply(_validator[key], _ruleObj[rule])
+                        await _validator[key][rule].apply(_validator[key], _ruleObj[rule]);
                     } else {
-                        _validator[key][rule](_ruleObj[rule])
+                        await _validator[key][rule](_ruleObj[rule], request, response, next);
                     }                    
                 }
                 tested = _validator.isValid();
             } else {
-                tested = new RegExp(params.requirements[key]).test(urlVal)
+                tested = new RegExp(params.requirements[key]).test(urlVal);
             }
 
             if (
@@ -413,9 +434,9 @@ function Routing() {
             ) {                
                 request.params[key] = urlVal;
                 if ( typeof(request[requestMethod][key]) == 'undefined' ) {
-                    request[requestMethod][key] = urlVal
+                    request[requestMethod][key] = urlVal;
                 }
-                return true
+                return true;
             }
 
         } else { // slow one
@@ -533,6 +554,54 @@ function Routing() {
 
         return false
     }
+    
+    var replacement = function(matched){
+        return ( /\/$/.test(matched) ? replacement.variable+ '/': replacement.variable )            
+    };
+    var checkRouteParams = function(route, params) {
+        
+        for (var p in route.param) {
+            if ( /^:/.test(route.param[p]) ) {
+                variable = route.param[p].substr(1);
+                
+                if ( typeof(params) != 'undefined' && typeof(params[variable]) != 'undefined' ) {
+                    
+                    regex = new RegExp('(:'+variable+'/|:'+variable+'$)', 'g');                   
+                    
+
+                    if ( typeof(route.param.path) != 'undefined' && /:/.test(route.param.path) ) {
+                        route.param.path = route.param.path.replace( regex, params[variable]);
+                    }
+                    if (typeof (route.param.title) != 'undefined' && /:/.test(route.param.title)) {
+                        route.param.title = route.param.title.replace( regex, params[variable]);
+                    }
+                    if (typeof (route.param.namespace) != 'undefined' && /:/.test(route.param.namespace)) {
+                        route.param.namespace = route.param.namespace.replace( regex, params[variable]);
+                    }
+                    // file is handle like url replacement (path is like pathname)
+                    if (typeof (route.param.file) != 'undefined' && /:/.test(route.param.file)) {
+                        replacement.variable = params[variable];        
+                        route.param.file = route.param.file.replace( regex, replacement );
+                    }
+                                        
+                    if ( /\,/.test(route.url) ) {                        
+                        urls = route.url.split(/\,/g);
+                        i = 0; len = urls.length;
+                        for (; i < len; ++i) {
+                            replacement.variable = params[variable]; 
+                            urls[i] = urls[i].replace( regex, replacement );
+                        }
+                        route.url = urls.join(',');
+                    } else {        
+                        replacement.variable = params[variable];        
+                        route.url = route.url.replace( regex, replacement );
+                    }
+                }
+            }
+        }
+        
+        return route;
+    }
 
     /**
      * @function getRoute
@@ -601,48 +670,7 @@ function Routing() {
             , len       = null
             , msg       = null
         ;
-        
-        var replacement = function(matched){
-            return ( /\/$/.test(matched) ? replacement.variable+ '/': replacement.variable )            
-        }
-        
-        for (var p in route.param) {
-            if ( /^:/.test(route.param[p]) ) {
-                variable = route.param[p].substr(1);
-                
-                if ( typeof(params) != 'undefined' && typeof(params[variable]) != 'undefined' ) {
-                    
-                    regex = new RegExp('(:'+variable+'/|:'+variable+'$)', 'g');                   
-                    
-
-                    if ( typeof(route.param.path) != 'undefined' && /:/.test(route.param.path) ) {
-                        route.param.path = route.param.path.replace( regex, params[variable]);
-                    }
-                    if (typeof (route.param.title) != 'undefined' && /:/.test(route.param.title)) {
-                        route.param.title = route.param.title.replace( regex, params[variable]);
-                    }
-                    if (typeof (route.param.namespace) != 'undefined' && /:/.test(route.param.namespace)) {
-                        route.param.namespace = route.param.namespace.replace( regex, params[variable]);
-                    }
-                    if (typeof (route.param.file) != 'undefined' && /:/.test(route.param.file)) {
-                        route.param.file = route.param.file.replace( regex, params[variable]);
-                    }
-                                        
-                    if ( /\,/.test(route.url) ) {                        
-                        urls = route.url.split(/\,/g);
-                        i = 0; len = urls.length;
-                        for (; i < len; ++i) {
-                            replacement.variable = params[variable]; 
-                            urls[i] = urls[i].replace( regex, replacement );
-                        }
-                        route.url = urls.join(',');
-                    } else {        
-                        replacement.variable = params[variable];        
-                        route.url = route.url.replace( regex, replacement );
-                    }
-                }
-            }
-        }
+        route = checkRouteParams(route, params);
 
         if ( /\,/.test(route.url) ) {
             urlIndex = ( typeof(urlIndex) != 'undefined' ) ? urlIndex : 0;
@@ -671,7 +699,7 @@ function Routing() {
             }
         }
         
-            // recommanded for x-bundle coms
+        // recommanded for x-bundle coms
         // leave `ignoreWebRoot` empty or set it to false for x-bundle coms
         route.toUrl = function (ignoreWebRoot) {
             
@@ -730,7 +758,32 @@ function Routing() {
         return route
     };
 
-    
+    var getFormatedRoute = function(route, url, hash) {
+        // fix url in case of empty param value allowed by the routing rule
+        // to prevent having a folder.
+        // eg.: {..., id: '/^\\s*$/'} => {..., id: ''} => /path/to/ becoming /path/to
+        if ( /\/$/.test(url) && url != '/' )
+            url = url.substr(0, url.length-1);
+        // adding hash if found
+        if (hash)
+            url += hash;
+        
+        route.url = url;
+        // recommanded for x-bundle coms
+        // leave `ignoreWebRoot` empty or set it to false for x-bundle coms
+        route.toUrl = function (ignoreWebRoot) {                
+            var wroot       = this.webroot
+                , hostname  = this.hostname
+                , path      = this.url
+            ;
+            
+            this.url = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : path;
+
+            return hostname + this.url
+        };
+        
+        return route
+    }
 
     /**
      * Get route by url
@@ -738,7 +791,7 @@ function Routing() {
      *
      * @function getRouteByUrl
      *
-     * @param {string} url e.g.: /bundle/some/url/path or http
+     * @param {string} url e.g.: /webroot/some/url/path or http
      * @param {string} [bundle] targeted bundle
      * @param {string} [method] request method (GET|PUT|PUT|DELETE) - GET is set by default
      * @param {object} [request] 
@@ -750,34 +803,69 @@ function Routing() {
     self.getRouteByUrl = function (url, bundle, method, request, isOverridinMethod) {
         
         if (
-            arguments.length == 2 && typeof(arguments[1]) != 'undefined' && self.allowedMethods.indexOf(arguments[1].toLowerCase()) > -1 
+            arguments.length == 2 
+            && typeof(arguments[1]) != 'undefined' 
+            && self.allowedMethods.indexOf(arguments[1].toLowerCase()) > -1 
         ) {
-            method = arguments[1], bundle = undefined;
+            method = arguments[1];
+            bundle = undefined;
         }
-        isOverridinMethod = ( typeof(arguments[arguments.length-1]) != 'boolean') ? false : arguments[arguments.length-1];
-
-        var matched             = false
-            , hostname          = null
-            , config            = null
-            , env               = null
-            , webroot           = null
-            , prefix            = null
-            , pathname          = null
-            , params            = null            
+        var webroot             = null
+            , route             = null
             , routing           = null
             , reverseRouting    = null
-            , isRoute           = null
-            , foundRoute        = null
-            , route             = null
-            , routeObj          = null
             , hash              = null // #section nav
+            , hostname          = null
+            , host              = null
         ;
         
         if ( /\#/.test(url) && url.length > 1 ) {
             var urlPart = url.split(/\#/);
             url     = urlPart[0];
             hash    = '#' + urlPart[1];
+            
+            urlPart = null;
         }
+        
+        // fast method
+        if (
+            arguments.length == 1 
+            && typeof(arguments[0]) != 'undefined'            
+        ) {
+            if ( !/^(https|http)/i.test(url) && !/^\//.test(url)) {
+                url = '/'+ url;
+            }
+            
+            webroot = '/' + url.split(/\//g)[1];
+            if (isGFFCtx) {
+                reverseRouting  = gina.config.reverseRouting;
+                routing         = gina.config.routing
+            }
+            // get bundle
+            if ( typeof(reverseRouting[webroot]) != 'undefined' ) {
+                var infos = routing[ reverseRouting[webroot] ];
+                bundle      = infos.bundle;
+                webroot     = infos.webroot;
+                host        = infos.host;
+                hostname    = infos.hostname;
+                infos       = null;
+            }          
+        }
+        
+        isOverridinMethod = ( typeof(arguments[arguments.length-1]) != 'boolean') ? false : arguments[arguments.length-1];
+
+        var matched             = false            
+            , config            = null
+            , env               = null
+            , prefix            = null
+            , pathname          = null
+            , params            = null
+            , isRoute           = null
+            , foundRoute        = null            
+            , routeObj          = null            
+        ;
+        
+        
         
         var isMethodProvidedByDefault = ( typeof(method) != 'undefined' ) ? true : false;
 
@@ -785,12 +873,12 @@ function Routing() {
             config          = window.gina.config;
             bundle          = (typeof (bundle) != 'undefined') ? bundle : config.bundle;
             env             = config.env;
-            routing         = config.getRouting(bundle);
-            reverseRouting  = config.reverseRouting;
+            routing         = routing || config.getRouting(bundle);
+            reverseRouting  = reverseRouting || config.reverseRouting;
             isXMLRequest    = ( typeof(isXMLRequest) != 'undefined' ) ? isXMLRequest : false; // TODO - retrieve the right value
 
-            hostname        = config.hostname;
-            webroot         = config.webroot;
+            hostname        = hostname || config.hostname;
+            webroot         = webroot || config.webroot;
             prefix          = hostname + webroot;
 
             request = {
