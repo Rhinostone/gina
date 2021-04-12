@@ -151,6 +151,15 @@ function Config(opt) {
                 }
                 
                 loadBundlesConfiguration( function(err, file, routing) {
+                    
+                    if (err) {
+                        console.error(err.stack||err.message);
+                        
+                        setTimeout(() => {
+                            process.exit(1);
+                        }, 0);
+                        return;
+                    }
 
                     if ( typeof(Config.initialized) == 'undefined' ) {
                         Config.initialized  = true;
@@ -1060,7 +1069,20 @@ function Config(opt) {
             }
             
             
-            for (var rule in routing) {
+            for (let rule in routing) {
+                
+                // checking requirements syntax
+                if ( typeof(routing[rule].requirements) != 'undefined' && routing[rule].requirements.count() > 0 ) {
+                    for ( let r in routing[rule].requirements) {
+                        if ( !/^\//.test(routing[rule].requirements[r]) && !/^validator\:\:/.test(routing[rule].requirements[r]) ) {
+                            let ruleName = ( !/\@/.test(rule) ) ? rule +'@'+ bundle : rule;
+                            err = new Error('['+ruleName+'] Bad routing syntax for `'+r+'` in requirements : must start with `/` or `validator::`');
+                            console.emerg(err.stack||err.message);
+                            process.exit(1);
+                        }
+                    }
+                }
+                
                 
                 if (rule == 'webroot@'+ bundle) continue;
                                 
