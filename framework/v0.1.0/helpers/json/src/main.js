@@ -35,6 +35,9 @@ module.exports = function(){
         ;
         
         try {
+            if ( typeof(process.env.IS_CACHELESS) != 'undefined' && /true/i.test(process.env.IS_CACHELESS) ) {
+                delete require.cache[filename];
+            }
             jsonStr = fs.readFileSync(filename).toString();
         } catch (err) {
             if ( typeof(console.emerg) != 'undefined' ) {
@@ -67,13 +70,22 @@ module.exports = function(){
         
         try {      
             return JSON.parse(jsonStr)
-        } catch (err) {        
-            var pos = err.stack.match(/position(\s|\s+)\d+/)[0].replace(/[^\d+]/g, '');            
-            jsonStr = jsonStr.substr(0, pos) + '--(ERROR !)--\n' + jsonStr.substr(pos);
-            var msg = (jsonStr.length > 400) ?  '...'+ jsonStr.substr(pos-200, 300) +'...' : jsonStr;
+        } catch (err) {
+            var pos     = null
+                , msg   = null
+                , error = null
+            ;
+            var stack   = err.stack.match(/position(\s|\s+)\d+/);
+            if ( Array.isArray(stack) && stack.length > 0) {
+                pos     = stack[0].replace(/[^\d+]/g, '');            
+                jsonStr = jsonStr.substr(0, pos) + '--(ERROR !)--\n' + jsonStr.substr(pos);
+                msg     = (jsonStr.length > 400) ?  '...'+ jsonStr.substr(pos-200, 300) +'...' : jsonStr;
+                error = new Error('[ requireJSON ] could not parse `'+ filename +'`:' +'\n\rSomething is wrong arround this portion:\n\r'+msg+'<strong style="color:red">"</strong>\n\rPlease check your file: `'+ filename +'`'+ '\n\r<strong style="color:red">'+err.stack+'</strong>\n');       
+            } else {
+                error = new Error('[ requireJSON ] could not parse `'+ filename +'`:' +'\n\rSomething is wrong with the content of your file.\n\rPlease check the syntax of your file : `'+ filename +'`'+ '\n\r<strong style="color:red">'+err.stack+'</strong>\n');       
+            }
             
-            var error = new Error('[ requireJSON ] could not parse `'+ filename +'`:' +'\n\rSomething is wrong arround this portion:\n\r'+msg+'<strong style="color:red">"</strong>\n\rPlease check your file: `'+ filename +'`'+ '\n\r<strong style="color:red">'+err.stack+'</strong>\n');       
-            if ( typeof(console.emerg) != 'undefined' ) {
+            if ( !/\/controllers/i.test(err.stack) && typeof(console.emerg) != 'undefined' ) {
                 console.emerg(error.message);
                 process.exit(1);
             }            
