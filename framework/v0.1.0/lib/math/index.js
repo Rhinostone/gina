@@ -179,8 +179,6 @@ function MathHelper() {
     //        hash.digest('hex');
     //    })
     //}
-
-    //init();
     return self;
 }
 module.exports = MathHelper();

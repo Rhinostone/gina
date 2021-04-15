@@ -439,10 +439,10 @@ function Server(options) {
     }
 
     var parseBody = function(body) {
-
+        var obj = null, tmp = null, arr = null;
         if ( /^(\{|\[|\%7B|\%5B)/.test(body) ) {
             try {
-                var obj = {}, tmp = null;
+                obj = {};
 
                 if ( /^(\%7B|\%5B)/.test(body) ) {
                     tmp = JSON.parse(decodeURIComponent(body))
@@ -462,7 +462,8 @@ function Server(options) {
             }
 
         } else {
-            var obj = {}, arr = body.split(/&/g);
+            obj = {};
+            arr = body.split(/&/g);
             if ( /(\"false\"|\"true\"|\"on\")/.test(body) )
                 body = body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
 

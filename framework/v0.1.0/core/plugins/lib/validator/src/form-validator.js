@@ -152,17 +152,43 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     
     // TODO - One method for the front, and one for the server
     var queryFromFrontend = function(options, errorMessage) {
+        var errors      = self[this['name']]['errors'] || {}; 
+        
+        
+        
         // stop if 
-        //  - previous error detected        
+        //  - previous error detected      
         if ( !self.isValid() ) {
             var id = this.target.id || this.target.getAttribute('id');
             // var errors      = self[this['name']]['errors'] || {};    
             // errors['query'] = replace(this.error || errorMessage || local.errorLabels['query'], this);
             
-            triggerEvent(gina, this.target, 'asyncCompleted.' + id);
+            
+            triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
             return self[this.name];
+            //return;
         }
         
+        var testedValue = this.target.dataset.ginaFormValidatorTestedValue;
+        console.debug('TESTED VALUE -> ' + this.value +' vs '+ testedValue);
+        if ( !testedValue ) {
+            this.target.dataset.ginaFormValidatorTestedValue = this.value;
+        } else if (testedValue === this.value) {
+            //this.target.dataset.ginaFormValidatorTestedValue = null;
+            errors['query'] = replace(this.error || errorMessage || local.errorLabels['query'], this);
+            //triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
+            
+            //return self[this.name];
+            return;
+        }
+        
+        
+        // if (!this.processingValue) {
+        //     this.processingValue = this.value;
+        // } else if (this.processingValue  == this.value ) {
+        //     //triggerEvent(gina, this.target, 'asyncCompleted.' + id);
+        //     return self[this.name];
+        // }
             
         var xhr = null, _this = this;
         // setting up AJAX
@@ -303,7 +329,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                             if ( typeof(errorFields[_this.name]) != 'undefined') {
                                 local.errorLabels['query'] = errorFields[_this.name];
                             }                    
-                            errors['query'] = replace(_this['error'] || local.errorLabels['query'], _this)
+                            errors['query'] = replace(_this['error'] || local.errorLabels['query'], _this);
+                            
+                            //errors[_this['name']]['query'] = replace(_this['error'] || local.errorLabels['query'], _this);
+                            //self.setErrors(errors);
                         }
                         // if error tagged by a previous validation, remove it when isValid == true 
                         else if ( isValid && typeof(errors['query']) != 'undefined' ) {
@@ -328,12 +357,22 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                             
                     _this.valid = isValid;
         
-                    if ( errors.count() > 0 )
-                        _this['errors'] = errors;                    
-                    
+                    if ( errors.count() > 0 ) {
+                        _this['errors'] = errors;
+                        
+                        var errClass = _this.target.getAttribute('data-gina-form-errors');
+                        if ( !/query/.test(errClass) ) {
+                            if ( !errClass || errClass =='' ) {
+                                errClass = 'query' 
+                            } else {
+                                errClass +=' query'
+                            }
+                            _this.target.setAttribute('data-gina-form-errors', errClass);
+                        }
+                    }
+                                            
                     var id = _this.target.id || _this.target.getAttribute('id');
-                    triggerEvent(gina, _this.target, 'asyncCompleted.' + id);
-                    return self[_this['name']];
+                    triggerEvent(gina, _this.target, 'asyncCompleted.' + id, self[_this['name']]);
                 }
                 
                 try {
@@ -545,12 +584,12 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             if ( !isValid && /^(true|false)$/i.test(condition) ) { // because it can be evaluated on backend validation
                 isValid = condition;
             } else if (!isValid) {
-                //if ( /\$[-_\[\]a-z 0-9]+|^!\//i.test(condition) ) {
+                var re = null, flags = null;
                 // Fixed on 2021-03-13: $variable now replaced with real value beafore validation
                 if ( /[\!\=>\>\<a-z 0-9]+/i.test(condition) ) {
                     var variables = condition.match(/\${0}[-_,.\[\]a-z0-9]+/ig); // without space(s)
                     var compiledCondition = condition;
-                    var re = null
+                    
                     for (var i = 0, len = variables.length; i < len; ++i) {
                         if ( typeof(self[ variables[i] ]) != 'undefined' && variables[i]) {
                             re = new RegExp("\\$"+ variables[i] +"(?!\\S+)", "g");
@@ -588,14 +627,12 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     try {
                         // TODO - motif /gi to pass to the second argument
                         if ( /\/(.*)\//.test(condition) ) {
-                            var re = condition.match(/\/(.*)\//).pop()
-                                , flags = condition.replace('/' + re + '/', '')
-                            ;
+                            re = condition.match(/\/(.*)\//).pop();
+                            flags = condition.replace('/' + re + '/', '');
 
                             isValid = new RegExp(re, flags).test(this.value)
                         } else {
                             isValid = eval(condition);
-                            //isValid = eval(condition) ? false: true;
                         }
                             
                         //valid = new RegExp(condition.replace(/\//g, '')).test(this.value)
@@ -637,6 +674,15 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
 
             this.value      = local['data'][this.name] = this.value.toLowerCase();
+            // Apply on current field upper -> lower
+            if ( 
+                isGFFCtx
+                && this.target.value != '' 
+                && /[A-Z]+/.test(this.target.value) 
+            ) {
+                this.target.value = this.value;
+            }
+                
 
             var rgx         = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
             var isValid     = rgx.test(this['value']) ? true : false;
@@ -667,6 +713,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
 
             this.value      = local['data'][this.name] = this.value.toLowerCase();
+            // Apply on current field upper -> lower
+            if ( 
+                isGFFCtx
+                && this.target.value != '' 
+                && /[A-Z]+/.test(this.target.value) 
+            ) {
+                this.target.value = this.value;
+            }
 
             var rgx         = /^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$/;
             var isValid     = rgx.test(this['value']) ? true : false;
@@ -1373,7 +1427,23 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     self['isValid'] = function() {
         return (self['getErrors']().count() > 0) ? false : true;
     }
-
+    self['setErrors'] = function(errors) {
+        for (var field in self) {
+            if ( typeof(self[field]) == 'function' ) {
+                continue
+            }
+            if ( typeof(self[field]['errors']) == 'undefined' ) {
+                delete errors[field];
+                continue;
+            }
+            for (var r in self[field]) {
+                if ( typeof(self[field].isValid) != 'undefined' && /^true$/i.test(self[field].isValid) ) {
+                    delete errors[field][r];
+                }
+            }
+        }
+        return errors;
+    }
     self['getErrors'] = function() {
         var errors = {};
 

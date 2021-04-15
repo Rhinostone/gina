@@ -181,16 +181,17 @@ function PrototypesHelper(instance) {
             //If loaded several times, it can lead to an exception. That's why I put this.
             configurable: true,
             value: function(){
+                var i = 0;
                 try {
                     var self = this;
                     if (this instanceof String) self = JSON.parse(this);
-                    var i = 0;
+                    
                     for (var prop in this)
                         if (this.hasOwnProperty(prop)) ++i;
 
                     return i;
                 } catch (err) {
-                    return i
+                    return i;
                 }
 
             }
