@@ -4013,16 +4013,17 @@ function PrototypesHelper(instance) {
             //If loaded several times, it can lead to an exception. That's why I put this.
             configurable: true,
             value: function(){
+                var i = 0;
                 try {
                     var self = this;
                     if (this instanceof String) self = JSON.parse(this);
-                    var i = 0;
+                    
                     for (var prop in this)
                         if (this.hasOwnProperty(prop)) ++i;
 
                     return i;
                 } catch (err) {
-                    return i
+                    return i;
                 }
 
             }
@@ -7635,17 +7636,43 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     
     // TODO - One method for the front, and one for the server
     var queryFromFrontend = function(options, errorMessage) {
+        var errors      = self[this['name']]['errors'] || {}; 
+        
+        
+        
         // stop if 
-        //  - previous error detected        
+        //  - previous error detected      
         if ( !self.isValid() ) {
             var id = this.target.id || this.target.getAttribute('id');
             // var errors      = self[this['name']]['errors'] || {};    
             // errors['query'] = replace(this.error || errorMessage || local.errorLabels['query'], this);
             
-            triggerEvent(gina, this.target, 'asyncCompleted.' + id);
+            
+            triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
             return self[this.name];
+            //return;
         }
         
+        var testedValue = this.target.dataset.ginaFormValidatorTestedValue;
+        console.debug('TESTED VALUE -> ' + this.value +' vs '+ testedValue);
+        if ( !testedValue ) {
+            this.target.dataset.ginaFormValidatorTestedValue = this.value;
+        } else if (testedValue === this.value) {
+            //this.target.dataset.ginaFormValidatorTestedValue = null;
+            errors['query'] = replace(this.error || errorMessage || local.errorLabels['query'], this);
+            //triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
+            
+            //return self[this.name];
+            return;
+        }
+        
+        
+        // if (!this.processingValue) {
+        //     this.processingValue = this.value;
+        // } else if (this.processingValue  == this.value ) {
+        //     //triggerEvent(gina, this.target, 'asyncCompleted.' + id);
+        //     return self[this.name];
+        // }
             
         var xhr = null, _this = this;
         // setting up AJAX
@@ -7786,7 +7813,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                             if ( typeof(errorFields[_this.name]) != 'undefined') {
                                 local.errorLabels['query'] = errorFields[_this.name];
                             }                    
-                            errors['query'] = replace(_this['error'] || local.errorLabels['query'], _this)
+                            errors['query'] = replace(_this['error'] || local.errorLabels['query'], _this);
+                            
+                            //errors[_this['name']]['query'] = replace(_this['error'] || local.errorLabels['query'], _this);
+                            //self.setErrors(errors);
                         }
                         // if error tagged by a previous validation, remove it when isValid == true 
                         else if ( isValid && typeof(errors['query']) != 'undefined' ) {
@@ -7811,12 +7841,22 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                             
                     _this.valid = isValid;
         
-                    if ( errors.count() > 0 )
-                        _this['errors'] = errors;                    
-                    
+                    if ( errors.count() > 0 ) {
+                        _this['errors'] = errors;
+                        
+                        var errClass = _this.target.getAttribute('data-gina-form-errors');
+                        if ( !/query/.test(errClass) ) {
+                            if ( !errClass || errClass =='' ) {
+                                errClass = 'query' 
+                            } else {
+                                errClass +=' query'
+                            }
+                            _this.target.setAttribute('data-gina-form-errors', errClass);
+                        }
+                    }
+                                            
                     var id = _this.target.id || _this.target.getAttribute('id');
-                    triggerEvent(gina, _this.target, 'asyncCompleted.' + id);
-                    return self[_this['name']];
+                    triggerEvent(gina, _this.target, 'asyncCompleted.' + id, self[_this['name']]);
                 }
                 
                 try {
@@ -8028,12 +8068,12 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             if ( !isValid && /^(true|false)$/i.test(condition) ) { // because it can be evaluated on backend validation
                 isValid = condition;
             } else if (!isValid) {
-                //if ( /\$[-_\[\]a-z 0-9]+|^!\//i.test(condition) ) {
+                var re = null, flags = null;
                 // Fixed on 2021-03-13: $variable now replaced with real value beafore validation
                 if ( /[\!\=>\>\<a-z 0-9]+/i.test(condition) ) {
                     var variables = condition.match(/\${0}[-_,.\[\]a-z0-9]+/ig); // without space(s)
                     var compiledCondition = condition;
-                    var re = null
+                    
                     for (var i = 0, len = variables.length; i < len; ++i) {
                         if ( typeof(self[ variables[i] ]) != 'undefined' && variables[i]) {
                             re = new RegExp("\\$"+ variables[i] +"(?!\\S+)", "g");
@@ -8071,14 +8111,12 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     try {
                         // TODO - motif /gi to pass to the second argument
                         if ( /\/(.*)\//.test(condition) ) {
-                            var re = condition.match(/\/(.*)\//).pop()
-                                , flags = condition.replace('/' + re + '/', '')
-                            ;
+                            re = condition.match(/\/(.*)\//).pop();
+                            flags = condition.replace('/' + re + '/', '');
 
                             isValid = new RegExp(re, flags).test(this.value)
                         } else {
                             isValid = eval(condition);
-                            //isValid = eval(condition) ? false: true;
                         }
                             
                         //valid = new RegExp(condition.replace(/\//g, '')).test(this.value)
@@ -8120,6 +8158,15 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
 
             this.value      = local['data'][this.name] = this.value.toLowerCase();
+            // Apply on current field upper -> lower
+            if ( 
+                isGFFCtx
+                && this.target.value != '' 
+                && /[A-Z]+/.test(this.target.value) 
+            ) {
+                this.target.value = this.value;
+            }
+                
 
             var rgx         = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
             var isValid     = rgx.test(this['value']) ? true : false;
@@ -8150,6 +8197,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
 
             this.value      = local['data'][this.name] = this.value.toLowerCase();
+            // Apply on current field upper -> lower
+            if ( 
+                isGFFCtx
+                && this.target.value != '' 
+                && /[A-Z]+/.test(this.target.value) 
+            ) {
+                this.target.value = this.value;
+            }
 
             var rgx         = /^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$/;
             var isValid     = rgx.test(this['value']) ? true : false;
@@ -8856,7 +8911,23 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     self['isValid'] = function() {
         return (self['getErrors']().count() > 0) ? false : true;
     }
-
+    self['setErrors'] = function(errors) {
+        for (var field in self) {
+            if ( typeof(self[field]) == 'function' ) {
+                continue
+            }
+            if ( typeof(self[field]['errors']) == 'undefined' ) {
+                delete errors[field];
+                continue;
+            }
+            for (var r in self[field]) {
+                if ( typeof(self[field].isValid) != 'undefined' && /^true$/i.test(self[field].isValid) ) {
+                    delete errors[field][r];
+                }
+            }
+        }
+        return errors;
+    }
     self['getErrors'] = function() {
         var errors = {};
 
@@ -8988,6 +9059,7 @@ function ValidatorPlugin(rules, data, formId) {
         'on'                : (isGFFCtx) ? on : null,
         'eventData'         : {},
         'target'            : (isGFFCtx) ? document : null, // by default
+        'errors'            : {},
 
         'initialized'       : false,
         'isReady'           : false,
@@ -9106,7 +9178,7 @@ function ValidatorPlugin(rules, data, formId) {
      * GFF definitions
      * */
     var setOptions = function (options) {
-        var options = merge(options, xhrOptions);
+        options = merge(options, xhrOptions);
         xhrOptions = options;
     }
 
@@ -9320,7 +9392,7 @@ function ValidatorPlugin(rules, data, formId) {
         var $el     = null, $parent = null, $target = null;
         var id      = $form.getAttribute('id');
         // TODO - Refacto on this may be done later since we are doing nothing with it
-        var data    = ( typeof(data) != 'undefined' ) ? data : {};
+        data    = ( typeof(data) != 'undefined' ) ? data : {};
 
         for (var i = 0, len = $form.length; i<len; ++i) {
                         
@@ -9340,6 +9412,10 @@ function ValidatorPlugin(rules, data, formId) {
             errAttr = $el.getAttribute('data-gina-form-errors');
 
             if (!name) continue;
+            
+            // if( errAttr == '' && typeof(errors[name]) != 'undefined' ) {
+            //     $el.setAttribute('data-gina-form-errors');
+            // }
 
             if ( typeof(errors[name]) != 'undefined' && !/form\-item\-error/.test($parent.className) ) {
 
@@ -9361,7 +9437,7 @@ function ValidatorPlugin(rules, data, formId) {
                         if (!formsErrors) formsErrors = {};
                         if ( !formsErrors[ name ] )
                             formsErrors[ name ] = {};
-
+                        
                         formsErrors[ name ][e] = errors[name][e]
                     }
                 }
@@ -11610,9 +11686,12 @@ function ValidatorPlugin(rules, data, formId) {
         if ( /^(radio|checkbox|text|hidden|password|number|date)$/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
                         
             var localRule = $form.rules[$el.name] || null;
+            if ( !localRule ) {
+                return;
+            }
             // data-gina-form-live-check-enabled
             // with local rule                
-            if ( $form.target.dataset.ginaFormLiveCheckEnabled && localRule /**&& localRule.isRequired*/ ) {
+            if ( $form.target.dataset.ginaFormLiveCheckEnabled && localRule) {
                 
                 var eventsList = [], _evt = null, _e = 0;                
                 if ( !/^(radio|checkbox)$/i.test($el.type) ) {
@@ -11679,6 +11758,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 localField[event.target.name]     = event.target.value;
                                 $localField[event.target.name]    = event.target;
                                 
+                                
                                 validate(event.target, localField, $localField, $form.rules, function onLiveValidation(result){
                                     var isFormValid = result.isValid();
                                     //console.debug('onSilentPreGlobalLiveValidation: '+ isFormValid, result);
@@ -11702,6 +11782,7 @@ function ValidatorPlugin(rules, data, formId) {
                                         // Don't be tempted to revome fields that has already been validated
                                         validate($gForm, gFields, $gFields, gRules, function onSilentGlobalLiveValidation(gResult){
                                             console.debug('onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
+                                            
                                             updateSubmitTriggerState( $gForm, gResult.isValid() );
                                             once = false;
                                         })
@@ -11733,8 +11814,12 @@ function ValidatorPlugin(rules, data, formId) {
                         }
                         // other inputs & textareas
                         else if ( /^keyup\./i.test(event.type) ) {
+                            $el.ginaFormValidatorTestedValue = $el.value;
                             liveCheckTimer = setTimeout( function onLiveCheckTimer() {
-                                console.debug(' keyup .... '+$el.id);
+                                console.debug(' keyup .... '+$el.id, $el.value, ' VS ',$el.ginaFormValidatorTestedValue + '(old)');
+                                
+                                
+                                
                                 processEvent()
                             }, 1000); 
                         }                        
@@ -12327,11 +12412,8 @@ function ValidatorPlugin(rules, data, formId) {
             return false
         }
         
-        // Live check by default - data-gina-form-live-check-enabled
-        if ( typeof($form.target.dataset.ginaFormLiveCheckEnabled) == 'undefined' )
-            $form.target.dataset.ginaFormLiveCheckEnabled = true;
         
-
+          
         var withRules = false, rule = null, evt = '', procced = null;
 
         if ( 
@@ -12358,6 +12440,16 @@ function ValidatorPlugin(rules, data, formId) {
         } else { // form without any rule binded
             $form.rules = {}
         }
+        
+        // Live check by default - data-gina-form-live-check-enabled
+        if ( 
+            typeof($form.target.dataset.ginaFormLiveCheckEnabled) == 'undefined'
+            && $form.rules.count() > 0
+        ) {
+            $form.target.dataset.ginaFormLiveCheckEnabled = true;
+        } else {
+            $form.target.dataset.ginaFormLiveCheckEnabled = false;
+        }
 
         // form fields collection
         if (!$form.fieldsSet)
@@ -12366,8 +12458,7 @@ function ValidatorPlugin(rules, data, formId) {
         // binding form elements
         var type            = null
             , id            = null
-            // submit lock
-            , isRequiredBeforeSubmit = null
+            
             // a|links
             , $a            = $target.getElementsByTagName('a')
             // input: checkbox, radio, hidden, text, files, number, date
@@ -12427,7 +12518,10 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
             // Adding live check
-            registerForLiveChecking($form, $textareas[f]);
+            if (/^true$/i.test($form.target.dataset.ginaFormLiveCheckEnabled) ) {
+                registerForLiveChecking($form, $textareas[f]);
+            }
+            
         }
         // EO Binding textarea
         
@@ -12452,7 +12546,9 @@ function ValidatorPlugin(rules, data, formId) {
             }
             
             // Adding live check
-            registerForLiveChecking($form, $inputs[f]);
+            if (/^true$/i.test($form.target.dataset.ginaFormLiveCheckEnabled) ) {
+                registerForLiveChecking($form, $inputs[f]);
+            }
             
             formElementGroupTmp = $inputs[f].getAttribute('data-gina-form-element-group');
             if (formElementGroupTmp) {
@@ -14077,6 +14173,8 @@ function ValidatorPlugin(rules, data, formId) {
                 console.debug('silent validation result[isValid:'+result.isValid()+']: ', result);
                 updateSubmitTriggerState( $form , result.isValid() );
             });
+        } else if (!/^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled) ) {
+            updateSubmitTriggerState( $form , true );
         }
         
     } // EO bindForm()
@@ -14095,7 +14193,7 @@ function ValidatorPlugin(rules, data, formId) {
         if ( typeof($formInstance.submitTrigger) == 'undefined') {
             console.warn('This might be normal, so do not worry if this form is handled by your javascript: `'+ $formInstance.id +'`\nGina could not complete `updateSubmitTriggerState()`: `submitTrigger` might not be attached to form instance `'+ $formInstance.id +'`\nTo disable this warning, You just need to disable `Form Live Checking on your form by adding to your <form>: `data-gina-form-live-check-enabled=false``')
         } else if ( document.getElementById($formInstance.submitTrigger) ) {
-            if ( isFormValid ) { // show submitTrigger
+            if ( /true/i.test(isFormValid) ) { // show submitTrigger
                 document.getElementById($formInstance.submitTrigger).disabled = false;
             } else { // hide submitTrigger
                 document.getElementById($formInstance.submitTrigger).disabled = true;
@@ -14426,23 +14524,34 @@ function ValidatorPlugin(rules, data, formId) {
                             $asyncField     = $fields[field];
                             $asyncFieldId   = $asyncField.getAttribute('id');
                             asyncEvt        = 'asyncCompleted.'+ $asyncFieldId;
-                            if ( typeof(gina.events[asyncEvt]) == 'undefined' ) {
+                            //if ( typeof(gina.events[asyncEvt]) == 'undefined' ) {
                                 ++asyncCount;
-                                addListener(gina, $asyncField, 'asyncCompleted.'+ $asyncFieldId, function(event) {
+                                addListener(gina, $asyncField, asyncEvt, function onasyncCompleted(event) {
                                     event.preventDefault();
                                     --asyncCount;
                                     var _asyncEvt = 'asyncCompleted.' + event.target.getAttribute('id');
+                                    
+                                    d[field] = event.detail;
+                                    
+                                    delete gina.events['asyncCompleted.'+ $asyncFieldId];
+                                    
                                     // removing listner
                                     removeListener(gina, event.target, _asyncEvt);
                                     if ( hasParsedAllRules && asyncCount <= 0) {
+                                        cb._errors = d['getErrors']();
+                                        
                                         triggerEvent(gina, $formOrElement, 'validated.' + id, cb)
                                     }
                                 });
-                            }                                
+                                
+                                d[field][rule](rules[field][rule]);
+                                continue;
+                            //}
+                            
                         }
-                        
-                        d[field][rule](rules[field][rule]);
-                        
+                        else {
+                            d[field][rule](rules[field][rule]);
+                        }
                     }
 
                     delete fields[field];
@@ -15026,6 +15135,7 @@ function ValidatorPlugin(rules, data, formId) {
                 hasParsedAllRules = true;
                 if (!hasBeenValidated && asyncCount <= 0) {
                     if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
+                        cb._errors = d['getErrors']();
                         triggerEvent(gina, $formOrElement, 'validated.' + id, cb);
                     } else {
                         hasBeenValidated = true;
@@ -15049,9 +15159,20 @@ function ValidatorPlugin(rules, data, formId) {
                     hasParsedAllRules   = false;
                     asyncCount          = 0;
                     var _cb = event.detail;
+                    var cbErrors = null;
+                    // if ( typeof(_cb._errors) != 'undefined' && _cb._errors.count() > 0 ) {
+                    //     cbErrors = merge(_cb._errors, d['getErrors']());
+                    //     cbErrors = d['getErrors'](cbErrors);
+                    // } else {
+                        cbErrors = d['getErrors']();
+                        instance.$forms[id].errors = merge(instance.$forms[id].errors, cbErrors);
+                        instance.$forms[id].errors  = d['setErrors'](instance.$forms[id].errors);
+                        console.debug('instance errors: ', instance.$forms[id].errors );
+                        
+                    // }
                     _cb({
                         'isValid'   : d['isValid'],
-                        'error'     : d['getErrors'](),
+                        'error'     : cbErrors,
                         'data'      : formatData( d['toData']() )
                     });
                     removeListener(gina, event.target, 'validated.' + event.target.id);

@@ -27,7 +27,6 @@ var statusCodes = requireJSON(__dirname + '/../../../core/status.codes');
  * @return {object} errorObject
  */
 function ApiError(errorMessage, fieldName, errorStatus) {
-    //console.log('[ApiError] ', fieldName, errorMessage);
     var e = new Error(errorMessage);    
     var isClientError = (arguments.length == 3) ? true : false;
     if ( arguments.length == 2 ) {
