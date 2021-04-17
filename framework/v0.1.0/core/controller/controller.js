@@ -454,7 +454,18 @@ function SuperController(options) {
             }
 
             if ( typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status) && typeof(data.page.data.error) != 'undefined' ) {
-                self.throwError(data.page.data.status, data.page.data.error)
+                var statusCode = local.options.conf.server.coreConfiguration.statusCodes;
+                var errorObject = {
+                    status: data.page.data.status,
+                    //errors: msg.error || msg.errors || msg,
+                    error: statusCodes[data.page.data.status] || msg.error || msg,
+                    message: data.page.data.message || data.page.data.error,
+                    stack: data.page.data.stack
+                };
+                if ( typeof(data.page.data.session) != 'undefined' ) {
+                    errorObject.session = data.page.data.session;
+                }
+                self.throwError(errorObject)
             }
 
             // making path thru [namespace &] file
