@@ -2460,7 +2460,7 @@ function SuperController(options) {
                 var port = getContext('gina').ports[options.protocol][options.scheme.replace(/\:/, '')][ options.port ];
                 if ( typeof(port) != 'undefined' ) {
                     error.accessPoint = port;
-                    error.message = 'Could not connect to [ ' + error.accessPoint + ' ].\nThe `'+port.split(/\@/)[0]+'` bundle is offline.\n';
+                    error.message = 'Could not connect to [ ' + error.accessPoint + ' ].\nThe `'+port.split(/\@/)[0]+'` bundle is offline or unreachable.\n';
                 }                    
             }
             self.throwError(error)
@@ -3278,10 +3278,12 @@ function SuperController(options) {
 
                 } else {
                     // Generic error
+                    var title = null;
                     if (!msg && typeof(errorObject) != 'undefined' && typeof(errorObject.error) != 'undefined' ) {
-                        msg = errorObject.error
+                        title = errorObject.error
                     }
-                    msgString += '<pre class="'+ eCode +'xx message">'+ msg +'</pre>';
+                    msgString += '<pre class="'+ eCode +'xx title">'+ title +'</pre>';
+                    msgString += '<pre class="'+ eCode +'xx message">'+ errorObject.message +'</pre>';
                     var stack = null;
                     if ( errorObject && typeof(errorObject) != 'undefined' && typeof(errorObject.stack) != 'undefined' ) {
                         stack = errorObject.stack

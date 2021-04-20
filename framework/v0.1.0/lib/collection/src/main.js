@@ -643,6 +643,7 @@ function Collection(content, options) {
         result.notIn    = instance.notIn;
         result.findOne  = instance.findOne;
         result.orderBy  = instance.orderBy;
+        result.max      = instance.max;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
         result.filter   = instance.filter;
@@ -824,6 +825,7 @@ function Collection(content, options) {
         result.replace  = instance.replace;
         result.update   = instance.update;
         result.orderBy  = instance.orderBy;
+        result.max      = instance.max;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
         result.filter   = instance.filter;
@@ -854,6 +856,7 @@ function Collection(content, options) {
         result.update   = instance.update;
         result.replace  = instance.replace;
         result.orderBy  = instance.orderBy;
+        result.max      = instance.max;
         result.notIn    = instance.notIn;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
@@ -946,6 +949,7 @@ function Collection(content, options) {
         result.update   = instance.update;
         result.replace  = instance.replace;
         result.orderBy  = instance.orderBy;
+        result.max      = instance.max;
         result.notIn    = instance.notIn;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
@@ -1033,6 +1037,7 @@ function Collection(content, options) {
         result.update   = instance.update;
         result.replace  = instance.replace;
         result.orderBy  = instance.orderBy;
+        result.max      = instance.max;
         result.notIn    = instance.notIn;
         result.delete   = instance.delete;
         result.toRaw    = instance.toRaw;
@@ -1071,6 +1076,7 @@ function Collection(content, options) {
         result.update   = instance.update;
         result.replace  = instance.replace;
         result.orderBy  = instance.orderBy;
+        result.max      = instance.max;
         result.notIn    = instance.notIn;
         result.toRaw    = instance.toRaw;
         result.filter   = instance.filter;
@@ -1089,7 +1095,7 @@ function Collection(content, options) {
     instance['orderBy'] = function () {
         
         if ( typeof(arguments) == 'undefined' || arguments.length < 1)
-            throw new Error('[ Collection->sort(filter) ] where `filter` must not be empty or null' );
+            throw new Error('[ Collection->orderBy(filter) ] where `filter` must not be empty or null' );
             
         var filter = null;
         if ( arguments.length == 1 ) {
@@ -1104,6 +1110,43 @@ function Collection(content, options) {
 
         var variableContent = (Array.isArray(this)) ? this : JSON.clone(content);
         return sortResult(filter, variableContent.toRaw())
+    }
+    
+    /**
+     * max
+     * E.g: 
+     *  myCollection.max({ order: 'not null'})
+     *      => 5
+     *  myCollection.max({ createAt: 'not null'})
+     *      => '2021-12-31T23:59:59'
+     *  myCollection.max({ firstName: 'not null'})
+     *      => 'Zora'
+     * 
+     * @param {object|array} filter
+     * 
+     * @return {number|date|string}
+     * */
+    instance['max'] = function () {
+        if ( typeof(arguments) == 'undefined' || arguments.length < 1)
+            throw new Error('[ Collection->max(filter) ] where `filter` must not be empty or null' );
+        
+        var filter = null;
+        if ( 
+            arguments.length > 1
+            || Array.isArray(arguments[0])
+            || typeof(arguments[0]) == 'object' && arguments[0].count() > 1
+        ) {
+            throw new Error('[ Collection->max(filter) ] only accept one filter length, and fileter count must be equal to 1' );
+        }
+        filter = arguments[0];
+        try {
+            var key = Object.keys(filter)[0];
+            var subFilter = {};
+            subFilter[key] = 'desc';
+            return instance['find'](filter).orderBy(subFilter).limit(1)[0][key];
+        } catch (err) {
+            throw err
+        }
     }
 
     /**
@@ -1328,6 +1371,7 @@ function Collection(content, options) {
         result.replace  = instance.replace;
         result.delete   = instance.delete;
         result.orderBy  = instance.orderBy;
+        result.max      = instance.max;
         result.toRaw    = instance.toRaw;
         result.filter   = instance.filter;
         
