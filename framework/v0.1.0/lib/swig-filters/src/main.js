@@ -300,6 +300,12 @@ function SwigFilters(conf) {
         }
     }
     
+    self.nl2br = function(text, replacement) {
+        replacement = ( typeof( replacement ) != 'undefined' ) ? replacement : '<br/>';
+        return text.replace(/(\n|\r)/g, replacement);
+    }
+    
+    
     return init()
     
 }

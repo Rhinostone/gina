@@ -153,13 +153,13 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     // TODO - One method for the front, and one for the server
     var queryFromFrontend = function(options, errorMessage) {
         var errors      = self[this['name']]['errors'] || {}; 
-        
+        var id          = this.target.id || this.target.getAttribute('id');
         
         
         // stop if 
         //  - previous error detected      
         if ( !self.isValid() ) {
-            var id = this.target.id || this.target.getAttribute('id');
+            //var id = this.target.id || this.target.getAttribute('id');
             // var errors      = self[this['name']]['errors'] || {};    
             // errors['query'] = replace(this.error || errorMessage || local.errorLabels['query'], this);
             
@@ -176,10 +176,13 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         } else if (testedValue === this.value) {
             //this.target.dataset.ginaFormValidatorTestedValue = null;
             errors['query'] = replace(this.error || errorMessage || local.errorLabels['query'], this);
-            //triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
             
-            //return self[this.name];
-            return;
+            
+            triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
+            return self[this.name];
+            
+            
+            //return;
         }
         
         
