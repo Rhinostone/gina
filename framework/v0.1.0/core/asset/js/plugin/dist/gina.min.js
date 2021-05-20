@@ -9749,9 +9749,10 @@ function ValidatorPlugin(rules, data, formId) {
         var XHRData = null;
         var isAttachment = null; // handle download
         var hFormIsRequired = null;
-                
+        
         
         options = (typeof (options) != 'undefined') ? merge(options, xhrOptions) : xhrOptions;
+        
         
         // forward callback to HTML data event attribute through `hform` status
         hFormIsRequired = ( $target.getAttribute('data-gina-form-event-on-submit-success') || $target.getAttribute('data-gina-form-event-on-submit-error') ) ? true : false;
@@ -9765,6 +9766,10 @@ function ValidatorPlugin(rules, data, formId) {
         method          = method.toUpperCase();
         options.method  = method;
         options.url     = url;
+        
+        if (!xhr) {
+            xhr = setupXhr(options);
+        }
 
         // to upload, use `multipart/form-data` for `enctype`
         var enctype = $target.getAttribute('enctype') || options.headers['Content-Type'];
