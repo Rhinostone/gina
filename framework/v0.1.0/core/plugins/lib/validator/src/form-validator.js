@@ -580,7 +580,19 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             var errors      = self[this['name']]['errors'] || {};  
             
             
-            if ( typeof(errors['isRequired']) == 'undefined' && this.value == '' || !errors['isRequired'] && this.value == '' && this.value != 0 ) {
+            if ( 
+                typeof(errors['isRequired']) == 'undefined'
+                && this.value == ''
+                && !/^false$/i.test(this.value) 
+                && this.value != 0 
+                ||
+                !errors['isRequired'] 
+                && this.value == ''
+                && !/^false$/i.test(this.value)
+                && this.value != 0
+            ) {
+                isValid = true;
+            } else if (!errors['isRequired'] && typeof(this.value) == 'string' && this.value == '') {
                 isValid = true;
             }
             
@@ -594,6 +606,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     var compiledCondition = condition;
                     
                     for (var i = 0, len = variables.length; i < len; ++i) {
+                        // $varibale comparison
                         if ( typeof(self[ variables[i] ]) != 'undefined' && variables[i]) {
                             re = new RegExp("\\$"+ variables[i] +"(?!\\S+)", "g");
                             if ( self[ variables[i] ].value == "" ) {
