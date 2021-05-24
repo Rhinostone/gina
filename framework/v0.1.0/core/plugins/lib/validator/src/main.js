@@ -5315,8 +5315,10 @@ function ValidatorPlugin(rules, data, formId) {
                         && /^(true|false)$/.test($form[i].value)
                     || !$form[i].checked
                         && typeof (rules[name]) != 'undefined'
-                        && typeof (rules[name].isBoolean) != 'undefined' && /^true$/.test(rules[name].isBoolean)
-                        && typeof (rules[name].isRequired) != 'undefined' && /^true$/.test(rules[name].isRequired)
+                        //&& typeof (rules[name].isBoolean) != 'undefined' && /^true$/.test(rules[name].isBoolean)
+                        //&& typeof (rules[name].isRequired) != 'undefined' && /^true$/.test(rules[name].isRequired)
+                        && typeof (rules[name].isBoolean) != 'undefined'
+                        && /^(true|false)$/.test($form[i].value)
                 ) {
                     // if is boolean
                     if ( /^(true|false)$/.test($form[i].value) ) {
@@ -5408,8 +5410,8 @@ function ValidatorPlugin(rules, data, formId) {
         
         var getCastedValue = function(fieldName) {
             if ( 
-                typeof(ruleObj[fieldName].isBoolean) != 'undefined'
-                || typeof(ruleObj[fieldName].isNumber) != 'undefined'
+                /**typeof(ruleObj[fieldName].isBoolean) != 'undefined'
+                || */typeof(ruleObj[fieldName].isNumber) != 'undefined'
                 || typeof(ruleObj[fieldName].isInteger) != 'undefined'
                 || typeof(ruleObj[fieldName].isFloat) != 'undefined'
                 || typeof(ruleObj[fieldName].toFloat) != 'undefined'
@@ -5417,7 +5419,9 @@ function ValidatorPlugin(rules, data, formId) {
             ) {
                 return fields[fieldName].replace(/\,/g, '.');
             }
-            
+            if ( typeof(fields[fieldName]) == 'boolean') {
+                return fields[fieldName]
+            }
             return '\\"'+ fields[fieldName] +'\\"';
         }
         
