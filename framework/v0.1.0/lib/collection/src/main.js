@@ -245,7 +245,7 @@ function Collection(content, options) {
              * @param {number} matched 
              */
             var search = function(filter, field, _content, matched, searchOptionRules) {
-                
+                var reValidCount = null, searchOptCount = null;
                 if (filter === null && _content === null) { // null case
 
                     ++matched;
