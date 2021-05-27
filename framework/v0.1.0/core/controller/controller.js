@@ -263,7 +263,6 @@ function SuperController(options) {
             set('page.environment.env', GINA_ENV);
             set('page.environment.envIsDev', GINA_ENV_IS_DEV);
             
-            
             var routing = local.options.conf.routing = ctx.config.envConf.routing; // all routes
             set('page.environment.routing', escape(JSON.stringify(routing))); // export for GFF
             //reverseRouting
@@ -339,7 +338,14 @@ function SuperController(options) {
 
             // user locale
             options.conf.locale = new Collection(userLocales).findOne({ short: userCountryCode }) || {};
-
+            
+            //set('page.date.now', new Date().format("isoDateTime"));
+            if ( typeof(options.conf.locale) == 'undefined' || !options.conf.locale ) {
+                options.conf.locale = {}
+            }
+            options.conf.locale.date = {
+                now: new Date().format("isoDateTime")
+            }
             set('page.view.locale', options.conf.locale);
             set('page.view.lang', userCulture);
         }
