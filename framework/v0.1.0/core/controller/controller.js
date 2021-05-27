@@ -262,6 +262,8 @@ function SuperController(options) {
             set('page.environment.engine', options.conf.server.engine);//version.middleware
             set('page.environment.env', GINA_ENV);
             set('page.environment.envIsDev', GINA_ENV_IS_DEV);
+            set('page.environment.date.now', new Date().format("isoDateTime"));
+            
             
             var routing = local.options.conf.routing = ctx.config.envConf.routing; // all routes
             set('page.environment.routing', escape(JSON.stringify(routing))); // export for GFF
