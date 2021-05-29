@@ -130,6 +130,7 @@ function Couchbase(conn, infos) {
             , name          = arr[arr.length-1].replace(/\.sql/, '') || null
             , comments      = ''
             , queryString   = null
+            , queryStatement= null // this is the usable queryString
             , params        = []
             , inlineParams  = [] // order of use inside the query
             , returnType    = null // Array or Object : Array by default
@@ -138,7 +139,7 @@ function Couchbase(conn, infos) {
 
 
         if (! /^\./.test(source) && name && typeof(conn[name]) == 'undefined' ) {
-
+            // N.B: because of the cache, if replacement of placeholders is done, it will affect the statement
             queryString = fs.readFileSync( source ).toString().replace(/\n/g, ' ');
             // extract comments
             comments    = queryString.match(/(\/\*([^*]|[\r\n]|(\*+([^*\/]|[\r\n])))*\*+\/)|(\/\/.*)/g);
@@ -198,15 +199,17 @@ function Couchbase(conn, infos) {
                         // Do not turn off the adhoc flag for each query since 
                         // only a finite number of query plans (currently 5000) can be stored in the SDK
                         adhoc: true, // false to use plan optimization, but need a statement `name param` or `num param`
-                        consistency: 3 
+                        consistency: 2 
                     };
+                    queryStatement = queryString.slice(0);
                     if (params) {
                         // BO - patch prepared statement case when placeholder is used as a cursor
                         var p                   = []
-                            , qStr              = queryString
+                            // cloning queryString
+                            , qStr              = queryString.slice(0)
                             , inl               = inlineParams.slice()
                             , re                = null
-                            , foundSpecialCase  = /\w+\.(\$|\%)/.test(queryString);
+                            , foundSpecialCase  = /\w+\.(\$|\%)/.test(qStr);
                             
                         // e.g.: c.documentNextId.$2 = $3
                         // e.g.: n.alertedOn.$1 = true
@@ -226,7 +229,7 @@ function Couchbase(conn, infos) {
                                 }                                    
                             }
 
-                            queryString = qStr;                                
+                            queryStatement = qStr;                                
                             if ( sdkVersion > 2 ) { // starting from SDK v3
                                 queryParams = {};
                                 index = 0; i = 0; len = inlineParams.length;                            
@@ -260,7 +263,7 @@ function Couchbase(conn, infos) {
                     
                     var query = null, execQuery = null, _collection = null;
                     if ( sdkVersion > 2 ) { // starting from SDK v3
-                        _collection = queryString.match(/\_collection(\s+\=|=)(.*)(\'|\")/);
+                        _collection = queryStatement.match(/\_collection(\s+\=|=)(.*)(\'|\")/);
                         if (_collection.length > 0) {
                             _collection = _collection[0];
                             if ( /\_collection/.test(_collection) ) {
@@ -276,12 +279,12 @@ function Couchbase(conn, infos) {
                         //execQuery = conn._cluster.query;
                         execQuery = inherits(conn, conn._cluster.query);
                         
-                        query = queryString;
+                        query = queryStatement;
                         queryOptions.parameters = queryParams;
                         
                     } else { // version 2
                         // prepared statement                        
-                        query = N1qlQuery.fromString(queryString.replace(/^\s+/, ''));
+                        query = N1qlQuery.fromString(queryStatement.replace(/^\s+/, ''));
                         // query options
                         // @param {object} options
                         // @param {string} options.sample
