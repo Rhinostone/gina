@@ -2580,7 +2580,7 @@ function SuperController(options) {
                               }  
                         } else {
                             // required when control is used in an halted state
-                            // Ref.: resumeHaltedRequest()
+                            // Ref.: resumeRequest()
                             if ( self && self.isHaltedRequest() && typeof(local.onHaltedRequestResumed) != 'undefined' ) {
                                 local.onHaltedRequestResumed(false);
                             }
@@ -2619,7 +2619,7 @@ function SuperController(options) {
                         self.emit('query#complete', data)
                     } else {
                         // required when control is used in an halted state
-                        // Ref.: resumeHaltedRequest()
+                        // Ref.: resumeRequest()
                         if ( self.isHaltedRequest() && typeof(local.onHaltedRequestResumed) != 'undefined' ) {
                             local.onHaltedRequestResumed(false);
                         }
@@ -2657,7 +2657,7 @@ function SuperController(options) {
                             cb(data)
                         } else {
                             // required when control is used in an halted state
-                            // Ref.: resumeHaltedRequest()
+                            // Ref.: resumeRequest()
                             if ( self.isHaltedRequest() && typeof(local.onHaltedRequestResumed) != 'undefined' ) {
                                 local.onHaltedRequestResumed(err);
                             }
@@ -3029,33 +3029,94 @@ function SuperController(options) {
         return (typeof(session.haltedRequest) != 'undefined' ) ? true : false;
     }
     
+    
+    local.haltedRequestUrlResumed = false;
+    
+    this.pauseRequest = function(data, requestStorage) {
+        
+        
+        // saving halted request
+        var req             = local.req
+            , res           = local.res
+            , next          = local.next
+            , haltedRequest = {
+                url     : req.url,
+                routing : req.routing,
+                method  : req.method.toLowerCase(),
+                data    : data               
+            }
+        ;
+        
+        if (
+            typeof(requestStorage) == 'undefined'
+            && typeof(req.session) != 'undefined'
+        ) {
+            requestStorage = req.session;
+        }
+        
+        if (
+            typeof(requestStorage) == 'undefined' 
+        ) {
+            var error = new ApiError('`requestStorage` is required', 424);
+            self.throwError(error);
+            return;
+        }
+        
+        var requestParams = {}, i = 0;
+        for (var p in req.params) {
+            if (i > 0) {
+                requestParams[p] = req.params[p];
+            }
+            ++i;
+        }
+        if (requestParams.count() > 0) {
+            haltedRequest.params = requestParams;
+        }
+        
+        requestStorage.haltedRequest = haltedRequest;
+        
+        return requestStorage;
+    }
+    
     /**
-     * resumeHaltedRequest
+     * resumeRequest
      * Used to resume an halted request
      * Requirements :
-     *  - a middleware attaching `haltedRequest` to userSession
+     *  - a middleware attached `haltedRequest` to userSession
      * OR
      * - a persistant object where `haltedRequest` is attached
      * 
      * @param {object} req 
      * @param {object} res 
      * @param {callback|null} next
-     * @param {object} userSession
+     * @param {object} [requestStorage] - Will try to use sessionStorage if not passed
      */
-    local.haltedRequestUrlResumed = false;
-    this.resumeHaltedRequest = function(req, res, next, userSession/**, requiredControllerOrNamespace*/) {
-        
+    //this.resumeRequest = function(req, res, next, requestStorage) {
+    this.resumeRequest = function(requestStorage) {
+           
         if (local.haltedRequestUrlResumed)
             return;
         
-        var haltedRequest = null;        
+        var haltedRequest   = null
+            , req           = local.req
+            , res           = local.res
+            , next          = local.next
+        ;
+        
         if (
-            typeof(userSession) == 'undefined' 
-            ||
-            typeof(userSession) != 'undefined' 
-            && typeof(userSession.haltedRequest) == 'undefined' 
+            typeof(requestStorage) == 'undefined'
+            && typeof(req.session) != 'undefined'
         ) {
-            var error = new ApiError('`userSession.haltedRequest` is required', 424);
+            requestStorage = req.session;
+        }
+        
+        if (
+            typeof(requestStorage) == 'undefined' 
+            ||
+            typeof(requestStorage) != 'undefined' 
+            && typeof(requestStorage.haltedRequest) == 'undefined' 
+        ) {
+            var error = new ApiError('`requestStorage.haltedRequest` is required', 424);
             self.throwError(error);
             return;
         }
@@ -3066,7 +3127,7 @@ function SuperController(options) {
             delete req[method]; 
         }
                
-        var haltedRequest   = userSession.haltedRequest;
+        haltedRequest       = requestStorage.haltedRequest;
         var data            = haltedRequest.data || {};
         var dataAsParams    = {};
         if (data.count() > 0) {
@@ -3087,17 +3148,17 @@ function SuperController(options) {
         
         local.haltedRequestUrlResumed = true;
         if ( /GET/i.test(req.method) ) { 
-            if ( typeof(userSession.haltedRequest) != 'undefined' ) {
-                delete userSession.haltedRequest;
+            if ( typeof(requestStorage.haltedRequest) != 'undefined' ) {
+                delete requestStorage.haltedRequest;
             }
-            delete userSession.haltedRequest;
-            userSession.haltedRequestUrlResumed = url;
+            delete requestStorage.haltedRequest;
+            requestStorage.haltedRequestUrlResumed = url;
             requiredController.redirect(url, true);
         } else {
             local.onHaltedRequestResumed = function(err) {
                 if (!err) {                    
-                    delete userSession.haltedRequest;
-                    delete userSession.inheritedData;
+                    delete requestStorage.haltedRequest;
+                    delete requestStorage.inheritedData;
                 }
             }
             requiredController[req.routing.param.control](req, res, local.onHaltedRequestResumed);

@@ -2799,7 +2799,8 @@ function ValidatorPlugin(rules, data, formId) {
                                         var gValidatorInfos = getFormValidationInfos($gForm, rules);
                                         gFields  = gValidatorInfos.fields;
                                         $gFields = gValidatorInfos.$fields;
-                                        gRules   = instance.$forms[$gForm.id].rules;
+                                        var formId = $gForm.getAttribute('id');
+                                        gRules   = instance.$forms[formId].rules;
                                         // Don't be tempted to revome fields that has already been validated
                                         validate($gForm, gFields, $gFields, gRules, function onSilentGlobalLiveValidation(gResult){
                                             console.debug('onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
@@ -2856,7 +2857,8 @@ function ValidatorPlugin(rules, data, formId) {
                 var gValidatorInfos = getFormValidationInfos($form.target, rules);
                 gFields  = gValidatorInfos.fields;
                 $gFields = gValidatorInfos.$fields;
-                gRules   = instance.$forms[$form.id].rules;
+                var formId = $gForm.getAttribute('id');
+                gRules   = instance.$forms[formId].rules;
                 // Don't be tempted to revome fields that has already been validated
                 validate($form.target, gFields, $gFields, gRules, function onSilentGlobalLiveValidationWithoutFieldRule(gResult){
                     console.debug('onSilentGlobalLiveValidation without field rule: '+ gResult.isValid());
@@ -5204,7 +5206,7 @@ function ValidatorPlugin(rules, data, formId) {
         //console.debug('submitTrigger[isFormValid='+ isFormValid +']: ', $formInstance.submitTrigger)
         $formInstance = null;
         if ( $formInstanceOrTarget instanceof HTMLFormElement ) { //  is target DOMobject
-            var id = $formInstanceOrTarget.id || $formInstanceOrTarget.getAttribute('id');
+            var id = $formInstanceOrTarget.getAttribute('id');
             $formInstance =  instance.$forms[id];
         } else {
             $formInstance = $formInstanceOrTarget;
@@ -5606,8 +5608,9 @@ function ValidatorPlugin(rules, data, formId) {
                 }
                 d = new FormValidator(fields, $fields, xhrOptions);
             } else {
-                id = $formOrElement.form.id || $formOrElement.form.target.getAttribute('id') || $formOrElement.form.getAttribute('id');
-                //id = $formOrElement.form.target.getAttribute('id');
+                //id = $formOrElement.form.id || $formOrElement.form.target.getAttribute('id') || $formOrElement.form.getAttribute('id');
+                id = $formOrElement.form.getAttribute('id') || $formOrElement.form.target.getAttribute('id');
+                
                 evt = 'validated.' + id;
                 instance.$forms[id].fields = fields;
                 d = new FormValidator(fields, $fields, xhrOptions, instance.$forms[id].fieldsSet);  

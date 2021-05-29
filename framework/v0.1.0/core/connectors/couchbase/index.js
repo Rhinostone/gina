@@ -332,9 +332,6 @@ function Couchbase(conn, infos) {
                     // trick to set event on the fly
                     var trigger = 'N1QL:'+entityName.toLowerCase()+ '#'+ name;
 
-                    //var self = this;
-                    
-
                     if (GINA_ENV_IS_DEV) {
                         var statement = (sdkVersion <= 2) ? query.options.statement : query;
                         console.debug('[ ' + trigger +' ] '+statement);
@@ -342,7 +339,7 @@ function Couchbase(conn, infos) {
                     
                     
                     var onQueryCallback = function(err, data, meta) {
-                        // if (/deleteAllSandboxedDocuments/.test(trigger)) {
+                        // if (/^company#getDocumentNextId$/.test(trigger)) {
                         //     console.log('[ ' + trigger + '] onQueryCallback => ', err, data, meta);
                         // }
                                                
