@@ -589,19 +589,23 @@ function Router(env) {
                         //     }
                         //     Middleware.prototype[f] = controller[f];
                         // }
-                        Middleware.prototype.getConfig              = controller.getConfig;
                         Middleware.prototype.checkBundleStatus      = controller.checkBundleStatus;
-                        Middleware.prototype.getLocales             = controller.getLocales;
+                        Middleware.prototype.getConfig              = controller.getConfig;
                         Middleware.prototype.getFormsRules          = controller.getFormsRules;
-                        Middleware.prototype.throwError             = controller.throwError;
+                        Middleware.prototype.getLocales             = controller.getLocales;
+                        Middleware.prototype.isCacheless            = controller.isCacheless;
+                        Middleware.prototype.isHaltedRequest        = controller.isHaltedRequest;
+                        Middleware.prototype.isWithCredentials      = controller.isWithCredentials;
+                        Middleware.prototype.isXMLRequest           = controller.isXMLRequest;
+                        Middleware.prototype.pauseRequest           = controller.pauseRequest;
+                        Middleware.prototype.query                  = controller.query;
                         Middleware.prototype.redirect               = controller.redirect;
                         Middleware.prototype.render                 = controller.render;
                         Middleware.prototype.renderJSON             = controller.renderJSON;
                         Middleware.prototype.renderWithoutLayout    = controller.renderWithoutLayout;
-                        Middleware.prototype.isXMLRequest           = controller.isXMLRequest;
-                        Middleware.prototype.isWithCredentials      = controller.isWithCredentials;
-                        Middleware.prototype.isCacheless            = controller.isCacheless;
+                        Middleware.prototype.resumeRequest          = controller.resumeRequest;
                         Middleware.prototype.requireController      = controller.requireController;
+                        Middleware.prototype.throwError             = controller.throwError;
 
                         return Middleware;
                     }(req, res, next)
