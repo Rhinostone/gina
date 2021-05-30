@@ -15,6 +15,7 @@ var fs                = require('fs')
     , console           = lib.logger
     , inherits          = lib.inherits
     , merge             = lib.merge
+    , routing           = lib.routing
     
     , SuperController   = require('./controller')
     , Config            = require('./config')
@@ -202,6 +203,17 @@ function Router(env) {
        ;
         try {
             config      = new Config().getInstance();
+            if (!params.bundle) {
+                try {
+                    //params.bundle = config.bundle;
+                    //params.param = config.routing[config.reverseRouting[params.param.url]];
+                    var _rule = config.reverseRouting[params.param.url];
+                    params = merge(params, config.routing[_rule]);
+                    params.rule = _rule;
+                } catch(reverseRoutingError) {
+                    serverInstance.throwError(response, 500, reverseRoutingError)
+                }
+            }
             bundle      = local.bundle = params.bundle;
             env         = config.env;
             conf        = config[bundle][env];            

@@ -1273,7 +1273,7 @@ function Config(opt) {
 
         var localEnv = conf[bundle][env].executionPath + '/env.local.json';
         if ( GINA_ENV_IS_DEV && fs.existsSync(localEnv) ) {
-            conf[bundle][env] = merge(conf[bundle][env], require(localEnv), true);
+            conf[bundle][env] = merge(conf[bundle][env], requireJSON(localEnv), true);
         }
         var envKeys = conf[bundle][env];
         for (var k in envKeys) {

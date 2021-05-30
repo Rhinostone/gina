@@ -974,6 +974,9 @@ function Server(options) {
                 'method': request.method
             }
         }
+        if ( typeof(request.routing.bundle) == 'undefined' ) {
+            request.routing.bundle = self.appName
+        }
         // Should not override main server.response.header.methods
         resHeaders['access-control-allow-methods'] = request.routing.method.replace(/(\,\s+|\,)/g, ', ').toUpperCase();                                            
         
@@ -1715,7 +1718,8 @@ function Server(options) {
                 // by default - used in `composeHeadersMiddleware`: see Default Global Middlewares (gna.js)
                 request.routing = {
                     'url': request.url,
-                    'method': 'GET'
+                    'method': 'GET',
+                    'bundle' : self.appName
                 };
                 request = checkPreflightRequest(request);
                 local.request = request; // update request
@@ -1867,7 +1871,8 @@ function Server(options) {
                     request.files = [];
                     request.routing = {
                         'url': request.url,
-                        'method': 'POST'
+                        'method': 'POST',
+                        'bundle' : self.appName
                     };
                     var busboy = new Busboy({ headers: request.headers });
                     
@@ -2381,7 +2386,7 @@ function Server(options) {
             throwError(nextExpressMiddleware._response, 500, (err.stack|err.message|err), nextExpressMiddleware._next, nextExpressMiddleware._nextAction)
         }
         
-        expressMiddlewares[nextExpressMiddleware._index](nextExpressMiddleware._request, nextExpressMiddleware._response, function onNext(err, request, response) {
+        expressMiddlewares[nextExpressMiddleware._index](nextExpressMiddleware._request, nextExpressMiddleware._response, function onNextMiddleware(err, request, response) {
             ++nextExpressMiddleware._index;  
             
             if (err) {
