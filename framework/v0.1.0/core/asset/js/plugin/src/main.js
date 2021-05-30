@@ -35,7 +35,6 @@ var readyEventHandlersInstalled = false;
 function ready() {
 
     if (!readyFired) {
-
         // this must be set to true before we start calling callbacks
         readyFired = true;
         var result = null;
