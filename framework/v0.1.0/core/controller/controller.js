@@ -3347,17 +3347,26 @@ function SuperController(options) {
 
                 } else {
                     // Generic error
-                    var title = null;
-                    if (!msg && typeof(errorObject) != 'undefined' && typeof(errorObject.error) != 'undefined' ) {
+                    var title = null, message = null, stack = null;;
+                    if ( typeof(errorObject) != 'undefined' && errorObject && typeof(errorObject.error) != 'undefined' ) {
                         title = errorObject.error
                     }
-                    msgString += '<pre class="'+ eCode +'xx title">'+ title +'</pre>';
-                    msgString += '<pre class="'+ eCode +'xx message">'+ errorObject.message +'</pre>';
-                    var stack = null;
-                    if ( errorObject && typeof(errorObject) != 'undefined' && typeof(errorObject.stack) != 'undefined' ) {
+                    if (typeof(errorObject) != 'undefined' && errorObject  && typeof(errorObject.message) != 'undefined' ) {
+                        message = errorObject.message
+                    }
+                    if (typeof(errorObject) != 'undefined' && errorObject  && typeof(errorObject.stack) != 'undefined' ) {
                         stack = errorObject.stack
+                    }
+                    
+                    if (title) {
+                        msgString += '<pre class="'+ eCode +'xx title">'+ title +'</pre>';
+                    }
+                    if (message) {
+                        msgString += '<pre class="'+ eCode +'xx message">'+ message +'</pre>';
+                    }
+                    if (stack) {
                         msgString += '<pre class="'+ eCode +'xx stack">'+ stack +'</pre>';
-                    }                    
+                    }                  
                 }
 
                 res.end(msgString);
