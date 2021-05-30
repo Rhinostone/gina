@@ -796,6 +796,8 @@ function ValidatorPlugin(rules, data, formId) {
             // catching ready state cb
             //handleXhrResponse(xhr, $target, id, $form, hFormIsRequired);
             xhr.onreadystatechange = function onValidationCallback(event) {   
+                // In case the user is also redirecting
+                var redirectDelay = (/Google Inc/i.test(navigator.vendor)) ? 50 : 0;
                 
                 if (xhr.readyState == 2) { // responseType interception
                     isAttachment    = ( /^attachment\;/.test( xhr.getResponseHeader("Content-Disposition") ) ) ? true : false; 
@@ -1076,8 +1078,9 @@ function ValidatorPlugin(rules, data, formId) {
                                 result.location = (!/^http/.test(result.location) && !/^\//.test(result.location) ) ? location.protocol +'//' + result.location : result.location;
                             //}                        
                             
-                            window.location.href = result.location;
-                            return;                        
+                            return setTimeout(() => {
+                                window.location.href = result.location;
+                            }, redirectDelay);                         
                         }
 
                     } else if ( xhr.status != 0) {
