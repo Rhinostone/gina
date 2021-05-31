@@ -103,6 +103,7 @@ function ValidatorPlugin(rules, data, formId) {
         'rules'                 : {},
         'setOptions'            : null,
         'send'                  : null,
+        'isSubmitting'          : null,
         'submit'                : null,
         'destroy'               : null,
         'resetErrorsDisplay'    : null,
@@ -389,6 +390,22 @@ function ValidatorPlugin(rules, data, formId) {
                 } else {
                     if ( typeof(liveCheckErrors[$form.id][fieldName]) != 'undefined') {
                         delete liveCheckErrors[$form.id][fieldName];
+                        if ( 
+                            typeof(window.gina.validator.$forms[$form.id].errors) != 'undefined'
+                            && typeof(window.gina.validator.$forms[$form.id].errors[fieldName]) != 'undefined'
+                        ) {
+                            delete window.gina.validator.$forms[$form.id].errors[fieldName];
+                        }
+                    }
+                    if ( 
+                        // gina.validator.$forms
+                        typeof(instance.$forms) != 'undefined'
+                        && typeof(instance.$forms[$form.id]) != 'undefined' 
+                        && typeof(instance.$forms[$form.id].errors) != 'undefined' 
+                        && instance.$forms[$form.id].errors.count() == 0 
+                    ) {
+                        // update submit trigger state
+                        updateSubmitTriggerState( $form, true );
                     }
                     
                     if ( typeof(liveCheckErrors[$form.id]) != 'undefined' && liveCheckErrors[$form.id].count() == 0 ) {
@@ -1376,7 +1393,8 @@ function ValidatorPlugin(rules, data, formId) {
                                     if (done) {
                                         xhr.setRequestHeader('Content-Type', 'multipart/form-data; boundary=' + boundary);
                                         xhr.send(data);
-
+                                        
+                                        instance.$forms[$form.id].isSubmitting = false;
                                         $form.sent = true;
                                     }
 
@@ -1451,6 +1469,7 @@ function ValidatorPlugin(rules, data, formId) {
                 xhr.send()
             }
 
+            instance.$forms[$form.id].isSubmitting = false;
             $form.sent = true;
         }
     }
@@ -2684,19 +2703,36 @@ function ValidatorPlugin(rules, data, formId) {
 
         //Then modify the "setter" of the value to notify when the value is changed:
         descriptor.set = function(val) {
+            
             //changing to native setter to prevent the loop while setting the value
             Object.defineProperty(this, 'value', {set:inputSetter});
+            
+            var _evt = 'change.' + this.id;
+            if ( val === this.value && val === this.defaultValue) {
+                Object.defineProperty(this, 'value', descriptor);
+                return;
+            }
+            if ( val === this.value) {
+                // if ( typeof(gina.events[_evt]) != 'undefined' ) {
+                //     console.debug('trigger event on: ', this.name, _evt);
+                //     triggerEvent(gina, this, _evt, val);
+                // }
+                //changing back to custom setter
+                Object.defineProperty(this, 'value', descriptor);
+                return;
+            }
+            
             this.value = val;
 
             //Custom code triggered when $el.value is set
             console.debug('Value set: '+val);
-            var _evt = 'change.' + this.id;
+            
             if ( typeof(gina.events[_evt]) != 'undefined' ) {
                 console.debug('trigger event on: ', this.name, _evt);
                 triggerEvent(gina, this, _evt, val);
             }
             //changing back to custom setter
-            Object.defineProperty(this, 'value', descriptor);   
+            Object.defineProperty(this, 'value', descriptor);
         }
         
         //Last add the new "value" descriptor to the $el element
@@ -2758,73 +2794,84 @@ function ValidatorPlugin(rules, data, formId) {
                             once = true;
                         } else if (once && /^changed\./i.test(event.type) || once && event.target.type == 'radio' ) {                            
                             return false;
-                        }                        
+                        }
+                        
+                        if ( 
+                            typeof(instance.$forms[event.target.form.getAttribute('id')].isSubmitting) != 'undefined'
+                            && /true/i.test(instance.$forms[event.target.form.getAttribute('id')].isSubmitting)
+                        ) {
+                            return false;
+                        }
+                        
                         var processEvent = function() {
+                            
                             console.debug('processing: ' + event.target.name+ '/'+ event.target.id);
                             
                             // Do not validate `onChange` if `input value` === `orignal value`
+                            // Or else, you will get an endless loop
                             if (
                                 // ignoring checkbox & radio because value for both have already changed
                                 !/^(radio|checkbox)$/i.test(event.target.type) 
                                 && event.target.value === event.target.defaultValue
                                 && event.target.value != ''
                             ) {
-                                cancelEvent(event);
                                 //resetting error display
-                                handleErrorsDisplay(event.target.form, {}, null, event.target.name);                                
+                                handleErrorsDisplay(event.target.form, {}, null, event.target.name);
+                                //once = false;
                                 return cancelEvent(event);
                             }
                             
                             
+                            var localField = {}, $localField = {};
+                            localField[event.target.name]     = event.target.value;
+                            $localField[event.target.name]    = event.target;
                             
-                            // $form.reBindForm( $form.target, $form.rules, function($form) {
-                                var localField = {}, $localField = {};
-                                localField[event.target.name]     = event.target.value;
-                                $localField[event.target.name]    = event.target;
+                            validate(event.target, localField, $localField, $form.rules, function onLiveValidation(result){
+                                var isFormValid = result.isValid();
+                                //console.debug('onSilentPreGlobalLiveValidation: '+ isFormValid, result);
+                                if (isFormValid) {
+                                    //resetting error display
+                                    handleErrorsDisplay(event.target.form, {}, result.data, event.target.name);
+                                } else {                                
+                                    handleErrorsDisplay(event.target.form, result.error, result.data, event.target.name);
+                                }
+                                //updateSubmitTriggerState( event.target.form, isFormValid );
+                                // data-gina-form-required-before-submit
+                                //console.debug('====>', result.isValid(), result);
                                 
-                                
-                                validate(event.target, localField, $localField, $form.rules, function onLiveValidation(result){
-                                    var isFormValid = result.isValid();
-                                    //console.debug('onSilentPreGlobalLiveValidation: '+ isFormValid, result);
-                                    if (isFormValid) {
-                                        //resetting error display
-                                        handleErrorsDisplay(event.target.form, {}, result.data, event.target.name);
-                                    } else {                                
-                                        handleErrorsDisplay(event.target.form, result.error, result.data, event.target.name);
-                                    }
-                                    //updateSubmitTriggerState( event.target.form, isFormValid );
-                                    // data-gina-form-required-before-submit
-                                    //console.debug('====>', result.isValid(), result);
-                                    
-                                    // Global check required: on all fields
-                                    // if (isFormValid) {
-                                        var $gForm = event.target.form, gFields = null, $gFields = null, gRules = null;
-                                        var gValidatorInfos = getFormValidationInfos($gForm, rules);
-                                        gFields  = gValidatorInfos.fields;
-                                        $gFields = gValidatorInfos.$fields;
-                                        var formId = $gForm.getAttribute('id');
-                                        gRules   = instance.$forms[formId].rules;
-                                        // Don't be tempted to revome fields that has already been validated
-                                        validate($gForm, gFields, $gFields, gRules, function onSilentGlobalLiveValidation(gResult){
-                                            console.debug('onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
-                                            
-                                            updateSubmitTriggerState( $gForm, gResult.isValid() );
-                                            once = false;
-                                        })
-                                    // } else {
-                                    //     updateSubmitTriggerState( event.target.form, isFormValid );
-                                    //     once = false;
-                                    // }
+                                // Global check required: on all fields
+                                // if (isFormValid) {
+                                    var $gForm = event.target.form, gFields = null, $gFields = null, gRules = null;
+                                    var gValidatorInfos = getFormValidationInfos($gForm, rules);
+                                    gFields  = gValidatorInfos.fields;
+                                    $gFields = gValidatorInfos.$fields;
+                                    var formId = $gForm.getAttribute('id');
+                                    gRules   = instance.$forms[formId].rules;
+                                    // Don't be tempted to revome fields that has already been validated
+                                    validate($gForm, gFields, $gFields, gRules, function onSilentGlobalLiveValidation(gResult){
+                                        console.debug('onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
                                         
-                                });
-                            // });
+                                        updateSubmitTriggerState( $gForm, gResult.isValid() );
+                                        once = false;
+                                    })
+                                // } else {
+                                //     updateSubmitTriggerState( event.target.form, isFormValid );
+                                //     once = false;
+                                // }
+                                    
+                            });
                                                     
                             
                             return;
                         }
                         
                         // radio & checkbox only
-                        if ( /^changed\./i.test(event.type) || /^change\./i.test(event.type) && event.target.type == 'radio') {
+                        if ( 
+                            /^changed\./i.test(event.type) 
+                            || 
+                            /^change\./i.test(event.type) 
+                            && event.target.type == 'radio'
+                        ) {
                             var i = 0;
                             return function(once, i) {
                                 if (i > 0) return;
@@ -2842,8 +2889,6 @@ function ValidatorPlugin(rules, data, formId) {
                             $el.ginaFormValidatorTestedValue = $el.value;
                             liveCheckTimer = setTimeout( function onLiveCheckTimer() {
                                 console.debug(' keyup .... '+$el.id, $el.value, ' VS ',$el.ginaFormValidatorTestedValue + '(old)');
-                                
-                                
                                 
                                 processEvent()
                             }, 1000); 
@@ -3180,7 +3225,7 @@ function ValidatorPlugin(rules, data, formId) {
                     console.info('Ignore previous warnings regarding upload. I have found a default `'+action+'` route: `'+ defaultRoute +'@'+ uploadActionUrl.bundle +'`');
                     $el.setAttribute('data-gina-form-upload-action', uploadActionUrl.toUrl());
                 } else {
-                    var errMsg = '`'+ action +'` needs to be defined to procced for your `input[type=file]` with ID `'+ $el.id +'`\n'+ additionalErrorDetails +'\n';
+                    var errMsg = '`'+ action +'` needs to be defined to proceed for your `input[type=file]` with ID `'+ $el.id +'`\n'+ additionalErrorDetails +'\n';
                     if ($errorContainer) {
                         $errorContainer.innerHTML += errMsg.replace(/(\n|\r)/g, '<br>');
                     }
@@ -3440,7 +3485,7 @@ function ValidatorPlugin(rules, data, formId) {
         
         
           
-        var withRules = false, rule = null, evt = '', procced = null;
+        var withRules = false, rule = null, evt = '', proceed = null;
 
         if ( 
             typeof(customRule) != 'undefined' 
@@ -4423,7 +4468,7 @@ function ValidatorPlugin(rules, data, formId) {
 
         evt = 'click';
 
-        procced = function () {
+        proceed = function () {
             // handle form reset
             addListener(gina, $target, 'reset.'+$target.id, function(e) {
                 e.preventDefault();
@@ -4701,7 +4746,7 @@ function ValidatorPlugin(rules, data, formId) {
             })
         }
         
-        procced();
+        proceed();
 
         
         for (var i = 0, iLen = $inputs.length; i < iLen; ++i) {
@@ -4737,7 +4782,7 @@ function ValidatorPlugin(rules, data, formId) {
                 }                
 
                 evt = 'change.'+ $inputs[i].id;
-                procced = function ($el, evt) {
+                proceed = function ($el, evt) {
 
                     // recover default state only on value === true || false                    
                     addListener(gina, $el, evt, function(event) {                        
@@ -4752,17 +4797,17 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
                     removeListener(gina, $inputs[i], evt);
-                    procced($inputs[i], evt)
+                    proceed($inputs[i], evt)
 
                 } else {
-                    procced($inputs[i], evt)
+                    proceed($inputs[i], evt)
                 }
 
             } else if ( typeof(type) != 'undefined' && type == 'radio' ) {
 
                 evt = $inputs[i].id;
 
-                procced = function ($el, evt) {
+                proceed = function ($el, evt) {
                     addListener(gina, $el, evt, function(event) {
                         cancelEvent(event);
                         updateRadio(event.target);
@@ -4775,17 +4820,17 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
                     removeListener(gina, $inputs[i], evt);
-                    procced($inputs[i], evt);
+                    proceed($inputs[i], evt);
                 } else {
-                    procced($inputs[i], evt)
+                    proceed($inputs[i], evt)
                 }
             }
         }
 
 
         evt = 'validate.' + _id;
-        procced = function () {
-            // attach form event
+        proceed = function () {
+            // attach form submit event
             addListener(gina, $target, evt, function(event) {
                 cancelEvent(event);
                                 
@@ -4815,12 +4860,12 @@ function ValidatorPlugin(rules, data, formId) {
         }
         // cannot be binded twice
         if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == 'validate.' + _id ) {
-            removeListener(gina, $form, evt, procced)
+            removeListener(gina, $form, evt, proceed)
         }
         
-        procced();
+        proceed();
 
-        var proccedToSubmit = function (evt, $submit) {
+        var proceedToSubmit = function (evt, $submit) {
             //console.debug('placing submit ', evt, $submit);
             // attach submit events
             addListener(gina, $submit, evt, function(event) {
@@ -4843,84 +4888,8 @@ function ValidatorPlugin(rules, data, formId) {
                 var validatorInfos = getFormValidationInfos($target, rules);
                 fields  = validatorInfos.fields;
                 $fields = validatorInfos.$fields;
-                //rules   = validatorInfos.rules;
                 rules   = instance.$forms[id].rules;
                 
-                // for (var i = 0, len = $target.length; i<len; ++i) {
-
-                //     name        = $target[i].getAttribute('name');
-                //     // NB.: If you still want to save the info and you main field is disabled;
-                //     //      consider using an input type=hidden
-                //     isDisabled  = $target[i].disabled || $target[i].getAttribute('disabled'); 
-                //     isDisabled  = ( /disabled|true/i.test(isDisabled) ) ? true : false;
-                    
-                //     if (!name) continue;
-                //     if (isDisabled) continue;
-
-                //     // TODO - add switch cases against tagName (checkbox/radio)
-                //     if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
-                        
-                        
-                        
-                //         if ( 
-                //             $target[i].checked 
-                //             || typeof (rules[name]) == 'undefined'
-                //                 && $target[i].value != 'undefined'
-                //                 && /^(true|false)$/.test($target[i].value)
-                //             || !$target[i].checked
-                //                 && typeof (rules[name]) != 'undefined'
-                //                 && typeof (rules[name].isBoolean) != 'undefined' && /^true$/.test(rules[name].isBoolean)
-                //                 && typeof (rules[name].isRequired) != 'undefined' && /^true$/.test(rules[name].isRequired)
-                //         ) {
-                //             // if is boolean
-                //             if ( /^(true|false)$/.test($target[i].value) ) {
-                                
-                //                 if ( typeof(rules[name]) == 'undefined' ) {
-                //                     rules[name] = { isBoolean: true };
-                //                 } else if ( typeof(rules[name]) != 'undefined' && typeof(rules[name].isBoolean) == 'undefined' ) {
-                //                     rules[name].isBoolean = true;
-                //                     // forces it when field found in validation rules
-                //                     rules[name].isRequired = true;
-                //                 }
-
-                //                 if ($target[i].type == 'radio') {
-                //                     if ( typeof(rules[name]) == 'undefined' )
-                //                         throw new Error('rule '+ name +' is not defined');
-                                        
-                //                     if (/^true$/.test(rules[name].isBoolean) && $target[i].checked ) {
-                //                         fields[name] = (/^true$/.test($target[i].value)) ? true : false;
-                //                     }
-                //                 } else {
-                //                     fields[name] = $target[i].value = (/^true$/.test($target[i].value)) ? true : false;
-                //                 }
-
-                //             } else {
-                //                 fields[name] = $target[i].value
-                //             }
-                            
-                //         }  else if ( // force validator to pass `false` if boolean is required explicitly
-                //             rules
-                //             && typeof(rules[name]) != 'undefined'
-                //             && typeof(rules[name].isBoolean) != 'undefined'
-                //             && typeof(rules[name].isRequired) != 'undefined'
-                //             && !/^(true|false)$/.test($target[i].value)
-
-                //         ) {
-                //             fields[name] = false;
-                //         }
-
-                //     } else {
-                //         fields[name] = $target[i].value;
-                //     }
-
-                //     if ( typeof($fields[name]) == 'undefined' ) {
-                //         $fields[name] = $target[i];
-                //         // reset filed error data attributes
-                //         $fields[name].setAttribute('data-gina-form-errors', '');
-                //     }
-                    
-                //     ++fields['_length']
-                // }
 
                 if ( fields['_length'] == 0 ) { // nothing to validate
                     delete fields['_length'];
@@ -4943,7 +4912,7 @@ function ValidatorPlugin(rules, data, formId) {
                     } else {
                         rule = getRuleObjByName(_id.replace(/\-/g, '.'))
                     }
-
+                    instance.$forms[id].isSubmitting = true;
                     validate($target, fields, $fields, rule, function onClickValidation(result){
                         triggerEvent(gina, $target, 'validate.' + _id, result)
                     })
@@ -5052,7 +5021,7 @@ function ValidatorPlugin(rules, data, formId) {
             }
             
             if ( typeof(gina.events[evt]) == 'undefined' || gina.events[evt] != $submit.id ) {
-                proccedToSubmit(evt, $submit)
+                proceedToSubmit(evt, $submit)
             }
 
         }// BO binding submit button
@@ -5189,7 +5158,7 @@ function ValidatorPlugin(rules, data, formId) {
         
         
         instance.$forms[_id]['binded']  = true;        
-        // If Live check enabled, procced to silent validation
+        // If Live check enabled, proceed to silent validation
         if ( /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled && $form.rules.count() > 0) ) {
             console.debug('silent validation mode on');
             var validationInfo  = getFormValidationInfos($form.target, $form.rules);
