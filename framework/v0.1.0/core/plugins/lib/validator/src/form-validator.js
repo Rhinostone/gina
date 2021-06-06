@@ -1089,7 +1089,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
                 this.valid = true;
                 
-                // is in exluded ?
+                // is in excluded ?
                 var excludedIndex = local.excluded.indexOf(this.name);
                 if ( excludedIndex > -1 ) {
                     local.excluded.splice(excludedIndex, 1);
@@ -1434,6 +1434,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
         addField(el, value);
     };
+    
+    // self['getExcludedFields'] = function() {
+    //     return local.excluded;
+    // };
 
     /**
      * Check if errors found during validation
