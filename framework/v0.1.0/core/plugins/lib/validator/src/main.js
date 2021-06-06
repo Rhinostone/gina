@@ -232,6 +232,10 @@ function ValidatorPlugin(rules, data, formId) {
             }
             $form = this.$forms[_id];
         }
+        
+        // $form.on('error', function onFormError(_err) {
+        //    console.debug('ERROR: '+ _err); 
+        // });
 
         return $form;
     }
@@ -2777,8 +2781,7 @@ function ValidatorPlugin(rules, data, formId) {
                 
                 if (eventsList.length > 0) {
                     var once = false;
-                    addListener(gina, $el, eventsList, function(event) {
-                    //addListener(gina, $el, [ 'change.'+$el.id, 'keyup.'+$el.id ], function(event) {                        
+                    addListener(gina, $el, eventsList, function(event) {                    
                         event.preventDefault();                        
                         clearTimeout(liveCheckTimer);                        
                         if ( !once && /^changed\./i.test(event.type) || !once && event.target.type == 'radio' ) {
@@ -2807,8 +2810,12 @@ function ValidatorPlugin(rules, data, formId) {
                                 && event.target.value != ''
                             ) {
                                 //resetting error display
-                                handleErrorsDisplay(event.target.form, {}, null, event.target.name);
-                                //once = false;
+                                var errors = instance.$forms[event.target.form.getAttribute('id')].errors;
+                                if (errors.count() == 0) {
+                                    handleErrorsDisplay(event.target.form, {}, null, event.target.name);
+                                } else {
+                                    handleErrorsDisplay(event.target.form, errors, null, event.target.name);
+                                }
                                 return cancelEvent(event);
                             }
                             
@@ -2819,6 +2826,7 @@ function ValidatorPlugin(rules, data, formId) {
                             
                             instance.$forms[event.target.form.getAttribute('id')].isValidating = true;
                             validate(event.target, localField, $localField, $form.rules, function onLiveValidation(result){
+                                instance.$forms[event.target.form.getAttribute('id')].isValidating = false;
                                 var isFormValid = result.isValid();
                                 //console.debug('onSilentPreGlobalLiveValidation: '+ isFormValid, result);
                                 if (isFormValid) {
@@ -2839,10 +2847,12 @@ function ValidatorPlugin(rules, data, formId) {
                                 var formId = $gForm.getAttribute('id');
                                 gRules   = instance.$forms[formId].rules;
                                 // Don't be tempted to revome fields that has already been validated
+                                instance.$forms[formId].isValidating = true;
                                 validate($gForm, gFields, $gFields, gRules, function onSilentGlobalLiveValidation(gResult){
-                                    console.debug('onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
                                     instance.$forms[formId].isValidating = false;
-                                    updateSubmitTriggerState( $gForm, gResult.isValid() );
+                                    console.debug('onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
+                                    var isFormValid = gResult.isValid();
+                                    updateSubmitTriggerState( $gForm, isFormValid);
                                     once = false;
                                 })
                                     
@@ -5120,23 +5130,29 @@ function ValidatorPlugin(rules, data, formId) {
             } else {
                 // update rule in case the current event is triggered outside the main sequence
                 // e.g.: form `id` attribute rewritten on the fly
-
                 var customRule = $target.getAttribute('data-gina-form-rule');
 
                 if ( customRule ) { // 'data-gina-form-rule'
-                    //rule = gina.validator.rules[ customRule.replace(/\-/g, '.') ];
                     rule = getRuleObjByName(customRule.replace(/\-/g, '.'))
                 } else {
-                    //rule = gina.validator.$forms[ id ].rules;
-                    rule= getRuleObjByName(id.replace(/\-/g, '.'))
+                    rule = getRuleObjByName(id.replace(/\-/g, '.'))
                 }
-
+                instance.$forms[id].isValidating = true;
                 validate($target, fields, $fields, rule, function onSubmitValidation(result){
-                    if ( typeof(gina.events['submit.' + id]) != 'undefined' ) { // if `on('submit', cb)` is binded
-                        triggerEvent(gina, $target, 'submit.' + id, result);
-                    } else {
-                        triggerEvent(gina, $target, 'validate.' + id, result);
-                    }
+                    instance.$forms[id].isValidating = false;
+                    // var isFormValid = result.isValid();
+                    // if (isFormValid) {
+                    //     //resetting error display
+                    //     handleErrorsDisplay($target, {}, result.data);
+                    // } else {                                
+                        // handleErrorsDisplay($target, result.error, result.data);
+                        if ( typeof(gina.events['submit.' + id]) != 'undefined' ) { // if `on('submit', cb)` is binded
+                            triggerEvent(gina, $target, 'submit.' + id, result);
+                        } else {
+                            triggerEvent(gina, $target, 'validate.' + id, result);
+                        }
+                        return;
+                    // }
                 })
             }
         });
