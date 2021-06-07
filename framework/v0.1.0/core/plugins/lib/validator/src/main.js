@@ -2811,12 +2811,13 @@ function ValidatorPlugin(rules, data, formId) {
                             ) {
                                 //resetting error display
                                 var errors = instance.$forms[event.target.form.getAttribute('id')].errors;
-                                if (errors.count() == 0) {
+                                if (!errors || errors.count() == 0) {
                                     handleErrorsDisplay(event.target.form, {}, null, event.target.name);
+                                    return cancelEvent(event);
                                 } else {
                                     handleErrorsDisplay(event.target.form, errors, null, event.target.name);
                                 }
-                                return cancelEvent(event);
+                                //return cancelEvent(event);
                             }
                             
                             
