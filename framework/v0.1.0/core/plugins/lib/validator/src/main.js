@@ -407,13 +407,13 @@ function ValidatorPlugin(rules, data, formId) {
         ; 
         // catch reset
         if ( 
-            typeof($form.dataset.ginaFormIsRestting) != 'undefined' 
-            && /^(true)$/i.test($form.dataset.ginaFormIsRestting) 
+            typeof($form.dataset.ginaFormIsResetting) != 'undefined' 
+            && /^(true)$/i.test($form.dataset.ginaFormIsResetting) 
         ) {
             errors = {};
             liveCheckErrors = {};
             // restore default
-            $form.dataset.ginaFormIsRestting = false;
+            $form.dataset.ginaFormIsResetting = false;
         } else {
             // Live check enabled ?
             if ( 
@@ -657,7 +657,7 @@ function ValidatorPlugin(rules, data, formId) {
         }
         
         // Resetting error display
-        $form.dataset.ginaFormIsRestting = true;
+        $form.dataset.ginaFormIsResetting = true;
         handleErrorsDisplay($form, {});
         
 
@@ -671,7 +671,7 @@ function ValidatorPlugin(rules, data, formId) {
      *
      * */
     var resetFields = function($form) {
-        var $form = $form, _id = null;
+        var _id = null;
         if ( typeof($form) == 'undefined' ) {
             if ( typeof(this.target) != 'undefined' ) {
                 _id = this.target.getAttribute('id');
@@ -696,30 +696,43 @@ function ValidatorPlugin(rules, data, formId) {
             var elId            = null
                 , $element      = null
                 , type          = null
-                , defaultValue  = null;
+                , value         = null // current value
+                , defaultValue  = null
+            ;
 
             for (var f in $form.fieldsSet) {
 
-                $element    = document.getElementById(f)
+                $element    = document.getElementById(f);
                 type        = $element.tagName.toLowerCase();
 
                 if (type == 'input') {
-                    defaultValue = $form.fieldsSet[f].value;
-                    if (/$(on|true|fasle)$/i.test(defaultValue)) {
+                    
+                    defaultValue = $form.fieldsSet[f].defaultValue;
+                    
+                    if (/$(on|true|false)$/i.test(defaultValue)) {
                         defaultValue = (/$(on|true)$/i.test(defaultValue)) ? true : false;
                     }
-                    $element.value = defaultValue;
-                } else if ( type == 'select' ) {
                     
-                    defaultValue = $element.getAttribute('data-value') || null;
-                    
-                    if (defaultValue && typeof($element.options[ defaultValue ]) != 'undefined' ) {
-                        $element.options[ defaultValue ].selected = true;
-                    } else {
-                        $element.options[ $form.fieldsSet[f].value ].selected = true;
-                        $element.setAttribute('data-value',  $element.options[ $form.fieldsSet[f].value ].value);    
+                    if (
+                        /^checkbox|radio$/i.test($element.type)
+                    ) {
+                        $element.checked = $form.fieldsSet[f].defaultChecked;
+                        //triggerEvent(gina, $element, 'change');
+                    } else if ( 
+                        !/^checkbox|radio$/i.test($element.type)
+                        //&& $element.value != defaultValue 
+                    ) {
+                        $element.value = defaultValue;
                     }
+                    
+                    triggerEvent(gina, $element, 'change');
+                } else if ( type == 'select' ) {
+                    defaultValue = $form.fieldsSet[f].selectedIndex || 0;
+                    $element.selectedIndex = defaultValue;
+                    $element.dataset.value = $element.options[ $element.selectedIndex ].value;
+                    triggerEvent(gina, $element, 'change');
                 }
+                
             }
         }
 
@@ -2767,7 +2780,7 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                     // EO Livecheck local events
                 } else {
-                    if ( /^(checkbox)$/i.test($el.type) ) {
+                    if ( /^(radio|checkbox)$/i.test($el.type) ) {
                         _evt = 'changed.'+$el.id;
                     } else {
                         _evt = 'change.'+$el.id;
@@ -2784,9 +2797,9 @@ function ValidatorPlugin(rules, data, formId) {
                     addListener(gina, $el, eventsList, function(event) {                    
                         event.preventDefault();                        
                         clearTimeout(liveCheckTimer);                        
-                        if ( !once && /^changed\./i.test(event.type) || !once && event.target.type == 'radio' ) {
+                        if ( !once && /^changed\./i.test(event.type) || !once && /^(radio|checkbox)$/i.test(event.target.type) ) {
                             once = true;
-                        } else if (once && /^changed\./i.test(event.type) || once && event.target.type == 'radio' ) {                            
+                        } else if (once && /^changed\./i.test(event.type) || once && /^(radio|checkbox)$/i.test(event.target.type) ) {                            
                             return false;
                         }
                         
@@ -3440,7 +3453,7 @@ function ValidatorPlugin(rules, data, formId) {
         // reset error display
         //resetErrorsDisplay($form);
         // or
-        // $form.target.dataset.ginaFormIsRestting = true;
+        // $form.target.dataset.ginaFormIsResetting = true;
         // handleErrorsDisplay($form.target, {});
         $form.binded = false;
         
@@ -3575,13 +3588,13 @@ function ValidatorPlugin(rules, data, formId) {
             }
             if (!$form.fieldsSet[ elId ]) {
                 let defaultValue = $textareas[f].value || '';
-                if (/$(on|true|fasle)$/i.test(defaultValue)) {
+                if (/$(on|true|false)$/i.test(defaultValue)) {
                     defaultValue = (/$(on|true)$/i.test(defaultValue)) ? true : false;
                 }
                 $form.fieldsSet[elId] = {
                     id: elId,
                     name: $textareas[f].name || null,
-                    value: defaultValue || null
+                    value: defaultValue || ""
                 }
             }
             // Adding live check
@@ -3602,13 +3615,30 @@ function ValidatorPlugin(rules, data, formId) {
 
             if (!$form.fieldsSet[ elId ]) {
                 let defaultValue = $inputs[f].value;
-                if (/$(on|true|fasle)$/i.test(defaultValue)) {
+                if (/$(on|true|false)$/i.test(defaultValue)) {
                     defaultValue = (/$(on|true)$/i.test(defaultValue)) ? true : false;
                 }
+                // just in case
+                if ( 
+                    typeof($form.fieldsSet[elId]) != 'undefined'
+                    && typeof($form.fieldsSet[elId].defaultValue) != 'undefined'
+                ) {
+                    defaultValue = $form.fieldsSet[elId].defaultValue;
+                }
+                
                 $form.fieldsSet[elId] = {
                     id: elId,
                     name: $inputs[f].name || null,
-                    value: defaultValue || null
+                    value: defaultValue || ( !/^(checkbox|radio)$/i.test($inputs[f].type) ) ? "" : $inputs[f].checked,
+                    defaultValue: defaultValue || ""
+                }
+                
+                if ( /^(checkbox|radio)$/i.test($inputs[f].type) && typeof($form.fieldsSet[elId].defaultChecked) == 'undefined' ) {
+                    $form.fieldsSet[elId].defaultChecked = ( 
+                                                            /^true$/i.test($inputs[f].checked)
+                                                            ||
+                                                            /^true$/.test(defaultValue) 
+                                                        ) ? true : false;
                 }
             }
             
@@ -4138,12 +4168,12 @@ function ValidatorPlugin(rules, data, formId) {
                 $form.fieldsSet[ elId ] = {
                     id              : elId,
                     name            : $select[s].name || null,
-                    value           : $select[s].options[ selectedIndex ].value || null,
-                    selectedIndex   : selectedIndex || null
+                    value           : $select[s].options[ selectedIndex ].value || selectedValue || null,
+                    selectedIndex   : selectedIndex || 0
                 };
 
                 // update select
-                if ( typeof($select[s].options[selectedIndex]) != 'undefined' ) {
+                if ( typeof($select[s].selectedIndex) != 'undefined' ) {
                     $select[s].options[ selectedIndex ].selected = true;
                     $select[s].setAttribute('data-value',  $select[s].options[ selectedIndex ].value);
                 }
@@ -4471,6 +4501,8 @@ function ValidatorPlugin(rules, data, formId) {
                 
                 var _id             = e.currentTarget.id || e.target.id
                 var $form           = instance.$forms[_id];
+                $form.target.dataset.ginaFormIsResetting = true;
+                resetFields($form);
                 // forcing it
                 var validationInfo  = getFormValidationInfos($form.target, $form.rules, true);
                 var fields          = validationInfo.fields;
@@ -4480,10 +4512,10 @@ function ValidatorPlugin(rules, data, formId) {
                     var isFormValid = result.isValid();
                     console.debug('silent reset validation result[isValid:'+isFormValid+']: ', result);
                     //resetting error display
-                    $form.target.dataset.ginaFormIsRestting = true;
                     handleErrorsDisplay($form.target, {});
                     
                     updateSubmitTriggerState( $form.target , isFormValid );
+                    $form.target.dataset.ginaFormIsResetting = false;
                 });
             })
             // reset proxy            
