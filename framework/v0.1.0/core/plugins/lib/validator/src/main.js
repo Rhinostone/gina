@@ -713,19 +713,13 @@ function ValidatorPlugin(rules, data, formId) {
                         defaultValue = (/$(on|true)$/i.test(defaultValue)) ? true : false;
                     }
                     
-                    if (
-                        /^checkbox|radio$/i.test($element.type)
-                    ) {
+                    if ( /^(checkbox|radio)$/i.test($element.type) ) {
                         $element.checked = $form.fieldsSet[f].defaultChecked;
-                        //triggerEvent(gina, $element, 'change');
-                    } else if ( 
-                        !/^checkbox|radio$/i.test($element.type)
-                        //&& $element.value != defaultValue 
-                    ) {
+                    } else if ( !/^(checkbox|radio)$/i.test($element.type) ) {
                         $element.value = defaultValue;
                     }
-                    
                     triggerEvent(gina, $element, 'change');
+                    
                 } else if ( type == 'select' ) {
                     defaultValue = $form.fieldsSet[f].selectedIndex || 0;
                     $element.selectedIndex = defaultValue;
@@ -3630,15 +3624,23 @@ function ValidatorPlugin(rules, data, formId) {
                     id: elId,
                     name: $inputs[f].name || null,
                     value: defaultValue || ( !/^(checkbox|radio)$/i.test($inputs[f].type) ) ? "" : $inputs[f].checked,
-                    defaultValue: defaultValue || ""
+                    defaultValue: ( !/^(checkbox|radio)$/i.test($inputs[f].type) ) ? defaultValue : $inputs[f].checked
                 }
                 
                 if ( /^(checkbox|radio)$/i.test($inputs[f].type) && typeof($form.fieldsSet[elId].defaultChecked) == 'undefined' ) {
+                    
+                    
                     $form.fieldsSet[elId].defaultChecked = ( 
-                                                            /^true$/i.test($inputs[f].checked)
+                                                            /^(true|on)$/i.test($inputs[f].checked)
                                                             ||
-                                                            /^true$/.test(defaultValue) 
+                                                            /^(true|on)$/.test(defaultValue)
+                                                            && /^(checkbox)$/i.test($inputs[f].type) 
                                                         ) ? true : false;
+                    
+                    if (/^radio$/i.test($inputs[f].type) ) {
+                        $form.fieldsSet[elId].value = $inputs[f].value;
+                        $form.fieldsSet[elId].defaultValue = $inputs[f].value;
+                    }
                 }
             }
             
@@ -4490,6 +4492,90 @@ function ValidatorPlugin(rules, data, formId) {
             // fix added on 2020/09/25 : 
             return;
         }// EO Binding radio
+        
+        for (var i = 0, iLen = $inputs.length; i < iLen; ++i) {
+            type    = $inputs[i].getAttribute('type');
+
+            if ( typeof($inputs[i].id) == 'undefined' || $inputs[i].id == '' ) {
+                $inputs[i].id = type +'-'+ uuid.v4();
+                $inputs[i].setAttribute('id', $inputs[i].id)
+            }
+
+
+            // recover default state only on value === true || false || on
+            if ( 
+                typeof(type) != 'undefined' 
+                && /^checkbox$/i.test(type)              
+            ) {
+                
+                // if is master of a group, init children default state                
+                if ( 
+                    $inputs[i].disabled 
+                    && allFormGroupNames.indexOf($inputs[i].id) > -1 
+                    ||
+                    !$inputs[i].checked 
+                    && allFormGroupNames.indexOf($inputs[i].id) > -1
+                ) {
+                    // updateGroupChildrenState($inputs[i]);
+                    let re = new RegExp( $inputs[i].id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') );                    
+                    for (let childElement in allFormGroupedElements ) {
+                        if ( re.test(allFormGroupedElements[childElement].group) ) {
+                            allFormGroupedElements[childElement].target.disabled = true;
+                        }
+                    }                          
+                }                
+
+                evt = 'change.'+ $inputs[i].id;
+                proceed = function ($el, evt) {
+
+                    // recover default state only on value === true || false                    
+                    addListener(gina, $el, evt, function(event) {                        
+                        updateCheckBox(event.target);
+                        
+                        triggerEvent(gina, event.target, 'changed.'+ event.target.id);                        
+                    });
+
+                    // default state recovery
+                    updateCheckBox($el, true);   
+                }
+
+                if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
+                    removeListener(gina, $inputs[i], evt);
+                    proceed($inputs[i], evt)
+
+                } else {
+                    proceed($inputs[i], evt)
+                }
+
+            } else if (
+                typeof(type) != 'undefined' 
+                && /^radio$/i.test(type) 
+            ) {
+
+                evt = $inputs[i].id;
+                //evt = 'change.'+ $inputs[i].id;
+
+                proceed = function ($el, evt) {
+                    // recover default state
+                    addListener(gina, $el, evt, function(event) {
+                        //cancelEvent(event);
+                        updateRadio(event.target);
+                        
+                        triggerEvent(gina, event.target, 'changed.'+ event.target.id);   
+                    });
+                    
+                    // default state recovery
+                    updateRadio($el, true);
+                }
+
+                if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
+                    removeListener(gina, $inputs[i], evt);
+                    proceed($inputs[i], evt);
+                } else {
+                    proceed($inputs[i], evt)
+                }
+            }
+        }
                                
 
         evt = 'click';
@@ -4522,8 +4608,14 @@ function ValidatorPlugin(rules, data, formId) {
             addListener(gina, $target, 'reset', function(event) {
                 var $el = event.target;
                 // prevent event to be triggered twice
-                if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
-                return false;
+                if ( 
+                    typeof(event.defaultPrevented) != 'undefined' 
+                    && event.defaultPrevented 
+                ) {
+                    return false;
+                }
+                // Fixed on 2021/06/08 - because of radio reset
+                event.preventDefault();
                 
                 var _evt = $el.id;    
                 if (!_evt) return false;
@@ -4532,8 +4624,6 @@ function ValidatorPlugin(rules, data, formId) {
                     _evt = 'reset.'+$el.id
                 }
                 if (gina.events[_evt]) {
-                    //cancelEvent(event);
-                    
                     triggerEvent(gina, $el, _evt, event.detail);
                 }
             });
@@ -4777,83 +4867,7 @@ function ValidatorPlugin(rules, data, formId) {
         proceed();
 
         
-        for (var i = 0, iLen = $inputs.length; i < iLen; ++i) {
-            type    = $inputs[i].getAttribute('type');
-
-            if ( typeof($inputs[i].id) == 'undefined' || $inputs[i].id == '' ) {
-                $inputs[i].id = type +'-'+ uuid.v4();
-                $inputs[i].setAttribute('id', $inputs[i].id)
-            }
-
-
-            // recover default state only on value === true || false || on
-            if ( 
-                typeof(type) != 'undefined' 
-                && /checkbox/i.test(type)              
-            ) {
-                
-                // if is master of a group, init children default state                
-                if ( 
-                    $inputs[i].disabled 
-                    && allFormGroupNames.indexOf($inputs[i].id) > -1 
-                    ||
-                    !$inputs[i].checked 
-                    && allFormGroupNames.indexOf($inputs[i].id) > -1
-                ) {
-                    // updateGroupChildrenState($inputs[i]);
-                    let re = new RegExp( $inputs[i].id.replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&') );                    
-                    for (let childElement in allFormGroupedElements ) {
-                        if ( re.test(allFormGroupedElements[childElement].group) ) {
-                            allFormGroupedElements[childElement].target.disabled = true;
-                        }
-                    }                          
-                }                
-
-                evt = 'change.'+ $inputs[i].id;
-                proceed = function ($el, evt) {
-
-                    // recover default state only on value === true || false                    
-                    addListener(gina, $el, evt, function(event) {                        
-                        updateCheckBox(event.target);
-                        
-                        triggerEvent(gina, event.target, 'changed.'+ event.target.id);                        
-                    });
-
-                    // default state recovery
-                    updateCheckBox($el, true);   
-                }
-
-                if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
-                    removeListener(gina, $inputs[i], evt);
-                    proceed($inputs[i], evt)
-
-                } else {
-                    proceed($inputs[i], evt)
-                }
-
-            } else if ( typeof(type) != 'undefined' && type == 'radio' ) {
-
-                evt = $inputs[i].id;
-
-                proceed = function ($el, evt) {
-                    addListener(gina, $el, evt, function(event) {
-                        cancelEvent(event);
-                        updateRadio(event.target);
-                        
-                        //triggerEvent(gina, event.target, 'changed.'+ event.target.id);   
-                    });
-
-                    updateRadio($el, true);
-                }
-
-                if ( typeof(gina.events[evt]) != 'undefined' && gina.events[evt] == $inputs[i].id ) {
-                    removeListener(gina, $inputs[i], evt);
-                    proceed($inputs[i], evt);
-                } else {
-                    proceed($inputs[i], evt)
-                }
-            }
-        }
+        
 
 
         evt = 'validate.' + _id;
