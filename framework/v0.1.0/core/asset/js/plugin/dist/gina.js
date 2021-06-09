@@ -9746,6 +9746,7 @@ function ValidatorPlugin(rules, data, formId) {
 
             var elId            = null
                 , $element      = null
+                , tagName       = null
                 , type          = null
                 , value         = null // current value
                 , defaultValue  = null
@@ -9755,6 +9756,14 @@ function ValidatorPlugin(rules, data, formId) {
 
                 $element    = document.getElementById(f);
                 type        = $element.tagName.toLowerCase();
+                tagName     = $element.tagName;
+                
+                if ( /textarea/i.test(tagName) ) {
+                    defaultValue = $form.fieldsSet[f].defaultValue;
+                    $element.value = defaultValue;
+                    triggerEvent(gina, $element, 'change');
+                    continue;
+                }
 
                 if (type == 'input') {
                     
@@ -12633,13 +12642,18 @@ function ValidatorPlugin(rules, data, formId) {
             }
             if (!$form.fieldsSet[ elId ]) {
                 let defaultValue = $textareas[f].value || '';
-                if (/$(on|true|false)$/i.test(defaultValue)) {
-                    defaultValue = (/$(on|true)$/i.test(defaultValue)) ? true : false;
-                }
+                // // just in case
+                // if ( 
+                //     typeof($form.fieldsSet[elId]) != 'undefined'
+                //     && typeof($form.fieldsSet[elId].defaultValue) != 'undefined'
+                // ) {
+                //     defaultValue = $form.fieldsSet[elId].defaultValue;
+                // }
                 $form.fieldsSet[elId] = {
                     id: elId,
                     name: $textareas[f].name || null,
-                    value: defaultValue || ""
+                    value: $textareas[f].value || '',
+                    defaultValue: defaultValue
                 }
             }
             // Adding live check
@@ -12664,12 +12678,12 @@ function ValidatorPlugin(rules, data, formId) {
                     defaultValue = (/$(on|true)$/i.test(defaultValue)) ? true : false;
                 }
                 // just in case
-                if ( 
-                    typeof($form.fieldsSet[elId]) != 'undefined'
-                    && typeof($form.fieldsSet[elId].defaultValue) != 'undefined'
-                ) {
-                    defaultValue = $form.fieldsSet[elId].defaultValue;
-                }
+                // if ( 
+                //     typeof($form.fieldsSet[elId]) != 'undefined'
+                //     && typeof($form.fieldsSet[elId].defaultValue) != 'undefined'
+                // ) {
+                //     defaultValue = $form.fieldsSet[elId].defaultValue;
+                // }
                 
                 $form.fieldsSet[elId] = {
                     id: elId,
