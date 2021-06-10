@@ -2695,7 +2695,7 @@ function ValidatorPlugin(rules, data, formId) {
     
     var setObserver = function ($el) {
         
-        if (!/^(radio|text|hidden|password|number|date)$/i.test($el.type) || $el.disabled) {
+        if (!/^(radio|text|hidden|password|number|date|email)$/i.test($el.type) || $el.disabled) {
             return;
         }
         
@@ -2742,7 +2742,7 @@ function ValidatorPlugin(rules, data, formId) {
         if (typeof(isOtherTagAllowed) == 'undefined' ) {
             isOtherTagAllowed = false;
         }
-        if ( /^(radio|checkbox|text|hidden|password|number|date)$/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
+        if ( /^(radio|checkbox|text|hidden|password|number|date|email)$/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
                         
             var localRule = $form.rules[$el.name] || null;
             if ( !localRule ) {
