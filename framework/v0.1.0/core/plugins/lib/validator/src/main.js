@@ -76,7 +76,6 @@ function ValidatorPlugin(rules, data, formId) {
         'eventData'         : {},
         'target'            : (isGFFCtx) ? document : null, // by default
         'errors'            : {},
-
         'initialized'       : false,
         'isReady'           : false,
         'rules'             : {},
@@ -96,7 +95,7 @@ function ValidatorPlugin(rules, data, formId) {
         'on'                    : (isGFFCtx) ? on : null,
         'eventData'             : {},
         'target'                : (isGFFCtx) ? document : null, // by default
-
+        'cachedErrors'          : {},
         'binded'                : false,
         'unbinded'              : false,
         'withUserBindings'      : false,
@@ -5601,6 +5600,12 @@ function ValidatorPlugin(rules, data, formId) {
                                     removeListener(gina, event.target, _asyncEvt);
                                     if ( hasParsedAllRules && asyncCount <= 0) {
                                         cb._errors = d['getErrors']();
+                                        // Fixed on 2021/06/11 - to prenvent from loopin on `data` === `data`
+                                        // if ( hasParsedAllRules && asyncCount < 0) {
+                                        //     console.debug('asyncCompleted.'+ $asyncFieldId + ' Exception. Returning.');
+                                        //     return;
+                                        // }
+                                            
                                         
                                         triggerEvent(gina, $formOrElement, 'validated.' + id, cb)
                                     }

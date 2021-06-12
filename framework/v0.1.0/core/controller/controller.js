@@ -882,7 +882,7 @@ function SuperController(options) {
 
         var request     = local.req;
         var response    = local.res;
-        var next        = local.next;
+        var next        = local.next || null;
         // var stream      = null;
         // if ( /http\/2/.test(local.options.conf.server.protocol) ) {            
         //     stream = response.stream;  
@@ -939,8 +939,9 @@ function SuperController(options) {
                     } else {
                         len = data.length
                     }
-
-                    response.setHeader("content-length", len);
+                    
+                    if (!response.headersSent)
+                        response.setHeader("content-length", len);
                     
                     
                     // if (stream && !stream.destroyed) {
@@ -953,15 +954,26 @@ function SuperController(options) {
                         setTimeout(function () {
                             response.end();
                             response.headersSent = true;
+                            if ( next ) {
+                                next()
+                            }
                         }, 200);
-
+                        
+                        
+                        
                         return // force completion
                     // }
                         
 
                 } else { // normal case
                     response.end(JSON.stringify(jsonObj));
-                    response.headersSent = true
+                    if (!response.headersSent)
+                        response.headersSent = true;
+                    if ( next ) {
+                        next()
+                    }
+                    
+                    return;
                 }
             }
         } catch (err) {
@@ -1369,7 +1381,7 @@ function SuperController(options) {
                 
                 req             = local.req;
                 originalMethod = ( typeof(req.originalMethod) != 'undefined') ? req.originalMethod :  req.method;           
-                console.debug('trying to get route: ', rte, bundle, req.method);     
+                console.debug('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] trying to get route: ', rte, bundle, req.method);     
                 if ( !ignoreWebRoot || !isStaticRoute(rte, req.method, bundle, env, ctx.config.envConf) && !ignoreWebRoot ) {                    
                     req.routing     = lib.routing.getRouteByUrl(rte, bundle, req.method, req);
                     // try alternative method
@@ -1979,11 +1991,11 @@ function SuperController(options) {
             // internet, while pinning the public key of the service in sensitive
             // environments.
             do {
-                console.log('Subject Common Name:', cert.subject.CN);
-                console.log('  Certificate SHA256 fingerprint:', cert.fingerprint256);
+                console.debug('Subject Common Name:', cert.subject.CN);
+                console.debug('  Certificate SHA256 fingerprint:', cert.fingerprint256);
 
                 hash = crypto.createHash('sha256');
-                console.log('  Public key ping-sha256:', sha256(cert.pubkey));
+                console.debug('  Public key ping-sha256:', sha256(cert.pubkey));
 
                 lastprint256 = cert.fingerprint256;
                 cert = cert.issuerCertificate;
@@ -3078,6 +3090,7 @@ function SuperController(options) {
         return requestStorage;
     }
     
+    
     /**
      * resumeRequest
      * Used to resume an halted request
@@ -3091,7 +3104,6 @@ function SuperController(options) {
      * @param {callback|null} next
      * @param {object} [requestStorage] - Will try to use sessionStorage if not passed
      */
-    //this.resumeRequest = function(req, res, next, requestStorage) {
     this.resumeRequest = function(requestStorage) {
            
         if (local.haltedRequestUrlResumed)
@@ -3153,6 +3165,7 @@ function SuperController(options) {
             }
             delete requestStorage.haltedRequest;
             requestStorage.haltedRequestUrlResumed = url;
+            
             requiredController.redirect(url, true);
         } else {
             local.onHaltedRequestResumed = function(err) {
@@ -3161,7 +3174,20 @@ function SuperController(options) {
                     delete requestStorage.inheritedData;
                 }
             }
-            requiredController[req.routing.param.control](req, res, local.onHaltedRequestResumed);
+            if ( typeof(next) == 'function' ) {
+                console.warn('About to override `next` param');
+            }
+            
+            try {
+                requiredController[req.routing.param.control](req, res, next);
+                // consuming it
+                local.onHaltedRequestResumed(false);
+            } catch(err) {
+                console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] Could not resume haltedRequest\n' + err.stack );
+                self.throwError(err);
+            }
+            
+            
         }              
     }
     

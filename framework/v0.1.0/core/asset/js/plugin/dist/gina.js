@@ -7702,18 +7702,31 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         
         var testedValue = this.target.dataset.ginaFormValidatorTestedValue;
         console.debug('TESTED VALUE -> ' + this.value +' vs '+ testedValue);
-        if ( !testedValue ) {
+        if ( !testedValue || testedValue !== this.value ) {
             this.target.dataset.ginaFormValidatorTestedValue = this.value;
         } else if (testedValue === this.value) {
-            //this.target.dataset.ginaFormValidatorTestedValue = null;
-            errors['query'] = replace(this.error || errorMessage || local.errorLabels['query'], this);
+            // not resending to backend, but in case of cached errors, re display same error message
+            var hasCachedErrors = false;
+            var cachedErrors = gina.validator.$forms[this.target.form.getAttribute('id')].cachedErrors || null;
+            if ( 
+                cachedErrors 
+                && typeof(cachedErrors[this.name]) != 'undefined'
+                && typeof(cachedErrors[this.name].query) != 'undefined' 
+                && typeof(cachedErrors[this.name].query[this.value]) != 'undefined' 
+            ) {
+                this.error = errorMessage = cachedErrors[this.name].query[this.value].slice(0);
+                hasCachedErrors = true;
+            }
+            errors['query'] = replace( this.error || errorMessage || local.errorLabels['query'], this);
             
+            if (hasCachedErrors) {
+                this['errors'] = errors;
+                this.valid = false;
+            }
             
             triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
+            
             return self[this.name];
-            
-            
-            //return;
         }
         
         
@@ -7890,9 +7903,20 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     }
                             
                     _this.valid = isValid;
-        
+                    var cachedErrors = gina.validator.$forms[_this.target.form.getAttribute('id')].cachedErrors || {};
                     if ( errors.count() > 0 ) {
                         _this['errors'] = errors;
+                        if ( typeof(errors.query) != 'undefined' && errors.query ) {
+                            
+                            if ( typeof(cachedErrors[_this.name]) == 'undefined' ) {
+                                cachedErrors[_this.name] = {}
+                            }
+                            if ( typeof(cachedErrors[_this.name].query) == 'undefined' ) {
+                                cachedErrors[_this.name].query = {}
+                            }
+                            
+                            cachedErrors[_this.name].query[_this.value] = errors.query.slice(0);
+                        }
                         
                         var errClass = _this.target.getAttribute('data-gina-form-errors');
                         if ( !/query/.test(errClass) ) {
@@ -7903,6 +7927,12 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                             }
                             _this.target.setAttribute('data-gina-form-errors', errClass);
                         }
+                    } else if ( 
+                        typeof(cachedErrors[_this.name]) != 'undefined'
+                        && typeof(cachedErrors[_this.name].query) != 'undefined'
+                        && typeof(cachedErrors[_this.name].query[_this.value]) != 'undefined'
+                    ) {
+                        delete cachedErrors[_this.name].query[_this.value];
                     }
                                             
                     var id = _this.target.id || _this.target.getAttribute('id');
@@ -9127,7 +9157,6 @@ function ValidatorPlugin(rules, data, formId) {
         'eventData'         : {},
         'target'            : (isGFFCtx) ? document : null, // by default
         'errors'            : {},
-
         'initialized'       : false,
         'isReady'           : false,
         'rules'             : {},
@@ -9147,7 +9176,7 @@ function ValidatorPlugin(rules, data, formId) {
         'on'                    : (isGFFCtx) ? on : null,
         'eventData'             : {},
         'target'                : (isGFFCtx) ? document : null, // by default
-
+        'cachedErrors'          : {},
         'binded'                : false,
         'unbinded'              : false,
         'withUserBindings'      : false,
@@ -14652,6 +14681,12 @@ function ValidatorPlugin(rules, data, formId) {
                                     removeListener(gina, event.target, _asyncEvt);
                                     if ( hasParsedAllRules && asyncCount <= 0) {
                                         cb._errors = d['getErrors']();
+                                        // Fixed on 2021/06/11 - to prenvent from loopin on `data` === `data`
+                                        // if ( hasParsedAllRules && asyncCount < 0) {
+                                        //     console.debug('asyncCompleted.'+ $asyncFieldId + ' Exception. Returning.');
+                                        //     return;
+                                        // }
+                                            
                                         
                                         triggerEvent(gina, $formOrElement, 'validated.' + id, cb)
                                     }
