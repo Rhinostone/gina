@@ -356,7 +356,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     isXHR = true;
                     self.isValidator = true;
                     // form errors
-                    if ( typeof(data.errors) != 'undefined' ) {
+                    if ( typeof(data.errors) != 'undefined' && data.errors.count() > 0 ) {
                         updateForm(data.id, 'errors', data.errors, isXHR)
                     }
 
