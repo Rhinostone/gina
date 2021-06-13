@@ -9698,7 +9698,16 @@ function ValidatorPlugin(rules, data, formId) {
                 window.ginaToolbar.update('forms', objCallback);
         }
 
-        if (gina && GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && data) {
+        if (
+            gina 
+            && isGFFCtx 
+            && GINA_ENV_IS_DEV
+            && instance.$forms[id].isSubmitting
+            && /^true$/i.test(instance.$forms[id].isSubmitting) 
+            && typeof(window.ginaToolbar) != 'undefined' 
+            && window.ginaToolbar 
+            && data
+        ) {
             
             try {
                 // update toolbar
@@ -10510,6 +10519,7 @@ function ValidatorPlugin(rules, data, formId) {
                                         
                                         instance.$forms[$form.id].isSubmitting = false;
                                         $form.sent = true;
+                                        
                                     }
 
                                     done = false;
@@ -10553,6 +10563,18 @@ function ValidatorPlugin(rules, data, formId) {
 
             instance.$forms[$form.id].isSubmitting = false;
             $form.sent = true;
+            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                // update toolbar
+                if (!gina.forms.sent)
+                    gina.forms.sent = {};
+
+                var objCallback = {
+                    id      : id,
+                    sent    : data
+                };
+
+                window.ginaToolbar.update('forms', objCallback);
+            }
         }
     }
         
@@ -15265,15 +15287,15 @@ function ValidatorPlugin(rules, data, formId) {
 
                     if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                         // update toolbar
-                        if (!gina.forms.sent)
-                            gina.forms.sent = {};
-
-                        //gina.forms.sent = data;
-                        //gina.forms.id   = id;
+                        if (!gina.forms.validated)
+                            gina.forms.validated = {};
+                            
+                        if (!gina.forms.validated[id])
+                            gina.forms.validated[id] = {};
 
                         var objCallback = {
-                            id      : id,
-                            sent    : data
+                            id          : id,
+                            validated   : data
                         };
 
                         window.ginaToolbar.update('forms', objCallback);
@@ -15726,7 +15748,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     isXHR = true;
                     self.isValidator = true;
                     // form errors
-                    if ( typeof(data.errors) != 'undefined' ) {
+                    if ( typeof(data.errors) != 'undefined' && data.errors.count() > 0 ) {
                         updateForm(data.id, 'errors', data.errors, isXHR)
                     }
 
