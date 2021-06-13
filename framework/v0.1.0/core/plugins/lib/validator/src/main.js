@@ -5475,7 +5475,7 @@ function ValidatorPlugin(rules, data, formId) {
                 || typeof(ruleObj[fieldName].toFloat) != 'undefined'
                 || typeof(ruleObj[fieldName].toInteger) != 'undefined'
             ) {
-                return fields[fieldName].replace(/\,/g, '.');
+                return fields[fieldName].replace(/\,/g, '.').replace(/\s+/g, '');
             }
             if ( typeof(fields[fieldName]) == 'boolean') {
                 return fields[fieldName]
