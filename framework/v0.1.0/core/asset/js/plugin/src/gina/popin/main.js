@@ -400,13 +400,13 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             if (!$popin.isOpen) {                         
                      
                 var $overlay = instance.target.childNodes[0];
-                addListener(gina, $overlay, 'click', function(event) {
+                addListener(gina, $overlay, 'mousedown', function(event) {
 
                     // don't cancel here, it will corrupt child elements behaviors such as checkboxes and radio buttons
                     if ( /gina-popin-is-active/.test(event.target.className) ) {
 
                         // remove listeners
-                        removeListener(gina, event.target, 'click');
+                        removeListener(gina, event.target, 'mousedown');
         
                         // binding popin close
                         var $close          = []
