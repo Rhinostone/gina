@@ -92,7 +92,12 @@ function Couchbase(conn, infos) {
             len         = files.length;
 
 
-            for(; f<files.length; ++f) {
+            for (; f<files.length; ++f) {
+                // ignoring filename starting with .
+                if ( /^\./.test(files[f]) ) {
+                    continue;
+                }
+                
                 filename    = _(dir +'/'+ files[f]);
                 loadN1QL(entities, filename)
             }
@@ -112,6 +117,16 @@ function Couchbase(conn, infos) {
             entityName = entityName.charAt(0).toUpperCase() + entityName.slice(1);
 
             for (; f < files.length; ++f) {
+                // ignoring filename starting with . & sub folders
+                if ( 
+                    /^\./.test(files[f])
+                    ||
+                    !/\.sql$/i.test(files[f]) 
+                    ||
+                    fs.statSync( _(filename + '/' + files[f], true) ).isDirectory() 
+                ) {
+                    continue;
+                }
                 readSource(entities, entityName, filename + '/' + files[f])
             }
 
@@ -120,7 +135,7 @@ function Couchbase(conn, infos) {
                 , entityName    =  arr[arr.length-1].replace(/\.sql/, '').split(/\_/)[0];
 
             entityName = entityName.charAt(0).toUpperCase() + entityName.slice(1);
-
+                     nbbnnb
             readSource(entities, entityName, filename)
         }
     }
@@ -130,6 +145,7 @@ function Couchbase(conn, infos) {
             , name          = arr[arr.length-1].replace(/\.sql/, '') || null
             , comments      = ''
             , queryString   = null
+            , includes      = null
             , queryStatement= null // this is the usable queryString
             , params        = []
             , inlineParams  = [] // order of use inside the query
@@ -140,7 +156,33 @@ function Couchbase(conn, infos) {
 
         if (! /^\./.test(source) && name && typeof(conn[name]) == 'undefined' ) {
             // N.B: because of the cache, if replacement of placeholders is done, it will affect the statement
-            queryString = fs.readFileSync( source ).toString().replace(/\n/g, ' ');
+            queryString = fs.readFileSync( source ).toString();
+            // handle includes
+            includes = queryString.match(/\@include(.*)\;/g) || null;
+            if ( includes && includes.length > 0 ) {
+                for (let i = 0, len = includes.length; i < len; i++) {
+                    let filename = includes[i].replace(/\"|\'|\;|(\@include\s+|\@include)/g, '');
+                    if ( 
+                        /^\./.test(filename)
+                        ||
+                        // windows style location
+                        /^[a-z]:(\\|\/\/)/i.test(filename) 
+                        ||
+                        // not unix absolut
+                        !/^\//.test(filename)
+                        && !/^[a-z]:(\\|\/\/)/i.test(filename)
+                        
+                    ) {
+                        let dir = new _(source).toUnixStyle();
+                        dir = dir.substr(0, dir.lastIndexOf('/')) + '/'
+                        filename = _(dir + filename.replace(/^\.\//, ''), true);
+                    }
+                    // remove @include calls 
+                    queryString = queryString.replace(includes[i], fs.readFileSync( filename ).toString() );
+                }
+            }
+            queryString = queryString.replace(/\n/g, ' ');
+            
             // extract comments
             comments    = queryString.match(/(\/\*([^*]|[\r\n]|(\*+([^*\/]|[\r\n])))*\*+\/)|(\/\/.*)/g);
             // extract return type
@@ -199,7 +241,7 @@ function Couchbase(conn, infos) {
                         // Do not turn off the adhoc flag for each query since 
                         // only a finite number of query plans (currently 5000) can be stored in the SDK
                         adhoc: true, // false to use plan optimization, but need a statement `name param` or `num param`
-                        consistency: 2 
+                        consistency: 2 // REQUEST_PLUS by default
                     };
                     queryStatement = queryString.slice(0);
                     if (params) {
