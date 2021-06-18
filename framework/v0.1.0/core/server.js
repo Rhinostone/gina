@@ -2762,31 +2762,41 @@ function Server(options) {
                 
                 //console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);                
                 console.error(local.request.method +' [ '+code+' ] '+ local.request.url);
-                
-                var eCode = code.toString().substr(0,1) + 'xx';
-                var eFilename               = null
-                    , eBody                 = null
-                    , eData                 = null
+                // intercept none HTML mime types
+                var url                     = unescape(local.request.url) /// avoid %20
+                    , ext                   = null
+                    , isHtmlContent         = false
                     , hasCustomErrorFile    = false
-                    , defaultMessage        = null
+                    , eCode                 = code.toString().substr(0,1) + 'xx'
                 ;
+                var extArr = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/);
+                if (extArr) {
+                    ext = extArr[0].substr(1);
+                }
+                if ( !ext || /^(html|htm)$/i.test(ext) ) {
+                    isHtmlContent = true;
+                }
                 
                 if ( 
-                    typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
+                    isHtmlContent
+                    && typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
                     && typeof(bundleConf.content.templates._common.errorFiles[code]) != 'undefined'
                     ||
-                    typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
+                    isHtmlContent
+                    && typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
                     && typeof(bundleConf.content.templates._common.errorFiles[eCode]) != 'undefined'
                 ) {
                     hasCustomErrorFile = true;
                     
-                    eData = {
-                        isRenderingCustomError  : true,
-                        bundle                  : self.appName,
-                        status                  : code || null,
-                        message                 : msg || null,
-                        pathname                : unescape(local.request.url)
-                    };
+                    var eFilename   = null
+                        , eData     = {
+                            isRenderingCustomError  : true,
+                            bundle                  : self.appName,
+                            status                  : code || null,
+                            message                 : msg || null,
+                            pathname                : url
+                        }
+                    ;
                     
                     if ( typeof(err) == 'object' && err.count() > 0 ) {
                         if ( typeof(err.stack)  != 'undefined' ) {
@@ -2814,16 +2824,14 @@ function Server(options) {
                         eFilename = bundleConf.content.templates._common.errorFiles[eCode];
                     }
                     
-                    //eBody = compile(eFilename, eData);
                     var eRule = 'custom-error-page@'+ self.appName;
                     var routeObj = routingUtils.getRoute(eRule);
                     routeObj.rule = eRule;
-                    routeObj.url = unescape(local.request.url);/// avoid %20
+                    routeObj.url = url;
                     routeObj.param.title = ( typeof(eData.title) != 'undefined' ) ? eData.title : 'Error ' + eData.status;
                     routeObj.param.file = eFilename;
                     routeObj.param.error = eData;
                     routeObj.param.displayToolbar = (/^true$/i.test(GINA_ENV_IS_DEV) ) ? true : false;
-                    
                     
                     local.request.routing = routeObj;
                     
@@ -2843,14 +2851,14 @@ function Server(options) {
                     
                     return;
                 }
+                
                 if ( /http\/2/.test(protocol) ) {
                     header = {
                         ':status': code,
-                        'content-type': 'text/html; charset='+ bundleConf.encoding
-                        //'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
+                        'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
                     };
                 } else {
-                    res.writeHead(code, { 'content-type': 'text/html; charset='+ bundleConf.encoding } );
+                    res.writeHead(code, { 'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding });
                 }
                     
                 header = completeHeaders(header, local.request, res);
@@ -2858,26 +2866,27 @@ function Server(options) {
                     // TODO - Check if the stream has not been closed before sending response
                     // if (stream && !stream.destroyed) {                      
                     stream.respond(header);
-                    if (hasCustomErrorFile) {
-                        stream.end(eBody);
-                        return;
+                    if ( isHtmlContent && hasCustomErrorFile ) {
+                        stream.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                    } else {
+                        stream.end();
                     }
-                    stream.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                    
                     // }
-                    return;
-                } else {  
-                    if (hasCustomErrorFile) {
-                        return res.end(eBody);
-                    }                  
-                    return res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                } else {
+                    if ( isHtmlContent && hasCustomErrorFile ) {
+                        res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                    } else {
+                        res.end()
+                    }
                 }
+                return;
             }            
             
         } else {                        
             if ( typeof(next) != 'undefined' )
-                return next();
-            else
-                return;
+                next();
+            return;
         }
     }
 };
