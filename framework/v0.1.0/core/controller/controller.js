@@ -3429,30 +3429,40 @@ function SuperController(options) {
             } else {
                 
                 console.error(req.method +' ['+ res.statusCode +'] '+ req.url);
-                
-                var eCode = code.toString().substr(0,1) + 'xx';
-                var eFilename               = null
-                    , eBody                 = null
-                    , eData                 = null
+                 // intercept none HTML mime types
+                 var url                     = unescape(local.req.url) /// avoid %20
+                    , ext                   = null
+                    , isHtmlContent         = false
                     , hasCustomErrorFile    = false
-                    , defaultMessage        = null
+                    , eCode                 = code.toString().substr(0,1) + 'xx'
                 ;
+                var extArr = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/);
+                if (extArr) {
+                    ext = extArr[0].substr(1);
+                }
+                if ( !ext || /^(html|htm)$/i.test(ext) ) {
+                    isHtmlContent = true;
+                }
                 
                 if ( 
-                    typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
+                    isHtmlContent
+                    && typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
                     && typeof(bundleConf.content.templates._common.errorFiles[code]) != 'undefined'
                     ||
-                    typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
+                    isHtmlContent
+                    && typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
                     && typeof(bundleConf.content.templates._common.errorFiles[eCode]) != 'undefined'
                 ) {
                     hasCustomErrorFile = true;
-                    
+                    var eFilename               = null
+                        , eData                 = null
+                    ;
                     eData = {
                         isRenderingCustomError  : true,
                         bundle                  : bundle,
                         status                  : code || null,
                         message                 : msg.message || msg || null,
-                        pathname                : unescape(local.req.url)
+                        pathname                : url
                     };
                     
                     if ( typeof(msg) == 'object' /**&& msg.count() > 0*/ ) {
@@ -3470,10 +3480,10 @@ function SuperController(options) {
                     ) {
                         eData.title = bundleConf.server.coreConfiguration.statusCodes[code];
                     }
-                    
-                    if ( typeof(local.req.routing) != 'undefined' ) {
-                        eData.routing = local.req.routing;
-                    }
+                    // TODO - Remove this if not used
+                    // if ( typeof(local.req.routing) != 'undefined' ) {
+                    //     eData.routing = local.req.routing;
+                    // }
                     
                     if (typeof(bundleConf.content.templates._common.errorFiles[code]) != 'undefined') {
                         eFilename = bundleConf.content.templates._common.errorFiles[code];
@@ -3562,8 +3572,13 @@ function SuperController(options) {
                         msgString += '<pre class="'+ eCode +' stack">'+ stack +'</pre>';
                     }                  
                 }
-                res.writeHead(code, { 'content-type': 'text/html'} );
-                res.end(msgString);
+                res.writeHead(code, { 'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding } );
+                if ( isHtmlContent && hasCustomErrorFile ) {
+                    res.end(msgString);
+                } else {
+                    res.end(msgString);
+                }
+                
                 return;
             }
         } else {
