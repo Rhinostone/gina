@@ -866,7 +866,7 @@ function Config(opt) {
             , foundDevVersion = null
         ;
             
-        // getting bunddle config files    
+        // getting bundle config files    
         var configFiles = fs.readdirSync(_(appPath + '/config'))
             , c         = 0
             , cLen      = configFiles.length
@@ -993,6 +993,7 @@ function Config(opt) {
         } else if (hasViews) {
             conf[bundle][env].template = true;
         }
+        
 
         name = 'routing';
         routing = files[name];
@@ -1009,6 +1010,20 @@ function Config(opt) {
                     control: 'getBundleStatus'
                 }
             };
+            
+            // custom error page
+            routing['custom-error-page'] = {
+                // url will be modified on error
+                url: '/custom-error',
+                method: 'GET',
+                middleware: [],
+                param: {
+                    control: 'renderCustomError',
+                    // default data : will be fed on error
+                    error: {}
+                }
+            };
+            
             // creating default rule for auto redirect: / => /webroot            
             if (
                 hasWebRoot 
@@ -1645,13 +1660,52 @@ function Config(opt) {
         //             files['statics'][ ( (_wroot) ? _wroot +'/' : '' ) + favFiles[f] ] = faviconsPath +'/'+ favFiles[f];                
         //     }
         // }
-
-        // loading forms rules
-        if (hasViews && typeof(files['templates']._common.forms) != 'undefined') {
-            try {
-                files['forms'] = loadForms(files['templates']._common.forms)
-            } catch (err) {
-                callback(err)
+        
+        
+        if (hasViews) {
+            // loading forms rules
+            if (typeof(files['templates']._common.forms) != 'undefined') {
+                try {
+                    files['forms'] = loadForms(files['templates']._common.forms)
+                } catch (err) {
+                    callback(err)
+                }
+            }
+            
+            // get error pages
+            if (typeof(files['templates']._common.html) != 'undefined') {
+                var htmlErrorsFromPath = function(htmlErrorsPath) {
+                    var htmlErrorsObj = new _(htmlErrorsPath);
+                    if ( htmlErrorsObj.existsSync() ) {
+                        var errorFiles = fs.readdirSync( htmlErrorsObj.toUnixStyle() );
+                        for (let f = 0, fLen = errorFiles.length; f < fLen; f++) {
+                            let errorFilename = _(htmlErrorsPath +'/'+errorFiles[f], true);
+                            if ( 
+                                /^\./.test(errorFiles[f])
+                                ||
+                                fs.statSync(errorFilename).isDirectory() 
+                            ) {
+                                continue;
+                            } 
+                            
+                            let eCode = errorFiles[f].replace(/\.(.*)$/, '');
+                            if ( typeof(files['templates']._common.errorFiles) == 'undefined' ) {
+                                files['templates']._common.errorFiles = {};
+                            }
+                            if ( typeof(files['templates']._common.errorFiles[eCode]) == 'undefined' ) {
+                                files['templates']._common.errorFiles[eCode] = errorFilename;
+                            }
+                        }
+                        errorFiles = null;
+                    }
+                    htmlErrorsObj = null;
+                    htmlErrorsPath = null;
+                };
+                // first, look into bundles
+                htmlErrorsFromPath(files['templates']._common.html+ '/errors');
+                // Then, look into shared without overriding existing
+                htmlErrorsFromPath(conf[bundle][env].sharedPath + '/errors');
+                
             }
         }
 

@@ -3,7 +3,7 @@
     // if layout == "" or layout == false => isWithoutLayout will be set to `true`
     "layout": "{templatesPath}/html/layout.html",
     "noLayout": "{gina}/framework/v{version}/core/asset/html/nolayout.html", 
-    "templates": "{templatesPath}", // only if hasView()
+    "templates": "{templatesPath}", // only if hasView() - deprecated
     "html": "{templatesPath}/html",  // only if hasView()
     "theme": "default_theme", // only if hasView()
     "forms": "{bundlePath}/forms",
