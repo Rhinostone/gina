@@ -3491,9 +3491,7 @@ function SuperController(options) {
                         eFilename = bundleConf.content.templates._common.errorFiles[eCode];
                     }
                     
-                    //eBody = compile(eFilename, eData);
                     var eRule = 'custom-error-page@'+ bundle;
-                    //var routeObj = routingUtils.getRoute(eRule);
                     var routeObj = bundleConf.content.routing[eRule];
                     routeObj.rule = eRule;
                     //routeObj.url = unescape(local.req.url);/// avoid %20
