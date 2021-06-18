@@ -8,6 +8,7 @@ var Busboy          = require('./deps/busboy');
 const Stream        = require('stream');
 var zlib            = require('zlib'); // gzip / deflate
 var util            = require('util');
+var swig            = require( _(GINA_FRAMEWORK_DIR +'/node_modules/swig', true) );
 var Config          = require('./config');
 var Router          = require('./router');
 var lib             = require('./../lib');
@@ -16,6 +17,7 @@ var inherits        = lib.inherits;
 var merge           = lib.merge;
 var Proc            = lib.Proc;
 var console         = lib.logger;
+var SwigFilters     = lib.SwigFilters;
 
 function Server(options) {
 
@@ -36,6 +38,40 @@ function Server(options) {
 
     this.routing = {};
     //this.activeChild = 0;
+    
+    var initSwigEngine = function(conf) {
+        // swig options
+        var dir = conf.content.templates._common.html;
+        var swigOptions = {
+            autoescape: ( typeof(conf.autoescape) != 'undefined') ? conf.autoescape: false,
+            loader: swig.loaders.fs(dir),
+            cache: (conf.cacheless) ? false : 'memory'
+        };
+
+        swig.setDefaults(swigOptions);
+        
+        var filters = SwigFilters({
+            options     : conf,
+            isProxyHost : getContext('isProxyHost'),
+            // throwError  : self.throwError,
+            // req         : local.req,
+            // res         : local.res 
+        });
+        
+        try {
+            // Allows you to get a bundle web root
+            // swig.setFilter('getWebroot', filters.getWebroot);
+            // swig.setFilter('nl2br', filters.nl2br);
+            for (let filter in filters) {
+                if ( typeof(filters[filter]) == 'function' && !/^getConfig$/.test(filter) ) {
+                    swig.setFilter(filter, filters[filter]);
+                }
+            }
+            
+        } catch (err) {
+            throw err;
+        }
+    }
 
     /**
      * Set Configuration
@@ -128,13 +164,16 @@ function Server(options) {
             serverOpt.port      = self.conf[self.appName][self.env].server.port = portsReverse[ self.appName +'@'+ self.projectName ][self.env][serverOpt.protocol][serverOpt.scheme];
             self.conf[self.appName][self.env].server.debugPort = getContext().debugPort;
             
-            // engin.io options
+            // engine.io options
             if ( ioServerOpt ) {
                 serverOpt.ioServer = ioServerOpt
             }
 
             Engine = require('./server.' + ((typeof (serverOpt.engine) != 'undefined' && serverOpt.engine != '') ? serverOpt.engine : 'express'));
             var engine = new Engine(serverOpt);
+            
+            // swigEngine to render thrown HTML errors
+            initSwigEngine(self.conf[self.appName][self.env]);
             
             self.emit('configured', false, engine.instance, engine.middleware, self.conf[self.appName][self.env]);
 
@@ -2644,6 +2683,7 @@ function Server(options) {
             throwError(res, 404, 'Page not found: \n' + pathname, next)
         }
     }
+    
 
     var throwError = function(res, code, msg, next) {
         
@@ -2721,7 +2761,88 @@ function Server(options) {
             } else {
                 
                 //console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);                
-                console.error(local.request.method +' [ '+code+' ] '+ local.request.url);  
+                console.error(local.request.method +' [ '+code+' ] '+ local.request.url);
+                
+                var eCode = code.toString().substr(0,1) + 'xx';
+                var eFilename               = null
+                    , eBody                 = null
+                    , eData                 = null
+                    , hasCustomErrorFile    = false
+                    , defaultMessage        = null
+                ;
+                
+                if ( 
+                    typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
+                    && typeof(bundleConf.content.templates._common.errorFiles[code]) != 'undefined'
+                    ||
+                    typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
+                    && typeof(bundleConf.content.templates._common.errorFiles[eCode]) != 'undefined'
+                ) {
+                    hasCustomErrorFile = true;
+                    
+                    eData = {
+                        isRenderingCustomError  : true,
+                        bundle                  : self.appName,
+                        status                  : code || null,
+                        message                 : msg || null,
+                        pathname                : unescape(local.request.url)
+                    };
+                    
+                    if ( typeof(err) == 'object' && err.count() > 0 ) {
+                        if ( typeof(err.stack)  != 'undefined' ) {
+                            eData.stack = err.stack
+                        }
+                        if ( !eData.message && typeof(err.message) != 'undefined' ) {
+                            eData.message = err.message
+                        }
+                    }
+                    if ( 
+                        code 
+                        // See: framework/${version}/core/status.code
+                        && typeof(bundleConf.server.coreConfiguration.statusCodes[code]) != 'undefined'
+                    ) {
+                        eData.title = bundleConf.server.coreConfiguration.statusCodes[code];
+                    }
+                    
+                    if ( typeof(local.request.routing) != 'undefined' ) {
+                        eData.routing = local.request.routing;
+                    }
+                    
+                    if (typeof(bundleConf.content.templates._common.errorFiles[code]) != 'undefined') {
+                        eFilename = bundleConf.content.templates._common.errorFiles[code];
+                    } else {
+                        eFilename = bundleConf.content.templates._common.errorFiles[eCode];
+                    }
+                    
+                    //eBody = compile(eFilename, eData);
+                    var eRule = 'custom-error-page@'+ self.appName;
+                    var routeObj = routingUtils.getRoute(eRule);
+                    routeObj.rule = eRule;
+                    routeObj.url = unescape(local.request.url);/// avoid %20
+                    routeObj.param.title = ( typeof(eData.title) != 'undefined' ) ? eData.title : 'Error ' + eData.status;
+                    routeObj.param.file = eFilename;
+                    routeObj.param.error = eData;
+                    routeObj.param.displayToolbar = (/^true$/i.test(GINA_ENV_IS_DEV) ) ? true : false;
+                    
+                    
+                    local.request.routing = routeObj;
+                    
+                    if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
+                        nextExpressMiddleware._index        = 0;
+                        nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
+                        nextExpressMiddleware._request      = local.request;
+                        nextExpressMiddleware._response     = res;
+                        nextExpressMiddleware._next         = next;
+                        nextExpressMiddleware._nextAction   = 'route'
+                        
+                        nextExpressMiddleware()
+                    } else {
+                        router._server = self.instance;
+                        router.route(local.request, res, next, local.reqeust.routing)
+                    }
+                    
+                    return;
+                }
                 if ( /http\/2/.test(protocol) ) {
                     header = {
                         ':status': code,
@@ -2737,10 +2858,17 @@ function Server(options) {
                     // TODO - Check if the stream has not been closed before sending response
                     // if (stream && !stream.destroyed) {                      
                     stream.respond(header);
+                    if (hasCustomErrorFile) {
+                        stream.end(eBody);
+                        return;
+                    }
                     stream.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
                     // }
                     return;
-                } else {                    
+                } else {  
+                    if (hasCustomErrorFile) {
+                        return res.end(eBody);
+                    }                  
                     return res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
                 }
             }            

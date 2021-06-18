@@ -22,6 +22,7 @@ var merge           = lib.merge;
 var inherits        = lib.inherits;
 var console         = lib.logger;
 var Collection      = lib.Collection;
+var routingUtils    = lib.routing;
 var swig            = require('swig');
 var SwigFilters     = lib.SwigFilters;
 var statusCodes     = requireJSON( _( getPath('gina').core + '/status.codes') );
@@ -405,10 +406,17 @@ function SuperController(options) {
      * @return {void}
      * */
     this.render = function(userData, displayToolbar) {
-
+        
+        var isRenderingCustomError = (
+                                    typeof(userData.isRenderingCustomError) != 'undefined'
+                                    && /^true$/i.test(userData.isRenderingCustomError)
+                                ) ? true : false;
+        if (isRenderingCustomError)
+            delete userData.isRenderingCustomError;
+            
         local.options.renderingStack.push( self.name );
         // preventing multiple call of self.render() when controller is rendering from another required controller
-        if ( local.options.renderingStack.length > 1 ) {
+        if ( local.options.renderingStack.length > 1 && !isRenderingCustomError ) {
             return false
         }
         
@@ -437,9 +445,9 @@ function SuperController(options) {
                 if ( typeof(data['page']['data']) == 'undefined' )
                     data['page']['data'] = userData;
                 else
-                    data['page']['data'] = merge( userData, data['page']['data'] );
+                    data['page']['data'] = (isRenderingCustomError) ? userData : merge( userData, data['page']['data'] );
             } else {
-                data = merge(userData, data)
+                data = (isRenderingCustomError) ? userData : merge(userData, data)
             }
 
             template = local.options.rule.replace('\@'+ local.options.bundle, '');
@@ -452,7 +460,7 @@ function SuperController(options) {
             setResources(localTemplateConf);
             
             
-            file = data.page.view.file;
+            file = (isRenderingCustomError) ? local.options.file : data.page.view.file;
 
             // pre-compiling variables
             data = merge(data, getData()); // needed !!
@@ -460,6 +468,13 @@ function SuperController(options) {
             if  (typeof(data.page.data) == 'undefined' ) {
                 data.page.data = {}
             }
+            
+            // if ( typeof(data.page.data.isRenderingCustomError) != 'undefined' ) {
+            //     if (/^true$/i.test(data.page.data.isRenderingCustomError))
+            //         isRenderingCustomError = true;
+                    
+            //     delete data.page.data.isRenderingCustomError
+            // }
 
             if ( typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status) && typeof(data.page.data.error) != 'undefined' ) {
                 var statusCode = local.options.conf.server.coreConfiguration.statusCodes;
@@ -502,11 +517,13 @@ function SuperController(options) {
                     }
 
                 } else {
-                    path = _(local.options.template.html +'/'+ file)
+                     path = (!isRenderingCustomError)
+                            ? _(local.options.template.html +'/'+ file)
+                            : file
                 }
             }
 
-            if (data.page.view.ext /** && hasViews() && fs.existsSync(_(path + data.page.view.ext, true))*/ ) {
+            if (data.page.view.ext && !new RegExp(data.page.view.ext+ '$').test(file) /** && hasViews() && fs.existsSync(_(path + data.page.view.ext, true))*/ ) {
                 path += data.page.view.ext
             }
 
@@ -807,6 +824,7 @@ function SuperController(options) {
                                 filename = local.options.template.html;
                                 filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
                                 self.throwError(local.res, 500, new Error('Controller::render(...) compilation error encountered while trying to process template `'+ filename + '`\n' + (err.stack||err.message||err) ));
+                                return;
                             }
                             
                             // Only available for http/2.0 for now
@@ -3021,19 +3039,37 @@ function SuperController(options) {
             self.throwError(err)
         } 
     }
+    
+    var getSession = function() {
+        var session = null;
+        if ( typeof(local.req.session) != 'undefined') {
+            session = local.req.session;
+        }
+        // passport override
+        if (!session && typeof(local.req.session) != 'undefined' && typeof(local.req.session.user) != 'undefined') {
+            session = local.req.session.user;
+        }
+        
+        return session;
+    }
         
     this.isHaltedRequest = function(session) {
         // trying to retrieve session since it is optional
         if ( typeof(session) == 'undefined' ) {
-            session = null;
-            if ( typeof(local.req.session) != 'undefined' && typeof(local.req.session.haltedRequest) != 'undefined' ) {
-                session = local.req.session;
-            }
-            // passport
-            if (!session && typeof(local.req.session) != 'undefined' && typeof(local.req.session.user) != 'undefined' && typeof(local.req.session.user.haltedRequest) != 'undefined' ) {
-                session = local.req.session.user;
-            }
-            if (!session) {
+            session = getSession();
+            // if ( typeof(local.req.session) != 'undefined' && typeof(local.req.session.haltedRequest) != 'undefined' ) {
+            //     session = local.req.session;
+            // }
+            // // passport
+            // if (!session && typeof(local.req.session) != 'undefined' && typeof(local.req.session.user) != 'undefined' && typeof(local.req.session.user.haltedRequest) != 'undefined' ) {
+            //     session = local.req.session.user;
+            // }
+            if (
+                !session 
+                || 
+                typeof(session) != 'undefined'
+                && typeof(session.haltedRequest) == 'undefined'
+            ) {
                 return false;
             }
         }
@@ -3192,6 +3228,63 @@ function SuperController(options) {
     }
     
     
+    this.renderCustomError = function (req, res, next) {
+
+        // preventing multiple call of self.renderWithoutLayout() when controller is rendering from another required controller
+        if (local.options.renderingStack.length > 1) {
+            return false;
+        }
+
+        //local.options.isWithoutLayout = true;
+        
+        var data = null;
+        if ( typeof(req.routing.param.error) != 'undefined' ) {
+            data = JSON.clone(req.routing.param.error) || {};
+            delete req.routing.param.error
+        }
+        
+        var session = getSession();
+        if (session) {
+            data.session = JSON.clone(session)
+        }
+        var displayToolbar = req.routing.param.displayToolbar || false;
+        if (req.routing.param.displayToolbar) {
+            delete req.routing.param.displayToolbar
+        }
+        var isLocalOptionResetNeeded = req.routing.param.isLocalOptionResetNeeded || false;
+        
+        if (isLocalOptionResetNeeded) {
+            delete req.routing.param.isLocalOptionResetNeeded;
+            var bundleConf = JSON.clone(local.options.conf);
+            var bundle = req.routing.bundle;
+            var param = req.routing.param;
+            var localOptions = {
+                // view namespace first
+                //namespace       : null,
+                control         : param.control,
+                //controller      : controllerFile,
+                //controller: '<span class="gina-bundle-name">' + bundle +'</span>/controllers/controller.js',
+                file: param.file,
+                //bundle          : bundle,//module
+                bundlePath      : bundleConf.bundlesPath + '/' + bundle,
+                //rootPath        : self.executionPath,
+                // We don't want to keep original conf untouched
+                //conf            : JSON.clone(conf),
+                //instance: self.serverInstance,
+                //template: (routeHasViews) ? bundleConf.content.templates[templateName] : undefined,
+                //isUsingTemplate: local.isUsingTemplate,
+                //cacheless: cacheless,
+                path: null //, // user custom path : namespace should be ignored | left blank
+                //assets: {}
+            };
+            local.options = merge(localOptions, local.options);
+            
+            
+        }
+        delete local.options.namespace;
+        self.render(data, displayToolbar);
+    }
+    
 
     /**
      * Throw error
@@ -3210,14 +3303,16 @@ function SuperController(options) {
         if (local.options.renderingStack.length > 1) {
             return false
         }
+        var bundleConf = local.options.conf;
+        var bundle = bundleConf.bundle;
         // handle error fallback
         // err.fallback must be a valide route object or a url string
         var fallback = null;
-        
+        var standardErrorMessage = null;
         if ( arguments.length == 1 && typeof(res) == 'object' ) {
             code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
                 //, errorObject   = res.stack || res.message || res.error || res.fallback
-            var standardErrorMessage = null;
+            
             
             if ( typeof(statusCodes[code]) != 'undefined' ) {
                 standardErrorMessage = statusCodes[code];
@@ -3289,7 +3384,7 @@ function SuperController(options) {
                 //     if ( typeof(req.headers['user-agent']) != 'undefined' && /msie/i.test(req.headers['user-agent']) ) {
                 //         res.writeHead(code, "content-type", "text/plain")
                 //     } else {
-                //         res.writeHead(code, { 'content-type': local.options.conf.server.coreConfiguration.mime['json']} );
+                //         res.writeHead(code, { 'content-type': bundleConf.server.coreConfiguration.mime['json']} );
                 //     }
                 // }
                 
@@ -3300,17 +3395,17 @@ function SuperController(options) {
                     } else {
                         var contentType = ( responseHeaders && responseHeaders['content-type'])
                                          ? responseHeaders['content-type']
-                                         : local.options.conf.server.coreConfiguration.mime['json']+ '; charset='+ local.options.conf.encoding
+                                         : bundleConf.server.coreConfiguration.mime['json']+ '; charset='+ bundleConf.encoding
                         ;
                         res.writeHead(code, { 'content-type': contentType } );
                     }
                 } else if ( typeof(responseHeaders['content-type']) != 'undefined' ) {
                     res.writeHead(code, { 'content-type': responseHeaders['content-type']} )
                 } else {
-                    res.writeHead(code, "content-type", local.options.conf.server.coreConfiguration.mime['json']+ '; charset='+ local.options.conf.encoding);
+                    res.writeHead(code, "content-type", bundleConf.server.coreConfiguration.mime['json']+ '; charset='+ bundleConf.encoding);
                 }
 
-                console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
+                console.error('[ BUNDLE ][ '+ bundleConf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
                 
                 if (!errorObject) {
                     errorObject = {
@@ -3325,12 +3420,77 @@ function SuperController(options) {
                 res.end(JSON.stringify(errorObject));
                 return;
             } else {
-                res.writeHead(code, { 'content-type': 'text/html'} );
+                
                 console.error(req.method +' ['+ res.statusCode +'] '+ req.url);
-
-                //var msgString = msg.stack || msg.error || msg;
-                var msgString = '<h1 class="status">Error '+ code +'.</h1>';
-                var eCode = code.toString().substr(0,1);
+                
+                var eCode = code.toString().substr(0,1) + 'xx';
+                var eFilename               = null
+                    , eBody                 = null
+                    , eData                 = null
+                    , hasCustomErrorFile    = false
+                    , defaultMessage        = null
+                ;
+                
+                if ( 
+                    typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
+                    && typeof(bundleConf.content.templates._common.errorFiles[code]) != 'undefined'
+                    ||
+                    typeof(bundleConf.content.templates._common.errorFiles) != 'undefined'
+                    && typeof(bundleConf.content.templates._common.errorFiles[eCode]) != 'undefined'
+                ) {
+                    hasCustomErrorFile = true;
+                    
+                    eData = {
+                        isRenderingCustomError  : true,
+                        bundle                  : bundle,
+                        status                  : code || null,
+                        message                 : msg.message || msg || null,
+                        pathname                : unescape(local.req.url)
+                    };
+                    
+                    if ( typeof(msg) == 'object' /**&& msg.count() > 0*/ ) {
+                        if ( typeof(msg.stack) != 'undefined' ) {
+                            eData.stack = msg.stack
+                        }
+                        if ( !eData.message && typeof(msg.message) != 'undefined' ) {
+                            eData.message = msg.message
+                        }
+                    }
+                    if ( 
+                        code 
+                        // See: framework/${version}/core/status.code
+                        && typeof(bundleConf.server.coreConfiguration.statusCodes[code]) != 'undefined'
+                    ) {
+                        eData.title = bundleConf.server.coreConfiguration.statusCodes[code];
+                    }
+                    
+                    if ( typeof(local.req.routing) != 'undefined' ) {
+                        eData.routing = local.req.routing;
+                    }
+                    
+                    if (typeof(bundleConf.content.templates._common.errorFiles[code]) != 'undefined') {
+                        eFilename = bundleConf.content.templates._common.errorFiles[code];
+                    } else {
+                        eFilename = bundleConf.content.templates._common.errorFiles[eCode];
+                    }
+                    
+                    //eBody = compile(eFilename, eData);
+                    var eRule = 'custom-error-page@'+ bundle;
+                    //var routeObj = routingUtils.getRoute(eRule);
+                    var routeObj = bundleConf.content.routing[eRule];
+                    routeObj.rule = eRule;
+                    //routeObj.url = unescape(local.req.url);/// avoid %20
+                    routeObj.param.title = ( typeof(eData.title) != 'undefined' ) ? eData.title : 'Error ' + eData.status;
+                    routeObj.param.file = eFilename;
+                    routeObj.param.error = eData;
+                    routeObj.param.displayToolbar = (/^true$/i.test(GINA_ENV_IS_DEV) ) ? true : false;
+                    routeObj.param.isLocalOptionResetNeeded = true;
+                    
+                    
+                    local.req.routing = routeObj;
+                    self.renderCustomError(local.req, res, local.next);
+                    return;
+                }
                 
                 // if (!errorObject) {
                 //     errorObject = {
@@ -3341,20 +3501,21 @@ function SuperController(options) {
                 //         stack: msg.stack
                 //     }
                 // }
+                var msgString = '<h1 class="status">Error '+ code +'.</h1>';
                 
                 console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] `this.'+ req.routing.param.control +'(...)` ['+res.statusCode +'] '+ req.url);
                 if ( typeof(msg) == 'object' ) {
 
                     if (msg.title) {
-                        msgString += '<pre class="'+ eCode +'xx title">'+ msg.title +'</pre>';
+                        msgString += '<pre class="'+ eCode +' title">'+ msg.title +'</pre>';
                     }
 
                     if (msg.error) {
-                        msgString += '<pre class="'+ eCode +'xx message">'+ msg.error +'</pre>';
+                        msgString += '<pre class="'+ eCode +' message">'+ msg.error +'</pre>';
                     }
 
                     if (msg.message) {
-                        msgString += '<pre class="'+ eCode +'xx message">'+ msg.message +'</pre>';
+                        msgString += '<pre class="'+ eCode +' message">'+ msg.message +'</pre>';
                     }
 
                     if (msg.stack) {
@@ -3368,7 +3529,7 @@ function SuperController(options) {
                         }
 
                         msg.stack = msg.stack.replace('Error:', '').replace(' ', '');
-                        msgString += '<pre class="'+ eCode +'xx stack">'+ msg.stack +'</pre>';
+                        msgString += '<pre class="'+ eCode +' stack">'+ msg.stack +'</pre>';
                     }
 
                 } else {
@@ -3385,16 +3546,16 @@ function SuperController(options) {
                     }
                     
                     if (title) {
-                        msgString += '<pre class="'+ eCode +'xx title">'+ title +'</pre>';
+                        msgString += '<pre class="'+ eCode +' title">'+ title +'</pre>';
                     }
                     if (message) {
-                        msgString += '<pre class="'+ eCode +'xx message">'+ message +'</pre>';
+                        msgString += '<pre class="'+ eCode +' message">'+ message +'</pre>';
                     }
                     if (stack) {
-                        msgString += '<pre class="'+ eCode +'xx stack">'+ stack +'</pre>';
+                        msgString += '<pre class="'+ eCode +' stack">'+ stack +'</pre>';
                     }                  
                 }
-
+                res.writeHead(code, { 'content-type': 'text/html'} );
                 res.end(msgString);
                 return;
             }
