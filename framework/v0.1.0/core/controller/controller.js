@@ -403,9 +403,10 @@ function SuperController(options) {
      *
      * @param {object} userData
      * @param {boolean} [displayToolbar]
+     * @param {object} [errOptions]
      * @return {void}
      * */
-    this.render = function(userData, displayToolbar) {
+    this.render = function(userData, displayToolbar, errOptions) {
         
         var isRenderingCustomError = (
                                     typeof(userData.isRenderingCustomError) != 'undefined'
@@ -413,18 +414,23 @@ function SuperController(options) {
                                 ) ? true : false;
         if (isRenderingCustomError)
             delete userData.isRenderingCustomError;
-            
-        local.options.renderingStack.push( self.name );
+        
+        var localOptions = (errOptions) ? errOptions : local.options;
+        localOptions.renderingStack.push( self.name );
         // preventing multiple call of self.render() when controller is rendering from another required controller
-        if ( local.options.renderingStack.length > 1 && !isRenderingCustomError ) {
+        if ( localOptions.renderingStack.length > 1 && !isRenderingCustomError ) {
             return false
         }
         
-        local.options.debugMode = ( typeof(displayToolbar) == 'undefined' ) ? undefined : ( (/true/i.test(displayToolbar)) ? true : false ); // only active for dev env
+        localOptions.debugMode = ( typeof(displayToolbar) == 'undefined' ) ? undefined : ( (/true/i.test(displayToolbar)) ? true : false ); // only active for dev env
         
         // specific override
-        if (GINA_ENV_IS_DEV && typeof(local.req[ local.req.method.toLowerCase() ].debug) != 'undefined' ) {
-            local.options.debugMode = ( /true/i.test(local.req[ local.req.method.toLowerCase() ].debug) ) ? true : false;
+        if (
+            GINA_ENV_IS_DEV
+            && typeof(local.req[ local.req.method.toLowerCase() ]) != 'undefined' 
+            && typeof(local.req[ local.req.method.toLowerCase() ].debug) != 'undefined' 
+        ) {
+            localOptions.debugMode = ( /true/i.test(local.req[ local.req.method.toLowerCase() ].debug) ) ? true : false;
         }
         
         var data            = null
@@ -432,7 +438,7 @@ function SuperController(options) {
         , file              = null
         , path              = null
         , plugin            = null
-        , isWithoutLayout   = (local.options.isWithoutLayout) ? true : false
+        , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false
         , layoutRoot        = null
     ;
         try {
@@ -450,17 +456,17 @@ function SuperController(options) {
                 data = (isRenderingCustomError) ? userData : merge(userData, data)
             }
 
-            template = local.options.rule.replace('\@'+ local.options.bundle, '');
-            var localTemplateConf = local.options.template;
+            template = localOptions.rule.replace('\@'+ localOptions.bundle, '');
+            var localTemplateConf = localOptions.template;
             if ( isWithoutLayout ) {
-                localTemplateConf = JSON.clone(local.options.template);
+                localTemplateConf = JSON.clone(localOptions.template);
                 localTemplateConf.javascripts = new Collection(localTemplateConf.javascripts).find({ isCommon: false}, { isCommon: true, name: 'gina' });
                 localTemplateConf.stylesheets = new Collection(localTemplateConf.stylesheets).find({ isCommon: false}, { isCommon: true, name: 'gina' }); 
             }
             setResources(localTemplateConf);
             
             
-            file = (isRenderingCustomError) ? local.options.file : data.page.view.file;
+            file = (isRenderingCustomError) ? localOptions.file : data.page.view.file;
 
             // pre-compiling variables
             data = merge(data, getData()); // needed !!
@@ -477,7 +483,7 @@ function SuperController(options) {
             // }
 
             if ( typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status) && typeof(data.page.data.error) != 'undefined' ) {
-                var statusCode = local.options.conf.server.coreConfiguration.statusCodes;
+                var statusCode = localOptions.conf.server.coreConfiguration.statusCodes;
                 var errorObject = {
                     status: data.page.data.status,
                     //errors: msg.error || msg.errors || msg,
@@ -492,19 +498,19 @@ function SuperController(options) {
             }
 
             // making path thru [namespace &] file
-            if ( typeof(local.options.namespace) != 'undefined' ) {
+            if ( typeof(localOptions.namespace) != 'undefined' ) {
                 // excepted for custom paths
                 if ( !/^(\.|\/|\\)/.test(file) )
-                    file = ''+ file.replace(local.options.namespace+'-', '');
+                    file = ''+ file.replace(localOptions.namespace+'-', '');
                 
                 // means that rule name === namespace -> pointing to root namespace dir
-                if (!file || file === local.options.namespace) {
+                if (!file || file === localOptions.namespace) {
                     file = 'index'
                 }
-                path = _(local.options.template.html +'/'+ local.options.namespace + '/' + file)
+                path = (isRenderingCustomError) ? _(file) : _(localOptions.template.html +'/'+ localOptions.namespace + '/' + file)
             } else {
-                if ( local.options.path && !/(\?|\#)/.test(local.options.path) ) {
-                    path = _(local.options.path);
+                if ( localOptions.path && !/(\?|\#)/.test(localOptions.path) ) {
+                    path = _(localOptions.path);
                     var re = new RegExp( data.page.view.ext+'$');
                     if ( data.page.view.ext && re.test(data.page.view.file) ) {
                         data.page.view.path = path.replace('/'+ data.page.view.file, '');
@@ -518,7 +524,7 @@ function SuperController(options) {
 
                 } else {
                      path = (!isRenderingCustomError)
-                            ? _(local.options.template.html +'/'+ file)
+                            ? _(localOptions.template.html +'/'+ file)
                             : file
                 }
             }
@@ -544,13 +550,13 @@ function SuperController(options) {
             fs.readFile(path, function (err, content) {
                 var isProxyHost = ( 
                     typeof(local.req.headers.host) != 'undefined' 
-                        && local.options.conf.server.scheme +'://'+ local.req.headers.host != local.options.conf.hostname 
+                        && localOptions.conf.server.scheme +'://'+ local.req.headers.host != localOptions.conf.hostname 
                     || typeof(local.req.headers[':authority']) != 'undefined' 
-                        && local.options.conf.server.scheme +'://'+ local.req.headers[':authority'] != local.options.conf.hostname  
+                        && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname  
                 ) ? true : false;
                 // setup swig default filters                
                 var filters = SwigFilters({
-                    options     : local.options,
+                    options     : JSON.clone(localOptions),
                     isProxyHost : isProxyHost,
                     throwError  : self.throwError,
                     req         : local.req,
@@ -560,7 +566,7 @@ function SuperController(options) {
                 if (err) {
                     msg = 'could not open "'+ path +'"' +
                             '\n1) The requested file does not exists in your views/html (check your template directory). Can you find: '+path +
-                            '\n2) Check the following rule in your `'+local.options.conf.bundlePath+'/config/routing.json` and look around `param` to make sure that nothing is wrong with your declaration: '+
+                            '\n2) Check the following rule in your `'+localOptions.conf.bundlePath+'/config/routing.json` and look around `param` to make sure that nothing is wrong with your declaration: '+
                             '\n' + options.rule +':'+ JSON.stringify(options.conf.content.routing[options.rule], null, 4) +
                             '\n3) At this point, if you still have problems trying to run this portion of code, you can contact us telling us how to reproduce the bug.' +
                             '\n\r[ stack trace ] '+ err.stack;
@@ -601,13 +607,13 @@ function SuperController(options) {
                     , filename              = null
                 ;
                 
-                if ( isWithoutLayout || !isWithoutLayout && typeof(local.options.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout) ) {
-                    layoutPath = (isWithoutLayout) ? local.options.template.noLayout : local.options.template.layout;
+                if ( isWithoutLayout || !isWithoutLayout && typeof(localOptions.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout) ) {
+                    layoutPath = (isWithoutLayout) ? localOptions.template.noLayout : localOptions.template.layout;
                     if (isWithoutLayout)
                         data.page.view.layout = layoutPath;
                 } else {
-                    layoutRoot = ( typeof(local.options.namespace) != 'undefined' && local.options.namespace != '') ? local.options.template.templates + '/'+ local.options.namespace  : local.options.template.templates;
-                    layoutPath = layoutRoot +'/'+ local.options.file + local.options.template.ext;    
+                    layoutRoot = ( typeof(localOptions.namespace) != 'undefined' && localOptions.namespace != '') ? localOptions.template.templates + '/'+ localOptions.namespace  : localOptions.template.templates;
+                    layoutPath = layoutRoot +'/'+ localOptions.file + localOptions.template.ext;    
                 }
                 
                 fs.readFile(layoutPath, function onLoadingLayout(err, layout) {
@@ -618,7 +624,7 @@ function SuperController(options) {
                         
                         try {
                             assets  = {assets:"${assets}"};                        
-                            //mapping = { filename: local.options.template.layout };         
+                            //mapping = { filename: localOptions.template.layout };         
                             mapping = { filename: layoutPath }; 
                             layout  = layout.toString();
                             // precompie in case of extends
@@ -634,7 +640,7 @@ function SuperController(options) {
                             
                             
                         
-                        isDeferModeEnabled = local.options.template.javascriptsDeferEnabled;  
+                        isDeferModeEnabled = localOptions.template.javascriptsDeferEnabled;  
                         
                         // iframe case - without HTML TAG
                         if (!self.isXMLRequest() && !/\<html/.test(layout) ) {
@@ -648,8 +654,8 @@ function SuperController(options) {
                                         
                         if (hasViews() && isWithoutLayout) {
                             // $.getScript(...)
-                            //var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers.host != local.options.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
-                            //var hostname = (isProxyHost) ? local.options.conf.hostname.replace(/\:\d+$/, '') : local.options.conf.hostname;
+                            //var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && localOptions.conf.server.scheme +'://'+ local.req.headers.host != localOptions.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname  ) ? true : false;
+                            //var hostname = (isProxyHost) ? localOptions.conf.hostname.replace(/\:\d+$/, '') : localOptions.conf.hostname;
                             
                             
                             
@@ -677,12 +683,12 @@ function SuperController(options) {
                         // adding plugins
                         if (
                             hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout 
-                            && local.options.debugMode 
+                            && localOptions.debugMode 
                             || 
                             hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout 
-                            && typeof(local.options.debugMode) == 'undefined' 
+                            && typeof(localOptions.debugMode) == 'undefined' 
                             || 
-                            hasViews() && local.options.debugMode 
+                            hasViews() && localOptions.debugMode 
                         ) {                            
 
                             layout = ''
@@ -704,25 +710,25 @@ function SuperController(options) {
                             ;
                                                         
 
-                            if (isWithoutLayout && local.options.debugMode || local.options.debugMode ) {
+                            if (isWithoutLayout && localOptions.debugMode || localOptions.debugMode ) {
 
                                 XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
                                 
                                 layout = layout.replace(/<\/body>/i, XHRData + '\n\t</body>');
                             }
                             
-                            if (GINA_ENV_IS_DEV || local.options.debugMode ) {
+                            if (GINA_ENV_IS_DEV || localOptions.debugMode ) {
                                 layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
                             }
                             
                             // adding javascripts
                             layout.replace('{{ page.view.scripts }}', '');
                             if ( isDeferModeEnabled ) { // placed in the HEAD                                
-                                layout = layout.replace(/\<\/head\>/i, '\t'+ local.options.template.ginaLoader +'\n</head>');                                
+                                layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                                
                                 layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
                                 
                             } else { // placed in the BODY
-                                layout = layout.replace(/\<\/body\>/i, '\t'+ local.options.template.ginaLoader +'\n</body>');                                
+                                layout = layout.replace(/\<\/body\>/i, '\t'+ localOptions.template.ginaLoader +'\n</body>');                                
                                 layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
                             }
                             
@@ -749,7 +755,7 @@ function SuperController(options) {
                             plugin = '\t'
                                 + '\n\t<script type="text/javascript">'
                                 + ' \n\t<!--'
-                                + '\n\t' + local.options.template.pluginLoader.toString()
+                                + '\n\t' + localOptions.template.pluginLoader.toString()
                                 + '\t//-->'
                                 + '\n</script>'
 
@@ -766,11 +772,11 @@ function SuperController(options) {
                             // adding javascripts
                             layout.replace('{{ page.view.scripts }}', '');
                             if ( isDeferModeEnabled ) { // placed in the HEAD                                
-                                layout = layout.replace(/\<\/head\>/i, '\t'+ local.options.template.ginaLoader +'\n</head>');                                
+                                layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                                
                                 layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
                                 
                             } else { // placed in the BODY
-                                layout = layout.replace(/\<\/body\>/i, '\t'+ local.options.template.ginaLoader +'\n</body>');                                
+                                layout = layout.replace(/\<\/body\>/i, '\t'+ localOptions.template.ginaLoader +'\n</body>');                                
                                 layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
                             }
 
@@ -779,7 +785,7 @@ function SuperController(options) {
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
                         
                         // special case for template without layout in debug mode - dev only
-                        if ( hasViews() && local.options.debugMode && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
+                        if ( hasViews() && localOptions.debugMode && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
                             try { 
                                 
                                 layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');                                                                    
@@ -789,7 +795,7 @@ function SuperController(options) {
                                 
 
                             } catch (err) {
-                                filename = local.options.template.html;
+                                filename = localOptions.template.html;
                                 filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
                                 self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)))
                             }
@@ -797,22 +803,22 @@ function SuperController(options) {
                         
 
                         if ( !local.res.headersSent ) {
-                            local.res.statusCode = ( typeof(local.options.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
+                            local.res.statusCode = ( typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
                             //catching errors
                             if (
-                                typeof(data.page.data.errno) != 'undefined' && /^2/.test(data.page.data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.page.data.status]) != 'undefined'
-                                || typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.page.data.status]) != 'undefined'
+                                typeof(data.page.data.errno) != 'undefined' && /^2/.test(data.page.data.status) && typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status]) != 'undefined'
+                                || typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status) && typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status]) != 'undefined'
                             ) {
 
                                 try {
-                                    local.res.statusMessage = local.options.conf.server.coreConfiguration.statusCodes[data.page.data.status];
+                                    local.res.statusMessage = localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status];
                                 } catch (err){
                                     local.res.statusCode    = 500;
-                                    local.res.statusMessage = err.stack||err.message||local.options.conf.server.coreConfiguration.statusCodes[local.res.statusCode];
+                                    local.res.statusMessage = err.stack||err.message||localOptions.conf.server.coreConfiguration.statusCodes[local.res.statusCode];
                                 }
                             }
 
-                            local.res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime['html'] + '; charset='+ local.options.conf.encoding );
+                            local.res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
                             try {
                                 // escape special chars
                                 var blacklistRe = new RegExp('[\<\>]', 'g');
@@ -821,26 +827,26 @@ function SuperController(options) {
                                 //swig.invalidateCache();
                                 layout = swig.compile(layout, mapping)(data);
                             } catch (err) {
-                                filename = local.options.template.html;
+                                filename = localOptions.template.html;
                                 filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
                                 self.throwError(local.res, 500, new Error('Controller::render(...) compilation error encountered while trying to process template `'+ filename + '`\n' + (err.stack||err.message||err) ));
                                 return;
                             }
                             
                             // Only available for http/2.0 for now
-                            if ( !self.isXMLRequest() && /http\/2/.test(local.options.conf.server.protocol) ) {
+                            if ( !self.isXMLRequest() && /http\/2/.test(localOptions.conf.server.protocol) ) {
                                 try {
                                     // TODO - button in toolbar to empty url assets cache    
-                                    if ( /**  GINA_ENV_IS_DEV ||*/ typeof(local.options.template.assets) == 'undefined' || typeof(local.options.template.assets[local.req.url]) == 'undefined' ) {
+                                    if ( /**  GINA_ENV_IS_DEV ||*/ typeof(localOptions.template.assets) == 'undefined' || typeof(localOptions.template.assets[local.req.url]) == 'undefined' ) {
                                         // assets string -> object
-                                        assets = self.serverInstance.getAssets(local.options.conf, layout.toString(), swig, data);
-                                        local.options.template.assets = JSON.parse(assets);
+                                        assets = self.serverInstance.getAssets(localOptions.conf, layout.toString(), swig, data);
+                                        localOptions.template.assets = JSON.parse(assets);
                                     }
                                     
                                     //  only for toolbar - TODO hasToolbar()
                                     if (
                                         GINA_ENV_IS_DEV && hasViews() && !isWithoutLayout
-                                        || hasViews() && local.options.debugMode
+                                        || hasViews() && localOptions.debugMode
                                         || GINA_ENV_IS_DEV && hasViews() && self.isXMLRequest() 
                                     ) {                                
                                         layout = layout.replace('{"assets":"${assets}"}', assets ); 
@@ -3252,7 +3258,7 @@ function SuperController(options) {
             delete req.routing.param.displayToolbar
         }
         var isLocalOptionResetNeeded = req.routing.param.isLocalOptionResetNeeded || false;
-        
+        var errOptions = null;
         if (isLocalOptionResetNeeded) {
             delete req.routing.param.isLocalOptionResetNeeded;
             var bundleConf = JSON.clone(local.options.conf);
@@ -3267,6 +3273,7 @@ function SuperController(options) {
                 file: param.file,
                 //bundle          : bundle,//module
                 bundlePath      : bundleConf.bundlesPath + '/' + bundle,
+                renderingStack  : bundleConf.renderingStack,
                 //rootPath        : self.executionPath,
                 // We don't want to keep original conf untouched
                 //conf            : JSON.clone(conf),
@@ -3277,12 +3284,12 @@ function SuperController(options) {
                 path: null //, // user custom path : namespace should be ignored | left blank
                 //assets: {}
             };
-            local.options = merge(localOptions, local.options);
+            errOptions = merge(localOptions, local.options);
             
             
         }
         delete local.options.namespace;
-        self.render(data, displayToolbar);
+        self.render(data, displayToolbar, errOptions);
     }
     
 
