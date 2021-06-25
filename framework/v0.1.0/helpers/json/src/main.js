@@ -30,7 +30,7 @@ module.exports = function(){
         
         var i                       = null
             , len                   = null
-            , comments_with_slashes = null
+            , commentsWithSlashes = null
             , jsonStr               = null
         ;
         
@@ -54,17 +54,17 @@ module.exports = function(){
         }
         
         // line style comments
-        comments_with_slashes = jsonStr.match(/\/\/(.*)?/g);        
+        commentsWithSlashes = jsonStr.match(/\/\/(.*)?/g);        
                 
-        len = ( comments_with_slashes) ? comments_with_slashes.length : 0;
-        if (comments_with_slashes && len > 0) {
+        len = ( commentsWithSlashes) ? commentsWithSlashes.length : 0;
+        if (commentsWithSlashes && len > 0) {
             i = 0;
             for(; i< len; ++i) {
                 // ignore urls
-                if ( /(\:|\")/.test( jsonStr.substr(jsonStr.indexOf(comments_with_slashes[i])-1,1) ) )
+                if ( /(\:|\")/.test( jsonStr.substr(jsonStr.indexOf(commentsWithSlashes[i])-1,1) ) )
                     continue;
                     
-                jsonStr = jsonStr.replace(comments_with_slashes[i], '');
+                jsonStr = jsonStr.replace(commentsWithSlashes[i], '');
             }
         }        
         
@@ -80,7 +80,7 @@ module.exports = function(){
                 pos     = stack[0].replace(/[^\d+]/g, '');            
                 jsonStr = jsonStr.substr(0, pos) + '--(ERROR !)--\n' + jsonStr.substr(pos);
                 msg     = (jsonStr.length > 400) ?  '...'+ jsonStr.substr(pos-200, 300) +'...' : jsonStr;
-                error = new Error('[ requireJSON ] could not parse `'+ filename +'`:' +'\n\rSomething is wrong arround this portion:\n\r'+msg+'<strong style="color:red">"</strong>\n\rPlease check your file: `'+ filename +'`'+ '\n\r<strong style="color:red">'+err.stack+'</strong>\n');       
+                error = new Error('[ requireJSON ] could not parse `'+ filename +'`:' +'\n\rSomething is wrong around this portion:\n\r'+msg+'<strong style="color:red">"</strong>\n\rPlease check your file: `'+ filename +'`'+ '\n\r<strong style="color:red">'+err.stack+'</strong>\n');       
             } else {
                 error = new Error('[ requireJSON ] could not parse `'+ filename +'`:' +'\n\rSomething is wrong with the content of your file.\n\rPlease check the syntax of your file : `'+ filename +'`'+ '\n\r<strong style="color:red">'+err.stack+'</strong>\n');       
             }
