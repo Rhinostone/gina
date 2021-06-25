@@ -861,7 +861,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             // test if val is a number
             try {
                 // if val is a string replaces comas by points
-                if ( typeof(val) == 'string' && /,/g.test(val) ) {
+                if ( typeof(val) == 'string' && /\,|\./g.test(val) ) {
                     val = this.value = parseFloat( val.replace(/,/g, '.').replace(/\s+/g, '') );
                 } else if ( typeof(val) == 'string' && val != '') {
                     val = this.value = parseInt( val.replace(/\s+/g, '') );
@@ -1006,6 +1006,13 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 this.value = this.value.replace(/\s+/g, '');
                 if ( /\,/.test(this.value) && !/\./.test(this.value) ) {
                     this.value = this.value.replace(/\,/g,'.');
+                    //local.data[this.name] = this.value;
+                    // if (isGFFCtx) {
+                    //     //this.target.setAttribute('value', this.value);
+                    //     document.getElementById(this.target.id).value = this.value;
+                    //     //triggerEvent(gina, this.target, 'change', self[this['name']]);
+                    // }
+                        
                 } else {
                     this.value = this.value.replace(/\,/g,'');
                 }
@@ -1031,8 +1038,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                         if ( !Number.isFinite(val) ) {
                             val = this.value = local.data[this.name] = new Number(parseFloat(val.match(/[0-9.,]+/g).join('').replace(/,/, '.')));// Number <> number
                         }
-
-                        this.target.setAttribute('value', val);
+                        if (isGFFCtx)
+                            this.target.setAttribute('value', val);
                     } catch(err) {
                         isValid = false;
                         errors['toFloat'] = replace(this.error || local.errorLabels['toFloat'], this);

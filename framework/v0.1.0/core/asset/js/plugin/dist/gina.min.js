@@ -8392,7 +8392,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             // test if val is a number
             try {
                 // if val is a string replaces comas by points
-                if ( typeof(val) == 'string' && /,/g.test(val) ) {
+                if ( typeof(val) == 'string' && /\,|\./g.test(val) ) {
                     val = this.value = parseFloat( val.replace(/,/g, '.').replace(/\s+/g, '') );
                 } else if ( typeof(val) == 'string' && val != '') {
                     val = this.value = parseInt( val.replace(/\s+/g, '') );
@@ -8537,6 +8537,13 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 this.value = this.value.replace(/\s+/g, '');
                 if ( /\,/.test(this.value) && !/\./.test(this.value) ) {
                     this.value = this.value.replace(/\,/g,'.');
+                    //local.data[this.name] = this.value;
+                    // if (isGFFCtx) {
+                    //     //this.target.setAttribute('value', this.value);
+                    //     document.getElementById(this.target.id).value = this.value;
+                    //     //triggerEvent(gina, this.target, 'change', self[this['name']]);
+                    // }
+                        
                 } else {
                     this.value = this.value.replace(/\,/g,'');
                 }
@@ -8562,8 +8569,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                         if ( !Number.isFinite(val) ) {
                             val = this.value = local.data[this.name] = new Number(parseFloat(val.match(/[0-9.,]+/g).join('').replace(/,/, '.')));// Number <> number
                         }
-
-                        this.target.setAttribute('value', val);
+                        if (isGFFCtx)
+                            this.target.setAttribute('value', val);
                     } catch(err) {
                         isValid = false;
                         errors['toFloat'] = replace(this.error || local.errorLabels['toFloat'], this);
@@ -9106,24 +9113,48 @@ function ValidatorPlugin(rules, data, formId) {
      * validator event handler - isGFFCtx only
      * */
     var events      = [
-                        'init', // form or popin init
-                        'ready',
-                        'registered',
-                        'success',
-                        'error',
-                        'progress',
-                        'submit',
-                        'reset',
-                        'change',
-                        'changed',
-                        'keydown', // for autocomplete
-                        'keyup', // for autocomplete
-                        'focusout',
-                        'focusin',
-                        'validate', // for form livecheck (validation)
-                        'validated', // for form livecheck (validation)
-                        'destroy'
-                    ];
+        'init', // form or popin init
+        'ready',
+        'registered',
+        'success',
+        'error',
+        'progress',
+        'submit',
+        'reset',
+        'change',
+        'changed',
+        'keydown', // for autocomplete
+        'keyup', // for autocomplete
+        'focusout',
+        'focusin',
+        'validate', // for form livecheck (validation)
+        'validated', // for form livecheck (validation)
+        'destroy'
+    ];
+    
+    // See: https://developer.mozilla.org/fr/docs/Web/HTML/Element/Input
+    var allowedLiveInputTypes = [
+        'radio',
+        'checkbox',
+        
+        'text',
+        'hidden',
+        'password',
+        'number', // not supporting float
+        'date',
+        'email',
+        // extended types
+        'search',
+        'color',
+        'tel',
+        'range',
+        'time',
+        'datetime-local',
+        'datetime', // deprecated
+        'month',
+        'week',
+        'url'
+    ];
 
     /** imports */
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
@@ -11230,7 +11261,6 @@ function ValidatorPlugin(rules, data, formId) {
                                 tmpStr += ','
                             }
                             try {
-                                
                                 rulesStr = rulesStr.replace( mergingRules[m], tmpStr); 
                                 instance.rules = JSON.parse(  JSON.stringify(instance.rules).replace( mergingRules[m], tmpStr)  );
                                 //instance.rules = JSON.parse(  JSON.stringify(instance.rules).replace( new RegExp(mergingRules[m], 'g'), tmpStr)  );
@@ -11796,8 +11826,19 @@ function ValidatorPlugin(rules, data, formId) {
     
     
     var setObserver = function ($el) {
-        
-        if (!/^(radio|text|hidden|password|number|date|email)$/i.test($el.type) || $el.disabled) {
+        var $formInstance = instance.$forms[$el.form.getAttribute('id')];
+        var isDisabled = ( /^true$/i.test($el.disabled) ) ? true : false;
+        if ( 
+            isDisabled
+            && typeof($formInstance.rule) != 'undefined' 
+            && typeof($formInstance.rule[$el.name]) != 'undefined'
+            && typeof($formInstance.rule[$el.name].exclude) != 'undefined'
+            && /^false$/i.test($formInstance.rule[$el.name].exclude)
+        ) {
+            isDisabled = false;
+        }
+        // var allowedTypes = allowedLiveInputTypes.slice();
+        if (!/^(radio|text|hidden|password|number|date|email)$/i.test($el.type) || isDisabled) {
             return;
         }
         
@@ -11823,6 +11864,9 @@ function ValidatorPlugin(rules, data, formId) {
             }
             
             this.value = val;
+            // if (document.getElementById(this.id).value !== this.value) {
+            //     document.getElementById(this.id).value = this.value;
+            // }
 
             //Custom code triggered when $el.value is set
             console.debug('Value set: '+val);
@@ -11844,11 +11888,27 @@ function ValidatorPlugin(rules, data, formId) {
         if (typeof(isOtherTagAllowed) == 'undefined' ) {
             isOtherTagAllowed = false;
         }
-        if ( /^(radio|checkbox|text|hidden|password|number|date|email)$/i.test($el.type) && !$el.disabled || isOtherTagAllowed && !$el.disabled ) {
-                        
-            var localRule = $form.rules[$el.name] || null;
+        var rules = $form.rules;
+        var $formInstance = instance.$forms[$el.form.getAttribute('id')];
+        var isDisabled = ( /^true$/i.test($el.disabled) ) ? true : false;
+        if ( 
+            isDisabled
+            && typeof($formInstance.rule) != 'undefined' 
+            && typeof($formInstance.rule[$el.name]) != 'undefined'
+            && typeof($formInstance.rule[$el.name].exclude) != 'undefined'
+            && /^false$/i.test($formInstance.rule[$el.name].exclude)
+        ) {
+            isDisabled = false;
+        }
+        // allowedLiveInputTypes
+        if ( /^(radio|checkbox|text|hidden|password|number|date|email)$/i.test($el.type) && !isDisabled  || isOtherTagAllowed && !isDisabled ) {
+            var field = $el.name;
+            var localRule = rules[field] || null;
             if ( !localRule ) {
-                return;
+                checkForRuleAlias(rules, $el);
+                
+                if ( typeof(rules[field]) == 'undefined' )
+                    return;
             }
             // data-gina-form-live-check-enabled
             // with local rule                
@@ -12356,7 +12416,7 @@ function ValidatorPlugin(rules, data, formId) {
     }
     
     /**
-     * reBindForm
+     * reBindForm - This is a WIP
      * 
      * @param {object} HTMLElement
      * @param {object} rules
@@ -12564,6 +12624,28 @@ function ValidatorPlugin(rules, data, formId) {
         
         return $form;
     }
+    
+    var checkForRuleAlias = function(formRules, $el) {
+        var field = $el.name;
+        var localRule = formRules[field] || null;
+        if ( !localRule ) {
+            // looking for regexp aliases from rules
+            for (let _r in formRules) {
+                if ( /^\//.test(_r) ) { // RegExp found
+                    re      = _r.match(/\/(.*)\//).pop();                                        
+                    flags   = _r.replace('/'+ re +'/', '');
+                    // fix escaping "[" & "]"
+                    re      = re.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+                    re      = new RegExp(re, flags);
+                    if ( re.test(field)  ) {                                            
+                        // create new entry    
+                        localRule = formRules[field] = formRules[_r];
+                        break;
+                    } 
+                }                                
+            }
+        }
+    }
 
     /**
      * bindForm
@@ -12646,7 +12728,7 @@ function ValidatorPlugin(rules, data, formId) {
             
             // a|links
             , $a            = $target.getElementsByTagName('a')
-            // input: checkbox, radio, hidden, text, files, number, date
+            // input type: checkbox, radio, hidden, text, files, number, date ...
             , $inputs       = $target.getElementsByTagName('input')
             // textarea
             , $textareas    = $target.getElementsByTagName('textarea')
@@ -12686,6 +12768,7 @@ function ValidatorPlugin(rules, data, formId) {
         
         // BO Binding textarea
         for (let f = 0, len = $textareas.length; f < len; ++f) {
+            checkForRuleAlias($form.rules, $textareas[f]);
             elId = $textareas[f].getAttribute('id');
             if (!elId || elId == '') {
                 elId = 'textareas.' + uuid.v4();
@@ -12717,6 +12800,7 @@ function ValidatorPlugin(rules, data, formId) {
         
         // BO Binding input       
         for (let f = 0, len = $inputs.length; f < len; ++f) {
+            checkForRuleAlias($form.rules, $inputs[f]);
             elId = $inputs[f].getAttribute('id');
             if (!elId || elId == '') {
                 elId = 'input.' + uuid.v4();
@@ -13229,14 +13313,57 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }// EO Binding input
 
-        var updateSelect = function($el) {
+        var updateSelect = function($el, $form) {
             $el.setAttribute('data-value', $el.value);
+            // If Live check enabled, proceed to silent validation
+            if ( /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled && $form.rules.count() > 0) ) {
+                var localField = {}, $localField = {}, $localForm = null;
+                $localForm = $el.form;//event.target.form
+                localField[event.target.name]     = event.target.value;
+                $localField[event.target.name]    = event.target;
+                
+                instance.$forms[$localForm.getAttribute('id')].isValidating = true;
+                validate(event.target, localField, $localField, $form.rules, function onLiveValidation(result){
+                    instance.$forms[$localForm.getAttribute('id')].isValidating = false;
+                    var isFormValid = result.isValid();
+                    //console.debug('onSilentPreGlobalLiveValidation: '+ isFormValid, result);
+                    if (isFormValid) {
+                        //resetting error display
+                        handleErrorsDisplay($localForm, {}, result.data, event.target.name);
+                    } else {                                
+                        handleErrorsDisplay($localForm, result.error, result.data, event.target.name);
+                    }
+                    //updateSubmitTriggerState( $localForm, isFormValid );
+                    // data-gina-form-required-before-submit
+                    //console.debug('====>', result.isValid(), result);
+                    
+                    // Global check required: on all fields
+                    var $gForm = $localForm, gFields = null, $gFields = null, gRules = null;
+                    var gValidatorInfos = getFormValidationInfos($gForm, rules);
+                    gFields  = gValidatorInfos.fields;
+                    $gFields = gValidatorInfos.$fields;
+                    var formId = $gForm.getAttribute('id');
+                    gRules   = instance.$forms[formId].rules;
+                    // Don't be tempted to revome fields that has already been validated
+                    instance.$forms[formId].isValidating = true;
+                    validate($gForm, gFields, $gFields, gRules, function onSilentGlobalLiveValidation(gResult){
+                        instance.$forms[formId].isValidating = false;
+                        console.debug('[updateSelect]: onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
+                        var isFormValid = gResult.isValid();
+                        updateSubmitTriggerState( $gForm, isFormValid);
+                        once = false;
+                    })
+                        
+                });
+            }
         };
         // BO binding select
-        var selectedIndex = null, selectedValue = null;        
+        var selectedIndex = null, selectedValue = null;  
         for (var s = 0, sLen = $select.length; s < sLen; ++s) {
+            checkForRuleAlias($form.rules, $select[s]);
+            
             elId = $select[s].getAttribute('id');
-
+            
             if (elId && /^gina\-toolbar/.test(elId)) continue;
 
             if (!elId || elId == '') {
@@ -13262,9 +13389,10 @@ function ValidatorPlugin(rules, data, formId) {
                 var $el = event.target;
                 
                 if (/select/i.test($el.type) ) {                    
-                    updateSelect($el);
+                    updateSelect($el, $form);
                 }                
             });
+            
 
             if ($select[s].options && !$form.fieldsSet[ elId ]) {
                 selectedIndex = 0;
@@ -14232,7 +14360,7 @@ function ValidatorPlugin(rules, data, formId) {
                 
                 name        = $target[i].getAttribute('name');
                 // NB.: If you still want to save the info and you main field is disabled;
-                //      consider using an input type=hidden
+                //      consider using an input type=hidden of validator rule `"exclude" : false`
                 isDisabled  = $target[i].disabled || $target[i].getAttribute('disabled'); 
                 isDisabled  = ( /disabled|true/i.test(isDisabled) ) ? true : false;
 
@@ -14431,7 +14559,7 @@ function ValidatorPlugin(rules, data, formId) {
             
             name        = $form[i].getAttribute('name');
             // NB.: If you still want to save the info and you main field is disabled;
-            //      consider using an input type=hidden
+            //      consider using an input type=hidden of validator rule `"exclude" : false`
             isDisabled  = $form[i].disabled || $form[i].getAttribute('disabled'); 
             isDisabled  = ( /disabled|true/i.test(isDisabled) ) ? true : false;
             
@@ -14641,6 +14769,7 @@ function ValidatorPlugin(rules, data, formId) {
             // looking for regexp aliases from rules
             if ( typeof (rules[field]) == 'undefined') {                
                 skipTest = false;
+                // TODO - replace loop by checkForRuleAlias(rules, $el);
                 for (var _r in rules) {
                     if ( /^\//.test(_r) ) { // RegExp found
                         re      = _r.match(/\/(.*)\//).pop();                                        
@@ -14751,7 +14880,6 @@ function ValidatorPlugin(rules, data, formId) {
                 }
                 d = new FormValidator(fields, $fields, xhrOptions);
             } else {
-                //id = $formOrElement.form.id || $formOrElement.form.target.getAttribute('id') || $formOrElement.form.getAttribute('id');
                 id = $formOrElement.form.getAttribute('id') || $formOrElement.form.target.getAttribute('id');
                 
                 evt = 'validated.' + id;
@@ -14771,7 +14899,7 @@ function ValidatorPlugin(rules, data, formId) {
             var localRuleObj = null, skipTest = null;
 
             //console.debug('parsing ', fields, $fields, rules);
-            if ( typeof(rules) != 'undefined' ) { // means that no rule is set or found
+            if ( typeof(rules) != 'undefined' ) {
                 
                 for (var field in fields) {
                     
@@ -14780,7 +14908,7 @@ function ValidatorPlugin(rules, data, formId) {
                         console.warn('field `'+ field +'` found for your form rule ('+ $formOrElement.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule if this is a mistake.');
                         continue;
                     }
-                    // 2021-01-17: fixing exclude defaullt override for `data-gina-form-element-group`
+                    // 2021-01-17: fixing exclude default override for `data-gina-form-element-group`
                     if ( 
                         $fields[field].getAttribute('data-gina-form-element-group')
                         && typeof(rules[field]) != 'undefined'
