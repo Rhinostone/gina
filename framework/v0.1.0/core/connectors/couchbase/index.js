@@ -243,7 +243,8 @@ function Couchbase(conn, infos) {
                         adhoc: true, // false to use plan optimization, but need a statement `name param` or `num param`
                         consistency: 2 // REQUEST_PLUS by default
                     };
-                    queryStatement = queryString.slice(0);
+                    
+                    queryStatement = queryString.slice(0);                    
                     if (params) {
                         // BO - patch prepared statement case when placeholder is used as a cursor
                         var p                   = []
@@ -360,6 +361,7 @@ function Couchbase(conn, infos) {
                         //queryOptions.consistency = 3;
                                 // .adhoc(queryOptions.adhoc)
                                 // .consistency(queryOptions.consistency)
+                        
                         // merge options
                         for (var qOpt in queryOptions) {
                             if ( typeof(query[ qOpt ]) == 'undefined' ) {
@@ -376,11 +378,19 @@ function Couchbase(conn, infos) {
 
                     // trick to set event on the fly
                     var trigger = 'N1QL:'+entityName.toLowerCase()+ '#'+ name;
-
-                    if (GINA_ENV_IS_DEV) {
-                        var statement = (sdkVersion <= 2) ? query.options.statement : query;
-                        console.debug('[ ' + trigger +' ] '+statement);
+                    var statement = (sdkVersion <= 2) ? query.options.statement : query;
+                    if ( /^select/i.test(statement) ) {
+                        queryOptions.adhoc = false;
+                        queryOptions.consistency = 1; // NOT_BOUNDED
+                        //query.adhoc(false);
+                        query.consistency(1); // NOT_BOUNDED
                     }
+                    if (GINA_ENV_IS_DEV) {
+                        //var statement = (sdkVersion <= 2) ? query.options.statement : query;
+                        console.debug('[ ' + trigger +' ] '+statement);
+                        console.debug('[ ' + trigger +' ] options: '+ JSON.stringify(queryOptions, null, 2));
+                    }
+                    
                     
                     
                     var onQueryCallback = function(err, data, meta) {
@@ -469,7 +479,26 @@ function Couchbase(conn, infos) {
                     }; // EO onQueryCallback
                     
                     self._isRegisteredFromProto = false;
-                    var register = function (trigger, queryParams, onQueryCallback, cb) {                        
+                    var register = function (trigger, queryParams, onQueryCallback, cb) {
+                        // JUNE 2021 patch
+                        // Adding support for FTS since it is not implemented in sdkVersion 2:
+                        // variables not replaced by value
+                        // looking for FTS (Full Text Search)
+                        var ftsClause = query.options.statement.match(/(search\(|search\s+\().*\)/i);
+                        if (ftsClause && Array.isArray(queryParams) ) {
+                            var originalFtsClauses = JSON.clone(ftsClause);
+                            for (let s = 0, sLen = ftsClause.length; s < sLen; s++) {
+                                if ( !/\)$/.test(ftsClause[s]) ) continue;
+                                for (let p = 0, pLen = queryParams.length; p < pLen; p++) {
+                                    if ( typeof(queryParams[p]) == 'function' ) continue;
+                                    let searchValue = ( /^(true|false)$/i.test(queryParams[p]) ) ? queryParams[p] : '"'+queryParams[p]+'"';
+                                    ftsClause[s] = ftsClause[s].replace( new RegExp('\\$'+ (p+1),'g'), searchValue)
+                                }
+                                query.options.statement = query.options.statement.replace(originalFtsClauses[s], ftsClause[s]);
+                            }
+                            originalFtsClauses = null;
+                        }
+                        ftsClause = null;
                         
                         if ( typeof(self.once) != 'undefined' && typeof(cb) != 'undefined' ) {
                             self._isRegisteredFromProto = true;
