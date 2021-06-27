@@ -1321,7 +1321,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
                 date = this.value = local.data[this.name] = new Date(formatedDate);
                 
-                if ( /Invalid Date/i.test(date) || !(date instanceof Date) ) {
+                if ( /Invalid Date/i.test(date) || date instanceof Date === false ) {
                     if ( !errors['isRequired'] && this.value == '' ) {
                         isValid = true
                     } else {
