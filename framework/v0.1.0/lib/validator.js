@@ -419,9 +419,9 @@ function Validator(data, errorLabels) {
 
             var date = this.value = local.data[this.name] = new Date(newMask);
 
-            this.valid = ( !date instanceof Date ) ? false : true;
+            this.valid = ( date instanceof Date ) ? true : false;
 
-            if ( !date instanceof Date ) {
+            if ( date instanceof Date  === false ) {
                 local.errors[this.name].isDate = replace(this.error || local.errorLabels.isDate, this)
             }
 

@@ -27,12 +27,22 @@ var statusCodes = requireJSON(__dirname + '/../../../core/status.codes');
  * @return {object} errorObject
  */
 function ApiError(errorMessage, fieldName, errorStatus) {
-    var e = new Error(errorMessage);    
+    var e = null;
+    if ( typeof(errorMessage) == 'object' && errorMessage instanceof Error ) {
+        e = JSON.clone(errorMessage);
+        errorMessage = e.message || e.stack;
+    } else {
+        e = new Error(errorMessage);   
+    }
+     
     var isClientError = (arguments.length == 3) ? true : false;
     if ( arguments.length == 2 ) {
         // server error
         if ( typeof(arguments[1]) == 'number' ) {
             errorStatus = arguments[1];
+            if (!e.status) {
+                e.status = errorStatus;
+            }
             fieldName = null;
         }
         // client error 
@@ -50,13 +60,16 @@ function ApiError(errorMessage, fieldName, errorStatus) {
     // Server Error
     if (!isClientError) {
         // TODO - Reformat stack to remove the first lines
-        e.status    = errorStatus || 500;
+        if (!e.status)
+            e.status    = errorStatus || 500;
+            
         if ( typeof(statusCodes[e.status]) != 'undefined' ) {
             e.error = statusCodes[e.status];
         } else {
             console.warn('[ ApiValidator ] statusCode `'+ e.status +'` not matching any definition in `'+_( getPath('gina').core + '/status.codes')+'`\nPlease contact the Gina dev team to add one if required');
         }
-        e.message   = errorMessage;
+        if (!e.message)
+            e.message   = errorMessage;
         
         return e;
     }
