@@ -3,10 +3,14 @@ var merge = require('../src/main');// Not needed if the framework installed
 var a = null;
 var b = null;
 var c = null;
+var d = null;
+var e = null;
 var setVariable = function () {
     a = [];
     b = ['apple', 'orange', 'mango'];
     c = ['green', 'yellow'];
+    d = [2021];
+    e = [2021];
 };
 
 setVariable();
@@ -21,6 +25,8 @@ setVariable();
 var BtoAwithoutOverride = merge(b, a);
 setVariable();
 var BtoCwithoutOverride = merge(b, c);
+setVariable();
+var DtoEwithoutOverride = merge(d, e);
 
 exports['Merge : A<-B with override'] = function(test) {
     var res = ['apple', 'orange', 'mango'];

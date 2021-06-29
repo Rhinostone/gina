@@ -1,5 +1,6 @@
 var reporter = require('nodeunit').reporters.default;
 var merge = require('../src/main');// Not needed if the framework installed
+var helpers = require('../../../helpers');
 
 var a = null;
 var b = null;
