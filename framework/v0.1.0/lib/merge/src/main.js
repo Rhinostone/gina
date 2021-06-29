@@ -408,9 +408,15 @@ function Merge() {
                             !override
                             && newTarget.indexOf(options[a]) > -1 
                             && typeof(options[a]) == 'number'
+                            // ok but not if @ same position
+                            //&& options[a] !== newTarget[a]
                         ) {
-                            newTarget.push(options[a]);
-                            break;
+                            if (options[a] !== newTarget[a]) {
+                                newTarget.push(options[a]);
+                                continue
+                            }
+                            
+                            //break;
                         }
                             
                         
@@ -426,7 +432,7 @@ function Merge() {
                                 newTarget[a] = options[a]
                             else
                                newTarget[a] = target[a]
-                        } else if (newTarget.indexOf(options[a]) == -1 && typeof(options[a]) == 'string') {
+                        } else if (newTarget.indexOf(options[a]) == -1 /**&& typeof(options[a]) == 'string'*/) {
                             newTarget.push(options[a]);
                         }
                         

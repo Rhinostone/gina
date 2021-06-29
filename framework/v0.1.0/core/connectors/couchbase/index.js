@@ -388,7 +388,7 @@ function Couchbase(conn, infos) {
                     if (GINA_ENV_IS_DEV) {
                         //var statement = (sdkVersion <= 2) ? query.options.statement : query;
                         console.debug('[ ' + trigger +' ] '+statement);
-                        console.debug('[ ' + trigger +' ] options: '+ JSON.stringify(queryOptions, null, 2));
+                        //console.debug('[ ' + trigger +' ] options: '+ JSON.stringify(queryOptions, null, 2));
                     }
                     
                     
