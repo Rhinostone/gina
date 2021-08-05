@@ -77,9 +77,13 @@ function Restart(opt, cmd) {
                         error = err.toString();
                         console.error(error);
                         //opt.notStopped.push(bundle + '@' + self.projectName);
-                        end(opt, cmd, isBulkRestart, bundleIndex, true)
+                        setTimeout(() => {
+                            end(opt, cmd, isBulkRestart, bundleIndex, true)
+                        }, 500);
                     } else {
-                        end(opt, cmd, isBulkRestart, bundleIndex)
+                        setTimeout(() => {
+                            end(opt, cmd, isBulkRestart, bundleIndex)
+                        }, 500);
                     }
 
                 })
