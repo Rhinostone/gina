@@ -4384,6 +4384,142 @@ function DateFormatHelper() {
         }
         return days;
     }
+    
+    
+    /**
+     * getQuarter
+     * Get quarter number
+     * To test : https://planetcalc.com/1252/
+     * Based on fiscal year- See.: https://en.wikipedia.org/wiki/Fiscal_year
+     * 
+     * TODO - Complete fiscalCodes
+     * 
+     * @param {object} [date] if not defined, will take today's value
+     * @param {string} [code] - us|eu
+     * 
+     * @return {number} quarterNumber - 1 to 4
+     */
+    var fiscalCodes = ['us', 'eu', 'corporate'];
+    var getQuarter = function(date, code) {
+        if (
+            arguments.length == 1 
+            && typeof(arguments[0]) == 'string'
+        ) {
+            if ( fiscalCodes.indexOf(arguments[0].toLowerCase()) < 0 ) {
+                throw new Error('Quarter '+ arguments[0] +' code not supported !');
+            }
+            date = new Date();
+            code = arguments[0]
+        }
+        if ( typeof(date) == 'undefined' ) {
+            date = new Date();
+        }
+        if ( typeof(code) == 'undefined') {
+            code = 'corporate';
+        }
+        
+        code = code.toLowerCase();
+        var q = [1,2,3,4]; // EU & corporates by default
+        switch (code) {
+            case 'us':
+                q = [4,1,2,3];
+                break;
+            
+            case 'corportate':
+            case 'eu':
+                q = [1,2,3,4]
+                break;
+            default:
+                // EU & corporates by default
+                q = [1,2,3,4];
+                break;
+        }
+        
+        return q[Math.floor(date.getMonth() / 3)];
+    }
+    
+    /**
+     * getHalfYear
+     * 
+     * Based on fiscal year- See.: https://en.wikipedia.org/wiki/Fiscal_year
+     * 
+     * @param {object} date 
+     * @param {string} code
+     * 
+     * @return halfYear number - 1 to 2
+     */
+    var getHalfYear = function(date, code) {
+        if (
+            arguments.length == 1 
+            && typeof(arguments[0]) == 'string'
+        ) {
+            if ( fiscalCodes.indexOf(arguments[0].toLowerCase()) < 0 ) {
+                throw new Error('Quarter '+ arguments[0] +' code not supported !');
+            }
+            date = new Date();
+            code = arguments[0]
+        }
+        if ( typeof(date) == 'undefined' ) {
+            date = new Date();
+        }
+        if ( typeof(code) == 'undefined') {
+            code = 'corporate';
+        }
+        
+        code = code.toLowerCase();
+        
+        return (date.getQuarter(code) <=2 ) ? 1 : 2;
+    }
+    
+    /**
+     * getWeekISO8601
+     * Get week number
+     * ISO 8601
+     * To test : https://planetcalc.com/1252/
+     * 
+     * @param {object} [date] if not defined, will take today's value
+     * 
+     * @return {number} weekNumber
+     */
+    var getWeekISO8601 = function(date) {
+        // Copy date so don't modify original
+        d = new Date(date.getFullYear(), date.getMonth(), date.getDate());    
+        // Make Sunday's day number 7
+        var dayNum = d.getDay() || 7;
+        d.setDate(d.getDate() + 4 - dayNum);
+        var yearStart = new Date(Date.parse(d.getFullYear(),0,1));
+        
+        return Math.ceil((((d - yearStart) / 86400000) + 1)/7)
+    }
+    
+    /**
+     * getWeek
+     * Get week number
+     * To test : https://planetcalc.com/1252/
+     * 
+     * @param {object} [date] if not defined, will take today's value
+     * 
+     * @return {number} weekNumber - 1 to 53
+     */
+    var getWeek = function(date, standardMethod) {
+        if ( typeof(date) == 'undefined' ) {
+            date = new Date();
+        }
+        if ( typeof(standardMethod) == 'undefined') {
+            standardMethod = 'ISO 8601';
+        }
+        
+        standardMethod = standardMethod.replace(/\s+/g, '').toLowerCase();
+        switch (standardMethod) {
+            case 'corporate':
+            case 'eu':
+            case 'iso8601':
+                return getWeekISO8601(date)
+        
+            default:
+                return getWeekISO8601(date)
+        }
+    }
 
     /**
      * Add or subtract hours
@@ -4431,6 +4567,9 @@ function DateFormatHelper() {
         countDaysTo     : countDaysTo,
         getDaysTo       : getDaysTo,
         getDaysInMonth  : getDaysInMonth,
+        getQuarter      : getQuarter,
+        getHalfYear     : getHalfYear,
+        getWeek         : getWeek,
         addHours        : addHours,
         addDays         : addDays,
         addYears        : addYears
