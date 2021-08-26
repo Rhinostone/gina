@@ -465,6 +465,9 @@ function SuperController(options) {
             }
             setResources(localTemplateConf);
             
+            if (data.page.view.file !== local.req.routing.param.file) {
+                data.page.view.file = localOptions.file = local.req.routing.param.file
+            }
             
             file = (isRenderingCustomError) ? localOptions.file : data.page.view.file;
 
