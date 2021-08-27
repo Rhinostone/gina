@@ -166,7 +166,7 @@ function Routing() {
     /**
      * Parse routing for mathcing url
      *
-     * @param {object} params - `params` is the same `request.routing` that can be retried in controller with: req.routin
+     * @param {object} params - `params` is the same `request.routing` that can be retried in controller with: req.routing
      * @param {string} url
      * @param {object} request
      * @param {object} [response] - Only used for query validation
@@ -176,6 +176,11 @@ function Routing() {
      *
      * */
     var parseRouting = async function(params, url, request, response, next) {
+        
+        // Sample debug break for specific rule
+        // if ( params.rule == 'my-specific-rule@bundle' ) {
+        //     console.debug('passed '+ params.rule);
+        // }
 
         var uRe             = params.url.split(/\//)
             , uRo           = url.split(/\//)
@@ -185,10 +190,116 @@ function Routing() {
             , score         = 0
             , foundRoute    = {}
             , i             = 0
+            , method        = request.method.toLowerCase()
         ;
         
-        //attaching routing description for this request
-        var method = request.method.toLowerCase();
+        // when requirement is not listed but still validated
+        // if ( 
+        //     typeof(params.requirements) != 'undefined' 
+        //     && method == params.method.toLowerCase()
+        //     //&& /validator\:\:/.test(JSON.stringify(params.requirements))
+        // ) {
+                        
+        //     var requiremements = Object.getOwnPropertyNames(params.requirements);
+        //     var r = 0;
+        //     // In order to filter variables
+        //     var uRoVars = uRo.join(',').match(/\:[-_a-z0-9]+/g);
+        //     // var uRoVarCount = (uRoVars) ? uRoVars.length : 0;
+        //     while ( r < requiremements.length ) {
+                
+        //         // if not listed, but still needing validation
+        //         if ( 
+        //             typeof(params.param[ requiremements[r] ]) == 'undefined' 
+        //             && /^validator\:\:/i.test(params.requirements[ requiremements[r] ])
+        //             && typeof(request[method][ requiremements[r] ])
+        //         ) {
+        //             if (uRo.length != uRe.length) {
+        //                 // r++;                     
+        //                 // continue;
+        //                 break;
+        //             }
+        //             // updating uRoVars
+        //             uRoVars = uRo.join(',').match(/\:[-_a-z0-9]+/g);
+        //             /**
+        //              * "requirements" : {
+        //              *      "email": "validator::{ isEmail: true, isString: [7] }"
+        //              *  }
+        //              * 
+        //              * e.g.: result = new Validator('routing', _data, null, {email: {isEmail: true, subject: \"Anything\"}} ).isEmail().valid;
+        //              */ 
+        //             let regex = params.requirements[ requiremements[r] ];
+        //             let _data = {}, _ruleObj = {}, _rule = {};
+                    
+        //             try {
+        //                 _ruleObj    = JSON.parse(
+        //                 regex.split(/::/).splice(1)[0]
+        //                     .replace(/([^\:\"\s+](\w+))\:/g, '"$1":') // { query: { validIf: true }} => { "query": { "validIf": true }}
+        //                     .replace(/([^\:\"\s+](\w+))\s+\:/g, '"$1":') // note the space between `validIf` & `:` { query: { validIf : true }} => { "query": { "validIf": true }}
+        //                 );                    
+        //             } catch (err) {
+        //                 throw err;
+        //             }
+                    
+        //             let key     = requiremements[r];
+        //             // validator.query case
+        //             if (typeof(_ruleObj.query) != 'undefined' && typeof(_ruleObj.query.data) != 'undefined') {
+        //                 _data = _ruleObj.query.data;
+        //                 // filter _data vs uRoVars by removing from data those not present in uRoVars
+        //                 for (let k in _data) {
+        //                     if ( uRoVars.indexOf(_data[k]) < 0 ) {
+        //                         delete _data[k]
+        //                     }
+        //                 }
+        //                 for (let p = 0, pLen = uRo.length; p < pLen; p++) {
+        //                     // :variable only
+        //                     if (!/^\:/.test(uRo[p])) continue;
+                                
+        //                     let pName = uRo[p].replace(/^\:/, '');
+        //                     if ( pName != '' && typeof(uRe[p]) != 'undefined' ) {
+        //                         _data[ pName ] = uRe[p];
+        //                         // Updating params
+        //                         if ( typeof(request.params[pName]) == 'undefined' ) {
+        //                             // Set in case it is not found
+        //                             request.params[pName] = uRe[p];
+        //                         }
+        //                     }
+        //                 }                       
+        //             }
+        //             // normal case
+        //             _data = merge(_data, request[method]);
+                    
+        //             if ( typeof(_data[key]) == 'undefined' ) {
+        //                 // init default value for unlisted variable/param
+        //                 _data[key] = null;
+        //             }
+                    
+        //             _rule[key]  = _ruleObj;                
+        //             _validator  = new Validator('routing', _data, null, _rule );
+                    
+        //             if (_ruleObj.count() == 0 ) {
+        //                 console.error('Route validation failed '+ params.rule);
+        //                 return false;
+        //             }
+                    
+        //             for (let rule in _ruleObj) {
+        //                 let _result = null;
+        //                 if (Array.isArray(_ruleObj[rule])) { // has args
+        //                     _result = await _validator[key][rule].apply(_validator[key], _ruleObj[rule]);
+        //                 } else {
+        //                     _result = await _validator[key][rule](_ruleObj[rule], request, response, next);
+        //                 }
+        //                 //let condition = _ruleObj[rule].validIf.replace(new RegExp('\\$isValid'), _result.isValid);
+        //                 // if ( eval(condition)) {
+        //                 if ( !_result.isValid ) {
+        //                     --score;
+        //                 }
+        //             }
+        //         }
+        //         r++
+        //     }
+        // }
+                
+        // attaching routing description for this request
         var paramMethod = params.method.toLowerCase();
                     
         var hasAlreadyBeenScored = false;
@@ -201,8 +312,7 @@ function Routing() {
             typeof(params.requirements) != 'undefined'
             && /get/i.test(method)
             && /delete/i.test(paramMethod)
-        ) {            
-            
+        ) {     
             if ( /get/i.test(method) && /delete/i.test(paramMethod) ) {
                 method = paramMethod;
             }
@@ -239,8 +349,7 @@ function Routing() {
                     }
                 }
                 hasAlreadyBeenScored = true;           
-            }
-            
+            }            
             
             for (let p in request[method]) {
                 if ( typeof(params.requirements[p]) != 'undefined' && uRo.indexOf(':' + p) < 0 ) {
@@ -253,14 +362,133 @@ function Routing() {
             }
         }
         
+                
+        
         
         if (!hasAlreadyBeenScored && uRe.length === uRo.length) {
+            
             for (; i < maxLen; ++i) {
+                
                 if (uRe[i] === uRo[i]) {
                     ++score;
-                } else if (score == i && hasParams(uRo[i]) && await fitsWithRequirements(uRo[i], uRe[i], params, request, response, next)) {
+                }
+                else if (score == i && hasParams(uRo[i]) && await fitsWithRequirements(uRo[i], uRe[i], params, request, response, next)) {
                     ++score;
                 }
+            }
+        }
+        // else if(!hasAlreadyBeenScored ) {            
+        // }
+        
+        if ( 
+            typeof(params.requirements) != 'undefined' 
+            && method == params.method.toLowerCase()
+            && !hasAlreadyBeenScored
+            && score >= maxLen
+        ) {
+                        
+            var requiremements = Object.getOwnPropertyNames(params.requirements);
+            var r = 0;
+            // In order to filter variables
+            var uRoVars = uRo.join(',').match(/\:[-_a-z0-9]+/g);
+            // var uRoVarCount = (uRoVars) ? uRoVars.length : 0;
+            while ( r < requiremements.length ) {
+                
+                // if not listed, but still needing validation
+                if ( 
+                    typeof(params.param[ requiremements[r] ]) == 'undefined' 
+                    && /^validator\:\:/i.test(params.requirements[ requiremements[r] ])
+                    && typeof(request[method][ requiremements[r] ])
+                ) {
+                    if (uRo.length != uRe.length) {
+                        // r++;                     
+                        // continue;
+                        break;
+                    }
+                    // updating uRoVars
+                    uRoVars = uRo.join(',').match(/\:[-_a-z0-9]+/g);
+                    /**
+                     * "requirements" : {
+                     *      "email": "validator::{ isEmail: true, isString: [7] }"
+                     *  }
+                     * 
+                     * e.g.: result = new Validator('routing', _data, null, {email: {isEmail: true, subject: \"Anything\"}} ).isEmail().valid;
+                     */ 
+                    let regex = params.requirements[ requiremements[r] ];
+                    let _data = {}, _ruleObj = {}, _rule = {};
+                    
+                    try {
+                        _ruleObj    = JSON.parse(
+                        regex.split(/::/).splice(1)[0]
+                            .replace(/([^\:\"\s+](\w+))\:/g, '"$1":') // { query: { validIf: true }} => { "query": { "validIf": true }}
+                            .replace(/([^\:\"\s+](\w+))\s+\:/g, '"$1":') // note the space between `validIf` & `:` { query: { validIf : true }} => { "query": { "validIf": true }}
+                        );                    
+                    } catch (err) {
+                        throw err;
+                    }
+                    
+                    let key     = requiremements[r];
+                    // validator.query case
+                    if (typeof(_ruleObj.query) != 'undefined' && typeof(_ruleObj.query.data) != 'undefined') {
+                        _data = _ruleObj.query.data;
+                        // filter _data vs uRoVars by removing from data those not present in uRoVars
+                        for (let k in _data) {
+                            if ( uRoVars.indexOf(_data[k]) < 0 ) {
+                                delete _data[k]
+                            }
+                        }
+                        for (let p = 0, pLen = uRo.length; p < pLen; p++) {
+                            // :variable only
+                            if (!/^\:/.test(uRo[p])) continue;
+                                
+                            let pName = uRo[p].replace(/^\:/, '');
+                            if ( pName != '' && typeof(uRe[p]) != 'undefined' ) {
+                                _data[ pName ] = uRe[p];
+                                // Updating params
+                                if ( typeof(request.params[pName]) == 'undefined' ) {
+                                    // Set in case it is not found
+                                    request.params[pName] = uRe[p];
+                                }
+                            }
+                        }                       
+                    }
+                    // normal case
+                    _data = merge(_data, request[method]);
+                    
+                    if ( typeof(_data[key]) == 'undefined' ) {
+                        // init default value for unlisted variable/param
+                        _data[key] = null;
+                    }
+                    
+                    _rule[key]  = _ruleObj;                
+                    _validator  = new Validator('routing', _data, null, _rule );
+                    
+                    if (_ruleObj.count() == 0 ) {
+                        console.error('Route validation failed '+ params.rule);
+                        //return false;
+                        --score;
+                        r++;
+                        continue;
+                    }
+                    
+                    for (let rule in _ruleObj) {
+                        let _result = null;
+                        if (Array.isArray(_ruleObj[rule])) { // has args
+                            _result = await _validator[key][rule].apply(_validator[key], _ruleObj[rule]);
+                        } else {
+                            _result = await _validator[key][rule](_ruleObj[rule], request, response, next);
+                        }
+                        // _result.catch( function onResultError(_err) {
+                        //     console.error(_err)
+                        // })
+                        //let condition = _ruleObj[rule].validIf.replace(new RegExp('\\$isValid'), _result.isValid);
+                        // if ( eval(condition)) {
+                        if ( !_result.isValid ) {
+                            --score;
+                        }
+                    }
+                }
+                r++
             }
         }
 
@@ -292,6 +520,10 @@ function Routing() {
      * @private
      * */
     var fitsWithRequirements = async function(urlVar, urlVal, params, request, response, next) {
+        // Sample debug break for specific rule
+        // if ( params.rule == 'my-specific-rule@bundle' ) {
+        //     console.debug('passed '+ params.rule);
+        // }
         //var isValid = new Validator('routing', { email: "contact@gina.io"}, null, {email: {isEmail: true}} ).isEmail().valid;
         var matched     = -1
             , _param    = urlVar.match(/\:\w+/g)
@@ -339,7 +571,7 @@ function Routing() {
             params.param.title = params.param.title.replace(regex, urlVal);
         }
 
-        if (_param.length == 1) {// fast one
+        if (_param.length == 1) { // fast one
             
             re = new RegExp( _param[0]);
             matched = (_param.indexOf(urlVar) > -1) ? _param.indexOf(urlVar) : false;
@@ -413,7 +645,7 @@ function Routing() {
                     console.error('Route validation failed '+ params.rule);
                     return false;
                 }
-                for (rule in _ruleObj) {
+                for (let rule in _ruleObj) {
                     if (Array.isArray(_ruleObj[rule])) { // has args
                         await _validator[key][rule].apply(_validator[key], _ruleObj[rule]);
                     } else {
@@ -491,7 +723,7 @@ function Routing() {
                         _rule[key[0]]  = _ruleObj;                
                         _validator  = new Validator('routing', _data, null, _rule );
                         
-                        for (rule in _ruleObj) {
+                        for (let rule in _ruleObj) {
                             if (Array.isArray(_ruleObj[rule])) { // has args
                                 _validator[key[0]][rule].apply(_validator[key[0]], _ruleObj[rule])
                             } else {
@@ -559,8 +791,15 @@ function Routing() {
         return ( /\/$/.test(matched) ? replacement.variable+ '/': replacement.variable )            
     };
     var checkRouteParams = function(route, params) {
-        
+        var variable    = null
+            , regex     = null
+            , urls      = null
+            , i         = null
+            , len       = null
+        ;
         for (var p in route.param) {
+            if ( typeof(params) != 'undefined' && typeof(params[p]) == 'undefined' ) continue;
+            
             if ( /^:/.test(route.param[p]) ) {
                 variable = route.param[p].substr(1);
                 
@@ -599,6 +838,16 @@ function Routing() {
                 }
             }
         }
+        
+        // Selecting url in case of multiple urls & optional requirmements
+        if ( urls ) {                      
+            i = 0; len = urls.length;
+            for (; i < len; ++i) {
+                if ( !/\:[-_a-z0-9]+/i.test(urls[i]) ) {
+                    route.urlIndex = i;
+                }
+            }
+        } 
         
         return route;
     }
@@ -673,6 +922,10 @@ function Routing() {
         route = checkRouteParams(route, params);
 
         if ( /\,/.test(route.url) ) {
+            if ( typeof(route.urlIndex) != 'undefined' ) {
+                urlIndex = route.urlIndex; // set by checkRouteParams(route, params)
+                delete route.urlIndex;
+            }
             urlIndex = ( typeof(urlIndex) != 'undefined' ) ? urlIndex : 0;
             route.url = route.url.split(/,/g)[urlIndex];            
         }
@@ -751,8 +1004,9 @@ function Routing() {
                                 .map(function(el){  return el.replace(/\//g, ''); }).join(', ');
             msg = '[ RoutingHelper::getRoute(rule[, bundle, method]) ] : route [ %r ] param placeholder not defined: `' + route.url + '` !\n Check your route description to compare requirements against param variables [ '+ paramList +']';
             msg = msg.replace(/\%r/, rule);
-            console.warn( new Error(msg) );
-            //return false;
+            var err = new Error(msg);
+            console.warn( err );
+            // Do not throw error nor return here !!!
         }
 
         return route

@@ -255,8 +255,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         var enctype = queryOptions.headers['Content-Type'];
         var result      = null
             , $target   = this.target
-            , id        = $target .getAttribute('id')
+            //, id        = $target.getAttribute('id')
         ;
+        id = $target.getAttribute('id')
                
         // checking url
         if (!/^http/.test(queryOptions.url) && /\@/.test(queryOptions.url) ) {
@@ -458,22 +459,44 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             var attr = options.url.split(/@/); 
             rule = attr[0];
             bundle = attr[1];
-            opt = getConfig( currentBundle, 'app' ).proxy[bundle];
+            try {
+                if (config.bundle !== bundle) { // ignore if same bundle
+                    opt = getConfig( currentBundle, 'app' ).proxy[bundle];
+                }               
+            } catch (proxyError) {
+                throw new Error('Could not retrieve `proxy` configuration for bundle `'+ bundle +'`. Please check your `/config/app.json`.\n'+proxyError.stack);
+            }
+            
             attr = null;
         } else {
             // TODO - handle else; when it is an external domain/url
             throw new Error('external url/domain not  handled at this moment, please contact us if you need support for it.')
         }
-        var route       = routing.getRoute(options.url, options.data);
+        var route       = JSON.clone(routing.getRoute(options.url, options.data));
         var env         = config.env;
         var conf        = config[bundle][env]; 
         if (!opt) {
+            if (config.bundle == bundle) {
+                var credentials = getConfig( currentBundle, 'settings' ).server.credentials;
+                options.ca = credentials.ca || null;
+                options.hostname    = conf.server.scheme +'://'+ conf.host;
+                options.port        = conf.port[conf.server.protocol][conf.server.scheme];
+                options.protocol    = conf.server.protocol;
+                options.rejectUnauthorized  = false;
+            }
             opt = {       
                 "ca"        : options.ca,
                 "hostname"  : options.hostname,        
                 "port"      : options.port,   
                 "path"      : options.path
             };
+            
+            if ( typeof(options.protocol) != 'undefined' ) {
+                opt.protocol = options.protocol
+            }
+            if ( typeof(options.rejectUnauthorized) != 'undefined' ) {
+                opt.rejectUnauthorized = options.rejectUnauthorized
+            }
         }
         
         var controllerOptions = {
@@ -524,12 +547,19 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 
         var util            = require('util');
         var promisify       = util.promisify;
-        var result = { isValid: false };
+        var result = { isValid: false }, err = false;
         await promisify(controller.query)(opt, data)
             .then(function onResult(_result) {
                 result = _result;
+            })
+            .catch(function onResultError(_err) {
+                err = _err;
             });
-            
+        if (err) {
+            //throw err;
+            console.error(err);
+            result.error = err;
+        }    
         return result;
     };
         

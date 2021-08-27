@@ -2033,7 +2033,7 @@ function SuperController(options) {
     };
 
     this.query = function(options, data, callback) {
-
+        var err = null;
         // preventing multiple call of self.query() when controller is rendering from another required controller
         if ( 
             typeof(local.options) != 'undefined'
@@ -2060,7 +2060,11 @@ function SuperController(options) {
         }
 
         if ( !options.host && !options.hostname ) {
-            self.emit('query#complete', new Error('SuperController::query() needs at least a `host IP` or a `hostname`'))
+            err = new Error('SuperController::query() needs at least a `host IP` or a `hostname`');
+            if (callback) {
+                return callback(err)
+            }
+            self.emit('query#complete', err)
         }
 
         
@@ -2192,8 +2196,9 @@ function SuperController(options) {
                                
             
         } catch(err) {
-            //throw err;
-            //throw new Error('Scheme `'+ scheme +'` not supported')
+            if (callback) {
+                return callback(err)
+            }
             self.emit('query#complete', err)
         }
            
