@@ -140,8 +140,10 @@ function SuperController(options) {
     this.setOptions = function(req, res, next, options) {
         local.options = SuperController.instance._options = options;
         local.options.renderingStack = (local.options.renderingStack) ? local.options.renderingStack : [];
+        local.options.isRenderingCustomError = (local.options.isRenderingCustomError) ? local.options.isRenderingCustomError : false;
         // Allowing `return` instead of `render`
         local.options.isReturningRaw = (local.options.isReturningRaw) ? local.options.isReturningRaw : false;
+        
 
         // N.B.: Avoid setting `page` properties as much as possible from the routing.json
         // It will be easier for the framework if set from the controller.
@@ -188,7 +190,6 @@ function SuperController(options) {
                             } else {
                                 set(str.substr(0, str.length-1), value)
                             }
-
 
                             str = 'page.'
                         }
@@ -237,8 +238,8 @@ function SuperController(options) {
                     local.options.isWithoutLayout = false;
                 }
     
-                var rule        = local.options.rule
-                    , namespace = local.options.namespace || 'default';
+                rule        = local.options.rule;
+                namespace   = local.options.namespace || 'default';
     
     
                 set('page.view.file', local.options.file);
@@ -436,13 +437,13 @@ function SuperController(options) {
         }
         
         var data            = null
-        , template          = null
-        , file              = null
-        , path              = null
-        , plugin            = null
-        , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false
-        , layoutRoot        = null
-    ;
+            , template          = null
+            , file              = null
+            , path              = null
+            , plugin            = null
+            , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false
+            , layoutRoot        = null
+        ;
         try {
             data = getData();
             
@@ -496,7 +497,12 @@ function SuperController(options) {
             //     delete data.page.data.isRenderingCustomError
             // }
 
-            if ( typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status) && typeof(data.page.data.error) != 'undefined' ) {
+            if ( 
+                !local.options.isRenderingCustomError
+                && typeof(data.page.data.status) != 'undefined' 
+                && !/^2/.test(data.page.data.status) 
+                && typeof(data.page.data.error) != 'undefined' 
+            ) {
                 var statusCode = localOptions.conf.server.coreConfiguration.statusCodes;
                 var errorObject = {
                     status: data.page.data.status,
@@ -508,7 +514,8 @@ function SuperController(options) {
                 if ( typeof(data.page.data.session) != 'undefined' ) {
                     errorObject.session = data.page.data.session;
                 }
-                self.throwError(errorObject)
+                self.throwError(errorObject);
+                return;
             }
 
             // making path thru [namespace &] file
@@ -874,6 +881,9 @@ function SuperController(options) {
                             if ( !local.res.headersSent ) {
                                 if ( local.options.isReturningRaw ) {
                                     return layout;
+                                }
+                                if ( local.options.isRenderingCustomError ) {
+                                    local.options.isRenderingCustomError = false;
                                 }
                                 local.res.end(layout);
                             }
@@ -3281,6 +3291,7 @@ function SuperController(options) {
         if (local.options.renderingStack.length > 1) {
             return false;
         }
+        local.options.isRenderingCustomError = true;
 
         //local.options.isWithoutLayout = true;
         
@@ -3357,8 +3368,12 @@ function SuperController(options) {
         // err.fallback must be a valide route object or a url string
         var fallback = null;
         var standardErrorMessage = null;
-        if ( arguments.length == 1 && typeof(res) == 'object' ) {
+        if ( arguments[0] instanceof Error || arguments.length == 1 && typeof(res) == 'object' ) {
+            
             code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
+            // if (!errorObject.status) {
+            //     errorObject.status = code;
+            // }
                 //, errorObject   = res.stack || res.message || res.error || res.fallback
             
             
@@ -3367,6 +3382,7 @@ function SuperController(options) {
             } else {
                 console.warn('[ ApiValidator ] statusCode `'+ code +'` not matching any definition in `'+_( getPath('gina').core + '/status.codes')+'`\nPlease contact the Gina dev team to add one if required');
             }
+            
             errorObject = {};
 
             if ( res instanceof Error) {
@@ -3403,7 +3419,7 @@ function SuperController(options) {
             // DELETE request methods don't normaly use a view,
             // but if we are calling it from a view, we should render the error back to the view
             if ( self.isXMLRequest() || !hasViews() && !/delete/i.test(req.method) || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
-                // faaback interception
+                // fallback interception
                 if ( fallback ) {            
                     if ( typeof(fallback) == 'string' ){ // string url: user provided
                         return self.redirect( fallback, true )
@@ -3469,7 +3485,10 @@ function SuperController(options) {
                 return;
             } else {
                 
-                console.error(req.method +' ['+ res.statusCode +'] '+ req.url);
+                
+                console.error(req.method +' ['+ errorObject.status +'] '+ req.url);
+                
+                
                  // intercept none HTML mime types
                  var url                     = unescape(local.req.url) /// avoid %20
                     , ext                   = null
@@ -3502,11 +3521,15 @@ function SuperController(options) {
                         isRenderingCustomError  : true,
                         bundle                  : bundle,
                         status                  : code || null,
-                        message                 : msg.message || msg || null,
+                        //message                 : errorObject.message || msg || null,
                         pathname                : url
                     };
                     
-                    if ( typeof(msg) == 'object' /**&& msg.count() > 0*/ ) {
+                    if ( errorObject ) {
+                        eData = merge(errorObject, eData);
+                    }
+                    
+                    if ( typeof(msg) == 'object' ) {
                         if ( typeof(msg.stack) != 'undefined' ) {
                             eData.stack = msg.stack
                         }

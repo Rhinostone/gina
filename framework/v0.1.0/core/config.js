@@ -966,9 +966,7 @@ function Config(opt) {
                     if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
                         fileContent = []
                     }             
-                    //fileContent = merge(fileContent, jsonFile);
-                    // Fixed on 2021-08-28 : it is best to merge with override because os b arrays
-                    fileContent = merge(jsonFile, fileContent, true);
+                    fileContent = merge(fileContent, jsonFile);
                 } else {
                     console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
                 }

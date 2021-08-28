@@ -2835,19 +2835,22 @@ function Server(options) {
                     
                     local.request.routing = routeObj;
                     
-                    if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
-                        nextExpressMiddleware._index        = 0;
-                        nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
-                        nextExpressMiddleware._request      = local.request;
-                        nextExpressMiddleware._response     = res;
-                        nextExpressMiddleware._next         = next;
-                        nextExpressMiddleware._nextAction   = 'route'
+                    // if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
+                    //     nextExpressMiddleware._index        = 0;
+                    //     nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
+                    //     nextExpressMiddleware._request      = local.request;
+                    //     nextExpressMiddleware._response     = res;
+                    //     nextExpressMiddleware._next         = next;
+                    //     nextExpressMiddleware._nextAction   = 'route'
                         
-                        nextExpressMiddleware()
-                    } else {
-                        router._server = self.instance;
-                        router.route(local.request, res, next, local.reqeust.routing)
-                    }
+                    //     nextExpressMiddleware()
+                    // } else {
+                        var router = local.router;
+                        if ( typeof(router._server) == 'undefined' ) {
+                            router._server = self.instance;
+                        }                        
+                        router.route(local.request, res, next, local.request.routing);
+                    // }
                     
                     return;
                 }
