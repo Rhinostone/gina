@@ -898,8 +898,29 @@ function Config(opt) {
             main = fName;
             tmp = fName.replace(/.json/, '.' + env + '.json'); // dev
 
+            
+            files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};            
+            // loading main
+            // filename = _(appPath + '/config/' + main);
+            // try {
+            //     exists = fs.existsSync(_(filename, true));
+            //     if (cacheless && exists) {
+            //         delete require.cache[require.resolve(_(filename, true))];
+            //     }
 
-            files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};
+            //     if (exists) {
+            //         files[name] = requireJSON(_(filename, true));                        
+            //     }
+
+            // } catch (_err) {
+
+            //     if (fs.existsSync(filename)) {
+            //         callback(new Error('[ ' + filename + ' ] is malformed !!'))
+            //     } else {
+            //         fileContent = undefined
+            //     }
+            // }
+            
             fileContent = files[name];
 
             // loading dev if exists
@@ -945,7 +966,9 @@ function Config(opt) {
                     if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
                         fileContent = []
                     }             
-                    fileContent = merge(fileContent, jsonFile);
+                    //fileContent = merge(fileContent, jsonFile);
+                    // Fixed on 2021-08-28 : it is best to merge with override because os b arrays
+                    fileContent = merge(jsonFile, fileContent, true);
                 } else {
                     console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
                 }

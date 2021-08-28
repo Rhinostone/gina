@@ -20,6 +20,10 @@ var console = require('./../lib/logger');
 function ContextHelper(contexts) {
 
     var self = {};
+    
+    if ( typeof(merge) == 'undefined' ) {
+        var merge  = require('./../lib/merge');
+    }
 
     /**
      * ContextHelper Constructor
