@@ -258,7 +258,7 @@ function Router(env) {
         var middleware      = params.middleware || [];
         var actionFile      = params.param.file; // matches rule name
         var namespace       = params.namespace;
-        var routeHasViews   = ( typeof(conf.content.templates) != 'undefined' ) ? true : false;
+        var routeHasViews   = routerObj.hasViews;
         var isUsingTemplate = conf.template;
         var hasSetup        = false;        
         
@@ -316,18 +316,18 @@ function Router(env) {
             //bundle          : bundle,//module
             bundlePath      : conf.bundlesPath + '/' + bundle,
             rootPath        : self.executionPath,
-            // We don't want to keep original conf untouched
-            conf            : JSON.clone(conf),
             //instance: self.serverInstance,
             template: (routeHasViews) ? conf.content.templates[templateName] : undefined,
             isUsingTemplate: local.isUsingTemplate,
             cacheless: cacheless,
-            path: params.param.path || null, // user custom path : namespace should be ignored | left blank
+            path: params.param.path || null, // user custom path : namespace should be ignored or left blank
             assets: {}
         };
 
-        
-        options = merge(options, params);
+        // Options need to be protected by a clone to allow overrides
+        options = merge(JSON.clone(options), params);
+        // We want to keep original conf untouched
+        options.conf = JSON.clone(conf);
         options.conf.content.routing[options.rule].param = params.param;
         delete options.middleware;
         delete options.param;
@@ -652,9 +652,9 @@ function Router(env) {
         }
     };
 
-    var hasViews = function() {
-        return local.routeHasViews;
-    };
+    // var hasViews = function() {
+    //     return local.routeHasViews;
+    // };
 
     init()
 };

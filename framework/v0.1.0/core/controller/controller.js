@@ -140,6 +140,8 @@ function SuperController(options) {
     this.setOptions = function(req, res, next, options) {
         local.options = SuperController.instance._options = options;
         local.options.renderingStack = (local.options.renderingStack) ? local.options.renderingStack : [];
+        // Allowing `return` instead of `render`
+        local.options.isReturningRaw = (local.options.isReturningRaw) ? local.options.isReturningRaw : false;
 
         // N.B.: Avoid setting `page` properties as much as possible from the routing.json
         // It will be easier for the framework if set from the controller.
@@ -464,9 +466,18 @@ function SuperController(options) {
                 localTemplateConf.stylesheets = new Collection(localTemplateConf.stylesheets).find({ isCommon: false}, { isCommon: true, name: 'gina' }); 
             }
             setResources(localTemplateConf);
-            
-            if (data.page.view.file !== local.req.routing.param.file) {
+            // Allowing file & ext override
+            if (
+                typeof(local.req.routing.param.file) != 'undefined'
+                && data.page.view.file !== local.req.routing.param.file
+            ) {
                 data.page.view.file = localOptions.file = local.req.routing.param.file
+            }
+            if ( 
+                typeof(local.req.routing.param.ext) != 'undefined' 
+                && data.page.view.ext !== local.req.routing.param.ext
+            ) {
+                data.page.view.ext = localOptions.template.ext = local.req.routing.param.ext
             }
             
             file = (isRenderingCustomError) ? localOptions.file : data.page.view.file;
@@ -860,8 +871,13 @@ function SuperController(options) {
                                 }
                             }                             
                             
-                            if ( !local.res.headersSent )
+                            if ( !local.res.headersSent ) {
+                                if ( local.options.isReturningRaw ) {
+                                    return layout;
+                                }
                                 local.res.end(layout);
+                            }
+                                
                                 
                             console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
                                                         
@@ -980,7 +996,13 @@ function SuperController(options) {
                         // required to close connection
                         setTimeout(function () {
                             response.end();
-                            response.headersSent = true;
+                            try {
+                                response.headersSent = true;
+                            } catch(err) {
+                                // Ignoring warning
+                                //console.warn(err);
+                            }
+                            
                             if ( next ) {
                                 next()
                             }
@@ -994,8 +1016,14 @@ function SuperController(options) {
 
                 } else { // normal case
                     response.end(JSON.stringify(jsonObj));
-                    if (!response.headersSent)
-                        response.headersSent = true;
+                    if (!response.headersSent) {
+                        try {
+                            response.headersSent = true;
+                        } catch(err) {
+                            // Ignoring warning
+                            //console.warn(err);
+                        }
+                    }
                     if ( next ) {
                         next()
                     }
@@ -1018,7 +1046,7 @@ function SuperController(options) {
         }
 
         if ( typeof(content) != "string" ) {
-            var content = content.toString();
+            content = content.toString();
         }
 
         // if (typeof(options) != "undefined" && typeof(options.charset) !="undefined") {
@@ -1031,7 +1059,12 @@ function SuperController(options) {
         if ( !local.res.headersSent ) {
             console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
             local.res.end(content);
-            local.res.headersSent = true
+            try {
+                local.res.headersSent = true
+            } catch(err) {
+                // Ignoring warning
+                //console.warn(err);
+            }
         }
     }
 
