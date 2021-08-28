@@ -1,16 +1,53 @@
 var merge = require('../src/main');// Not needed if the framework installed
 
-var a = null;
-var b = null;
-var c = null;
-var d = null;
-var e = null;
+var a   = null
+    , b = null
+    , c = null
+    , d = null
+    , e = null
+    , f = null
+    , g = null
+;
 var setVariable = function () {
     a = [];
     b = ['apple', 'orange', 'mango'];
     c = ['green', 'yellow'];
     d = [2021];
     e = [2021];
+    f = [
+        {
+            "id": "robot",
+            "name": "Gina",
+            "email": "robot@gina.io"
+        },
+        {
+            "id": "contact",
+            "name": "Gina",
+            "email": "contact@gina.io"
+        },
+        {
+            "id": "newsletter",
+            "name": "Gina",
+            "email": "newsletter@gina.io"
+        }
+    ];
+    g = [
+        {
+            "id": "robot",
+            "name": "Gina",
+            "email": "dev.freelancer@gina.io"
+        },
+        {
+            "id": "contact",
+            "name": "Gina",
+            "email": "contact@freelancer.app"
+        },
+        {
+            "id": "newsletter",
+            "name": "Gina",
+            "email": "newsletter@freelancer.app"
+        }
+    ]
 };
 
 setVariable();
@@ -27,6 +64,8 @@ setVariable();
 var BtoCwithoutOverride = merge(b, c);
 setVariable();
 var DtoEwithoutOverride = merge(d, e);
+setVariable();
+var GtoFwithoutOverride = merge(g, f);
 
 exports['Merge : A<-B with override'] = function(test) {
     var res = ['apple', 'orange', 'mango'];
@@ -81,6 +120,32 @@ exports['Merge : B<-C without override'] = function(test) {
     test.done()
 }
 
+exports['Merge : G<-F without override'] = function(test) {
+    var res = [
+        {
+            "id": "robot",
+            "name": "Gina",
+            "email": "dev.freelancer@gina.io"
+        },
+        {
+            "id": "contact",
+            "name": "Gina",
+            "email": "contact@freelancer.app"
+        },
+        {
+            "id": "newsletter",
+            "name": "Gina",
+            "email": "newsletter@freelancer.app"
+        }
+    ];
+
+    test.equal( typeof(GtoFwithoutOverride), 'object' );
+    test.equal( Array.isArray(GtoFwithoutOverride), true );
+    test.deepEqual(GtoFwithoutOverride, res);
+
+    test.done()
+}
+
 exports['Compare : A<-B with override & B<-A without override'] = function(test) {
     test.deepEqual(AtoBwithOverride, BtoAwithoutOverride);
 
@@ -91,3 +156,9 @@ exports['Compare : B<-A with override & A<-B without override'] = function(test)
 
     test.done()
 }
+
+// exports['Compare : G<-F without override'] = function(test) {
+//     test.notDeepEqual(GtoFwithoutOverride);
+
+//     test.done()
+// }

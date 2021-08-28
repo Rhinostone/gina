@@ -506,6 +506,10 @@ function Merge() {
 }
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
+    // for unit tests
+    if ( typeof(JSON.clone) == 'undefined' ) {
+        require('../../../helpers');
+    }
     // Publish as node.js module
     module.exports = Merge()
 } else if ( typeof(define) === 'function' && define.amd) {
