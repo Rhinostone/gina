@@ -211,7 +211,8 @@ function Router(env) {
                     params = merge(params, config.routing[_rule]);
                     params.rule = _rule;
                 } catch(reverseRoutingError) {
-                    serverInstance.throwError(response, 500, reverseRoutingError)
+                    serverInstance.throwError(response, 500, reverseRoutingError);
+                    return;
                 }
             }
             bundle      = local.bundle = params.bundle;
@@ -219,6 +220,7 @@ function Router(env) {
             conf        = config[bundle][env];            
         } catch (configErr) {            
             serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (configErr.stack || configErr.message) );
+            return;
         }  
         
         local.cacheless     = cacheless;
@@ -240,8 +242,11 @@ function Router(env) {
         ];        
         
         
-        if (reservedActions.indexOf(action) > -1)
+        if (reservedActions.indexOf(action) > -1) {
             serverInstance.throwError(response, 500, '[ this.'+action+' ] is reserved for the framework');
+            return;
+        }
+            
         
         // Routing object
         var routerObj = {
@@ -294,18 +299,18 @@ function Router(env) {
             filename = mainControllerFile;
         }
         controllerFile = filename;
-
         
+        /**
+         * BO routing configuration
+         * Attention: this portion of code is replicated in `form-validator.js`
+         * Any modification on this part must be reflected on `form-validator.js`
+         */
         // default param setting
         if ( !params.rule ) {
             params.rule = params.name;
         }
         var templateName = params.rule.replace('\@'+ bundle, '') || '_common';
-        
-        // inheriting from _common
-        if (conf.content.templates[templateName])
-            conf.content.templates[templateName].ginaLoader = conf.content.templates._common.ginaLoader;
-        
+             
         var options = {
             // view namespace first
             namespace       : params.param.namespace || namespace,
@@ -328,11 +333,20 @@ function Router(env) {
         options = merge(JSON.clone(options), params);
         // We want to keep original conf untouched
         options.conf = JSON.clone(conf);
+        // inheriting from _common
+        if (
+            options.template
+            && typeof(options.template.ginaLoader) == 'undefined'
+        ) {
+            options.template.ginaLoader = options.conf.content.templates._common.ginaLoader;
+        }            
         options.conf.content.routing[options.rule].param = params.param;
         delete options.middleware;
         delete options.param;
         delete options.requirements;
-
+        /**
+         * EO routing configuration
+         */
 
         try {
 
@@ -358,6 +372,7 @@ function Router(env) {
             // TODO - increase `stack-trace` from 10 (default value) to 500 or more to get the exact error --stack-trace-limit=1000
             // TODO - also check `stack-size` why not set it to at the same time => --stack-size=1024
             serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (err.stack || err.message) );
+            return;
         }
         
         
@@ -441,6 +456,7 @@ function Router(env) {
                     return controller;
                 } catch (err) {
                     serverInstance.throwError(response, 500, err );
+                    return;
                 }
             };
             
@@ -517,6 +533,7 @@ function Router(env) {
                             } else {
                                 serverInstance.throwError(response, 500, err.stack);
                             }
+                            return;
                         }
 
                     })
@@ -536,6 +553,7 @@ function Router(env) {
                     } else {
                         serverInstance.throwError(response, 500, err.stack);
                     }
+                    return;
                 }                
             }
 
@@ -545,14 +563,7 @@ function Router(env) {
             } else {
                 serverInstance.throwError(response, 500, err.stack);
             }
-
-            // var superController = new SuperController(options);
-            // superController.setOptions(request, response, next, options);
-            // if ( typeof(controller) != 'undefined' && typeof(controller[action]) == 'undefined') {
-            //     serverInstance.throwError(response, 500, (new Error('control not found: `'+ action+'`. Please, check your routing.json or the related control in your `'+controllerFile+'`.')).stack);
-            // } else {
-            //     serverInstance.throwError(response, 500, err.stack);
-            // }
+            return;
         }
 
         action = null
@@ -578,6 +589,7 @@ function Router(env) {
                 if ( !fs.existsSync( filename ) ) {
                     // no middleware found with this alias
                     serverInstance.throwError(res, 501, new Error('middleware not found '+ middleware).stack);
+                    return;
                 }
                 
                 if (local.cacheless) delete require.cache[require.resolve(_(filename, true))];
@@ -628,6 +640,7 @@ function Router(env) {
 
                 if ( !middleware[constructor] ) {
                     serverInstance.throwError(res, 501, new Error('contructor [ '+constructor+' ] not found @'+ middlewares[m]).stack);
+                    return;
                 }
 
                 if ( typeof(middleware[constructor]) != 'undefined') {

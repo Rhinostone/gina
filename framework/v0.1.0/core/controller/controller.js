@@ -289,7 +289,7 @@ function SuperController(options) {
             set('page.environment.debugPort', options.conf.server.debugPort);
             set('page.environment.pid', process.pid);
 
-            set('page.view.layout', local.options.template.layout);
+            set('page.view.layout', local.options.template.layout.replace(new RegExp(local.options.template.templates+'/'), ''));
             set('page.view.ext', ext);
             set('page.view.control', action);
             set('page.view.controller', local.options.controller.replace(options.conf.bundlesPath, ''), true);
@@ -364,16 +364,15 @@ function SuperController(options) {
         //TODO - detect when to use swig
         var dir = null;
         if (local.options.template || self.templates) {
-            dir = self.templates || local.options.template.templates;
+            dir = local.options.template.templates || self.templates;
         }
         
         var swigOptions = {
-            autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape : false,
-            //loader: swig.loaders.fs(dir),
-            cache: (local.options.cacheless) ? false : 'memory'
+            autoescape  : ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape : false,
+            cache       : (local.options.cacheless) ? false : 'memory'
         };
         if (dir) {
-            swigOptions.loader = swig.loaders.fs(dir)
+            swigOptions.loader = swig.loaders.fs(dir);
         }
         swig.setDefaults(swigOptions);
         self.engine = swig;
@@ -410,7 +409,7 @@ function SuperController(options) {
      * @return {void}
      * */
     this.render = function(userData, displayToolbar, errOptions) {
-        
+        var err = null;
         var isRenderingCustomError = (
                                     typeof(userData.isRenderingCustomError) != 'undefined'
                                     && /^true$/i.test(userData.isRenderingCustomError)
@@ -441,8 +440,7 @@ function SuperController(options) {
             , file              = null
             , path              = null
             , plugin            = null
-            , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false
-            , layoutRoot        = null
+            , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false            
         ;
         try {
             data = getData();
@@ -490,12 +488,6 @@ function SuperController(options) {
                 data.page.data = {}
             }
             
-            // if ( typeof(data.page.data.isRenderingCustomError) != 'undefined' ) {
-            //     if (/^true$/i.test(data.page.data.isRenderingCustomError))
-            //         isRenderingCustomError = true;
-                    
-            //     delete data.page.data.isRenderingCustomError
-            // }
 
             if ( 
                 !local.options.isRenderingCustomError
@@ -586,14 +578,15 @@ function SuperController(options) {
                 
                 if (err) {
                     msg = 'could not open "'+ path +'"' +
-                            '\n1) The requested file does not exists in your views/html (check your template directory). Can you find: '+path +
-                            '\n2) Check the following rule in your `'+localOptions.conf.bundlePath+'/config/routing.json` and look around `param` to make sure that nothing is wrong with your declaration: '+
+                            '\n1) The requested file does not exists in your templates/html (check your template directory). Can you find: '+path +
+                            '\n2) Check the following rule in your `'+localOptions.conf.bundlePath+'/config/routing.json` and look around `param` to make sure that nothing is wrong with your file declaration: '+
                             '\n' + options.rule +':'+ JSON.stringify(options.conf.content.routing[options.rule], null, 4) +
                             '\n3) At this point, if you still have problems trying to run this portion of code, you can contact us telling us how to reproduce the bug.' +
                             '\n\r[ stack trace ] '+ err.stack;
 
                     console.error(err);
                     self.throwError(local.res, 500, new Error(msg));
+                    return;
                 }
 
                 try {
@@ -614,11 +607,12 @@ function SuperController(options) {
                     // a way of retrieving swig compilation stack traces
                     //var stack = __stack.splice(1).toString().split(',').join('\n');
                     self.throwError(local.res, 500, new Error('template compilation exception encoutered: [ '+path+' ]\n'+(err.stack||err.message)));
+                    return;
                 }
 
                 dic['page.content'] = content;
                 
-                var layoutPath              = null
+                var layoutPath              = null                    
                     , assets                = null
                     , mapping               = null
                     , XHRData               = null
@@ -632,36 +626,66 @@ function SuperController(options) {
                     layoutPath = (isWithoutLayout) ? localOptions.template.noLayout : localOptions.template.layout;
                     if (isWithoutLayout)
                         data.page.view.layout = layoutPath;
-                } else {
-                    layoutRoot = ( typeof(localOptions.namespace) != 'undefined' && localOptions.namespace != '') ? localOptions.template.templates + '/'+ localOptions.namespace  : localOptions.template.templates;
-                    layoutPath = layoutRoot +'/'+ localOptions.file + localOptions.template.ext;    
+                } else { // without layout case
+                    
+                    // by default
+                    layoutPath = localOptions.template.layout;
+                    if ( !/^\//.test(layoutPath)) {
+                        layoutPath = localOptions.template.templates +'/'+ layoutPath;
+                    }
+                    // default layout
+                    if ( !isWithoutLayout  && !fs.existsSync(layoutPath) && layoutPath == localOptions.template.templates +'/index.html' ) {
+                        console.warn('Layout '+ local.options.template.layout +' not found, replacing with `nolayout`: '+ localOptions.template.noLayout);
+                        layoutPath = localOptions.template.noLayout
+                        isWithoutLayout = true;
+                        data.page.view.layout = layoutPath;
+                    }
+                    // user defiend layout
+                    else if (!isWithoutLayout && !fs.existsSync(layoutPath) ) {
+                        err = new ApiError(options.bundle +' SuperController exception while trying to load your layout `'+ layoutPath +'`.\nIt seems like you have defined a layout, but gina could not locate the file.\nFor more informations, check your `config/templates.json` declaration around `'+ local.options.rule.replace(/\@(.*)/g, '') +'`', 500);
+                        self.throwError(err);
+                        return;
+                    }
                 }
                 
-                fs.readFile(layoutPath, function onLoadingLayout(err, layout) {
+                // fs.readFile(layoutPath, function onLoadingLayout(err, layout) {
 
-                    if (err) {
-                        self.throwError(local.res, 500, err);
-                    } else {
+                    // if (err) {
+                    //     var moreMessage = (isWithoutLayout || !isWithoutLayout && !fs.existsSync(local.options.template.layout)) ? ' without layout': '';
+                    //     err.error = options.bundle +' SuperController error while trying to load template content `'+ layoutPath +'`'+ moreMessage +' \n' + err.message;
+                    //     self.throwError(local.res, 500, err);
+                    //     return;
+                    // } else {
                         
                         try {
-                            assets  = {assets:"${assets}"};                        
-                            //mapping = { filename: localOptions.template.layout };         
-                            mapping = { filename: layoutPath }; 
-                            layout  = layout.toString();
-                            // precompie in case of extends
-                            if ( /\{\%(\s+extends|extends)/.test(layout) ) {
-                                //swig.invalidateCache();
-                                layout = swig.compile(layout, mapping)(data);
-                            }
+                            var layout = null;
+                            assets  = {assets:"${assets}"};
+                            mapping = { filename: layoutPath };
+                            layout  = content.toString();
+                            
+                            // precompile in case of extends or to display the toolbar
+                            //if ( /\{\%(\s+extends|extends)/.test(layout) ) {
+                            // if ( 
+                            //     hasViews() 
+                            //     && localOptions.debugMode 
+                            //     && GINA_ENV_IS_DEV 
+                            //     && /\{\%(\s+extends|extends)/.test(layout)
+                            // ) {
+                            //swig.invalidateCache();
+                            // detect template layout - {{ page.view.layout }}
+                            var linkedLayoutRe = new RegExp('(\{\{|\{\{\\s)(page.view.layout)(\}\}|\\s\}\})');
+                            layout = layout.replace(linkedLayoutRe, data.page.view.layout);
+                            layout = swig.compile(layout, mapping)(data);
                         } catch(err) {
-                            err.stack = 'Exception,  bad syntax or undefined data found: start investigating in '+ mapping.filename +'\n' + err.stack;
+                            err.stack = 'Exception, bad syntax or undefined data found: start investigating in '+ mapping.filename +'\n' + err.stack;
                             self.throwError(local.res, 500, err);
                             return
                         }
                             
                             
                         
-                        isDeferModeEnabled = localOptions.template.javascriptsDeferEnabled;  
+                        isDeferModeEnabled = localOptions.template.javascriptsDeferEnabled || localOptions.conf.content.templates._common.javascriptsDeferEnabled || false;  
+                        //isDeferModeEnabled = localOptions.template.javascriptsDeferEnabled || false;
                         
                         // iframe case - without HTML TAG
                         if (!self.isXMLRequest() && !/\<html/.test(layout) ) {
@@ -743,16 +767,14 @@ function SuperController(options) {
                             }
                             
                             // adding javascripts
-                            layout.replace('{{ page.view.scripts }}', '');
-                            if ( isDeferModeEnabled ) { // placed in the HEAD                                
-                                layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                                
+                            layout.replace('{{ page.view.scripts }}', '');                            
+                            if ( isDeferModeEnabled ) { // placed in the HEAD 
                                 layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
-                                
-                            } else { // placed in the BODY
-                                layout = layout.replace(/\<\/body\>/i, '\t'+ localOptions.template.ginaLoader +'\n</body>');                                
+                            } else { // placed in the BODY                             
                                 layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
                             }
-                            
+                            // ginaLoader cannot be deferred
+                            layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                            
 
                         } else if ( hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() ) {
                             
@@ -772,7 +794,7 @@ function SuperController(options) {
                             layout += XHRData + XHRView;
 
                         } else { // production env
-
+                            /**
                             plugin = '\t'
                                 + '\n\t<script type="text/javascript">'
                                 + ' \n\t<!--'
@@ -782,6 +804,7 @@ function SuperController(options) {
 
                                 //+ '\n\t<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
                             ;
+                            */
                             
                             
                             // if ( !/page\.view\.scripts/.test(layout) ) {
@@ -792,19 +815,19 @@ function SuperController(options) {
                             
                             // adding javascripts
                             layout.replace('{{ page.view.scripts }}', '');
-                            if ( isDeferModeEnabled ) { // placed in the HEAD                                
-                                layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                                
+                            if ( isDeferModeEnabled ) { // placed in the HEAD                                                           
                                 layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
                                 
-                            } else { // placed in the BODY
-                                layout = layout.replace(/\<\/body\>/i, '\t'+ localOptions.template.ginaLoader +'\n</body>');                                
+                            } else { // placed in the BODY                               
                                 layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
                             }
+                            // ginaLoader cannot be deferred
+                            layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>'); 
 
                         }
 
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
-                        
+                        /**
                         // special case for template without layout in debug mode - dev only
                         if ( hasViews() && localOptions.debugMode && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
                             try { 
@@ -818,9 +841,22 @@ function SuperController(options) {
                             } catch (err) {
                                 filename = localOptions.template.html;
                                 filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
-                                self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)))
+                                self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)));
+                                return;
                             }
-                        }                        
+                        }  
+                        else if (hasViews() && localOptions.debugMode && GINA_ENV_IS_DEV) {
+                            try {
+                                //layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+                                layout = swig.compile(layout, mapping)(data);
+                            } catch (err) {
+                                filename = localOptions.template.html;
+                                filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
+                                self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)));
+                                return;
+                            }
+                        } 
+                        */                     
                         
 
                         if ( !local.res.headersSent ) {
@@ -840,6 +876,7 @@ function SuperController(options) {
                             }
 
                             local.res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
+                            // Last compilation before rendering
                             try {
                                 // escape special chars
                                 var blacklistRe = new RegExp('[\<\>]', 'g');
@@ -875,6 +912,7 @@ function SuperController(options) {
                                     
                                 } catch (err) {
                                     self.throwError(local.res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
+                                    return;
                                 }
                             }                             
                             
@@ -896,11 +934,12 @@ function SuperController(options) {
                         } else {
                             return;
                         }
-                    }
-                })
+                    // }
+                //}) // EO fs.readFile(layoutPath, function onLoadingLayout(err, layout) {
             })
         } catch (err) {
-            self.throwError(local.res, 500, err)
+            self.throwError(local.res, 500, err);
+            return;
         }
     }
         
@@ -1042,7 +1081,8 @@ function SuperController(options) {
                 }
             }
         } catch (err) {
-            self.throwError(response, 500, err)
+            self.throwError(response, 500, err);
+            return;
         }
 
     }
@@ -1148,7 +1188,8 @@ function SuperController(options) {
      * */
     var setResources = function(viewConf) {
         if (!viewConf) {
-            self.throwError(500, new Error('No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: gina bundle:add-view '+ options.conf.bundle +' @'+ options.conf.projectName))
+            self.throwError(500, new Error('No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: gina bundle:add-view '+ options.conf.bundle +' @'+ options.conf.projectName));
+            return;
         }
         
         var authority = ( typeof(local.req.headers['x-forwarded-proto']) != 'undefined' ) ? local.req.headers['x-forwarded-proto'] : local.options.conf.server.scheme;
@@ -1422,6 +1463,7 @@ function SuperController(options) {
                     res = local.res;
                     var stack = __stack.splice(1).toString().split(',').join('\n');
                     self.throwError(res, 500, new Error('RedirectError: @param `ignoreWebRoot` must be a boolean\n' + stack));
+                    return;
                 }
             } else {
                 // detect by default
@@ -1780,8 +1822,12 @@ function SuperController(options) {
             scheme = url.match(/^\w+\:/)[0];
             scheme = scheme.substr(0, scheme.length-1);
             
-            if ( !/^http/.test(scheme) )
+            if ( !/^http/.test(scheme) ) {
                 self.throwError(local.res, 500, new Error('[ '+ scheme +' ] Scheme not supported. Ref.: `http` or `https` only'));
+                return;
+            }
+                
+                
                 
         } else { // by default
             scheme = 'http';
@@ -1804,11 +1850,17 @@ function SuperController(options) {
         
         // extension and mime
         var filename    = url.split(/\//g).pop(); 
-        if (!filename)
+        if (!filename) {
             self.throwError(local.res, 500, new Error('Filename not found in url: `'+ url +'`'));
+            return;
+        }
+            
         
-        if ( !/\.\w+$/.test(filename) )
-                self.throwError(local.res, 500, new Error('[ '+ filename +' ] extension not found.'));
+        if ( !/\.\w+$/.test(filename) ) {
+            self.throwError(local.res, 500, new Error('[ '+ filename +' ] extension not found.'));
+            return;
+        }
+                
         
         // filename renaming
         if (opt.file)
@@ -1829,6 +1881,7 @@ function SuperController(options) {
             
         } else { // extension not supported
             self.throwError(local.res, 500, new Error('[ '+ ext +' ] Extension not supported. Ref.: gina/core mime.types'));
+            return;
         }
         
         // defining responseType
@@ -1893,6 +1946,7 @@ function SuperController(options) {
 
         } else { // extension not supported
             self.throwError(local.res, 500, new Error('[ '+ ext +' ] Extension not supported. Ref.: gina/core mime.types'));
+            return;
         }        
     }
 
@@ -2327,16 +2381,19 @@ function SuperController(options) {
 
                     try {
                         if ( data.status && !/^2/.test(data.status) && typeof(local.options.conf.server.coreConfiguration.statusCodes[data.status]) != 'undefined' ) {
-                            self.throwError(data)
+                            self.throwError(data);
+                            return;
                         } else {
-                            callback( false, data )
+                            callback( false, data );
+                            return;
                         }
                     } catch (e) {
                         var infos = local.options, controllerName = infos.controller.substr(infos.controller.lastIndexOf('/'));
                         var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
                         var exception = new Error(msg);
                         exception.status = 500;
-                        self.throwError(exception)
+                        self.throwError(exception);
+                        return;
                     }                        
 
                 } else {
@@ -2429,7 +2486,8 @@ function SuperController(options) {
                         var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
                         var exception = new Error(msg);
                         exception.status = 500;
-                        self.throwError(exception)
+                        self.throwError(exception);
+                        return;
                     }  
                 })
             }
@@ -2558,7 +2616,8 @@ function SuperController(options) {
                     error.message = 'Could not connect to [ ' + error.accessPoint + ' ].\nThe `'+port.split(/\@/)[0]+'` bundle is offline or unreachable.\n';
                 }                    
             }
-            self.throwError(error)
+            self.throwError(error);
+            return;
         });
         
         client.on('connect', () => {
@@ -2663,7 +2722,8 @@ function SuperController(options) {
                               if ( /^5/.test(data.status)  ) {
                                   return callback(data)  
                               } else {
-                                  self.throwError(data)
+                                  self.throwError(data);
+                                  return;
                               }  
                         } else {
                             // required when control is used in an halted state
@@ -2679,7 +2739,8 @@ function SuperController(options) {
                         var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
                         var exception = new Error(msg);
                         exception.status = 500;
-                        self.throwError(exception)
+                        self.throwError(exception);
+                        return;
                     }                        
                     
                 } else {
@@ -2756,7 +2817,8 @@ function SuperController(options) {
                         var msg = 'Controller Query Exception while catching back.\nBundle: '+ infos.bundle +'\nController File: /controllers'+ controllerName +'\nControl: this.'+ infos.control +'(...)\n\r' + e.stack;
                         var exception = new Error(msg);
                         exception.status = 500;
-                        self.throwError(exception)
+                        self.throwError(exception);
+                        return;
                     }                          
                 })
             }
@@ -3039,17 +3101,20 @@ function SuperController(options) {
                     formId = formId.replace(/\-/g, '.');
                     return JSON.clone(local.options.conf.content.forms).rules[formId];
                 } catch (ruleErr) {
-                    self.throwError(ruleErr)
+                    self.throwError(ruleErr);
+                    return;
                 }
             } else {
                 try {
                     return JSON.clone(local.options.conf.content.forms).rules
                 } catch ( ruleErr ) {
-                    self.throwError(ruleErr)
+                    self.throwError(ruleErr);
+                    return;
                 }                
             }
         } catch (err) {
-            self.throwError(local.res, 500, err)
+            self.throwError(local.res, 500, err);
+            return;
         }
     }
     
@@ -3093,7 +3158,8 @@ function SuperController(options) {
                 
             res.end();
         } catch(err) {
-            self.throwError(err)
+            self.throwError(err);
+            return;
         } 
     }
     
@@ -3368,7 +3434,12 @@ function SuperController(options) {
         // err.fallback must be a valide route object or a url string
         var fallback = null;
         var standardErrorMessage = null;
-        if ( arguments[0] instanceof Error || arguments.length == 1 && typeof(res) == 'object' ) {
+        if ( 
+            arguments[0] instanceof Error 
+            || arguments.length == 1 && typeof(res) == 'object'
+            || arguments[arguments.length-1] instanceof Error
+            || typeof(arguments[arguments.length-1]) == 'string' && !(arguments[0] instanceof Error) 
+        ) {
             
             code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
             // if (!errorObject.status) {
@@ -3383,11 +3454,14 @@ function SuperController(options) {
                 console.warn('[ ApiValidator ] statusCode `'+ code +'` not matching any definition in `'+_( getPath('gina').core + '/status.codes')+'`\nPlease contact the Gina dev team to add one if required');
             }
             
-            errorObject = {};
+            errorObject = {
+                status  : code,
+                error   : standardErrorMessage || res.error || res.message
+            };
 
             if ( res instanceof Error) {
-                errorObject.status   = code;
-                errorObject.error   = standardErrorMessage || res.error || res.message;
+                //errorObject.status   = code;
+                //errorObject.error    = standardErrorMessage || res.error || res.message;
                 errorObject.stack   = res.stack;
                 if (res.message && typeof(res.message) == 'string') {
                     errorObject.message = res.message;
@@ -3395,9 +3469,11 @@ function SuperController(options) {
                     console.warn('[ Controller ] Ignoring message because of the format.\n'+res.message)
                 }
                     
-            } else {
+            } else if ( typeof(arguments[arguments.length-1]) == 'string' ) {
                 // formated error
-                errorObject = JSON.clone(res)
+                errorObject.message = arguments[arguments.length-1]
+            } else if (arguments[arguments.length-1] instanceof Error) {
+                errorObject = merge(arguments[arguments.length-1], errorObject)
             }
             
             if ( typeof(res.fallback) != 'undefined' ) {
@@ -3469,7 +3545,7 @@ function SuperController(options) {
                     res.writeHead(code, "content-type", bundleConf.server.coreConfiguration.mime['json']+ '; charset='+ bundleConf.encoding);
                 }
 
-                console.error('[ BUNDLE ][ '+ bundleConf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url);
+                
                 
                 if (!errorObject) {
                     errorObject = {
@@ -3481,7 +3557,20 @@ function SuperController(options) {
                     }
                 }
                 
-                res.end(JSON.stringify(errorObject));
+                var errOutput = null, output = errorObject.toString();
+                if ( output == '[object Object]' ) {
+                    errOutput = JSON.stringify(errorObject);
+                } else {
+                    errOutput = JSON.stringify(
+                        {
+                            status  : errorObject.status,
+                            error   : output
+                        }
+                    );
+                }
+                
+                console.error('[ BUNDLE ][ '+ bundleConf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url +'\n'+ errOutput);                
+                res.end(errOutput);
                 return;
             } else {
                 
