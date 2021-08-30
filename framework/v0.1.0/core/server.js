@@ -1139,6 +1139,7 @@ function Server(options) {
         
         if ( !this._options.template ) {            
             throwError({stream: stream}, 500, 'Internal server error\n' + headers[':path'] + '\nNo template found');
+            return;
         }
         
         var header = null, isWebroot = false, pathname = null;
@@ -1205,7 +1206,8 @@ function Server(options) {
             if ( new RegExp('^'+ conf.handlersPath).test(asset.filename) ) {
                 
                 if ( !fs.existsSync(asset.filename) ) {
-                    throwError({stream: stream}, 404, 'Page not found: \n' + headers[':path']);   
+                    throwError({stream: stream}, 404, 'Page not found: \n' + headers[':path']);
+                    return;   
                     // header[':status'] = 404;
                     // //console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack|err.message|err));
                     // stream.respond(header);
@@ -1232,7 +1234,8 @@ function Server(options) {
                     } 
                     //console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack|err.message|err));
                     var msg = ( header[':status'] == 404 ) ? 'Page not found: \n' + asset.url :  'Internal server error\n' + (err.stack|err.message|err)
-                    throwError({stream: pushStream}, header[':status'], msg);   
+                    throwError({stream: pushStream}, header[':status'], msg);
+                    return;   
                     // stream.respond(header);
                     // stream.end();
                     // return;
@@ -1358,6 +1361,7 @@ function Server(options) {
             
             if (!exist) {
                 throwError(response, 404, 'Page not found: \n' + pathname, next);
+                return;
             } else {
                 
                 isFilenameDir = fs.statSync(filename).isDirectory();
@@ -1367,7 +1371,8 @@ function Server(options) {
                     request.url += 'index.html';
                     
                     if ( !fs.existsSync(filename) ) {
-                        throwError(response, 403, 'Forbidden: \n' + pathname, next);      
+                        throwError(response, 403, 'Forbidden: \n' + pathname, next);
+                        return;     
                     } else {
                         var ext = 'html';
                         if ( /http\/2/.test(protocol) ) {
@@ -1415,7 +1420,8 @@ function Server(options) {
                 
                 fs.readFile(filename, bundleConf.encoding, function onStaticFileRead(err, file) {
                     if (err) {
-                        throwError(response, 404, 'Page not found: \n' + pathname, next);                                               
+                        throwError(response, 404, 'Page not found: \n' + pathname, next);   
+                        return;                                            
                     } else if (!response.headersSent) {
                         
                         isBinary = true;
@@ -1507,6 +1513,7 @@ function Server(options) {
                                                     request.url += 'index.html';
                                                     if ( !fs.existsSync(filename) ) {
                                                         throwError(response, 403, 'Forbidden: \n' + pathname, next);
+                                                        return;
                                                     } else {
                                                         header = {
                                                             ':status': 301,
@@ -1639,7 +1646,8 @@ function Server(options) {
                             }
                                                         
                         } catch(err) {
-                            throwError(response, 500, err.stack)
+                            throwError(response, 500, err.stack);
+                            return;
                         }
                     }
                     
@@ -2023,8 +2031,8 @@ function Server(options) {
                             writeStreams[ws].on('error', function(err) {
                                 console.error('[ busboy ] [ onWriteError ]', err);
                                 throwError(response, 500, 'Internal server error\n' + err, next);
-
                                 this.close(); 
+                                return;
                             });
                             
                             writeStreams[ws].on('finish', function() {
@@ -2038,7 +2046,8 @@ function Server(options) {
                                                 req.handled = true;
                                                 if (err) {
                                                     if (!res.headersSent)
-                                                        throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                                                        throwError(response, 500, 'Internal server error\n' + err.stack, next);
+                                                        return;
                                                 } else {
                                                     handle(req, res, next, bundle, pathname, config)
                                                 }
@@ -2160,7 +2169,8 @@ function Server(options) {
                 } catch (err) {
                     msg = '[ Could complete POST ] '+ request.url +'\n'+ err.stack;
                     console.error(msg);
-                    throwError(response, 500, err, next);                    
+                    throwError(response, 500, err, next);
+                    return;
                 }
                     
 
@@ -2252,6 +2262,7 @@ function Server(options) {
                     } catch (err) {
                         var msg = '[ '+request.url+' ]\nCould not evaluate PUT.\n'+ err.stack;
                         throwError(response, 500, msg, next);
+                        return;
                     }
 
                 } else {
@@ -2301,7 +2312,8 @@ function Server(options) {
             if (!req.handled) {
                 req.handled = true;
                 if (err) {
-                    throwError(response, 500, 'Internal server error\n' + err.stack, next)
+                    throwError(response, 500, 'Internal server error\n' + err.stack, next);
+                    return;
                 } else {                                    
                     handle(req, res, next, bundle, pathname, config)                                                                       
                 }
@@ -2406,6 +2418,7 @@ function Server(options) {
         //     config.refresh(bundle, function(err, routing) {
         //         if (err) {
         //             throwError(res, 500, 'Internal server error: \n' + (err.stack||err), next)
+        //             return;
         //         } else {
         //             refreshing routing at the same time.
         //            self.routing = routing;
@@ -2422,14 +2435,16 @@ function Server(options) {
         var expressMiddlewares  = self.instance._expressMiddlewares;
         
         if (err) {
-            throwError(nextExpressMiddleware._response, 500, (err.stack|err.message|err), nextExpressMiddleware._next, nextExpressMiddleware._nextAction)
+            throwError(nextExpressMiddleware._response, 500, (err.stack|err.message|err), nextExpressMiddleware._next, nextExpressMiddleware._nextAction);
+            return;
         }
         
         expressMiddlewares[nextExpressMiddleware._index](nextExpressMiddleware._request, nextExpressMiddleware._response, function onNextMiddleware(err, request, response) {
             ++nextExpressMiddleware._index;  
             
             if (err) {
-                throwError(nextExpressMiddleware._response, 500, (err.stack||err.message||err), nextExpressMiddleware._next, nextExpressMiddleware._nextAction)
+                throwError(nextExpressMiddleware._response, 500, (err.stack||err.message||err), nextExpressMiddleware._next, nextExpressMiddleware._nextAction);
+                return;
             }
             
             if (request)
@@ -2542,10 +2557,12 @@ function Server(options) {
             if ( routing == null || routing.count() == 0 ) {
                 console.error('Malformed routing or Null value for bundle [' + bundle + '] => ' + req.url);
                 throwError(res, 500, 'Internal server error\nMalformed routing or Null value for bundle [' + bundle + '] => ' + req.url, next);
+                return;
             }
 
         } catch (err) {
-            throwError(res, 500, err.stack, next)
+            throwError(res, 500, err.stack, next);
+            return;
         }
         var isMethodAllowed = null, hostname = null;        
         out:
@@ -2680,7 +2697,8 @@ function Server(options) {
                 router.route(req, res, next, req.routing)
             }            
         } else {
-            throwError(res, 404, 'Page not found: \n' + pathname, next)
+            throwError(res, 404, 'Page not found: \n' + pathname, next);
+            return;
         }
     }
     

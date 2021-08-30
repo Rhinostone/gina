@@ -897,30 +897,8 @@ function Config(opt) {
             // handle registered config files
             main = fName;
             tmp = fName.replace(/.json/, '.' + env + '.json'); // dev
-
             
             files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};            
-            // loading main
-            // filename = _(appPath + '/config/' + main);
-            // try {
-            //     exists = fs.existsSync(_(filename, true));
-            //     if (cacheless && exists) {
-            //         delete require.cache[require.resolve(_(filename, true))];
-            //     }
-
-            //     if (exists) {
-            //         files[name] = requireJSON(_(filename, true));                        
-            //     }
-
-            // } catch (_err) {
-
-            //     if (fs.existsSync(filename)) {
-            //         callback(new Error('[ ' + filename + ' ] is malformed !!'))
-            //     } else {
-            //         fileContent = undefined
-            //     }
-            // }
-            
             fileContent = files[name];
 
             // loading dev if exists
@@ -1018,11 +996,12 @@ function Config(opt) {
 
         name = 'routing';
         routing = files[name];
+        var r = null, rLen = null;
         //Server only because of the shared mode VS the standalone mode.
         if (cacheless || typeof(reload) != 'undefined' && reload) {
                         
             //setting app param
-            var r = null, rLen = null, urls = null;
+            var urls = null;
             // bundle status
             routing['bundle-status'] = {
                 url: '/bundle-status',
@@ -1338,7 +1317,8 @@ function Config(opt) {
             } else if ( typeof(files['statics']) != 'undefined' ) {
                 var defaultAliases = requireJSON(staticsPath);
 
-                files['statics'] = merge(files['statics'], defaultAliases)
+                //files['statics'] = merge(files['statics'], defaultAliases)
+                files['statics'] = merge(defaultAliases, files['statics'], true)
             }
            
             
@@ -1419,9 +1399,8 @@ function Config(opt) {
                 files['templates'] = JSON.clone(defaultViews)
             }
             
+            
             if ( typeof(files['templates']) != 'undefined' ) {
-                
-                //var defaultViews = requireJSON(viewsPath);
                 
                 var css     = {
                         name    : '',
@@ -1442,7 +1421,7 @@ function Config(opt) {
                 var excluded            = {}
                     , excludedType      = null
                     , excludedStr       = null
-                    , excludedName      = null
+                    , excludedUrl       = null
                     , currentCollection = null
                     , noneDefaultJs     = null
                     , noneDefaultCss    = null
@@ -1452,14 +1431,19 @@ function Config(opt) {
                     , tLen  = null
                     , tTmp  = null
                     , url   = null
-                ;                   
-                for (var section in files['templates']) {
-                                                                                                      
-                    // updating javascripts & css order
-                    noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.clone(files['templates'][section].javascripts) : [];                    
-                    noneDefaultCss  = (files['templates'][section].stylesheets) ? JSON.clone(files['templates'][section].stylesheets) : [];                                       
+                ;  
+                
+                // formating _common def for javascripts & stylesheets
+                for (let section in files['templates']) {
+                    if (!/^_common$/.test(section) ) continue;
                     
-                    if ( Array.isArray(noneDefaultJs) && noneDefaultJs.length > 0 && typeof(noneDefaultJs[0].url) == 'undefined' ) {
+                    // inheriting from defaultViews - gina _common
+                    files['templates'][section] = merge(files['templates'][section], defaultViews[section]);
+                    // updating javascripts & css order
+                    noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.clone(files['templates'][section].javascripts) : [];                   
+                    noneDefaultCss  = (files['templates'][section].stylesheets) ? JSON.clone(files['templates'][section].stylesheets) : [];
+                    
+                    if ( Array.isArray(noneDefaultJs) && noneDefaultJs.length > 0 /**&& typeof(noneDefaultJs[0].url) == 'undefined'*/ ) {
                         tTmp    = JSON.clone(noneDefaultJs);
                         t       = 0;
                         tLen    = tTmp.length;
@@ -1468,47 +1452,133 @@ function Config(opt) {
                             noneDefaultJs[t]        = JSON.clone(js);
                             //url                     = ( !reWebroot.test(tTmp[t]) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(tTmp[t]) ) ? tTmp[t].substr(1) : tTmp[t] ) : tTmp[t];                               
                             url                     = tTmp[t];
-                            noneDefaultJs[t].url    = url;                                
-                            noneDefaultJs[t].name   = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');    
-                            noneDefaultJs[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;                        
-                        }                
-                    }
-                    // if ( section == 'document-send') {
-                    //     console.debug('document-send debug');
-                    // }
-                    if (!files['templates'][section].javascriptsExcluded) {
-                        if ( /^_common$/.test(section) ) {
-                            noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);    
-                        } else {
-                            // filter when a common script url is redeclared in the current section : isCommon `true` -> `false`
-                            if ( noneDefaultJs.length > 0 )
-                                noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
-                            else
-                            noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs);
+                            if ( typeof(url) == 'string') {
+                                noneDefaultJs[t].url    = url;                                
+                                noneDefaultJs[t].name   = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');    
+                                noneDefaultJs[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;
+                            } else {
+                                noneDefaultJs[t] = merge(url, noneDefaultJs[t]);
+                            }  
                         }
-                    } else if ( 
-                        typeof(files['templates'][section].javascriptsExcluded) != 'undefined' 
-                        && files['templates'][section].javascriptsExcluded == '*' 
-                    ) {
-                        noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);  
                     }
                     
-                    if (!files['templates'][section].stylesheetsExcluded) {
-                        if ( /^_common$/.test(section) ) {
-                            noneDefaultCss = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);    
-                        } else {
-                            // filter when a common script url is redeclared in the current section : isCommon `true` -> `false`
-                            if ( noneDefaultCss.length > 0 )
-                                noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss, true);
-                            else
-                                noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss);
-                        }
-                    } else if ( 
-                        typeof(files['templates'][section].stylesheetsExcluded) != 'undefined' 
-                        && files['templates'][section].stylesheetsExcluded == '*' 
-                    ) {
-                        noneDefaultCss = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);  
+                    if ( Array.isArray(noneDefaultCss) && noneDefaultCss.length > 0 /**&& typeof(noneDefaultCss[0].url) == 'undefined'*/ ) {
+                        tTmp    = JSON.clone(noneDefaultCss);
+                        t       = 0;
+                        tLen    = tTmp.length;
+                        noneDefaultCss = [];
+                        for (; t < tLen; ++t) {
+                            noneDefaultCss[t]           = JSON.clone(css);                            
+                            url                         = tTmp[t];
+                            if ( typeof(url) == 'string') {
+                                noneDefaultCss[t].url       = url;                                
+                                noneDefaultCss[t].name      = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
+                                noneDefaultCss[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;
+                            } else {
+                                noneDefaultCss[t] = merge(url, noneDefaultCss[t]);
+                            } 
+                        }                
                     }
+                    
+                    files['templates'][section].javascripts = JSON.clone(noneDefaultJs);
+                    files['templates'][section].stylesheets = JSON.clone(noneDefaultCss);
+                }
+                // process other sections
+                for (let section in files['templates']) {
+                    // skip _common section
+                    if (/^_common$/.test(section) ) continue;
+                                                                                                      
+                    // updating javascripts & css order
+                    noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.clone(files['templates'][section].javascripts) : [];                   
+                    noneDefaultCss  = (files['templates'][section].stylesheets) ? JSON.clone(files['templates'][section].stylesheets) : [];
+                    
+                    if ( Array.isArray(noneDefaultJs) && noneDefaultJs.length > 0 /**&& typeof(noneDefaultJs[0].url) == 'undefined'*/ ) {
+                        tTmp    = JSON.clone(noneDefaultJs);
+                        t       = 0;
+                        tLen    = tTmp.length;
+                        noneDefaultJs = [];
+                        for (; t < tLen; ++t) {
+                            noneDefaultJs[t]        = JSON.clone(js);
+                            //url                     = ( !reWebroot.test(tTmp[t]) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(tTmp[t]) ) ? tTmp[t].substr(1) : tTmp[t] ) : tTmp[t];                               
+                            url                     = tTmp[t];
+                            if ( typeof(url) == 'string') {
+                                noneDefaultJs[t].url    = url;                                
+                                noneDefaultJs[t].name   = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');    
+                                noneDefaultJs[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;
+                            } else {
+                                noneDefaultJs[t] = merge(url, noneDefaultJs[t]);
+                            }
+                        }
+                    }
+                    
+                    if ( Array.isArray(noneDefaultCss) && noneDefaultCss.length > 0 /**&& typeof(noneDefaultCss[0].url) == 'undefined'*/ ) {
+                        tTmp    = JSON.clone(noneDefaultCss);
+                        t       = 0;
+                        tLen    = tTmp.length;
+                        noneDefaultCss = [];
+                        for (; t < tLen; ++t) {
+                            noneDefaultCss[t]           = JSON.clone(css);                            
+                            url                         = tTmp[t];
+                            if ( typeof(url) == 'string') {
+                                noneDefaultCss[t].url       = url;                                
+                                noneDefaultCss[t].name      = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
+                                noneDefaultCss[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;
+                            } else {
+                                noneDefaultCss[t] = merge(url, noneDefaultCss[t]);
+                            } 
+                        }                
+                    } 
+                                        
+                    
+                    // adding gina def
+                    noneDefaultJs   = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);
+                    if ( section == 'dashboard') {
+                        console.debug('paused @dashoard');
+                    }
+                    if (!files['templates'][section].javascriptsExcluded) {
+                        // if ( /^_common$/.test(section) ) {
+                        //     noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);    
+                        // } else {
+                            // filter when a common script url is redeclared in the current section : isCommon `true` -> `false`
+                            // if ( noneDefaultJs.length > 0 )
+                                // merging with common javascript def
+                                noneDefaultJs = merge.setKeyComparison('url')(noneDefaultJs, files['templates']._common.javascripts);
+                            // else
+                            //     noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs);
+                        // }
+                    }
+                    // if ( 
+                    //     typeof(files['templates'][section].javascriptsExcluded) != 'undefined' 
+                    //     && files['templates'][section].javascriptsExcluded == '*' 
+                    // ) {
+                    //     // will also remmove gina definitions
+                    //     files['templates']._common.javascripts = []
+                    //     //noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);  
+                    // }
+                    
+                    
+                    // adding gina def
+                    noneDefaultCss  = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);   
+                    if (!files['templates'][section].stylesheetsExcluded) {
+                        // if ( /^_common$/.test(section) ) {
+                        //     noneDefaultCss = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);    
+                        // } else {
+                            // filter when a common script url is redeclared in the current section : isCommon `true` -> `false`
+                            // if ( noneDefaultCss.length > 0 )
+                                // merging with common stylesheets def
+                                noneDefaultCss = merge.setKeyComparison('url')(noneDefaultCss, files['templates']._common.stylesheets);
+                            // else
+                            //     noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss);
+                        // }
+                    }
+                    // if ( 
+                    //     typeof(files['templates'][section].stylesheetsExcluded) != 'undefined' 
+                    //     && files['templates'][section].stylesheetsExcluded == '*' 
+                    // ) {
+                    //     //noneDefaultCss = []
+                    //     files['templates']._common.stylesheets = []
+                    //     //noneDefaultCss = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);  
+                    // } // else is handles at the bottom of the current loop
                     
                     
                     // force js rechecking on `name` & `url`
@@ -1527,28 +1597,6 @@ function Config(opt) {
                         noneDefaultJs[t].type  = ( typeof(noneDefaultJs[t].type) != 'undefined' ) ? noneDefaultJs[t].type : js.type;
                         noneDefaultJs[t].isCommon  = ( typeof(noneDefaultJs[t].isCommon) != 'undefined' ) ? noneDefaultJs[t].isCommon : ( ( /^_common$/.test(section) ) ? true : false );                        
                     }
-                    
-                    
-                    if ( Array.isArray(noneDefaultCss) && noneDefaultCss.length > 0 && typeof(noneDefaultCss[0].url) == 'undefined' ) {
-                        tTmp    = JSON.clone(noneDefaultCss);
-                        t       = 0;
-                        tLen    = tTmp.length;
-                        noneDefaultCss = [];
-                        for (; t < tLen; ++t) {
-                            noneDefaultCss[t]           = JSON.clone(css);                            
-                            url                         = tTmp[t];
-                            noneDefaultCss[t].url       = url;                                
-                            noneDefaultCss[t].name      = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
-                            noneDefaultCss[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;
-                        }                
-                    }
-                    
-                    if ( /^_common$/.test(section) ) {
-                        noneDefaultCss = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);
-                    } else {
-                        noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss);
-                    }
-                    
                     // force css rechecking on `name` & `url`
                     t = 0;
                     tLen = noneDefaultCss.length;
@@ -1566,64 +1614,94 @@ function Config(opt) {
                         noneDefaultCss[t].isCommon  = ( typeof(noneDefaultCss[t].isCommon) != 'undefined' ) ? noneDefaultCss[t].isCommon : ( ( /^_common$/.test(section) ) ? true : false );
                     }
                     
+                    
+                    
+                                      
+                    
+                    //noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss);
+                    
+                    
                     files['templates'][section].javascripts = noneDefaultJs;
                     files['templates'][section].stylesheets = noneDefaultCss;
                     
-                    
-                    
-                    if (!/^_common/.test(section)) {
-                        
-                        excludedType = [];
-                        // merging other common properties
-                        for (var ref in files['templates']._common) {
-                            if ( /^(javascripts|stylesheets)$/.test(ref) ) {
-                                excludedType.push(ref);
-                                continue;
-                            }
-                            
-                            if ( typeof(files['templates'][section][ref]) == 'undefined' )
-                                files['templates'][section][ref] = files['templates']._common[ref];
-                        }
-                        
-                        // removes common definitions from the common definitions of the current section
-                        r = 0;
-                        rLen = excludedType.length;
-                        if (rLen > 0) {
-                            for (; r < rLen; ++r) {                                
-                                excludedStr = excludedType[r] +'Excluded';
-                                
-                                if ( typeof(files['templates'][section][excludedStr]) != 'undefined' ) {
-                                    currentCollection = new Collection(files['templates'][section][excludedType[r]]);
-                                    excluded = ( /string/.test( typeof(files['templates'][section][excludedStr]) ) ) ? files['templates'][section][excludedStr].split(/(\,|\;)/g) : files['templates'][section][excludedStr];
-                                    
-                                    t = 0; tLen = excluded.length;
-                                    for (; t < tLen; ++t) {
-                                        excludedName = excluded[t].trim();
-                                        if (/^(\*|all)$/.test(excludedName) ) {
-                                            currentCollection = currentCollection
-                                                                    .update({ name: 'gina'}, { isCommon: false })
-                                                                    .delete({ 'isCommon': true });
-                                            break;
-                                        } else {
-                                            currentCollection = currentCollection
-                                                                    .notIn({ name: 'gina'})
-                                                                    .delete({ 'name': excludedName });
-                                        }
-                                    }       
-                                    files['templates'][section][excludedType[r]] = currentCollection.toRaw();                  
-                                }
-                            }
-                        }
-
-                        
-                    } else {
-                        for (var ref in defaultViews._common) {
-                            if ( /^(javascripts|stylesheets)$/.test(ref) ) continue;
-                            
-                            if ( typeof(files['templates'][section][ref]) == 'undefined' || !files['templates'][section][ref])
-                                files['templates'][section][ref] = defaultViews._common[ref];
+                                            
+                    excludedType = [];
+                    for (let ref in files['templates'][section]) {
+                        if ( /^(javascriptsExcluded|stylesheetsExcluded)$/.test(ref) ) {                                
+                            excludedType.push(ref);
                         }
                     }
+                    // merging other common properties
+                    for (let ref in files['templates']._common) {
+                        if ( /^(javascripts|stylesheets)$/.test(ref) ) { 
+                            continue;
+                        }
+                        
+                        if ( typeof(files['templates'][section][ref]) == 'undefined' ) {
+                            files['templates'][section][ref] = files['templates']._common[ref];
+                        } else {
+                            files['templates'][section][ref] = merge(files['templates'][section][ref], files['templates']._common[ref]);
+                        }                             
+                    }
+                    
+                    // removes common definitions from the common definitions of the current section
+                    r = 0;
+                    rLen = excludedType.length;
+                    if (rLen > 0) {
+                        for (; r < rLen; ++r) {                                
+                            //excludedStr = excludedType[r] +'Excluded';
+                            excludedStr = excludedType[r];
+                            if ( typeof(files['templates'][section][excludedStr]) != 'undefined' ) {
+                                
+                                let allFilesCollection = new Collection(files['templates'][section][excludedStr.replace(/Excluded$/, '')]);
+                                let currentCollectionRaw = allFilesCollection.toRaw();
+                                // must be `url` list
+                                excluded = ( /string/.test( typeof(files['templates'][section][excludedStr]) ) && !/^(\*|all)$/i.test(files['templates'][section][excludedStr]) ) ? files['templates'][section][excludedStr].split(/(\,|\;)/g) : files['templates'][section][excludedStr];
+                                if (!Array.isArray(excluded) && !/^(\*|all)$/i.test(files['templates'][section][excludedStr])) {
+                                    // '/path/to.file' -> ['/path/to.file']
+                                    excluded = [excluded];
+                                }
+                                
+                                if (/^(\*|all)$/i.test(files['templates'][section][excludedStr])) {
+                                    //currentCollection = allFilesCollection.notIn({ name: 'gina'}, 'name').toRaw();  
+                                    currentCollection = allFilesCollection.toRaw();  
+                                    
+                                    excluded = [];
+                                    for (let e = 0, eLen = currentCollectionRaw.length; e < eLen; e++) {
+                                        if (currentCollectionRaw[e].name == 'gina' ) continue;
+                                        excluded.push(currentCollectionRaw[e].url);
+                                    }
+                                } else {
+                                    // must be `url` list
+                                    currentCollection = new Collection(excluded);
+                                }
+                                
+                                
+                                
+                                t = 0; tLen = excluded.length;
+                                for (; t < tLen; ++t) {
+                                    excludedUrl = excluded[t].trim();
+                                    // if (/^(\*|all)$/.test(excludedUrl) ) {
+                                    //     currentCollection = allFilesCollection
+                                    //                             .update({ name: 'gina'}, { isCommon: false })
+                                    //                             .delete({ 'isCommon': true });
+                                    //     break;
+                                    // } else {
+                                        
+                                    //     currentCollection = currentCollection
+                                    //                             //.notIn({ name: 'gina'}, 'name')
+                                    //                             .delete({ 'url': excludedUrl }, 'url');
+                                    // }
+                                    for (let e = 0, eLen = currentCollectionRaw.length; e < eLen; e++) {
+                                        if (currentCollectionRaw[e].url != excludedUrl[t]) continue;
+                                        currentCollection = currentCollection.delete({ 'url': excludedUrl }, 'url');
+                                    }
+                                }       
+                                files['templates'][section][excludedStr.replace(/Excluded$/, '')] = currentCollection.toRaw();                  
+                            }
+                        }
+                    }                        
+                     
                 } // EO for section                
                 
             }
@@ -1739,14 +1817,12 @@ function Config(opt) {
                 if (cacheless) {
                     delete require.cache[require.resolve(_(loaderSrcPath, true))]
                 }
-                
-                if (files['templates']._common.javascriptsDeferEnabled) {
-                    scriptTag = '\n\t\t<script defer type="text/javascript">'
-                } else {
-                    scriptTag = '\n\t\t<script type="text/javascript">'
-                }
-                
-                
+                // Attention - ginaLoader cannot be deferred !
+                // if (files['templates']._common.javascriptsDeferEnabled) {
+                //     scriptTag = '\n\t\t<script defer type="text/javascript">'
+                // } else {
+                scriptTag = '\n\t\t<script type="text/javascript">'
+                // }                
                 scriptTag = scriptTag 
                     + '\n\t\t<!--'
                     + '\n\t\t' + fs.readFileSync( _(loaderSrcPath, true)).toString()

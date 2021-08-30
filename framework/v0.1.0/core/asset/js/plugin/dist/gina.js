@@ -8433,8 +8433,30 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             }
         }
         
+        /**
+         * BO routing configuration
+         * Attention: this portion of code is from `router.js`
+         * Any modification on this part must be reflected on `router.js`
+         */
+        // default param setting
+         var params = {
+            method              : route.method,
+            requirements        : route.requirements,
+            namespace           : route.namespace || undefined,
+            url                 : unescape(route.url), /// avoid %20
+            rule                : rule + '@' + bundle,
+            param               : JSON.clone(route.param),
+            middleware          : JSON.clone(route.middleware),
+            bundle              : route.bundle,
+            isXMLRequest        : request.isXMLRequest,
+            isWithCredentials   : request.isWithCredentials
+        };
+        
+        var templateName = params.rule.replace('\@'+ bundle, '') || '_common';
+        var routeHasViews = ( typeof(conf.content.templates) != 'undefined' ) ? true : false;
         var controllerOptions = {
             // view namespace first
+            template: (routeHasViews) ? conf.content.templates[templateName] : undefined,
             // namespace       : params.param.namespace || namespace,
             //control         : route.param.control,
             // controller      : controllerFile,
@@ -8452,20 +8474,29 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             //path: params.param.path || null, // user custom path : namespace should be ignored | left blank
             //assets: {}
         };
-        var params = {
-            method              : route.method,
-            requirements        : route.requirements,
-            namespace           : route.namespace || undefined,
-            url                 : unescape(route.url), /// avoid %20
-            rule                : rule + '@' + bundle,
-            param               : JSON.clone(route.param),
-            middleware          : JSON.clone(route.middleware),
-            bundle              : route.bundle,
-            isXMLRequest        : request.isXMLRequest,
-            isWithCredentials   : request.isWithCredentials
-        };
-        controllerOptions = merge(controllerOptions, params);
+        
+        controllerOptions = merge(controllerOptions, params);        
+        
+        // BO - Template outside of namespace fix added on 2021-08-19
+        // We want to keep original conf untouched
+        controllerOptions.conf = JSON.clone(conf);
         controllerOptions.conf.content.routing[controllerOptions.rule].param = params.param;
+        // inheriting from _common
+        if (
+            controllerOptions.template
+            && typeof(controllerOptions.template.ginaLoader) == 'undefined'
+        ) {
+            controllerOptions.template.ginaLoader = controllerOptions.conf.content.templates._common.ginaLoader;
+        }            
+        controllerOptions.conf.content.routing[controllerOptions.rule].param = params.param;
+        delete controllerOptions.middleware;
+        delete controllerOptions.param;
+        delete controllerOptions.requirements;
+        // EO - Template outside of namespace
+        /**
+         * EO routing configuration
+         */
+        
         var Controller = require(_(GINA_FRAMEWORK_DIR +'/core/controller/controller.js'), true);
         var controller = new Controller(controllerOptions);
         controller.name = route.param.control;            
@@ -9884,7 +9915,7 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
             
-            if ( typeof(this.isPopinContext) != 'undefined' && /true/i.test(this.isPopinContext) ) {
+            if ( $target && typeof(this.isPopinContext) != 'undefined' && /true/i.test(this.isPopinContext) ) {
                 $target.isPopinContext = this.isPopinContext;
             }
             

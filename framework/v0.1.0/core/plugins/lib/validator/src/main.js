@@ -363,7 +363,7 @@ function ValidatorPlugin(rules, data, formId) {
                 }
             }
             
-            if ( typeof(this.isPopinContext) != 'undefined' && /true/i.test(this.isPopinContext) ) {
+            if ( $target && typeof(this.isPopinContext) != 'undefined' && /true/i.test(this.isPopinContext) ) {
                 $target.isPopinContext = this.isPopinContext;
             }
             

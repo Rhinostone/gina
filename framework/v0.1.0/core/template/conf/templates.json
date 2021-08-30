@@ -17,19 +17,21 @@
     },
     "stylesheets": [
       {
-        "name"    : "gina",
-        "media"   : "all",
-        "rel"     : "stylesheet",
-        "type"    : "text/css",
-        "url"     : "/css/vendor/gina/gina.min.css"
+        "name"      : "gina",
+        "media"     : "all",
+        "rel"       : "stylesheet",
+        "type"      : "text/css",
+        "url"       : "/css/vendor/gina/gina.min.css",
+        "isCommon"  : true
       }
     ],
     "javascriptsDeferEnabled": true, // will place scripts in defer mode in the head by default. If false, will place in the footer
     "javascripts": [
       {
-        "name"    : "gina",
-        "type"   : "text/javascript",
-        "url"     : "/js/vendor/gina/gina.min.js"
+        "name"      : "gina",
+        "type"      : "text/javascript",
+        "url"       : "/js/vendor/gina/gina.min.js",
+        "isCommon"  : true
       }
     ]
   }

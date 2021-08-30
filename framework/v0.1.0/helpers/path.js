@@ -55,10 +55,12 @@ function PathHelper() {
         if ( typeof(force) == undefined) {
             force = _this.force = false
         }
+        // Attention : _('/my/path/../folder/file.ext') will output -> /my/folder/file.ext
         path = Path.normalize(path);
         var isConstructor = false;
-        if (this instanceof _ // <- You could use arguments.callee instead of _ here,
-                // except in in EcmaScript 5 strict mode.
+        if (
+            this instanceof _ // <- You could use arguments.callee instead of _ here,
+            // except in in EcmaScript 5 strict mode.
             && !this.previouslyConstructedBy_) {
             isConstructor = true;
             this.previouslyConstructedBy_ = true
@@ -85,7 +87,7 @@ function PathHelper() {
                     }
                 } else {
                     //console.debug("linux style");
-                    //we don't want empty spaces..
+                    //we don't want empty spaces
                     this.value = path.replace(/\\/g, "/");
                     var p = this.value;
                     //console.debug("path ", p);
@@ -538,7 +540,7 @@ function PathHelper() {
     var cp = function(source, destination, excluded) {
 
         /**
-         * BO Targeting folder content..
+         * BO Targeting folder content
          * This only matters when copy is done Folder To Folder.
          *
          * TODO - Need to br [optimized] by not having to create new path object.
@@ -566,7 +568,7 @@ function PathHelper() {
             childElementsOnly['destination'] = false
         }
         /**
-         * EO Targeting folder content..
+         * EO Targeting folder content
          * */
 
             //Define strategy.

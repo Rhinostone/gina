@@ -14,7 +14,7 @@
  * var filters = SwigFilters({
  *   options     : local.options,
  *   isProxyHost : isProxyHost,
- *   throwError  : self.throwError,
+ *   throwError  : self.throwError, // use ctx.throwError
  *   req         : local.req,
  *   res         : local.res 
  * });
@@ -116,8 +116,11 @@ function SwigFilters(conf) {
         
         //var ctx = SwigFilters().getConfig();
         //var ctx = self.options;
+        if (typeof(params) == 'undefined') {
+            params = {}
+        } 
         var ctx  = SwigFilters.instance._options || self.options;
-        
+                
         var config              = null
             , hostname          = null
             , wroot             = null
@@ -241,7 +244,7 @@ function SwigFilters(conf) {
                         try {
                             url = url.replace(new RegExp(':'+p+'(\\W|$)', 'g'), params[p]+'$1')
                         } catch (err) {
-                            self.throwError(ctx.res, 500, new Error('template compilation exception encoutered: [ '+ path +' ]\nsounds like you are having troubles with the following call `{{ "'+route+'" | getUrl() }}` where `'+p+'` parameter is expected according to your `routing.json`'  +'\n'+ (err.stack||err.message)));
+                            ctx.throwError(ctx.res, 500, new Error('template compilation exception encoutered: [ '+ url +' ]\nsounds like you are having troubles with the following call `{{ "'+route+'" | getUrl() }}` where `'+p+'` parameter is expected according to your `routing.json`'  +'\n'+ (err.stack||err.message)));
                         }
                     }
                 }
@@ -249,7 +252,7 @@ function SwigFilters(conf) {
                 if ( /\,/.test(url) ) {
                     url = url.split(/\,/g)[0] || null; // just taking the default one: using the first element unless it is empty.
                     if (!url) {
-                        self.throwError(ctx.res, 500, new Error('please check your `routing.json` at the defined rule `'+ rule +'` : `url` attribute cannot be empty').stack)
+                        ctx.throwError(ctx.res, 500, new Error('please check your `routing.json` at the defined rule `'+ rule +'` : `url` attribute cannot be empty').stack)
                     }
                 }
             }
