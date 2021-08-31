@@ -28,6 +28,14 @@ var statusCodes = requireJSON(__dirname + '/../../../core/status.codes');
  */
 function ApiError(errorMessage, fieldName, errorStatus) {
     var e = null;
+    
+    if ( typeof(merge) != 'function' ) {
+        merge = require('./../../../lib/merge');
+    }    
+    if ( typeof(statusCodes) == 'undefined' ) {
+        var statusCodes = requireJSON(__dirname + '/../../../core/status.codes');
+    }
+    
     if ( typeof(errorMessage) == 'object' && errorMessage instanceof Error ) {
         e = JSON.clone(errorMessage);
         errorMessage = e.message || e.stack;
