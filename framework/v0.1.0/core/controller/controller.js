@@ -638,6 +638,7 @@ function SuperController(options) {
                     , isDeferModeEnabled    = null
                     , viewInfos             = null
                     , filename              = null
+                    , isWithSwigLayout      = null
                 ;
                 
                 if ( isWithoutLayout || !isWithoutLayout && typeof(localOptions.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout) ) {
@@ -662,6 +663,7 @@ function SuperController(options) {
                     }
                     // user defiend layout
                     else if ( !isWithoutLayout && !fs.existsSync(layoutPath) ) {
+                        isWithSwigLayout = true;
                         layoutPath = localOptions.template.noLayout;
                         data.page.view.layout = layoutPath;
                     }
@@ -708,7 +710,7 @@ function SuperController(options) {
                             
                             // mappin conf
                             mapping = { filename: path };                            
-                            if (isWithoutLayout) {
+                            if (isWithoutLayout || isWithSwigLayout) {
                                 layout = tpl;                                
                             } else {
                                 // var linkedLayoutRe = new RegExp('(\{\{|\{\{\\s)(page.view.layout)(\}\}|\\s\}\})');
