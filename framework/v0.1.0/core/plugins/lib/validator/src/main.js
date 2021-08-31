@@ -2136,7 +2136,7 @@ function ValidatorPlugin(rules, data, formId) {
     var checkForRulesImports = function (rules) {
         // check if rules has imports & replace
         var rulesStr        = JSON.stringify(rules);
-        var importedRules   = rulesStr.match(/(\"@import\s+[a-z A-Z 0-9/.]+\")/g);
+        var importedRules   = rulesStr.match(/(\"@import\s+[-_a-z A-Z 0-9/.]+\")/g);
         // TODO - complete mergingRules integration
         var mergingRules     = rulesStr.match(/(\"_merging(.*))(\s+\:|\:)(.*)(\",|\")/g)
         var isMerging       = false;
@@ -2150,10 +2150,12 @@ function ValidatorPlugin(rules, data, formId) {
                 // [""@import client/form", ""@import project26/edit demo/edit"]
                 //console.debug('ruleArr -> ', ruleArr, importedRules[r]);
                 for (let i = 0, iLen = ruleArr.length; i<iLen; ++i) {
-                    tmpRule = ruleArr[i].replace(/\//g, '.');
+                    tmpRule = ruleArr[i].replace(/\//g, '.').replace(/\-/g, '.');
                     if ( typeof(instance.rules[ tmpRule ]) != 'undefined' ) {
-                        rule = merge(rule, instance.rules[ tmpRule ]);                        
+                        let rule = JSON.stringify(instance.rules[ tmpRule ]);
+                        //let rule = merge(rule, instance.rules[ tmpRule ]);                        
                         //rule['@import_' + tmpRule.replace(/\./g, '_')] = ruleArr[i];
+                        rulesStr = rulesStr.replace(new RegExp(importedRules[r], 'g'), rule);
                     } else {
                         console.warn('[formValidator:rules] <@import error> on `'+importedRules[r]+'`: rule `'+ruleArr[i]+'` not found. Ignoring.');
                         continue;
@@ -2225,14 +2227,17 @@ function ValidatorPlugin(rules, data, formId) {
                         } else { // inherits
                             gina.forms.rules = merge(rules, gina.forms.rules);
                         }                            
-                        
+                        // update instance.rules
+                        instance.rules = merge(JSON.clone(gina.forms.rules), instance.rules);                        
                     } catch (err) {
                         throw (err)
                     }
                 }
                 
-                if ( !local.rules.count() )
+                if ( !local.rules.count() ) {
                     local.rules = JSON.clone(instance.rules);
+                }
+                    
 
                 $validator.setOptions           = setOptions;
                 $validator.getFormById          = getFormById;
@@ -2254,7 +2259,7 @@ function ValidatorPlugin(rules, data, formId) {
                     , $allForms = document.getElementsByTagName('form');
 
 
-                // has rule ?
+                // form has rule ?
                 for (var f=0, len = $allForms.length; f<len; ++f) {
                     // preparing prototype (need at least an ID for this)
                     
@@ -2279,6 +2284,9 @@ function ValidatorPlugin(rules, data, formId) {
 
                         if (customRule) {
                             customRule = customRule.replace(/\-/g, '.');
+                            if ( typeof(rules) != 'undefined' ) {
+                                instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone(gina.forms.rules), instance.rules[customRule]);  
+                            }
                             if ( typeof(local.rules[customRule]) == 'undefined' ) {
                                 throw new Error('['+$allForms[f].id+'] no rule found with key: `'+customRule+'`. Please check if json is not malformed @ /forms/rules/' + customRule.replace(/\./g, '/') +'.json');        
                             } else {
@@ -6049,6 +6057,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 for (var _r in rules[c].conditions[_c].rules) {
                                     // ignore if we are testing on caseField or if $field does not exist
                                     if (_r == caseName || !$fields[_r]) continue;
+                                    //if (_r == caseName || !$fields[caseName]) continue;
                                     // ok, not the current case but still, 
                                     // we want to apply the validation when the field is not yet listed 
                                     if (field != _r && !/^\//.test(_r) ) {
