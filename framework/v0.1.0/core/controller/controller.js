@@ -652,18 +652,26 @@ function SuperController(options) {
                         layoutPath = localOptions.template.templates +'/'+ layoutPath;
                     }
                     // default layout
-                    if ( !isWithoutLayout  && !fs.existsSync(layoutPath) && layoutPath == localOptions.template.templates +'/index.html' ) {
+                    if ( 
+                        !isWithoutLayout  && !fs.existsSync(layoutPath) && layoutPath == localOptions.template.templates +'/index.html'                         
+                    ) {
                         console.warn('Layout '+ local.options.template.layout +' not found, replacing with `nolayout`: '+ localOptions.template.noLayout);
                         layoutPath = localOptions.template.noLayout
                         isWithoutLayout = true;
                         data.page.view.layout = layoutPath;
                     }
                     // user defiend layout
-                    else if (!isWithoutLayout && !fs.existsSync(layoutPath) ) {
+                    else if ( !isWithoutLayout && !fs.existsSync(layoutPath) ) {
+                        layoutPath = localOptions.template.noLayout;
+                        data.page.view.layout = layoutPath;
+                    }
+                    // layout defiendd but not found
+                    else if (!fs.existsSync(layoutPath) ) {
                         err = new ApiError(options.bundle +' SuperController exception while trying to load your layout `'+ layoutPath +'`.\nIt seems like you have defined a layout, but gina could not locate the file.\nFor more informations, check your `config/templates.json` declaration around `'+ local.options.rule.replace(/\@(.*)/g, '') +'`', 500);
                         self.throwError(err);
                         return;
                     }
+                    
                 }
                 
                 // fs.readFile(layoutPath, function onLoadingLayout(err, layout) {
@@ -678,37 +686,41 @@ function SuperController(options) {
                         try {                            
                             assets  = {assets:"${assets}"};
                             
-                            // retrieve layout
-                            //layout = fs.readFileSync(layoutPath).toString();
-                            // retrive template
-                            var tpl = null; // = fs.readFileSync(path).toString();
+                            /**
+                             * retrieve template & layout
+                             * */ 
+                            var tpl = null; 
+                            // tpl = fs.readFileSync(path).toString();
+                            // layout = fs.readFileSync(layoutPath).toString();                            
                             
                             await Promise.all([
                                 readFile(layoutPath),
                                 readFile(path)
-                              ]).then(([_layout, _tpl]) => {
-                                  
-                                layout  = _layout.toString();
-                                tpl     = _tpl.toString();
-                              }).catch(error => {
+                                ])
+                                .then(([_layout, _tpl]) => {                                  
+                                    layout  = _layout.toString();
+                                    tpl     = _tpl.toString();
+                                })
+                                .catch(error => {
                                 console.error(error.message);
                                 return;
-                              });
+                            });
                             
-                            
-                            // var linkedLayoutRe = new RegExp('(\{\{|\{\{\\s)(page.view.layout)(\}\}|\\s\}\})');
-                            // tpl = tpl.replace(linkedLayoutRe, data.page.view.layout);
-                            tpl = tpl.replace('{{ page.view.layout }}', data.page.view.layout);                                                
-                            layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
-                            
+                            // mappin conf
                             mapping = { filename: path };                            
                             if (isWithoutLayout) {
                                 layout = tpl;                                
                             } else {
+                                // var linkedLayoutRe = new RegExp('(\{\{|\{\{\\s)(page.view.layout)(\}\}|\\s\}\})');
+                                // tpl = tpl.replace(linkedLayoutRe, data.page.view.layout);
+                                tpl = tpl.replace('{{ page.view.layout }}', data.page.view.layout);  
+                                layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
                                 layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
                             }
-                            // precompilation needed in case of extends or to display the toolbar  
-                            layout = swig.compile(layout, mapping)(data);
+                            // precompilation needed in case of `extends` or in order to display the toolbar
+                            if ( hasViews() && GINA_ENV_IS_DEV || /\{\%(\s+extends|extends)/.test(layout) ) {
+                                layout = swig.compile(layout, mapping)(data);
+                            }                            
                             
                         } catch(err) {
                             err.stack = 'Exception, bad syntax or undefined data found: start investigating in '+ mapping.filename +'\n' + err.stack;
