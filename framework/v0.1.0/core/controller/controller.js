@@ -639,9 +639,10 @@ function SuperController(options) {
                     , viewInfos             = null
                     , filename              = null
                     , isWithSwigLayout      = null
+                    , isUsingGinaLayout     = (!isWithoutLayout && typeof(localOptions.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout)) ? true : false
                 ;
                 
-                if ( isWithoutLayout || !isWithoutLayout && typeof(localOptions.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout) ) {
+                if ( isWithoutLayout || isUsingGinaLayout ) {
                     layoutPath = (isWithoutLayout) ? localOptions.template.noLayout : localOptions.template.layout;
                     if (isWithoutLayout)
                         data.page.view.layout = layoutPath;
@@ -712,11 +713,13 @@ function SuperController(options) {
                             mapping = { filename: path };                            
                             if (isWithoutLayout || isWithSwigLayout) {
                                 layout = tpl;                                
+                            } else if (isUsingGinaLayout) {
+                                mapping = { filename: path };
+                                layout = layout.replace('{{ page.content }}', tpl);  
                             } else {
                                 // var linkedLayoutRe = new RegExp('(\{\{|\{\{\\s)(page.view.layout)(\}\}|\\s\}\})');
                                 // tpl = tpl.replace(linkedLayoutRe, data.page.view.layout);
                                 tpl = tpl.replace('{{ page.view.layout }}', data.page.view.layout);  
-                                layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
                                 layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
                             }
                             // precompilation needed in case of `extends` or in order to display the toolbar
