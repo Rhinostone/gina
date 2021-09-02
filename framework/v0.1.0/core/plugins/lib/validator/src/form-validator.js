@@ -16,8 +16,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
 
-    if (isGFFCtx && !$fields )
-        throw new Error('No `Validator` instance found.\nTry:\nvar FormValidator = require("gina/validator"):\nvar formValidator = new FormValidator(...);')
+    // if (isGFFCtx && !$fields )
+    //     throw new Error('No `Validator` instance found.\nTry:\nvar FormValidator = require("gina/validator"):\nvar formValidator = new FormValidator(...);')
         
     var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
     var helpers         = (isGFFCtx) ? {} : require('../../../../../helpers');
@@ -330,7 +330,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 
                 var onResult = function(result) {
             
-                    _this.value      = local['data'][_this.name] = _this.value.toLowerCase();
+                    _this.value      = local['data'][_this.name] = (_this.value) ? _this.value.toLowerCase() : _this.value;
         
                     var isValid     = result.isValid || false;
                     var errors      = self[_this['name']]['errors'] || {};
@@ -615,7 +615,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         var val = null, label = null;
         
         if ( typeof(self[el]) == 'undefined' && typeof(value) != 'undefined' ) {
-            self[el] = value
+            self[el] = val = value;
         }
         
         if ( typeof(self[el]) == 'object' ) {
@@ -635,7 +635,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
         // keys are stringyfied because of the compiler !!!
         self[el] = {
-            'target': (isGFFCtx) ? $fields[el] : null,
+            'target': (isGFFCtx && typeof($fields) != 'undefined') ? $fields[el] : null,
             'name': el,
             'value': val,
             'valid': false,
@@ -780,10 +780,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         self[el]['isEmail'] = function() {
 
 
-            this.value      = local['data'][this.name] = this.value.toLowerCase();
+            this.value      = local['data'][this.name] = (this.value) ? this.value.toLowerCase() : this.value;
             // Apply on current field upper -> lower
             if ( 
                 isGFFCtx
+                && this.target
                 && this.target.value != '' 
                 && /[A-Z]+/.test(this.target.value) 
             ) {
@@ -819,10 +820,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         self[el]['isJsonWebToken'] = function() {
 
 
-            this.value      = local['data'][this.name] = this.value.toLowerCase();
+            this.value      = local['data'][this.name] = (this.value) ? this.value.toLowerCase() : this.value;
             // Apply on current field upper -> lower
             if ( 
                 isGFFCtx
+                && this.target
                 && this.target.value != '' 
                 && /[A-Z]+/.test(this.target.value) 
             ) {
@@ -1197,7 +1199,13 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             }
 
             // radio group case
-            if ( isGFFCtx && this.target.tagName == 'INPUT' && typeof(this.target.type) != 'undefined' && this.target.type == 'radio' ) {
+            if ( 
+                isGFFCtx 
+                && this.target 
+                && this.target.tagName == 'INPUT' 
+                && typeof(this.target.type) != 'undefined' 
+                && this.target.type == 'radio' 
+            ) {
                 var radios = document.getElementsByName(this.name);
                 for (var i = 0, len = radios.length; i < len; ++i) {
                     if (radios[i].checked) {
@@ -1468,7 +1476,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
             if ( typeof(isApplicable) == 'boolean' && !isApplicable ) {
 
-                local.data[this.name] = this.value;
+                local.data[this.name] = this.value = (/^true$/i.test(this.value)) ? true : false;
 
                 return self[this.name]
             }
@@ -1523,7 +1531,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     
     for (let el in self) {        
         // Adding fields & validators to context
-        addField(el);        
+        //addField(el);        
+        addField(el, self[el]);
     }
     
     self['addField'] = function(el, value) {
@@ -1585,7 +1594,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 }
             }
         }
-
+        // local.data = JSON.parse(JSON.stringify(local.data).replace(/\"(true|false)\"/gi, '$1'))
         return local.data
     }
 

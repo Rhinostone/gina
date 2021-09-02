@@ -1274,12 +1274,16 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             var domain = gina.config.hostname.replace(/(https|http|)\:\/\//, '').replace(/\:\d+$/, '');
             var reDomain = new RegExp(domain+'\:\\d+\|'+domain);            
             for (;i < len; ++i) {
+                if ( typeof(scripts[i].src) == 'undefined' || scripts[i].src == '' ) {
+                    continue;
+                }
                 let filename = scripts[i].src
                                 .replace(/(https|http|)\:\/\//, '')
                                 .replace(reDomain, '');
                 // don't load if already in the global context
                 if ( globalScriptsList.indexOf(filename) > -1 )
                     continue;
+                
                 getScript(scripts[i].src);
             }
             //i = 0; len = styles.length

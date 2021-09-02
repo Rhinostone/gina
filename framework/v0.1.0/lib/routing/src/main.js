@@ -29,8 +29,18 @@ function Routing() {
     var plugins = null, Validator = null;
     if (!isGFFCtx) {
         plugins = require(__dirname+'/../../../core/plugins') || getContext('gina').plugins;
-        Validator = plugins.Validator;
-    }
+        Validator = plugins.Validator;        
+    } 
+    // BO - In case of partial rendering whithout handler defined for the partial
+    else {
+        if ( !merge || typeof(merge) != 'function' ) {
+            var merge = require('utils/merge');
+        }
+        if ( !Validator || typeof(Validator) != 'function' ) {
+            var Validator = require('utils/form-validator');
+        }
+    }                        
+    // EO - In case of partial rendering whithout handler defined for the partial
     
     /**
      * Get url props
@@ -129,7 +139,6 @@ function Routing() {
         // if ( params.rule == 'my-specific-rule@bundle' ) {
         //     console.debug('passed '+ params.rule);
         // }
-
         if ( /\,/.test(url) ) {
             var i               = 0
                 , urls          = url.split(/\,/g)
@@ -452,6 +461,7 @@ function Routing() {
                             }
                         }                       
                     }
+                    
                     // normal case
                     _data = merge(_data, request[method]);
                     
@@ -461,7 +471,8 @@ function Routing() {
                     }
                     
                     _rule[key]  = _ruleObj;                
-                    _validator  = new Validator('routing', _data, null, _rule );
+                    //_validator  = new Validator('routing', _data, null, _rule );
+                    _validator  = new Validator(_data);
                     
                     if (_ruleObj.count() == 0 ) {
                         console.error('Route validation failed '+ params.rule);
@@ -1374,6 +1385,6 @@ if ((typeof (module) !== 'undefined') && module.exports) {
     // Publish as node.js module
     module.exports = Routing()
 } else if (typeof (define) === 'function' && define.amd) {
-    // Publish as AMD module
-    define(function() { return Routing() })
+    // Publish as AMD module    
+    define('utils/routing', ['require', 'utils/form-validator', 'utils/merge'], function() { return Routing() })
 }
