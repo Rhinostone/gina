@@ -568,8 +568,9 @@ function SuperController(options) {
                             '\n1) The requested file does not exists in your templates/html (check your template directory). Can you find: '+path +
                             '\n2) Check the following rule in your `'+localOptions.conf.bundlePath+'/config/routing.json` and look around `param` to make sure that nothing is wrong with your file declaration: '+
                             '\n' + options.rule +':'+ JSON.stringify(options.conf.content.routing[options.rule], null, 4) +
-                            '\n3) At this point, if you still have problems trying to run this portion of code, you can contact us telling us how to reproduce the bug.' +
-                            '\n\r[ stack trace ] '+ err.stack;
+                            '\n3) At this point, if you still have problems trying to run this portion of code, you can contact us telling us how to reproduce the bug.'
+                            //'\n\r[ stack trace ] '
+                            ;
                 err = new ApiError(msg, 500);
                 console.error(err.stack);
                 self.throwError(err);
@@ -685,7 +686,7 @@ function SuperController(options) {
                     //     self.throwError(local.res, 500, err);
                     //     return;
                     // } else {
-                        var layout = null;
+                        var layout = null, isLoadingPartial = false;
                         try {                            
                             assets  = {assets:"${assets}"};
                             
@@ -733,7 +734,15 @@ function SuperController(options) {
                             return
                         }
                             
-                            
+                        isLoadingPartial = ( 
+                            !/\<html/i.test(layout) 
+                            || !/\<head/i.test(layout) 
+                            || !/\<body/i.test(layout) 
+                        ) ? true : false;
+                        
+                        if (isLoadingPartial) {
+                            console.warn('----------------> loading partial `'+ path);
+                        }
                         
                         isDeferModeEnabled = localOptions.template.javascriptsDeferEnabled || localOptions.conf.content.templates._common.javascriptsDeferEnabled || false;  
                         //isDeferModeEnabled = localOptions.template.javascriptsDeferEnabled || false;
@@ -818,12 +827,18 @@ function SuperController(options) {
                             }
                             
                             // adding javascripts
-                            layout.replace('{{ page.view.scripts }}', '');                            
-                            if ( isDeferModeEnabled ) { // placed in the HEAD 
-                                layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
-                            } else { // placed in the BODY                             
-                                layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
+                            layout.replace('{{ page.view.scripts }}', '');            
+                            // placed in the HEAD excepted when rendering a partial or when `isDeferModeEnabled` == true
+                            if (isLoadingPartial) {
+                                layout += '\t{{ page.view.scripts }}';
+                            } else {
+                                if ( isDeferModeEnabled  ) {
+                                    layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
+                                } else { // placed in the BODY                                
+                                    layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
+                                }
                             }
+                                
                             // ginaLoader cannot be deferred
                             layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                            
 
@@ -866,15 +881,19 @@ function SuperController(options) {
                             
                             // adding javascripts
                             layout.replace('{{ page.view.scripts }}', '');
-                            if ( isDeferModeEnabled ) { // placed in the HEAD                                                           
-                                layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
-                                
-                            } else { // placed in the BODY                               
-                                layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
+                            if (isLoadingPartial) {                                
+                                layout += '\t{{ page.view.scripts }}\n';
+                                layout += '\t'+ localOptions.template.ginaLoader +'\n';
+                            } else {
+                                if ( isDeferModeEnabled && /\<\/head\>/i.test(layout) ) { // placed in the HEAD                                                           
+                                    layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
+                                    
+                                } else { // placed in the BODY                               
+                                    layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
+                                }
+                                // ginaLoader cannot be deferred
+                                layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');
                             }
-                            // ginaLoader cannot be deferred
-                            layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>'); 
-
                         }
                         
                         //dic['page.content'] = layout;

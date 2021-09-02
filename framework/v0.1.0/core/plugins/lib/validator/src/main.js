@@ -345,7 +345,7 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( typeof(rules) != 'undefined' ) {
                     $form['rule'] = customRule = getRuleObjByName(rule)
                 } else if ( typeof($form.target) != 'undefined' && $form.target !== null && $form.target.getAttribute('data-gina-form-rule') ) {
-                    rule = $form.target.getAttribute('data-gina-form-rule').replace(/\-/g, '.');
+                    rule = $form.target.getAttribute('data-gina-form-rule').replace(/\-|\//g, '.');
 
                     if ( typeof(rules) != 'undefined' ) {
                         $form['rule'] = getRuleObjByName(rule)
@@ -354,7 +354,7 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                 } // no else to allow form without any rule
             } else {
-                rule = customRule.replace(/\-/g, '.');
+                rule = customRule.replace(/\-|\//g, '.');
 
                 if ( typeof(rules) != 'undefined' ) {
                     $form['rule'] = getRuleObjByName(rule)
@@ -2136,7 +2136,15 @@ function ValidatorPlugin(rules, data, formId) {
     var checkForRulesImports = function (rules) {
         // check if rules has imports & replace
         var rulesStr        = JSON.stringify(rules);
-        var importedRules   = rulesStr.match(/(\"@import\s+[-_a-z A-Z 0-9/.]+\")/g);
+        var importedRules   = rulesStr.match(/(\"@import\s+[-_a-z A-Z 0-9/.]+\")/g) || [];
+        // remove duplicate
+        var filtered = [];
+        for (let d = 0, dLen = importedRules.length; d < dLen; d++) {
+            if (filtered.indexOf(importedRules[d]) < 0) {
+                filtered.push(importedRules[d])
+            }
+        }
+        importedRules = filtered;
         // TODO - complete mergingRules integration
         var mergingRules     = rulesStr.match(/(\"_merging(.*))(\s+\:|\:)(.*)(\",|\")/g)
         var isMerging       = false;
@@ -2225,10 +2233,12 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( typeof(gina.forms.rules) == 'undefined' || !gina.forms.rules) {
                             gina.forms.rules = rules
                         } else { // inherits
-                            gina.forms.rules = merge(rules, gina.forms.rules);
+                            //gina.forms.rules = merge(rules, gina.forms.rules);
+                            gina.forms.rules = merge(gina.forms.rules, rules, true);
                         }                            
                         // update instance.rules
-                        instance.rules = merge(JSON.clone(gina.forms.rules), instance.rules);                        
+                        //instance.rules = merge(JSON.clone(gina.forms.rules), instance.rules);
+                        instance.rules = merge(instance.rules, JSON.clone(gina.forms.rules), true);
                     } catch (err) {
                         throw (err)
                     }
@@ -2273,31 +2283,35 @@ function ValidatorPlugin(rules, data, formId) {
                         $allForms[f].setAttribute('id', id)
                     }
 
-                    $allForms[f]['id'] = $validator.id = id;
+                    //$allForms[f]['id'] = $validator.id = id;
+                    $validator.id = id;
 
-                    if ( typeof($allForms[f].id) != 'undefined' && $allForms[f].id != 'null' && $allForms[f].id != '') {
+                    //if ( typeof($allForms[f].getAttribute('id')) != 'undefined' && $allForms[f].id != 'null' && $allForms[f].id != '') {
 
                         $validator.target = $allForms[f];
-                        instance.$forms[$allForms[f].id] = merge({}, $validator);
+                        instance.$forms[id] = merge({}, $validator);
 
                         var customRule = $allForms[f].getAttribute('data-gina-form-rule');
 
                         if (customRule) {
-                            customRule = customRule.replace(/\-/g, '.');
+                            customRule = customRule.replace(/\-|\//g, '.');
                             if ( typeof(rules) != 'undefined' ) {
-                                instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone(gina.forms.rules), instance.rules[customRule]);  
+                                instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone( eval('gina.forms.rules.'+ customRule)), instance.rules[customRule]);  
                             }
                             if ( typeof(local.rules[customRule]) == 'undefined' ) {
-                                throw new Error('['+$allForms[f].id+'] no rule found with key: `'+customRule+'`. Please check if json is not malformed @ /forms/rules/' + customRule.replace(/\./g, '/') +'.json');        
-                            } else {
-                                //customRule = instance.rules[customRule]
-                                customRule = getRuleObjByName(customRule)
+                                throw new Error('['+id+'] no rule found with key: `'+customRule+'`. Please check if json is not malformed @ /forms/rules/' + customRule.replace(/\./g, '/') +'.json');        
                             }
+                            customRule = instance.rules[customRule];
                         }
 
                         // finding forms handled by rules
-                        if ( typeof($allForms[f].id) == 'string' && typeof(local.rules[$allForms[f].id.replace(/\-/g, '.')]) != 'undefined' ) {
-                            $target = instance.$forms[$allForms[f].id].target;
+                        if ( 
+                            typeof(id) == 'string' 
+                            && typeof(local.rules[id.replace(/\-/g, '.')]) != 'undefined'
+                            ||
+                            typeof(customRule) == 'object'
+                        ) {
+                            $target = instance.$forms[id].target;
                             if (customRule) {
                                 bindForm($target, customRule)
                             } else {
@@ -2305,7 +2319,10 @@ function ValidatorPlugin(rules, data, formId) {
                             }
 
                             ++i
-                        } else {
+                        }
+                        // TODO - remove this
+                        // migth not be needed anymore  
+                        else {
                             // weird exception when having in the form an element with name="id"
                             if ( typeof($allForms[f].id) == 'object' ) {
                                 delete instance.$forms[$allForms[f].id];
@@ -2334,7 +2351,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 }
                             }
                         }
-                    }
+                    //}
 
                 }
 
@@ -2393,7 +2410,7 @@ function ValidatorPlugin(rules, data, formId) {
             customRule = $form.getAttribute('data-gina-form-rule');
 
             if (customRule) {
-                customRule = customRule.replace(/\-/g, '.');
+                customRule = customRule.replace(/\-|\//g, '.');
                 if ( typeof(rules[customRule]) == 'undefined') {
                     customRule = null;
                     throw new Error('[' + $form.id + '] no rule found with key: `' + customRule + '`');
@@ -3607,7 +3624,7 @@ function ValidatorPlugin(rules, data, formId) {
             typeof(customRule) != 'undefined' 
             || 
             typeof(_id) == 'string' 
-                && typeof(rules[_id.replace(/\-/g, '.')]) != 'undefined' 
+                && typeof(rules[_id.replace(/\-|\//g, '.')]) != 'undefined' 
         ) {
             withRules = true;
 
@@ -3616,14 +3633,26 @@ function ValidatorPlugin(rules, data, formId) {
             } else if ( 
                 customRule 
                 && typeof(customRule) == 'string' 
-                && typeof(rules[customRule.replace(/\-/g, '.')]) != 'undefined'
+                && typeof(rules[customRule.replace(/\-|\//g, '.')]) != 'undefined'
             ) {                
-                rule = getRuleObjByName(customRule.replace(/\-/g, '.'))
+                rule = getRuleObjByName(customRule.replace(/\-|\//g, '.'))
             } else {
-                rule = getRuleObjByName(_id.replace(/\-/g, '.'))
+                rule = getRuleObjByName(_id.replace(/\-|\//g, '.'))
             }
 
-            $form.rules = rule
+            $form.rules = rule;
+            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                // update toolbar
+                if (!gina.forms.rules)
+                    gina.forms.rules = {};
+
+                objCallback = {
+                    id      : _id,
+                    rules  : $form.rules
+                };
+
+                window.ginaToolbar.update('forms', objCallback);
+            }
         } else { // form without any rule binded
             $form.rules = {}
         }
@@ -5115,7 +5144,7 @@ function ValidatorPlugin(rules, data, formId) {
                     var customRule = $target.getAttribute('data-gina-form-rule');
 
                     if ( customRule ) { // 'data-gina-form-rule'
-                        rule = getRuleObjByName(customRule.replace(/\-/g, '.'))
+                        rule = getRuleObjByName(customRule.replace(/\-|\//g, '.'))
                     } else {
                         rule = getRuleObjByName(_id.replace(/\-/g, '.'))
                     }
@@ -5344,7 +5373,7 @@ function ValidatorPlugin(rules, data, formId) {
                 var customRule = $target.getAttribute('data-gina-form-rule');
 
                 if ( customRule ) { // 'data-gina-form-rule'
-                    rule = getRuleObjByName(customRule.replace(/\-/g, '.'))
+                    rule = getRuleObjByName(customRule.replace(/\-|\//g, '.'))
                 } else {
                     rule = getRuleObjByName(id.replace(/\-/g, '.'))
                 }
@@ -5565,13 +5594,72 @@ function ValidatorPlugin(rules, data, formId) {
         }
     }
     
+    var getCastedValue = function(ruleObj, fields, fieldName, isOnDynamisedRulesMode) {
+        
+        if ( 
+            // do not cast if no rule linked to the field
+            typeof(ruleObj[fieldName]) == 'undefined'
+            // do not cast if not defined or on error
+            || /^(null|NaN|undefined|\s*)$/i.test(fields[fieldName])
+        ) {
+            return fields[fieldName]
+        }
+        
+        if ( 
+            /**typeof(ruleObj[fieldName].isBoolean) != 'undefined'
+            || */typeof(ruleObj[fieldName].isNumber) != 'undefined'
+            || typeof(ruleObj[fieldName].isInteger) != 'undefined'
+            || typeof(ruleObj[fieldName].isFloat) != 'undefined'
+            || typeof(ruleObj[fieldName].toFloat) != 'undefined'
+            || typeof(ruleObj[fieldName].toInteger) != 'undefined'
+        ) {
+            
+            if ( /\,/.test(fields[fieldName]) ) {
+                fields[fieldName] = fields[fieldName].replace(/\,/g, '.').replace(/\s+/g, '');
+            }
+            return fields[fieldName];
+        }
+        
+        if ( typeof(fields[fieldName]) == 'boolean') {
+            return fields[fieldName]
+        } else if (ruleObj[fieldName].isBoolean) {
+            return (/^true$/i.test(fields[fieldName])) ? true : false;
+        }
+        
+        return (
+            typeof(isOnDynamisedRulesMode) != 'undefined' 
+            && /^true$/i.test(isOnDynamisedRulesMode) 
+        ) ? '\\"'+ fields[fieldName] +'\\"' : fields[fieldName];
+    }
+    
+    /**
+     * formatFields
+     * Will cast values if needed
+     * 
+     * @param {string|object} rules 
+     * @param {object} fields 
+     * @returns 
+     */
+    var formatFields = function(rules, fields) {
+        var ruleObj = null;
+        if ( typeof(rules) != 'string') {
+            rules = JSON.stringify(JSON.clone(rules))
+        }
+        ruleObj = JSON.parse(rules.replace(/\"(true|false)\"/gi, '$1'));
+        
+        for (let fName in fields) {
+            fields[fName] = getCastedValue(ruleObj, fields, fName);
+        }
+        return fields;
+    }
+    
     var getDynamisedRules = function(stringifiedRules, fields, $fields, isLiveCheckingOnASingleElement) {
         
         // Because this could also be live check, if it is the case, we need all fields
         // of the current form rule for variables replacement/evaluation. Since live check is
         // meant to validate one field at the time, you could fall in a case where the current
         // field should be compared with another field of the same form.
-        var ruleObj = JSON.parse(stringifiedRules);
+        var ruleObj = JSON.parse(stringifiedRules.replace(/\"(true|false)\"/gi, '$1'));
         var stringifiedRulesTmp = JSON.stringify(ruleObj);
         if (isLiveCheckingOnASingleElement) {            
             var $currentForm    = $fields[Object.getOwnPropertyNames($fields)[0]].form;
@@ -5595,23 +5683,6 @@ function ValidatorPlugin(rules, data, formId) {
         }
         arrFields.sort().reverse();
         
-        var getCastedValue = function(fieldName) {
-            if ( 
-                /**typeof(ruleObj[fieldName].isBoolean) != 'undefined'
-                || */typeof(ruleObj[fieldName].isNumber) != 'undefined'
-                || typeof(ruleObj[fieldName].isInteger) != 'undefined'
-                || typeof(ruleObj[fieldName].isFloat) != 'undefined'
-                || typeof(ruleObj[fieldName].toFloat) != 'undefined'
-                || typeof(ruleObj[fieldName].toInteger) != 'undefined'
-            ) {
-                return fields[fieldName].replace(/\,/g, '.').replace(/\s+/g, '');
-            }
-            if ( typeof(fields[fieldName]) == 'boolean') {
-                return fields[fieldName]
-            }
-            return '\\"'+ fields[fieldName] +'\\"';
-        }
-        
         for (let i = 0, len = arrFields.length; i < len; i++) {
             _field = arrFields[i].replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&');
             re = new RegExp('\\$'+_field, 'g');
@@ -5619,7 +5690,7 @@ function ValidatorPlugin(rules, data, formId) {
             let fieldValue = '\\"'+ fields[arrFields[i]] +'\\"';
             let isInRule = re.test(stringifiedRulesTmp);
             if ( isInRule && typeof(ruleObj[arrFields[i]]) != 'undefined' ) {
-                fieldValue = getCastedValue(arrFields[i]);
+                fieldValue = getCastedValue(ruleObj, fields, arrFields[i], true);
             } else if ( isInRule ) {
                 console.warn('`'+arrFields[i]+'` is used in a dynamic rule without definition. This could lead to an evaluation error. Casting `'+arrFields[i]+'` to `string`.');
             }
@@ -5634,7 +5705,7 @@ function ValidatorPlugin(rules, data, formId) {
                 let fieldValue = '\\"'+ $fields[arrFields[i]].value +'\\"';
                 let isInRule = re.test(stringifiedRulesTmp);
                 if ( isInRule && typeof(ruleObj[arrFields[i]]) != 'undefined' ) {
-                    fieldValue = getCastedValue(arrFields[i]);
+                    fieldValue = getCastedValue(ruleObj, fields, arrFields[i], true);
                 } else if ( isInRule ) {
                     console.warn('`'+arrFields[i]+'` is used in a dynamic rule without definition. This could lead to an evaluation error. Casting `'+arrFields[i]+'` to `string`.');
                 }
@@ -5660,6 +5731,7 @@ function ValidatorPlugin(rules, data, formId) {
         delete fields['_length']; //cleaning
         
         var stringifiedRules = JSON.stringify(rules);
+        fields = formatFields(stringifiedRules, fields);
         if ( /\$(.*)/.test(stringifiedRules) ) {
             var isLiveCheckingOnASingleElement = (
                 !/^form$/i.test($formOrElement.tagName)
@@ -5788,8 +5860,9 @@ function ValidatorPlugin(rules, data, formId) {
         
         //console.debug(fields, $fields);
         var d = null;//FormValidator instance
-        var fieldErrorsAttributes = {};
+        var fieldErrorsAttributes = {}, isSingleElement = false;
         if (isGFFCtx) { // Live check if frontend only for now
+            // form case
             if ( /^form$/i.test($formOrElement.tagName) ) {
                 id = $formOrElement.getAttribute('id');
                 evt = 'validated.' + id;
@@ -5799,7 +5872,10 @@ function ValidatorPlugin(rules, data, formId) {
                     delete $formOrElement.eventData.error
                 }
                 d = new FormValidator(fields, $fields, xhrOptions);
-            } else {
+            }
+            // single element case 
+            else {
+                isSingleElement = true;
                 id = $formOrElement.form.getAttribute('id') || $formOrElement.form.target.getAttribute('id');
                 
                 evt = 'validated.' + id;
@@ -5809,7 +5885,17 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
         
-        var allFields = JSON.clone(fields);
+        var allFields = null;
+        var $allFields = null;
+        if (!isSingleElement) {
+            allFields   = JSON.clone(fields);
+            $allFields  = $fields;
+        } else {
+            var formAllInfos = getFormValidationInfos(instance.$forms[$formOrElement.form.id].target, instance.$forms[$formOrElement.form.id].rules, false);            
+            allFields   = formatFields(JSON.stringify(instance.$forms[$formOrElement.form.id].rules), JSON.clone(formAllInfos.fields));
+            $allFields  = formAllInfos.$fields;
+        }
+        
         var allRules = ( typeof(rules) !=  'undefined' ) ? JSON.clone(rules) : {};
         var forEachField = function($formOrElement, allFields, allRules, fields, $fields, rules, cb, i) {            
             
@@ -5880,13 +5966,15 @@ function ValidatorPlugin(rules, data, formId) {
                         ) {
                             caseName = c.replace('_case_', '');                            
                             // if case exists but case field not existing
-                            if ( typeof($fields[caseName]) == 'undefined' ) {
+                            if ( typeof($allFields[caseName]) == 'undefined' ) {
+                                console.warn('Found case `'+ c +'` but field `'+ caseName +'` is misssing in the dom.\n You should add `'+ caseName +'` element to your form in order to allow Validator to process this case.');
                                 continue
                             }
                             
                             // depending on the case value, replace/merge original rule with condition rule
                             if ( typeof(allFields[caseName]) == 'undefined' ) {
-                                allFields[caseName] =  $fields[c.replace(/^\_case\_/, '')].value
+                                //allFields[caseName] =  $fields[c.replace(/^\_case\_/, '')].value
+                                allFields[caseName] =  $allFields[caseName].value
                             }
                             // Watch changes in case the value is modified
                             // A mutation observer was previously defined in case of hidden field when value has been mutated with javascript
@@ -6111,10 +6199,12 @@ function ValidatorPlugin(rules, data, formId) {
                                     } else {
                                         if ( typeof(rules[c].conditions[_c].rules[_r]) != 'undefined' ) {
                                             // depending on the case value, replace/merge original rule with condition rule
-                                            caseField = c.replace(/^\_case\_/, '');
+                                            //caseField = c.replace(/^\_case\_/, '');
+                                            caseField = _r;
+                                            caseValue = fields[caseField];
                                             
                                             if ( typeof($fields[caseField]) == 'undefined' ) {
-                                                console.warn('ignoring case `'+ c +'`: field `'+ +'` not found in your DOM');
+                                                console.warn('ignoring case `'+ caseField +'`: field `'+ +'` not found in your DOM');
                                                 continue;
                                             }
                                             // by default
@@ -6134,13 +6224,14 @@ function ValidatorPlugin(rules, data, formId) {
                                             }
                                             
                                             if ( 
-                                                rules[c].conditions[_c].case == caseValue 
-                                                ||
-                                                // test for regexp 
-                                                /^\//.test(rules[c].conditions[_c].case) 
-                                                && new RegExp(rules[c].conditions[_c].case).test(caseValue)
+                                                //rules[c].conditions[_c].case == caseValue 
+                                                typeof(rules[c].conditions[_c].rules[_r]) != 'undefined'
+                                                // ||
+                                                // // test for regexp 
+                                                // /^\//.test(rules[c].conditions[_c].case) 
+                                                // && new RegExp(rules[c].conditions[_c].case).test(caseValue)
                                             ) {
-                                                localRuleObj = ( typeof(rules[_r]) != 'undefined' ) ? rules[_r] : {};
+                                                localRuleObj = ( typeof(rules[c].conditions[_c].rules[_r]) != 'undefined' ) ? rules[c].conditions[_c].rules[_r] : {};
                                                 //rules[_r] = merge(rules[c].conditions[_c].rules[_r], localRuleObj);
                                                 rules[_r] = localRuleObj;
                                             }
