@@ -2194,6 +2194,7 @@ function Server(options) {
 
             case 'get':
                 if ( typeof(request.query) != 'undefined' && request.query.count() > 0 ) {   
+                    var inheritedDataObj = {};
                     if ( typeof(request.query.inheritedData) != 'undefined' ) {
                         // try {
                         //     bodyStr = decodeURIComponent(request.query.inheritedData); // it is already a string for sure
@@ -2206,12 +2207,23 @@ function Server(options) {
                         //     bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
                         // obj = JSON.parse(bodyStr);
                         
-                        obj = parseBody(request.query.inheritedData);
+                        if ( typeof(request.query.inheritedData) == 'string' ) {
+                            inheritedDataObj = parseBody(decodeURIComponent(request.query.inheritedData));
+                        }
+                        
                         delete request.query.inheritedData;
                         
-                        request.query = merge(request.query, obj);
-                        delete obj;
-                    }            
+                    }
+                    bodyStr = JSON.stringify(request.query);                        
+                    // false & true case
+                    if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                        bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                    
+                    obj = parseBody(decodeURIComponent(bodyStr));
+                    
+                    request.query = merge(obj, inheritedDataObj);
+                    delete obj;
+                            
                     request.get = request.query;                    
                 }                
                 // else, will be matching route params against url context instead, once route is identified
