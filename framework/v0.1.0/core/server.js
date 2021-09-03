@@ -2709,8 +2709,8 @@ function Server(options) {
         var isUsingTemplate = self.conf[self.appName][self.env].template;
         var isXMLRequest    = local.request.isXMLRequest;
         var protocol        = getResponseProtocol(res);
-        var stream          = ( /http\/2/.test(protocol) ) ? res.stream : null;
-        var header          = ( /http\/2/.test(protocol) ) ? {} : null;        
+        var stream          = ( /http\/2/.test(protocol) && res.stream ) ? res.stream : null;
+        var header          = ( /http\/2/.test(protocol) && res.stream ) ? {} : null;        
         var err             = null;
         var bundleConf      = self.conf[self.appName][self.env];
         
@@ -2737,7 +2737,7 @@ function Server(options) {
 
                 // Internet Explorer override
                 if ( /msie/i.test(local.request.headers['user-agent']) ) {
-                    if ( /http\/2/.test(protocol) ) {
+                    if ( /http\/2/.test(protocol) && stream ) {
                         header = {
                             ':status': code,
                             'content-type': 'text/plain; charset='+ bundleConf.encoding
@@ -2748,7 +2748,7 @@ function Server(options) {
                     }
                     
                 } else {
-                    if ( /http\/2/.test(protocol) ) {
+                    if ( /http\/2/.test(protocol) && stream ) {
                         header = {
                             ':status': code,
                             'content-type': 'application/json; charset='+ bundleConf.encoding
@@ -2761,20 +2761,20 @@ function Server(options) {
                 console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url +'\n'+ msg);
                                 
                 header = completeHeaders(header, local.request, res);
-                if ( /http\/2/.test(protocol) ) {
+                if ( /http\/2/.test(protocol) && stream) {
                     stream.respond(header);
                     stream.end(JSON.stringify({
                         status: code,
                         error: msg
                     }));
-                    return;
+                    
                 } else {
-                    return res.end(JSON.stringify({
+                    res.end(JSON.stringify({
                         status: code,
                         error: msg
                     }));
-                }
-                
+                }                
+                return;
                 
             } else {
                 
@@ -2873,7 +2873,7 @@ function Server(options) {
                     return;
                 }
                 
-                if ( /http\/2/.test(protocol) ) {
+                if ( /http\/2/.test(protocol) && stream ) {
                     header = {
                         ':status': code,
                         'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
@@ -2883,7 +2883,7 @@ function Server(options) {
                 }
                     
                 header = completeHeaders(header, local.request, res);
-                if ( /http\/2/.test(protocol) ) {
+                if ( /http\/2/.test(protocol) && stream ) {
                     // TODO - Check if the stream has not been closed before sending response
                     // if (stream && !stream.destroyed) {                      
                     stream.respond(header);

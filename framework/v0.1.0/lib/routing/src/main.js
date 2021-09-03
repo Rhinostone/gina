@@ -25,11 +25,14 @@ function Routing() {
         
     self.allowedMethodsString   = self.allowedMethods.join(',');
     
-    // loading plugins
-    var plugins = null, Validator = null;
+    // loading utils & plugins
+    var plugins = null, inherits = null, merge = null, Validator = null;
     if (!isGFFCtx) {
+        inherits = require('../../inherits');
+        merge = require('../../merge');
         plugins = require(__dirname+'/../../../core/plugins') || getContext('gina').plugins;
-        Validator = plugins.Validator;        
+        Validator = plugins.Validator;
+                
     } 
     // BO - In case of partial rendering whithout handler defined for the partial
     else {
@@ -471,8 +474,11 @@ function Routing() {
                     }
                     
                     _rule[key]  = _ruleObj;                
-                    //_validator  = new Validator('routing', _data, null, _rule );
-                    _validator  = new Validator(_data);
+                    if (!isGFFCtx) {
+                        _validator  = new Validator('routing', _data, null, _rule );
+                    } else {
+                        _validator  = new Validator(_data);
+                    }
                     
                     if (_ruleObj.count() == 0 ) {
                         console.error('Route validation failed '+ params.rule);
@@ -496,6 +502,9 @@ function Routing() {
                         // if ( eval(condition)) {
                         if ( !_result.isValid ) {
                             --score;
+                            if ( typeof(_result.error) != 'undefined' ) {
+                                throw _result.error;
+                            }
                         }
                     }
                 }
@@ -985,17 +994,28 @@ function Routing() {
         /**
          * request current url
          * 
+         * 
+         * 
          * @param {boolean} [ignoreWebRoot]
          * @param {object} [options] - see: https://nodejs.org/api/https.html#https_new_agent_options
+         * @param {object} [_this] - current context: only used when `promisify`is used
          * 
          * @callback {callback} [cb] - see: https://nodejs.org/api/https.html#https_new_agent_options
          *      @param {object} res
          */
-        route.request = function(ignoreWebRoot, options, cb) {
+        route.request = function(ignoreWebRoot, options) {
             
-            var wroot       = this.webroot
-                , hostname  = this.hostname
-                , url       = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : this.url
+            var cb = null, _this = null;
+            if ( typeof(arguments[arguments.length-1]) == 'function' ) {
+                cb = arguments[arguments.length-1];
+            }
+            if ( typeof(arguments[2]) == 'object' ) {
+                _this = arguments[2];
+            }
+            
+            var wroot       = this.webroot || _this.webroot
+                , hostname  = this.hostname || _this.hostname
+                , url       = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : this.url || _this.url
             ;
             
             var scheme = ( /^https/.test(hostname) ) ? 'https' : 'http';
@@ -1004,8 +1024,51 @@ function Routing() {
                 var target = ( typeof(options) != 'undefined' && typeof(options.target) != 'undefined' ) ? options.target : "_self";
                 window.open(url, target)
             } else {
-                var agent = require(''+scheme);          
-                agent.get(url, options, cb)
+                if ( typeof(options.agent) == 'undefined' ) {
+                    // See.: https://nodejs.org/api/http.html#http_class_http_agent
+                    // create an agent just for this request
+                    options.agent = false;
+                }
+                var agent = require(''+scheme);
+                if (cb) {
+                    var data = '', err = false;
+                    agent.get(url, options, function onAgentResponse(res) {  
+                        res.on('data', function (chunk) {
+                            data += chunk;
+                        });
+                        res.on('error', function (error) {
+                            err = 'Failed to get mail content';
+                            if (error && typeof(error.stack) != 'undefined' ) {
+                                err += error.stack;
+                            } else if ( typeof(error) == 'string' ) {
+                                err += '\n' + error;
+                            }
+                        });
+                        res.on('end', function () {
+                            if (/^\{/.test(data) ) {
+                                try {
+                                    data = JSON.parse(data);
+                                    if (typeof(data.error) != 'undefined') {
+                                        err = JSON.clone(data);
+                                        data = null;
+                                    }
+                                } catch(parseError) {
+                                    err = parseError
+                                }
+                            }
+                            if (err) {
+                                cb(err);
+                                return;
+                            }
+                            cb(false, data);
+                            return;
+                        });
+                    });                    
+                } else {
+                    agent.get(url, options);
+                }
+                return;
+                
             }                
         }
         

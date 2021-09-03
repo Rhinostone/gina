@@ -1089,7 +1089,10 @@ function Config(opt) {
                 // checking requirements syntax
                 if ( typeof(routing[rule].requirements) != 'undefined' && routing[rule].requirements.count() > 0 ) {
                     for ( let r in routing[rule].requirements) {
-                        if ( !/^\//.test(routing[rule].requirements[r]) && !/^validator\:\:/.test(routing[rule].requirements[r]) ) {
+                        if ( 
+                            !/^\//.test(routing[rule].requirements[r]) 
+                            && !/^validator\:\:/.test(routing[rule].requirements[r])
+                        ) {
                             let ruleName = ( !/\@/.test(rule) ) ? rule +'@'+ bundle : rule;
                             err = new Error('['+ruleName+'] Bad routing syntax for `'+r+'` in requirements : must start with `/` or `validator::`');
                             console.emerg(err.stack||err.message);
