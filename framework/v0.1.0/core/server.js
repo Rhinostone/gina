@@ -2214,7 +2214,7 @@ function Server(options) {
                         delete request.query.inheritedData;
                         
                     }
-                    bodyStr = JSON.stringify(request.query);                        
+                    bodyStr = JSON.stringify(request.query).replace(/\"{/g, '{').replace(/}\"/g, '}').replace(/\\/g, '');                 
                     // false & true case
                     if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
                         bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
