@@ -495,9 +495,7 @@ function Routing() {
                         } else {
                             _result = await _validator[key][rule](_ruleObj[rule], request, response, next);
                         }
-                        // _result.catch( function onResultError(_err) {
-                        //     console.error(_err)
-                        // })
+                        
                         //let condition = _ruleObj[rule].validIf.replace(new RegExp('\\$isValid'), _result.isValid);
                         // if ( eval(condition)) {
                         if ( !_result.isValid ) {

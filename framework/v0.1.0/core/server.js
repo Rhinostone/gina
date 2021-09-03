@@ -2654,8 +2654,9 @@ function Server(options) {
                             methods.indexOf(method) > -1 && typeof(req.query) != 'undefined' && req.query.count() == 0
                             || methods.indexOf(method) > -1 && typeof(req.query) == 'undefined' && typeof(req.params) != 'undefined' && req.params.count() > 1
                         ) {
+                            //req.params = parseObject(req.params);
                             p = 0;
-                            for (var parameter in req.params) {
+                            for (let parameter in req.params) {
                                 if (p > 0) {
                                     // false & true case
                                     if ( /^(false|true|on)$/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
@@ -2668,7 +2669,7 @@ function Server(options) {
                             
                         } else if ( method == 'put' ) { // merging req.params with req.put (passed through URI)
                             p = 0;
-                            for (var parameter in req.params) {
+                            for (let parameter in req.params) {
                                 if (p > 0) {
                                     // false & true case
                                     if ( /^(false|true|on)$/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
