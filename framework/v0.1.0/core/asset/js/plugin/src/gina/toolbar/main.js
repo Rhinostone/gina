@@ -183,7 +183,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
             var $currentForms = null;
             try {
-                var txt = $json.text();
+                var txt = ($json) ? $json.text() : '';
                 if (txt == '' || txt == 'null' ) {
                     $json.text('Empty')
                 } else {
@@ -206,8 +206,14 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
             } catch (err) {
                 
-                var sectionStr = ( section ) ? ' [ '+ section + ' ] ' : ' ';                                    
-                $json.text('Could not load'+ sectionStr +'json\n' + (err.stack||err.message||err));
+                var sectionStr = ( section ) ? ' [ '+ section + ' ] ' : ' ';
+                var _err = 'Could not load'+ sectionStr +'json\n' + (err.stack||err.message||err);
+                if ($json) {
+                    $json.text(_err);
+                } else {
+                    throw _err;
+                }
+                
             }
 
             if (jsonObject) {
@@ -613,7 +619,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             changeToolbarHeight();
 
             // Parse JSON
-            var txt = $json.text();
+            var txt = ($json) ? $json.text() : '';
             // dev only - allows HTML 5 mock
             if ( /^\{\{ (.*) \}\}/.test(txt) ) {
                 // loading mock
@@ -839,7 +845,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         html += '</li>';
                     } else {
 
-                        if (/^_comment/.test(i) ) continue;
+                        //if (/^_comment/.test(i) ) continue;
 
                         if (obj[i] !== ginaObj[i] ) {
                             html += '<li class="gina-toolbar-key-value gina-toolbar-is-overridden">';
@@ -1061,7 +1067,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
                     } else {
 
-                        if (/^_comment/.test(i) ) continue;
+                        //if (/^_comment/.test(i) ) continue;
 
                         if (obj[i] !== ginaObj[i] ) {
                             if (!id) {

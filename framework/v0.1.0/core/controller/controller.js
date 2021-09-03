@@ -143,9 +143,7 @@ function SuperController(options) {
         local.options = SuperController.instance._options = options;
         local.options.renderingStack = (local.options.renderingStack) ? local.options.renderingStack : [];
         local.options.isRenderingCustomError = (local.options.isRenderingCustomError) ? local.options.isRenderingCustomError : false;
-        // Allowing `return` instead of `render`
-        local.options.isReturningRaw = (local.options.isReturningRaw) ? local.options.isReturningRaw : false;
-        
+               
 
         // N.B.: Avoid setting `page` properties as much as possible from the routing.json
         // It will be easier for the framework if set from the controller.
@@ -592,19 +590,6 @@ function SuperController(options) {
                     req         : local.req,
                     res         : local.res 
                 });
-                
-                // if (err) {
-                //     msg = 'could not open "'+ path +'"' +
-                //             '\n1) The requested file does not exists in your templates/html (check your template directory). Can you find: '+path +
-                //             '\n2) Check the following rule in your `'+localOptions.conf.bundlePath+'/config/routing.json` and look around `param` to make sure that nothing is wrong with your file declaration: '+
-                //             '\n' + options.rule +':'+ JSON.stringify(options.conf.content.routing[options.rule], null, 4) +
-                //             '\n3) At this point, if you still have problems trying to run this portion of code, you can contact us telling us how to reproduce the bug.' +
-                //             '\n\r[ stack trace ] '+ err.stack;
-
-                //     console.error(err);
-                //     self.throwError(local.res, 500, new Error(msg));
-                //     return;
-                // }
 
                 try {
                     
@@ -745,8 +730,7 @@ function SuperController(options) {
                         }
                         
                         isDeferModeEnabled = localOptions.template.javascriptsDeferEnabled || localOptions.conf.content.templates._common.javascriptsDeferEnabled || false;  
-                        //isDeferModeEnabled = localOptions.template.javascriptsDeferEnabled || false;
-                        
+                                                
                         // iframe case - without HTML TAG
                         if (!self.isXMLRequest() && !/\<html/.test(layout) ) {
                             layout = '<html>\n\t<head></head>\n\t<body class="gina-iframe-body">\n\t\t'+ layout +'\n\t</body>\n</html>';
@@ -994,9 +978,6 @@ function SuperController(options) {
                             layout = swig.compile(layout, mapping)(data);                            
                             
                             if ( !local.res.headersSent ) {
-                                if ( local.options.isReturningRaw ) {
-                                    return layout;
-                                }
                                 if ( local.options.isRenderingCustomError ) {
                                     local.options.isRenderingCustomError = false;
                                 }
@@ -3524,12 +3505,7 @@ function SuperController(options) {
         ) {
             
             code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
-            // if (!errorObject.status) {
-            //     errorObject.status = code;
-            // }
-                //, errorObject   = res.stack || res.message || res.error || res.fallback
-            
-            
+                        
             if ( typeof(statusCodes[code]) != 'undefined' ) {
                 standardErrorMessage = statusCodes[code];
             } else {
@@ -3538,10 +3514,10 @@ function SuperController(options) {
             
             errorObject = {
                 status  : code,
-                error   : standardErrorMessage || res.error || res.message
+                error   : res.error || res.message || standardErrorMessage
             };
 
-            if ( res instanceof Error) {
+            if ( res instanceof Error || typeof(res.stack) != 'undefined' ) {
                 //errorObject.status   = code;
                 //errorObject.error    = standardErrorMessage || res.error || res.message;
                 errorObject.stack   = res.stack;
@@ -3554,7 +3530,10 @@ function SuperController(options) {
             } else if ( typeof(arguments[arguments.length-1]) == 'string' ) {
                 // formated error
                 errorObject.message = arguments[arguments.length-1]
-            } else if (arguments[arguments.length-1] instanceof Error) {
+            } else if (
+                arguments[arguments.length-1] instanceof Error 
+                || typeof(res) == 'object' && typeof(res.stack) != 'undefined' 
+            ) {
                 errorObject = merge(arguments[arguments.length-1], errorObject)
             }
             
@@ -3652,8 +3631,7 @@ function SuperController(options) {
                 }
                 
                 console.error('[ BUNDLE ][ '+ bundleConf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url +'\n'+ errOutput);                
-                res.end(errOutput);
-                return;
+                return res.end(errOutput);
             } else {
                 
                 
