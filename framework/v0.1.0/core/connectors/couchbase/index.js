@@ -237,14 +237,7 @@ function Couchbase(conn, infos) {
                     }
 
                     var sdkVersion = conn.sdk.version || 2;
-                    var queryParams = [];
-                    var queryOptions = { // values by default
-                        // Do not turn off the adhoc flag for each query since 
-                        // only a finite number of query plans (currently 5000) can be stored in the SDK
-                        adhoc: true, // false to use plan optimization, but need a statement `name param` or `num param`
-                        consistency: 2 // REQUEST_PLUS by default
-                    };
-                    
+                    var queryParams = [];                                        
                     queryStatement = queryString.slice(0);                    
                     if (params) {
                         // BO - patch prepared statement case when placeholder is used as a cursor
@@ -306,6 +299,12 @@ function Couchbase(conn, infos) {
                     }
                     
                     var query = null, execQuery = null, _collection = null;
+                    var queryOptions = { // values by default
+                        // Do not turn off the adhoc flag for each query since 
+                        // only a finite number of query plans (currently 5000) can be stored in the SDK
+                        adhoc: true, // false to use plan optimization, but need a statement `name param` or `num param`
+                        consistency: 3 // STATEMENT_PLUS by default
+                    };
                     if ( sdkVersion > 2 ) { // starting from SDK v3
                         _collection = queryStatement.match(/\_collection(\s+\=|=)(.*)(\'|\")/);
                         if (_collection.length > 0) {
@@ -359,17 +358,21 @@ function Couchbase(conn, infos) {
                         // For more, visit :
                         // - https://blog.couchbase.com/high-performance-consistency/
                         // - https://developer.couchbase.com/documentation/server/current/architecture/querying-data-with-n1ql.html
-                        //queryOptions.consistency = 3;
+                        // queryOptions.consistency = 2; // 3
                                 // .adhoc(queryOptions.adhoc)
                                 // .consistency(queryOptions.consistency)
-                        
+                        if ( /^select/i.test(statement) ) {
+                            queryOptions.adhoc = false;
+                            queryOptions.consistency = 1; // NOT_BOUNDED
+                            query.consistency(1); // NOT_BOUNDED
+                        }
                         // merge options
                         for (var qOpt in queryOptions) {
                             if ( typeof(query[ qOpt ]) == 'undefined' ) {
                                 console.warn('N1QL:'+entityName.toLowerCase()+ '#'+ name + ': `'+ qOpt +'` is not a valid queryOption. Ignorig...');
                                 continue;
                             }
-                            query[ qOpt ]( queryOptions[ qOpt ] )
+                            query[ qOpt ]( queryOptions[ qOpt ] );
                         }    
                                           
                     }
@@ -380,12 +383,7 @@ function Couchbase(conn, infos) {
                     // trick to set event on the fly
                     var trigger = 'N1QL:'+entityName.toLowerCase()+ '#'+ name;
                     var statement = (sdkVersion <= 2) ? query.options.statement : query;
-                    if ( /^select/i.test(statement) ) {
-                        queryOptions.adhoc = false;
-                        queryOptions.consistency = 1; // NOT_BOUNDED
-                        //query.adhoc(false);
-                        query.consistency(1); // NOT_BOUNDED
-                    }
+                    
                     if (GINA_ENV_IS_DEV) {
                         //var statement = (sdkVersion <= 2) ? query.options.statement : query;
                         console.debug('[ ' + trigger +' ] '+statement);
