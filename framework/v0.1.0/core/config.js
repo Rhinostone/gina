@@ -1319,8 +1319,6 @@ function Config(opt) {
                 files['statics'] = requireJSON(staticsPath)
             } else if ( typeof(files['statics']) != 'undefined' ) {
                 var defaultAliases = requireJSON(staticsPath);
-
-                //files['statics'] = merge(files['statics'], defaultAliases)
                 files['statics'] = merge(defaultAliases, files['statics'], true)
             }
            
@@ -1349,6 +1347,7 @@ function Config(opt) {
                 dirs = fs.readdirSync(conf[bundle][env].publicPath);
                 // ignoring html (template files) directory
                 //dirs.splice(dirs.indexOf(new _(reps.html, true).toArray().last()), 1);
+                
                 // making statics allowed directories
                 while ( d < dirs.length) {
                     lStat = fs.lstatSync(_(conf[bundle][env].publicPath +'/'+ dirs[d], true));
@@ -1452,8 +1451,7 @@ function Config(opt) {
                         tLen    = tTmp.length;
                         noneDefaultJs = [];
                         for (; t < tLen; ++t) {
-                            noneDefaultJs[t]        = JSON.clone(js);
-                            //url                     = ( !reWebroot.test(tTmp[t]) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(tTmp[t]) ) ? tTmp[t].substr(1) : tTmp[t] ) : tTmp[t];                               
+                            noneDefaultJs[t]        = JSON.clone(js);                            
                             url                     = tTmp[t];
                             if ( typeof(url) == 'string') {
                                 noneDefaultJs[t].url    = url;                                
@@ -1501,8 +1499,7 @@ function Config(opt) {
                         tLen    = tTmp.length;
                         noneDefaultJs = [];
                         for (; t < tLen; ++t) {
-                            noneDefaultJs[t]        = JSON.clone(js);
-                            //url                     = ( !reWebroot.test(tTmp[t]) ) ? conf[bundle][env].server.webroot + ( ( /^\//.test(tTmp[t]) ) ? tTmp[t].substr(1) : tTmp[t] ) : tTmp[t];                               
+                            noneDefaultJs[t]        = JSON.clone(js);                            
                             url                     = tTmp[t];
                             if ( typeof(url) == 'string') {
                                 noneDefaultJs[t].url    = url;                                
@@ -1534,10 +1531,10 @@ function Config(opt) {
                                         
                     
                     // adding gina def
-                    noneDefaultJs   = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);
-                    if ( section == 'dashboard') {
-                        console.debug('paused @dashoard');
-                    }
+                    if ( !files['templates'][section].javascriptsExcluded || files['templates'][section].javascriptsExcluded != '**' ) {
+                        noneDefaultJs   = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);
+                    }                    
+                    
                     if (!files['templates'][section].javascriptsExcluded) {
                         // if ( /^_common$/.test(section) ) {
                         //     noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);    
@@ -1561,7 +1558,10 @@ function Config(opt) {
                     
                     
                     // adding gina def
-                    noneDefaultCss  = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);   
+                    if ( !files['templates'][section].stylesheetsExcluded || files['templates'][section].stylesheetsExcluded != '**' ) {
+                        noneDefaultCss  = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss); 
+                    }
+                      
                     if (!files['templates'][section].stylesheetsExcluded) {
                         // if ( /^_common$/.test(section) ) {
                         //     noneDefaultCss = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);    
@@ -1659,13 +1659,13 @@ function Config(opt) {
                                 let allFilesCollection = new Collection(files['templates'][section][excludedStr.replace(/Excluded$/, '')]);
                                 let currentCollectionRaw = allFilesCollection.toRaw();
                                 // must be `url` list
-                                excluded = ( /string/.test( typeof(files['templates'][section][excludedStr]) ) && !/^(\*|all)$/i.test(files['templates'][section][excludedStr]) ) ? files['templates'][section][excludedStr].split(/(\,|\;)/g) : files['templates'][section][excludedStr];
-                                if (!Array.isArray(excluded) && !/^(\*|all)$/i.test(files['templates'][section][excludedStr])) {
+                                excluded = ( /string/.test( typeof(files['templates'][section][excludedStr]) ) && !/^(\*|\*\*|all)$/i.test(files['templates'][section][excludedStr]) ) ? files['templates'][section][excludedStr].split(/(\,|\;)/g) : files['templates'][section][excludedStr];
+                                if (!Array.isArray(excluded) && !/^(\*|\*\*|all)$/i.test(files['templates'][section][excludedStr])) {
                                     // '/path/to.file' -> ['/path/to.file']
                                     excluded = [excluded];
                                 }
                                 
-                                if (/^(\*|all)$/i.test(files['templates'][section][excludedStr])) {
+                                if (/^(\*|\*\*|all)$/i.test(files['templates'][section][excludedStr])) {
                                     //currentCollection = allFilesCollection.notIn({ name: 'gina'}, 'name').toRaw();  
                                     currentCollection = allFilesCollection.toRaw();  
                                     
@@ -1684,7 +1684,7 @@ function Config(opt) {
                                 t = 0; tLen = excluded.length;
                                 for (; t < tLen; ++t) {
                                     excludedUrl = excluded[t].trim();
-                                    // if (/^(\*|all)$/.test(excludedUrl) ) {
+                                    // if (/^(\*|\*\*|all)$/.test(excludedUrl) ) {
                                     //     currentCollection = allFilesCollection
                                     //                             .update({ name: 'gina'}, { isCommon: false })
                                     //                             .delete({ 'isCommon': true });

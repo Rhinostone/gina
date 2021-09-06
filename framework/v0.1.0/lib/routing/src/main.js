@@ -389,9 +389,8 @@ function Routing() {
                 }
             }
         }
-        // else if(!hasAlreadyBeenScored ) {            
-        // }
         
+        // This test is done to catch `validator::` rules under requirements
         if ( 
             typeof(params.requirements) != 'undefined' 
             && method == params.method.toLowerCase()
@@ -405,12 +404,12 @@ function Routing() {
             var uRoVars = uRo.join(',').match(/\:[-_a-z0-9]+/g);
             // var uRoVarCount = (uRoVars) ? uRoVars.length : 0;
             while ( r < requiremements.length ) {
-                
+                // requirement name as `key`
+                let key = requiremements[r];
                 // if not listed, but still needing validation
                 if ( 
-                    typeof(params.param[ requiremements[r] ]) == 'undefined' 
-                    && /^validator\:\:/i.test(params.requirements[ requiremements[r] ])
-                    && typeof(request[method][ requiremements[r] ])
+                    typeof(params.param[ key ]) == 'undefined' 
+                    && /^validator\:\:/i.test(params.requirements[ key ])
                 ) {
                     if (uRo.length != uRe.length) {
                         // r++;                     
@@ -426,7 +425,7 @@ function Routing() {
                      * 
                      * e.g.: result = new Validator('routing', _data, null, {email: {isEmail: true, subject: \"Anything\"}} ).isEmail().valid;
                      */ 
-                    let regex = params.requirements[ requiremements[r] ];
+                    let regex = params.requirements[ key ];
                     let _data = {}, _ruleObj = {}, _rule = {};
                     
                     try {
@@ -439,7 +438,6 @@ function Routing() {
                         throw err;
                     }
                     
-                    let key     = requiremements[r];
                     // validator.query case
                     if (typeof(_ruleObj.query) != 'undefined' && typeof(_ruleObj.query.data) != 'undefined') {
                         _data = _ruleObj.query.data;
@@ -465,9 +463,9 @@ function Routing() {
                         }                       
                     }
                     
-                    // normal case
-                    _data = merge(_data, request[method]);
-                    
+                    // If validator.query has data, _data should inherit from request data
+                    _data = merge(_data, JSON.clone(request[method]) || {} );
+                    // This test is to initialize query.data[key] to null by default
                     if ( typeof(_data[key]) == 'undefined' ) {
                         // init default value for unlisted variable/param
                         _data[key] = null;
@@ -482,19 +480,22 @@ function Routing() {
                     
                     if (_ruleObj.count() == 0 ) {
                         console.error('Route validation failed '+ params.rule);
-                        //return false;
                         --score;
                         r++;
                         continue;
-                    }
-                    
+                    }                    
+                    // for each validation rule
                     for (let rule in _ruleObj) {
+                        // updating query.data
+                        if (typeof(_ruleObj[rule].data) != 'undefined') {
+                            _ruleObj[rule].data = _data;
+                        }
                         let _result = null;
                         if (Array.isArray(_ruleObj[rule])) { // has args
                             _result = await _validator[key][rule].apply(_validator[key], _ruleObj[rule]);
                         } else {
                             _result = await _validator[key][rule](_ruleObj[rule], request, response, next);
-                        }
+                        }                     
                         
                         //let condition = _ruleObj[rule].validIf.replace(new RegExp('\\$isValid'), _result.isValid);
                         // if ( eval(condition)) {

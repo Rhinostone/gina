@@ -824,7 +824,9 @@ function SuperController(options) {
                             }
                                 
                             // ginaLoader cannot be deferred
-                            layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                            
+                            if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                                layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                            
+                            }
 
                         } else if ( hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() ) {
                             
@@ -867,7 +869,9 @@ function SuperController(options) {
                             layout.replace('{{ page.view.scripts }}', '');
                             if (isLoadingPartial) {                                
                                 layout += '\t{{ page.view.scripts }}\n';
-                                layout += '\t'+ localOptions.template.ginaLoader +'\n';
+                                if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                                    layout += '\t'+ localOptions.template.ginaLoader +'\n';
+                                }
                             } else {
                                 if ( isDeferModeEnabled && /\<\/head\>/i.test(layout) ) { // placed in the HEAD                                                           
                                     layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
@@ -876,7 +880,9 @@ function SuperController(options) {
                                     layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
                                 }
                                 // ginaLoader cannot be deferred
-                                layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');
+                                if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                                    layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');
+                                }
                             }
                         }
                         
@@ -2192,8 +2198,16 @@ function SuperController(options) {
         
     };
 
-    this.query = function(options, data, callback) {
+    this.query = function() { // options, data, callback
         var err = null;
+        var options = arguments[0];
+        var data = arguments[1] || {};
+        var callback = null;
+        if ( typeof(arguments[arguments.length-1]) == 'function' ) {
+            callback = arguments[arguments.length-1];
+        }  else {
+            data = arguments[arguments.length-1]
+        }
         // preventing multiple call of self.query() when controller is rendering from another required controller
         if ( 
             typeof(local.options) != 'undefined'
@@ -2229,14 +2243,14 @@ function SuperController(options) {
 
         
 
-        if (arguments.length <3) {
-            if ( typeof(data) == 'function') {
-                var callback = data;
-                var data = undefined;
-            } else {
-                callback = undefined;
-            }
-        }
+        // if (arguments.length <3) {
+        //     if ( typeof(data) == 'function') {
+        //         var callback = data;
+        //         var data = undefined;
+        //     } else {
+        //         callback = undefined;
+        //     }
+        // }
         if ( typeof(data) != 'undefined' &&  data.count() > 0) {
 
             queryData = '?';
@@ -2244,20 +2258,23 @@ function SuperController(options) {
             if ( ['put', 'post'].indexOf(options.method.toLowerCase()) >-1 && /(text\/plain|application\/json|application\/x\-www\-form)/i.test(options.headers['content-type']) ) {
                 // replacing
                 queryData = encodeURIComponent(JSON.stringify(data))
+                //queryData = JSON.stringify(data)
 
             } else {
                 //Sample request.
                 //options.path = '/updater/start?release={"version":"0.0.5-dev","url":"http://10.1.0.1:8080/project/bundle/repository/archive?ref=0.0.5-dev","date":1383669077141}&pid=46493';
-
-                for (var d in data) {
-                    if ( typeof(data[d]) == 'object') {
-                        data[d] = JSON.stringify(data[d]);
+                // do not alter the orignal data
+                var tmpData = JSON.clone(data);
+                for (let d in tmpData) {
+                    if ( typeof(tmpData[d]) == 'object') {
+                        tmpData[d] = JSON.stringify(tmpData[d]);
                     }
-                    queryData += d + '=' + data[d] + '&';
+                    queryData += d + '=' + encodeURIComponent(tmpData[d]) + '&';
                 }
 
                 queryData = queryData.substring(0, queryData.length-1);
                 queryData = queryData.replace(/\s/g, '%20');
+                
                 options.path += queryData;
             }
 
@@ -2284,6 +2301,15 @@ function SuperController(options) {
 
         //you need this, even when empty.
         options.headers['content-length'] = queryData.length;
+        
+        // adding gina headers
+        if ( local.req != null && typeof(local.req.ginaHeaders) != 'undefined' ) {
+            // gina form headers
+            for (let h in local.req.ginaHeaders.form) {
+                let k = h.substr(0,1).toUpperCase() + h.substr(1);
+                options.headers['X-Gina-Form-' +  k ] = local.req.ginaHeaders.form[h];
+            }
+        }
 
         var ctx         = getContext()
             , protocol  = null
@@ -3151,34 +3177,48 @@ function SuperController(options) {
     /**
      * Get forms rules
      *
-     * @param {string} [formId]
      *
      * @return {object} rules
      *
      * */
-    this.getFormsRules = function (formId) {
-        try {
-
-            if ( typeof(formId) != 'undefined' ) {
-                try {
-                    formId = formId.replace(/\-/g, '.');
-                    return JSON.clone(local.options.conf.content.forms).rules[formId];
-                } catch (ruleErr) {
-                    self.throwError(ruleErr);
-                    return;
+    this.getFormsRules = function () {
+        var bundle  = local.options.conf.bundle; // by default
+        var form    = null;
+        var rule    = null;
+        var isGettingRulesFromAnotherBundle = false;
+        var rules   = {};
+        if ( typeof(local.req.ginaHeaders) != 'undefined' && typeof(local.req.ginaHeaders.form) != 'undefined' ) {
+            form = local.req.ginaHeaders.form;
+            if ( typeof(form.rule) != 'undefined' ) {
+                var ruleInfos = form.rule.split(/\@/);
+                rule = ruleInfos[0];
+                // rules might be located in another bundle
+                if (ruleInfos[1] && ruleInfos[1] != '' && ruleInfos[1] != bundle) {
+                    bundle = ruleInfos[1];
+                    isGettingRulesFromAnotherBundle = true;
                 }
-            } else {
-                try {
-                    return JSON.clone(local.options.conf.content.forms).rules
-                } catch ( ruleErr ) {
-                    self.throwError(ruleErr);
-                    return;
-                }                
             }
-        } catch (err) {
-            self.throwError(local.res, 500, err);
-            return;
         }
+
+        if ( form && typeof(form.id) != 'undefined' ) {
+            try {
+                if (isGettingRulesFromAnotherBundle) {
+                    rules = JSON.clone(getConfig()[bundle][local.options.conf.env].content.forms.rules[form.id]) || null;
+                } else {
+                    rules = JSON.clone(local.options.conf.content.forms).rules[form.id] || null;
+                }
+                
+                if (!rules) {                    
+                    rules = {};
+                    console.warn('[CONTROLLER]['+ local.options.conf.bundle +'][Backend validation] did not find matching rules for form.id `'+ form.id +'` for  `'+ bundle+' bundle`. Do not Panic if you did not defined any.')
+                }
+            } catch (ruleErr) {
+                self.throwError(ruleErr);
+                return;
+            }
+        }
+        
+        return rules;
     }
     
     this.push = function(payload) {

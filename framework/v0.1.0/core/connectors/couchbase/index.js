@@ -178,6 +178,7 @@ function Couchbase(conn, infos) {
                         filename = _(dir + filename.replace(/^\.\//, ''), true);
                     }
                     // remove @include calls 
+                    //console.debug('including .....'+ filename);
                     queryString = queryString.replace(includes[i], fs.readFileSync( filename ).toString() );
                 }
             }

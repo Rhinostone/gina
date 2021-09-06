@@ -6229,7 +6229,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
         
         var testedValue = this.target.dataset.ginaFormValidatorTestedValue;
-        console.debug('TESTED VALUE -> ' + this.value +' vs '+ testedValue);
+        console.debug('[ '+ this['name'] +' ]', 'TESTED VALUE -> ' + this.value +' vs '+ testedValue);
         if ( !testedValue || testedValue !== this.value ) {
             this.target.dataset.ginaFormValidatorTestedValue = this.value;
         } else if (testedValue === this.value) {
@@ -6251,11 +6251,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 this['errors'] = errors;
                 this.valid = false;
             }
-            
-            triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
+            var _evt = 'asyncCompleted.' + id;
+            if ( typeof( gina.events[_evt]) != 'undefined' ) {
+                triggerEvent(gina, this.target, _evt, self[this['name']]);
+            }           
             
             return self[this.name];
         }
+        console.debug('Did not return !!!');
         
         
         // if (!this.processingValue) {
@@ -6518,8 +6521,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             var attr = options.url.split(/@/); 
             rule = attr[0];
             bundle = attr[1];
+            var proxyConf = getConfig( currentBundle, 'app' ).proxy;
             try {
                 if (config.bundle !== bundle) { // ignore if same bundle
+                    // getting proxy conf when available
                     opt = getConfig( currentBundle, 'app' ).proxy[bundle];
                 }               
             } catch (proxyError) {
@@ -6534,7 +6539,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         var route       = JSON.clone(routing.getRoute(options.url, options.data));
         var env         = config.env;
         var conf        = config[bundle][env]; 
-        if (!opt) {
+        if (!opt) { // setup opt by default if no proxy conf found
             if (config.bundle == bundle) {
                 var credentials = getConfig( currentBundle, 'settings' ).server.credentials;
                 options.ca = credentials.ca || null;
@@ -6628,13 +6633,28 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         //controller.serverInstance = serverInstance;
         controller.setOptions(request, response, next, controllerOptions);
         
-        
-        opt.method  = options.method;
-        opt.path    = route.url;
+                                        
         var data = ( typeof(options.data) == 'object' && options.data.count() > 0 )
                 ? options.data
-                : {};
-                
+                : {};        
+        // inherited data from current query asking for validation
+        var urlParams = '';
+        if ( /^get|delete|put$/i.test(options.method) ) {
+            urlParams += '?';
+            var i = 0;
+            for (let p in data) {
+                if (i > 0) {
+                    urlParams += '&';
+                }
+                let val = (typeof(data[p]) == 'object') ? encodeURIComponent(JSON.stringify(data[p])) : data[p];
+                urlParams += p +'='+ val;
+                i++;
+            }
+        }
+        opt.method  = options.method;
+        //opt.path    = route.url + urlParams;
+        opt.path    = route.url;
+             
         var util            = require('util');
         var promisify       = util.promisify;
         var result = { isValid: false }, err = false;
@@ -7379,9 +7399,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             }
 
             this.valid = isValid;
-            if ( errors.count() > 0 )
+            if ( errors.count() > 0 ) {
                 this['errors'] = errors;
-
+            }
 
             return self[this.name]
         }
@@ -7630,8 +7650,20 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
         return errors;
     }
-    self['getErrors'] = function() {
+    /**
+     * getErrors
+     * 
+     * @param {string} [fieldName]
+     * 
+     * @returns errors
+     */
+    self['getErrors'] = function(fieldName) {
         var errors = {};
+        
+        if ( typeof(fieldName) != 'undefined' ) {
+            errors[fieldName] = self[fieldName]['errors'] || {};
+            return errors
+        }
 
         for (var field in self) {
             if ( typeof(self[field]) != 'function' && typeof(self[field]['errors']) != 'undefined' ) {
@@ -8075,9 +8107,8 @@ function Routing() {
                 }
             }
         }
-        // else if(!hasAlreadyBeenScored ) {            
-        // }
         
+        // This test is done to catch `validator::` rules under requirements
         if ( 
             typeof(params.requirements) != 'undefined' 
             && method == params.method.toLowerCase()
@@ -8091,12 +8122,12 @@ function Routing() {
             var uRoVars = uRo.join(',').match(/\:[-_a-z0-9]+/g);
             // var uRoVarCount = (uRoVars) ? uRoVars.length : 0;
             while ( r < requiremements.length ) {
-                
+                // requirement name as `key`
+                let key = requiremements[r];
                 // if not listed, but still needing validation
                 if ( 
-                    typeof(params.param[ requiremements[r] ]) == 'undefined' 
-                    && /^validator\:\:/i.test(params.requirements[ requiremements[r] ])
-                    && typeof(request[method][ requiremements[r] ])
+                    typeof(params.param[ key ]) == 'undefined' 
+                    && /^validator\:\:/i.test(params.requirements[ key ])
                 ) {
                     if (uRo.length != uRe.length) {
                         // r++;                     
@@ -8112,7 +8143,7 @@ function Routing() {
                      * 
                      * e.g.: result = new Validator('routing', _data, null, {email: {isEmail: true, subject: \"Anything\"}} ).isEmail().valid;
                      */ 
-                    let regex = params.requirements[ requiremements[r] ];
+                    let regex = params.requirements[ key ];
                     let _data = {}, _ruleObj = {}, _rule = {};
                     
                     try {
@@ -8125,7 +8156,6 @@ function Routing() {
                         throw err;
                     }
                     
-                    let key     = requiremements[r];
                     // validator.query case
                     if (typeof(_ruleObj.query) != 'undefined' && typeof(_ruleObj.query.data) != 'undefined') {
                         _data = _ruleObj.query.data;
@@ -8151,9 +8181,9 @@ function Routing() {
                         }                       
                     }
                     
-                    // normal case
-                    _data = merge(_data, request[method]);
-                    
+                    // If validator.query has data, _data should inherit from request data
+                    _data = merge(_data, JSON.clone(request[method]) || {} );
+                    // This test is to initialize query.data[key] to null by default
                     if ( typeof(_data[key]) == 'undefined' ) {
                         // init default value for unlisted variable/param
                         _data[key] = null;
@@ -8168,19 +8198,22 @@ function Routing() {
                     
                     if (_ruleObj.count() == 0 ) {
                         console.error('Route validation failed '+ params.rule);
-                        //return false;
                         --score;
                         r++;
                         continue;
-                    }
-                    
+                    }                    
+                    // for each validation rule
                     for (let rule in _ruleObj) {
+                        // updating query.data
+                        if (typeof(_ruleObj[rule].data) != 'undefined') {
+                            _ruleObj[rule].data = _data;
+                        }
                         let _result = null;
                         if (Array.isArray(_ruleObj[rule])) { // has args
                             _result = await _validator[key][rule].apply(_validator[key], _ruleObj[rule]);
                         } else {
                             _result = await _validator[key][rule](_ruleObj[rule], request, response, next);
-                        }
+                        }                     
                         
                         //let condition = _ruleObj[rule].validIf.replace(new RegExp('\\$isValid'), _result.isValid);
                         // if ( eval(condition)) {
@@ -10450,6 +10483,24 @@ function ValidatorPlugin(rules, data, formId) {
         
         
         options = (typeof (options) != 'undefined') ? merge(options, xhrOptions) : xhrOptions;
+        // `x-gina-form`definition
+        //options.headers['X-Gina-Form-Location'] = gina.config.bundle;
+        if ( typeof($form.id) != 'undefined' ) {
+            options.headers['X-Gina-Form-Id'] = $form.id;
+            if ( 
+                typeof(gina.forms.rules) != 'undefined' 
+                && $form.rules.count() > 0
+                && typeof($form.rules[$form.id]) != 'undefined'
+            ) {
+                options.headers['X-Gina-Form-Rule'] = $form.id +'@'+ gina.config.bundle;
+            } 
+        }
+        // if ( typeof($form.name) != 'undefined' ) {
+        //     options.headers['X-Gina-Form-Name'] = $form.name;
+        // }                        
+        if ( typeof($form.target.dataset.ginaFormRule) != 'undefined' ) {
+            options.headers['X-Gina-Form-Rule'] = $form.target.dataset.ginaFormRule +'@'+ gina.config.bundle;
+        }        
         
         
         // forward callback to HTML data event attribute through `hform` status
@@ -15465,16 +15516,27 @@ function ValidatorPlugin(rules, data, formId) {
                                     
                                     // removing listner
                                     removeListener(gina, event.target, _asyncEvt);
-                                    if ( hasParsedAllRules && asyncCount <= 0) {
-                                        cb._errors = d['getErrors']();
+                                    if ( 
+                                        hasParsedAllRules && asyncCount <= 0
+                                        // ||
+                                        // event.target.dataset.ginaFormValidatorTestedValue == event.detail.value
+                                    ) {
+                                        cb._errors = d['getErrors'](field);
+                                        
                                         // Fixed on 2021/06/11 - to prenvent from loopin on `data` === `data`
                                         // if ( hasParsedAllRules && asyncCount < 0) {
                                         //     console.debug('asyncCompleted.'+ $asyncFieldId + ' Exception. Returning.');
                                         //     return;
                                         // }
-                                            
                                         
-                                        triggerEvent(gina, $formOrElement, 'validated.' + id, cb)
+                                        var $currentForm = $formOrElement;  
+                                        // if ( !/^form$/i.test($formOrElement.tagName) ) {
+                                        //     $currentForm  = $formOrElement.form;
+                                        //     triggerEvent(gina, $currentForm, 'validated.' + $currentForm.getAttribute('id'), cb)
+                                        // } else {
+                                        //     triggerEvent(gina, $formOrElement, 'validated.' + $formOrElement.getAttribute('id'), cb);
+                                        // }
+                                        return;
                                     }
                                 });
                                 
@@ -15544,6 +15606,7 @@ function ValidatorPlugin(rules, data, formId) {
         
         var allRules = ( typeof(rules) !=  'undefined' ) ? JSON.clone(rules) : {};
         var forEachField = function($formOrElement, allFields, allRules, fields, $fields, rules, cb, i) {            
+           
             
             var hasCase = false, isInCase = null, conditions = null;
             var caseValue = null, caseType = null;
@@ -15555,14 +15618,15 @@ function ValidatorPlugin(rules, data, formId) {
                 
                 for (var field in fields) {
                     
-                    if ( typeof($fields[field]) == 'undefined' ) {
+                    if ( isGFFCtx && typeof($fields[field]) == 'undefined' ) {
                         //throw new Error('field `'+ field +'` found for your form rule ('+ $formOrElement.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule.')
                         console.warn('field `'+ field +'` found for your form rule ('+ $formOrElement.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule if this is a mistake.');
                         continue;
                     }
                     // 2021-01-17: fixing exclude default override for `data-gina-form-element-group`
                     if ( 
-                        $fields[field].getAttribute('data-gina-form-element-group')
+                        isGFFCtx
+                        && $fields[field].getAttribute('data-gina-form-element-group')
                         && typeof(rules[field]) != 'undefined'
                         && typeof(rules[field].exclude) != 'undefined'
                         && rules[field].exclude
@@ -15576,7 +15640,8 @@ function ValidatorPlugin(rules, data, formId) {
                     
                     
                     if ( 
-                        $fields[field].tagName.toLowerCase() == 'input' 
+                        isGFFCtx
+                        && $fields[field].tagName.toLowerCase() == 'input' 
                         && /(checkbox)/i.test($fields[field].getAttribute('type')) 
                     ) {
                         if ( 
@@ -16124,7 +16189,10 @@ function ValidatorPlugin(rules, data, formId) {
                     //     cbErrors = d['getErrors'](cbErrors);
                     // } else {
                         cbErrors = d['getErrors']();
-                        instance.$forms[id].errors = merge(instance.$forms[id].errors, cbErrors);
+                        //instance.$forms[id].errors = merge(instance.$forms[id].errors, cbErrors);
+                        // update instance errors
+                        //for (var e in cbErrors)
+                        instance.$forms[id].errors = merge(cbErrors, instance.$forms[id].errors);
                         instance.$forms[id].errors  = d['setErrors'](instance.$forms[id].errors);
                         console.debug('instance errors: ', instance.$forms[id].errors );
                         
