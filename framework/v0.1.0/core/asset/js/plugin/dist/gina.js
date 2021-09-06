@@ -2482,10 +2482,7 @@ function Merge() {
 
                     // both target & options are arrays
                     if ( Array.isArray(options) && Array.isArray(target) ) {
-
-
                         target = mergeArray(options, target, override);
-
                     } else {
                         // Merge the base object
                         for (var name in options) {
@@ -2655,8 +2652,7 @@ function Merge() {
             , i             = 0
         ;
 
-        if (override) {
-
+        if (/^true$/i.test(override)) {
             // if collection, comparison will be done uppon the `id` attribute by default unless you call .setKeyComparison('someField')
             if (
                 typeof(options[0]) == 'object'
@@ -2716,6 +2712,13 @@ function Merge() {
                 return newTarget;
 
             } else { // normal case `arrays` or merging from a blank collection
+                if (
+                    Array.isArray(options) && options.length == 0
+                    ||
+                    typeof(options) == 'undefined'
+                ) {
+                    return target;
+                }
                 return options;
             }
         }

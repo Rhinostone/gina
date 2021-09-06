@@ -1534,8 +1534,8 @@ function Config(opt) {
                     
                     if (!files['templates'][section].javascriptsExcluded) {
                         // merging with common javascript def
-                        noneDefaultJs = merge.setKeyComparison('url')(noneDefaultJs, files['templates']._common.javascripts);
-                        //noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
+                        //noneDefaultJs = merge.setKeyComparison('url')(noneDefaultJs, files['templates']._common.javascripts);
+                        noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
                     }
                     // adding gina def
                     if ( !files['templates'][section].javascriptsExcluded || files['templates'][section].javascriptsExcluded != '**' ) {
