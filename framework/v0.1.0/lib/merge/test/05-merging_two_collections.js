@@ -14,6 +14,8 @@ var design          = null;
 var newFonts        = null;
 var designNew       = null;
 
+var template        = null;
+
 var setVariable = function () {
     a = [];
     b = [
@@ -349,6 +351,33 @@ var setVariable = function () {
             }
         ]
     };
+    
+    template = {
+        "_common": {
+          "routeNameAsFilenameEnabled": true,
+          "http-metas": {
+            "content-type": "text/html"
+          },
+          "stylesheets": [
+            {
+              "name": "default",
+              "media": "screen",
+              "url": "/css/dashboard.css"
+            }
+          ]
+        },
+        "home": {
+            "stylesheets": [],
+            "javascripts": [
+                "/handlers/home.js"
+            ]
+        },
+        "contact": {
+            "javascripts": [
+                "/handlers/contact.js"
+            ]
+        }
+    }
 
 };
 
@@ -383,6 +412,10 @@ var DesignNewToDesignWithoutOverride = merge(designNew, design);
 setVariable();
 var DesignToDesignNewWithOverride = merge(design, designNew, true);
 
+setVariable();
+var Template_commonToTemplateHomeWithOverride = merge.setKeyComparison('url')(template._common, template.home, true);
+setVariable();
+var Template_commonToTemplateContactWithOverride = merge.setKeyComparison('url')(template._common, template.contact, true);
 
 exports['Merge : A<-B with override'] = function(test) {
     var res = [
@@ -406,7 +439,20 @@ exports['Merge : A<-B with override'] = function(test) {
     test.done()
 }
 exports['Merge : B<-A with override'] = function(test) {
-    var res = [];
+    var res = [
+        {
+            id: 1,
+            value: 'apple'
+        },
+        {
+            id: 2,
+            value: 'orange'
+        },
+        {
+            id: 3,
+            value: 'mango'
+        }
+    ];
 
     test.equal( Array.isArray(BtoAwithOverride), true );
     test.deepEqual(BtoAwithOverride, res);
@@ -895,17 +941,37 @@ exports['Merge : design<-designNew with override'] = function(test) {
     test.done()
 }
 
+exports['Merge : template._common<-template.home with override'] = function(test) {
+    var res = {
+        "routeNameAsFilenameEnabled": true,
+        "http-metas": {
+            "content-type": "text/html"
+        },
+        "stylesheets": [
+            {
+                "name": "default",
+                "media": "screen",
+                "url": "/css/dashboard.css"
+            }
+        ],
+        "javascripts": [
+            "/handlers/home.js"
+        ]
+    };
+
+    test.equal(typeof(Template_commonToTemplateHomeWithOverride), 'object');
+    test.deepEqual(Template_commonToTemplateHomeWithOverride, res);
+
+    test.done()
+}
+
 
 exports['Compare : A<-B with override & B<-A without override'] = function(test) {
     test.deepEqual(AtoBwithOverride, BtoAwithoutOverride);
 
     test.done()
 }
-exports['Compare : B<-A with override & A<-B without override'] = function(test) {
-    test.notDeepEqual(AtoBwithoutOverride, BtoAwithOverride);
 
-    test.done()
-}
 
 // for debug purpose
 if (reporter)
