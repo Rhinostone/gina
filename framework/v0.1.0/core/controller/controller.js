@@ -435,12 +435,13 @@ function SuperController(options) {
             localOptions.debugMode = ( /true/i.test(local.req[ local.req.method.toLowerCase() ].debug) ) ? true : false;
         }
         
-        var data            = null
+        var data                = null
+            , layout            = null
             , template          = null
             , file              = null
             , path              = null
             , plugin            = null
-            , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false            
+            , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false        
         ;
         try {
             data = getData();
@@ -611,9 +612,7 @@ function SuperController(options) {
                     self.throwError(local.res, 500, new Error('template compilation exception encoutered: [ '+path+' ]\n'+(err.stack||err.message)));
                     return;
                 }
-
-                //dic['page.content'] = content;
-                dic['page.content'] = layout;
+                
                 
                 
                 var layoutPath              = null                    
@@ -671,7 +670,7 @@ function SuperController(options) {
                     //     self.throwError(local.res, 500, err);
                     //     return;
                     // } else {
-                        var layout = null, isLoadingPartial = false;
+                        var isLoadingPartial = false;
                         try {                            
                             assets  = {assets:"${assets}"};
                             
@@ -695,23 +694,43 @@ function SuperController(options) {
                                 return;
                             });
                             
+                                                        
                             // mappin conf
-                            mapping = { filename: path };                            
+                            mapping = { filename: path };
+                            if (local.options.isRenderingCustomError) {
+                                layout = layout.replace(/\{\{ page\.content \}\}/g, '');
+                                // TODO - Test if there is a block call `gina-error` in the layout & replace block name from tpl                              
+                                tpl = "{% extends '"+ layoutPath +"' %}" + tpl;
+                            }
+                            
                             if (isWithoutLayout || isWithSwigLayout) {
                                 layout = tpl;                                
                             } else if (isUsingGinaLayout) {
                                 mapping = { filename: path };
-                                layout = layout.replace('{{ page.content }}', tpl);  
+                                if ( /(\{\{|\{\{\s+)page\.content/.test(layout) ) {
+                                    
+                                    if ( /\{\%(\s+extends|extends)/.test(tpl) ) {
+                                        err = new Error('You cannot use at the same time `page.content` in your layout `'+ layoutPath +'` while `extends` call in your content `'+ path +'`. You have to choose one or the other');
+                                        self.throwError(local.res, 500, err);
+                                        return
+                                    }
+                                    layout = layout.replace('{{ page.content }}', tpl);
+                                } else {
+                                    layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
+                                }
+                                
                             } else {
                                 // var linkedLayoutRe = new RegExp('(\{\{|\{\{\\s)(page.view.layout)(\}\}|\\s\}\})');
                                 // tpl = tpl.replace(linkedLayoutRe, data.page.view.layout);
                                 tpl = tpl.replace('{{ page.view.layout }}', data.page.view.layout);  
                                 layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
                             }
+                                
                             // precompilation needed in case of `extends` or in order to display the toolbar
                             if ( hasViews() && GINA_ENV_IS_DEV || /\{\%(\s+extends|extends)/.test(layout) ) {
                                 layout = swig.compile(layout, mapping)(data);
-                            }                            
+                            }
+                            //dic['page.content'] = layout;                          
                             
                         } catch(err) {
                             err.stack = 'Exception, bad syntax or undefined data found: start investigating in '+ mapping.filename +'\n' + err.stack;
@@ -886,8 +905,9 @@ function SuperController(options) {
                             }
                         }
                         
-                        //dic['page.content'] = layout;
+                        
                         layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+                        dic['page.content'] = layout;
                         /**
                         // special case for template without layout in debug mode - dev only
                         if ( hasViews() && localOptions.debugMode && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
@@ -920,7 +940,7 @@ function SuperController(options) {
                         */                     
                         
 
-                        if ( !local.res.headersSent && !local.options.isRenderingCustomError) {
+                        if ( !local.res.headersSent /**&& !local.options.isRenderingCustomError*/) {
                             local.res.statusCode = ( typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
                             //catching errors
                             if (
@@ -3492,6 +3512,7 @@ function SuperController(options) {
                 //controller      : controllerFile,
                 //controller: '<span class="gina-bundle-name">' + bundle +'</span>/controllers/controller.js',
                 file: param.file,
+                //layout: param.file,
                 //bundle          : bundle,//module
                 bundlePath      : bundleConf.bundlesPath + '/' + bundle,
                 renderingStack  : bundleConf.renderingStack,
@@ -3828,11 +3849,12 @@ function SuperController(options) {
                     }                  
                 }
                 res.writeHead(code, { 'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding } );
-                if ( isHtmlContent && hasCustomErrorFile ) {
+                // if ( isHtmlContent && hasCustomErrorFile ) {
+                //     res.end(msgString);
+                // } else {
+                //if ( isHtmlContent && !hasCustomErrorFile ) {
                     res.end(msgString);
-                } else {
-                    res.end(msgString);
-                }
+                //}
                 
                 return;
             }
