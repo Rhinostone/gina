@@ -1530,50 +1530,29 @@ function Config(opt) {
                     } 
                                         
                     
+                                      
+                    
+                    if (!files['templates'][section].javascriptsExcluded) {
+                        // merging with common javascript def
+                        noneDefaultJs = merge.setKeyComparison('url')(noneDefaultJs, files['templates']._common.javascripts);
+                        //noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
+                    }
                     // adding gina def
                     if ( !files['templates'][section].javascriptsExcluded || files['templates'][section].javascriptsExcluded != '**' ) {
                         noneDefaultJs   = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);
-                    }                    
-                    
-                    if (!files['templates'][section].javascriptsExcluded) {
-                        // if ( /^_common$/.test(section) ) {
-                        //     noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);    
-                        // } else {
-                            // filter when a common script url is redeclared in the current section : isCommon `true` -> `false`
-                            // if ( noneDefaultJs.length > 0 )
-                                // merging with common javascript def
-                                noneDefaultJs = merge.setKeyComparison('url')(noneDefaultJs, files['templates']._common.javascripts);
-                            // else
-                            //     noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs);
-                        // }
                     }
-                    // if ( 
-                    //     typeof(files['templates'][section].javascriptsExcluded) != 'undefined' 
-                    //     && files['templates'][section].javascriptsExcluded == '*' 
-                    // ) {
-                    //     // will also remmove gina definitions
-                    //     files['templates']._common.javascripts = []
-                    //     //noneDefaultJs = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);  
-                    // }
                     
-                    
+                      
+                    if (!files['templates'][section].stylesheetsExcluded) {
+                        // merging with common stylesheets def
+                        //noneDefaultCss = merge.setKeyComparison('url')(noneDefaultCss, files['templates']._common.stylesheets);
+                        noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss, true);
+                    }
                     // adding gina def
                     if ( !files['templates'][section].stylesheetsExcluded || files['templates'][section].stylesheetsExcluded != '**' ) {
                         noneDefaultCss  = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss); 
                     }
-                      
-                    if (!files['templates'][section].stylesheetsExcluded) {
-                        // if ( /^_common$/.test(section) ) {
-                        //     noneDefaultCss = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);    
-                        // } else {
-                            // filter when a common script url is redeclared in the current section : isCommon `true` -> `false`
-                            // if ( noneDefaultCss.length > 0 )
-                                // merging with common stylesheets def
-                                noneDefaultCss = merge.setKeyComparison('url')(noneDefaultCss, files['templates']._common.stylesheets);
-                            // else
-                            //     noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss);
-                        // }
-                    }
+                    
                     // if ( 
                     //     typeof(files['templates'][section].stylesheetsExcluded) != 'undefined' 
                     //     && files['templates'][section].stylesheetsExcluded == '*' 
