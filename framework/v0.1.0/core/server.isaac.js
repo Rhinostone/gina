@@ -241,8 +241,8 @@ function ServerEngineClass(options) {
                 request.params  = {};
                 request.query   = {};
                 
-                if ( /\?/.test(request.url) ) {     
-                                   
+                if ( /\?/.test(request.url) ) {
+                    
                     queryParams = request.url.split(/\?/);
                     
                     len = queryParams.length;
@@ -261,7 +261,14 @@ function ServerEngineClass(options) {
                                     a[1] = ( /^(true|on)$/i.test(a[1]) ) ? true : false;
                                 else if (a[1].indexOf('%') > -1)
                                     a[1] = decodeURIComponent(a[1]);
-                                    
+                                
+                                if (/^(\{|\[)/.test(a[1]) ) {
+                                    try {
+                                        a[1] = JSON.parse(a[1]);
+                                    } catch(notAJsonError) {
+                                        console.warn('[SERVER][INCOMING REQUEST]', 'Could not convert to JSON or Array this key/value to :' + a[0] + ': '+a[1] +'/nLeaving value as a string.');
+                                    }
+                                }
                                 request.query[ a[0] ] = a[1] 
                             }                        
                         } 

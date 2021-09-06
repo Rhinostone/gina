@@ -817,6 +817,24 @@ function ValidatorPlugin(rules, data, formId) {
         
         
         options = (typeof (options) != 'undefined') ? merge(options, xhrOptions) : xhrOptions;
+        // `x-gina-form`definition
+        //options.headers['X-Gina-Form-Location'] = gina.config.bundle;
+        if ( typeof($form.id) != 'undefined' ) {
+            options.headers['X-Gina-Form-Id'] = $form.id;
+            if ( 
+                typeof(gina.forms.rules) != 'undefined' 
+                && $form.rules.count() > 0
+                && typeof($form.rules[$form.id]) != 'undefined'
+            ) {
+                options.headers['X-Gina-Form-Rule'] = $form.id +'@'+ gina.config.bundle;
+            } 
+        }
+        // if ( typeof($form.name) != 'undefined' ) {
+        //     options.headers['X-Gina-Form-Name'] = $form.name;
+        // }                        
+        if ( typeof($form.target.dataset.ginaFormRule) != 'undefined' ) {
+            options.headers['X-Gina-Form-Rule'] = $form.target.dataset.ginaFormRule +'@'+ gina.config.bundle;
+        }        
         
         
         // forward callback to HTML data event attribute through `hform` status
@@ -5832,16 +5850,27 @@ function ValidatorPlugin(rules, data, formId) {
                                     
                                     // removing listner
                                     removeListener(gina, event.target, _asyncEvt);
-                                    if ( hasParsedAllRules && asyncCount <= 0) {
-                                        cb._errors = d['getErrors']();
+                                    if ( 
+                                        hasParsedAllRules && asyncCount <= 0
+                                        // ||
+                                        // event.target.dataset.ginaFormValidatorTestedValue == event.detail.value
+                                    ) {
+                                        cb._errors = d['getErrors'](field);
+                                        
                                         // Fixed on 2021/06/11 - to prenvent from loopin on `data` === `data`
                                         // if ( hasParsedAllRules && asyncCount < 0) {
                                         //     console.debug('asyncCompleted.'+ $asyncFieldId + ' Exception. Returning.');
                                         //     return;
                                         // }
-                                            
                                         
-                                        triggerEvent(gina, $formOrElement, 'validated.' + id, cb)
+                                        var $currentForm = $formOrElement;  
+                                        // if ( !/^form$/i.test($formOrElement.tagName) ) {
+                                        //     $currentForm  = $formOrElement.form;
+                                        //     triggerEvent(gina, $currentForm, 'validated.' + $currentForm.getAttribute('id'), cb)
+                                        // } else {
+                                        //     triggerEvent(gina, $formOrElement, 'validated.' + $formOrElement.getAttribute('id'), cb);
+                                        // }
+                                        return;
                                     }
                                 });
                                 
@@ -5911,6 +5940,7 @@ function ValidatorPlugin(rules, data, formId) {
         
         var allRules = ( typeof(rules) !=  'undefined' ) ? JSON.clone(rules) : {};
         var forEachField = function($formOrElement, allFields, allRules, fields, $fields, rules, cb, i) {            
+           
             
             var hasCase = false, isInCase = null, conditions = null;
             var caseValue = null, caseType = null;
@@ -5922,14 +5952,15 @@ function ValidatorPlugin(rules, data, formId) {
                 
                 for (var field in fields) {
                     
-                    if ( typeof($fields[field]) == 'undefined' ) {
+                    if ( isGFFCtx && typeof($fields[field]) == 'undefined' ) {
                         //throw new Error('field `'+ field +'` found for your form rule ('+ $formOrElement.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule.')
                         console.warn('field `'+ field +'` found for your form rule ('+ $formOrElement.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule if this is a mistake.');
                         continue;
                     }
                     // 2021-01-17: fixing exclude default override for `data-gina-form-element-group`
                     if ( 
-                        $fields[field].getAttribute('data-gina-form-element-group')
+                        isGFFCtx
+                        && $fields[field].getAttribute('data-gina-form-element-group')
                         && typeof(rules[field]) != 'undefined'
                         && typeof(rules[field].exclude) != 'undefined'
                         && rules[field].exclude
@@ -5943,7 +5974,8 @@ function ValidatorPlugin(rules, data, formId) {
                     
                     
                     if ( 
-                        $fields[field].tagName.toLowerCase() == 'input' 
+                        isGFFCtx
+                        && $fields[field].tagName.toLowerCase() == 'input' 
                         && /(checkbox)/i.test($fields[field].getAttribute('type')) 
                     ) {
                         if ( 
@@ -6491,7 +6523,10 @@ function ValidatorPlugin(rules, data, formId) {
                     //     cbErrors = d['getErrors'](cbErrors);
                     // } else {
                         cbErrors = d['getErrors']();
-                        instance.$forms[id].errors = merge(instance.$forms[id].errors, cbErrors);
+                        //instance.$forms[id].errors = merge(instance.$forms[id].errors, cbErrors);
+                        // update instance errors
+                        //for (var e in cbErrors)
+                        instance.$forms[id].errors = merge(cbErrors, instance.$forms[id].errors);
                         instance.$forms[id].errors  = d['setErrors'](instance.$forms[id].errors);
                         console.debug('instance errors: ', instance.$forms[id].errors );
                         

@@ -4,7 +4,7 @@ var dateFormat  = helpers.dateFormat;
 
 /**
  * @class Validator
- *
+ * Backend validator
  * e.g.:
  *  var data = req.post;
  *  var d = new Validator(data);

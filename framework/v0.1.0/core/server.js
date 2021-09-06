@@ -1684,7 +1684,22 @@ function Server(options) {
              * They can only be controlled/produced by the remote domain.
              * */
             request.isWithCredentials  = ( request.headers['access-control-allow-credentials'] && request.headers['access-control-allow-credentials'] == true ) ? true : false;
-                        
+            /**
+             * Intercept gina headers
+             */
+            if ( typeof(request.headers['x-gina-form-id']) != 'undefined' ) {
+                var ginaHeaders = {
+                    form: {
+                        id: request.headers['x-gina-form-id']
+                    }
+                };
+                if ( typeof(request.headers['x-gina-form-rule']) != 'undefined' ) {
+                    var rule = request.headers['x-gina-form-rule'].split(/\@/);
+                    ginaHeaders.form.rule = rule[0];
+                    ginaHeaders.form.bundle = rule[1];
+                }
+                request.ginaHeaders = ginaHeaders;
+            }            
             
             local.request = request;
                         
@@ -2193,27 +2208,25 @@ function Server(options) {
                 break;
 
             case 'get':
+                // if ( typeof(request.query) == 'string' && /^(\{|\[\{)/.test(request.query) ) {
+                //     bodyStr = request.query.replace(/\"{/g, '{').replace(/}\"/g, '}').replace(/\\/g, '');
+                //     request.query = JSON.parse(bodyStr);
+                // }
                 if ( typeof(request.query) != 'undefined' && request.query.count() > 0 ) {   
                     var inheritedDataObj = {};
                     if ( typeof(request.query.inheritedData) != 'undefined' ) {
-                        // try {
-                        //     bodyStr = decodeURIComponent(request.query.inheritedData); // it is already a string for sure
-                        // } catch (err) {
-                        //     bodyStr = request.query.inheritedData;
-                        // }
-                        // delete request.query.inheritedData;
-                        // // false & true case
-                        // if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
-                        //     bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-                        // obj = JSON.parse(bodyStr);
+                        
                         
                         if ( typeof(request.query.inheritedData) == 'string' ) {
                             inheritedDataObj = parseBody(decodeURIComponent(request.query.inheritedData));
+                        } else {
+                            inheritedDataObj = JSON.clone(request.query.inheritedData);
                         }
                         
                         delete request.query.inheritedData;
                         
                     }
+                    
                     bodyStr = JSON.stringify(request.query).replace(/\"{/g, '{').replace(/}\"/g, '}').replace(/\\/g, '');                 
                     // false & true case
                     if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )

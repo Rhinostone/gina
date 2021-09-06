@@ -546,7 +546,7 @@ function Router(env) {
                     }
                 }
                 try {
-                    controller[action](request, response, next)
+                    controller[action](request, response, next);
                 } catch (err) {
                     if ( typeof(controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
                         serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);

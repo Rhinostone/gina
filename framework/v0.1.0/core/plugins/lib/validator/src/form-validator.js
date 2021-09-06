@@ -170,7 +170,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
         
         var testedValue = this.target.dataset.ginaFormValidatorTestedValue;
-        console.debug('TESTED VALUE -> ' + this.value +' vs '+ testedValue);
+        console.debug('[ '+ this['name'] +' ]', 'TESTED VALUE -> ' + this.value +' vs '+ testedValue);
         if ( !testedValue || testedValue !== this.value ) {
             this.target.dataset.ginaFormValidatorTestedValue = this.value;
         } else if (testedValue === this.value) {
@@ -192,11 +192,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 this['errors'] = errors;
                 this.valid = false;
             }
-            
-            triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
+            var _evt = 'asyncCompleted.' + id;
+            if ( typeof( gina.events[_evt]) != 'undefined' ) {
+                triggerEvent(gina, this.target, _evt, self[this['name']]);
+            }           
             
             return self[this.name];
         }
+        console.debug('Did not return !!!');
         
         
         // if (!this.processingValue) {
@@ -459,8 +462,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             var attr = options.url.split(/@/); 
             rule = attr[0];
             bundle = attr[1];
+            var proxyConf = getConfig( currentBundle, 'app' ).proxy;
             try {
                 if (config.bundle !== bundle) { // ignore if same bundle
+                    // getting proxy conf when available
                     opt = getConfig( currentBundle, 'app' ).proxy[bundle];
                 }               
             } catch (proxyError) {
@@ -475,7 +480,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         var route       = JSON.clone(routing.getRoute(options.url, options.data));
         var env         = config.env;
         var conf        = config[bundle][env]; 
-        if (!opt) {
+        if (!opt) { // setup opt by default if no proxy conf found
             if (config.bundle == bundle) {
                 var credentials = getConfig( currentBundle, 'settings' ).server.credentials;
                 options.ca = credentials.ca || null;
@@ -569,13 +574,28 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         //controller.serverInstance = serverInstance;
         controller.setOptions(request, response, next, controllerOptions);
         
-        
-        opt.method  = options.method;
-        opt.path    = route.url;
+                                        
         var data = ( typeof(options.data) == 'object' && options.data.count() > 0 )
                 ? options.data
-                : {};
-                
+                : {};        
+        // inherited data from current query asking for validation
+        var urlParams = '';
+        if ( /^get|delete|put$/i.test(options.method) ) {
+            urlParams += '?';
+            var i = 0;
+            for (let p in data) {
+                if (i > 0) {
+                    urlParams += '&';
+                }
+                let val = (typeof(data[p]) == 'object') ? encodeURIComponent(JSON.stringify(data[p])) : data[p];
+                urlParams += p +'='+ val;
+                i++;
+            }
+        }
+        opt.method  = options.method;
+        //opt.path    = route.url + urlParams;
+        opt.path    = route.url;
+             
         var util            = require('util');
         var promisify       = util.promisify;
         var result = { isValid: false }, err = false;
@@ -1320,9 +1340,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             }
 
             this.valid = isValid;
-            if ( errors.count() > 0 )
+            if ( errors.count() > 0 ) {
                 this['errors'] = errors;
-
+            }
 
             return self[this.name]
         }
@@ -1571,8 +1591,20 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
         return errors;
     }
-    self['getErrors'] = function() {
+    /**
+     * getErrors
+     * 
+     * @param {string} [fieldName]
+     * 
+     * @returns errors
+     */
+    self['getErrors'] = function(fieldName) {
         var errors = {};
+        
+        if ( typeof(fieldName) != 'undefined' ) {
+            errors[fieldName] = self[fieldName]['errors'] || {};
+            return errors
+        }
 
         for (var field in self) {
             if ( typeof(self[field]) != 'function' && typeof(self[field]['errors']) != 'undefined' ) {
