@@ -710,7 +710,7 @@ function SuperController(options) {
                                 if ( /(\{\{|\{\{\s+)page\.content/.test(layout) ) {
                                     
                                     if ( /\{\%(\s+extends|extends)/.test(tpl) ) {
-                                        err = new Error('You cannot use at the same time `page.content` in your layout `'+ layoutPath +'` while `extends` call in your content `'+ path +'`. You have to choose one or the other');
+                                        err = new Error('You cannot use at the same time `page.content` in your layout `'+ layoutPath +'` while calling `extends` from your page or content `'+ path +'`. You have to choose one or the other');
                                         self.throwError(local.res, 500, err);
                                         return
                                     }
