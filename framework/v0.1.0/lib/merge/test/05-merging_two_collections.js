@@ -964,6 +964,29 @@ exports['Merge : template._common<-template.home with override'] = function(test
 
     test.done()
 }
+exports['Merge : template._common<-template.contact with override'] = function(test) {
+    var res = {
+        "routeNameAsFilenameEnabled": true,
+        "http-metas": {
+            "content-type": "text/html"
+        },
+        "stylesheets": [
+            {
+                "name": "default",
+                "media": "screen",
+                "url": "/css/dashboard.css"
+            }
+        ],
+        "javascripts": [
+            "/handlers/contact.js"
+        ]
+    };
+
+    test.equal(typeof(Template_commonToTemplateContactWithOverride), 'object');
+    test.deepEqual(Template_commonToTemplateContactWithOverride, res);
+
+    test.done()
+}
 
 
 exports['Compare : A<-B with override & B<-A without override'] = function(test) {
