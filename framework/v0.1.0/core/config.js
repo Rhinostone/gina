@@ -1534,7 +1534,6 @@ function Config(opt) {
                     
                     if (!files['templates'][section].javascriptsExcluded) {
                         // merging with common javascript def
-                        //noneDefaultJs = merge.setKeyComparison('url')(noneDefaultJs, files['templates']._common.javascripts);
                         noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
                     }
                     // adding gina def
@@ -1545,23 +1544,13 @@ function Config(opt) {
                       
                     if (!files['templates'][section].stylesheetsExcluded) {
                         // merging with common stylesheets def
-                        //noneDefaultCss = merge.setKeyComparison('url')(noneDefaultCss, files['templates']._common.stylesheets);
                         noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss, true);
                     }
                     // adding gina def
                     if ( !files['templates'][section].stylesheetsExcluded || files['templates'][section].stylesheetsExcluded != '**' ) {
                         noneDefaultCss  = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss); 
                     }
-                    
-                    // if ( 
-                    //     typeof(files['templates'][section].stylesheetsExcluded) != 'undefined' 
-                    //     && files['templates'][section].stylesheetsExcluded == '*' 
-                    // ) {
-                    //     //noneDefaultCss = []
-                    //     files['templates']._common.stylesheets = []
-                    //     //noneDefaultCss = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);  
-                    // } // else is handles at the bottom of the current loop
-                    
+                                       
                     
                     // force js rechecking on `name` & `url`
                     t = 0;
@@ -1595,13 +1584,7 @@ function Config(opt) {
                         noneDefaultCss[t].type      = ( typeof(noneDefaultCss[t].type) != 'undefined' ) ? noneDefaultCss[t].type : css.type;
                         noneDefaultCss[t].isCommon  = ( typeof(noneDefaultCss[t].isCommon) != 'undefined' ) ? noneDefaultCss[t].isCommon : ( ( /^_common$/.test(section) ) ? true : false );
                     }
-                    
-                    
-                    
                                       
-                    
-                    //noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss);
-                    
                     
                     files['templates'][section].javascripts = noneDefaultJs;
                     files['templates'][section].stylesheets = noneDefaultCss;
@@ -1663,17 +1646,6 @@ function Config(opt) {
                                 t = 0; tLen = excluded.length;
                                 for (; t < tLen; ++t) {
                                     excludedUrl = excluded[t].trim();
-                                    // if (/^(\*|\*\*|all)$/.test(excludedUrl) ) {
-                                    //     currentCollection = allFilesCollection
-                                    //                             .update({ name: 'gina'}, { isCommon: false })
-                                    //                             .delete({ 'isCommon': true });
-                                    //     break;
-                                    // } else {
-                                        
-                                    //     currentCollection = currentCollection
-                                    //                             //.notIn({ name: 'gina'}, 'name')
-                                    //                             .delete({ 'url': excludedUrl }, 'url');
-                                    // }
                                     for (let e = 0, eLen = currentCollectionRaw.length; e < eLen; e++) {
                                         if (currentCollectionRaw[e].url != excludedUrl[t]) continue;
                                         currentCollection = currentCollection.delete({ 'url': excludedUrl }, 'url');

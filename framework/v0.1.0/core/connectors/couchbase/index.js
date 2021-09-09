@@ -299,11 +299,12 @@ function Couchbase(conn, infos) {
                     }
                     
                     var query = null, execQuery = null, _collection = null;
-                    var queryOptions = { // values by default
+                    // values by default
+                    var queryOptions = {
                         // Do not turn off the adhoc flag for each query since 
                         // only a finite number of query plans (currently 5000) can be stored in the SDK
-                        adhoc: true, // false to use plan optimization, but need a statement `name param` or `num param`
-                        consistency: 3 // STATEMENT_PLUS by default
+                        adhoc: false, // false to use plan optimization, but need a statement `name param` or `num param`
+                        consistency: 1 // NOT_BOUNDED, but STATEMENT_PLUS is set by default for insert & update
                     };
                     if ( sdkVersion > 2 ) { // starting from SDK v3
                         _collection = queryStatement.match(/\_collection(\s+\=|=)(.*)(\'|\")/);
@@ -361,11 +362,11 @@ function Couchbase(conn, infos) {
                         // queryOptions.consistency = 2; // 3
                                 // .adhoc(queryOptions.adhoc)
                                 // .consistency(queryOptions.consistency)
-                        if ( /^select/i.test(statement) ) {
-                            queryOptions.adhoc = false;
-                            queryOptions.consistency = 1; // NOT_BOUNDED
-                            query.consistency(1); // NOT_BOUNDED
-                        }
+                        //if ( /^(insert|update)/i.test(statement) ) {
+                            queryOptions.adhoc = true;
+                            queryOptions.consistency = 3; // NOT_BOUNDED
+                            query.consistency(3); // NOT_BOUNDED
+                        //}
                         // merge options
                         for (var qOpt in queryOptions) {
                             if ( typeof(query[ qOpt ]) == 'undefined' ) {
@@ -631,8 +632,9 @@ function Couchbase(conn, infos) {
         try {    
             var conn        = this.getConnection();                    
             var sdkVersion = conn.sdk.version || 2;
-            var queryOptions = { // by default
-                adhoc: false,
+            // by default
+            var queryOptions = { 
+                adhoc: true,
                 consistency: 3
             };
             
@@ -685,7 +687,12 @@ function Couchbase(conn, infos) {
 
             // trick to set event on the fly
             var trigger = 'N1QL:'+ this.name.toLowerCase()+ '#'+ name;
+            // trick to set event on the fly
+            var statement = (sdkVersion <= 2) ? query.options.statement : query;
             
+            if (GINA_ENV_IS_DEV) {
+                console.debug('[ ' + trigger +' ] '+statement);
+            }
 
             var self = this;
             conn.query(query, rec, function(err, data, meta) {
@@ -701,6 +708,9 @@ function Couchbase(conn, infos) {
                     err.message = '`GenericN1QLError::bulkInsert`\n'+ err.message;
                     err.stack   = '`GenericN1QLError::bulkInsert`\n'+ err.stack;
                 }
+                if (GINA_ENV_IS_DEV) {
+                    console.debug('[ bulkInsert response ] : err ? '+ err + ', meta : \n'+ JSON.stringify(meta) +'\n data :\n'+ JSON.stringify(data) );
+                }
 
                 self.emit(trigger, err, data, meta);
             });
@@ -708,6 +718,9 @@ function Couchbase(conn, infos) {
             return {
                 onComplete : function(cb) {
                     self.once(trigger, function(err, data, meta){
+                        if (GINA_ENV_IS_DEV) {
+                            console.debug('[ bulkInsert triggerd ] '+ trigger);
+                        }
                         cb(err, data, meta)
                     })
                 }
