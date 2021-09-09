@@ -10112,43 +10112,44 @@ function ValidatorPlugin(rules, data, formId) {
                 /^(true)$/i.test($form.dataset.ginaFormLiveCheckEnabled) 
                 && typeof(fieldName) != 'undefined'
             ) {
-                if ( typeof(liveCheckErrors[$form.id]) == 'undefined') {
-                    liveCheckErrors[$form.id] = {};
+                var formId = ( typeof($form.id) != 'string' ) ? $form.getAttribute('id') : $form.id;
+                if ( typeof(liveCheckErrors[formId]) == 'undefined') {
+                    liveCheckErrors[formId] = {};
                 }            
                 if (errors.count() > 0) {
                     // reset field name
-                    liveCheckErrors[$form.id][fieldName] = {};
+                    liveCheckErrors[formId][fieldName] = {};
                     // override
-                    liveCheckErrors[$form.id][fieldName] = merge(errors[fieldName], liveCheckErrors[$form.id][fieldName]);
-                    errors = liveCheckErrors[$form.id];
+                    liveCheckErrors[formId][fieldName] = merge(errors[fieldName], liveCheckErrors[formId][fieldName]);
+                    errors = liveCheckErrors[formId];
                     // only if the form has not been sent yet
-                    if (!instance.$forms[$form.id].sent) {
+                    if (!instance.$forms[formId].sent) {
                         isWarning = true;
                     }
                 } else {
-                    if ( typeof(liveCheckErrors[$form.id][fieldName]) != 'undefined') {
-                        delete liveCheckErrors[$form.id][fieldName];
+                    if ( typeof(liveCheckErrors[formId][fieldName]) != 'undefined') {
+                        delete liveCheckErrors[formId][fieldName];
                         if ( 
-                            typeof(window.gina.validator.$forms[$form.id].errors) != 'undefined'
-                            && typeof(window.gina.validator.$forms[$form.id].errors[fieldName]) != 'undefined'
+                            typeof(window.gina.validator.$forms[formId].errors) != 'undefined'
+                            && typeof(window.gina.validator.$forms[formId].errors[fieldName]) != 'undefined'
                         ) {
-                            delete window.gina.validator.$forms[$form.id].errors[fieldName];
+                            delete window.gina.validator.$forms[formId].errors[fieldName];
                         }
                     }
                     if ( 
                         typeof(instance.$forms) != 'undefined'
-                        && typeof(instance.$forms[$form.id]) != 'undefined' 
-                        && typeof(instance.$forms[$form.id].errors) != 'undefined' 
-                        && instance.$forms[$form.id].errors.count() == 0 
+                        && typeof(instance.$forms[formId]) != 'undefined' 
+                        && typeof(instance.$forms[formId].errors) != 'undefined' 
+                        && instance.$forms[formId].errors.count() == 0 
                     ) {
                         // update submit trigger state
                         updateSubmitTriggerState( $form, true );
                     }
                     
-                    if ( typeof(liveCheckErrors[$form.id]) != 'undefined' && liveCheckErrors[$form.id].count() == 0 ) {
-                        delete liveCheckErrors[$form.id]
+                    if ( typeof(liveCheckErrors[formId]) != 'undefined' && liveCheckErrors[formId].count() == 0 ) {
+                        delete liveCheckErrors[formId]
                     } else {
-                        errors = liveCheckErrors[$form.id];
+                        errors = liveCheckErrors[formId];
                     }
                     
                     
@@ -15482,6 +15483,11 @@ function ValidatorPlugin(rules, data, formId) {
             // check each field against rule
             for (var rule in rules[field]) {
                 
+                if ( typeof(d[field][rule]) != 'function' ) {
+                    //console.warn('Rule `'+ rule +'` not found');
+                    continue;
+                }
+                
                 if ( /^((is)\d+|is$)/.test(rule) && typeof(d[field][rule]) == 'undefined' ) { // is aliases                   
                     d[field][rule] = function(){};
                     d[field][rule] = inherits(d[field][rule], d[field][ rule.replace(/\d+/, '') ]);
@@ -15602,8 +15608,9 @@ function ValidatorPlugin(rules, data, formId) {
             $allFields  = $fields;
         } else {
             // TODO - Get cached infos
-            var formAllInfos = getFormValidationInfos(instance.$forms[$formOrElement.form.id].target, instance.$forms[$formOrElement.form.id].rules, false);            
-            allFields   = formatFields(JSON.stringify(instance.$forms[$formOrElement.form.id].rules), JSON.clone(formAllInfos.fields));
+            var formId = $formOrElement.form.getAttribute('id');
+            var formAllInfos = getFormValidationInfos(instance.$forms[formId].target, instance.$forms[formId].rules, false);            
+            allFields   = formatFields(JSON.stringify(instance.$forms[formId].rules), JSON.clone(formAllInfos.fields));
             $allFields  = formAllInfos.$fields;
         }
         
