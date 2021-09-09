@@ -179,7 +179,8 @@ function ServerEngineClass(options) {
                 // how many ms before sending a new ping packet
                 pingTimeout: options.ioServer.pingTimeout || options.ioServer.timeout,
                 // how many ms without a pong packet to consider the connection closed
-                pingInterval: options.ioServer.pingInterval || options.ioServer.interval
+                pingInterval: options.ioServer.pingInterval || options.ioServer.interval,
+                port: this.port || options.ioServer.port || null
             }));
             
             socket.on('message', function(payload){ 

@@ -716,12 +716,10 @@ function SuperController(options) {
                                     }
                                     layout = layout.replace('{{ page.content }}', tpl);
                                 } else {
-                                    layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
+                                    layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');                                    
                                 }
                                 
                             } else {
-                                // var linkedLayoutRe = new RegExp('(\{\{|\{\{\\s)(page.view.layout)(\}\}|\\s\}\})');
-                                // tpl = tpl.replace(linkedLayoutRe, data.page.view.layout);
                                 tpl = tpl.replace('{{ page.view.layout }}', data.page.view.layout);  
                                 layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
                             }
@@ -744,9 +742,9 @@ function SuperController(options) {
                             || !/\<body/i.test(layout) 
                         ) ? true : false;
                         
-                        if (isLoadingPartial) {
-                            console.warn('----------------> loading partial `'+ path);
-                        }
+                        // if (isLoadingPartial) {
+                        //     console.warn('----------------> loading partial `'+ path);
+                        // }
                         
                         isDeferModeEnabled = localOptions.template.javascriptsDeferEnabled || localOptions.conf.content.templates._common.javascriptsDeferEnabled || false;  
                                                 
@@ -769,10 +767,6 @@ function SuperController(options) {
                             
                             var scripts = data.page.view.scripts;
                             scripts = scripts.replace(/\s+\<script/g, '\n<script');
-                                        
-                            // var stylesheets = data.page.view.stylesheets;
-                            // stylesheets = stylesheets
-                            //             .replace(/\s+\<link/g, '\n<link');
                                                     
                             if (!isProxyHost) {
                                 var webroot = data.page.environment.webroot;
