@@ -816,6 +816,14 @@ function ValidatorPlugin(rules, data, formId) {
         var isAttachment = null; // handle download
         var hFormIsRequired = null;
         
+        if ( 
+            typeof(instance.$forms[id].isSending) != 'undefined'
+            && /^true$/i.test(instance.$forms[id].isSending)
+        ) {
+            return;
+        }
+        instance.$forms[id].isSending = true;
+        
         
         options = (typeof (options) != 'undefined') ? merge(options, xhrOptions) : xhrOptions;
         // `x-gina-form`definition
@@ -1479,7 +1487,7 @@ function ValidatorPlugin(rules, data, formId) {
                                         xhr.setRequestHeader('Content-Type', 'multipart/form-data; boundary=' + boundary);
                                         xhr.send(data);
                                         
-                                        instance.$forms[$form.id].isSubmitting = false;
+                                        //instance.$forms[$form.id].isSubmitting = false;
                                         $form.sent = true;
                                         
                                     }
@@ -1519,11 +1527,11 @@ function ValidatorPlugin(rules, data, formId) {
                 if ( typeof(enctype) != 'undefined' && enctype != null && enctype != ''){
                     xhr.setRequestHeader('Content-Type', enctype);
                 }
-
+                
                 xhr.send()
             }
 
-            instance.$forms[$form.id].isSubmitting = false;
+            //instance.$forms[$form.id].isSubmitting = false;
             $form.sent = true;
             if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                 // update toolbar
@@ -5177,6 +5185,7 @@ function ValidatorPlugin(rules, data, formId) {
                         rule = getRuleObjByName(_id.replace(/\-/g, '.'))
                     }
                     instance.$forms[id].isSubmitting = true;
+                    instance.$forms[id].isSending = false;
                     validate($target, fields, $fields, rule, function onClickValidation(result){
                         triggerEvent(gina, $target, 'validate.' + _id, result)
                     })
@@ -6501,6 +6510,7 @@ function ValidatorPlugin(rules, data, formId) {
                 if (!hasBeenValidated && asyncCount <= 0) {
                     if ( typeof(cb) != 'undefined' && typeof(cb) === 'function' ) {
                         cb._errors = d['getErrors']();
+                        cb._data = d['toData']();
                         triggerEvent(gina, $formOrElement, 'validated.' + id, cb);
                     } else {
                         hasBeenValidated = true;
@@ -6529,7 +6539,7 @@ function ValidatorPlugin(rules, data, formId) {
                     //     cbErrors = merge(_cb._errors, d['getErrors']());
                     //     cbErrors = d['getErrors'](cbErrors);
                     // } else {
-                        cbErrors = d['getErrors']();
+                        cbErrors = _cb._errors || d['getErrors']();
                         //instance.$forms[id].errors = merge(instance.$forms[id].errors, cbErrors);
                         // update instance errors
                         //for (var e in cbErrors)
@@ -6538,15 +6548,13 @@ function ValidatorPlugin(rules, data, formId) {
                         console.debug('instance errors: ', instance.$forms[id].errors );
                         
                     // }
+                    var _data = _cb._data || d['toData']();
                     _cb({
                         'isValid'   : d['isValid'],
                         'error'     : cbErrors,
-                        'data'      : formatData( d['toData']() )
+                        'data'      : formatData( _data )
                     });
                     removeListener(gina, event.target, 'validated.' + event.target.id);
-                    //removeListener(gina, event.target, event.type);
-                    
-                    //hasBeenValidated    = false;
                     return 
                 }                    
             });

@@ -84,8 +84,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         throw new Error('missing data param')
     } else {
         // cloning
-        self  = JSON.parse( JSON.stringify(data) );
-        local.data = JSON.parse( JSON.stringify(data) )
+        self  = merge( JSON.clone(data), self );
+        local.data = merge( JSON.clone(data), local.data);
     }
     
     var getElementByName = function($form, name) { // frontend only
@@ -689,7 +689,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 delete window._currentValidatorAlias;
                 
             var errors      = self[this['name']]['errors'] || {};  
-            
+            local.data[this.name] = self[this.name].value;
             
             if ( 
                 typeof(errors['isRequired']) == 'undefined'
@@ -903,6 +903,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     val = this.value = local.data[this.name] = false;
                     break;
             }
+            
             var isValid = (val !== null) ? true : false;
 
             if (!isValid) {
@@ -945,9 +946,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             try {
                 // if val is a string replaces comas by points
                 if ( typeof(val) == 'string' && /\,|\./g.test(val) ) {
-                    val = this.value = parseFloat( val.replace(/,/g, '.').replace(/\s+/g, '') );
+                    val = local.data[this.name] = this.value = parseFloat( val.replace(/,/g, '.').replace(/\s+/g, '') );
                 } else if ( typeof(val) == 'string' && val != '') {
-                    val = this.value = parseInt( val.replace(/\s+/g, '') );
+                    val = local.data[this.name] = this.value = parseInt( val.replace(/\s+/g, '') );
                 }
 
             } catch (err) {
@@ -1101,7 +1102,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 }
             }
 
-            var val         = this.value
+            var val         = local.data[this.name] = this.value
                 , errors    = self[this['name']]['errors'] || {}
                 , isValid   = true
             ;
@@ -1165,7 +1166,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 this.value = this.value.replace(/\s+/g, '');
             }
 
-            var val         = this.value
+            var val         = local.data[this.name] = this.value
                 , isValid   = false
                 , errors    = self[this['name']]['errors'] || {}
             ;
@@ -1289,7 +1290,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          * */
         self[el]['isString'] = function(minLength, maxLength) {
 
-            var val             = this.value
+            var val             = local.data[this.name] = this.value
                 , isValid       = false
                 , isMinLength   = true
                 , isMaxLength   = true
@@ -1481,7 +1482,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             if ( typeof(isApplicable) == 'boolean' && isApplicable ) {
                 //if ( typeof(this.value) == 'string' ) {
                     this.value = this.value.replace(/^\s+|\s+$/, '');
-                    local.data[this.name] = this.value;
+                    local.data[this.name] = local.data[this.name] = this.value;
                 //}
                 return self[this.name]
             }
