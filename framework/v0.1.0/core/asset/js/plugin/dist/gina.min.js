@@ -11829,7 +11829,49 @@ function ValidatorPlugin(rules, data, formId) {
         }
 
     }
-
+    
+    /**
+     * cleanupInstanceRules
+     * Will remove _case_ condition for empty rules
+     * Used to remove empty `@import` after `checkForRulesImports` is called
+     * 
+     */
+    var cleanupInstanceRules = function() {
+        var rule = ( typeof(arguments[0]) != 'undefined' ) ? arguments[0] : instance.rules;           
+        for (let r in rule) {
+            let props = Object.getOwnPropertyNames(rule[r]);
+            let p = 0, pLen = props.length;
+            let hasCases = false, caseName = null;
+            while (p < pLen) {
+                if ( /^\_case\_/.test(props[p]) ) {
+                    hasCases = true;
+                    caseName = props[p];
+                    break;
+                }
+                p++
+            }
+            
+            if ( !hasCases && typeof(rule[r]) == 'object') {
+                cleanupInstanceRules(rule[r]);
+            } 
+            
+            if (caseName && Array.isArray(rule[r][caseName].conditions) && rule[r][caseName].conditions.length > 0) {
+                let c = 0, len = rule[r][caseName].conditions.length;
+                while (c < len) {
+                    if ( 
+                        typeof(rule[r][caseName].conditions[c].rules) != 'undefined'
+                        && rule[r][caseName].conditions[c].rules.count() == 0 
+                    ) {
+                        rule[r][caseName].conditions.splice(c, 1);
+                        len--;
+                        c--;
+                    }
+                    c++;
+                }
+            } 
+        }
+    }
+    
     var checkForRulesImports = function (rules) {
         // check if rules has imports & replace
         var rulesStr        = JSON.stringify(rules);
@@ -11859,17 +11901,17 @@ function ValidatorPlugin(rules, data, formId) {
                     tmpRule = ruleArr[i].replace(/\//g, '.').replace(/\-/g, '.');
                     if ( typeof(instance.rules[ tmpRule ]) != 'undefined' ) {
                         let rule = JSON.stringify(instance.rules[ tmpRule ]);
-                        //let rule = merge(rule, instance.rules[ tmpRule ]);                        
-                        //rule['@import_' + tmpRule.replace(/\./g, '_')] = ruleArr[i];
                         let strRule = JSON.parse(rule);
-                        if ( typeof(strRule['@comment']) != 'undefined' ) {
-                            strRule['@comment'] += '\n';
+                        if ( typeof(strRule['_comment']) != 'undefined' ) {
+                            strRule['_comment'] += '\n';
                         } else {
-                            strRule['@comment'] = '';
+                            strRule['_comment'] = '';
                         }                        
-                        strRule['@comment'] += 'Imported from `'+ importPath +'`';
+                        strRule['_comment'] += 'Imported from `'+ importPath +'`';
                         rule = JSON.stringify(strRule);
                         rulesStr = rulesStr.replace(new RegExp(importedRules[r], 'g'), rule);
+                        // also need to replace in instance.rules
+                        instance.rules = JSON.parse(JSON.stringify(instance.rules).replace(new RegExp(importedRules[r], 'g'), '{}'));
                     } else {
                         console.warn('[formValidator:rules] <@import error> on `'+importedRules[r]+'`: rule `'+ruleArr[i]+'` not found. Ignoring.');
                         continue;
@@ -11889,30 +11931,27 @@ function ValidatorPlugin(rules, data, formId) {
                                 tmpStr += ','
                             }
                             try {
-                                rulesStr = rulesStr.replace( mergingRules[m], tmpStr); 
-                                instance.rules = JSON.parse(  JSON.stringify(instance.rules).replace( mergingRules[m], tmpStr)  );
-                                //instance.rules = JSON.parse(  JSON.stringify(instance.rules).replace( new RegExp(mergingRules[m], 'g'), tmpStr)  );
+                                rulesStr = rulesStr.replace( new RegExp(mergingRules[m], 'g'), tmpStr); 
+                                // also need to replace in instance.rules
+                                instance.rules = JSON.parse(JSON.stringify(instance.rules).replace(new RegExp(mergingRules[m], 'g'), '{}'));
                             } catch (error) {
                                 throw error
-                            }
-                            
-                            //JSON.parse(rulesStr.substr(0, rulesStr.indexOf(mergingRules[m])) + rulesStr.substr(mergingRules[m].length) )
-                            //instance.rules = JSON.parse( JSON.stringify(instance.rules).replace( new RegExp(mergingRules[m], 'g'), tmpStr) );                 
+                            }               
                         }
                     }
                     
-                } else {
-                    rulesStr = rulesStr.replace(importedRules[r], JSON.stringify(rule));
-                    instance.rules = JSON.parse( JSON.stringify(instance.rules).replace( new RegExp(importedRules[r], 'g'), JSON.stringify(rule)) );
-                }                
-                //console.debug('str ', rulesStr);
+                }
                 rule = {}
-
             }
 
-            
             rules = JSON.parse(rulesStr);
             parseRules(rules, '');
+            
+            try {
+                cleanupInstanceRules();
+            } catch (err) {
+                console.error(err.stack);
+            }            
         }
         
         return rules;
@@ -11939,11 +11978,11 @@ function ValidatorPlugin(rules, data, formId) {
                         if ( typeof(gina.forms.rules) == 'undefined' || !gina.forms.rules) {
                             gina.forms.rules = rules
                         } else { // inherits
-                            //gina.forms.rules = merge(rules, gina.forms.rules);
                             gina.forms.rules = merge(gina.forms.rules, rules, true);
                         }                            
                         // update instance.rules
                         //instance.rules = merge(JSON.clone(gina.forms.rules), instance.rules);
+                        // .setKeyComparison('case')
                         instance.rules = merge(instance.rules, JSON.clone(gina.forms.rules), true);
                     } catch (err) {
                         throw (err)
@@ -15470,7 +15509,7 @@ function ValidatorPlugin(rules, data, formId) {
                 skipTest = false;
                 // TODO - replace loop by checkForRuleAlias(rules, $el);
                 for (var _r in rules) {
-                    if (/^@comment$/i.test(_r)) continue;
+                    if (/^_comment$/i.test(_r)) continue;
                     if ( /^\//.test(_r) ) { // RegExp found
                         re      = _r.match(/\/(.*)\//).pop();                                        
                         flags   = _r.replace('/'+ re +'/', '');
@@ -15874,7 +15913,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                                 // enter condition rules
                                 for (var _r in rules[c].conditions[_c].rules) {
-                                    if (/^@comment$/i.test(_r)) continue;
+                                    if (/^_comment$/i.test(_r)) continue;
                                     // ignore if we are testing on caseField or if $field does not exist
                                     if (_r == caseName || !$fields[_r]) continue;
                                     //if (_r == caseName || !$fields[caseName]) continue;
@@ -16029,7 +16068,7 @@ function ValidatorPlugin(rules, data, formId) {
                                     conditions[c]['rules'][field] = { exclude: true }            
                                 }                             
                                 for (var f in conditions[c]['rules']) {
-                                    if (/^@comment$/i.test(f)) continue;
+                                    if (/^_comment$/i.test(f)) continue;
                                     //console.debug('F: ', f, '\nrule: '+ JSON.stringify(conditions[c]['rules'][f], null, 2));
                                     if ( /^\//.test(f) ) { // RegExp found
 
@@ -16225,9 +16264,6 @@ function ValidatorPlugin(rules, data, formId) {
                         'data'      : formatData( _data )
                     });
                     removeListener(gina, event.target, 'validated.' + event.target.id);
-                    //removeListener(gina, event.target, event.type);
-                    
-                    //hasBeenValidated    = false;
                     return 
                 }                    
             });
