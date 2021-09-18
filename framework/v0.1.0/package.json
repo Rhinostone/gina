@@ -8,6 +8,7 @@
     "express": "^4.16.3",
     "node-uuid": "^1.4.8",
     "requirejs": "^2.3.6",
+    "sanitize-html": "^2.5.0",
     "swig": "^1.4.2",
     "uuid": "^3.4.0"
   }

@@ -36,7 +36,7 @@ function addListener(target, element, name, callback) {
             target.customEvent.addListener(name, callback)
         }
 
-        gina.events[name] = ( typeof(element.id) != 'undefined' && typeof(element.id) != 'object' ) ? element.id : element.getAttribute('id')
+        gina.events[name] = ( typeof(element.id) != 'undefined' && typeof(element.id) != 'object' ) ? element.id : element.getAttribute('id');
     }
     
     var i = 0, len = null;
