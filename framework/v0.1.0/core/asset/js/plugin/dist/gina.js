@@ -6793,34 +6793,35 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 var re = null, flags = null;
                 // Fixed on 2021-03-13: $variable now replaced with real value beafore validation
                 if ( /[\!\=>\>\<a-z 0-9]+/i.test(condition) ) {
-                    var variables = condition.match(/\${0}[-_,.\[\]a-z0-9]+/ig); // without space(s)
-                    var compiledCondition = condition;
-                    
-                    for (var i = 0, len = variables.length; i < len; ++i) {
-                        // $varibale comparison
-                        if ( typeof(self[ variables[i] ]) != 'undefined' && variables[i]) {
-                            re = new RegExp("\\$"+ variables[i] +"(?!\\S+)", "g");
-                            if ( self[ variables[i] ].value == "" ) {
-                                compiledCondition = compiledCondition.replace(re, '""');
-                            } else if ( typeof(self[ variables[i] ].value) == 'string' ) {
-                                compiledCondition = compiledCondition.replace(re, '"'+ self[ variables[i] ].value +'"');
-                            } else {
-                                compiledCondition = compiledCondition.replace(re, self[ variables[i] ].value);
+                    var variables = condition.match(/\${0}[-_,.\[\]a-z0-9]+/ig); // without space(s)                    
+                    if (variables && variables.length > 0) {
+                        var compiledCondition = condition;
+                        for (var i = 0, len = variables.length; i < len; ++i) {
+                            // $varibale comparison
+                            if ( typeof(self[ variables[i] ]) != 'undefined' && variables[i]) {
+                                re = new RegExp("\\$"+ variables[i] +"(?!\\S+)", "g");
+                                if ( self[ variables[i] ].value == "" ) {
+                                    compiledCondition = compiledCondition.replace(re, '""');
+                                } else if ( typeof(self[ variables[i] ].value) == 'string' ) {
+                                    compiledCondition = compiledCondition.replace(re, '"'+ self[ variables[i] ].value +'"');
+                                } else {
+                                    compiledCondition = compiledCondition.replace(re, self[ variables[i] ].value);
+                                }
                             }
                         }
-                    }
-
-                    try {
-                        // security checks
-                        compiledCondition = compiledCondition.replace(/(\(|\)|return)/g, '');
-                        if ( /^\//.test(compiledCondition) ) {
-                            isValid = eval(compiledCondition + '.test("' + this.value + '")')
-                        } else {
-                            isValid = eval(compiledCondition)
-                        }
                         
-                    } catch (err) {
-                        throw new Error(err.stack||err.message)
+                        try {
+                            // security checks
+                            compiledCondition = compiledCondition.replace(/(\(|\)|return)/g, '');
+                            if ( /^\//.test(compiledCondition) ) {
+                                isValid = eval(compiledCondition + '.test("' + this.value + '")')
+                            } else {
+                                isValid = eval(compiledCondition)
+                            }
+                            
+                        } catch (err) {
+                            throw new Error(err.stack||err.message)
+                        }
                     }
                 } else if ( condition instanceof RegExp ) {
 
@@ -15607,7 +15608,7 @@ function ValidatorPlugin(rules, data, formId) {
                 _field = arrFields[i].replace(/\-|\_|\@|\#|\.|\[|\]/g, '\\$&');
                 re = new RegExp('\\$'+_field, 'g');
                 // default field value
-                let fieldValue = '\\"'+ $fields[arrFields[i]].value +'\\"';
+                let fieldValue = ($fields[arrFields[i]].value != '' ) ? '\\"'+ $fields[arrFields[i]].value +'\\"' : '\\"\\"';
                 let isInRule = re.test(stringifiedRulesTmp);
                 if ( isInRule && typeof(ruleObj[arrFields[i]]) != 'undefined' ) {
                     fieldValue = getCastedValue(ruleObj, fields, arrFields[i], true);
@@ -15739,16 +15740,13 @@ function ValidatorPlugin(rules, data, formId) {
                             asyncEvt        = 'asyncCompleted.'+ $asyncFieldId;
                             
                             var triggeredCount = 0, eventTriggered = false;
-                            if ( typeof(gina.events[asyncEvt]) != 'undefined' ) {
-                                
+                            if ( typeof(gina.events[asyncEvt]) != 'undefined' ) {                                
                                 console.debug('event `'+ asyncEvt +'` already added');
                                 asyncCount = 0;
-                                //triggerEvent(gina, $asyncField, asyncEvt, d[field]);
                                 return;
-                                //continue;
                             }
                             ++asyncCount;
-                            console.debug('Adding listner '+asyncEvt);
+                            //console.debug('Adding listner '+asyncEvt);
                             addListener(gina, $asyncField, asyncEvt, function onasyncCompleted(event) {
                                 event.preventDefault();
                                 
@@ -15762,7 +15760,7 @@ function ValidatorPlugin(rules, data, formId) {
                                 
                                 var _asyncEvt = 'asyncCompleted.' + event.target.getAttribute('id');
                                 if ( /true/.test(eventTriggered) ) {
-                                    console.debug('already triggered !\nasyncCount: '+ asyncCount +'\nhasParsedAllRules: '+hasParsedAllRules );                                    
+                                    //console.debug('already triggered !\nasyncCount: '+ asyncCount +'\nhasParsedAllRules: '+hasParsedAllRules );                                    
                                     return;
                                 }
                                                                     
@@ -15783,12 +15781,12 @@ function ValidatorPlugin(rules, data, formId) {
                                     eventTriggered = true;
                                                                             
                                     // removing listner to revalidate with another context
-                                    console.debug('removing listner '+ _asyncEvt +'\nasyncCount: '+ asyncCount +'\nhasParsedAllRules: '+hasParsedAllRules + '\neventTriggered: '+ eventTriggered);
+                                    //console.debug('removing listner '+ _asyncEvt +'\nasyncCount: '+ asyncCount +'\nhasParsedAllRules: '+hasParsedAllRules + '\neventTriggered: '+ eventTriggered);
                                     removeListener(gina, event.target, _asyncEvt);
                                     
                                     cb._data = d['toData']();
                                     cb._errors = d['getErrors'](field);
-                                    console.debug('query callbakc triggered ', cb._errors, '\nisValidating: ', instance.$forms[formId].isValidating);
+                                    //console.debug('query callbakc triggered ', cb._errors, '\nisValidating: ', instance.$forms[formId].isValidating);
                                     // update instance form errors
                                     if ( cb._errors && cb._errors.count() > 0) {
                                         if ( typeof(instance.$forms[formId].errors) == 'undefined' ) {
@@ -15803,10 +15801,10 @@ function ValidatorPlugin(rules, data, formId) {
                                 var needsGlobalReValidation = false, isFormValid = null;
                                 if ( listedFields.length == 1 || listedFields[listedFields.length-1] == field) {
                                     // trigger end of validation
-                                    console.debug(field +' is the last element to be validated for formId: '+ formId, cb._errors, instance.$forms[formId].errors);
+                                    //console.debug(field +' is the last element to be validated for formId: '+ formId, cb._errors, instance.$forms[formId].errors);
                                     isFormValid = ( cb._errors.count() > 0 ) ? false : true;
                                     if (!isFormValid && /^true|false$/i.test(instance.$forms[formId].isValidating)) {
-                                        console.debug('should update error display now ', cb._errors);
+                                        //console.debug('should update error display now ', cb._errors);
                                         instance.$forms[formId].errors = merge(cb._errors, instance.$forms[formId].errors);
                                         refreshWarning($allFields[field]);
                                         handleErrorsDisplay($currentForm, cb._errors, cb._data, field);
@@ -15814,18 +15812,17 @@ function ValidatorPlugin(rules, data, formId) {
                                         //return;
                                     }                                   
                                     triggerEvent(gina, $currentForm, 'validated.' + formId, cb);
-                                    //needsGlobalReValidation = true;
                                 }
                                 // just update warning state 
                                 else if (/^true$/i.test(instance.$forms[formId].isValidating)) {
-                                    console.debug(field +' is NOT the last element to be validated for formId: '+ formId);
+                                    //console.debug(field +' is NOT the last element to be validated for formId: '+ formId);
                                     needsGlobalReValidation = true;                                 
                                 }
                                 
                                 if (needsGlobalReValidation) {
                                     validate($currentForm, allFields, $allFields, rules, function onSilentQueryGlobalLiveValidation(gResult){
                                         instance.$forms[formId].isValidating = false;
-                                        console.debug('['+ formId +'] onSilentQueryGlobalLiveValidation: '+ gResult.isValid(), gResult);
+                                        //console.debug('['+ formId +'] onSilentQueryGlobalLiveValidation: '+ gResult.isValid(), gResult);
                                         isFormValid = gResult.isValid();
                                         if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                                             // update toolbar
