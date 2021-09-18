@@ -41,7 +41,8 @@ function ValidatorPlugin(rules, data, formId) {
         'focusin',
         'validate', // for form livecheck (validation)
         'validated', // for form livecheck (validation)
-        'destroy'
+        'destroy',
+        'asyncCompleted'
     ];
     
     // See: https://developer.mozilla.org/fr/docs/Web/HTML/Element/Input
@@ -234,31 +235,50 @@ function ValidatorPlugin(rules, data, formId) {
             throw new Error('[ FormValidator::getFormById(formId) ] `formId` is missing')
         }
 
-        _id = _id.replace(/\#/, '');
+        _id = _id.replace(/\#/, '');        
         
-        if ( typeof(instance.$forms[_id]) != 'undefined' ) {
-            return instance.$forms[_id];
-        }
-
         // in case form is created on the fly and is not yet registered
         if (document.getElementById(_id) != null && typeof (instance['$forms'][_id]) == 'undefined') {
-            //instance['$forms'][_id] = document.getElementById(_id);
-            
             initForm( document.getElementById(_id) );
-        }
-
-        if ( typeof(instance['$forms'][_id]) != 'undefined' ) {
+        }        
+        
+        if ( typeof(instance.$forms[_id]) != 'undefined' ) {            
             instance['$forms'][_id].withUserBindings = true;
-
             if ( typeof(this.$forms[_id]) == 'undefined') {
                 this.$forms[_id] = instance['$forms'][_id];
+                $form = this.$forms[_id];
+            } else {
+                $form = instance.$forms[_id];
             }
-            $form = this.$forms[_id];
+            
+        }      
+        
+        if ( !instance.$forms[_id].binded) {
+            var $target = instance.$forms[_id].target;
+            bindForm($target);
+            $form = instance.$forms[_id];
         }
         
-        // $form.on('error', function onFormError(_err) {
-        //    console.debug('ERROR: '+ _err); 
-        // });
+        if (!$form) {
+            throw new Error('Validator::getFormById(...) exception: could not retrieve form `'+ _id +'`');
+        }
+        
+        // update toolbar
+        if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+            // update toolbar
+            if (!gina.forms.errors)
+                gina.forms.errors = {};
+
+            var objCallback = {
+                id      : _id,
+                rules   : instance.$forms[_id].rules
+            };
+            if ( typeof(instance.$forms[_id].errors) != 'undefined' ) {
+                objCallback.errors = instance.$forms[_id].errors
+            }
+
+            window.ginaToolbar.update('forms', objCallback);
+        }
 
         return $form;
     }
@@ -387,14 +407,15 @@ function ValidatorPlugin(rules, data, formId) {
         
         var $parent = $el.parentNode, isErrorMessageHidden = false;
         var $children = $parent.getElementsByTagName('div');
-        
+                
         if ( /form\-item\-warning/.test($parent.className) ) {
             $parent.className = $parent.className.replace(/form\-item\-warning/, 'form-item-error');
             
-        } else if (/form\-item\-error/.test($parent.className) ) {
+        } else if (/form\-item\-error/.test($parent.className) ) {            
             $parent.className = $parent.className.replace(/form\-item\-error/, 'form-item-warning');
             isErrorMessageHidden = true;
         }
+        
 
         for (var c = 0, cLen = $children.length; c<cLen; ++c) {
             if ( /form\-item\-error\-message/.test($children[c].className) ) {
@@ -454,7 +475,7 @@ function ValidatorPlugin(rules, data, formId) {
                     liveCheckErrors[formId][fieldName] = merge(errors[fieldName], liveCheckErrors[formId][fieldName]);
                     errors = liveCheckErrors[formId];
                     // only if the form has not been sent yet
-                    if (!instance.$forms[formId].sent) {
+                    if (!instance.$forms[formId].sent || instance.$forms[formId].isValidating) {
                         isWarning = true;
                     }
                 } else {
@@ -556,16 +577,16 @@ function ValidatorPlugin(rules, data, formId) {
 
                     
 
-            } else if ( typeof(errors[name]) == 'undefined' && /(form\-item\-error|form\-item\-warning)/.test($parent.className) ) {
+            } else if ( typeof(errors[name]) == 'undefined' && /(form\-item\-error|form\-item\-warning)/.test($parent.className) || typeof(errors[name]) != 'undefined' && errors[name].count() == 0 && /(form\-item\-error|form\-item\-warning)/.test($parent.className) ) {
                 // reset when not in error
                 // remove child elements
                 var $children = $parent.getElementsByTagName('div');
                 for (var c = 0, cLen = $children.length; c<cLen; ++c) {
                     if ( /form\-item\-error\-message/.test($children[c].className) ) {
-                        //$parent.removeChild($children[c]);
                         $children[c].parentElement.removeChild($children[c]);
                         break
                     }
+                    
                 }
 
                 $parent.className = $parent.className.replace(/(\s+form\-item\-error|form\-item\-error|\s+form\-item\-warning|form\-item\-warning)/, '');
@@ -3018,6 +3039,8 @@ function ValidatorPlugin(rules, data, formId) {
                             instance.$forms[event.target.form.getAttribute('id')].isValidating = true;
                             validate(event.target, localField, $localField, $form.rules, function onLiveValidation(result){
                                 instance.$forms[event.target.form.getAttribute('id')].isValidating = false;
+                                //console.debug('validation on processEvent(...) ', result);
+                                
                                 var isFormValid = result.isValid();
                                 //console.debug('onSilentPreGlobalLiveValidation: '+ isFormValid, result);
                                 if (isFormValid) {
@@ -3041,9 +3064,24 @@ function ValidatorPlugin(rules, data, formId) {
                                 instance.$forms[formId].isValidating = true;
                                 validate($gForm, gFields, $gFields, gRules, function onSilentGlobalLiveValidation(gResult){
                                     instance.$forms[formId].isValidating = false;
-                                    console.debug('onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
+                                    console.debug('['+ formId +'] onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
                                     var isFormValid = gResult.isValid();
+                                    if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                                        // update toolbar
+                                        if (!gina.forms.errors)
+                                            gina.forms.errors = {};
+                        
+                                        var objCallback = {
+                                            id      : formId,
+                                            errors  :  gResult.error || {}
+                                        };
+                        
+                                        window.ginaToolbar.update('forms', objCallback);
+                                    }                                   
+                                    
+                                    
                                     updateSubmitTriggerState( $gForm, isFormValid);
+                                    
                                     once = false;
                                 })
                                     
@@ -3076,20 +3114,27 @@ function ValidatorPlugin(rules, data, formId) {
                         else if ( /^focusin\./i.test(event.type) ) {
                             if ( /\-error/.test($el.parentNode.className) ) {
                                 console.debug('#1 you just focusin ....'+$el.id, $el.value);
-                                refreshWarning($el)
+                                refreshWarning($el);
                             }
                         }
                         else if ( /^focusout\./i.test(event.type) ) {
                             if ( /\-warning/.test($el.parentNode.className) ) {
-                                console.debug('#1 you just focusout ....'+$el.id, $el.value);
-                                refreshWarning($el)
+                                console.debug('#1 you just focusout ....'+$el.id, $el.value);                                
+                                refreshWarning($el);
+                                // in case error context is changed by another task
+                                handleErrorsDisplay($el.form, instance.$forms[ $el.form.getAttribute('id') ].errors, null, $el.name);
                             }
                         }
                         else if ( /^keyup\./i.test(event.type) ) {
                             $el.ginaFormValidatorTestedValue = $el.value;
                             liveCheckTimer = setTimeout( function onLiveCheckTimer() {
-                                console.debug(' keyup .... '+$el.id, $el.value, ' VS ',$el.ginaFormValidatorTestedValue + '(old)');
-                                processEvent()
+                                // do not trigger for copy/paste event
+                                if ( ['91', '17'].indexOf(''+event.keyCode) > -1  && keyboardMapping.count() == 0) {
+                                    //console.debug('mapping ', keyboardMapping);
+                                    return;
+                                }
+                                console.debug(' keyup ('+ event.keyCode +') .... '+$el.id, $el.value, ' VS ',$el.ginaFormValidatorTestedValue + '(old)');
+                                processEvent();
                             }, 1000); 
                         }                        
                         else if (/^change\./i.test(event.type) && !/^(checkbox)$/i.test(event.target.type) ) {
@@ -3127,6 +3172,10 @@ function ValidatorPlugin(rules, data, formId) {
      */
     var setCaretToPos = function ($el, pos) {
         setSelectionRange($el, pos, pos);
+    }
+    
+    var isElementVisible = function($el) {
+        return ($el.offsetWidth > 0 || $el.offsetHeight > 0 || $el === document.activeElement) ? true : false;
     }
     
     var focusNextElement = function($el, isGoingBackward) {
@@ -3233,6 +3282,8 @@ function ValidatorPlugin(rules, data, formId) {
                         // Shortcuts
                         case 17: //CTRL
                         case 91: //CMD
+                            console.debug("CMD hit");
+                            e.preventDefault();
                             break;
                         case 67: // to handle CMD+C (copy)
                             if (
@@ -3691,6 +3742,7 @@ function ValidatorPlugin(rules, data, formId) {
             return false
         }
         
+        console.debug('binding for: '+ _id);
         
           
         var withRules = false, rule = null, evt = '', proceed = null;
@@ -3738,6 +3790,8 @@ function ValidatorPlugin(rules, data, formId) {
             && $form.rules.count() > 0
         ) {
             $form.target.dataset.ginaFormLiveCheckEnabled = true;
+        } else if( typeof($form.target.dataset.ginaFormLiveCheckEnabled) != 'undefined' ) {
+            $form.target.dataset.ginaFormLiveCheckEnabled = ( /^true$/i.test($form.target.dataset.ginaFormLiveCheckEnabled) ) ? true : false;
         } else {
             $form.target.dataset.ginaFormLiveCheckEnabled = false;
         }
@@ -5302,9 +5356,17 @@ function ValidatorPlugin(rules, data, formId) {
                 /**if ( typeof(instance.$forms[$form.id].submitTrigger) != 'undefined' &&  $submit.form.id !== instance.$forms[$form.id].submitTrigger ) {
                     console.warn('Form `submitTrigger` is already defined for your form #'+ $submit.form.id +': cannot attach `'+$submit.id+'`');
                 } else */
-                if ( typeof(instance.$forms[$form.id].submitTrigger) == 'undefined' ) {
-                    console.debug('attching submitTrigger: '+ $submit.id);
+                if (
+                    typeof($submit.dataset.ginaFormSubmitTriggerFor) == 'undefined'
+                    && typeof(instance.$forms[$form.id]) != 'undefined'
+                    && typeof(instance.$forms[$form.id].submitTrigger) == 'undefined' 
+                    && typeof($submit.form.id) != 'undefined'
+                    && $form.id == $submit.form.id
+                ) {
+                    console.debug('attching submitTrigger: '+ $submit.id, ' \ form id: '+ $form.id);
                     instance.$forms[$form.id].submitTrigger = $form.submitTrigger = $submit.id || $submit.getAttribute('id');
+                    // mark submitTrigger
+                    $submit.dataset.ginaFormSubmitTriggerFor = $form.id;
                 } // else, skipping
             }
 
@@ -5482,9 +5544,24 @@ function ValidatorPlugin(rules, data, formId) {
             var validationInfo  = getFormValidationInfos($form.target, $form.rules);
             var fields          = validationInfo.fields;
             var $fields         = validationInfo.$fields;
-            validate($form.target, fields, $fields, $form.rules, function onSilentValidation(result){
+            validate($form.target, fields, $fields, $form.rules, function onSilentValidation(result){                
                 console.debug('silent validation result[isValid:'+result.isValid()+']: ', result);
-                updateSubmitTriggerState( $form , result.isValid() );
+                if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                    // update toolbar
+                    if (!gina.forms.errors)
+                        gina.forms.errors = {};
+    
+                    var objCallback = {
+                        id      : _id,
+                        errors  :  result.error //,
+                        // we might also need to update rules in case of form ajax changes
+                        // rules   : $form.rules,
+                        // data    : result.data
+                    };
+    
+                    window.ginaToolbar.update('forms', objCallback);
+                }
+                updateSubmitTriggerState( $form, result.isValid() );
             });
         } else if (!/^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled) ) {
             updateSubmitTriggerState( $form , true );
@@ -5576,10 +5653,18 @@ function ValidatorPlugin(rules, data, formId) {
                 /**if ( typeof(instance.$forms[id].submitTrigger) != 'undefined' &&  $form[i].form.id !== instance.$forms[id].submitTrigger ) {
                     console.warn('Form `submitTrigger` is already defined for your form `#'+ $form[i].form.id +'`: cannot attach `'+$form[i].id+'`');
                 } else */
-                if ( typeof(instance.$forms[id]) != 'undefined' && typeof(instance.$forms[id].submitTrigger) == 'undefined' ) {
-                    //console.debug('attching submitTrigger: '+ $form[i].id);
+                if ( 
+                    typeof($form[i].dataset.ginaFormSubmitTriggerFor) == 'undefined'
+                    && typeof(instance.$forms[id]) != 'undefined'
+                    && typeof(instance.$forms[id].submitTrigger) == 'undefined'
+                    && typeof($form[i].form.id) != 'undefined' 
+                    && id == $form[i].form.id
+                ) {
                     instance.$forms[id].submitTrigger = $form[i].id || $form[i].getAttribute('id');
-                } // else, skipping
+                    // mark submitTrigger
+                    $form[i].dataset.ginaFormSubmitTriggerFor = id;
+                } 
+                // else, skipping
             }
             
             name        = $form[i].getAttribute('name');
@@ -5859,11 +5944,27 @@ function ValidatorPlugin(rules, data, formId) {
                     return;
             }
             
+            var listedFields = Object.getOwnPropertyNames(rules) || [];
+            var f = 0, fLen = listedFields.length;
+            if (fLen > 0) {
+                while (f < fLen) {
+                    if ( 
+                        typeof(rules[listedFields[f]].exclude) != 'undefined'
+                        && /^true$/i.test(rules[listedFields[f]].exclude)  
+                    ) {
+                        // remove from listedFields
+                        listedFields.splice(f, 1);
+                        fLen--;
+                        f--;
+                    }
+                    f++;
+                }
+            }
+           
             // check each field against rule
             for (var rule in rules[field]) {
-                
+                // skip when not processing rule function
                 if ( typeof(d[field][rule]) != 'function' ) {
-                    //console.warn('Rule `'+ rule +'` not found');
                     continue;
                 }
                 
@@ -5887,52 +5988,127 @@ function ValidatorPlugin(rules, data, formId) {
                         }
                         d[field][rule].apply(d[field], args);
                     } else {
-                        if ( /query/.test(rule) ) {
+                        // query rule case
+                        if ( /^query$/.test(rule) ) {
                             $asyncField     = $fields[field];
                             $asyncFieldId   = $asyncField.getAttribute('id');
                             asyncEvt        = 'asyncCompleted.'+ $asyncFieldId;
-                            //if ( typeof(gina.events[asyncEvt]) == 'undefined' ) {
-                                ++asyncCount;
-                                addListener(gina, $asyncField, asyncEvt, function onasyncCompleted(event) {
-                                    event.preventDefault();
-                                    --asyncCount;
-                                    var _asyncEvt = 'asyncCompleted.' + event.target.getAttribute('id');
-                                    
-                                    d[field] = event.detail;
-                                    
-                                    delete gina.events['asyncCompleted.'+ $asyncFieldId];
-                                    
-                                    // removing listner
-                                    removeListener(gina, event.target, _asyncEvt);
-                                    if ( 
-                                        hasParsedAllRules && asyncCount <= 0
-                                        // ||
-                                        // event.target.dataset.ginaFormValidatorTestedValue == event.detail.value
-                                    ) {
-                                        cb._errors = d['getErrors'](field);
-                                        
-                                        // Fixed on 2021/06/11 - to prenvent from loopin on `data` === `data`
-                                        // if ( hasParsedAllRules && asyncCount < 0) {
-                                        //     console.debug('asyncCompleted.'+ $asyncFieldId + ' Exception. Returning.');
-                                        //     return;
-                                        // }
-                                        
-                                        var $currentForm = $formOrElement;  
-                                        // if ( !/^form$/i.test($formOrElement.tagName) ) {
-                                        //     $currentForm  = $formOrElement.form;
-                                        //     triggerEvent(gina, $currentForm, 'validated.' + $currentForm.getAttribute('id'), cb)
-                                        // } else {
-                                        //     triggerEvent(gina, $formOrElement, 'validated.' + $formOrElement.getAttribute('id'), cb);
-                                        // }
-                                        return;
-                                    }
-                                });
-                                
-                                d[field][rule](rules[field][rule]);
-                                continue;
-                            //}
                             
+                            var triggeredCount = 0, eventTriggered = false;
+                            if ( typeof(gina.events[asyncEvt]) != 'undefined' ) {
+                                
+                                console.debug('event `'+ asyncEvt +'` already added');
+                                asyncCount = 0;
+                                //triggerEvent(gina, $asyncField, asyncEvt, d[field]);
+                                return;
+                                //continue;
+                            }
+                            ++asyncCount;
+                            console.debug('Adding listner '+asyncEvt);
+                            addListener(gina, $asyncField, asyncEvt, function onasyncCompleted(event) {
+                                event.preventDefault();
+                                
+                                triggeredCount++;                                
+                                --asyncCount;
+                                // is this the last rule ?
+                                var _rulesArr = Object.getOwnPropertyNames(rules[field]);
+                                if (_rulesArr[_rulesArr.length-1] == rule) {
+                                    hasParsedAllRules = true;
+                                }
+                                
+                                var _asyncEvt = 'asyncCompleted.' + event.target.getAttribute('id');
+                                if ( /true/.test(eventTriggered) ) {
+                                    console.debug('already triggered !\nasyncCount: '+ asyncCount +'\nhasParsedAllRules: '+hasParsedAllRules );                                    
+                                    return;
+                                }
+                                                                    
+                                d[field] = event.detail;
+                                
+                                // retrieve current form
+                                var $currentForm = $formOrElement;
+                                if ( !/^form$/i.test($formOrElement.tagName) ) {
+                                    $currentForm  = $formOrElement.form; 
+                                }                                    
+                                var formId = $currentForm.getAttribute('id');
+                                
+                                if ( 
+                                    hasParsedAllRules 
+                                    && asyncCount <= 0
+                                    && !eventTriggered
+                                ) {
+                                    eventTriggered = true;
+                                                                            
+                                    // removing listner to revalidate with another context
+                                    console.debug('removing listner '+ _asyncEvt +'\nasyncCount: '+ asyncCount +'\nhasParsedAllRules: '+hasParsedAllRules + '\neventTriggered: '+ eventTriggered);
+                                    removeListener(gina, event.target, _asyncEvt);
+                                    
+                                    cb._data = d['toData']();
+                                    cb._errors = d['getErrors'](field);
+                                    console.debug('query callbakc triggered ', cb._errors, '\nisValidating: ', instance.$forms[formId].isValidating);
+                                    // update instance form errors
+                                    if ( cb._errors && cb._errors.count() > 0) {
+                                        if ( typeof(instance.$forms[formId].errors) == 'undefined' ) {
+                                            instance.$forms[formId].errors = {}
+                                        }
+                                        
+                                        instance.$forms[formId].errors[field] = cb._errors[field];                                        
+                                    }                                    
+                                }
+                                
+                                // is this the last or the only field to be validated ?
+                                var needsGlobalReValidation = false, isFormValid = null;
+                                if ( listedFields.length == 1 || listedFields[listedFields.length-1] == field) {
+                                    // trigger end of validation
+                                    console.debug(field +' is the last element to be validated for formId: '+ formId, cb._errors, instance.$forms[formId].errors);
+                                    isFormValid = ( cb._errors.count() > 0 ) ? false : true;
+                                    if (!isFormValid && /^true|false$/i.test(instance.$forms[formId].isValidating)) {
+                                        console.debug('should update error display now ', cb._errors);
+                                        instance.$forms[formId].errors = merge(cb._errors, instance.$forms[formId].errors);
+                                        refreshWarning($allFields[field]);
+                                        handleErrorsDisplay($currentForm, cb._errors, cb._data, field);
+                                        updateSubmitTriggerState( $currentForm, isFormValid);
+                                        //return;
+                                    }                                   
+                                    triggerEvent(gina, $currentForm, 'validated.' + formId, cb);
+                                    //needsGlobalReValidation = true;
+                                }
+                                // just update warning state 
+                                else if (/^true$/i.test(instance.$forms[formId].isValidating)) {
+                                    console.debug(field +' is NOT the last element to be validated for formId: '+ formId);
+                                    needsGlobalReValidation = true;                                 
+                                }
+                                
+                                if (needsGlobalReValidation) {
+                                    validate($currentForm, allFields, $allFields, rules, function onSilentQueryGlobalLiveValidation(gResult){
+                                        instance.$forms[formId].isValidating = false;
+                                        console.debug('['+ formId +'] onSilentQueryGlobalLiveValidation: '+ gResult.isValid(), gResult);
+                                        isFormValid = gResult.isValid();
+                                        if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                                            // update toolbar
+                                            if (!gina.forms.errors)
+                                                gina.forms.errors = {};
+                            
+                                            var objCallback = {
+                                                id      : formId,
+                                                errors  :  gResult.error || {}
+                                            };
+                            
+                                            window.ginaToolbar.update('forms', objCallback);
+                                        }                                   
+                                        
+                                        
+                                        //refreshWarning($allFields[field]);
+                                        handleErrorsDisplay($currentForm, gResult.error, gResult.data, field);
+                                        updateSubmitTriggerState( $currentForm, isFormValid);
+                                    })
+                                }
+                                
+                            });
+                            
+                            d[field][rule](rules[field][rule]);
+                            continue;
                         }
+                        // normal rule case
                         else {
                             d[field][rule](rules[field][rule]);
                         }
@@ -6352,8 +6528,9 @@ function ValidatorPlugin(rules, data, formId) {
                     if (isInCase || caseName == field) continue;                
 
                     // check each field against rule only if rule exists 3/3
-                    if ( /**caseName != field && */typeof(rules[field]) != 'undefined' ) {
-                        checkFieldAgainstRules(field, rules, fields);
+                    if ( typeof(rules[field]) != 'undefined' ) {
+                        //checkFieldAgainstRules(field, rules, fields);
+                        checkFieldAgainstRules(field, rules, allFields);
                     }                    
                         
                     if (hasCase) {
@@ -6572,22 +6749,19 @@ function ValidatorPlugin(rules, data, formId) {
                     hasBeenValidated    = true;
                     hasParsedAllRules   = false;
                     asyncCount          = 0;
-                    var _cb = event.detail;
-                    var cbErrors = null;
-                    // if ( typeof(_cb._errors) != 'undefined' && _cb._errors.count() > 0 ) {
-                    //     cbErrors = merge(_cb._errors, d['getErrors']());
-                    //     cbErrors = d['getErrors'](cbErrors);
-                    // } else {
-                        cbErrors = _cb._errors || d['getErrors']();
-                        //instance.$forms[id].errors = merge(instance.$forms[id].errors, cbErrors);
-                        // update instance errors
-                        //for (var e in cbErrors)
-                        instance.$forms[id].errors = merge(cbErrors, instance.$forms[id].errors);
-                        instance.$forms[id].errors  = d['setErrors'](instance.$forms[id].errors);
-                        console.debug('instance errors: ', instance.$forms[id].errors );
-                        
-                    // }
-                    var _data = _cb._data || d['toData']();
+                    
+                    var _cb         = event.detail;
+                    var _data       = _cb._data || d['toData']();
+                    var cbErrors    = _cb._errors || d['getErrors']() || null;
+                    
+                    console.debug('instance errors: ', instance.$forms[id].errors, ' VS cbErrors: ', cbErrors, d['isValid'](), ' VS d.getErrors(): ',d['getErrors']() );
+                                        
+                    if ( cbErrors.count() > 0 && d['isValid']()) {
+                        d['isValid'] = function() {
+                            return false;
+                        }
+                    }
+                    
                     _cb({
                         'isValid'   : d['isValid'],
                         'error'     : cbErrors,

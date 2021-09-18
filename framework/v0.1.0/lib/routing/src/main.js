@@ -26,12 +26,14 @@ function Routing() {
     self.allowedMethodsString   = self.allowedMethods.join(',');
     
     // loading utils & plugins
-    var plugins = null, inherits = null, merge = null, Validator = null;
+    var plugins = null, inherits = null, merge = null, Validator = null, fs = null, promisify = null;
     if (!isGFFCtx) {
-        inherits = require('../../inherits');
-        merge = require('../../merge');
-        plugins = require(__dirname+'/../../../core/plugins') || getContext('gina').plugins;
-        Validator = plugins.Validator;
+        fs          = require('fs');
+        promisify   = require('util').promisify;
+        inherits    = require('../../inherits');
+        merge       = require('../../merge');
+        plugins     = require(__dirname+'/../../../core/plugins') || getContext('gina').plugins;
+        Validator   = plugins.Validator;
                 
     } 
     // BO - In case of partial rendering whithout handler defined for the partial
@@ -1028,48 +1030,53 @@ function Routing() {
                     // create an agent just for this request
                     options.agent = false;
                 }
-                var agent = require(''+scheme);
-                if (cb) {
+                var agent = require(''+scheme);                
+                var onAgentResponse = function(res) {  
+                                     
                     var data = '', err = false;
-                    agent.get(url, options, function onAgentResponse(res) {  
-                        res.on('data', function (chunk) {
-                            data += chunk;
-                        });
-                        res.on('error', function (error) {
-                            err = 'Failed to get mail content';
-                            if (error && typeof(error.stack) != 'undefined' ) {
-                                err += error.stack;
-                            } else if ( typeof(error) == 'string' ) {
-                                err += '\n' + error;
-                            }
-                        });
-                        res.on('end', function () {
-                            if (/^\{/.test(data) ) {
-                                try {
-                                    data = JSON.parse(data);
-                                    if (typeof(data.error) != 'undefined') {
-                                        err = JSON.clone(data);
-                                        data = null;
-                                    }
-                                } catch(parseError) {
-                                    err = parseError
+                    
+                    res.on('data', function (chunk) {
+                        data += chunk;
+                    });
+                    res.on('error', function (error) {
+                        err = 'Failed to get mail content';
+                        if (error && typeof(error.stack) != 'undefined' ) {
+                            err += error.stack;
+                        } else if ( typeof(error) == 'string' ) {
+                            err += '\n' + error;
+                        }
+                    });
+                    res.on('end', function () {
+                        if (/^\{/.test(data) ) {
+                            try {
+                                data = JSON.parse(data);
+                                if (typeof(data.error) != 'undefined') {
+                                    err = JSON.clone(data);
+                                    data = null;
                                 }
+                            } catch(parseError) {
+                                err = parseError
                             }
-                            if (err) {
-                                cb(err);
-                                return;
-                            }
-                            cb(false, data);
+                        }
+                        if (err) {                          
+                            cb(err);
                             return;
-                        });
-                    });                    
-                } else {
-                    agent.get(url, options);
+                        }
+                                               
+                        cb(false, data);
+                        return;
+                    });
                 }
-                return;
-                
-            }                
-        }
+                if (cb) {                 
+                    agent.get(url, options, onAgentResponse);
+                } else {
+                    // just throw the request without waiting/handling response
+                    agent.get(url, options);
+                }           
+            }
+            return;            
+                         
+        } // EO route.request()
         
         if ( /\:/.test(route.url) ) {
             var paramList = route.url

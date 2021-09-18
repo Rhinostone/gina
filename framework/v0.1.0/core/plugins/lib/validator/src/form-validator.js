@@ -158,25 +158,32 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         
         // stop if 
         //  - previous error detected      
-        if ( !self.isValid() ) {
-            //var id = this.target.id || this.target.getAttribute('id');
-            // var errors      = self[this['name']]['errors'] || {};    
-            // errors['query'] = replace(this.error || errorMessage || local.errorLabels['query'], this);
-            
-            
+        if ( !self.isValid() ) {            
+            console.debug('stopping on errors ...');
             triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
-            return self[this.name];
-            //return;
+            //return self[this.name];
+            return;
         }
         
         var testedValue = this.target.dataset.ginaFormValidatorTestedValue;
         console.debug('[ '+ this['name'] +' ]', 'TESTED VALUE -> ' + this.value +' vs '+ testedValue);
+        var _evt = 'asyncCompleted.' + id;
+        var currentFormId = this.target.form.getAttribute('id');
+        var cachedErrors = gina.validator.$forms[currentFormId].cachedErrors || null;
         if ( !testedValue || testedValue !== this.value ) {
             this.target.dataset.ginaFormValidatorTestedValue = this.value;
+            // remove cachedErrors
+            if ( 
+                cachedErrors 
+                && typeof(cachedErrors[this.name]) != 'undefined'
+                && typeof(cachedErrors[this.name].query) != 'undefined'
+            ) {
+                delete cachedErrors[this.name].query;
+                delete gina.validator.$forms[currentFormId].errors.query;
+            }
         } else if (testedValue === this.value) {
             // not resending to backend, but in case of cached errors, re display same error message
-            var hasCachedErrors = false;
-            var cachedErrors = gina.validator.$forms[this.target.form.getAttribute('id')].cachedErrors || null;
+            var hasCachedErrors = false;            
             if ( 
                 cachedErrors 
                 && typeof(cachedErrors[this.name]) != 'undefined'
@@ -192,23 +199,15 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 this['errors'] = errors;
                 this.valid = false;
             }
-            var _evt = 'asyncCompleted.' + id;
+            // Do not remove this test            
             if ( typeof( gina.events[_evt]) != 'undefined' ) {
                 triggerEvent(gina, this.target, _evt, self[this['name']]);
             }           
             
             return self[this.name];
         }
-        console.debug('Did not return !!!');
-        
-        
-        // if (!this.processingValue) {
-        //     this.processingValue = this.value;
-        // } else if (this.processingValue  == this.value ) {
-        //     //triggerEvent(gina, this.target, 'asyncCompleted.' + id);
-        //     return self[this.name];
-        // }
-            
+        //console.debug('Did not return !!!');
+                            
         var xhr = null, _this = this;
         // setting up AJAX
         if (window.XMLHttpRequest) { // Mozilla, Safari, ...
@@ -249,7 +248,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         // cleanup before sending
         queryData = strData.replace(/\\"/g, '');           
         // TODO - support regexp for validIf
-        var validIf = options.validIf || true;
+        var validIf = ( typeof(options.validIf) == 'undefined' ) ? true : options.validIf;
                
         queryOptions = merge(queryOptions, options, xhrOptions);
         delete queryOptions.data;
@@ -336,49 +335,67 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     _this.value      = local['data'][_this.name] = (_this.value) ? _this.value.toLowerCase() : _this.value;
         
                     var isValid     = result.isValid || false;
+                    if (validIf != isValid) {
+                        isValid = false;                        
+                    } else {
+                        isValid = true;
+                    }
+                    self[_this['name']].valid = isValid;
                     var errors      = self[_this['name']]['errors'] || {};
                     
                     var errorFields = ( typeof(result.error) != 'undefined' && typeof(result.fields) != 'undefined' ) ? result.fields : {};
                     
-                    if (errorFields.count() > 0) {
+                    if (errorFields.count() > 0 && !isValid || !isValid) {
+                                    
+                        if (!isValid) {
+                            var systemError = null;
+                            if ( typeof(errorFields[_this.name]) != 'undefined') {
+                                local.errorLabels['query'] = errorFields[_this.name];                                
+                            } else if ( typeof(result.error) != 'undefined' && /^5/.test(result.status) ) {
+                                // system error
+                                //console.debug('found system error: ', result);
+                                systemError = result.error;
+                            }                    
+                            errors['query'] = replace(systemError || _this['error'] || options['error'] || local.errorLabels['query'],  _this);
+                            console.debug('query error detected !! ', result);
+                        }
+                        
                         if ( !errors['query'] && _this.value == '' ) {
                             isValid = true;
                         }
-            
-                        if (!isValid) {
-                            if ( typeof(errorFields[_this.name]) != 'undefined') {
-                                local.errorLabels['query'] = errorFields[_this.name];
-                            }                    
-                            errors['query'] = replace(_this['error'] || local.errorLabels['query'], _this);
-                            
-                            //errors[_this['name']]['query'] = replace(_this['error'] || local.errorLabels['query'], _this);
-                            //self.setErrors(errors);
-                        }
-                        // if error tagged by a previous validation, remove it when isValid == true 
-                        else if ( isValid && typeof(errors['query']) != 'undefined' ) {
-                            delete errors['query'];
-                        }
-                        
-                        // To handle multiple errors from backend
-                        // for (var f in errorFields.length) {
-                        //     if ( !errors['query'] && _this.value == '' ) {
-                        //         isValid = true;
-                        //     }
-                
-                        //     if (!isValid) {
-                        //         errors['query'] = replace(_this['error'] || local.errorLabels['query'], _this)
-                        //     }
-                        //     // if error tagged by a previous validation, remove it when isValid == true 
-                        //     else if ( isValid && typeof(errors['query']) != 'undefined' ) {
-                        //         delete errors['query'];
-                        //     }
-                        // }
                     }
+                    
+                    // if error tagged by a previous validation, remove it when isValid == true 
+                    if ( isValid && typeof(errors['query']) != 'undefined' ) {
+                        delete errors['query'];
+                    }
+                    
+                    // To handle multiple errors from backend
+                    // for (var f in errorFields.length) {
+                    //     if ( !errors['query'] && _this.value == '' ) {
+                    //         isValid = true;
+                    //     }
+            
+                    //     if (!isValid) {
+                    //         errors['query'] = replace(_this['error'] || local.errorLabels['query'], _this)
+                    //     }
+                    //     // if error tagged by a previous validation, remove it when isValid == true 
+                    //     else if ( isValid && typeof(errors['query']) != 'undefined' ) {
+                    //         delete errors['query'];
+                    //     }
+                    // }
                             
                     _this.valid = isValid;
                     var cachedErrors = gina.validator.$forms[_this.target.form.getAttribute('id')].cachedErrors || {};
                     if ( errors.count() > 0 ) {
+                        
                         _this['errors'] = errors;
+                        if ( typeof(self[_this['name']].errors) == 'undefined' ) {
+                            self[_this['name']].errors = {};
+                        }
+                        
+                        self[_this['name']].errors = merge(self[_this['name']].errors, errors);
+                        
                         if ( typeof(errors.query) != 'undefined' && errors.query ) {
                             
                             if ( typeof(cachedErrors[_this.name]) == 'undefined' ) {
@@ -409,7 +426,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     }
                                             
                     var id = _this.target.id || _this.target.getAttribute('id');
-                    triggerEvent(gina, _this.target, 'asyncCompleted.' + id, self[_this['name']]);
+                    console.debug('prematurely completed event `'+ 'asyncCompleted.' + id +'`');
+                    return triggerEvent(gina, _this.target, 'asyncCompleted.' + id, self[_this['name']]);
                 }
                 
                 try {
@@ -1576,24 +1594,65 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         return (self['getErrors']().count() > 0) ? false : true;
     }
     self['setErrors'] = function(errors) {
+        if (!errors) {
+            return {}
+        }
         for (var field in self) {
-            if ( typeof(self[field]) == 'function' ) {
+            if ( typeof(self[field]) != 'object' ) {
                 continue
             }
-            if ( typeof(self[field]['errors']) == 'undefined' ) {
+            // if ( typeof(self[field]['errors']) == 'undefined' || self[field]['errors'].count() == 0 ) {
+            //     delete errors[field];
+            //     continue;
+            // }
+            // if ( typeof(errors[field]) == 'undefined' ) {
+            //     continue;
+            // }
+            for (var r in self[field]) {
+                // no error for the current field rule
+                if ( 
+                    typeof(errors[field]) != 'object'
+                    ||
+                    typeof(errors[field][r]) == 'undefined'
+                ) {
+                    continue;
+                }
+                
+                
+                if ( 
+                    typeof(self[field].valid) != 'undefined' 
+                    && /^true$/i.test(self[field].valid) 
+                ) {
+                    delete errors[field][r];
+                    continue;
+                }
+                
+                
+                if ( typeof( self[field]['errors']) == 'undefined' ) {
+                    self[field]['errors'] = {}
+                }
+                
+                self[field]['errors'][r] = errors[field][r];                
+            }
+            
+            // if field does not have errors, remove errors[field]
+            if ( 
+                typeof(self[field]['errors']) == 'undefined'
+                    && typeof(errors[field]) != 'undefined'
+                ||
+                typeof(self[field]['errors']) != 'undefined'
+                    && self[field]['errors'].count() == 0
+                    && typeof(errors[field]) != 'undefined'
+            ) {
                 delete errors[field];
                 continue;
-            }
-            for (var r in self[field]) {
-                if ( typeof(self[field].isValid) != 'undefined' && /^true$/i.test(self[field].isValid) ) {
-                    delete errors[field][r];
-                }
             }
         }
         return errors;
     }
     /**
      * getErrors
+     * NB.: This portion is shared between the front & the back
      * 
      * @param {string} [fieldName]
      * 
@@ -1603,12 +1662,20 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         var errors = {};
         
         if ( typeof(fieldName) != 'undefined' ) {
-            errors[fieldName] = self[fieldName]['errors'] || {};
+            if ( typeof(self[fieldName]['errors']) != 'undefined' && self[fieldName]['errors'].count() > 0 ) {
+                errors[fieldName] = self[fieldName]['errors'];
+            }                        
             return errors
         }
-
+        
         for (var field in self) {
-            if ( typeof(self[field]) != 'function' && typeof(self[field]['errors']) != 'undefined' ) {
+            if ( 
+                typeof(self[field]) != 'object'
+            ) {
+                continue;
+            }
+                        
+            if ( typeof(self[field]['errors']) != 'undefined' ) {
                 if ( self[field]['errors'].count() > 0)
                     errors[field] = self[field]['errors'];
             }

@@ -15,7 +15,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
      */
     function Toolbar() {
 
-        //console.log('Toolbar jquery is ', $.fn.jquery);
+        //console.debug('Toolbar jquery is ', $.fn.jquery);
 
         var self = {
             version         : '1.0.3',
@@ -302,7 +302,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     });
 
                     //$htmlForms.html( parseView(jsonObject.forms, ginaJsonObject.forms, null, $htmlForms) );
-                } else if ( /^(data-xhr|view-xhr)$/.test(section) ) {
+                } //else 
+                if ( /^(data-xhr|view-xhr)$/.test(section) ) {
                     
                     // reset case
                     if ( typeof(jsonObject[section]) == 'undefined' || !jsonObject[section] || jsonObject[section] == 'null' ) {
@@ -343,7 +344,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         $htmlView.html( parseView(jsonObject[section], ginaJsonObject[section], null, isXHR, $htmlView) );
                     }
                     
-                } else if ( /^(el-xhr)$/.test(section) ) {
+                } //else 
+                if ( /^(el-xhr)$/.test(section) ) {
                     // -> XHR Forms
                     isXHR = true;                    
                     $currentForms = $('#' + data).find('form:not(' + formsIgnored + ')');
@@ -358,9 +360,28 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                             .find('ul').first()
                             .slideToggle();
                     });
-                } else if ( /^(forms)$/.test(section) ) {
+                } //else 
+                if ( /^(forms)$/.test(section) ) {
                     isXHR = true;
                     self.isValidator = true;
+                    
+                    var $form = $('#gina-toolbar-form-' + data.id);
+                    // for live changes (eg.: on `Validator::getFormById()` call)
+                    if ( !$form.length ) {
+                        // crearte toolbar entry for the new form
+                        $currentForms = $forms;                    
+                        $htmlForms.html('');
+                        $htmlForms.html( parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length, isXHR) );
+                        // Form binding
+                        $htmlForms.find('div.gina-toolbar-section > h2').off('click').on('click', function(event) {
+                            event.preventDefault();
+
+                            $(this)
+                                .parent()
+                                .find('ul').first()
+                                .slideToggle();
+                        });
+                    }
                     
                     // form data sent
                     if ( typeof(data.rules) != 'undefined' ) {
@@ -1361,7 +1382,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                 .find('ul.gina-toolbar-section-content')
                 .find('li.gina-toolbar-form-'+ section + '> ul');
 
-            if ( $section.length > 0) { // update
+            if ($section.length > 0) { // update
 
                 if ( obj.count() == 0 ) { // no errors remove section
                     $form
@@ -1377,11 +1398,11 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             } else { // init
 
                 $form
-                .find('ul.gina-toolbar-section-content')
-                .append('<li class="gina-toolbar-form-'+ section +'">' +
-                            '<h3 class="gina-toolbar-sub-section-title">'+ section +'</h3>' +
-                            '<ul class="gina-toolbar-properties">'+ parseSection( obj, id, elIsXHR, section ) +'</ul>' +
-                        '</li>');
+                    .find('ul.gina-toolbar-section-content')
+                    .append('<li class="gina-toolbar-form-'+ section +'">' +
+                                '<h3 class="gina-toolbar-sub-section-title">'+ section +'</h3>' +
+                                '<ul class="gina-toolbar-properties">'+ parseSection( obj, id, elIsXHR, section ) +'</ul>' +
+                            '</li>');
             }
 
             // Form binding
