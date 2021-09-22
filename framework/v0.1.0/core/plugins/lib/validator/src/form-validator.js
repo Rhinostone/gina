@@ -169,8 +169,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         console.debug('[ '+ this['name'] +' ]', 'TESTED VALUE -> ' + this.value +' vs '+ testedValue);
         var _evt = 'asyncCompleted.' + id;
         var currentFormId = this.target.form.getAttribute('id');
-        var cachedErrors = gina.validator.$forms[currentFormId].cachedErrors || null;
-        if ( !testedValue || testedValue !== this.value ) {
+        var cachedErrors = (
+                            typeof(gina.validator) != 'undefined'
+                            && typeof(gina.validator.$forms[currentFormId]) != 'undefined'
+                            && typeof(gina.validator.$forms[currentFormId].cachedErrors) != 'undefined'
+                        )
+                        ? gina.validator.$forms[currentFormId].cachedErrors 
+                        : null;
+        if ( !testedValue || typeof(testedValue) == 'undefined' || testedValue !== this.value ) {
             this.target.dataset.ginaFormValidatorTestedValue = this.value;
             // remove cachedErrors
             if ( 
@@ -179,7 +185,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 && typeof(cachedErrors[this.name].query) != 'undefined'
             ) {
                 delete cachedErrors[this.name].query;
-                delete gina.validator.$forms[currentFormId].errors.query;
+                if ( 
+                    typeof(gina.validator.$forms[currentFormId]) != 'undefined'
+                    &&
+                    typeof(gina.validator.$forms[currentFormId].errors) != 'undefined'
+                ) {
+                    delete gina.validator.$forms[currentFormId].errors.query;
+                }
+                
             }
         } else if (testedValue === this.value) {
             // not resending to backend, but in case of cached errors, re display same error message
@@ -1663,7 +1676,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         var errors = {};
         
         if ( typeof(fieldName) != 'undefined' ) {
-            if ( typeof(self[fieldName]['errors']) != 'undefined' && self[fieldName]['errors'].count() > 0 ) {
+            if ( typeof(self[fieldName]) != 'undefined' && self[fieldName] && typeof(self[fieldName]['errors']) != 'undefined' && self[fieldName]['errors'].count() > 0 ) {
                 errors[fieldName] = self[fieldName]['errors'];
             }                        
             return errors
