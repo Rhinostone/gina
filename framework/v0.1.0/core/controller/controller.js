@@ -3408,15 +3408,20 @@ function SuperController(options) {
             self.throwError(error);
             return;
         }
+        haltedRequest       = requestStorage.haltedRequest;
+        var data            = haltedRequest.data || {};
         // request methods cleanup
         // checkout /framework/{verrsion}/core/template/conf/(settings.json).server.supportedRequestMethods
         var serverSupportedMethods = local.options.conf.server.supportedRequestMethods;
         for (let method in serverSupportedMethods) {
+            if (req.method.toLowerCase() == method) {
+                data = merge(data, req[method])
+            }
+            
             delete req[method]; 
         }
                
-        haltedRequest       = requestStorage.haltedRequest;
-        var data            = haltedRequest.data || {};
+        
         var dataAsParams    = {};
         if (data.count() > 0) {
             dataAsParams = JSON.clone(haltedRequest.data);
@@ -3440,6 +3445,7 @@ function SuperController(options) {
                 delete requestStorage.haltedRequest;
             }
             delete requestStorage.haltedRequest;
+            delete requestStorage.inheritedData;
             requestStorage.haltedRequestUrlResumed = url;
             
             requiredController.redirect(url, true);
