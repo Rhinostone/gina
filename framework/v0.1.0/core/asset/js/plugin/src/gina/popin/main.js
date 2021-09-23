@@ -149,6 +149,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 }
             }
             
+            if (!$popin && gina.popin.activePopinId) {
+                $popin = gina.popin.$popins[gina.popin.activePopinId]
+            }
+            
             return $popin;
         }     
         
@@ -195,7 +199,6 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     evt = 'popin.click.'+ 'gina-popin-' + instance.id +'-'+ uuid.v4() +'-'+ name;
                     $el['id'] = evt;
                     $el.setAttribute( 'id', evt);
-
                     
                     if (!gina.events[evt]) {
                     
@@ -209,7 +212,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                                 if (!fired) {
                                     fired = true;
-                                    
+                                    console.debug('active popin should be ', $popin.id);
+                                    gina.popin.activePopinId = $popin.id;
                                     popinBind(e, $popin);
                                     if (!$popin.isOpen) {                                        
                                         popinOpen($popin.name);

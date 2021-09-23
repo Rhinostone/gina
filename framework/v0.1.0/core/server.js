@@ -175,6 +175,14 @@ function Server(options) {
             // swigEngine to render thrown HTML errors
             initSwigEngine(self.conf[self.appName][self.env]);
             
+            // setting timezone
+            if ( 
+                typeof(options.conf[self.appName][self.env].content.settings.region) != 'undefined'
+                && typeof(options.conf[self.appName][self.env].content.settings.region.timeZone) != 'undefined'
+            ) {
+                process.env.TZ = options.conf[self.appName][self.env].content.settings.region.timeZone;
+            }
+            
             self.emit('configured', false, engine.instance, engine.middleware, self.conf[self.appName][self.env]);
 
         } catch (err) {

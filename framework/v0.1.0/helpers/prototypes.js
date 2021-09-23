@@ -61,7 +61,8 @@ function PrototypesHelper(instance) {
          * 
          * @return {object} cloned JSON object
          **/
-        var clone = function(source, target) {
+        
+         var clone = function(source, target) {
             if (source == null || typeof source != 'object') return source;
             if (source.constructor != Object && source.constructor != Array) return source;
             if (source.constructor == Date || source.constructor == RegExp || source.constructor == Function ||
@@ -82,11 +83,97 @@ function PrototypesHelper(instance) {
 
             return target;
         };
+        // TODO - add unit tests
+        // TODO - decide which one we want to keep
+        // Following code should have the same effect as the default code, but error are better handled
+        
+        // var clone = function(source, target) {
+        //     if (source == null || source == undefined || typeof source != 'object') return source;
+        //     if (source.constructor.name != 'Object' && source.constructor.name != 'Array') return source;
+        //     // if (
+        //     //     source.constructor == Date 
+        //     //     || source.constructor == RegExp 
+        //     //     || source.constructor == Function 
+        //     //     || source.constructor == String 
+        //     //     || source.constructor == Number 
+        //     //     || source.constructor == Boolean
+        //     // ) {
+        //     //     return new source.constructor(source)
+        //     // }
+            
+        //     //target = target || new source.constructor();
+        //     target = ( typeof(target) != 'undefined' && target) ? target : new source.constructor();
+        //     var i       = 0
+        //         , len   = Object.getOwnPropertyNames(source).length || 0
+        //         , keys  = Object.keys(source)
+        //         , error = null
+        //     ;
+            
+        //     while (i<len) {
+        //         try {
+        //             //target[keys[i]] = (typeof target[keys[i]] == 'undefined') ? clone(source[keys[i]], null) : target[keys[i]];
+        //             if (typeof target[keys[i]] != 'undefined') {
+        //                 ++i;
+        //                 continue;
+        //             }
+        //             if ( typeof(source[keys[i]]) != 'undefined' ) {
+        //                 let _source = source[keys[i]];
+        //                 if (/^null|undefined$/i.test(_source)) {
+        //                     target[keys[i]] = _source
+        //                 }                        
+        //                 else if (
+        //                     _source.constructor.name == 'Date'
+        //                     || _source.constructor.name == 'RegExp'
+        //                     || _source.constructor.name == 'Function'
+        //                     || _source.constructor.name == 'String'
+        //                     || _source.constructor.name == 'Number'
+        //                     || _source.constructor.name == 'Boolean'
+        //                 ) {
+        //                     target[keys[i]] =  _source
+        //                 } 
+        //                 else if (
+        //                     // _source.constructor.name == 'Date'
+        //                     // || _source.constructor.name == 'RegExp'
+        //                     // || _source.constructor.name == 'Function'
+        //                     // || _source.constructor.name == 'String'
+        //                     // || _source.constructor.name == 'Number'
+        //                     // || _source.constructor.name == 'Boolean'
+        //                     //|| 
+        //                     _source.constructor.name == 'Array'
+        //                     //|| _source.constructor.name == 'Object'
+        //                 ) {
+        //                     //target[keys[i]] = new _source.constructor(_source)
+        //                     target[keys[i]] = _source.slice()
+        //                 }
+        //                 else {
+        //                     //target[keys[i]] = clone(_source[keys[i]], null)
+        //                     target[keys[i]] = new _source.constructor(_source)
+        //                 }
+        //             }
+
+        //             i++;
+        //         } catch (err) {
+        //             var errString = 'JSON.clone(...) error on constructor not supported: ['+ keys[i] +'] `'+ source.constructor.name  +'`\n'+ err.stack;
+        //             console.error(errString);
+        //             error = new Error(errString);
+        //             break;
+        //         }  
+        //     }
+            
+        //     if (error) {
+        //         throw error;
+        //     }
+            
+        //     i = null; len = null; keys = null;
+
+        //     return target;
+                          
+        // };
         
         
         
         // WHY NOT USE SOMETHING ELSE ?
-        // Could have been fine, but not working when you have references pointg to another object
+        // Could have been fine, but not working when you have references pointing to another object
         // return Object.assign({}, source);
         // var clone = function(source, target) {
         //     return Object.assign(target||{}, source);

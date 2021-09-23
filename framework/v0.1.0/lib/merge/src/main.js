@@ -29,7 +29,7 @@ function Merge() {
         var i = 1;
         var length = arguments.length;
 
-        var options, name, src, copy, copyIsArray, clone;
+        var options, /**name,*/ src, copy, copyIsArray, clone;
 
 
 
