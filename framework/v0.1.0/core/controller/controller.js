@@ -375,6 +375,10 @@ function SuperController(options) {
             swigOptions.loader = swig.loaders.fs(dir);
         }
         swig.setDefaults(swigOptions);
+        // preserve the same timezone as the system
+        var defaultTZOffset = new Date().getTimezoneOffset();
+        swig.setDefaultTZOffset(defaultTZOffset);
+        
         self.engine = swig;
     }
     
