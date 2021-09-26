@@ -6292,7 +6292,7 @@
                     
                     for (var c in rules) {
                         if (!/^\_case\_/.test(c) ) continue;
-                        if ( typeof(rules[c].conditions) == 'undefined' ) continue;
+                        if ( typeof(rules[c].conditions) == 'undefined' || Array.isArray(rules[c].conditions) && !rules[c].conditions.length ) continue;
                         if ( typeof(rules[c].conditions[0].rules) == 'undefined' ) continue;
                         
                         
