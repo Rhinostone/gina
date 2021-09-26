@@ -241,16 +241,19 @@ function Couchbase(conn, infos) {
                     queryStatement = queryString.slice(0);                    
                     if (params) {
                         // BO - patch prepared statement case when placeholder is used as a cursor
-                        var p                   = []
+                        var p                       = []
                             // cloning queryString
-                            , qStr              = queryString.slice(0)
-                            , inl               = inlineParams.slice()
-                            , re                = null
-                            , foundSpecialCase  = /\w+\.(\$|\%)/.test(qStr);
+                            , qStr                  = queryString.slice(0)
+                            , inl                   = inlineParams.slice()
+                            , re                    = null
+                            , foundSpecialLeftCase  = /\w+\.(\$|\%)/.test(qStr)
+                            // rightCase already handled by default
+                            //, foundSpecialRightCase = /(\$|\%)\d+\.\w+/.test(qStr)
+                        ;
                             
                         // e.g.: c.documentNextId.$2 = $3
                         // e.g.: n.alertedOn.$1 = true
-                        if (foundSpecialCase) {
+                        if (foundSpecialLeftCase) {
                             i = 0; len = args.length;
                             for (; i < len; ++i) {
                                 key = inl.indexOf(params[i]);
@@ -292,7 +295,18 @@ function Couchbase(conn, infos) {
                                 }
                             }
                                 
-                        } else { // normal case
+                        }
+                        
+                        // e.g.: c.id = $1.id
+                        // if (foundSpecialRightCase) {
+                        //     console.debug('foundSpecialRightCase...')
+                        // }
+                        
+                        // normal case
+                        if (
+                            !foundSpecialLeftCase /**&& !foundSpecialRightCase*/
+                            || Array.isArray(queryParams) && queryParams.length == 0 
+                        ) { 
                             queryParams = args;
                         }
                         // EO - patch
@@ -363,9 +377,9 @@ function Couchbase(conn, infos) {
                                 // .adhoc(queryOptions.adhoc)
                                 // .consistency(queryOptions.consistency)
                         //if ( /^(insert|update)/i.test(statement) ) {
-                            queryOptions.adhoc = true;
-                            queryOptions.consistency = 3; // NOT_BOUNDED
-                            query.consistency(3); // NOT_BOUNDED
+                        queryOptions.adhoc = true;
+                        queryOptions.consistency = 3; // NOT_BOUNDED
+                        query.consistency(3); // NOT_BOUNDED
                         //}
                         // merge options
                         for (var qOpt in queryOptions) {
@@ -387,7 +401,7 @@ function Couchbase(conn, infos) {
                     
                     if (GINA_ENV_IS_DEV) {
                         //var statement = (sdkVersion <= 2) ? query.options.statement : query;
-                        console.debug('[ ' + trigger +' ] '+statement);
+                        console.debug('[ ' + trigger +' ] '+ statement);
                         //console.debug('[ ' + trigger +' ] options: '+ JSON.stringify(queryOptions, null, 2));
                     }
                     
@@ -511,13 +525,18 @@ function Couchbase(conn, infos) {
                                     cb(onCompleteError)
                                 }                                    
                             });
-                            
+                            // if (/triggerToDebug/.test(trigger)) {
+                            //     console.log('[ ' + trigger + '] onQuery => ', query, queryParams);
+                            // }
                             conn.query(query, queryParams, onQueryCallback);
                         } // else  promise case                                              
                             
                         
                         if (!self._isRegisteredFromProto) {
                             //console.debug('regular trigger: ', trigger, self._isRegisteredFromProto);
+                            // if (/triggerToDebug/.test(trigger)) {
+                            //     console.log('[ ' + trigger + '] onQuery => ', query, queryParams);
+                            // }
                             conn.query(query, queryParams, onQueryCallback);
                         }
                     }
@@ -532,11 +551,7 @@ function Couchbase(conn, infos) {
                     
                     if ( sdkVersion > 2 ) { 
                         var qErr = false, qData = null, qMeta = null;
-                        
-                        // if ( _mainCallback == null ) {   
-                        //     conn._cluster.query.onComplete = _proto;
-                        // }
-                        
+                                                
                         if ( _mainCallback == null ) {  
                             return {
                                 onComplete : function(cb) {
@@ -596,8 +611,9 @@ function Couchbase(conn, infos) {
                         
                         if ( _mainCallback == null ) {      
                             setTimeout((trigger, queryParams, onQueryCallback) => {
-                                if (!self._isRegisteredFromProto) {                                    
-                                    register(trigger, queryParams, onQueryCallback); // needed when used as a synchrone method 
+                                if (!self._isRegisteredFromProto) {                 
+                                    // needed when used as a synchrone method                    
+                                    register(trigger, queryParams, onQueryCallback);
                                 }
                             }, 0, trigger, queryParams, onQueryCallback);             
                             return _proto 
