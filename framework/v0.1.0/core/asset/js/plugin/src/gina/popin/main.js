@@ -853,11 +853,18 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     throw new Error('`$popin.name` needs to be defined !')
                 }
                 name = this.name;
+            } else if (typeof(this.name) == 'undefined' && name != 'undefined') {
+                this.name = name;
             }
             // popin object
             var $popin      = getPopinByName(name);
             var id          = $popin.id;
-                        
+            
+            // set as active if none is active
+            if ( !gina.popin.activePopinId ) {
+                gina.popin.activePopinId = id;
+            }
+            
             // popin element
             var $el         = document.getElementById(id) || null;
 
