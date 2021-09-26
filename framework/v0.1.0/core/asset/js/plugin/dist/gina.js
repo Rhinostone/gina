@@ -10972,7 +10972,14 @@ define("utils/dom", function(){});
                                 ) {
                                     $popin.isRedirecting = false;
                                     $popin.close();
-                                    delete result.popin;
+                                    var _reload = (result.popin.reload) ? result.popin.reload : false;
+                                    if ( !result.popin.location && !result.popin.url) {
+                                       delete result.popin;
+                                       // only exception
+                                       if (_reload) {
+                                        result.popin = { reload: _reload };
+                                       }
+                                    }
                                 }
                                 
                                 if ( 
@@ -24678,7 +24685,15 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                             ) {
                                                 $popin.isRedirecting = false;
                                                 $popin.close();
-                                                delete result.popin;
+                                                
+                                                var _reload = (result.popin.reload) ? result.popin.reload : false;
+                                                if ( !result.popin.location && !result.popin.url) {
+                                                    delete result.popin;
+                                                    // only exception
+                                                    if (_reload) {
+                                                        result.popin = { reload: _reload };
+                                                    }
+                                                }                                               
                                             }
                                             
                                             var _target = '_self'; // by default

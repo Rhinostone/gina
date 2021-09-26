@@ -1127,7 +1127,14 @@
                                 ) {
                                     $popin.isRedirecting = false;
                                     $popin.close();
-                                    delete result.popin;
+                                    var _reload = (result.popin.reload) ? result.popin.reload : false;
+                                    if ( !result.popin.location && !result.popin.url) {
+                                       delete result.popin;
+                                       // only exception
+                                       if (_reload) {
+                                        result.popin = { reload: _reload };
+                                       }
+                                    }
                                 }
                                 
                                 if ( 
