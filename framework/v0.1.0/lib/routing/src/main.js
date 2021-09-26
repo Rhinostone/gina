@@ -964,7 +964,7 @@ function Routing() {
                 if ( self.reservedParams.indexOf(r) > -1 || new RegExp(route.param[r]).test(maskedUrl) )
                     continue;
                 if (typeof(params[r]) != 'undefined' )
-                    queryParams += r +'='+ params[r]+ '&';
+                    queryParams += r +'='+ encodeURIComponent(params[r])+ '&';
             }
             
             if (queryParams.length > 1) {
