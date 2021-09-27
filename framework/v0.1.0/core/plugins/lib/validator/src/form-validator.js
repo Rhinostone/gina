@@ -558,7 +558,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         var routeHasViews = ( typeof(conf.content.templates) != 'undefined' ) ? true : false;
         var controllerOptions = {
             // view namespace first
-            template: (routeHasViews) ? conf.content.templates[templateName] : undefined,
+            template: (routeHasViews) ? conf.content.templates[templateName] || conf.content.templates._common : undefined,
             // namespace       : params.param.namespace || namespace,
             //control         : route.param.control,
             // controller      : controllerFile,

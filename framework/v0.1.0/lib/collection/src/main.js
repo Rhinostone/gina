@@ -914,8 +914,6 @@ function Collection(content, options) {
         }
 
         // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
-        //var currentResult = JSON.clone( (Array.isArray(this)) ? this : content );
-        var currentResult = null;
         var foundResults = null;
         if ( Array.isArray(arguments[0]) ) {
             foundResults = arguments[0];

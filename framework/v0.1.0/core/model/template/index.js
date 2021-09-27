@@ -109,14 +109,12 @@ Model = function(namespace){
                                             .replace(/\{Entity\}/g, entityName)
                                             .replace(/\{Model\}/g, model);
 
-                                        //var EntityFactory = new requireFromString(EntityFactorySource)( _this.getConfig() );
                                         var EntityFactoryClass = requireFromString(EntityFactorySource);
                                         var EntityFactory = new EntityFactoryClass( _this.getConfig() );
                                         console.log("Factory is ",  EntityFactory);
 
-                                        //var Entity = new Entity();
                                         merge(Entity, EntityFactory, true);
-                                        //console.log("\nEntity CONTENT ", Entity, " \nVS\n", EntityFactory);
+                                        //console.debug("\nEntity CONTENT ", Entity, " \nVS\n", EntityFactory);
 
                                     } else {
                                         throw new Error('Gina.Model.getContext(...): [entityName] is undefined.');
@@ -128,9 +126,9 @@ Model = function(namespace){
 
                                 //Entity = new entitiesManager[model]();
                                 //utils.merge(_this, Entity, true);
-                                console.log("EntityManager  \n",  entitiesManager,"\n VS \n",  EntityFactory);
+                                //console.debug("EntityManager  \n",  entitiesManager,"\n VS \n",  EntityFactory);
                                 if (i == files.length-1) {
-                                    console.log("All done !");
+                                    //console.debug("All done !");
                                     _this.emit('ready', false, entitiesManager);
                                     ++i;
                                 }

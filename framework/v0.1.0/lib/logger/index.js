@@ -9,11 +9,12 @@
 // Imports
 var util            = require('util');
 var EventEmitter    = require('events').EventEmitter;
+var colors          = require('colors');  
+
 var e = new EventEmitter();
 
 var merge           = require('../merge');
 var helpers         = require('../../helpers');
-
 
 /**
  * @class Logger
@@ -59,7 +60,7 @@ function Logger(opt) {
                 code: 3,
                 label: 'Error',
                 description: 'Error conditions.',
-                color : 'orange'
+                color : 'red'
             },
             warn : {
                 code: 4,
@@ -77,31 +78,29 @@ function Logger(opt) {
                 code: 6,
                 label: 'Informational',
                 description: 'Informational messages.',
-                color: 'blue'
+                color: 'cyan'
             },
             debug : {
                 code: 7,
                 label: 'Debug',
                 description: 'Debug-level messages.',
-                color: 'cyan'
+                color: 'gray'
             }
 
         }
     };
 
     if (opt) {
-        opt = merge(true, defaultOptions, opt)
+        opt = merge(defaultOptions, opt, true)
     } else {
         opt = ( typeof(Logger.instance) != 'undefined' && typeof(Logger.instance._options) != 'undefined' ) ? Logger.instance._options : defaultOptions;
     }
-
 
     /**
      * init
      * @constructor
      * */
-    var init = function(opt) {
-
+    var init = function(opt) {        
         // if ( typeof(Logger.initialized) != 'undefined' ) {
         //     console.debug("Logger instance already exists. Loading it.");
         //
@@ -114,7 +113,18 @@ function Logger(opt) {
             Logger.instance                 = self;
             Logger.instance._options        = self._options = opt;
             Logger.instance._eventHandler   = e;
-
+            
+            if (colors) {
+                var _colors = {};
+                for (let k in colors.styles) {
+                    _colors[k] = {};
+                    for (let i in colors.styles[k]) {
+                        _colors[k][i] = colors.styles[k][i]
+                    }
+                }
+                self.colors = _colors;
+            }
+            
             setDefaultLevels(opt);
 
             return Logger.instance
@@ -130,16 +140,21 @@ function Logger(opt) {
     var setDefaultLevels = function(options) {
 
         var opt = options || self._options;
-
+        
+        
         try {
-            opt._maxLevelLen = 0;
+            
+            //console.log('colors ----> ', colors);
+            
+            opt._maxLevelLen = 0;            
             for (var l in opt.levels) {
                 if (l.length > opt._maxLevelLen) {
                     opt._maxLevelLen = l.length;
                 }
+                                
                 
                 if ( typeof(self[l]) == 'undefined' ) {
-                    self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ parse +', "'+ l +'", arguments);');
+                    self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ JSON.stringify(self.colors) +', '+ parse +', "'+ l +'", arguments);');
                 }                
                 
                 // if ( typeof(self[l]) != 'undefined' )
@@ -151,10 +166,9 @@ function Logger(opt) {
         } catch (err) {
             process.stdout.write(err.stack + '\n')
         }
-
     }
 
-    var write = function(opt, parse, s, args, e) {
+    var write = function(opt, colors, parse, s, args, e) {
 
         var content = '', payload = null;
         //To handle logs with coma separated arguments.
@@ -220,7 +234,20 @@ function Logger(opt) {
             };
 
             var patt = opt.template.match(/\%[a-z A-Z]/g);
-            content = opt.template;
+            
+            
+            var colorCode = opt.levels[s.replace(/\s+/, '')].color;
+            var _color = colors[colorCode];
+            //process.stdout.write('colors code '+ colorCode  +'\n');
+            //process.stdout.write('colors '+ JSON.stringify(colors[colorCode], null, 2)  +'\n');
+            
+            if ( typeof(_color) != 'undefined' && _color) {
+                //process.stdout.write('colors code '+ JSON.stringify(colors, null, 2)  +'\n');
+                content = _color.open + opt.template + _color.close;
+            } else { // system styles
+                content = opt.template;
+            }
+                        
             for(var p=0; p<patt.length; ++p) {
                 content = content.replace(new RegExp(patt[p], 'g'), repl[patt[p]])
             }
@@ -321,11 +348,12 @@ function Logger(opt) {
 
 
             for (var l in levels) {
-                self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ parse +', "'+ l +'", arguments);');
+                self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ JSON.stringify(self.colors) +', ' + parse +', "'+ l +'", arguments);');                
             }
         } catch(e) {
             setDefaultLevels(opt);
-            self.error('Cannot set type: ', e.stack|| e.message);
+            //console.error('Cannot set type: ' + e.stack || e.message);
+            process.stdout.write('Cannot set type: ' + e.stack || e.message + '\n');
         }
     }
 
@@ -354,4 +382,12 @@ function Logger(opt) {
 
     return init(opt);
 }
+
 module.exports = Logger();
+// if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
+//     // Publish as node.js module
+//     module.exports = Logger();
+// } else if ( typeof(define) === 'function' && define.amd) {
+//     // Publish as AMD module
+//     define( function() { return Logger() });
+// }
