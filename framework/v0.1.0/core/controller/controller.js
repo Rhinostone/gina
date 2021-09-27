@@ -721,7 +721,7 @@ function SuperController(options) {
                             if (isRenderingCustomError) {
                                 // TODO - Test if there is a block call `gina-error` in the layout & replace block name from tpl
                                 
-                                if ( /\{\%(\s+extends|extends)/.test(tpl) ) {
+                                if ( !/\{\%(\s+extends|extends)/.test(tpl) ) {
                                     tpl = "\n{% extends '"+ layoutPath +"' %}\n" + tpl;
                                 }
                                 if (!/\{\% block content/.test(tpl)) {
