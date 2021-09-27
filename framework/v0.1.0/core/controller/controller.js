@@ -437,6 +437,16 @@ function SuperController(options) {
             return false
         }
         
+                
+        var data                = null
+            , layout            = null
+            , template          = null
+            , file              = null
+            , path              = null
+            , plugin            = null
+            , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false        
+        ;
+        
         localOptions.debugMode = ( typeof(displayToolbar) == 'undefined' ) ? undefined : ( (/true/i.test(displayToolbar)) ? true : false ); // only active for dev env
         
         // specific override
@@ -446,16 +456,15 @@ function SuperController(options) {
             && typeof(local.req[ local.req.method.toLowerCase() ].debug) != 'undefined' 
         ) {
             localOptions.debugMode = ( /true/i.test(local.req[ local.req.method.toLowerCase() ].debug) ) ? true : false;
+        } else if ( 
+            GINA_ENV_IS_DEV 
+            && hasViews()
+            && !isWithoutLayout 
+            && localOptions.debugMode == undefined 
+        ) {
+            localOptions.debugMode = true;
         }
         
-        var data                = null
-            , layout            = null
-            , template          = null
-            , file              = null
-            , path              = null
-            , plugin            = null
-            , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false        
-        ;
         try {
             data = getData();
             
@@ -589,91 +598,90 @@ function SuperController(options) {
                 return;
             }
             
-            // fs.readFile(path, async function (err, content) {
-                var isProxyHost = ( 
-                    typeof(local.req.headers.host) != 'undefined' 
-                        && localOptions.conf.server.scheme +'://'+ local.req.headers.host != localOptions.conf.hostname 
-                    || typeof(local.req.headers[':authority']) != 'undefined' 
-                        && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname  
-                ) ? true : false;
-                // setup swig default filters                
-                var filters = SwigFilters({
-                    options     : JSON.clone(localOptions),
-                    isProxyHost : isProxyHost,
-                    throwError  : self.throwError,
-                    req         : local.req,
-                    res         : local.res 
-                });
+            var isProxyHost = ( 
+                typeof(local.req.headers.host) != 'undefined' 
+                    && localOptions.conf.server.scheme +'://'+ local.req.headers.host != localOptions.conf.hostname 
+                || typeof(local.req.headers[':authority']) != 'undefined' 
+                    && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname  
+            ) ? true : false;
+            // setup swig default filters                
+            var filters = SwigFilters({
+                options     : JSON.clone(localOptions),
+                isProxyHost : isProxyHost,
+                throwError  : self.throwError,
+                req         : local.req,
+                res         : local.res 
+            });
 
-                try {
-                    
-                    // Extends default `length` filter
-                    swig.setFilter('length', filters.length);
+            try {
+                
+                // Extends default `length` filter
+                swig.setFilter('length', filters.length);
 
-                    
+                
 
-                    // Allows you to get a bundle web root
-                    swig.setFilter('getWebroot', filters.getWebroot);
-                    
-                    swig.setFilter('getUrl', filters.getUrl);
+                // Allows you to get a bundle web root
+                swig.setFilter('getWebroot', filters.getWebroot);
+                
+                swig.setFilter('getUrl', filters.getUrl);
 
-                } catch (err) {
-                    // [ martin ]
-                    // i sent an email to [ paul@paularmstrongdesigns.com ] on 2014/08 to see if there is
-                    // a way of retrieving swig compilation stack traces
-                    //var stack = __stack.splice(1).toString().split(',').join('\n');
-                    self.throwError(local.res, 500, new Error('template compilation exception encoutered: [ '+path+' ]\n'+(err.stack||err.message)));
+            } catch (err) {
+                // [ martin ]
+                // i sent an email to [ paul@paularmstrongdesigns.com ] on 2014/08 to see if there is
+                // a way of retrieving swig compilation stack traces
+                //var stack = __stack.splice(1).toString().split(',').join('\n');
+                self.throwError(local.res, 500, new Error('template compilation exception encoutered: [ '+path+' ]\n'+(err.stack||err.message)));
+                return;
+            }
+            
+            
+            
+            var layoutPath              = null                    
+                , assets                = null
+                , mapping               = null
+                , XHRData               = null
+                , XHRView               = null
+                , isDeferModeEnabled    = null
+                , viewInfos             = null
+                , filename              = null
+                , isWithSwigLayout      = null
+                , isUsingGinaLayout     = (!isWithoutLayout && typeof(localOptions.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout)) ? true : false
+            ;
+            
+            if ( isWithoutLayout || isUsingGinaLayout ) {
+                layoutPath = (isWithoutLayout) ? localOptions.template.noLayout : localOptions.template.layout;
+                if (isWithoutLayout)
+                    data.page.view.layout = layoutPath;
+            } else { // without layout case
+                
+                // by default
+                layoutPath = localOptions.template.layout;
+                if ( !/^\//.test(layoutPath)) {
+                    layoutPath = localOptions.template.templates +'/'+ layoutPath;
+                }
+                // default layout
+                if ( 
+                    !isWithoutLayout  && !fs.existsSync(layoutPath) && layoutPath == localOptions.template.templates +'/index.html'                         
+                ) {
+                    console.warn('Layout '+ local.options.template.layout +' not found, replacing with `nolayout`: '+ localOptions.template.noLayout);
+                    layoutPath = localOptions.template.noLayout
+                    isWithoutLayout = true;
+                    data.page.view.layout = layoutPath;
+                }
+                // user defiend layout
+                else if ( !isWithoutLayout && !fs.existsSync(layoutPath) ) {
+                    isWithSwigLayout = true;
+                    layoutPath = localOptions.template.noLayout;
+                    data.page.view.layout = layoutPath;
+                }
+                // layout defiendd but not found
+                else if (!fs.existsSync(layoutPath) ) {
+                    err = new ApiError(options.bundle +' SuperController exception while trying to load your layout `'+ layoutPath +'`.\nIt seems like you have defined a layout, but gina could not locate the file.\nFor more informations, check your `config/templates.json` declaration around `'+ local.options.rule.replace(/\@(.*)/g, '') +'`', 500);
+                    self.throwError(err);
                     return;
                 }
                 
-                
-                
-                var layoutPath              = null                    
-                    , assets                = null
-                    , mapping               = null
-                    , XHRData               = null
-                    , XHRView               = null
-                    , isDeferModeEnabled    = null
-                    , viewInfos             = null
-                    , filename              = null
-                    , isWithSwigLayout      = null
-                    , isUsingGinaLayout     = (!isWithoutLayout && typeof(localOptions.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout)) ? true : false
-                ;
-                
-                if ( isWithoutLayout || isUsingGinaLayout ) {
-                    layoutPath = (isWithoutLayout) ? localOptions.template.noLayout : localOptions.template.layout;
-                    if (isWithoutLayout)
-                        data.page.view.layout = layoutPath;
-                } else { // without layout case
-                    
-                    // by default
-                    layoutPath = localOptions.template.layout;
-                    if ( !/^\//.test(layoutPath)) {
-                        layoutPath = localOptions.template.templates +'/'+ layoutPath;
-                    }
-                    // default layout
-                    if ( 
-                        !isWithoutLayout  && !fs.existsSync(layoutPath) && layoutPath == localOptions.template.templates +'/index.html'                         
-                    ) {
-                        console.warn('Layout '+ local.options.template.layout +' not found, replacing with `nolayout`: '+ localOptions.template.noLayout);
-                        layoutPath = localOptions.template.noLayout
-                        isWithoutLayout = true;
-                        data.page.view.layout = layoutPath;
-                    }
-                    // user defiend layout
-                    else if ( !isWithoutLayout && !fs.existsSync(layoutPath) ) {
-                        isWithSwigLayout = true;
-                        layoutPath = localOptions.template.noLayout;
-                        data.page.view.layout = layoutPath;
-                    }
-                    // layout defiendd but not found
-                    else if (!fs.existsSync(layoutPath) ) {
-                        err = new ApiError(options.bundle +' SuperController exception while trying to load your layout `'+ layoutPath +'`.\nIt seems like you have defined a layout, but gina could not locate the file.\nFor more informations, check your `config/templates.json` declaration around `'+ local.options.rule.replace(/\@(.*)/g, '') +'`', 500);
-                        self.throwError(err);
-                        return;
-                    }
-                    
-                }
+            }
                 
                 // fs.readFile(layoutPath, function onLoadingLayout(err, layout) {
 
@@ -710,13 +718,21 @@ function SuperController(options) {
                                                         
                             // mappin conf
                             mapping = { filename: path };
-                            if (local.options.isRenderingCustomError) {
-                                layout = layout.replace(/\{\{ page\.content \}\}/g, '');
-                                // TODO - Test if there is a block call `gina-error` in the layout & replace block name from tpl                              
-                                tpl = "{% extends '"+ layoutPath +"' %}" + tpl;
+                            if (isRenderingCustomError) {
+                                // TODO - Test if there is a block call `gina-error` in the layout & replace block name from tpl
+                                
+                                if ( /\{\%(\s+extends|extends)/.test(tpl) ) {
+                                    tpl = "\n{% extends '"+ layoutPath +"' %}\n" + tpl;
+                                }
+                                if (!/\{\% block content/.test(tpl)) {
+                                    // TODO - test if lyout has <body>
+                                    tpl = '{% block content %}<p>If you view this message you didn’t define a content block in your template.</p>{% endblock %}' + tpl;
+                                }                                
+                                
+                                tpl = tpl.replace(/\{\{ page\.content \}\}/g, '');
                             }
                             
-                            if (isWithoutLayout || isWithSwigLayout) {
+                            if ( isWithoutLayout || isWithSwigLayout) {
                                 layout = tpl;                                
                             } else if (isUsingGinaLayout) {
                                 mapping = { filename: path };
@@ -733,12 +749,17 @@ function SuperController(options) {
                                 }
                                 
                             } else {
-                                tpl = tpl.replace('{{ page.view.layout }}', data.page.view.layout);  
-                                layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
+                                tpl = tpl.replace('{{ page.view.layout }}', data.page.view.layout);
+                                if (/\<\/body\>/i.test(layout)) {
+                                    layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
+                                }
+                                 else {
+                                    layout += tpl;
+                                }                                
                             }
                                 
                             // precompilation needed in case of `extends` or in order to display the toolbar
-                            if ( hasViews() && GINA_ENV_IS_DEV || /\{\%(\s+extends|extends)/.test(layout) ) {
+                            if ( hasViews() && GINA_ENV_IS_DEV || /\{\%(\s+extends|extends)/.test(layout) ) {                                
                                 layout = swig.compile(layout, mapping)(data);
                             }
                             //dic['page.content'] = layout;                          

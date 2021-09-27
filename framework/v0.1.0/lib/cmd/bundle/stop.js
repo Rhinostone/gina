@@ -109,7 +109,10 @@ function Stop(opt, cmd) {
                 stop(opt, cmd, i)
             } else {
                 opt.client.write('\n\r[ Offline ] '+ opt.offlineCount +'/'+ self.bundles.length);
-                var notStoppedMsg = '\nCould not stop: \n - '+ opt.notStopped.join('\n - ') + '\n\r';
+                var notStoppedMsg = '\nThe following bundle could not be stopped or was not running: \n - '+ opt.notStopped.join('\n - ') + '\n\r';
+                if (opt.notStopped.length > 1) {
+                    notStoppedMsg = '\nThe following bundles could not be stopped or were not running: \n - '+ opt.notStopped.join('\n - ') + '\n\r';
+                }
                 opt.client.write(notStoppedMsg);
                 
                 if ( typeof(error) != 'undefined') {

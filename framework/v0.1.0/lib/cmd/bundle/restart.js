@@ -97,9 +97,6 @@ function Restart(opt, cmd) {
             if ( typeof(self.bundles[i]) != 'undefined' ) {
                 restart(opt, cmd, i)
             } else {
-                //opt.client.write('\n\r[ Offline ] '+ opt.offlineCount +'/'+ self.bundles.length);
-                //var notStoppedMsg = '\nCould not stop: \n - '+ opt.notStopped.join('\n - ') + '\n\r';
-                //opt.client.write(notStoppedMsg);
                 
                 if ( typeof(error) != 'undefined') {
                     process.exit(1);
