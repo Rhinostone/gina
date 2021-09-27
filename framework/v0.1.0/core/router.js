@@ -322,7 +322,7 @@ function Router(env) {
             bundlePath      : conf.bundlesPath + '/' + bundle,
             rootPath        : self.executionPath,
             //instance: self.serverInstance,
-            template: (routeHasViews) ? conf.content.templates[templateName] : undefined,
+            template: (routeHasViews) ? conf.content.templates[templateName] || conf.content.templates._common : undefined,
             isUsingTemplate: local.isUsingTemplate,
             cacheless: cacheless,
             path: params.param.path || null, // user custom path : namespace should be ignored or left blank

@@ -3,6 +3,7 @@
 
 var fs      = require('fs');
 var net     = require('net');
+
 var console = lib.logger;
 
 function Cmd(opt, runOffine) {

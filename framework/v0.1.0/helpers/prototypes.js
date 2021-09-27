@@ -63,20 +63,41 @@ function PrototypesHelper(instance) {
          **/
         
          var clone = function(source, target) {
+            // if ( source === undefined) {
+            //     source = null;
+            // }
             if (source == null || typeof source != 'object') return source;
             if (source.constructor != Object && source.constructor != Array) return source;
             if (source.constructor == Date || source.constructor == RegExp || source.constructor == Function ||
                 source.constructor == String || source.constructor == Number || source.constructor == Boolean)
                 return new source.constructor(source);
 
-            target = target || new source.constructor();
+            try {
+                target = target || new source.constructor();
+            } catch (err) {                
+                throw err;
+            }
+            
             var i       = 0
                 , len   = Object.getOwnPropertyNames(source).length || 0
                 , keys  = Object.keys(source)
             ;
             
             while (i<len) {
-                target[keys[i]] = (typeof target[keys[i]] == 'undefined') ? clone(source[keys[i]], null) : target[keys[i]];
+                let key = Object.getOwnPropertyNames(source)[i];
+                if (key == 'undefined') {
+                    i++;
+                    continue;
+                }
+                if (source[key] === undefined) {
+                    var warn = new Error('JSON.clone(...) possible error leading to loop detected: source['+key+'] is undefined !! Key `'+ key +'` should not be left undefined. You could assign `null` to remove this warning.');
+                    warn.stack = warn.stack.replace(/^Error\:\s+/g, '');
+                    console.warn(warn);
+                    target[key] = null
+                } else {
+                    target[key] = (typeof target[key] == 'undefined' ) ? clone(source[key], null) : target[key];
+                }
+                
                 i++;
             }
             i = null; len = null; keys = null;

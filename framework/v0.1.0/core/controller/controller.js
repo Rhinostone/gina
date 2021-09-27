@@ -208,13 +208,25 @@ function SuperController(options) {
 
             var  action             = local.options.control
                 , rule              = local.options.rule
-                , ext               = 'html'
+                , ext               = 'html' // by default
                 , isWithoutLayout   = false // by default
                 , namespace         = local.options.namespace || '';
 
 
-            if ( typeof(local.options.template) != 'undefined' ) {
-                ext = local.options.template.ext || ext;
+            if ( typeof(local.options.template) != 'undefined' && local.options.template ) {
+                if ( 
+                    typeof(local.options.template.ext) != 'undefined' 
+                    && local.options.template.ext 
+                    && local.options.template.ext != ''
+                ) {
+                    ext = local.options.template.ext
+                }
+                
+                if ( !/\./.test(ext) ) {
+                    ext = '.' + ext;
+                    local.options.template.ext = ext
+                }
+                
                 if (
                     typeof(local.options.template.layout) == 'undefined'
                     || /^false$/.test(local.options.template.layout)
@@ -223,10 +235,7 @@ function SuperController(options) {
                     isWithoutLayout = true;
                 }
             }
-            if ( !/\./.test(ext) ) {
-                ext = '.' + ext;
-                local.options.template.ext = ext
-            }
+            
             
             if ( hasViews() ) {
 
@@ -1716,7 +1725,12 @@ function SuperController(options) {
                 var requestParams = req[req.method.toLowerCase()] || {};
                 
                 // merging new & olds params
-                requestParams = merge(requestParams, oldParams);                
+                requestParams = merge(requestParams, oldParams);
+                // remove session to prevent reaching the 2000 chars limit
+                // if you need the session, you need to find another way to retrieve while in the next route
+                if ( typeof(requestParams.session) != 'undefined' ) {                    
+                    delete requestParams.session;
+                }
                 if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {                    
                     var inheritedData = null;
                     if ( /\?/.test(path) ) {
@@ -1724,6 +1738,12 @@ function SuperController(options) {
                     } else {
                         inheritedData = '?inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));  
                     }  
+                    
+                    if ( inheritedData.length > 2000 ) {
+                        var error = new ApiError('Controller::redirect(...) exceptions: `inheritedData` reached 2000 chars limit', 424);
+                        self.throwError(error);
+                        return;
+                    }
                     
                     // if redirecting from a xhrRequest
                     if ( self.isXMLRequest() ) {
@@ -3335,7 +3355,7 @@ function SuperController(options) {
                 url     : req.url,
                 routing : req.routing,
                 method  : req.method.toLowerCase(),
-                data    : data               
+                data    : JSON.clone(data)
             }
         ;
         

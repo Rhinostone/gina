@@ -2363,8 +2363,6 @@
                             gina.forms.rules = merge(gina.forms.rules, rules, true);
                         }                            
                         // update instance.rules
-                        //instance.rules = merge(JSON.clone(gina.forms.rules), instance.rules);
-                        // .setKeyComparison('case')
                         instance.rules = merge(instance.rules, JSON.clone(gina.forms.rules), true);
                     } catch (err) {
                         throw (err)
@@ -2423,7 +2421,7 @@
                         if (customRule) {
                             customRule = customRule.replace(/\-|\//g, '.');
                             if ( typeof(rules) != 'undefined' ) {
-                                instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone( eval('gina.forms.rules.'+ customRule)), instance.rules[customRule]);  
+                                instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone( eval('gina.forms.rules.'+ customRule)), instance.rules[customRule]);
                             }
                             if ( typeof(local.rules[customRule]) == 'undefined' ) {
                                 throw new Error('['+id+'] no rule found with key: `'+customRule+'`. Please check if json is not malformed @ /forms/rules/' + customRule.replace(/\./g, '/') +'.json');        

@@ -2425,7 +2425,7 @@ function Merge() {
     var newTarget           = []
         //, keyComparison     = 'id' // use for collections merging [{ id: 'val1' }, { id: 'val2' }, {id: 'val3' }, ...]
     ;
-    
+        
     
     /**
      *
@@ -2437,7 +2437,6 @@ function Merge() {
      * */
     var browse = function (target, source) {
         
-
         if ( typeof(target) == 'undefined' ) {
             target = ( typeof(source) != 'undefined' && Array.isArray(source)) ? [] : {}
         }
@@ -2471,7 +2470,6 @@ function Merge() {
             }
 
         } else {
-
             for (; i < length; ++i) {
                 // Only deal with non-null/undefined values
                 if ( typeof(arguments[i]) != 'boolean' && ( options = arguments[i]) != null) {
@@ -2489,8 +2487,8 @@ function Merge() {
                             if (!target) {
                                 target = { name: null }
                             }
-
-                            src     = target[ name ] ;
+                                                        
+                            src     = target[ name ];
                             copy    = options[ name ];
 
 
@@ -2717,6 +2715,9 @@ function Merge() {
                     ||
                     typeof(options) == 'undefined'
                 ) {
+                    // means that we are trying to replace with an empty array/collection
+                    // this does not make any sense, so we just return the target as if the merge had no effect
+                    // DO NOT CHANGE THIS, it affects gina merging config
                     return target;
                 }
                 return options;
@@ -2925,8 +2926,17 @@ function Merge() {
         return keyComparison
     }
     
+    // clone target & source to prevent mutations from the originals
+    // if (!browse.originalValueshasBeenCached) {            
+    //     for (let a = 0, aLen = arguments.length; a < aLen; a++) {
+    //         if ( typeof(arguments[a]) == 'object' ) {
+    //             arguments[a] = JSON.clone(arguments[a]);
+    //         }
+    //     }
+    //     browse.originalValueshasBeenCached = true;            
+    // }
+    
     return browse
-
 }
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
@@ -3911,20 +3921,41 @@ function PrototypesHelper(instance) {
          **/
         
          var clone = function(source, target) {
+            // if ( source === undefined) {
+            //     source = null;
+            // }
             if (source == null || typeof source != 'object') return source;
             if (source.constructor != Object && source.constructor != Array) return source;
             if (source.constructor == Date || source.constructor == RegExp || source.constructor == Function ||
                 source.constructor == String || source.constructor == Number || source.constructor == Boolean)
                 return new source.constructor(source);
 
-            target = target || new source.constructor();
+            try {
+                target = target || new source.constructor();
+            } catch (err) {                
+                throw err;
+            }
+            
             var i       = 0
                 , len   = Object.getOwnPropertyNames(source).length || 0
                 , keys  = Object.keys(source)
             ;
             
             while (i<len) {
-                target[keys[i]] = (typeof target[keys[i]] == 'undefined') ? clone(source[keys[i]], null) : target[keys[i]];
+                let key = Object.getOwnPropertyNames(source)[i];
+                if (key == 'undefined') {
+                    i++;
+                    continue;
+                }
+                if (source[key] === undefined) {
+                    var warn = new Error('JSON.clone(...) possible error leading to loop detected: source['+key+'] is undefined !! Key `'+ key +'` should not be left undefined. You could assign `null` to remove this warning.');
+                    warn.stack = warn.stack.replace(/^Error\:\s+/g, '');
+                    console.warn(warn);
+                    target[key] = null
+                } else {
+                    target[key] = (typeof target[key] == 'undefined' ) ? clone(source[key], null) : target[key];
+                }
+                
                 i++;
             }
             i = null; len = null; keys = null;
@@ -5601,8 +5632,6 @@ function Collection(content, options) {
         }
 
         // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
-        //var currentResult = JSON.clone( (Array.isArray(this)) ? this : content );
-        var currentResult = null;
         var foundResults = null;
         if ( Array.isArray(arguments[0]) ) {
             foundResults = arguments[0];
@@ -6707,7 +6736,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         var routeHasViews = ( typeof(conf.content.templates) != 'undefined' ) ? true : false;
         var controllerOptions = {
             // view namespace first
-            template: (routeHasViews) ? conf.content.templates[templateName] : undefined,
+            template: (routeHasViews) ? conf.content.templates[templateName] || conf.content.templates._common : undefined,
             // namespace       : params.param.namespace || namespace,
             //control         : route.param.control,
             // controller      : controllerFile,
@@ -12208,8 +12237,6 @@ define("utils/dom", function(){});
                             gina.forms.rules = merge(gina.forms.rules, rules, true);
                         }                            
                         // update instance.rules
-                        //instance.rules = merge(JSON.clone(gina.forms.rules), instance.rules);
-                        // .setKeyComparison('case')
                         instance.rules = merge(instance.rules, JSON.clone(gina.forms.rules), true);
                     } catch (err) {
                         throw (err)
@@ -12268,7 +12295,7 @@ define("utils/dom", function(){});
                         if (customRule) {
                             customRule = customRule.replace(/\-|\//g, '.');
                             if ( typeof(rules) != 'undefined' ) {
-                                instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone( eval('gina.forms.rules.'+ customRule)), instance.rules[customRule]);  
+                                instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone( eval('gina.forms.rules.'+ customRule)), instance.rules[customRule]);
                             }
                             if ( typeof(local.rules[customRule]) == 'undefined' ) {
                                 throw new Error('['+id+'] no rule found with key: `'+customRule+'`. Please check if json is not malformed @ /forms/rules/' + customRule.replace(/\./g, '/') +'.json');        

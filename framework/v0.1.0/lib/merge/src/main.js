@@ -4,7 +4,7 @@ function Merge() {
     var newTarget           = []
         //, keyComparison     = 'id' // use for collections merging [{ id: 'val1' }, { id: 'val2' }, {id: 'val3' }, ...]
     ;
-    
+        
     
     /**
      *
@@ -16,7 +16,6 @@ function Merge() {
      * */
     var browse = function (target, source) {
         
-
         if ( typeof(target) == 'undefined' ) {
             target = ( typeof(source) != 'undefined' && Array.isArray(source)) ? [] : {}
         }
@@ -50,7 +49,6 @@ function Merge() {
             }
 
         } else {
-
             for (; i < length; ++i) {
                 // Only deal with non-null/undefined values
                 if ( typeof(arguments[i]) != 'boolean' && ( options = arguments[i]) != null) {
@@ -68,8 +66,8 @@ function Merge() {
                             if (!target) {
                                 target = { name: null }
                             }
-
-                            src     = target[ name ] ;
+                                                        
+                            src     = target[ name ];
                             copy    = options[ name ];
 
 
@@ -296,6 +294,9 @@ function Merge() {
                     ||
                     typeof(options) == 'undefined'
                 ) {
+                    // means that we are trying to replace with an empty array/collection
+                    // this does not make any sense, so we just return the target as if the merge had no effect
+                    // DO NOT CHANGE THIS, it affects gina merging config
                     return target;
                 }
                 return options;
@@ -504,8 +505,17 @@ function Merge() {
         return keyComparison
     }
     
+    // clone target & source to prevent mutations from the originals
+    // if (!browse.originalValueshasBeenCached) {            
+    //     for (let a = 0, aLen = arguments.length; a < aLen; a++) {
+    //         if ( typeof(arguments[a]) == 'object' ) {
+    //             arguments[a] = JSON.clone(arguments[a]);
+    //         }
+    //     }
+    //     browse.originalValueshasBeenCached = true;            
+    // }
+    
     return browse
-
 }
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
