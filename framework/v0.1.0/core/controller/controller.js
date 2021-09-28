@@ -534,7 +534,7 @@ function SuperController(options) {
             }
 
             // making path thru [namespace &] file
-            if ( typeof(localOptions.namespace) != 'undefined' ) {
+            if ( typeof(localOptions.namespace) != 'undefined' && localOptions.namespace ) {
                 // excepted for custom paths
                 if ( !/^(\.|\/|\\)/.test(file) )
                     file = ''+ file.replace(localOptions.namespace+'-', '');
@@ -650,8 +650,13 @@ function SuperController(options) {
             
             if ( isWithoutLayout || isUsingGinaLayout ) {
                 layoutPath = (isWithoutLayout) ? localOptions.template.noLayout : localOptions.template.layout;
-                if (isWithoutLayout)
+                // user layout override
+                if ( isUsingGinaLayout && !isWithoutLayout ) {
+                    layoutPath = localOptions.template.layout;
+                } 
+                if (isWithoutLayout) {
                     data.page.view.layout = layoutPath;
+                }                    
             } else { // without layout case
                 
                 // by default

@@ -291,7 +291,7 @@ function Router(env) {
             filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.'+ namespace +'.js';
             if ( !fs.existsSync(filename) ) {                
                 hasControllerNamespace = false;
-                console.warn('Namespace `'+ namespace +'` found, but no `'+filename+'` to load: just ignore this message if this is ok with you');                
+                console.warn('Namespace `'+ namespace +'` found, but no reloated controller file found at `'+filename+'` to load: just ignore this message if this is ok with you');                
                 filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
                 console.info('Switching to default controller: '+ mainControllerFile);
             }
