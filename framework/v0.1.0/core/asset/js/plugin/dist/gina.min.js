@@ -3948,7 +3948,7 @@ function PrototypesHelper(instance) {
                     continue;
                 }
                 if (source[key] === undefined) {
-                    var warn = new Error('JSON.clone(...) possible error leading to loop detected: source['+key+'] is undefined !! Key `'+ key +'` should not be left undefined. You could assign `null` to remove this warning.');
+                    var warn = new Error('JSON.clone(...) possible error detected: source['+key+'] is undefined !! Key `'+ key +'` should not be left `undefined`. Assigning to `null`.');
                     warn.stack = warn.stack.replace(/^Error\:\s+/g, '');
                     console.warn(warn);
                     target[key] = null

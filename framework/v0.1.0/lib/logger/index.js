@@ -248,7 +248,7 @@ function Logger(opt) {
                 content = opt.template;
             }
                         
-            for(var p=0; p<patt.length; ++p) {
+            for (let p=0; p<patt.length; ++p) {
                 content = content.replace(new RegExp(patt[p], 'g'), repl[patt[p]])
             }
 
