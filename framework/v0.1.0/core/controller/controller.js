@@ -463,6 +463,8 @@ function SuperController(options) {
             && localOptions.debugMode == undefined 
         ) {
             localOptions.debugMode = true;
+        } else if ( localOptions.debugMode == undefined  ) {
+            localOptions.debugMode = GINA_ENV_IS_DEV
         }
         
         try {
@@ -2848,7 +2850,7 @@ function SuperController(options) {
                             data = JSON.parse(data);
                             // just in case
                             if ( typeof(data.status) == 'undefined' ) {
-                                console.warn('Response status code is `undefined`: switching to `200`');
+                                console.warn( '['+local.req.routing.rule +'] ' + 'Response status code is `undefined`: switching to `200`');
                                 data.status = 200;
                             }
                         } catch (err) {

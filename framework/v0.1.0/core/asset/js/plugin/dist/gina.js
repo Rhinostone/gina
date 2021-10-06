@@ -3948,8 +3948,11 @@ function PrototypesHelper(instance) {
                     continue;
                 }
                 if (source[key] === undefined) {
-                    var warn = new Error('JSON.clone(...) possible error detected: source['+key+'] is undefined !! Key `'+ key +'` should not be left `undefined`. Assigning to `null`.');
+                    var warn = new Error('JSON.clone(...) possible error detected: source['+key+'] is undefined !! Key `'+ key +'` should not be left `undefined`. Assigning to `null`');
                     warn.stack = warn.stack.replace(/^Error\:\s+/g, '');
+                    if ( typeof(warn.message) != 'undefined' ) {
+                        warn.message = warn.message.replace(/^Error\:\s+/g, '');
+                    }
                     console.warn(warn);
                     target[key] = null
                 } else {
@@ -4953,7 +4956,7 @@ function Collection(content, options) {
 
             var matched = null
                 , filterIsArray = null
-                , searchResult = null;
+                , searchResult = [];
             
             /**
              *  Regular Search
@@ -5160,7 +5163,6 @@ function Collection(content, options) {
             }
 
             
-
             for (var o in tmpContent) {
 
                 if (!tmpContent[o]) {
@@ -5168,11 +5170,13 @@ function Collection(content, options) {
                 }
                 
                 if (!/undefined|function/.test( typeof(tmpContent[o]))) {
+                    
                     for (let l = 0, lLen = filters.count(); l<lLen; ++l) {
                         filter = filters[l];
                         condition = filter.count();
                         // for each condition 
                         matched = 0;
+                        
                         for (var f in filter) {
                             if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
@@ -5198,9 +5202,7 @@ function Collection(content, options) {
                                                                     
                                 searchResult = search(filter[f], f, tmpContent[o][f], matched, searchOptionRules);                                
                                 matched = searchResult.matched;
-                            }
-                            
-                            
+                            }                            
                         }
 
                         if (matched == condition ) { // all conditions must be fulfilled to match
@@ -7706,8 +7708,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         self[el]['exclude'] = function(isApplicable) {
 
             if ( typeof(isApplicable) == 'boolean' && !isApplicable ) {
-
-                local.data[this.name] = this.value = (/^true$/i.test(this.value)) ? true : false;
+                
+                if ( /^true|false$/i.test(this.value)) {
+                    this.value = (/^true$/i.test(this.value)) ? true : false;
+                    local.data[this.name] = this.value;
+                }                
 
                 return self[this.name]
             }
@@ -10846,8 +10851,7 @@ define("utils/dom", function(){});
                     // 200, 201, 201' etc ...
                     if( /^2/.test(xhr.status) ) {
 
-                        try {
-                            
+                        try {                           
                             
                             // handling blob xhr download
                             if ( /blob/.test(xhr.responseType) || isAttachment ) {
