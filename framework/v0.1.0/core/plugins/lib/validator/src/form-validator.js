@@ -1528,8 +1528,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         self[el]['exclude'] = function(isApplicable) {
 
             if ( typeof(isApplicable) == 'boolean' && !isApplicable ) {
-
-                local.data[this.name] = this.value = (/^true$/i.test(this.value)) ? true : false;
+                
+                if ( /^true|false$/i.test(this.value)) {
+                    this.value = (/^true$/i.test(this.value)) ? true : false;
+                    local.data[this.name] = this.value;
+                }                
 
                 return self[this.name]
             }

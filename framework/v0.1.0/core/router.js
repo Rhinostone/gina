@@ -320,7 +320,8 @@ function Router(env) {
             file: actionFile,
             //bundle          : bundle,//module
             bundlePath      : conf.bundlesPath + '/' + bundle,
-            rootPath        : self.executionPath,
+            rootPath        : conf.executionPath || null,
+            executionPath   : conf.executionPath || null,
             //instance: self.serverInstance,
             template: (routeHasViews) ? conf.content.templates[templateName] || conf.content.templates._common : undefined,
             isUsingTemplate: local.isUsingTemplate,

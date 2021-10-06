@@ -972,8 +972,7 @@
                     // 200, 201, 201' etc ...
                     if( /^2/.test(xhr.status) ) {
 
-                        try {
-                            
+                        try {                           
                             
                             // handling blob xhr download
                             if ( /blob/.test(xhr.responseType) || isAttachment ) {

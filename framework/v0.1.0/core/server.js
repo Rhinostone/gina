@@ -93,15 +93,17 @@ function Server(options) {
 
         //True => multiple bundles sharing the same server (port).
         self.isStandalone   = options.isStandalone;
-        self.executionPath  = options.executionPath;
         self.bundles        = options.bundles;
+        self.executionPath  = options.executionPath;
+        
 
         if (!self.isStandalone) {
             //Only load the related conf / env.
             self.conf[self.appName] = {};
             self.conf[self.appName][self.env] = options.conf[self.appName][self.env];
             self.conf[self.appName][self.env].bundlesPath = options.conf[self.appName][self.env].bundlesPath;
-            self.conf[self.appName][self.env].modelsPath =  options.conf[self.appName][self.env].modelsPath;            
+            self.conf[self.appName][self.env].modelsPath =  options.conf[self.appName][self.env].modelsPath;
+            self.conf[self.appName][self.env].executionPath = options.conf[self.appName][self.env].executionPath = self.executionPath;
         } else {
 
             //console.log("Running mode not handled yet..", self.appName, " VS ", self.bundles);

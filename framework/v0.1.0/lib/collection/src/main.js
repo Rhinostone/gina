@@ -235,7 +235,7 @@ function Collection(content, options) {
 
             var matched = null
                 , filterIsArray = null
-                , searchResult = null;
+                , searchResult = [];
             
             /**
              *  Regular Search
@@ -442,7 +442,6 @@ function Collection(content, options) {
             }
 
             
-
             for (var o in tmpContent) {
 
                 if (!tmpContent[o]) {
@@ -450,11 +449,13 @@ function Collection(content, options) {
                 }
                 
                 if (!/undefined|function/.test( typeof(tmpContent[o]))) {
+                    
                     for (let l = 0, lLen = filters.count(); l<lLen; ++l) {
                         filter = filters[l];
                         condition = filter.count();
                         // for each condition 
                         matched = 0;
+                        
                         for (var f in filter) {
                             if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
@@ -480,9 +481,7 @@ function Collection(content, options) {
                                                                     
                                 searchResult = search(filter[f], f, tmpContent[o][f], matched, searchOptionRules);                                
                                 matched = searchResult.matched;
-                            }
-                            
-                            
+                            }                            
                         }
 
                         if (matched == condition ) { // all conditions must be fulfilled to match
