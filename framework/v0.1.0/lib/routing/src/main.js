@@ -195,7 +195,7 @@ function Routing() {
         // if ( params.rule == 'my-specific-rule@bundle' ) {
         //     console.debug('passed '+ params.rule);
         // }
-
+        
         var uRe             = params.url.split(/\//)
             , uRo           = url.split(/\//)
             , uReCount      = 0
@@ -207,6 +207,7 @@ function Routing() {
             , method        = request.method.toLowerCase()
         ;
         
+        // TODO - remove comments
         // when requirement is not listed but still validated
         // if ( 
         //     typeof(params.requirements) != 'undefined' 
@@ -365,9 +366,15 @@ function Routing() {
                 hasAlreadyBeenScored = true;           
             }            
             
+            // Sample debug break for specific rule
+            // if ( params.rule == 'my-specific-rule@bundle' ) {
+            //     console.debug('passed '+ params.rule);
+            // }
             for (let p in request[method]) {
                 if ( typeof(params.requirements[p]) != 'undefined' && uRo.indexOf(':' + p) < 0 ) {
-                    uRo[uRoCount] = ':' + p; ++uRoCount;
+                    uRo[uRoCount] = ':' + p; 
+                    ++uRoCount;
+                    
                     uRe[uReCount] = request[method][p];
                     ++uReCount;
                     if (!hasAlreadyBeenScored && uRe.length === uRo.length)
@@ -377,7 +384,10 @@ function Routing() {
         }
         
                 
-        
+        // Sample debug break for specific rule
+        // if ( params.rule == 'my-specific-rule@bundle' ) {
+        //     console.debug('passed '+ params.rule);
+        // }
         
         if (!hasAlreadyBeenScored && uRe.length === uRo.length) {
             
@@ -458,7 +468,7 @@ function Routing() {
                                 _data[ pName ] = uRe[p];
                                 // Updating params
                                 if ( typeof(request.params[pName]) == 'undefined' ) {
-                                    // Set in case it is not found
+                                    // Set in case if not found
                                     request.params[pName] = uRe[p];
                                 }
                             }
@@ -812,13 +822,16 @@ function Routing() {
         return ( /\/$/.test(matched) ? replacement.variable+ '/': replacement.variable )            
     };
     var checkRouteParams = function(route, params) {
-        var variable    = null
-            , regex     = null
-            , urls      = null
-            , i         = null
-            , len       = null
+        var variable        = null
+            , regex         = null
+            , urls          = null
+            , i             = null
+            , len           = null
+            , rawRouteUrl   = route.url
+            , p             = null
+            , pLen          = null
         ;
-        for (var p in route.param) {
+        for (p in route.param) {
             if ( typeof(params) != 'undefined' && typeof(params[p]) == 'undefined' ) continue;
             
             if ( /^:/.test(route.param[p]) ) {
@@ -863,8 +876,28 @@ function Routing() {
         // Selecting url in case of multiple urls & optional requirmements
         if ( urls ) {                      
             i = 0; len = urls.length;
+            var rawUrlVars = null
+                , rawUrlScore = null
+                , rawUrls = rawRouteUrl.split(/\,/g)
+                , pKey = null
+                , lastScore = 0
+            ;
+            route.urlIndex = 0; // by default
             for (; i < len; ++i) {
-                if ( !/\:[-_a-z0-9]+/i.test(urls[i]) ) {
+                rawUrlScore = 0;
+                rawUrlVars = rawUrls[0].match(/\:[-_a-z0-9]+/ig);
+                if ( !rawUrlVars ) continue;
+                p = 0;
+                pLen = rawUrlVars.length;
+                for (; p < pLen; p++) {
+                    pKey = rawUrlVars[p].substr(1);
+                    if ( typeof(params[ pKey ]) != 'undefined' && params[ pKey ] ) {
+                        rawUrlScore++;
+                    }
+                }
+                // We just rely in params count for now
+                if (rawUrlScore > lastScore) {
+                    lastScore = rawUrlScore;
                     route.urlIndex = i;
                 }
             }
