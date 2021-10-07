@@ -2496,7 +2496,7 @@ function SuperController(options) {
                 local.options.withCredentials = res.headers['access-control-allow-credentials'];
 
 
-            var data = '';
+            var data = '', err = false;
 
             res.on('data', function onData (chunk) {
                 data += chunk;
@@ -2507,7 +2507,7 @@ function SuperController(options) {
                 
                 // exceptions filter
                 if ( typeof(data) == 'string' && /^Unknown ALPN Protocol/.test(data) ) {
-                    var err = {
+                    err = {
                         status: 500,
                         error: new Error(data)
                     };
@@ -2529,8 +2529,9 @@ function SuperController(options) {
                         } catch (err) {
                             data = {
                                 status    : 500,
-                                error     : data
-                            }
+                                error     : err
+                            };
+                            console.error(err);
                         }
                     }
 
@@ -2850,14 +2851,16 @@ function SuperController(options) {
                             data = JSON.parse(data);
                             // just in case
                             if ( typeof(data.status) == 'undefined' ) {
-                                console.warn( '['+local.req.routing.rule +'] ' + 'Response status code is `undefined`: switching to `200`');
+                                var currentRule = local.options.rule || local.req.routing.rule;
+                                console.warn( '['+ currentRule +'] ' + 'Response status code is `undefined`: switching to `200`');
                                 data.status = 200;
                             }
                         } catch (err) {
                             data = {
                                 status    : 500,
-                                error     : data
+                                error     : err
                             }
+                            console.error(err);
                         }
                     } else if ( !data && this.aborted && this.destroyed) {
                         data = {

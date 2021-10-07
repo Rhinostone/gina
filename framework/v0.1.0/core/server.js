@@ -2142,7 +2142,9 @@ function Server(options) {
                             // false & true case
                             if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
                                 bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-                            
+                            if ( /(\"null\")/i.test(bodyStr) )
+                                bodyStr = bodyStr.replace(/\"null\"/ig, null);
+                                
                             try {
                                 obj = parseBody(bodyStr);
                                 request.post = obj;
@@ -2239,8 +2241,11 @@ function Server(options) {
                     
                     bodyStr = JSON.stringify(request.query).replace(/\"{/g, '{').replace(/}\"/g, '}').replace(/\\/g, '');                 
                     // false & true case
-                    if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
-                        bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                    if ( /(\"false\"|\"true\"|\"on\")/i.test(bodyStr) )
+                        bodyStr = bodyStr.replace(/\"false\"/ig, false).replace(/\"true\"/ig, true).replace(/\"on\"/ig, true);
+                    if ( /(\"null\")/i.test(bodyStr) )
+                        bodyStr = bodyStr.replace(/\"null\"/ig, null);
+                        
                     
                     obj = parseBody(decodeURIComponent(bodyStr));
                     
@@ -2282,6 +2287,8 @@ function Server(options) {
                             // false & true case
                             if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
                                 bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                            if ( /(\"null\")/i.test(bodyStr) )
+                                bodyStr = bodyStr.replace(/\"null\"/ig, null);
 
                             obj = parseBody(bodyStr);
 
@@ -2309,6 +2316,8 @@ function Server(options) {
                     // false & true case
                     if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
                         bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                    if ( /(\"null\")/i.test(bodyStr) )
+                        bodyStr = bodyStr.replace(/\"null\"/ig, null);
 
                     obj = JSON.parse(bodyStr)
                 }
