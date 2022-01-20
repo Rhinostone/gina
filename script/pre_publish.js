@@ -155,22 +155,22 @@ function PrePublish() {
         })
     }
 
-    this.runTests = function(cb) {
-        if ( fs.existsSync(self.path+'/test') ) {
-            exec(['nodeunit', self.path+'/test'], function done(err, data) {
-                if ( /FAILURES\:/.test(data) || !/OK\:/.test(data) ) {
-                    console.info(data);
-                    cb(new Error('Tests failed !! See message above.'));
-                    return;
-                }
-                cb(err, data)
-            })
-            //exec('npm '++'test')
-            //cb(false)
-        } else {
-            cb(false)
-        }
-    }
+    // this.runTests = function(cb) {
+    //     if ( fs.existsSync(self.path+'/test') ) {
+    //         exec(['nodeunit', self.path+'/test'], function done(err, data) {
+    //             if ( /FAILURES\:/.test(data) || !/OK\:/.test(data) ) {
+    //                 console.info(data);
+    //                 cb(new Error('Tests failed !! See message above.'));
+    //                 return;
+    //             }
+    //             cb(err, data)
+    //         })
+    //         //exec('npm '++'test')
+    //         //cb(false)
+    //     } else {
+    //         cb(false)
+    //     }
+    // }
 
     this.removeComments = function() { console.log('removin comments ...')};
     this.removeConsoleLog = function() {

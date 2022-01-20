@@ -13,6 +13,7 @@ nbproject
 .gna
 node_modules*
 VERSION
+MIDDLEWARE
 # SCM
 .svn
 .git
