@@ -190,11 +190,13 @@ function PostInstall() {
         var msg = "Gina's command line tool has been installed.";
 
         var deps = require(_(self.path) + '/package.json').dependecies;
-
+        
+        var version = require( _(self.path + '/package.json') ).version;
+        var middleware = 'isaac@'+version; // by default
 
         for (var d in deps) {
             if (d === 'express' && deps[d] != '') {
-                var middleware = d +'@'+ deps[d]
+                middleware = d +'@'+ deps[d]
             }
         }
 

@@ -5,7 +5,6 @@
     "couchbase": "^2.6.12",
     "engine.io": "",
     "engine.io-client": "^3.4.3",
-    "express": "^4.16.3",
     "node-uuid": "^1.4.8",
     "requirejs": "^2.3.6",
     "sanitize-html": "^2.5.0",
