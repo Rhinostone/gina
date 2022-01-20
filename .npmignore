@@ -1,3 +1,10 @@
+# IDE
+.jshintrc
+.idea
+nbproject
+.vscode
+.history
+
 support
 test
 examples
@@ -6,4 +13,3 @@ examples
 ./framework/0.1.0_old
 *.old
 gina.com
-
