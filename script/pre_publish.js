@@ -1,6 +1,6 @@
 /*
  * This file is part of the gina package.
- * Copyright (c) 2009-2017 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -160,7 +160,8 @@ function PrePublish() {
             exec(['nodeunit', self.path+'/test'], function done(err, data) {
                 if ( /FAILURES\:/.test(data) || !/OK\:/.test(data) ) {
                     console.info(data);
-                    cb(new Error('Tests failed !! See message above.'))
+                    cb(new Error('Tests failed !! See message above.'));
+                    return;
                 }
                 cb(err, data)
             })

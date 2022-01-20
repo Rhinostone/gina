@@ -200,11 +200,11 @@ function PostInstall() {
 
         var expressPackage = _(self.path + '/node_modules/express/package.json');
         if ( typeof(middleware) == 'undefined' && fs.existsSync(expressPackage) ) {
-            var middleware = require(expressPackage).version;
+            middleware = require(expressPackage).version;
             middleware = 'express@' + middleware;
         } else if (typeof(middleware) == 'undefined') {
             throw new Error('No middleware found !!');
-            process.exit(1)
+            //process.exit(1)
         }
 
         if ( fs.existsSync(filename) ) { // update
@@ -214,7 +214,7 @@ function PostInstall() {
                 fs.writeFile(filename, middleware, function onWrote(err){
                     if (err) {
                         throw new Error(err.stack||err.message||err);
-                        process.exit(1)
+                        //process.exit(1)
                     } else {
                         console.info(msg)
                     }
@@ -224,7 +224,7 @@ function PostInstall() {
             fs.writeFile(filename, middleware, function onWrote(err){
                 if (err) {
                     throw new Error(err.stack||err.message||err);
-                    process.exit(1)
+                    //process.exit(1)
                 } else {
                     console.info(msg)
                 }
