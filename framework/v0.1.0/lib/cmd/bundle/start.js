@@ -243,6 +243,7 @@ function Start(opt, cmd) {
     
     
     var end = function (opt, cmd, isBulkStart, i) {
+        
         if (isBulkStart) {            
             ++i;            
             if ( typeof(self.bundles[i]) != 'undefined' ) {
@@ -256,7 +257,13 @@ function Start(opt, cmd) {
             }
         } else {
             if (!opt.client.destroyed)
-                opt.client.emit('end');                
+                opt.client.emit('end');
+            // Force exit in case process is stuck
+            setTimeout(() => {
+                if (!opt.client.destroyed) {
+                    opt.client.emit('exit');
+                }
+            }, 150);
         }
     }
 

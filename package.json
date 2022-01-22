@@ -25,11 +25,6 @@
   },
   "copyright": "Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>",
   "dependencies": {
-    "colors": "^1.1.2",
-    "tar": ""
-  },
-  "ginaDependencies": {
-    "colors": "^1.1.2",
     "tar": ""
   },
   "engine": [

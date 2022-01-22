@@ -18,7 +18,7 @@ function SessionStore(session) {
         , env               = ctx.env
         , conf              = getConfig()[bundle][env]
         , connectorsPath    = conf.connectorsPath
-        , connector         = conf.content.connectors[session.name].connector;
+        , connector         = conf.content.connectors[session.name].connector
     ; 
     var connectorName = 'couchbase';
     var filename = _(connectorsPath + '/'+ connector +'/lib/session-store.js', true);

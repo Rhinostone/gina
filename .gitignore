@@ -14,6 +14,7 @@ nbproject
 node_modules*
 VERSION
 MIDDLEWARE
+package-lock.json
 # SCM
 .svn
 .git

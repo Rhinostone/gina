@@ -7,11 +7,13 @@
  * NB.: this file is built appart
  *
  * Must be placed before gina <script> tag
- *
+ * 
+ * Instructions for closure compiler: https://github.com/google/closure-compiler/wiki/@suppress-annotations
  * */
 
 window['originalContext']   = window['jQuery'];
 window['ginaToolbar']       = null;
+
 window['onGinaLoaded']      = function(gina) {
 
     if (!gina) {
@@ -53,6 +55,7 @@ window['onGinaLoaded']      = function(gina) {
          * @param {string} [bundle]
          * 
          * @return {object} routing
+         * 
         */        
         gina['config']['getRouting'] = function(bundle) {
 
@@ -70,7 +73,7 @@ window['onGinaLoaded']      = function(gina) {
                    routes[route] = routing[route]
             }
             
-            return (routes.count() > 0) ? routes : null
+            return (routes['count']() > 0) ? routes : null
         };
 
         // globals
@@ -120,7 +123,7 @@ window['onGinaLoaded']      = function(gina) {
     
         // all required must be listed in `src/gina.js` defined modules list
         if (options['envIsDev']) {
-            var Toolbar             = require('gina/toolbar');
+            var Toolbar             = window['require']('gina/toolbar');
             window['ginaToolbar']   = new Toolbar();
         }
 

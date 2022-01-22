@@ -41,6 +41,22 @@ module.exports = function () {
         var result, error = false;
         var hasCalledBack = false;
         var e = new EventEmitter();
+        
+        e.onData = function(callback) {
+            e.once('run#data', callback);
+
+            e.once('run#err', callback);
+
+            return e
+        }
+
+        e.onComplete = function(callback) {
+            e.once('run#complete', function(err, data) {
+                callback(err, data);
+            });
+
+            return e
+        };
 
         //console.log( opt.cwd );
         //console.log( 'running ', cmdline);
@@ -50,14 +66,20 @@ module.exports = function () {
         if (typeof(cmdline) == 'string') {
             cmdline = cmdline.split(' ')
         }
-        cmd = spawn(cmdline.splice(0,1).toString(), cmdline, { cwd: opt.cwd, stdio: [ 'ignore', out, err ] });
-
-
+        
+        console.debug('opt.outToProcessSTD => ', opt.outToProcessSTD);
+        if ( typeof(opt) != 'undefined' && typeof(opt.outToProcessSTD) != 'undefined' && /^true$/i.test(opt.outToProcessSTD) ) {
+            // mainly used for task like `npm install`. This is not the default setup
+            cmd = spawn(cmdline.splice(0,1).toString(), cmdline, { cwd: opt.cwd, stdio: [ process.stdin, process.stdout, process.stderr ] });
+        } else {
+            cmd = spawn(cmdline.splice(0,1).toString(), cmdline, { cwd: opt.cwd, stdio: [ 'ignore', out, err ] });
+        }   
         cmd.on('stdout', function(data) {
             var str = data.toString();
             var lines = str.split(/(\r?\n)/g);
             result = lines.join('');
-            //console.info('out: ', result);
+            console.log('out: ', result);
+            
             e.emit('run#data', result)
         });
 
@@ -65,9 +87,14 @@ module.exports = function () {
         cmd.on('stderr', function (err) {
             var str = err.toString();
             error = str || false;
-            //console.error('err: ', error);
+            console.log('err: ', error);
+            
             e.emit('run#err', error)
         });
+        
+        // cmd.on('exit', function (code){
+        //     console.debug('exiting with code '+ code +' ....');
+        // });
 
         cmd.on('close', function (code) {
 
@@ -108,27 +135,7 @@ module.exports = function () {
             }
         });
 
-        e.onData = function(callback) {
-
-            e.once('run#data', function(data) {
-                callback(data)
-            });
-
-            e.once('run#err', function(err, data) {
-                callback(err, data)
-            });
-
-            return e
-
-        }
-
-        e.onComplete = function(callback) {
-            e.once('run#complete', function(err, data) {
-                callback(err, data)
-            });
-
-            return e
-        };
+        
 
         return e
 	};

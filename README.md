@@ -2,6 +2,7 @@
 
 <strong>Gina I/O</strong> - Node.js MVC and Event Driven framework
 
+> This is a `preview version`. We are looking for people to help us test and imrpove `Windows` support.
 
 ## Philosophy behind
 
@@ -12,7 +13,7 @@ Gina comes with essential features at this moment, but most of the things we don
 ## Getting started with Gina I/O
 
 ### Installing Gina
-Gina is at the same time a framework and a deploy and monitoring environnement for  your projects. To fully enjoy Gina, we recommend that you install it globally.
+Gina is at the same time a framework, a deploy and monitoring environnement for your projects. To fully enjoy Gina, we recommend that you install it with the `-g` option.
 
 ```  tty
 npm install -g gina@latest

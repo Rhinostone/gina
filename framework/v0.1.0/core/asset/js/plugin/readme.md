@@ -48,9 +48,22 @@ To compile & minify, run the following command line.
 $ r.js -o build.json
 ```
 
-Then you need to optimize
+Then you need to optimize with closure compiler
+> Current used version is : v20220104
+> If you need the latest, [visit the project page](https://mvnrepository.com/artifact/com.google.javascript/closure-compiler)
+> For compilation issuers : 
+> - https://github.com/google/closure-compiler/wiki/@suppress-annotations
+> - https://github.com/google/closure-compiler/wiki/Warnings
+
+
+`gina.js` Optimization options :
+
+- `WHITESPACE_ONLY` - Working (1.11MB -> 513KB)
+- `SIMPLE_OPTIMIZATIONS`  - Wanted, but not working yet (from 1.11MB -> 389KB) 
+- `ADVANCED_OPTIMIZATIONS` - The best if we can make it work :'( 
+
 ```tty
-$ java -jar /usr/local/lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level SIMPLE_OPTIMIZATIONS --js ./dist/gina.js --create_source_map ./dist/gina.min.js.map --js_output_file ./dist/gina.min.js
+$ java -jar ./lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level WHITESPACE_ONLY --jscomp_warning=es5Strict --js ./dist/gina.js --create_source_map ./dist/gina.min.js.map --js_output_file ./dist/gina.min.js
 ```
 **Attention:** look into `dist/gina.min.js.map` to modify `./dist/gina.js` to `./gina.js`
 
@@ -63,7 +76,7 @@ $ cd /usr/local/node_modules/gina/node_modules/gina/framework/v.0.1.0/core/asset
 ```
 
 ```tty
-$ java -jar /usr/local/lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/gina/utils/loader.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
+$ java -jar ./lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/gina/utils/loader.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
 ```
 
 ### Building SASS assets into CSS

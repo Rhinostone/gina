@@ -39,7 +39,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
         return _hasUserValidators;
     } 
-    
+    /**@js_externs local*/
     var local = {
         'errors': {},
         'keys': {
@@ -478,6 +478,17 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
     }
     
+    /**
+     * queryFromBackend
+     * 
+     * 
+     * @param {object} options 
+     * @param {object} request 
+     * @param {object} response 
+     * @param {callback} next
+     *  
+     * 
+     */
     var queryFromBackend = async function(options, request, response, next) {
         var Config = require(_(GINA_FRAMEWORK_DIR +'/core/config.js', true));
         var config      = new Config().getInstance();
@@ -630,6 +641,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         var util            = require('util');
         var promisify       = util.promisify;
         var result = { isValid: false }, err = false;
+          
         await promisify(controller.query)(opt, data)
             .then(function onResult(_result) {
                 result = _result;
