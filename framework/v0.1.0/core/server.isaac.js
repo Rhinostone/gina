@@ -22,7 +22,7 @@ var refreshCore = function() {
         _(corePath + '/gna.js', true)
     ];
 
-    for (var c in require.cache) {
+    for (let c in require.cache) {
         if ( (core).test(c) && excluded.indexOf(c) < 0 ) {
             require.cache[c].exports = require( _(c, true) )
         }
@@ -133,8 +133,8 @@ function ServerEngineClass(options) {
     if ( typeof(options.ioServer) != 'undefined' && typeof(options.ioServer.integrationMode) != 'undefined' && /^attach$/.test(options.ioServer.integrationMode) ) {
         console.info('[IO SERVER ] `eio` found using `'+ options.ioServer.integrationMode +'` integration mode');
         delete options.ioServer.integrationMode;
-        
-        ioServer = new Eio(server, options.ioServer);        
+        // test done in case we would like to switch to socket.io-server
+        ioServer = ( typeof(Eio.attach) != 'undefined' ) ? new Eio.attach(server, options.ioServer) : new Eio(server, options.ioServer);        
         
         ioServer.getClientsBySessionId = function(sessionId) {
             
@@ -222,7 +222,8 @@ function ServerEngineClass(options) {
             , len       = null
             , p         = null
             , arr       = null
-            , a         = null;
+            , a         = null
+        ;
           
         // http2stream handle by the Router class & the SuperController class
         // See `${core}/router.js` & `${core}/controller/controller.js`    

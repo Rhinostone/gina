@@ -3,7 +3,9 @@
 var fs              = require('fs');
 //var util            = require('util');
 //var promisify       = require('util').promisify;
-var couchbase       = require('couchbase');
+// Use couchbase module from the user's project dependencies if not found
+var couchbasePath   = _(getPath('project') +'/node_modules/couchbase');
+var couchbase       = require(couchbasePath);
 
 var lib             = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var inherits        = lib.inherits;

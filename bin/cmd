@@ -41,6 +41,11 @@ function Cmd(opt, runOffine) {
             conn.once('end', function() {
                 console.info('[ CLI ] task completed')
             });
+            // force exit
+            conn.once('exit', function() {
+                //console.info('[ CLI ] task forced to exit')
+                conn.end();
+            });
 
             //Receiving.
             conn.on('data', function(data) {

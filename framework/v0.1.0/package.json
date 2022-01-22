@@ -1,14 +1,12 @@
 {
   "dependencies": {
     "busboy": "^0.2.14",
-    "colors": "^1.4.0",
-    "couchbase": "^2.6.12",
-    "engine.io": "",
-    "engine.io-client": "^3.4.3",
-    "node-uuid": "^1.4.8",
+    "colors": "^1.4.0",    
+    "engine.io": "^6",
+    "engine.io-client": "^6",
     "requirejs": "^2.3.6",
     "sanitize-html": "^2.5.0",
     "swig": "^1.4.2",
-    "uuid": "^3.4.0"
+    "uuid": "^7"
   }
 }

@@ -2,7 +2,10 @@
 var fs              = require('fs');
 var util            = require('util');
 var EventEmitter    = require('events').EventEmitter;
-var couchbase       = require('couchbase');
+// Use couchbase module from the user's project dependencies if not found
+var couchbasePath   = _(getPath('project') +'/node_modules/couchbase');
+var couchbase       = require(couchbasePath);
+
 var gina            = require('../../../../core/gna');
 var utils           = gina.utils;
 var console         = utils.logger;

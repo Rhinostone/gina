@@ -35,7 +35,9 @@ function PrototypesHelper(instance) {
     if ( typeof(Array.clone) == 'undefined' ) {
         /**
          * clone array
+         * 
          * @return {array} Return cloned array
+         * @supress {misplacedTypeAnnotation}
          **/
         Object.defineProperty( Array.prototype, 'clone', {
             writable:   false,
@@ -315,6 +317,7 @@ function PrototypesHelper(instance) {
         /**
          * __stack Get current stack
          * @return {Object} stack Current stack
+         * @suppress {es5Strict}
          **/
         Object.defineProperty(global, '__stack', {
             //If loaded several times, it can lead to an exception. That's why I put this.
@@ -325,6 +328,7 @@ function PrototypesHelper(instance) {
                     return stack;
                 };
                 var err = new Error;
+                /** @suppress {es5Strict} */
                 Error.captureStackTrace(err, arguments.callee);
                 var stack = err.stack;
                 Error.prepareStackTrace = orig;

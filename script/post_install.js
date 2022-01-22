@@ -26,41 +26,67 @@ function PostInstall() {
 
     //Initialize post installation scripts.
     var init = function() {
-        self.isWin32 = GINA_IS_WIN32;
-        self.path = GINA_FRAMEWORK;
-        self.gina = GINA_DIR;
-        var path = new _(process.env.PATH.split(':')[1]).toUnixStyle();
-        path = path.split('/');
-
-        var root = null;
-        for (var p = 0; p < path.length; ++p) {
-            if (path[p] == 'node_modules') {
-                root = root.substr(0, root.length-1);
-                break
+        self.isWin32 = isWin32();//getEnvVar('GINA_IS_WIN32');
+        self.path = getEnvVar('GINA_FRAMEWORK');
+        self.gina = getEnvVar('GINA_DIR');
+        self.root = self.gina; // by default        
+        self.isGlobalInstall = false;
+        
+        var args = process.argv, i = 0, len = args.length;
+        for (; i < len; ++i) {
+            if (args[i] == '-g' ) {
+                self.isGlobalInstall = true;
+                break;
             }
-            root += path[p] + '/'
         }
-        self.root = root;
+        
+        // var path = new _(process.env.PATH.split(':')[1]).toUnixStyle();
+        // path = path.split('/');
+        // var root = '';
+        // for (var p = 0; p < path.length; ++p) {
+        //     if (path[p] == 'node_modules') {
+        //         root = root.substr(0, root.length-1);
+        //         break
+        //     }
+        //     root += path[p] + '/'
+        // }
+        // self.root = root;
+        
+        
 
+        
+        console.debug('is this for Windows ? ' +  self.isWin32);
+             
+        
 
-        console.log('project ',  self.root, ' VS ', process.cwd());
-
-        console.debug('framework path: ' + GINA_FRAMEWORK);
-
-        if ( self.root === process.cwd() ) { //local install
-            createVersionFile(function onFileCreated(err) {
-                if (err) {
-                    console.error(err.stack)
-                }
-                createGinaFileForPlatform()
-            })
-        } else {
-
+        if ( !self.isGlobalInstall ) { //global install
+            self.root = process.cwd(); // project path
+            console.error('local installation is not supported for this version at the moment.');
+            console.info('please use `npm install -g gina`');
+            process.exit(1);
         }
+        
+        
+        console.debug('framework path: ' + self.gina);
+        console.debug('framework version path: ' + self.path);
+        console.debug('cwd path: ' + self.root );
+        console.debug('this is a global install ...');
+        
+        createVersionFile(function onFileCreated(err) {
+            if (err) {
+                console.error(err.stack);
+                process.exit(1);
+            }
+            createGinaFileForPlatform()
+        })
+         
     }
 
     var createVersionFile = function(callback) {
-        var version = require( _(self.path + '/package.json') ).version;
+        //var location = (self.gina === process.cwd() ) ? self.gina : self.root;
+        var version = require( _(self.gina + '/package.json') ).version;
+        console.debug('writting version number: '+ version);
+        
         var target = _(self.path + '/VERSION');
         try {
             if ( fs.existsSync(target) ) {
@@ -70,6 +96,39 @@ function PostInstall() {
             callback(false)
         } catch(err) {
             callback(err)
+        }
+    }
+    
+    var configureGina = function(callback) {
+        // link to ./bin/cli to binaries dir
+        // link to ./bin/cli-debug to binaries dir      
+        if (!self.isWin32) {
+            var binPath     = _('/usr/local/bin');
+            var cli         = _(binPath +'/gina');
+            var cliDebug    = _(binPath +'/gina-debug');
+            
+            if ( fs.existsSync(cli) ) {
+                fs.unlinkSync(cli)
+            }
+            if ( fs.existsSync(cliDebug) ) {
+                fs.unlinkSync(cliDebug)
+            }
+            
+            var cmd = 'ln -s '+ self.gina +'/bin/cli '+ binPath +'/gina';
+            console.debug('running: '+ cmd);
+            run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
+                .onData(function(data){
+                    console.info(data)
+                })
+                .onComplete( function done(err, data){
+                    if (err) {
+                        console.error(err);
+                        console.warn('try to run : sudo ln -s '+ self.gina +'/bin/cli '+ binPath +'/gina');
+                    }
+                });
+            
+        } else {
+            console.warn('linking gina binary is not supported yet for Windows.');
         }
     }
 
@@ -83,12 +142,25 @@ function PostInstall() {
             target = _(appPath +'/'+ win32Name)
         }
         //Will override.
+        console.info('linking to binaries dir ... ');
         if ( typeof(callback) != 'undefined') {
-            generator.createFileFromTemplate(source, target, function onGinaFileCreated(err) {
-                callback(err)
-            })
+            if ( !self.isGlobalInstall ) { // local install only
+                generator.createFileFromTemplate(source, target, function onGinaFileCreated(err) {
+                    callback(err)
+                    
+                })
+            } else {
+                
+                configureGina();
+                callback(false)
+            }
         } else {
-            generator.createFileFromTemplate(source, target)
+            if ( !self.isGlobalInstall ) {
+                generator.createFileFromTemplate(source, target)
+            } else {
+                
+                configureGina();       
+            }
         }
     }
 
@@ -106,13 +178,19 @@ function PostInstall() {
                 // this is done to allow multiple calls of post_install.js
                 var filename = _(self.path + '/SUCCESS');
                 var installed = fs.existsSync( filename );
-                if (installed && /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
-                    var msg = "Gina's command line tool has been installed.";
-                    console.info(msg);
-                    process.exit(0)
-                } else  {
-                    fs.writeFileSync(filename, true );
+                if (installed) {
+                    fs.unlinkSync( filename );
                 }
+                
+                // if ( /node_modules\/gina/.test( new _(process.cwd()).toUnixStyle() ) ) {
+                //     var msg = "Gina's command line tool has been installed.";
+                //     console.info(msg);
+                //     process.exit(0)
+                // } 
+                
+                console.debug('Writting '+ filename);
+                fs.writeFileSync(filename, 'true' );
+                
                 // do something that can be called after the first time installation
 
 
@@ -170,14 +248,15 @@ function PostInstall() {
         console.info('now installing modules: please, wait ...');
         var cmd = ( isWin32() ) ? 'npm.cmd install' : 'npm install';
 
-        run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp')  })
-            .onData(function(data){
+        run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
+            .onData(function onData(data){
                 console.info(data)
             })
             .onComplete( function done(err, data){
-                if (err) {
-                    console.error(err)
-                } else {
+                
+                if (!err) {
+                //    console.error(err)
+                //} else {
                     //console.info(data);
                     end()
                 }
@@ -191,7 +270,7 @@ function PostInstall() {
 
         var deps = require(_(self.path) + '/package.json').dependecies;
         
-        var version = require( _(self.path + '/package.json') ).version;
+        var version = require( _(self.gina + '/package.json') ).version;
         var middleware = 'isaac@'+version; // by default
 
         for (var d in deps) {
@@ -216,7 +295,6 @@ function PostInstall() {
                 fs.writeFile(filename, middleware, function onWrote(err){
                     if (err) {
                         throw new Error(err.stack||err.message||err);
-                        //process.exit(1)
                     } else {
                         console.info(msg)
                     }
@@ -226,7 +304,6 @@ function PostInstall() {
             fs.writeFile(filename, middleware, function onWrote(err){
                 if (err) {
                     throw new Error(err.stack||err.message||err);
-                    //process.exit(1)
                 } else {
                     console.info(msg)
                 }

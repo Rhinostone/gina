@@ -415,8 +415,8 @@ function StoragePlugin(options) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var merge       = require('utils/merge');//require('../../../../../lib/merge');
-    var Collection  = require('utils/collection');//require('../../../../../lib/collection');
+    var merge       = require('utils/merge'); //require('../../../../../lib/merge');
+    var Collection  = require('utils/collection'); //require('../../../../../lib/collection');
     var uuid        = require('uuid');
 
     module.exports = StoragePlugin

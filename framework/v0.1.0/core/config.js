@@ -583,7 +583,7 @@ function Config(opt) {
                 var version = undefined, middleware = undefined;
                 try {
                     self.version    = version = require(_(getPath('gina').root +'/package.json' )).version;
-                    self.middleware = middleware = fs.readFileSync(_(getPath('gina').root + '/MIDDLEWARE')).toString() || 'none';
+                    self.middleware = middleware = fs.readFileSync(_(GINA_FRAMEWORK_DIR + '/MIDDLEWARE')).toString() || 'none';
 
                     setContext('gina.version', version);
                     setContext('gina.middleware', middleware);

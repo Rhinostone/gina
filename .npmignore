@@ -10,7 +10,13 @@ test
 examples
 *.sock
 ./test/workspace
-./framework/0.1.0_old
+framework/v*/node_modules
+framework/v*/core/asset/js/plugin/lib
+framework/v*/core/asset/js/plugin/src
+framework/v*/core/asset/js/plugin/build*
+./node_modules
+/tmp/*
 *.old
 gina.com
 MIDDLEWARE
+package-lock.json
