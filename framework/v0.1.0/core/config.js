@@ -1245,31 +1245,36 @@ function Config(opt) {
             self.setReverseRouting(bundle, env, reverseRouting);            
         }
 
-               
+        if (!conf[bundle][env].executionPath) {
+            conf[bundle][env].executionPath = self.executionPath
+        }       
 
         //Constants to be exposed in configuration files.
         var reps = {
-            "gina"          : getPath('gina').root,
-            "frameworkDir"  : GINA_FRAMEWORK_DIR,
-            "root"          : conf[bundle][env].executionPath,
-            "env"           : env,
-            "project"       : getPath('project'),
-            "source"        : conf[bundle][env].sources,
-            "executionPath" : conf[bundle][env].executionPath,
-            "projectPath"   : conf[bundle][env].projectPath,
-            "bundlesPath"   : conf[bundle][env].bundlesPath,
-            "mountPath"     : conf[bundle][env].mountPath,
-            "bundlePath"    : conf[bundle][env].bundlePath,
-            "templatesPath" : conf[bundle][env].templatesPath,
-            "publicPath"    : conf[bundle][env].publicPath,
-            "modelsPath"    : conf[bundle][env].modelsPath,
-            "libPath"       : conf[bundle][env].libPath,
-            "handlersPath"  : conf[bundle][env].handlersPath,
-            "sharedPath"    : conf[bundle][env].sharedPath,
-            "logsPath"      : conf[bundle][env].logsPath,
-            "tmpPath"       : conf[bundle][env].tmpPath,
-            "bundle"        : bundle,
-            "version"       : getContext('gina').version
+            "gina"              : getPath('gina').root,
+            "frameworkDir"      : GINA_FRAMEWORK_DIR,            
+            "env"               : env,
+            // "server.engine"     : conf[bundle][env].engine,
+            // "server.protocol"   : conf[bundle][env].protocol,
+            // "server.scheme"     : conf[bundle][env].scheme,
+            "project"           : getPath('project'),
+            "root"              : conf[bundle][env].executionPath,
+            "executionPath"     : conf[bundle][env].executionPath,
+            "source"            : conf[bundle][env].sources,
+            "projectPath"       : conf[bundle][env].projectPath,
+            "bundlesPath"       : conf[bundle][env].bundlesPath,
+            "mountPath"         : conf[bundle][env].mountPath,
+            "bundlePath"        : conf[bundle][env].bundlePath,
+            "templatesPath"     : conf[bundle][env].templatesPath,
+            "publicPath"        : conf[bundle][env].publicPath,
+            "modelsPath"        : conf[bundle][env].modelsPath,
+            "libPath"           : conf[bundle][env].libPath,
+            "handlersPath"      : conf[bundle][env].handlersPath,
+            "sharedPath"        : conf[bundle][env].sharedPath,
+            "logsPath"          : conf[bundle][env].logsPath,
+            "tmpPath"           : conf[bundle][env].tmpPath,
+            "bundle"            : bundle,
+            "version"           : getContext('gina').version
         };
         
         var corePath = getPath('gina').core;            
@@ -1392,7 +1397,7 @@ function Config(opt) {
                 //files['statics'] = merge(files['statics'], statics);
                 
                 conf[bundle][env].publicResources = publicResources
-            } else {
+            } else if (hasViews) {
                 console.warn('no public dir to scan...')
             }
 

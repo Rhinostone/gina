@@ -179,6 +179,7 @@ function CmdHelper(cmd, client, debug) {
             if ( typeof(require.cache[cmd.projectConfigPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.projectConfigPath)]
             }
+                                    
             cmd.projects    = requireJSON( cmd.projectConfigPath );
 
             // bundles passed to the CMD
@@ -222,6 +223,9 @@ function CmdHelper(cmd, client, debug) {
                         // if path is set through CMD argv
                         // --path
                         if ( typeof(cmd.params.path) != 'undefined' ) {
+                            if ( /^\.\//.test(cmd.params.path) ) {
+                                cmd.params.path = cmd.params.path.replace(/^\.\//, process.cwd() +'/')
+                            }
                             folder = new _( cmd.params.path, true );
 
 
@@ -663,7 +667,10 @@ function CmdHelper(cmd, client, debug) {
         // control the bundle name
         if ( cmd.projectName != null && cmd.name != null && typeof(cmd.bundlesByProject[cmd.projectName][cmd.name]) == 'undefined' ) { 
             errMsg = 'Bundle name `'+ cmd.name +'` not found in your project `@'+ cmd.projectName +'`';
-            console.error(errMsg);
+            //console.debug('task `'+ cmd.task +'` error:');
+            if ( cmd.task != 'bundle:add' ) {
+                console.error(errMsg);
+            }            
             return false;
         }  
 

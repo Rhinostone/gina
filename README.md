@@ -2,7 +2,9 @@
 
 <strong>Gina I/O</strong> - Node.js MVC and Event Driven framework
 
-> This is a `preview version`. We are looking for people to help us test and imrpove `Windows` support.
+> This is a `preview release`. We are looking for people to help us test and improve `Windows` support.
+> Some commands or features might not work since the framework is still in developpement & testing
+> We have some applications using the framework in production and we are still improving our code in order to release the `1.0.0` version: which should come by the end of 2022.
 
 ## Philosophy behind
 
@@ -13,7 +15,7 @@ Gina comes with essential features at this moment, but most of the things we don
 ## Getting started with Gina I/O
 
 ### Installing Gina
-Gina is at the same time a framework, a deploy and monitoring environnement for your projects. To fully enjoy Gina, we recommend that you install it with the `-g` option.
+Gina aims to be at the same time a framework, a deploy and monitoring environnement for your projects. To fully enjoy Gina, we recommend that you install it with the `-g` option.
 
 ```  tty
 npm install -g gina@latest
@@ -23,35 +25,29 @@ You can check if gina is properly installed
 ```  tty
 gina version
 ```
-NB.: This is a shortcut for `gina framework:version`
+__NB.:__ This is a shortcut for `gina framework:version`
 
-If you need any help, hit :
-
-```  tty
-gina framework:help
-```
 
 ### Initializing a project
 Let's create our first project and install gina.
 
 ``` tty
-mkdir myproject
+mkdir myproject && cd myproject
 ```
 
-``` tty
-cd myproject
-```
 
 Then you need to __initialize your project__
 
-> on Windows from the Windows CLI - __NEED TO BE ADMIN !!__
+> on Windows from the Windows CLI, you might need admin privilegies.
 
 ```  tty
-gina project:add myproject
+gina project:add @myproject
 ```
 
-
-__NB:__ If you have not installed gina with the global option, make sure that all gina commands are launched from the project root.
+If you need to remove this project later
+```  tty
+gina project:rm @myproject
+```
 
 ### Creating a bundle (application)
 
@@ -67,7 +63,7 @@ Ok ! Let's do it !
 ``` tty
 gina bundle:add frontend @myproject
 ```
-__NB.:__ If you are launching the command from the project root, you don't need `@myproject`. The same goes for all bundle commands.
+__NB.:__ If you are launching the command from the project directory, you don't need `@myproject`. The same goes for all bundles commands.
 
 We have just created a frontend application that will host our homepage.
 You will find all bundle sources under `myproject/src`.
@@ -92,16 +88,27 @@ If you need to restart you bundle
 gina bundle:restart frontend @myproject
 ```
 
-### Setting environment
-__Setting default env__
-By default, Gina is intalled with `dev` environment which allow you to display the toolbar.
-If you need to change this:
-```tty
-gina framework:set --env=prod
-```
-This only means that when you omit the env in the command line, it will automatically add `--env=prod` for you.
+### Adding templates
 
-> __NB:__ You can pick any name you want.
+The default bundle renders a json representation of a "Hello World" message.
+
+Let's add a view on our frontend
+
+```tty
+gina view:add frontend @myproject
+```
+Now edit the `home` control in `src/frontend/controllers/controller.js` so that you can have `self.render(...)` instead of `self.renderJSON(...)`
+
+Once it's done, you just need to refresh your browser.
+
+Gina is shipped with [Swig](https://node-swig.github.io/swig-templates/) as the default template engine. If you are more confortable with another template engine, you can use your own.
+
+
+
+### Setting your default environment
+> By default, Gina comes with 2 environments : `dev` and `prod`. The default is `prod`. But if you are contributing to the framework or prototyping your application or service, we advise to use the `dev` environment.
+
+
 
 __Setting starting env__
 You can have multiple environments for your project and decide to pick one as the starting env by using `--env=your_env` everytime you have to run a bundle.
@@ -109,22 +116,6 @@ You can have multiple environments for your project and decide to pick one as th
 ```tty
 gina bundle:start frontend @myproject --env=prod
 ```
-
-
-### Adding views
-
-The default bundle renders a json representation of a "Hello World" message.
-
-Let's add views on our frontend
-
-```tty
-gina bundle:add-views frontend @myproject
-```
-Now edit the `init` control in `src/frontend/controllers/controller.js` so that you can have `self.render(...)` instead of `self.renderJSON(...)`
-
-Once it's done, you just need to refresh your browser.
-
-Gina is shipped with [Swig](https://node-swig.github.io/swig-templates/) as the default template engine. If you are more confortable with another template engine, you can use your own.
 
 
 ## Troubleshooting
@@ -141,15 +132,17 @@ __Are you starting for the first time ?__
 node node_modules/gina/script/post_install.js
 ```
 
-- Have you noticed the __environment argument__ ( dev ) ?
-``` tty
-gina bundle:start frontend --env=dev
-```
-Without the __dev__ argument, Gina is going to understand that you want to use the default environment (prod by default). If it's really what you want to achieve, just __build__ without `--env=prod`:
-```tty
-gina bundle:build frontend --env=prod
-```
+- Have you noticed the __environment argument__ ( prod ) ?
 
+``` tty
+gina bundle:start frontend --env=prod
+```
+Without the __prod__ argument, Gina is going to understand that you want to use the default environment (the one you have set by default for your project). If it's really what you want to achieve, just __build__ with your default prod which is `--env=dev`:
+```tty
+gina env:set @myproject --env=prod
+```
+> __NB.:__ you can set the defaut environment for your project like this:
+> 
 
 __Are you trying to restart after a crash ?__
 

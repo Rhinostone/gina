@@ -49,7 +49,8 @@ function Locales() {
         for (var f = 0, len = files.length; f < len; ++f) {
             if ( ! /^\./.test(files[f]) || f == len-1 ) {
                 key         = files[f].split(/\./)[0];
-                regions[i]  = { lang: key, content: _require( dir + '/' + files[f] ) }
+                regions[i]  = { lang: key, content: _require( dir + '/' + files[f] ) };
+                ++i
             }
         }
 

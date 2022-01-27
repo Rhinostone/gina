@@ -50,7 +50,7 @@ function Add(opt, cmd) {
 
         }
 
-
+        
         // creating project file
         var file = new _(self.projectLocation + '/project.json', true);
         if ( !file.existsSync() ) {
@@ -150,6 +150,7 @@ function Add(opt, cmd) {
     }
 
     var createEnvFile = function(target) {
+        
         lib.generator.createFileFromDataSync(
             {},
             target
@@ -165,7 +166,8 @@ function Add(opt, cmd) {
         var contentFile = require(conf);
         var dic = {
             'project' : self.projectName,
-            'node_version' : GINA_NODE_VERSION.match(/\d+/g).join('.')
+            'node_version' : GINA_NODE_VERSION.match(/\d+/g).join('.'),
+            'gina_version' : GINA_VERSION
         };
 
         contentFile = whisper(dic, contentFile);//data

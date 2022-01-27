@@ -93,6 +93,7 @@ var port = 8124;
 // |-> framework/{version}/lib/cmd
 var allowedOffline = [
     'dev:',
+    'build:',
     'env:',
     'framework:',
     'project:',

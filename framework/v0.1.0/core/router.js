@@ -313,22 +313,25 @@ function Router(env) {
              
         var options = {
             // view namespace first
-            namespace       : params.param.namespace || namespace,
+            namespace       : (/controller\.js$/i.test(controllerFile)) ? null : params.param.namespace || namespace,
             control         : params.param.control,
             controller      : controllerFile,
             //controller: '<span class="gina-bundle-name">' + bundle +'</span>/controllers/controller.js',
-            file: actionFile,
+            file            : actionFile,
             //bundle          : bundle,//module
             bundlePath      : conf.bundlesPath + '/' + bundle,
             rootPath        : conf.executionPath || null,
             executionPath   : conf.executionPath || null,
             //instance: self.serverInstance,
-            template: (routeHasViews) ? conf.content.templates[templateName] || conf.content.templates._common : undefined,
             isUsingTemplate: local.isUsingTemplate,
             cacheless: cacheless,
             path: params.param.path || null, // user custom path : namespace should be ignored or left blank
             assets: {}
         };
+               
+        if (routeHasViews) {
+            options.template = (routeHasViews) ? conf.content.templates[templateName] || conf.content.templates._common : undefined;
+        }
 
         // Options need to be protected by a clone to allow overrides
         options = merge(JSON.clone(options), params);
@@ -598,22 +601,12 @@ function Router(env) {
                 var MiddlewareClass = function(req, res, next) {
 
                     return function () { // getting rid of the middleware context
-
-                        //var Middleware = ( !/^middlewares\.express\./.test(filename) ) ? require(_(filename, true)) : require(_(expressMiddlewareBootstrap, true));
+                        
                         var Middleware = require(_(filename, true));
-                        // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
+                        // TODO - loop on a defined SuperController property like SuperController._allowedForExport
 
 
                         // Exporting config & common methods
-                        // This is working, but too heavy
-                        // TODO- Allow user to target selected methods to be exported
-                        // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
-                        // for ( let f in controller) {
-                        //     if ( typeof(controller[f]) != 'function' ) {
-                        //         continue;
-                        //     }
-                        //     Middleware.prototype[f] = controller[f];
-                        // }
                         Middleware.prototype.checkBundleStatus      = controller.checkBundleStatus;
                         Middleware.prototype.getConfig              = controller.getConfig;
                         Middleware.prototype.getFormsRules          = controller.getFormsRules;

@@ -12,6 +12,8 @@
     $ gina project:add @<project_name> [ —-path=/var/www/<project_name> ] (if no path given, will take the current)
 
     where `/var/www/<project_name>` is the destination path
+    
+    This command line also supports relative path like `--path=./<project_name>`
 
     2nd method
     ----------
@@ -26,39 +28,39 @@
 
 [ Start project ]
 
-    $ gina project:start <project_name> [ —-env=staging, --inspect-brk=5000 ]
+    $ gina project:start @<project_name> [ —-env=staging, --inspect-brk=5000 ]
 
 
 [ Restart project ]
 
     Will restart project with the last known environment
 
-    $ gina project:restart <project_name>
+    $ gina project:restart @<project_name>
 
 
 [ Stop project ]
 
     Will restart project with the last known environment
 
-    $ gina project:stop <project_name>
+    $ gina project:stop @<project_name>
 
 
 
 [ Remove an existing project ]
 
-    $ gina project:remove <project_name> [ -f (remove all related sources without prompting) ]
+    $ gina project:remove @<project_name> [ -f (remove all related sources without prompting) ]
 
 
 [ Rename project ]
 
-    $ gina project:rename <project_name> <new_project_name>
+    $ gina project:rename @<project_name> @<new_project_name>
 
 
 [ Backup project ]
 
     N.B.: Only available when ordering for supoort
 
-    $ gina project:backup aikos —-path=/var/dump —-with-password
+    $ gina project:backup @<project_name> —-path=/var/dump —-with-password
 
 
 [ Restore project ]

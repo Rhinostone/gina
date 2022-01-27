@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
-
+/**
+ * Mainly used to debug framework CMD lib - default port should be #5858
+ */
 const fs    = require('fs');
 const {exec} = require('child_process');
 const os    = require('os');
@@ -43,5 +45,4 @@ exec('node ' + debugPort +' '+ __dirname +'/cli ' + argv, (error, stdout, stderr
         return;
     }
     console.log(`${stdout}`);
-    //console.error(`${stderr}`);
 });

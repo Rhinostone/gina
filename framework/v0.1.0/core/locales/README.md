@@ -32,6 +32,10 @@ Capital cities, languages, continents, TLDs, and geonameid are from [geonames.or
 
 EDGAR codes are from [sec.gov](https://www.sec.gov/edgar/searchedgar/edgarstatecodes.htm)
 
+Culture codes explained (https://www.fincher.org/Utilities/CountryLanguageList.shtml)
+short: { ISO 639 - 2 lower case letters }-{ ISO 3166 - 2 upper case letters }
+long: { ISO 639 - 2 lower case letters }-{ ISO 3166 - 3 upper case letters }
+
 ## Building `dist` from resources
 
 ### countries 

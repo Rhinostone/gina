@@ -8,7 +8,7 @@ Last updated October 16th, 2016
 - [sass](http://sass-lang.com/install)
 - [sass-lint](https://www.npmjs.com/package/sass-lint)
 - [csso](https://github.com/css/csso)
-- Java & [Google Closure Compiler](https://developers.google.com/closure/compiler/)
+- Java (for [Google Closure Compiler](https://developers.google.com/closure/compiler/))
 
 
 ## Installing Dependencies
@@ -31,7 +31,7 @@ $ npm install -g csso@2.2.1
 
 ## Compiling & minification
 
-### Building main frontend framework
+### Building main frontend plugin
 Uglify2 is the default compiler.
 
 Locate `/node_modules/gina/core/asset/js/plugin/gina`.

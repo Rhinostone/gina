@@ -43,7 +43,7 @@ function Rename(opt, cmd) {
 
     var rename = function() {
 
-        self.projects[local.target] = self.projects[local.source];
+        self.projects[local.target] = JSON.clone(self.projects[local.source]);
 
         // renaming folder !
         if (!self.projects[local.source].path || self.projects[local.source].path == '') {
@@ -57,13 +57,18 @@ function Rename(opt, cmd) {
             , project = {}// local project.json
             , pack = {};// local pakage.json
 
-
+            
+            
         folder.mv(target, function(err){
+            console.debug('bundles => ', JSON.stringify(self.bundles, null, 4));
+            console.debug('project => ', JSON.stringify(self.projects, null, 4));
             if (err) {
                 console.error(err.stack);
                 process.exit(1)
             }
 
+            
+            
             // renaming project in config files
             self.projects[local.target].path = target;
 
@@ -89,6 +94,9 @@ function Rename(opt, cmd) {
 
             // updating projects
             delete self.projects[local.source];
+            
+            
+            
 
             // renaming & update ports
             var ports               = JSON.clone(self.portsData)

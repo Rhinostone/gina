@@ -1,1 +1,1 @@
-Vendor is used for files like `jquery.min.js`
+Vendor is used for dependecies like `jquery.min.js`

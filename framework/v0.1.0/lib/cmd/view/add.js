@@ -2,7 +2,7 @@ var fs          = require('fs');
 var readline    = require('readline');
 var rl          = readline.createInterface(process.stdin, process.stdout);
 
-var Config  = require( _(getPath('gina').core + '/config') );
+var CmdHelper   = require('./../helper');
 var console = lib.logger;
 
 /**
@@ -13,77 +13,123 @@ var console = lib.logger;
  * $ gina bundle:add <bundle_name> @<project_name>
  * */
 function Add(opt, cmd) {
-    var self = { task: 'add-views' }
+    var self = { task: 'add' }
         , local = {}
-        , config = null
     ;
 
     var init = function() {
+        
+        // import CMD helpers
+        new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 
-        self.projects   = require( _(GINA_HOMEDIR + '/projects.json') );
-
-        self.envs       = [];
-
-
-        var i = 3, bundles = [];
-        for (; i<process.argv.length; ++i) {
-            if ( /^\@[a-z0-9_.]/.test(process.argv[i]) ) {
-
-                if ( !isValidName(process.argv[i]) ) {
-                    console.error('[ '+process.argv[i]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].');
-                    process.exit(1);
-                }
-
-            } else if (/^[a-z0-9_.]/.test(process.argv[i])) {
-                bundles.push(process.argv[i])
-            }
-        }
-
-        if ( typeof(self.name) == 'undefined') {
-            var folder = new _(process.cwd()).toArray().last();
-            if ( isDefined(folder) ) {
-                self.name = folder
-            }
-        }
-
-
-        if ( isDefined(self.name) && bundles.length > 0) {
-            self.bundles = bundles;
-            for (var e in self.projects[self.name].envs) {
-                self.envs.push(self.projects[self.name].envs[e])
-            }
-            self.envs.sort();
-            // rollback infos
-            self.envPath            = _(self.projects[self.name].path + '/env.json');
-            self.envData            = requireJSON(self.envPath);
-            self.projectPath        = _(self.projects[self.name].path + '/project.json', true);
-            self.projectData        = require(self.projectPath);
+        // check CMD configuration
+        if ( !isCmdConfigured() ) return false;
+        
+        if ( isDefined('project', self.projectName) && self.bundles.length > 0) {
 
             addViews(0)
+
         } else {
-            //console.error('[ '+ self.name+' ] is not an existing project');
-            if ( bundles.length == 0) {
+            //console.error('[ '+ self.projectName+' ] is not an existing project');
+            if ( self.bundles.length == 0) {
                 console.error('Missing argument <bundle_name>');
-                process.exit(1)
+            } else if  (!isDefined('project', self.projectName) ) {
+                console.error('`@' + self.projectName +'` is not an existing project.');
+            } else {
+                console.error('Missing argument @<project_name>');
             }
-            console.error('Missing argument @<project_name>');
+
             process.exit(1)
         }
     }
 
-    var isDefined = function(name) {
-        if ( typeof(self.projects[name]) != 'undefined' ) {
-            return true
+    /**
+     * Browse sources
+     *
+     * @param {string} source
+     * @param {string} bundle
+     * */
+     var browse = function(source, list) {
+
+        var bundle = local.bundle
+            , newSource
+            , files = fs.readdirSync(source)
+            , f = 0;
+
+        if (source == local.source && typeof(list) == 'undefined') {//root
+            var list = [];// root list
+            for (var l=0; l<files.length; ++l) {
+                list[l] = _(local.source +'/'+ files[l])
+            }
         }
-        return false
+
+        if (!files && list.indexOf(source) > -1) {
+            list.splice( list.indexOf(source), 1 )
+        }
+
+        for (; f < files.length; ++f) {
+            newSource = _(source +'/'+ files[f]);
+            if ( fs.statSync(newSource).isDirectory() ) {
+                browse(newSource, list)
+            } else {
+                list = parse(newSource, list)
+            }
+
+            if ( f == files.length-1) { //end of current dir
+                var p = newSource.split('/');
+                p.splice(p.length -1);
+                newSource = p.join('/');
+                if (list != undefined && list.indexOf(newSource) > -1) {
+                    list.splice( list.indexOf(newSource), 1 )
+                }
+            }
+
+            if (f == files.length-1 && list.length == 0) { //end of all
+
+                local.isInstalled = true;
+
+                break
+            }
+        }
     }
 
-    var isValidName = function(name) {
-        if (name == undefined) return false;
+    /**
+     * Parse file and modify only javascripts - *.js
+     *
+     * @param {string} file - File to parse
+     * @param {array} list
+     * */
+     var parse = function(file, list) {
+        //console.log('replacing: ', file);
+        try {
+            var f;
+            f =(f=file.split(/\//))[f.length-1];
+            var isJS = /\.js/.test(f.substring(f.length-3))
+                , isJSON = /\.js/.test(f.substring(f.length-5));
 
-        self.name = name.replace(/\@/, '');
-        var patt = /^[a-z0-9_.]/;
-        return patt.test(self.name)
+            if ( isJS || isJSON && /config\/app\.json/.test(file) ) {
+                var contentFile = fs.readFileSync(file, 'utf8').toString();
+                var dic = {
+                    "Bundle" : local.bundle.substring(0, 1).toUpperCase() + local.bundle.substring(1),
+                    "bundle" : local.bundle,
+                    "Namespace" : (local.namespace) ? local.namespace.substring(0, 1).toUpperCase() + local.namespace.substring(1) : '',
+                    "namespace" : local.namespace || ''
+                };
+
+                contentFile = whisper(dic, contentFile);
+                //rewrite file
+                lib.generator.createFileFromDataSync(contentFile, file)
+            }
+
+            if ( list != undefined && list.indexOf(file) > -1 ) { //end of current dir
+                list.splice( list.indexOf(file), 1 )
+            }
+            return list
+
+        } catch(err) {
+            console.error(err.stack);
+            process.exit(1)
+        }
     }
 
     /**
@@ -98,9 +144,7 @@ function Add(opt, cmd) {
             process.exit(0)
         }
 
-        var options         = {}
-            , bundle        = self.bundles[b]
-        ;
+        var bundle = self.bundles[b];
 
 
         if ( /^[a-z0-9_.]/.test(bundle) ) {
@@ -111,30 +155,13 @@ function Add(opt, cmd) {
 
             local.bundle    = bundle;
             local.b         = b;
-            local.env       = self.projects[self.name]['def_env'];
-            local.root      = self.projects[self.name].path;
+            local.env       = self.projects[self.projectName]['def_env'];
+            local.root      = self.projects[self.projectName].path;
 
-            console.log('adding views for: '+ local.bundle +'@'+ self.name);
-
-            config = new Config({
-                env             : local.env,
-                executionPath   : local.root,
-                projectName     : self.name,
-                startingApp     : local.bundle,
-                ginaPath        : getPath('gina').core,
-                task            : self.task
-            });
-
-            config.onReady( function onConfigReady(err, config) {
-                if (err) {
-                    console.warn(err.stack);
-                }
-
-                local.src = config.conf[local.bundle][local.env].bundlePath;
-                addConfFile()
-            })
-
-
+            console.info('Adding view folder for: '+ local.bundle +'@'+ self.projectName);
+            
+            local.src = _(self.bundlesLocation +'/'+ bundle, true);
+            addConfFile()
 
         } else {
             console.error('[ '+ bundle+' ] is not a valid bundle name')
@@ -150,19 +177,19 @@ function Add(opt, cmd) {
      * */
     var addConfFile = function() {
 
-        var file    = new _( getPath('gina').core + '/template/conf/views.json');
-        var target  = _(local.src + '/config/views.json');
-        var folder  = _(local.src + '/views');
+        var templatesConf = new _( getPath('gina').core + '/template/boilerplate/bundle/config/templates.json');
+        var target  = _(local.src + '/config/templates.json');
+        var folder  = _(local.src + '/templates');
 
         if ( fs.existsSync(target) || fs.existsSync(folder) ) {
-            rl.setPrompt('Found views for [ '+ local.bundle +'@'+ self.name +' ]. Do you want to override ? (yes|no) > ');
+            rl.setPrompt('Found templates for [ '+ local.bundle +'@'+ self.projectName +' ]. Do you want to override ? (yes|no) > ');
             rl.prompt();
 
             rl.on('line', function(line) {
                 switch( line.trim().toLowerCase() ) {
                     case 'y':
                     case 'yes':
-                        createFile(file, target)
+                        createFile(templatesConf, target);
                         break;
                     case 'n':
                     case 'no':
@@ -174,7 +201,7 @@ function Add(opt, cmd) {
                         break;
                 }
             }).on('close', function() {
-                console.log('exiting ['+ local.bundle +'@'+ self.name +'] views installation');
+                console.log('exiting ['+ local.bundle +'@'+ self.projectName +'] templates installation');
 
                 ++local.b;
                 addViews(local.b)
@@ -204,18 +231,32 @@ function Add(opt, cmd) {
     }
 
     var copyFolder = function() {
-        var folder = new _( getPath('gina').core +'/template/views' );
-        var target = _(local.src + '/views');
+        var folder = new _( getPath('gina').core +'/template/boilerplate/bundle_templates' );
+        var folderPublic = new _( getPath('gina').core +'/template/boilerplate/bundle_public' );
+        var target = _(local.src);
 
-        folder.cp(target, function(err){
+        folder.cp(target + '/templates', function(err, targetPath){
             if (err) {
                 console.log(err.stack);
                 process.exit(1)
             }
-            console.log('['+ local.bundle +'@'+ self.name +'] views installed with success !');
-
-            ++local.b;
-            addViews(local.b)
+            console.debug('targetPath: ', targetPath);
+            // Browse, parse and replace keys
+            local.source        = _(targetPath +'/handlers', true);
+            local.isInstalled   = false;
+            browse(local.source);
+            
+            console.log('['+ local.bundle +'@'+ self.projectName +'] templates installed with success !');
+            folderPublic.cp(target + '/public', function(err, targetPath){
+                if (err) {
+                    console.log(err.stack);
+                    process.exit(1)
+                }
+                console.log('['+ local.bundle +'@'+ self.projectName +'] public installed with success !');
+                ++local.b;
+                addViews(local.b)
+            });
+            
         });
     }
 

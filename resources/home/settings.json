@@ -12,5 +12,6 @@
     "rundir": "{run_dir}",
     "tmpdir": "{tmp_dir}",
     "logdir": "{log_dir}",
-    "culture": "{culture}"
+    "culture": "{culture}",
+    "timezone": "{timezone}"
 }
