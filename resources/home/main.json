@@ -4,7 +4,7 @@
     },
     "def_framework": "{version}",
     "envs": {
-        "{release}": [ "dev" ]
+        "{release}": [ "dev", "prod" ]
     },
     "def_env": {
       "{release}": "dev"
@@ -27,10 +27,13 @@
         "{release}": "http"
     },
     "cultures": {
-        "_comment": "e.g.:  en-US, fr-FR",
+        "_comment": "e.g.:  en-US, fr-FR ... available for the framework then used to translate the admin dashboard",
         "{release}": [  "en-US", "fr-FR" ]
     },
     "def_culture": {
         "{release}": "en-US"
+    },
+    "def_timezone": {
+        "{release}": "Africa/Douala"
     }
 }

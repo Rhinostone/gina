@@ -1,9 +1,10 @@
-{
-  "default": {
+// bundle need to be restarted on changes !!
+{  
+  "homepage": {
     "url": "/",
     "method": "GET",
     "param": {
-      "control": "init"
+      "control": "home"
     }
   }
 }

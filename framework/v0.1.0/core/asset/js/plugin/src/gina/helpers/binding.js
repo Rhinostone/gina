@@ -18,7 +18,7 @@ function BindingHelper(handlerContext) {
      *     // mark notification as read
      *     {
      *         call: 'onNotification',
-     *         paypload: {
+     *         payload: {
      *             id: obj.notificationId,
      *             action: 'mark-as-read'
      *         }

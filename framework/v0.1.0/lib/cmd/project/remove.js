@@ -31,6 +31,7 @@ function Remove(opt, cmd) {
 
         if ( typeof(self.projects[self.projectName]) == 'undefined' ) {
             console.error('project [ '+ self.projectName + ' ] not found in `~/.gina/projects.json`');
+            
             process.exit(1)
         }
 
@@ -51,7 +52,7 @@ function Remove(opt, cmd) {
                     process.exit(1)
                 }
             }
-
+           
             end(true)
         })
     }
@@ -124,16 +125,12 @@ function Remove(opt, cmd) {
         
         
         var target = _(GINA_HOMEDIR + '/projects.json');
-
-
-        if ( typeof(self.projects[self.projectName]) != 'undefined' ) {
-            delete self.projects[self.projectName];
-
-            lib.generator.createFileFromDataSync(
-                self.projects,
-                target
-            )
-        }
+        delete self.projects[self.projectName];
+        lib.generator.createFileFromDataSync(
+            self.projects,
+            target
+        )
+        
 
         if (removed)
             console.log('Project [ '+ self.projectName +' ] removed');

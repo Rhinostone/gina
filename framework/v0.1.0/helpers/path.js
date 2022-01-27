@@ -75,7 +75,6 @@ function PathHelper() {
                 this.path = path;
                 if (process.platform == "win32") {
                     //In case of mixed slashes.
-                    //this.value = path.replace(/\//g, "\\");
                     this.value = path.replace(/\\/g, "/");// Make it unix like.
 
                     var p = this.value;
@@ -225,31 +224,36 @@ function PathHelper() {
         }
         return self
     }
-
-    _.prototype.existsSync = function() {
-        
+    
+    var existsSync = function(value) {        
         if ( typeof(fs.accessSync) != 'undefined' ) {
             try {
-                fs.accessSync(this.value, fs.constants.F_OK);
+                fs.accessSync(value, fs.constants.F_OK);
                 return true;
             } catch (err) {
                 return false;
             }
         } else { // support for old version of nodejs
-            return fs.existsSync(this.value);
+            return fs.existsSync(value);
         } 
     }
-
-    _.prototype.exists = function(callback) {        
+    _.prototype.existsSync = function() {
+        return existsSync(this.value);
+    }
+    
+    var exists = function(value, callback) {
         if ( typeof(fs.access) != 'undefined' ) {
-            fs.access(this.value, fs.constants.F_OK, (err) => {
+            fs.access(value, fs.constants.F_OK, (err) => {
                 callback( (err) ? false: true )
             });
         } else { // support for old version of nodejs
-            fs.exists(this.value, function(exists) {
-                callback(exists)
+            fs.exists(value, function(found) {
+                callback(found)
             })
-        }   
+        }  
+    }
+    _.prototype.exists = function(callback) {        
+        exists(this.value, callback);
     }
     
     _.prototype.isWritableSync = function() {
@@ -325,7 +329,7 @@ function PathHelper() {
      * */
     _.prototype.mkdirSync = function(permission) {
 
-        if ( fs.existsSync(this.value) ) {
+        if ( existsSync(this.value) ) {
             return this // always return the instance for sync
         }
         cleanSlashes(this);
@@ -368,7 +372,7 @@ function PathHelper() {
                 path += '/' + pathArr[i]
             }
 
-            if ( !fs.existsSync(path) ) {
+            if ( !existsSync(path) ) {
                 addFolder(self, permission, pathArr, i, path)
             } else {
                 mkdirSync(self, permission, pathArr, i, path)
@@ -393,8 +397,8 @@ function PathHelper() {
         self = cleanSlashes(self);
 
         //Enter dir & start rm.
-        fs.exists(self.value, function(exists) {
-            if (exists) {
+        exists(self.value, function(found) {
+            if (found) {
                 callback(false, self.value)
             } else {
                 var p = self.value;
@@ -463,8 +467,8 @@ function PathHelper() {
                 path += '/' + pathArr[i]
             }
 
-            fs.exists(path, function(exists) {
-                if (!exists) {
+            exists(path, function(found) {
+                if (!found) {
                     addFolder(self, permission, pathArr, i, path)
                 } else {
                     mkdir(self, permission, pathArr, i, path)
@@ -492,6 +496,51 @@ function PathHelper() {
             }
         }
     }
+    
+    /**
+     * symlinkSync
+     * 
+     * @param {string} source 
+     * @param {string} destination 
+     * @param {string} type - Only available from node v12.0.0 & only available on Windows and ignored on other platforms
+     */
+     var symlinkSync = function(source, destination, type) {
+        if ( !existsSync(source) ) {
+            throw new Error('Cannot complete copy from `'+ source +'`: the path does not exist.');
+        }
+        var nodeVersion = process.version.replace(/v/, '').split(/\./g)[0];
+        if ( 
+            process.platform == "win32" 
+            && ~~nodeVersion >= 12 
+            && typeof(type) != 'undefined' 
+            && type != 'null' 
+            && type != ''
+        ) { // can use type
+            
+            if ( ['dir', 'file', 'junction'].indexOf(type) < 0 ) {
+                throw new Error('Wrong symlink type: '+ type);
+            }
+            
+            fs.symlinkSync(source, destination, type)
+        } else {
+            fs.symlinkSync(source, destination)
+        }
+    }
+    
+    _.prototype.renameSync = function(destination) {
+        var self = this;
+        var source = self.value;
+        
+        if ( !existsSync(source) ) {
+            throw new Error('Cannot complete rename from `'+ source +'`: the path does not exist.');
+        }
+        
+        try {
+            fs.renameSync(source, destination);
+        } catch (err) {
+            throw err
+        }        
+    }
 
 
     /**
@@ -503,7 +552,7 @@ function PathHelper() {
      *  var sourceToCopy = new _(stringPath);
      *  var target = _(stringPath);
      *
-     *  sourceToCopy.cp(target, function(err){
+     *  sourceToCopy.cp(target, function(err, destination){
      *
      *  })
      *
@@ -523,7 +572,7 @@ function PathHelper() {
         }
         
         if ( typeof(excluded) == 'function') {
-            var cb = excluded;
+            cb = excluded;
             excluded = undefined
         }
         var self = this;
@@ -532,13 +581,17 @@ function PathHelper() {
         //console.debug("starting copying ", p, " => ", target);
         cp(p, target, excluded)
             .onComplete( function(err, destination, method) {
-                cb(err);
+                cb(err, destination);
             });
 
     }
 
     var cp = function(source, destination, excluded) {
-
+        
+        if ( !existsSync(source) ) {
+            throw new Error('Cannot complete copy from `'+ source +'`: the path does not exist.');
+        }
+        
         /**
          * BO Targeting folder content
          * This only matters when copy is done Folder To Folder.
@@ -571,13 +624,28 @@ function PathHelper() {
          * EO Targeting folder content
          * */
 
-            //Define strategy.
+        //Define strategy.
         fs.lstat(source, function(err, stats) {
             // 1) File => Dir (add if exist else, throw error).
             // 2) File => File (create or replace if exists).
             // 3) Dir => Dir (create or replace if exists).
-
-            if ( !stats.isDirectory() ) {
+            
+            if (err) {
+                e.emit("cp#complete", err);
+                return;
+            }
+            
+            if ( stats.isSymbolicLink() ) {
+                //console.debug('#1 ('+process.version+') Found symlink: '+ source,'\n', JSON.stringify(stats, null, 4));
+                try {
+                    symlinkSync(fs.realpathSync(source), destination);
+                } catch (realPathError) {
+                    e.emit("cp#complete", realPathError, destination);
+                    return;
+                }
+                
+                e.emit("cp#complete", err, destination)
+            } else if ( !stats.isDirectory() ) {
                 // 1) & 2) File => Dir (add if exist else, throw error).
                 copyFileToFile(source, destination, 0, function(err) {
                     e.emit("cp#complete", err, destination)
@@ -685,9 +753,9 @@ function PathHelper() {
                     };
 
                     var d = _(destination);
-                    fs.exists(d, function(exists){
+                    exists(d, function(found){
                         //console.debug("about to remove !! ", d, exists);
-                        if (exists) {
+                        if (found) {
                             rm(d).onComplete( onRemoved )
                         } else {
                             onRemoved(false, d)
@@ -770,21 +838,38 @@ function PathHelper() {
     }
 
     var browseCopy = function(sourceDir, destinationDir, excluded, callback, list, listTo, i) {
-        var list = ( typeof(list) != 'undefined' ) ? list : [];
-        var listTo = ( typeof(listTo) != 'undefined' ) ? listTo : [];
-        var i = ( typeof(i) != 'undefined' ) ? i : 0;
-
+        list = ( typeof(list) != 'undefined' ) ? list : [];
+        listTo = ( typeof(listTo) != 'undefined' ) ? listTo : [];
+        i = ( typeof(i) != 'undefined' ) ? i : 0;
+        
+        //console.debug('[browseCopy]', list.length, i, sourceDir, destinationDir);
         if (
             sourceDir == undefined 
             || sourceDir == '' 
             || destinationDir == undefined 
             || destinationDir == ''
         ) {
-            end(callback, new Error('cp() encountred a fatal error. You have to check your paths.\nSource: '+ sourceDir +'\nDestination: ' + destinationDir) )
+            var copyError = false;
+            // is it the list the last file ?
+            if (list.length != i) {
+                copyError = new Error('cp() encountred a fatal error. You have to check your paths.\nSource: '+ sourceDir +'\nDestination: ' + destinationDir);
+            }
+            end(callback, copyError);
         } else {
-            fs.stat(sourceDir, function(err, stats) {
-
-                if ( stats.isDirectory() ) {
+            fs.lstat(sourceDir, function(err, stats) {
+                
+                if ( stats.isSymbolicLink() ) {
+                    //console.debug('real path: ', fs.realpathSync(list[i]));
+                    //console.debug('#2 ('+process.version+') Found symlink: '+ sourceDir,'\n', JSON.stringify(stats, null, 4));
+                    try {
+                        symlinkSync(fs.realpathSync(list[i]), listTo[i]);
+                    } catch (realPathError) {
+                        throw realPathError;
+                    }
+                    
+                    ++i;
+                    browseCopy(list[i], listTo[i], excluded, callback, list, listTo, i)
+                } else if ( stats.isDirectory() ) {
 
                     var isExcluded = false;
                     if ( typeof(sourceDir) != 'undefined' && excluded != undefined) {
@@ -886,8 +971,8 @@ function PathHelper() {
                         var path = '/'+ (str = source.split(/\//g))[str.length-1];
                         destination += path
                     }
-
-                    fs.exists(destination, function(replaceFlag) {
+                    
+                    exists(destination, function(replaceFlag) {
                         if (replaceFlag) {
                             fs.unlink(destination, function(err) {
                                 //TODO - log error.
@@ -952,60 +1037,45 @@ function PathHelper() {
         var self = this;
         //Enter dir & start rm.
         var p = self.value;
-        if ( typeof(fs.access) != 'undefined' ) {
-            fs.access(this.value, fs.constants.F_OK, (err) => {
-                var exists = (err) ? false: true;
-                if ( !exists ) {
-                    var err = new Error(' mv() - source [ '+p+' ] does not exists !');
-                    console.error(err);
-                    if ( !callback ) {
-                        throw err
-                    }
-                    callback(err)
-                } else {
-                    mv(self, target)
-                        .onComplete( function(err, path){
-                            if (p == path && typeof(callback) != 'undefined') {
-                                callback(err)
-                            }
-                        })
-                }
-            });
-        } else { // support for old version of nodejs
-            fs.exists(p, function(exists){
-                if ( !exists ) {
-                    var err = new Error(' mv() - source [ '+p+' ] does not exists !');
-                    console.error(err);
-                    if ( !callback ) {
-                        throw err
-                    }
-                    callback(err)
-                } else {
-                    mv(self, target)
-                        .onComplete( function(err, path){
-                            if (p == path && typeof(callback) != 'undefined') {
-                                callback(err)
-                            }
-                        })
-                }
-            })
-        } 
-
-            
+        exists(p, function(found){
+            if ( !found ) {
+                var err = new Error(' mv() - source [ '+p+' ] does not exists !');
+                console.error(err);
+                if ( !callback ) {
+                    throw err
+                }
+                callback(err)
+            } else {
+                mv(self, target)
+                    .onComplete( function(err, path){
+                        if (err) {
+                            console.error(err);
+                            return callback(err)
+                        }
+                        if (p == path && typeof(callback) != 'undefined') {
+                            callback(err)
+                        }
+                    })
+            }
+        })            
     }
 
     var mv = function(self, target) {
-        //console.debug("starting mv/copy from ", self.value, " to ", target);
-        var task = new _(self.value);
-        task.cp(target, function(err) {
-            if (err) console.error(err);
-
-            //console.debug("cp done... now unlinking source ", self.value);
-            rm(self.value).onComplete( function(err, path){
-                //console.debug('rm() complete');
-                e.emit('mv#complete', err, path)
+        console.debug("starting mv/copy from ", self.value, " to ", target);
+        cp(self.value, target)
+            .onComplete(function onCpMv(err) {
+                console.debug("cp done... now unlinking source ", self.value);        
+                if (err) {
+                    e.emit('mv#complete', err);
+                    return;
+                }
+    
+                
+                rm(self.value).onComplete( function(err, path){
+                    console.debug('rm() complete');
+                    e.emit('mv#complete', err, path)
+                })
             })
-        });
 
         return {
             /**
@@ -1035,7 +1105,7 @@ function PathHelper() {
      * */
     _.prototype.rmSync = function() {
 
-        if ( !fs.existsSync(this.value) ) {
+        if ( !existsSync(this.value) ) {
             return this // always return the instance for sync
         }
         cleanSlashes(this);
@@ -1161,9 +1231,9 @@ function PathHelper() {
         //Enter dir & start rm.
         self = cleanSlashes(self);
         var p = self.value;
-        fs.exists(p, function(exists) {
+        exists(p, function(found) {
             //console.debug(" does it exists ? ", p, exists );
-            if (!exists) {
+            if (!found) {
                 //console.debug("done removing ", p);
                 callback(new Error('`'+p+'` does not found'), p)
 

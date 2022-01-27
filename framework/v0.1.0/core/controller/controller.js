@@ -59,12 +59,6 @@ function SuperController(options) {
         view    : {}
     };
 
-    // var ports = {
-    //     'http': 80,
-    //     'https': 443
-    // };
-
-
     /**
      * SuperController Constructor
      * @constructor
@@ -254,8 +248,6 @@ function SuperController(options) {
                 set('page.view.file', local.options.file);
                 set('page.view.title', rule.replace(new RegExp('@' + options.conf.bundle), ''));
                 set('page.view.namespace', namespace);
-    
-                
             }            
             
 
@@ -297,8 +289,8 @@ function SuperController(options) {
             set('page.environment.port', options.conf.server.port);
             set('page.environment.debugPort', options.conf.server.debugPort);
             set('page.environment.pid', process.pid);
-
-            set('page.view.layout', local.options.template.layout.replace(new RegExp(local.options.template.templates+'/'), ''));
+            
+                        
             set('page.view.ext', ext);
             set('page.view.control', action);
             set('page.view.controller', local.options.controller.replace(options.conf.bundlesPath, ''), true);
@@ -308,8 +300,12 @@ function SuperController(options) {
             set('page.view.method', local.options.method);
             set('page.view.namespace', namespace); // by default
             set('page.view.url', req.url);
-            set('page.view.html.properties.mode.javascriptsDeferEnabled', local.options.template.javascriptsDeferEnabled);
-            set('page.view.html.properties.mode.routeNameAsFilenameEnabled', local.options.template.routeNameAsFilenameEnabled);
+            if ( local.options.template ) {
+                set('page.view.layout', local.options.template.layout.replace(new RegExp(local.options.template.templates+'/'), ''));
+                set('page.view.html.properties.mode.javascriptsDeferEnabled', local.options.template.javascriptsDeferEnabled);
+                set('page.view.html.properties.mode.routeNameAsFilenameEnabled', local.options.template.routeNameAsFilenameEnabled);
+            }
+            
                         
             var parameters = JSON.clone(req.getParams());
             parameters = merge(parameters, options.conf.content.routing[rule].param);
@@ -325,7 +321,7 @@ function SuperController(options) {
             set('page.view.route', rule);
 
             
-            var acceptLanguage = 'en-US'; // by default : language-COUNTRY
+            var acceptLanguage = GINA_CULTURE; // by default : language-COUNTRY
             if ( typeof(req.headers['accept-language']) != 'undefined' ) {
                 acceptLanguage = req.headers['accept-language']
             } else if ( typeof(local.options.conf.server.response.header['accept-language']) != 'undefined' ) {
@@ -343,8 +339,9 @@ function SuperController(options) {
 
             try {
                 userLocales = locales.findOne({ lang: userLangCode }).content;
-            } catch (err) {
-                console.warn('language code `'+ userLangCode +'` not handled to setup locales: replacing by default: `'+ local.options.conf.content.settings.region.shortCode +'`');
+            } catch (err) {    
+                //var defaultRegion = (local.options.conf.content.settings.region) ? local.options.conf.content.settings.region.shortCode   
+                console.warn('language code `'+ userLangCode +'` not handled by current locales setup: replacing by default: `'+ local.options.conf.content.settings.region.shortCode +'`');
                 userLocales = locales.findOne({ lang: local.options.conf.content.settings.region.shortCode }).content // by default
             }
 
@@ -374,21 +371,21 @@ function SuperController(options) {
         var dir = null;
         if (local.options.template || self.templates) {
             dir = local.options.template.templates || self.templates;
+            
+            var swigOptions = {
+                autoescape  : ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape : false,
+                cache       : (local.options.cacheless) ? false : 'memory'
+            };
+            if (dir) {
+                swigOptions.loader = swig.loaders.fs(dir);
+            }
+            swig.setDefaults(swigOptions);
+            // preserve the same timezone as the system
+            var defaultTZOffset = new Date().getTimezoneOffset();
+            swig.setDefaultTZOffset(defaultTZOffset);
+            
+            self.engine = swig;
         }
-        
-        var swigOptions = {
-            autoescape  : ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape : false,
-            cache       : (local.options.cacheless) ? false : 'memory'
-        };
-        if (dir) {
-            swigOptions.loader = swig.loaders.fs(dir);
-        }
-        swig.setDefaults(swigOptions);
-        // preserve the same timezone as the system
-        var defaultTZOffset = new Date().getTimezoneOffset();
-        swig.setDefaultTZOffset(defaultTZOffset);
-        
-        self.engine = swig;
     }
     
     this.renderWithoutLayout = function (data, displayToolbar) {
@@ -580,7 +577,7 @@ function SuperController(options) {
 
             
 
-            // please, do not put any slashes when including...
+            // please, do not start with a slashe when including...
             // ex.:
             //      /html/inc/_partial.html (BAD)
             //      html/inc/_partial.html (GOOD)
@@ -690,377 +687,367 @@ function SuperController(options) {
                 
             }
                 
-                // fs.readFile(layoutPath, function onLoadingLayout(err, layout) {
-
-                    // if (err) {
-                    //     var moreMessage = (isWithoutLayout || !isWithoutLayout && !fs.existsSync(local.options.template.layout)) ? ' without layout': '';
-                    //     err.error = options.bundle +' SuperController error while trying to load template content `'+ layoutPath +'`'+ moreMessage +' \n' + err.message;
-                    //     self.throwError(local.res, 500, err);
-                    //     return;
-                    // } else {
-                        var isLoadingPartial = false;
-                        try {                            
-                            assets  = {assets:"${assets}"};
-                            
-                            /**
-                             * retrieve template & layout
-                             * */ 
-                            var tpl = null; 
-                            // tpl = fs.readFileSync(path).toString();
-                            // layout = fs.readFileSync(layoutPath).toString();                            
-                            
-                            await Promise.all([
-                                readFile(layoutPath),
-                                readFile(path)
-                                ])
-                                .then(([_layout, _tpl]) => {                                  
-                                    layout  = _layout.toString();
-                                    tpl     = _tpl.toString();
-                                })
-                                .catch(error => {
-                                console.error(error.message);
-                                return;
-                            });
-                            
-                                                        
-                            // mappin conf
-                            mapping = { filename: path };
-                            if (isRenderingCustomError) {
-                                // TODO - Test if there is a block call `gina-error` in the layout & replace block name from tpl
-                                
-                                if ( !/\{\%(\s+extends|extends)/.test(tpl) ) {
-                                    tpl = "\n{% extends '"+ layoutPath +"' %}\n" + tpl;
-                                }
-                                if (!/\{\% block content/.test(tpl)) {
-                                    // TODO - test if lyout has <body>
-                                    tpl = '{% block content %}<p>If you view this message you didn’t define a content block in your template.</p>{% endblock %}' + tpl;
-                                }                                
-                                
-                                tpl = tpl.replace(/\{\{ page\.content \}\}/g, '');
-                            }
-                            
-                            if ( isWithoutLayout || isWithSwigLayout) {
-                                layout = tpl;                                
-                            } else if (isUsingGinaLayout) {
-                                mapping = { filename: path };
-                                if ( /(\{\{|\{\{\s+)page\.content/.test(layout) ) {
-                                    
-                                    if ( /\{\%(\s+extends|extends)/.test(tpl) ) {
-                                        err = new Error('You cannot use at the same time `page.content` in your layout `'+ layoutPath +'` while calling `extends` from your page or content `'+ path +'`. You have to choose one or the other');
-                                        self.throwError(local.res, 500, err);
-                                        return
-                                    }
-                                    layout = layout.replace('{{ page.content }}', tpl);
-                                } else {
-                                    layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');                                    
-                                }
-                                
-                            } else {
-                                tpl = tpl.replace('{{ page.view.layout }}', data.page.view.layout);
-                                if (/\<\/body\>/i.test(layout)) {
-                                    layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
-                                }
-                                 else {
-                                    layout += tpl;
-                                }                                
-                            }
-                                
-                            // precompilation needed in case of `extends` or in order to display the toolbar
-                            if ( hasViews() && GINA_ENV_IS_DEV || /\{\%(\s+extends|extends)/.test(layout) ) {                                
-                                layout = swig.compile(layout, mapping)(data);
-                            }
-                            //dic['page.content'] = layout;                          
-                            
-                        } catch(err) {
-                            err.stack = 'Exception, bad syntax or undefined data found: start investigating in '+ mapping.filename +'\n' + err.stack;
+            
+            var isLoadingPartial = false;
+            try {                            
+                assets  = {assets:"${assets}"};
+                
+                /**
+                 * retrieve template & layout
+                 * */ 
+                var tpl = null; 
+                // tpl = fs.readFileSync(path).toString();
+                // layout = fs.readFileSync(layoutPath).toString();                            
+                
+                await Promise.all([
+                    readFile(layoutPath),
+                    readFile(path)
+                    ])
+                    .then(([_layout, _tpl]) => {                                  
+                        layout  = _layout.toString();
+                        tpl     = _tpl.toString();
+                    })
+                    .catch(error => {
+                    console.error(error.message);
+                    return;
+                });
+                
+                                            
+                // mappin conf
+                mapping = { filename: path };
+                if (isRenderingCustomError) {
+                    // TODO - Test if there is a block call `gina-error` in the layout & replace block name from tpl
+                    
+                    if ( !/\{\%(\s+extends|extends)/.test(tpl) ) {
+                        tpl = "\n{% extends '"+ layoutPath +"' %}\n" + tpl;
+                    }
+                    if (!/\{\% block content/.test(tpl)) {
+                        // TODO - test if lyout has <body>
+                        tpl = '{% block content %}<p>If you view this message you didn’t define a content block in your template.</p>{% endblock %}' + tpl;
+                    }                                
+                    
+                    tpl = tpl.replace(/\{\{ page\.content \}\}/g, '');
+                }
+                
+                if ( isWithoutLayout || isWithSwigLayout) {
+                    layout = tpl;                                
+                } else if (isUsingGinaLayout) {
+                    mapping = { filename: path };
+                    if ( /(\{\{|\{\{\s+)page\.content/.test(layout) ) {
+                        
+                        if ( /\{\%(\s+extends|extends)/.test(tpl) ) {
+                            err = new Error('You cannot use at the same time `page.content` in your layout `'+ layoutPath +'` while calling `extends` from your page or content `'+ path +'`. You have to choose one or the other');
                             self.throwError(local.res, 500, err);
                             return
                         }
+                        layout = layout.replace('{{ page.content }}', tpl);
+                    } else {
+                        layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');                                    
+                    }
+                    
+                } else {
+                    tpl = tpl.replace('{{ page.view.layout }}', data.page.view.layout);
+                    if (/\<\/body\>/i.test(layout)) {
+                        layout = layout.replace(/\<\/body\>/i, '\t'+tpl+'\n</body>');
+                    }
+                        else {
+                        layout += tpl;
+                    }                                
+                }
+                    
+                // precompilation needed in case of `extends` or in order to display the toolbar
+                if ( hasViews() && GINA_ENV_IS_DEV || /\{\%(\s+extends|extends)/.test(layout) ) {                                
+                    layout = swig.compile(layout, mapping)(data);
+                }
+                //dic['page.content'] = layout;                          
+                
+            } catch(err) {
+                err.stack = 'Exception, bad syntax or undefined data found: start investigating in '+ mapping.filename +'\n' + err.stack;
+                self.throwError(local.res, 500, err);
+                return
+            }
+                
+            isLoadingPartial = ( 
+                !/\<html/i.test(layout) 
+                || !/\<head/i.test(layout) 
+                || !/\<body/i.test(layout) 
+            ) ? true : false;
+            
+            // if (isLoadingPartial) {
+            //     console.warn('----------------> loading partial `'+ path);
+            // }
+            
+            isDeferModeEnabled = localOptions.template.javascriptsDeferEnabled || localOptions.conf.content.templates._common.javascriptsDeferEnabled || false;  
+                                    
+            // iframe case - without HTML TAG
+            if (!self.isXMLRequest() && !/\<html/.test(layout) ) {
+                layout = '<html>\n\t<head></head>\n\t<body class="gina-iframe-body">\n\t\t'+ layout +'\n\t</body>\n</html>';
+            }                     
+            
+            // adding stylesheets
+            if (!isWithoutLayout && data.page.view.stylesheets && !/\{\{\s+(page\.view\.stylesheets)\s+\}\}/.test(layout) ) {
+                layout = layout.replace(/\<\/head\>/i, '\n{{ page.view.stylesheets }}\n</head>')
+            }
                             
-                        isLoadingPartial = ( 
-                            !/\<html/i.test(layout) 
-                            || !/\<head/i.test(layout) 
-                            || !/\<body/i.test(layout) 
-                        ) ? true : false;
-                        
-                        // if (isLoadingPartial) {
-                        //     console.warn('----------------> loading partial `'+ path);
-                        // }
-                        
-                        isDeferModeEnabled = localOptions.template.javascriptsDeferEnabled || localOptions.conf.content.templates._common.javascriptsDeferEnabled || false;  
-                                                
-                        // iframe case - without HTML TAG
-                        if (!self.isXMLRequest() && !/\<html/.test(layout) ) {
-                            layout = '<html>\n\t<head></head>\n\t<body class="gina-iframe-body">\n\t\t'+ layout +'\n\t</body>\n</html>';
-                        }                     
-                        
-                        // adding stylesheets
-                        if (!isWithoutLayout && data.page.view.stylesheets && !/\{\{\s+(page\.view\.stylesheets)\s+\}\}/.test(layout) ) {
-                            layout = layout.replace(/\<\/head\>/i, '\n{{ page.view.stylesheets }}\n</head>')
-                        }
+            if (hasViews() && isWithoutLayout) {
+                // $.getScript(...)
+                //var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && localOptions.conf.server.scheme +'://'+ local.req.headers.host != localOptions.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname  ) ? true : false;
+                //var hostname = (isProxyHost) ? localOptions.conf.hostname.replace(/\:\d+$/, '') : localOptions.conf.hostname;
+                
+                
+                
+                var scripts = data.page.view.scripts;
+                scripts = scripts.replace(/\s+\<script/g, '\n<script');
                                         
-                        if (hasViews() && isWithoutLayout) {
-                            // $.getScript(...)
-                            //var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && localOptions.conf.server.scheme +'://'+ local.req.headers.host != localOptions.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname  ) ? true : false;
-                            //var hostname = (isProxyHost) ? localOptions.conf.hostname.replace(/\:\d+$/, '') : localOptions.conf.hostname;
-                            
-                            
-                            
-                            var scripts = data.page.view.scripts;
-                            scripts = scripts.replace(/\s+\<script/g, '\n<script');
-                                                    
-                            if (!isProxyHost) {
-                                var webroot = data.page.environment.webroot;
-                                scripts = scripts.replace(/src\=\"\/(.*)\"/g, 'src="'+ webroot +'$1"');
-                                //stylesheets = stylesheets.replace(/href\=\"\/(.*)\"/g, 'href="'+ webroot +'$1"')
-                            }
-                            
-                            // iframe case - without HTML TAG
-                            if (self.isXMLRequest() || !/\<html/.test(layout) ) {                                
-                                layout += scripts; 
-                                //layout += stylesheets;  
-                            }                            
-                                                                   
-                        }
+                if (!isProxyHost) {
+                    var webroot = data.page.environment.webroot;
+                    scripts = scripts.replace(/src\=\"\/(.*)\"/g, 'src="'+ webroot +'$1"');
+                    //stylesheets = stylesheets.replace(/href\=\"\/(.*)\"/g, 'href="'+ webroot +'$1"')
+                }
+                
+                // iframe case - without HTML TAG
+                if (self.isXMLRequest() || !/\<html/.test(layout) ) {                                
+                    layout += scripts; 
+                    //layout += stylesheets;  
+                }                            
+                                                        
+            }
 
-                        // adding plugins
+            // adding plugins
+            if (
+                hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout 
+                && localOptions.debugMode 
+                || 
+                hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout 
+                && typeof(localOptions.debugMode) == 'undefined' 
+                || 
+                hasViews() && localOptions.debugMode 
+            ) {                            
+
+                layout = ''
+                    + '{%- set ginaDataInspector                    = JSON.clone(page) -%}'
+                    + '{%- set ginaDataInspector.view.assets        = {} -%}'
+                    + '{%- set ginaDataInspector.view.scripts       = "ignored-by-toolbar" -%}'
+                    + '{%- set ginaDataInspector.view.stylesheets   = "ignored-by-toolbar" -%}'
+                    + layout
+                ;
+                    
+                plugin = '\t'
+                    + '{# Gina Toolbar #}'
+                    + '{%- set userDataInspector                    = JSON.clone(page) -%}'
+                    + '{%- set userDataInspector.view.scripts       = "ignored-by-toolbar"  -%}'
+                    + '{%- set userDataInspector.view.stylesheets   = "ignored-by-toolbar"  -%}'
+                    + '{%- set userDataInspector.view.assets        = '+ JSON.stringify(assets) +' -%}'
+                    + '{%- include "'+ getPath('gina').core +'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector } -%}'
+                    + '{# END Gina Toolbar #}'                                                           
+                ;
+                                            
+
+                if (isWithoutLayout && localOptions.debugMode || localOptions.debugMode ) {
+
+                    XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
+                    
+                    layout = layout.replace(/<\/body>/i, XHRData + '\n\t</body>');
+                }
+                
+                if (GINA_ENV_IS_DEV || localOptions.debugMode ) {
+                    layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
+                }
+                
+                // adding javascripts
+                layout.replace('{{ page.view.scripts }}', '');            
+                // placed in the HEAD excepted when rendering a partial or when `isDeferModeEnabled` == true
+                if (isLoadingPartial) {
+                    layout += '\t{{ page.view.scripts }}';
+                } else {
+                    if ( isDeferModeEnabled  ) {
+                        layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
+                    } else { // placed in the BODY                                
+                        layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
+                    }
+                }
+                    
+                // ginaLoader cannot be deferred
+                if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                    layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                            
+                }
+
+            } else if ( hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() ) {
+                
+                if (isWithoutLayout) {                                
+                    delete data.page.view.scripts;
+                    delete data.page.view.stylesheets;                                
+                }
+                // means that we don't want GFF context or we already have it loaded
+                viewInfos = JSON.clone(data.page.view);
+                if ( !isWithoutLayout )
+                    viewInfos.assets = assets;
+
+                XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
+                XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(viewInfos)) +'">';
+
+
+                layout += XHRData + XHRView;
+
+            } else { // production env
+                /**
+                plugin = '\t'
+                    + '\n\t<script type="text/javascript">'
+                    + ' \n\t<!--'
+                    + '\n\t' + localOptions.template.pluginLoader.toString()
+                    + '\t//-->'
+                    + '\n</script>'
+
+                    //+ '\n\t<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
+                ;
+                */
+                
+                
+                // if ( !/page\.view\.scripts/.test(layout) ) {
+                //     layout = layout.replace(/<\/body>/i, plugin + '\t{{ page.view.scripts }}\n\t</body>');
+                // } else {
+                //     layout = layout.replace(/{{ page.view.scripts }}/i, plugin + '\t{{ page.view.scripts }}');
+                // }
+                
+                // adding javascripts
+                layout.replace('{{ page.view.scripts }}', '');
+                if (isLoadingPartial) {                                
+                    layout += '\t{{ page.view.scripts }}\n';
+                    if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                        layout += '\t'+ localOptions.template.ginaLoader +'\n';
+                    }
+                } else {
+                    if ( isDeferModeEnabled && /\<\/head\>/i.test(layout) ) { // placed in the HEAD                                                           
+                        layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
+                        
+                    } else { // placed in the BODY                               
+                        layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
+                    }
+                    // ginaLoader cannot be deferred
+                    if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                        layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');
+                    }
+                }
+            }
+            
+            
+            layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+            dic['page.content'] = layout;
+            /**
+            // special case for template without layout in debug mode - dev only
+            if ( hasViews() && localOptions.debugMode && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
+                try { 
+                    
+                    layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');                                                                    
+                    layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+                    //swig.invalidateCache();
+                    layout = swig.compile(layout, mapping)(data);
+                    
+
+                } catch (err) {
+                    filename = localOptions.template.html;
+                    filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
+                    self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)));
+                    return;
+                }
+            }  
+            else if (hasViews() && localOptions.debugMode && GINA_ENV_IS_DEV) {
+                try {
+                    //layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
+                    layout = swig.compile(layout, mapping)(data);
+                } catch (err) {
+                    filename = localOptions.template.html;
+                    filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
+                    self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)));
+                    return;
+                }
+            } 
+            */                     
+            
+
+            if ( !local.res.headersSent /**&& !local.options.isRenderingCustomError*/) {
+                local.res.statusCode = ( typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
+                //catching errors
+                if (
+                    typeof(data.page.data.errno) != 'undefined' && /^2/.test(data.page.data.status) && typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status]) != 'undefined'
+                    || typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status) && typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status]) != 'undefined'
+                ) {
+
+                    try {
+                        local.res.statusMessage = localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status];
+                    } catch (err){
+                        local.res.statusCode    = 500;
+                        local.res.statusMessage = err.stack||err.message||localOptions.conf.server.coreConfiguration.statusCodes[local.res.statusCode];
+                    }
+                }
+
+                local.res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
+                
+                try {
+                    
+                    // escape special chars
+                    var blacklistRe = new RegExp('[\<\>]', 'g');
+                    // DO NOT REPLACE IT BY JSON.clone() !!!!
+                    
+                    data.page.data = JSON.parse(JSON.stringify(data.page.data).replace(blacklistRe, '\$&'));
+                    
+                } catch (err) {
+                    filename = localOptions.template.html;
+                    filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
+                    self.throwError(local.res, 500, new Error('Controller::render(...) compilation error encountered while trying to process template `'+ filename + '`\n' + (err.stack||err.message||err) ));
+                    return;
+                }
+                
+                    
+                // Only available for http/2.0 for now
+                if ( !self.isXMLRequest() && /http\/2/.test(localOptions.conf.server.protocol) ) {
+                    try {
+                        // TODO - button in toolbar to empty url assets cache    
+                        if ( /**  GINA_ENV_IS_DEV ||*/ typeof(localOptions.template.assets) == 'undefined' || typeof(localOptions.template.assets[local.req.url]) == 'undefined' ) {
+                            // assets string -> object
+                            //assets = self.serverInstance.getAssets(localOptions.conf, layout.toString(), swig, data);
+                            assets = self.serverInstance.getAssets(localOptions.conf, layout, swig, data);
+                            localOptions.template.assets = JSON.parse(assets);
+                        }
+                        
+                        //  only for toolbar - TODO hasToolbar()
                         if (
-                            hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout 
-                            && localOptions.debugMode 
-                            || 
-                            hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout 
-                            && typeof(localOptions.debugMode) == 'undefined' 
-                            || 
-                            hasViews() && localOptions.debugMode 
-                        ) {                            
-
-                            layout = ''
-                                + '{%- set ginaDataInspector                    = JSON.clone(page) -%}'
-                                + '{%- set ginaDataInspector.view.assets        = {} -%}'
-                                + '{%- set ginaDataInspector.view.scripts       = "ignored-by-toolbar" -%}'
-                                + '{%- set ginaDataInspector.view.stylesheets   = "ignored-by-toolbar" -%}'
-                                + layout
-                            ;
-                                
-                            plugin = '\t'
-                                + '{# Gina Toolbar #}'
-                                + '{%- set userDataInspector                    = JSON.clone(page) -%}'
-                                + '{%- set userDataInspector.view.scripts       = "ignored-by-toolbar"  -%}'
-                                + '{%- set userDataInspector.view.stylesheets   = "ignored-by-toolbar"  -%}'
-                                + '{%- set userDataInspector.view.assets        = '+ JSON.stringify(assets) +' -%}'
-                                + '{%- include "'+ getPath('gina').core +'/asset/js/plugin/src/gina/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector } -%}'
-                                + '{# END Gina Toolbar #}'                                                           
-                            ;
-                                                        
-
-                            if (isWithoutLayout && localOptions.debugMode || localOptions.debugMode ) {
-
-                                XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
-                                
-                                layout = layout.replace(/<\/body>/i, XHRData + '\n\t</body>');
-                            }
-                            
-                            if (GINA_ENV_IS_DEV || localOptions.debugMode ) {
-                                layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
-                            }
-                            
-                            // adding javascripts
-                            layout.replace('{{ page.view.scripts }}', '');            
-                            // placed in the HEAD excepted when rendering a partial or when `isDeferModeEnabled` == true
-                            if (isLoadingPartial) {
-                                layout += '\t{{ page.view.scripts }}';
-                            } else {
-                                if ( isDeferModeEnabled  ) {
-                                    layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
-                                } else { // placed in the BODY                                
-                                    layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
-                                }
-                            }
-                                
-                            // ginaLoader cannot be deferred
-                            if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
-                                layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                            
-                            }
-
-                        } else if ( hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() ) {
-                            
-                            if (isWithoutLayout) {                                
-                                delete data.page.view.scripts;
-                                delete data.page.view.stylesheets;                                
-                            }
-                            // means that we don't want GFF context or we already have it loaded
-                            viewInfos = JSON.clone(data.page.view);
-                            if ( !isWithoutLayout )
-                                viewInfos.assets = assets;
-
-                            XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
-                            XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(viewInfos)) +'">';
-
-
-                            layout += XHRData + XHRView;
-
-                        } else { // production env
-                            /**
-                            plugin = '\t'
-                                + '\n\t<script type="text/javascript">'
-                                + ' \n\t<!--'
-                                + '\n\t' + localOptions.template.pluginLoader.toString()
-                                + '\t//-->'
-                                + '\n</script>'
-
-                                //+ '\n\t<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
-                            ;
-                            */
-                            
-                            
-                            // if ( !/page\.view\.scripts/.test(layout) ) {
-                            //     layout = layout.replace(/<\/body>/i, plugin + '\t{{ page.view.scripts }}\n\t</body>');
-                            // } else {
-                            //     layout = layout.replace(/{{ page.view.scripts }}/i, plugin + '\t{{ page.view.scripts }}');
-                            // }
-                            
-                            // adding javascripts
-                            layout.replace('{{ page.view.scripts }}', '');
-                            if (isLoadingPartial) {                                
-                                layout += '\t{{ page.view.scripts }}\n';
-                                if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
-                                    layout += '\t'+ localOptions.template.ginaLoader +'\n';
-                                }
-                            } else {
-                                if ( isDeferModeEnabled && /\<\/head\>/i.test(layout) ) { // placed in the HEAD                                                           
-                                    layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
-                                    
-                                } else { // placed in the BODY                               
-                                    layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
-                                }
-                                // ginaLoader cannot be deferred
-                                if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
-                                    layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');
-                                }
-                            }
+                            GINA_ENV_IS_DEV && hasViews() && !isWithoutLayout
+                            || hasViews() && localOptions.debugMode
+                            || GINA_ENV_IS_DEV && hasViews() && self.isXMLRequest() 
+                        ) {                                
+                            layout = layout.replace('{"assets":"${assets}"}', assets ); 
                         }
                         
-                        
-                        layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
-                        dic['page.content'] = layout;
-                        /**
-                        // special case for template without layout in debug mode - dev only
-                        if ( hasViews() && localOptions.debugMode && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
-                            try { 
-                                
-                                layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');                                                                    
-                                layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
-                                //swig.invalidateCache();
-                                layout = swig.compile(layout, mapping)(data);
-                                
-
-                            } catch (err) {
-                                filename = localOptions.template.html;
-                                filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
-                                self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)));
-                                return;
-                            }
-                        }  
-                        else if (hasViews() && localOptions.debugMode && GINA_ENV_IS_DEV) {
-                            try {
-                                //layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
-                                layout = swig.compile(layout, mapping)(data);
-                            } catch (err) {
-                                filename = localOptions.template.html;
-                                filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
-                                self.throwError(local.res, 500, new Error('Compilation error encountered while trying to process template `'+ filename + '`\n'+(err.stack||err.message)));
-                                return;
-                            }
-                        } 
-                        */                     
-                        
-
-                        if ( !local.res.headersSent /**&& !local.options.isRenderingCustomError*/) {
-                            local.res.statusCode = ( typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
-                            //catching errors
-                            if (
-                                typeof(data.page.data.errno) != 'undefined' && /^2/.test(data.page.data.status) && typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status]) != 'undefined'
-                                || typeof(data.page.data.status) != 'undefined' && !/^2/.test(data.page.data.status) && typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status]) != 'undefined'
-                            ) {
-
-                                try {
-                                    local.res.statusMessage = localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status];
-                                } catch (err){
-                                    local.res.statusCode    = 500;
-                                    local.res.statusMessage = err.stack||err.message||localOptions.conf.server.coreConfiguration.statusCodes[local.res.statusCode];
-                                }
-                            }
-
-                            local.res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
-                            
-                            try {
-                                
-                                // escape special chars
-                                var blacklistRe = new RegExp('[\<\>]', 'g');
-                                // DO NOT REPLACE IT BY JSON.clone() !!!!
-                                
-                                data.page.data = JSON.parse(JSON.stringify(data.page.data).replace(blacklistRe, '\$&'));
-                                
-                            } catch (err) {
-                                filename = localOptions.template.html;
-                                filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
-                                self.throwError(local.res, 500, new Error('Controller::render(...) compilation error encountered while trying to process template `'+ filename + '`\n' + (err.stack||err.message||err) ));
-                                return;
-                            }
-                            
-                             
-                            // Only available for http/2.0 for now
-                            if ( !self.isXMLRequest() && /http\/2/.test(localOptions.conf.server.protocol) ) {
-                                try {
-                                    // TODO - button in toolbar to empty url assets cache    
-                                    if ( /**  GINA_ENV_IS_DEV ||*/ typeof(localOptions.template.assets) == 'undefined' || typeof(localOptions.template.assets[local.req.url]) == 'undefined' ) {
-                                        // assets string -> object
-                                        //assets = self.serverInstance.getAssets(localOptions.conf, layout.toString(), swig, data);
-                                        assets = self.serverInstance.getAssets(localOptions.conf, layout, swig, data);
-                                        localOptions.template.assets = JSON.parse(assets);
-                                    }
-                                    
-                                    //  only for toolbar - TODO hasToolbar()
-                                    if (
-                                        GINA_ENV_IS_DEV && hasViews() && !isWithoutLayout
-                                        || hasViews() && localOptions.debugMode
-                                        || GINA_ENV_IS_DEV && hasViews() && self.isXMLRequest() 
-                                    ) {                                
-                                        layout = layout.replace('{"assets":"${assets}"}', assets ); 
-                                    }
-                                    
-                                } catch (err) {
-                                    self.throwError(local.res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
-                                    return;
-                                }
-                            }
-                            
-                            // Last compilation before rendering                            
-                            layout = swig.compile(layout, mapping)(data);                            
-                            
-                            if ( !local.res.headersSent ) {
-                                if ( local.options.isRenderingCustomError ) {
-                                    local.options.isRenderingCustomError = false;
-                                }
-                                local.res.end(layout);
-                            }                                
-                                
-                            console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
-                                                        
-                        } else if (typeof(local.next) != 'undefined') {                            
-                            // local.next();
-                            return local.next();
-                        } else {
-                            if ( typeof(local.req.params.errorObject) != 'undefined' ) {
-                                self.throwError(local.req.params.errorObject);
-                                return;
-                            }
-                            local.res.end('Unexpected controller error while trying to render.');
-                            return;
-                        }
-                    // }
-                //}) // EO fs.readFile(layoutPath, function onLoadingLayout(err, layout) {
-            //}) // EO fs.readFile(path, async function (err, content) {
+                    } catch (err) {
+                        self.throwError(local.res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
+                        return;
+                    }
+                }
+                
+                // Last compilation before rendering                            
+                layout = swig.compile(layout, mapping)(data);                            
+                
+                if ( !local.res.headersSent ) {
+                    if ( local.options.isRenderingCustomError ) {
+                        local.options.isRenderingCustomError = false;
+                    }
+                    local.res.end(layout);
+                }                                
+                    
+                console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
+                                            
+            } else if (typeof(local.next) != 'undefined') {                            
+                // local.next();
+                return local.next();
+            } else {
+                if ( typeof(local.req.params.errorObject) != 'undefined' ) {
+                    self.throwError(local.req.params.errorObject);
+                    return;
+                }
+                local.res.end('Unexpected controller error while trying to render.');
+                return;
+            }
         } catch (err) {
             self.throwError(local.res, 500, err);
             return;
@@ -1312,7 +1299,7 @@ function SuperController(options) {
      * */
     var setResources = function(viewConf) {
         if (!viewConf) {
-            self.throwError(500, new Error('No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: gina bundle:add-view '+ options.conf.bundle +' @'+ options.conf.projectName));
+            self.throwError(500, new Error('No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: gina view:add '+ options.conf.bundle +' @'+ options.conf.projectName));
             return;
         }
         
@@ -2700,7 +2687,6 @@ function SuperController(options) {
                 
         
         var body = Buffer.from(options.queryData);
-        //options.headers['content-length'] = options.queryData.length;
         options.headers['content-length'] = body.length;        
         delete options.queryData;
         

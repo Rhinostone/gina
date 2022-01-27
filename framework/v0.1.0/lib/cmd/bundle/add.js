@@ -397,7 +397,7 @@ function Add(opt, cmd) {
 
         var projectData = require(self.projectPath)
             , target    = _( self.projects[self.projectName].path +'/'+ projectData.bundles[local.bundle].src, true )
-            , sample    = new _( getPath('gina').core + '/template/samples/bundle/' );
+            , sample    = new _( getPath('gina').core + '/template/boilerplate/bundle/' );
 
 
         sample.cp(target, function done(err) {
@@ -471,7 +471,6 @@ function Add(opt, cmd) {
                 break
             }
         }
-
     }
 
     /**

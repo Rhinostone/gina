@@ -1,1 +1,1 @@
-`Views` is the public directory.
+`public` is the public directory.

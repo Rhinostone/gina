@@ -1,4 +1,6 @@
+// bundle need to be restarted on changes !!
 {
   "name": "{bundle}",
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "greeting": "Hello World !"
 }

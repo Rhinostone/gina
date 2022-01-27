@@ -175,7 +175,10 @@ function Server(options) {
             var engine = new Engine(serverOpt);
             
             // swigEngine to render thrown HTML errors
-            initSwigEngine(self.conf[self.appName][self.env]);
+            if ( hasViews(self.appName) ) {
+                initSwigEngine(self.conf[self.appName][self.env]);
+            }
+            
             
             // setting timezone
             if ( 
@@ -2409,6 +2412,7 @@ function Server(options) {
 
         end:
             for (var b in conf) {
+                if (self.bundles.indexOf(b) < 0) continue;
                 if ( typeof(conf[b][self.env].content) != 'undefined' && typeof(conf[b][self.env].content.statics) != 'undefined' && conf[b][self.env].content.statics.count() > 0 ) {
                     for (var s in conf[b][self.env].content.statics) {
                         s = (s.substr(0,1) == '/') ? s.substr(1) : s;

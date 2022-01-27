@@ -142,24 +142,44 @@ function Initialize(opt) {
             var mainConfig  = require(target);
             mainConfig      = whisper(dic, mainConfig);
             
-            // updating protocols
+            // updating protocols, schemes & cultures
             mainConfig.protocols = merge(mainConfig.protocols, data.protocols, true);
             mainConfig.schemes = merge(mainConfig.schemes, data.schemes, true);
+            mainConfig.cultures = merge(mainConfig.cultures||{}, data.cultures, true);
+            
             
             // don't remove def_protocol
             var defProtocol = mainConfig['def_protocol'][self.release];
             var defScheme   = mainConfig['def_scheme'][self.release];
+            var defCulture  = mainConfig['def_culture'][self.release];
+            var defTimezone  = mainConfig['def_timezone'][self.release];
+            
             if ( mainConfig.protocols[self.release].indexOf(defProtocol) < 0 )
                 mainConfig.protocols[self.release].push(defProtocol);
             
             if ( mainConfig.schemes[self.release].indexOf(defScheme) < 0 )
                 mainConfig.schemes[self.release].push(defScheme);
                 
+            if ( mainConfig.cultures[self.release].indexOf(defCulture) < 0 )
+                mainConfig.cultures[self.release].push(defCulture);
+                
+            // Update only when needed
+            if (!mainConfig.def_culture)
+                mainConfig.def_culture = data.def_culture;
+            if (!mainConfig.def_timezone)
+                mainConfig.def_timezone = data.def_timezone;
+                
             mainConfig.protocols[self.release].sort();
             mainConfig.schemes[self.release].sort();
+            mainConfig.cultures[self.release].sort();
             
             // commit
-            lib.generator.createFileFromDataSync(mainConfig, target)
+            lib.generator.createFileFromDataSync(mainConfig, target);
+            
+            setEnvVar('GINA_CULTURES', mainConfig.cultures[self.release]);
+            setEnvVar('GINA_CULTURE', defCulture);
+            setEnvVar('GINA_TIMEZONE', defTimezone);
+            process.env.TZ = defTimezone;
         }
     }
 
@@ -244,6 +264,7 @@ function Initialize(opt) {
             }
 
             setEnvVar('GINA_ENV_IS_DEV', isDev);
+            
         //}
     }
 
@@ -289,6 +310,8 @@ function Initialize(opt) {
 
             var dic = {
                 'version' : _( getEnvVar('GINA_VERSION'), true),
+                'culture' : _( getEnvVar('GINA_CULTURE'), true),
+                'timezone' : _( getEnvVar('GINA_TIMEZONE'), true),
                 'dev_env' : env,
                 'node_version': process.version,
                 'debug_port' : process.debugPort,
