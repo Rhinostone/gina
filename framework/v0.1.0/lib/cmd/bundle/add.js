@@ -44,7 +44,7 @@ function Add(opt, cmd) {
             if ( self.bundles.length == 0) {
                 console.error('Missing argument <bundle_name>');
             } else if  (!isDefined('project', self.projectName) ) {
-                console.error('`@' + self.projectName +'` is not an existing project.');
+                console.error('[' + self.projectName +'] is not an existing project.');
             } else {
                 console.error('Missing argument @<project_name>');
             }

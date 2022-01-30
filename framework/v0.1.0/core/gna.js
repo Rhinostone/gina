@@ -25,7 +25,7 @@ var gna         = {
 };
 var Config      = require('./config');
 var config      = null;
-//var helpers     = require('./../helpers');
+// helpers were previously loaded
 var lib         = require('./../lib');
 var console     = lib.logger;
 var Proc        = lib.Proc;
@@ -191,16 +191,17 @@ setContext('gina.plugins', plugins);
 
 
 //Setting env.
-var env = projects[projectName]['dev_env']
+var env = projects[projectName]['def_env']
     , isDev = (projects[projectName]['dev_env'] === projects[projectName]['def_env']) ? true: false;
 
 gna.env = process.env.NODE_ENV = env;
 gna.os.isWin32 = process.env.isWin32 = isWin32;
-
+gna.isAborting = false;
 //Cahceless is also defined in the main config : Config::isCacheless().
 process.env.IS_CACHELESS = isDev;
 
-var bundlesPath = (GINA_ENV_IS_DEV) ? projects[projectName]['path'] + '/src' : projects[projectName]['path'] + '/bundles';
+
+var bundlesPath = (isDev) ? projects[projectName]['path'] + '/src' : projects[projectName]['path'] + '/bundles';
 setPath('bundles', _(bundlesPath, true));
 
 
@@ -235,6 +236,7 @@ if (!isPath) {
  * @param {string} [bunlde]
  */
 var abort = function(err, bundle) {
+    gna.isAborting = true;
     if (
         process.argv[2] == '-s' && isLoadedThroughCLI
         || process.argv[2] == '--start' && isLoadedThroughCLI
@@ -310,7 +312,7 @@ gna.getProjectConfiguration = function (callback){
 
             var bundle = getContext('bundle');
             var bundlePath = getPath('project') + '/';
-            bundlePath += ( GINA_ENV_IS_DEV ) ? project.bundles[ bundle ].src : project.bundles[ bundle ].release.link;
+            bundlePath += ( isDev ) ? project.bundles[ bundle ].src : project.bundles[ bundle ].release.link;
             
             
             for (var b in project.bundles) {
@@ -485,7 +487,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
 
             // open default browser for dev env only
-            // if ( GINA_ENV_IS_DEV) {
+            // if ( isDev) {
             //     var payload = JSON.stringify({
             //         code    : 200,
             //         command  : "open"
@@ -932,9 +934,9 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
             for (var bundle in packs) {
                 //is bundle ?
                 tmp = '';
+                // For all but dev
                 if (
-                    typeof (packs[bundle].release) != 'undefined' && env == 'prod'
-                    || typeof (packs[bundle].release) != 'undefined' && env == 'stage'
+                    typeof (packs[bundle].release) != 'undefined' && !isDev
                 ) {
 
 
@@ -958,7 +960,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                         break
                     }
                 } else {
-                    abort('Path mismatched with env: ' + path)
+                    abort('Path mismatched with env: ' + path);
                 }
                 // else, not a bundle
             }

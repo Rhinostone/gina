@@ -14,49 +14,7 @@ Object.defineProperty( Array.prototype, 'clone', {
 
 
 if ( typeof(JSON.clone) == 'undefined' ) {
-        /**
-         * JSON.clone
-         * Clone JSON object
-         * 
-         * Changes made here must be reflected in: 
-         *  - gina/utils/prototypes.js
-         *  - gina/framework/version/helpers/prototypes.js
-         *  - gina/framework/version/core/asset/js/plugin/src/gina/utils/polyfill.js
-         * 
-         * @param {object} source
-         * @param {object} [target]
-         * 
-         * @return {object} cloned JSON object
-         **/
-        var clone = function(source, target) {
-            if (source == null || typeof source != 'object') return source;
-            if (source.constructor != Object && source.constructor != Array) return source;
-            if (source.constructor == Date || source.constructor == RegExp || source.constructor == Function ||
-                source.constructor == String || source.constructor == Number || source.constructor == Boolean)
-                return new source.constructor(source);
-
-            target = target || new source.constructor();
-            var i       = 0
-                , len   = Object.getOwnPropertyNames(source).length || 0
-                , keys  = Object.keys(source)
-            ;
-            
-            while (i<len) {
-                target[keys[i]] = (typeof target[keys[i]] == 'undefined') ? clone(source[keys[i]], null) : target[keys[i]];
-                i++;
-            }
-            i = null; len = null; keys = null;
-
-            return target;
-        };
-        
-        JSON.clone = clone;
-        // WHY NOT USE SOMETHING ELSE ?
-        // Could have been fine, but not working when you have references pointg to another object
-        // return Object.assign({}, source);        
-        
-        // Performences issue
-        //return JSON.parse(JSON.stringify(source));
+    JSON.clone = require(__dirname + '/prototypes.json_clone');
 }
 
 if ( typeof(JSON.escape) == 'undefined' ) {

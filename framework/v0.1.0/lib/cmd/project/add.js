@@ -186,21 +186,22 @@ function Add(opt, cmd) {
             , projects = self.projects
             , error = false;
 
-
+        
         projects[self.projectName] = {
             "path": self.projectLocation,
             "framework": "v" + GINA_VERSION,
             "envs": self.envs,
             "def_env": self.defaultEnv,
             "dev_env": self.devEnv,
-            "protocols": self.protocols,
+            "protocols": (created) ? self.protocolsAvailable : self.protocols,
             "def_protocol": self.defaultProtocol,
-            "schemes": self.schemes,
+            "schemes": (created) ? self.schemesAvailable : self.schemes,
             "def_scheme": self.defaultScheme
         };
         
         // crearte/update ports, protocols & schemes
         addBundlePorts(0);
+        
 
         // writing file
         lib.generator.createFileFromDataSync(
@@ -272,23 +273,12 @@ function Add(opt, cmd) {
             
             hasPastProtocolAndSchemeCheck(self.defaultProtocol, self.defaultScheme, true);              
             
+            //console.debug('self.protocols ...', self.protocols);
             // get user protocols list
             var protocols = JSON.clone(self.protocols);
             // get user schemes list
             var schemes = JSON.clone(self.schemes);
-                        
             var projectConfig   = JSON.clone(self.projects);
-                            
-            // if ( protocols.indexOf(protocol) < 0 ) {
-            //     protocols.push(protocol);
-            //     self.protocols = protocols;   
-            //     projectConfig[self.projectName].protocols = protocols;         
-            // }
-            // if ( schemes.indexOf(scheme) < 0 ) {
-            //     schemes.push(scheme);
-            //     self.schemes = schemes;   
-            //     projectConfig[self.projectName].schemes = schemes;      
-            // }
                         
             //console.debug('about to update project ports conf\n\rBundles: '+ JSON.stringify(self.projectData, null, 4));
             var ports               = JSON.clone(self.portsData) // cloning
@@ -330,7 +320,7 @@ function Add(opt, cmd) {
                     // ignore unmatched protocol : in case of the framework update
                     if ( self.protocolsAvailable.indexOf(protocol) < 0) {
                         delete ports[protocol];
-                        if ( self.protocols.indexOf(protocol) < 0) {
+                        if ( protocols.indexOf(protocol) < 0) {
                             delete self.protocols[self.protocols.indexOf(protocol)]; 
                         }                                               
                         continue; 
@@ -448,7 +438,7 @@ function Add(opt, cmd) {
                     }  
                 }
             }
-            
+                        
             // save to ~/.gina/projects.json
             lib.generator.createFileFromDataSync(projectConfig, self.projectConfigPath);
     

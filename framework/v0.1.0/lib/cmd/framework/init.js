@@ -117,7 +117,7 @@ function Initialize(opt) {
     }
 
     self.checkIfMain = function() {
-        console.debug('checking main...');
+        console.debug('Checking main...');
         var source  = getPath('gina').root + '/resources/home/main.json';
         var target  = self.opt.homedir + '/main.json';
         var version = 'v' + getEnvVar('GINA_VERSION');
@@ -141,6 +141,9 @@ function Initialize(opt) {
             // update if needed : like the version number ...
             var mainConfig  = require(target);
             mainConfig      = whisper(dic, mainConfig);
+            
+            // envs
+            mainConfig.envs = merge(mainConfig.envs, data.envs, true);
             
             // updating protocols, schemes & cultures
             mainConfig.protocols = merge(mainConfig.protocols, data.protocols, true);

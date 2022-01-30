@@ -39,7 +39,8 @@ function Cmd(opt, runOffine) {
         var framework = net.createServer( function(conn) {//'connection' listener
             //feedback.
             conn.once('end', function() {
-                console.info('[ CLI ] task completed')
+                console.info('[ CLI ] task completed');
+                conn.end();
             });
             // force exit
             conn.once('exit', function() {
