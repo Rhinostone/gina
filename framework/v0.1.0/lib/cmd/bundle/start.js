@@ -66,7 +66,6 @@ function Start(opt, cmd) {
             opt.client.write(msg);
             // CMD exit
             opt.client.emit('end');
-
         } else {
 
             var isStarting  = false

@@ -97,6 +97,11 @@ Let's add a view on our frontend
 ```tty
 gina view:add frontend @myproject
 ```
+Then restart your bundle
+```tty
+gina bundle:restart frontend @myproject
+```
+
 Now edit the `home` control in `src/frontend/controllers/controller.js` so that you can have `self.render(...)` instead of `self.renderJSON(...)`
 
 Once it's done, you just need to refresh your browser.
@@ -106,15 +111,34 @@ Gina is shipped with [Swig](https://node-swig.github.io/swig-templates/) as the 
 
 
 ### Setting your default environment
-> By default, Gina comes with 2 environments : `dev` and `prod`. The default is `prod`. But if you are contributing to the framework or prototyping your application or service, we advise to use the `dev` environment.
+
+Please, note that you have 2 types of environments : one for the framework, and one for your project & your bundles.
+
+> By default, Gina (the framework) comes with 2 environments : `dev` and `prod`. The default is `prod`. But if you are contributing to the framework or prototyping your application or service, we advise to use the `dev` environment.
+> ```tty
+> gina framework:env 
+> ```
 
 
 
-__Setting starting env__
+__Setting your application starting environement__
 You can have multiple environments for your project and decide to pick one as the starting env by using `--env=your_env` everytime you have to run a bundle.
 
 ```tty
 gina bundle:start frontend @myproject --env=prod
+```
+__NB.:__ Omitting `--env=<env>` will fallback to your project default environement.
+
+__Setting your project or your application default environement__
+
+For the entire project & for all bundles inside
+```tty
+gina env:use prod @myproject
+```
+
+For the a particular bundle
+```tty
+gina env:use frontend/prod @myproject
 ```
 
 

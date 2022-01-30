@@ -123,7 +123,19 @@ function PostInstall() {
                 .onComplete( function done(err, data){
                     if (err) {
                         console.error(err);
-                        console.warn('try to run : sudo ln -s '+ self.gina +'/bin/cli '+ binPath +'/gina');
+                        console.warn('try to run : sudo ' + cmd);
+                    }
+                });
+            
+            cmd = 'ln -s '+ self.gina +'/bin/cli-debug '+ binPath +'/gina-debug';   
+            run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
+                .onData(function(data){
+                    console.info(data)
+                })
+                .onComplete( function done(err, data){
+                    if (err) {
+                        console.error(err);
+                        console.warn('try to run : sudo ' + cmd);
                     }
                 });
             

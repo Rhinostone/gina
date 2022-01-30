@@ -32,6 +32,8 @@ function CmdHelper(cmd, client, debug) {
         nodeParams : [],
         debugPort: debug.port,
         debugBrkEnabled: debug.brkEnabled,
+        // gina short version for the project
+        def_framework_short : null,
         // project name {string}
         projectName : null, // defined by filterArgs()
         projectLocation: null,
@@ -52,7 +54,7 @@ function CmdHelper(cmd, client, debug) {
         envPath : null, // path to env.json - defined by filterArgs()
         // current env {object}
         envData : {}, // defined by loadAssets()
-        envs : [], // defined by loadAssets()
+        envs : [], // all gina envs defined by loadAssets()
         defaultEnv : null, // defined by loadAssets()
         devEnv : null, // defined by loadAssets()
         protocols : [], // defined by loadAssets()
@@ -299,7 +301,7 @@ function CmdHelper(cmd, client, debug) {
             if (cmd.projectName != null) {
                 // valid name but not in projects and task != :add, :remove or :import
                 if ( typeof(cmd.projects[cmd.projectName]) == 'undefined' && !/\:(add|import|remove)$/.test(cmd.task) ) {
-                    errMsg = 'Project name `@'+ cmd.projectName +'` not found in your projects';
+                    errMsg = 'Project ['+ cmd.projectName +'] not found in your projects list';
                     console.error(errMsg);
                     exit(errMsg);
                     return false;
@@ -348,7 +350,6 @@ function CmdHelper(cmd, client, debug) {
         if (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined') { // ignore when adding project
             
             
-            
             if ( typeof(require.cache[cmd.projectPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.projectPath)]
             }
@@ -370,13 +371,43 @@ function CmdHelper(cmd, client, debug) {
             }
             console.debug('[ ConfigAssetsLoaderHelper ] envPath ', cmd.envPath);
             cmd.envData = requireJSON(cmd.envPath);
-
-            // updating envs list
+            
+            cmd.def_framework_short = ( typeof(cmd.projects[cmd.projectName].framework) != 'undefined' ) ? (cmd.projects[cmd.projectName].framework.replace(/^v/, '').split(/\./g).splice(0,2)).join('.') : (cmd.mainConfig.def_framework.split(/\./g).splice(0,2)).join('.');
+            console.debug('default def_framework_short ', cmd.def_framework_short);
+            
+            // updating default envs list
             cmd.envs = [];
-            for (var e in cmd.projects[cmd.projectName].envs) {
+            for (let e in cmd.projects[cmd.projectName].envs) {
                 cmd.envs.push(cmd.projects[cmd.projectName].envs[e])
             }
+            
             cmd.envs.sort();
+            // updating default protocols list
+            cmd.protocols = [];
+            for (let p in cmd.projects[cmd.projectName].protocols) {
+                cmd.protocols.push(cmd.projects[cmd.projectName].protocols[p])
+            }
+            if ( !cmd.protocols.length ) {            
+                var defProtocols = cmd.mainConfig.protocols[cmd.def_framework_short];
+                console.debug('default protocols ', defProtocols);
+                for (let p in defProtocols) {
+                    cmd.protocols.push(defProtocols[p]);
+                }
+            }            
+            //cmd.protocols.sort();
+            // updating default schemes list
+            cmd.schemes = [];
+            for (let s in cmd.projects[cmd.projectName].schemes) {
+                cmd.schemes.push(cmd.projects[cmd.projectName].schemes[s])
+            }
+            if ( !cmd.schemes.length ) {
+                var defSchemes = cmd.mainConfig.schemes[cmd.def_framework_short];
+                console.debug('default schemes ', defSchemes);
+                for (let s in defSchemes) {
+                    cmd.schemes.push(defSchemes[s]);
+                }
+            }
+            //cmd.schemes.sort();
 
             if ( typeof(require.cache[cmd.portsPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.portsPath)]
@@ -391,110 +422,50 @@ function CmdHelper(cmd, client, debug) {
 
             
             ports = JSON.clone(cmd.portsData); 
-            cmd.protocols = [];
-            cmd.schemes = [];
+            
             var re = null;
             //console.debug('[ ConfigAssetsLoaderHelper ] Loaded bundles list\n'+ JSON.stringify(cmd.bundles, null, 4));
-            // // protocols & schemes list: for the bundle
-            // if (cmd.bundles.length > 0 && typeof (cmd.projects[cmd.projectName]) != 'undefined') { 
-                
-            //     if ( typeof(cmd.bundlesByProject[cmd.projectName]) == 'undefined' ) {
-            //         cmd.bundlesByProject[cmd.projectName] = {}
-            //     }
-                
-            //     cmd.bundlesByProject[cmd.projectName].protocols = [];
-            //     cmd.bundlesByProject[cmd.projectName].schemes = [];
-                
-            //     for (var b = 0, bLen = cmd.bundles.length; b < bLen; ++b) {
+                            
+            // protocols & schemes list: for the project
+            re = new RegExp('\@' + cmd.projectName, '');
+            
+            for (var protocol in ports) {
+                if ( typeof(cmd.portsData[protocol]) == 'undefined')
+                    cmd.portsData[protocol] = {};
                     
-            //         re = new RegExp('^' + cmd.bundles[b] +'\@', '');
-            //         reProjectProtoScheme = new RegExp('\@'+ cmd.projectName +'$', '');
-            //         reProtoScheme = new RegExp('^' + cmd.bundles[b] +'\@'+ cmd.projectName, '');
-            //         for (var protocol in ports) {
-            //             if ( typeof(cmd.portsData[protocol]) == 'undefined')
-            //                 cmd.portsData[protocol] = {};
-                            
-            //             for (var scheme in ports[protocol]) {
-            //                 if ( typeof(cmd.portsData[protocol][scheme]) == 'undefined')
-            //                     cmd.portsData[protocol][scheme] = {};   
-                                                         
-            //                 for (var port in ports[protocol][scheme]) {
-                                
-            //                     if (cmd.protocols.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
-            //                         //cmd.protocols.push(protocol);
-            //                         if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
-            //                             cmd.portsData[protocol][scheme][port] = {}
-            //                     }
-                                
-            //                     // updating schemes list
-            //                     if (cmd.schemes.indexOf(scheme) < 0 && re.test(ports[protocol][scheme][port])) {
-            //                         //cmd.schemes.push(scheme);
-            //                         if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
-            //                             cmd.portsData[protocol][scheme][port] = {}
-            //                     }
-
-            //                     // updating port list
-            //                     if (cmd.portsList.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
-            //                         cmd.portsList.push(~~port);
-            //                         cmd.portsData[protocol][scheme][port] = ports[protocol][scheme][port];        
-                                    
-            //                         // if ( reProtoScheme.test(ports[protocol][scheme][port]) ) {
-            //                         //     if (cmd.bundlesByProject[cmd.projectName].protocols.indexOf(protocol) < 0)
-            //                         //         cmd.bundlesByProject[cmd.projectName].protocols.push(protocol);
-            //                         // }
-            //                     }
-            //                 }
-            //             }                            
-            //         }
-            //     }
-
-
-
-            // } else {
-                
-                // protocols & schemes list: for the project
-                re = new RegExp('\@' + cmd.projectName, '');
-                
-                for (var protocol in ports) {
-                    if ( typeof(cmd.portsData[protocol]) == 'undefined')
-                        cmd.portsData[protocol] = {};
+                for (var scheme in ports[protocol]) {
+                    if ( typeof(cmd.portsData[protocol][scheme]) == 'undefined')
+                        cmd.portsData[protocol][scheme] = {};
                         
-                    for (var scheme in ports[protocol]) {
-                        if ( typeof(cmd.portsData[protocol][scheme]) == 'undefined')
-                            cmd.portsData[protocol][scheme] = {};
-                            
-                        for (var port in ports[protocol][scheme]) {
-                            // updating protocols list
-                            if (cmd.protocols.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
-                                //cmd.protocols.push(protocol);
-                                if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
-                                    cmd.portsData[protocol][scheme][port] = {}
-                            }
-                                                        
-                            // updating schemes list
-                            if (cmd.schemes.indexOf(scheme) < 0 && re.test(ports[protocol][scheme][port])) {
-                                //cmd.schemes.push(scheme);
-                                if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
-                                    cmd.portsData[protocol][scheme][port] = {}
-                            } 
-    
-                            // updating port list
-                            if (cmd.portsList.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
-                                cmd.portsList.push(~~port);
-                                cmd.portsData[protocol][scheme][port] = ports[protocol][scheme][port]
-                            }
+                    for (var port in ports[protocol][scheme]) {
+                        // updating protocols list
+                        if (cmd.protocols.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
+                            //cmd.protocols.push(protocol);
+                            if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
+                                cmd.portsData[protocol][scheme][port] = {}
                         }
-                    }                    
-                }                
-            }
-            
-            //console.debug('[ ConfigAssetsLoaderHelper ] Loaded portsData\n'+ JSON.stringify(cmd.portsData, null, 4));
-            
-            // sorting
-            cmd.protocols.sort();
-            cmd.schemes.sort();
+                                                    
+                        // updating schemes list
+                        if (cmd.schemes.indexOf(scheme) < 0 && re.test(ports[protocol][scheme][port])) {
+                            //cmd.schemes.push(scheme);
+                            if (typeof(cmd.portsData[protocol][scheme][port]) == 'undefined')
+                                cmd.portsData[protocol][scheme][port] = {}
+                        } 
 
-        //}
+                        // updating port list
+                        if (cmd.portsList.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
+                            cmd.portsList.push(~~port);
+                            cmd.portsData[protocol][scheme][port] = ports[protocol][scheme][port]
+                        }
+                    }
+                }                    
+            }                
+        }
+        
+        //console.debug('[ ConfigAssetsLoaderHelper ] Loaded portsData\n'+ JSON.stringify(cmd.portsData, null, 4));
+        // sorting
+        cmd.protocols.sort();
+        cmd.schemes.sort();
 
         // getting defautl envs list
         cmd.envs = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined') ? cmd.projects[cmd.projectName]['envs'] : cmd.mainConfig['envs'][ GINA_SHORT_VERSION ];
@@ -543,9 +514,10 @@ function CmdHelper(cmd, client, debug) {
         }
         
         for (var protocol in ports) {
-            for (var scheme in ports[protocol]) {                
-                for (var port in ports[protocol][scheme]) {
-                
+            if ( !protocol || protocol == 'undefined' ) continue;
+            for (var scheme in ports[protocol]) {
+                if ( !scheme || scheme == 'undefined' ) continue;
+                for (var port in ports[protocol][scheme]) {                
                     cmd.portsGlobalList.push(~~port); // updating global ports list
                     
                     if ( hasProject && re.test(ports[protocol][scheme][port]) ) {
@@ -600,13 +572,15 @@ function CmdHelper(cmd, client, debug) {
         var bundleConfigPath = null, settings = null;
         for (var project in cmd.bundlesByProject) { // for each project
             
+            if (!cmd.bundlesByProject[project]) continue;
+            
             for (var bundle in cmd.bundlesByProject[project]) { // for each bundle
                 // bundles array list
                 if ( cmd.bundles.indexOf(bundle) < 0 && cmd.projectName != null && project == cmd.projectName) { 
                     cmd.bundles.push(bundle);
                 }            
                 
-                if ( typeof(cmd.bundlesByProject[project][bundle].protocols) == 'undefined' ) {
+                if ( typeof(cmd.bundlesByProject[project][bundle].protocols) == 'undefined' ) {                    
                     cmd.bundlesByProject[project][bundle].protocols = []
                 }
                 if ( typeof(cmd.bundlesByProject[project][bundle].schemes) == 'undefined' ) {
@@ -665,8 +639,13 @@ function CmdHelper(cmd, client, debug) {
         }
         
         // control the bundle name
+        // no existing project found for the bundle
+        if ( cmd.projectName != null && cmd.name != null && typeof(cmd.projects[cmd.projectName]) == 'undefined' ) {
+            return false;
+        }
         if ( cmd.projectName != null && cmd.name != null && typeof(cmd.bundlesByProject[cmd.projectName][cmd.name]) == 'undefined' ) { 
-            errMsg = 'Bundle name `'+ cmd.name +'` not found in your project `@'+ cmd.projectName +'`';
+            
+            errMsg = 'Bundle name `'+ cmd.name +'` not found in your project `@'+ cmd.projectName +'`';            
             //console.debug('task `'+ cmd.task +'` error:');
             if ( cmd.task != 'bundle:add' ) {
                 console.error(errMsg);
