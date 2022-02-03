@@ -71,16 +71,18 @@
 
     /** imports */
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+    var envIsDev        = null;
     if (isGFFCtx) {
         require('utils/events');
         registerEvents(this.plugin, events);
 
         require('utils/dom');
         require('utils/effects');
-
+        
+        envIsDev = gina.config.envIsDev;
     } else {
-        var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
-        if (cacheless) {
+        envIsDev   = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false;
+        if (envIsDev) {
             delete require.cache[require.resolve('./form-validator')]
         }
     }
@@ -134,9 +136,9 @@
         'resetErrorsDisplay'    : null,
         'resetFields'           : null
     };
-    
+    /**@js_externs local*/
     var local = {
-        rules: {}
+        'rules': {}
     };
     
     var keyboardMapping = {};
@@ -264,7 +266,7 @@
         
         
         // update toolbar
-        if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+        if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
             // update toolbar
             if (!gina.forms.errors)
                 gina.forms.errors = {};
@@ -443,7 +445,7 @@
     var handleErrorsDisplay = function($form, errors, data, fieldName) {
         
         // Toolbar errors display
-        if ( GINA_ENV_IS_DEV )
+        if ( envIsDev )
             var formsErrors = null;
         
         var errorClass  = 'form-item-error' // by default
@@ -566,7 +568,7 @@
                         $err.appendChild($msg);
                     }
 
-                    if ( GINA_ENV_IS_DEV ) {
+                    if ( envIsDev ) {
                         if (!formsErrors) formsErrors = {};
                         if ( !formsErrors[ name ] )
                             formsErrors[ name ] = {};
@@ -615,7 +617,7 @@
                             $msg.appendChild( document.createTextNode(errors[name][e]) );
                             $err.appendChild($msg);
 
-                            if ( GINA_ENV_IS_DEV ) {
+                            if ( envIsDev ) {
                                 if (!formsErrors) formsErrors = {};
                                 if ( !formsErrors[ name ] )
                                     formsErrors[ name ] = {};
@@ -642,7 +644,7 @@
 
             triggerEvent(gina, $form, 'error.' + id, errors)
 
-            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+            if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                 // update toolbar
                 if (!gina.forms.errors)
                     gina.forms.errors = {};
@@ -654,7 +656,7 @@
 
                 window.ginaToolbar.update('forms', objCallback);
             }
-        } else if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar) { // reset toolbar form errors
+        } else if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar) { // reset toolbar form errors
             if (!gina.forms.errors)
                 gina.forms.errors = {};
 
@@ -669,7 +671,7 @@
         if (
             gina 
             && isGFFCtx 
-            && GINA_ENV_IS_DEV
+            && envIsDev
             && instance.$forms[id].isSubmitting
             && /^true$/i.test(instance.$forms[id].isSubmitting) 
             && typeof(window.ginaToolbar) != 'undefined' 
@@ -1046,13 +1048,13 @@
                                             XHRView = JSON.parse(decodeURIComponent(XHRView.value));
                                             
                                             // update data tab                                                
-                                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
+                                            if ( gina && envIsDev && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
                                                 window.ginaToolbar.update("data-xhr", XHRData);
                                             }
                                             
                                             // update view tab
                                             
-                                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
+                                            if ( gina && envIsDev && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
                                                 window.ginaToolbar.update("view-xhr", XHRView);
                                             }   
 
@@ -1078,7 +1080,7 @@
                             if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                 try {
                                     // don't refresh for html datas
-                                    if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html|\/json/.test(contentType) ) {
+                                    if ( envIsDev && typeof(XHRData) != 'undefined' && /\/html|\/json/.test(contentType) ) {
                                         window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
@@ -1213,7 +1215,7 @@
                             if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                 try {
 
-                                    if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' ) {
+                                    if ( envIsDev && typeof(XHRData) != 'undefined' ) {
                                         window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
@@ -1293,7 +1295,7 @@
 
                                     // update toolbar
                                     XHRData = result;
-                                    if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
+                                    if ( gina && envIsDev && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                         try {
                                             // update toolbar
                                             window.ginaToolbar.update('data-xhr', XHRData );
@@ -1362,7 +1364,7 @@
 
                             // update toolbar
                             XHRData = result;
-                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
+                            if ( gina && envIsDev && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                 try {
                                     // update toolbar
                                     window.ginaToolbar.update('data-xhr', XHRData );
@@ -1395,7 +1397,7 @@
                         if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                             try {
                                 // don't refresh for html datas
-                                if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+                                if ( envIsDev && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
                                     window.ginaToolbar.update("data-xhr", XHRData);
                                 }
 
@@ -1529,7 +1531,7 @@
                                         xhr.send(data);
                                         
                                         $form.sent = true;
-                                        if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                                        if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                                             // update toolbar
                                             if (!gina.forms.sent)
                                                 gina.forms.sent = {};
@@ -1582,7 +1584,7 @@
             }
 
             $form.sent = true;
-            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+            if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                 // update toolbar
                 if (!gina.forms.sent)
                     gina.forms.sent = {};
@@ -1908,7 +1910,7 @@
                                 dLen--;
                                 d--;
                                 //update toolbar
-                                if (gina && GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {            
+                                if (gina && envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {            
                                     try {
                                         // update toolbar
                                         window.ginaToolbar.update('data-xhr', {files: files});                        
@@ -2718,6 +2720,7 @@
         return ruleObj
     }
     
+    
     var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
                         
         if (i == len) { // end
@@ -2729,7 +2732,6 @@
 
         // init root object
         if ( typeof(rootObj) == 'undefined' ) {
-            
             rootObj = {};
             root = 'rootObj';
             
@@ -3094,7 +3096,7 @@
                                     instance.$forms[formId].isValidating = false;
                                     console.debug('['+ formId +'] onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
                                     var isFormValid = gResult.isValid();
-                                    if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                                    if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                                         // update toolbar
                                         if (!gina.forms.errors)
                                             gina.forms.errors = {};
@@ -3796,7 +3798,7 @@
             }
 
             $form.rules = rule;
-            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+            if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                 // update toolbar
                 if (!gina.forms.rules)
                     gina.forms.rules = {};
@@ -5593,7 +5595,7 @@
             var $fields         = validationInfo.$fields;
             validate($form.target, fields, $fields, $form.rules, function onSilentValidation(result){                
                 console.debug('silent validation result[isValid:'+result.isValid()+']: ', result);
-                if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                     // update toolbar
                     if (!gina.forms.errors)
                         gina.forms.errors = {};
@@ -6103,7 +6105,7 @@
                                             updateSubmitTriggerState( $currentForm, isFormValid);
                                         }
                                         
-                                        if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                                        if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                                             // update toolbar
                                             if (!gina.forms.errors)
                                                 gina.forms.errors = {};
@@ -6148,7 +6150,7 @@
                                         instance.$forms[formId].isValidating = false;
                                         // console.debug('['+ formId +'] onSilentQueryGlobalLiveValidation: '+ gResult.isValid(), gResult);
                                         isFormValid = gResult.isValid();
-                                        if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                                        if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                                             // update toolbar
                                             if (!gina.forms.errors)
                                                 gina.forms.errors = {};
@@ -6769,7 +6771,7 @@
                 try {
                     data = formatData( d['toData']() );
 
-                    if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                    if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                         // update toolbar
                         if (!gina.forms.validated)
                             gina.forms.validated = {};

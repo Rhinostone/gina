@@ -297,7 +297,7 @@ function Initialize(opt) {
         console.debug('checking settings...');
         var main            = require( _(self.opt.homedir + '/main.json', true) )
             , version       = _( getEnvVar('GINA_VERSION'), true)
-            , env           = process.env.NODE_ENV = _( getEnvVar('GINA_ENV') || main['dev_env'][self.release], true)
+            , env           = _( getEnvVar('GINA_ENV') || main['dev_env'][self.release], true)
             , settings      = require( _( getPath('gina').root + '/resources/home/settings.json', true ) )
             , userSettings  = {}
             , target        = _(self.opt.homedir +'/'+ self.release +'/settings.json', true)

@@ -26,7 +26,8 @@
 
     "home": {
         // If you want to exclude all global css
-        //"stylesheetsExcluded": "*",
+        //"stylesheetsExcluded": "*",        
+        // If you also want to get rid of `gina` definitions, use "**" while excluding
         
         // local css - Will fetch from {Bundle}/public
         "stylesheets": [

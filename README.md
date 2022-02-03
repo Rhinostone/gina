@@ -3,8 +3,8 @@
 <strong>Gina I/O</strong> - Node.js MVC and Event Driven framework
 
 > This is a `preview release`. We are looking for people to help us test and improve `Windows` support.
-> Some commands or features might not work since the framework is still in developpement & testing
-> We have some applications using the framework in production and we are still improving our code in order to release the `1.0.0` version: which should come by the end of 2022.
+> Some commands or features might not work since the framework is still under developpement & testing
+> We have some applications using the framework in production and we are improving our code in order to release the `1.0.0` version: which should come by the end of 2022. Thank you for your patience !
 
 ## Philosophy behind
 
@@ -12,10 +12,12 @@ Gina was designed to be accessible, flexible, scalable and maintainable. Our mai
 
 Gina comes with essential features at this moment, but most of the things we don't have yet can be replaced by some alternatives written in other languages like: Ruby, PHP, .net, Python or C++. You are free to use such alternatives until we implement similar features.
 
+Note that Gina does not rely on Connect or ExpressJS, still, you can use all plugins or middlewares deigned for thoses framewokrs ;-)
+
 ## Getting started with Gina I/O
 
 ### Installing Gina
-Gina aims to be at the same time a framework, a deploy and monitoring environnement for your projects. To fully enjoy Gina, we recommend that you install it with the `-g` option.
+Gina aims to be at the same time a framework, a deployment and monitoring environnement for your projects. So, to fully enjoy Gina, we recommend that you install it with the `-g` option.
 
 ```  tty
 npm install -g gina@latest
@@ -114,14 +116,28 @@ Gina is shipped with [Swig](https://node-swig.github.io/swig-templates/) as the 
 
 Please, note that you have 2 types of environments : one for the framework, and one for your project & your bundles.
 
-> By default, Gina (the framework) comes with 2 environments : `dev` and `prod`. The default is `prod`. But if you are contributing to the framework or prototyping your application or service, we advise to use the `dev` environment.
+> By default, Gina (the framework) comes with 2 environments : `dev` and `prod`. The default is `prod`. if you are contributing to the framework or prototyping your application or service, we advise to use the `dev` environment.
 > ```tty
-> gina framework:env 
+> gina framework:set --env=dev 
 > ```
 
+You can check which are the environments set for your projects
+```tty
+gina env:list
+```
+__or for a particular project__
+```tty
+gina env:list @myproject
+```
 
+__or for a particular bundle__
+```tty
+gina env:list frontend @myproject
+```
 
-__Setting your application starting environement__
+#### Setting your application starting environement on runtime
+> This method does not memorise the selected environment as the default one for your application
+
 You can have multiple environments for your project and decide to pick one as the starting env by using `--env=your_env` everytime you have to run a bundle.
 
 ```tty
@@ -129,16 +145,28 @@ gina bundle:start frontend @myproject --env=prod
 ```
 __NB.:__ Omitting `--env=<env>` will fallback to your project default environement.
 
-__Setting your project or your application default environement__
+#### Setting your project or your application default environement
 
-For the entire project & for all bundles inside
+For the entire project & for all bundles inside by default
 ```tty
 gina env:use prod @myproject
 ```
+__NB.:__ If you need to change it for a particular bundle, you still can do it at runtime using `--env=<your env>` to override the default settings. Tihs will not set `<your env>`as the default environment for the whole project.
 
-For the a particular bundle
+
+#### Other operation you can apply to your environment
+__Adding a new environment for your project__
 ```tty
-gina env:use frontend/prod @myproject
+gina env:add staging @myproject
+```
+__Removing an existing environment for your project__
+```tty
+gina env:rm staging @myproject
+```
+
+__Defining an existing environment as `developpment` (you can only have one like this)__
+```tty
+gina env:link-dev <your new dev env>
 ```
 
 
@@ -156,17 +184,6 @@ __Are you starting for the first time ?__
 node node_modules/gina/script/post_install.js
 ```
 
-- Have you noticed the __environment argument__ ( prod ) ?
-
-``` tty
-gina bundle:start frontend --env=prod
-```
-Without the __prod__ argument, Gina is going to understand that you want to use the default environment (the one you have set by default for your project). If it's really what you want to achieve, just __build__ with your default prod which is `--env=dev`:
-```tty
-gina env:set @myproject --env=prod
-```
-> __NB.:__ you can set the defaut environment for your project like this:
-> 
 
 __Are you trying to restart after a crash ?__
 

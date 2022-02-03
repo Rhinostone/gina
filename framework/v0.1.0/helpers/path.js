@@ -506,7 +506,7 @@ function PathHelper() {
      */
      var symlinkSync = function(source, destination, type) {
         if ( !existsSync(source) ) {
-            throw new Error('Cannot complete copy from `'+ source +'`: the path does not exist.');
+            throw new Error('Cannot complete symlinkSync from `'+ source +'`: the path does not exist.');
         }
         var nodeVersion = process.version.replace(/v/, '').split(/\./g)[0];
         if ( 
@@ -525,6 +525,16 @@ function PathHelper() {
         } else {
             fs.symlinkSync(source, destination)
         }
+    }
+    _.prototype.symlinkSync = function(destination, type) {
+        var self = this;
+        var source = self.value;
+        
+        // if ( !existsSync(source) ) {
+        //     throw new Error('Cannot complete symlink from `'+ source +'`: the path does not exist.');
+        // }
+        
+        symlinkSync(source, destination, type);
     }
     
     _.prototype.renameSync = function(destination) {

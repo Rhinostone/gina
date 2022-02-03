@@ -21,13 +21,15 @@ var console         = lib.logger;
 
 function Couchbase(conn, infos) {
     var EntitySuperClass = null, EntityN1qlClass = null;
+    var envIsDev = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
+    
     /**
      * Init
      * @constructor
      * */
     var init = function(conn, infos) {
         // load on startup
-        var cacheless           = (process.env.IS_CACHELESS == 'false') ? false : true;
+        var cacheless           = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
         var path                = getPath('bundle') + '/models/'+ infos.database +'/entities'
             , n1qlDefault       = __dirname + '/lib'
             , files             = fs.readdirSync(path)
@@ -401,7 +403,7 @@ function Couchbase(conn, infos) {
                     var trigger = 'N1QL:'+entityName.toLowerCase()+ '#'+ name;
                     var statement = (sdkVersion <= 2) ? query.options.statement : query;
                     
-                    if (GINA_ENV_IS_DEV) {
+                    if (envIsDev) {
                         //var statement = (sdkVersion <= 2) ? query.options.statement : query;
                         console.debug('[ ' + trigger +' ] '+ statement);
                         //console.debug('[ ' + trigger +' ] options: '+ JSON.stringify(queryOptions, null, 2));
@@ -708,7 +710,7 @@ function Couchbase(conn, infos) {
             // trick to set event on the fly
             var statement = (sdkVersion <= 2) ? query.options.statement : query;
             
-            if (GINA_ENV_IS_DEV) {
+            if (envIsDev) {
                 console.debug('[ ' + trigger +' ] '+statement);
             }
 
@@ -726,7 +728,7 @@ function Couchbase(conn, infos) {
                     err.message = '`GenericN1QLError::bulkInsert`\n'+ err.message;
                     err.stack   = '`GenericN1QLError::bulkInsert`\n'+ err.stack;
                 }
-                if (GINA_ENV_IS_DEV) {
+                if (envIsDev) {
                     console.debug('[ bulkInsert response ] : err ? '+ err + ', meta : \n'+ JSON.stringify(meta) +'\n data :\n'+ JSON.stringify(data) );
                 }
 
@@ -736,7 +738,7 @@ function Couchbase(conn, infos) {
             return {
                 onComplete : function(cb) {
                     self.once(trigger, function(err, data, meta){
-                        if (GINA_ENV_IS_DEV) {
+                        if (envIsDev) {
                             console.debug('[ bulkInsert triggerd ] '+ trigger);
                         }
                         cb(err, data, meta)

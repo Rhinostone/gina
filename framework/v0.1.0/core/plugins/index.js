@@ -16,7 +16,7 @@
 function Plugins() {
 
     var _require = function(path) {
-        var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
+        var cacheless = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
         if (cacheless) {
             try {
                 delete require.cache[require.resolve(path)];

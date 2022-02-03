@@ -191,14 +191,15 @@ setContext('gina.plugins', plugins);
 
 
 //Setting env.
-var env = projects[projectName]['def_env']
-    , isDev = (projects[projectName]['dev_env'] === projects[projectName]['def_env']) ? true: false;
+var env     = process.env.NODE_ENV || projects[projectName]['def_env']
+    , isDev = (env === projects[projectName]['dev_env']) ? true: false
+;
 
 gna.env = process.env.NODE_ENV = env;
 gna.os.isWin32 = process.env.isWin32 = isWin32;
 gna.isAborting = false;
 //Cahceless is also defined in the main config : Config::isCacheless().
-process.env.IS_CACHELESS = isDev;
+process.env.NODE_ENV_IS_DEV = (/^true$/i.test(isDev)) ? true : false;
 
 
 var bundlesPath = (isDev) ? projects[projectName]['path'] + '/src' : projects[projectName]['path'] + '/bundles';
@@ -369,21 +370,44 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
         new _(tmpPath).mkdirSync();
     }
     
-    var exists = fs.existsSync(source);
+    var isSourceFound   = fs.existsSync(source)
+        , isTargetFound = fs.existsSync(target)
+    ;
     console.debug('[ FRAMEWORK ][ MOUNT ] Source: ', source);
-    console.debug('[ FRAMEWORK ][ MOUNT ]checking before mounting ', target, fs.existsSync(target), bundlesPath);
-    if ( fs.existsSync(target) ) {
+    console.debug('[ FRAMEWORK ][ MOUNT ] Checking before mounting ', target, isTargetFound, bundlesPath);
+    if ( isTargetFound ) {
         try {
+            console.debug('[ FRAMEWORK ][ MOUNT ] removing old build ', target);
             fs.unlinkSync(target)
         } catch (err) {
             callback(err)
         }
     }
-    if ( exists ) {
+    
+    // hack to test none-dev env without building: in case you did not build your bundle, but you have the src available
+    if (!isSourceFound && !isDev) {
+        var srcPathObj = new _( root +'/'+ gna.project.bundles[gna.core.startingApp].src);
+        if ( srcPathObj.existsSync() ) {
+            var d =(d = _(source).split(/\//g)).splice(0, d.length-1).join('/');
+            var destinationObj = new _(d);
+            if (!destinationObj.existsSync()) {
+                destinationObj.mkdirSync();
+            }
+            srcPathObj.symlinkSync(_(source));
+            isSourceFound = true;
+        }
+    }
+    
+    if ( isSourceFound ) {
         //will override existing each time you restart.
-        var pathToMount = gna.utils.generator.createPathSync(bundlesPath, function onPathCreated(err){
+        //var pathToMount = 
+        gna.utils.generator.createPathSync(bundlesPath, function onPathCreated(err){
             if (!err) {
                 try {
+                    var targetObj = new _(target);
+                    if ( targetObj.existsSync() ) {
+                        targetObj.rmSync();
+                    }
                     if ( type != undefined)
                         fs.symlinkSync(source, target, type)
                     else
@@ -414,7 +438,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
         });
     } else {
         // Means that it did not find the release. Build and re mount.
-        callback('[ FRAMEWORK ] Found no release to mount for: ', source)
+        callback( new Error('[ FRAMEWORK ] Did not find a release to mount from: '+ source) )
     }
 };
 
@@ -679,8 +703,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         gna.mount( bundlesPath, source, linkPath, function onBundleMounted(mountErr) {
 
             if (mountErr) {
-                console.error(mountErr.stack);
-                process.exit(1)
+                abort(mountErr.stack);
             }
 
             if (!Config.instance) {
@@ -703,7 +726,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                 if (err) console.error(err, err.stack);
 
                 var initialize = function(err, instance, middleware, conf) {
-
+                    var errMsg = null;
                     if (!err) {
 
                         //On user conf complete.
@@ -845,14 +868,14 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
                             // -- EO
                         } else {
-
-                            console.error( '[ FRAMEWORK ] Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
-
-                            abort(err)
+                            errMsg = new Error('[ FRAMEWORK ] Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
+                            //console.error(errMsg);
+                            abort(errMsg)
                         }
 
                     } else {
-                        console.error('[ FRAMEWORK ] ', err.stack||err.message)
+                        errMsg = new Error('[ FRAMEWORK ] '+ (err.stack||err.message));
+                        console.error(errMsg);
                     }
                 };
 
@@ -881,7 +904,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
      * */
     gna.stop = process.stop = function(pid, code) {
         console.info('[ FRAMEWORK ] Stopped service');
-        if(typeof(code) != 'undefined')
+        if (typeof(code) != 'undefined')
             process.exit(code);
 
         process.exit()
@@ -906,8 +929,9 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
 
     var packs = project.bundles;
     if (isLoadedThroughCLI) {
+        appName = getContext('bundle');
         if (!isPath) {
-            appName = getContext('bundle');
+            //appName = getContext('bundle');
             if (typeof (packs[appName].release.version) == 'undefined' && typeof (packs[appName].tag) != 'undefined') {
                 packs[appName].release.version = packs[appName].tag
             }
@@ -921,9 +945,9 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
     }
 
     path = path.replace(root + '/', '');
-    var search;
+    var search = null;
     if ((/index.js/).test(path) || p[p.length - 1] == 'index') {
-        var self;
+        var self = null;
         path = (self = path.split('/')).splice(0, self.length - 1).join('/')
     }
 
@@ -931,7 +955,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         //finding app.
         if (!isLoadedThroughWorker) {
             var target, source, tmp;
-            for (var bundle in packs) {
+            for (let bundle in packs) {
                 //is bundle ?
                 tmp = '';
                 // For all but dev
@@ -963,8 +987,12 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                     abort('Path mismatched with env: ' + path);
                 }
                 // else, not a bundle
+            } // EO for (let bundle in packs) {
+            
+            if (gna.isAborting) {
+                return;
             }
-
+            
             if (appName == undefined) {
                 setContext('bundle', undefined);
                 abort('No bundle found for path: ' + path)

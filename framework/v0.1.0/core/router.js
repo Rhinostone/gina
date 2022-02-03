@@ -35,10 +35,7 @@ function Router(env) {
     this.name = 'Router';
     
     var self = this
-        , local = {
-            //conf    : config.getInstance(),
-            //bundle  : null
-        }
+        , local = {}
     ;
 
     /**
@@ -199,7 +196,7 @@ function Router(env) {
             , conf              = null
             , bundle            = null
             , env               = null
-            , cacheless         = (process.env.IS_CACHELESS == 'false') ? false : true
+            , cacheless         = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false
        ;
         try {
             config      = new Config().getInstance();
@@ -291,7 +288,7 @@ function Router(env) {
             filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.'+ namespace +'.js';
             if ( !fs.existsSync(filename) ) {                
                 hasControllerNamespace = false;
-                console.warn('Namespace `'+ namespace +'` found, but no reloated controller file found at `'+filename+'` to load: just ignore this message if this is ok with you');                
+                console.warn('Namespace `'+ namespace +'` found, but no related controller file found at `'+filename+'` to load: just ignore this message if this is ok with you');                
                 filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
                 console.info('Switching to default controller: '+ mainControllerFile);
             }
@@ -407,7 +404,7 @@ function Router(env) {
             
             var requireController = function (namespace, options) {
 
-                var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
+                var cacheless   = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
                 var corePath    = getPath('gina').core;
                 var config      = getContext('gina').Config.instance;
                 var bundle      = config.bundle;

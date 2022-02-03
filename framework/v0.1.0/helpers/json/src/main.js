@@ -35,7 +35,7 @@ module.exports = function(){
         ;
         
         try {
-            if ( typeof(process.env.IS_CACHELESS) != 'undefined' && /true/i.test(process.env.IS_CACHELESS) ) {
+            if ( typeof(process.env.NODE_ENV_IS_DEV) != 'undefined' && /true/i.test(process.env.NODE_ENV_IS_DEV) ) {
                 delete require.cache[filename];
             }
             jsonStr = fs.readFileSync(filename).toString();

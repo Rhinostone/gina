@@ -17,7 +17,7 @@ var fs = require('fs');
  * @author      Rhinostone <gina@rhinostone.com>
  */
 var _require = function(path) {
-    var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
+    var cacheless = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
     if ( cacheless && !/context/.test(path) ) { // all but the context
         try {
             delete require.cache[require.resolve(path)];

@@ -33,7 +33,7 @@ function EntitySuper(conn, caller) {
     var local           = {}
     var self            = this;
     var caller          = caller || undefined;
-    var cacheless       = (process.env.IS_CACHELESS == 'false') ? false : true;
+    var cacheless       = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
 
     var init = function(conn, caller) {
 

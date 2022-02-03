@@ -1,4 +1,5 @@
 //var fs          = require('fs');
+var CmdHelper   = require('./../helper');
 var console = lib.logger;
 /**
  * Remove existing environment
@@ -8,6 +9,12 @@ function Remove(opt, cmd) {
     var self = {};
 
     var init = function() {
+        // import CMD helpers
+        new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
+
+        // check CMD configuration
+        if ( !isCmdConfigured() ) return false;
+        
         self.target = _(GINA_HOMEDIR + '/projects.json');
         self.projects   = require(self.target);
 
@@ -21,13 +28,13 @@ function Remove(opt, cmd) {
             // is current path == project path ?
             var root = process.cwd();
             var name = new _(root).toArray().last();
-            if ( isDefined(name) ) {
-                self.name = name
+            if ( isDefined('project', name) ) {
+                self.projectName = name
             }
         }
 
         if ( typeof(process.argv[3]) != 'undefined' ) {
-            if ( !self.projects[self.name].envs.inArray(process.argv[3]) ) {
+            if ( !self.projects[self.projectName].envs.inArray(process.argv[3]) ) {                
                 console.error('Environment [ '+process.argv[3]+' ] not found');
                 process.exit(1)
             }
@@ -36,42 +43,42 @@ function Remove(opt, cmd) {
             process.exit(1)
         }
 
-        if ( typeof(self.name) == 'undefined' ) {
+        if ( typeof(self.projectName) == 'undefined' ) {
             console.error('Project name is required: @<project_name>');
             process.exit(1)
-        } else if ( typeof(self.name) != 'undefined' && isDefined(self.name) ) {
+        } else if ( typeof(self.projectName) != 'undefined' && isDefined('project', self.projectName) ) {
             removeEnv(process.argv[3], self.projects, self.target)
         } else {
-            console.error('[ '+self.name+' ] is not a valid project name.');
+            console.error('[ '+self.projectName+' ] is not a valid project name.');
             process.exit(1)
         }
     }
 
-    var isDefined = function(name) {
-        if ( typeof(self.projects[name]) != 'undefined' ) {
-            return true
-        }
-        return false
-    }
+    // var isDefined = function(name) {
+    //     if ( typeof(self.projects[name]) != 'undefined' ) {
+    //         return true
+    //     }
+    //     return false
+    // }
 
-    var isValidName = function(name) {
-        if (name == undefined) return false;
+    // var isValidName = function(name) {
+    //     if (name == undefined) return false;
 
-        self.name = name.replace(/\@/, '');
-        var patt = /^[a-z0-9_.]/;
-        return patt.test(self.name)
-    }
+    //     self.projectName = name.replace(/\@/, '');
+    //     var patt = /^[a-z0-9_.]/;
+    //     return patt.test(self.projectName)
+    // }
 
     var removeEnv = function(env, projects, target) {
-        if(env === projects[self.name]['dev_env']|| env === projects[self.name]['def_env']) {
-            if (env === projects[self.name]['def_env']) {
+        if(env === projects[self.projectName]['dev_env']|| env === projects[self.projectName]['def_env']) {
+            if (env === projects[self.projectName]['def_env']) {
                 console.error('Environment [ '+env+' ] is set as "default environment"')
             } else {
                 console.error('Environment [ '+env+' ] is protected')
             }
         } else {
 
-            projects[self.name]['envs'].splice(projects[self.name]['envs'].indexOf(env), 1);
+            projects[self.projectName]['envs'].splice(projects[self.projectName]['envs'].indexOf(env), 1);
             lib.generator.createFileFromDataSync(
                 projects,
                 target
@@ -81,11 +88,11 @@ function Remove(opt, cmd) {
                 , portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json')
                 , ports = require(portsPath)
                 , portsReverse = require(portsReversePath)
-                , envsPath = _(projects[self.name].path +'/env.json')
+                , envsPath = _(projects[self.projectName].path +'/env.json')
                 , envs = requireJSON(envsPath);
 
 
-            var patt = new RegExp("@"+ self.name +"/"+ env +"$");
+            var patt = new RegExp("@"+ self.projectName +"/"+ env +"$");
             for (var p in ports) {
                 if ( patt.test(ports[p]) ) {
                     delete ports[p]

@@ -198,7 +198,7 @@ function Server(options) {
     }
     
     this.isCacheless = function() {
-        return (GINA_ENV_IS_DEV) ? true : false
+        return (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false
     }
 
     this.onConfigured = function(callback) {
@@ -419,16 +419,16 @@ function Server(options) {
 
             routing = merge(routing, ((self.isStandalone && apps[i] != self.appName ) ? standaloneTmp : tmp), true);
             // originalRule is used to facilitate cross bundles (hypertext)linking
-            for (var r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
+            for (let r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
                 routing[originalRules[r]].originalRule = (routing[originalRules[r]].bundle === self.appName ) ?  config.getOriginalRule(originalRules[r], routing) : config.getOriginalRule(routing[originalRules[r]].bundle +'-'+ originalRules[r], routing)
             }
 
             // reverse routing
-            for (var rule in routing) {
+            for (let rule in routing) {
                 if ( typeof(routing[rule].url) != 'object' ) {
                     reverseRouting[routing[rule].url] = rule
                 } else {
-                    for (var u = 0, len = routing[rule].url.length; u < len; ++u) {
+                    for (let u = 0, len = routing[rule].url.length; u < len; ++u) {
                         reverseRouting[routing[rule].url[u]] = rule
                     }
                 }
@@ -1443,7 +1443,7 @@ function Server(options) {
                             contentType = getHead(response, filename);                           
                             
                             // adding gina loader
-                            if (/text\/html/i.test(contentType) && GINA_ENV_IS_DEV) {
+                            if ( /text\/html/i.test(contentType) && self.isCacheless() ) {
                                 isBinary = false;
                                 // javascriptsDeferEnabled
                                 if  (bundleConf.content.templates._common.javascriptsDeferEnabled ) {
@@ -2010,8 +2010,7 @@ function Server(options) {
                             done()
                         }
                         
-                    //     liner._flush = function (done) {
-                            
+                    //     liner._flush = function (done) {                            
                     //         done()
                     //     }
                                                             
@@ -2044,11 +2043,7 @@ function Server(options) {
                                     if (tmpFilename.existsSync())
                                         tmpFilename.rmSync();
                                 }, autoTmpCleanupTimeout, tmpFilename);
-                            }
-                            
-                            // if (fs.existsSync(tmpFilename))
-                            //     fs.unlinkSync(tmpFilename);
-                            
+                            }                            
                         });
                     });
 
@@ -2165,8 +2160,7 @@ function Server(options) {
                                         request.post = JSON.parse(bodyStr)
                                     }
                                     
-                                } catch (err) {
-                                    //throwError(response, 500, err, next)                                
+                                } catch (err) {                              
                                     msg = '[ Exception found for POST ] '+ request.url +'\n'+  err.stack;
                                     console.warn(msg);
                                 }
@@ -2898,7 +2892,7 @@ function Server(options) {
                     routeObj.param.title = ( typeof(eData.title) != 'undefined' ) ? eData.title : 'Error ' + eData.status;
                     routeObj.param.file = eFilename;
                     routeObj.param.error = eData;
-                    routeObj.param.displayToolbar = (/^true$/i.test(GINA_ENV_IS_DEV) ) ? true : false;
+                    routeObj.param.displayToolbar = self.isCacheless();
                     
                     local.request.routing = routeObj;
                     
@@ -2936,16 +2930,16 @@ function Server(options) {
                     // TODO - Check if the stream has not been closed before sending response
                     // if (stream && !stream.destroyed) {                      
                     stream.respond(header);
-                    if ( isHtmlContent && hasCustomErrorFile ) {
-                        stream.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                    if ( isHtmlContent && !hasCustomErrorFile ) {
+                        stream.end('<html><body><pre><h1>Error '+ code +'.</h1><pre>'+ msg + '</pre></body></html>');
                     } else {
                         stream.end();
                     }
                     
                     // }
                 } else {
-                    if ( isHtmlContent && hasCustomErrorFile ) {
-                        res.end('<h1>Error '+ code +'.</h1><pre>'+ msg + '</pre>');
+                    if ( isHtmlContent && !hasCustomErrorFile ) {
+                        res.end('<html><body><pre><h1>Error '+ code +'.</h1><pre>'+ msg + '</pre></body><html>');
                     } else {
                         res.end()
                     }

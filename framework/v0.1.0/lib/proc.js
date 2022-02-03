@@ -222,7 +222,6 @@ function Proc(bundle, proc, usePidFile){
                 console.emerg('[ FRAMEWORK ][ uncaughtException ] ', err.stack);
 
                 //console.debug("[ FRAMEWORK ][ PROC ] @=>", self.args);
-                //var env =  process.env.NODE_ENV || 'prod';
                 var bundle = self.bundle;
                 var pid = self.getPidByBundleName(bundle);
 

@@ -482,7 +482,7 @@ function Config(opt) {
                     continue;
 
                 if (
-                    pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && GINA_ENV_IS_DEV
+                    pkg[app] != 'undefined' && pkg[app]['src'] != 'undefined' && self.isCacheless()
                 ) {
                     p = _(pkg[app].src);
                     content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
@@ -808,7 +808,7 @@ function Config(opt) {
         conf[bundle][env].isStandalone  = isStandalone;
         conf[bundle][env].executionPath = getContext('paths').root;
                        
-        if ( self.task == 'run' && !GINA_ENV_IS_DEV ) {
+        if ( self.task == 'run' && !self.isCacheless() ) {
             appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
         } else { //getting src path instead
             appPath = _(conf[bundle][env].sources + '/' + bundle);
@@ -902,7 +902,7 @@ function Config(opt) {
             fileContent = files[name];
 
             // loading dev if exists
-            if (GINA_ENV_IS_DEV) {
+            if ( self.isCacheless() ) {
                 filename = _(appPath + '/config/' + tmp);
                 try {
                     exists = fs.existsSync(_(filename, true));
@@ -998,7 +998,7 @@ function Config(opt) {
         routing = files[name];
         var r = null, rLen = null;
         //Server only because of the shared mode VS the standalone mode.
-        if (cacheless || typeof(reload) != 'undefined' && reload) {
+        //if (cacheless || typeof(reload) != 'undefined' && reload) {
                         
             //setting app param
             var urls = null;
@@ -1243,7 +1243,7 @@ function Config(opt) {
                 }
             }
             self.setReverseRouting(bundle, env, reverseRouting);            
-        }
+        //} // EO if (cacheless || typeof(reload) != 'undefined' && reload)
 
         if (!conf[bundle][env].executionPath) {
             conf[bundle][env].executionPath = self.executionPath
@@ -1295,7 +1295,7 @@ function Config(opt) {
         }
 
         var localEnv = conf[bundle][env].executionPath + '/env.local.json';
-        if ( GINA_ENV_IS_DEV && fs.existsSync(localEnv) ) {
+        if ( self.isCacheless() && fs.existsSync(localEnv) ) {
             conf[bundle][env] = merge(conf[bundle][env], requireJSON(localEnv), true);
         }
         var envKeys = conf[bundle][env];
@@ -1939,9 +1939,8 @@ function Config(opt) {
      * @return {boolean} isUsingCache
      * */
     this.isCacheless = function() {
-        //var env = self.Env.get();//Config.instance.Env.get();
         //Also defined in core/gna.
-        return (GINA_ENV_IS_DEV) ? true : false
+        return (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false;
     }
     /**
      * Refresh for cachless mode

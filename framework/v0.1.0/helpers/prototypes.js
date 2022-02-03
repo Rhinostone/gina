@@ -1,14 +1,21 @@
 function PrototypesHelper(instance) {
     
+    var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+    
     var local = instance || null;
     // since in for some cases we cannot use gina envVars directly
-    if ( 
-        typeof(GINA_DIR) == 'undefined' 
+    if (        
+        typeof(GINA_DIR) == 'undefined'
+        && !isGFFCtx
+        && typeof(process) != 'undefined' 
         && process.argv.length > 3 
         && /^\{/.test(process.argv[2]) 
     ) {
         envVars = JSON.parse(process.argv[2]).envVars;
     }
+    // else if (isGFFCtx) {
+    //     envVars = window;
+    // }
      
     
     // dateFormat proto
@@ -57,8 +64,9 @@ function PrototypesHelper(instance) {
         });
     }
     
-    if ( typeof(JSON.clone) == 'undefined' ) {
-        JSON.clone = require( envVars.GINA_DIR +'/utils/prototypes.json_clone');        
+    if ( typeof(JSON.clone) == 'undefined' && !isGFFCtx ) {
+        //JSON.clone = (isGFFCtx) ? require('utils/prototypes.json_clone') : require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
+        JSON.clone = require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
     }
     
     if ( typeof(JSON.escape) == 'undefined' ) {

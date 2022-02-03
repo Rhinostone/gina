@@ -130,7 +130,8 @@ function SuperController(options) {
      * Check if env is running cacheless
      * */
     this.isCacheless = function() {
-        return local.options.cacheless;
+        //return local.options.cacheless;
+        return (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false;
     }
 
     this.setOptions = function(req, res, next, options) {
@@ -265,8 +266,8 @@ function SuperController(options) {
             set('page.environment.gina pid', GINA_PID);
             set('page.environment.nodejs', version.nodejs +' '+ version.platform +' '+ version.arch);
             set('page.environment.engine', options.conf.server.engine);//version.middleware
-            set('page.environment.env', GINA_ENV);
-            set('page.environment.envIsDev', GINA_ENV_IS_DEV);
+            set('page.environment.env', process.env.NODE_ENV);
+            set('page.environment.envIsDev', self.isCacheless());
             set('page.environment.date.now', new Date().format("isoDateTime"));
             
             
@@ -448,20 +449,20 @@ function SuperController(options) {
         
         // specific override
         if (
-            GINA_ENV_IS_DEV
+            self.isCacheless()
             && typeof(local.req[ local.req.method.toLowerCase() ]) != 'undefined' 
             && typeof(local.req[ local.req.method.toLowerCase() ].debug) != 'undefined' 
         ) {
             localOptions.debugMode = ( /true/i.test(local.req[ local.req.method.toLowerCase() ].debug) ) ? true : false;
         } else if ( 
-            GINA_ENV_IS_DEV 
+            self.isCacheless() 
             && hasViews()
             && !isWithoutLayout 
             && localOptions.debugMode == undefined 
         ) {
             localOptions.debugMode = true;
         } else if ( localOptions.debugMode == undefined  ) {
-            localOptions.debugMode = GINA_ENV_IS_DEV
+            localOptions.debugMode = self.isCacheless()
         }
         
         try {
@@ -756,7 +757,7 @@ function SuperController(options) {
                 }
                     
                 // precompilation needed in case of `extends` or in order to display the toolbar
-                if ( hasViews() && GINA_ENV_IS_DEV || /\{\%(\s+extends|extends)/.test(layout) ) {                                
+                if ( hasViews() && self.isCacheless() || /\{\%(\s+extends|extends)/.test(layout) ) {                                
                     layout = swig.compile(layout, mapping)(data);
                 }
                 //dic['page.content'] = layout;                          
@@ -815,10 +816,10 @@ function SuperController(options) {
 
             // adding plugins
             if (
-                hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout 
+                hasViews() && self.isCacheless() && !isWithoutLayout 
                 && localOptions.debugMode 
                 || 
-                hasViews() && GINA_ENV_IS_DEV && !isWithoutLayout 
+                hasViews() && self.isCacheless() && !isWithoutLayout 
                 && typeof(localOptions.debugMode) == 'undefined' 
                 || 
                 hasViews() && localOptions.debugMode 
@@ -850,7 +851,7 @@ function SuperController(options) {
                     layout = layout.replace(/<\/body>/i, XHRData + '\n\t</body>');
                 }
                 
-                if (GINA_ENV_IS_DEV || localOptions.debugMode ) {
+                if (self.isCacheless() || localOptions.debugMode ) {
                     layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
                 }
                 
@@ -872,7 +873,7 @@ function SuperController(options) {
                     layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                            
                 }
 
-            } else if ( hasViews() && GINA_ENV_IS_DEV && self.isXMLRequest() ) {
+            } else if ( hasViews() && self.isCacheless() && self.isXMLRequest() ) {
                 
                 if (isWithoutLayout) {                                
                     delete data.page.view.scripts;
@@ -935,7 +936,7 @@ function SuperController(options) {
             dic['page.content'] = layout;
             /**
             // special case for template without layout in debug mode - dev only
-            if ( hasViews() && localOptions.debugMode && GINA_ENV_IS_DEV && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
+            if ( hasViews() && localOptions.debugMode && self.isCacheless() && !/\{\# Gina Toolbar \#\}/.test(layout) ) {
                 try { 
                     
                     layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');                                                                    
@@ -951,7 +952,7 @@ function SuperController(options) {
                     return;
                 }
             }  
-            else if (hasViews() && localOptions.debugMode && GINA_ENV_IS_DEV) {
+            else if (hasViews() && localOptions.debugMode && self.isCacheless()) {
                 try {
                     //layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
                     layout = swig.compile(layout, mapping)(data);
@@ -1003,7 +1004,7 @@ function SuperController(options) {
                 if ( !self.isXMLRequest() && /http\/2/.test(localOptions.conf.server.protocol) ) {
                     try {
                         // TODO - button in toolbar to empty url assets cache    
-                        if ( /**  GINA_ENV_IS_DEV ||*/ typeof(localOptions.template.assets) == 'undefined' || typeof(localOptions.template.assets[local.req.url]) == 'undefined' ) {
+                        if ( /**  self.isCacheless() ||*/ typeof(localOptions.template.assets) == 'undefined' || typeof(localOptions.template.assets[local.req.url]) == 'undefined' ) {
                             // assets string -> object
                             //assets = self.serverInstance.getAssets(localOptions.conf, layout.toString(), swig, data);
                             assets = self.serverInstance.getAssets(localOptions.conf, layout, swig, data);
@@ -1012,9 +1013,9 @@ function SuperController(options) {
                         
                         //  only for toolbar - TODO hasToolbar()
                         if (
-                            GINA_ENV_IS_DEV && hasViews() && !isWithoutLayout
+                            self.isCacheless() && hasViews() && !isWithoutLayout
                             || hasViews() && localOptions.debugMode
-                            || GINA_ENV_IS_DEV && hasViews() && self.isXMLRequest() 
+                            || self.isCacheless() && hasViews() && self.isXMLRequest() 
                         ) {                                
                             layout = layout.replace('{"assets":"${assets}"}', assets ); 
                         }
@@ -1800,7 +1801,7 @@ function SuperController(options) {
                     'location': path 
                 };                
                 
-                if (GINA_ENV_IS_DEV) {
+                if (self.isCacheless()) {
                     res.writeHead(code, merge(headInfos, {
                         'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
                         'pragma': 'no-cache',
@@ -3117,7 +3118,7 @@ function SuperController(options) {
             path: path,
             method: method
         }
-        if (GINA_ENV_IS_DEV) {
+        if (self.isCacheless()) {
             opt.rejectUnauthorized = false;
         }
                 
@@ -3814,7 +3815,7 @@ function SuperController(options) {
                         routeObj.param.title = ( typeof(eData.title) != 'undefined' ) ? eData.title : 'Error ' + eData.status;
                         routeObj.param.file = eFilename;
                         routeObj.param.error = eData;
-                        routeObj.param.displayToolbar = (/^true$/i.test(GINA_ENV_IS_DEV) ) ? true : false;
+                        routeObj.param.displayToolbar = self.isCacheless();
                         routeObj.param.isLocalOptionResetNeeded = true;
                         
                         
