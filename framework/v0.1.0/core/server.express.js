@@ -11,6 +11,9 @@ const inherits  = lib.inherits;
 const merge     = lib.merge;
 const console   = lib.logger;
 
+const env     = process.env.NODE_ENV
+    , isDev = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false;
+
 function ServerEngineClass(options) {
 
     const credentials = {

@@ -40,6 +40,7 @@ function CmdHelper(cmd, client, debug) {
         projectArgvList: [],
         // global projects collection {collection}
         projects : null, // defined by filterArgs()
+        projectsPath : _(GINA_HOMEDIR + '/projects.json'), // ~/.gina/project.json
         // current project path
         projectPath : null, // local project/project.json - defined by filterArgs()
         projectConfigPath: null, // path to .gina/project.json 
@@ -105,7 +106,7 @@ function CmdHelper(cmd, client, debug) {
             cmd.nodeParams.push(debugOption)
         }
         
-
+        console.debug('process.argv: ', process.argv);
         for (var a in process.argv) {
             
              
@@ -197,6 +198,8 @@ function CmdHelper(cmd, client, debug) {
 
             // getting CMD params
             getParams();
+            console.debug('nodeParams: ', cmd.nodeParams);
+            console.debug('cmd.params: ', cmd.params);            
 
             var mightBeASomeBundle = true;
             for (; i < len; ++i) {
@@ -473,6 +476,19 @@ function CmdHelper(cmd, client, debug) {
         cmd.defaultEnv = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['def_env'] : cmd.mainConfig['def_env'][ GINA_SHORT_VERSION ];
         // getting dev env
         cmd.devEnv = (cmd.projectName != null &&typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['dev_env'] : cmd.mainConfig['dev_env'][ GINA_SHORT_VERSION ];
+        // project or bundle environment override through : --env=<some env>
+        if ( typeof(cmd.params.env) != 'undefined' && /\:(start|stop|restart|build|deploy)/i.test(cmd.task) ) {
+            console.debug('Overriding default project env: '+ cmd.defaultEnv +' => '+ cmd.params.env);
+            if (cmd.envs.indexOf(cmd.params.env) < 0) {
+                errMsg = 'Environment `'+ cmd.params.env +'` not found in your project ['+ cmd.projectName +']';
+                console.error(errMsg);
+                return false;
+            }
+            cmd.defaultEnv = process.env.NODE_ENV = cmd.params.env;
+        } else {
+            delete process.env.NODE_ENV
+        }
+        
         // available protocols
         cmd.protocolsAvailable = cmd.mainConfig.protocols[GINA_SHORT_VERSION];
         // getting default protocol
@@ -643,7 +659,7 @@ function CmdHelper(cmd, client, debug) {
         if ( cmd.projectName != null && cmd.name != null && typeof(cmd.projects[cmd.projectName]) == 'undefined' ) {
             return false;
         }
-        if ( cmd.projectName != null && cmd.name != null && typeof(cmd.bundlesByProject[cmd.projectName][cmd.name]) == 'undefined' ) { 
+        if ( /bundle\:/.test(cmd.task) && cmd.projectName != null && cmd.name != null && typeof(cmd.bundlesByProject[cmd.projectName][cmd.name]) == 'undefined' ) { 
             
             errMsg = 'Bundle name `'+ cmd.name +'` not found in your project `@'+ cmd.projectName +'`';            
             //console.debug('task `'+ cmd.task +'` error:');
@@ -678,15 +694,12 @@ function CmdHelper(cmd, client, debug) {
 
             case 'project':
                 return ( typeof(cmd.projects) != 'undefined' && typeof(cmd.projects[name]) != 'undefined' && cmd.projects[name] != null && cmd.projects[name] != '' ) ? true : false;
-            break;
 
             case 'bundle':
                 return ( typeof(cmd.portsReverseData) != 'undefined' &&  typeof(cmd.portsReverseData[ name +'@'+ cmd.projectName ]) != 'undefined' ) ? true : false;
-            break;
 
             case 'env':
                 return ( typeof(cmd.envs) != 'undefined' && cmd.envs.indexOf(name) > -1 ) ? true : false;
-            break;
 
             default:
                 return false;
@@ -699,7 +712,7 @@ function CmdHelper(cmd, client, debug) {
      * */
     isValidName = function(name) {
 
-        if ( typeof(name) == 'undefined' || name == null || name == '')
+        if ( typeof(name) == 'undefined' || name == null || name == undefined || name == '')
             return false;
 
         return /^[a-z0-9_.]/.test( name.replace('@', '') )

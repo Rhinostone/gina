@@ -109,11 +109,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
      * Will apply `Utf8Array` to `String`
      * @param {array} arrayBuffer 
      */
-    var bufferToString = function(arrayBuffer) {
-        // if (!isGFFCtx) {
-            
-        //     return Buffe
-        // }
+    var bufferToString = function(arrayBuffer) {        
         var out     = null
             , i     = null
             , len   = null
@@ -1566,29 +1562,38 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          */
         self[el]['query'] = query;
         
+        
+        self[el]['getValidationContext'] = function() {
+            return {
+                'isGFFCtx'  : isGFFCtx,
+                'self'      : self,
+                'local'     : local,
+                'replace'   : replace
+            }
+        }
         // Merging user validators
         // To debug, open inspector and look into `Extra Scripts`     
         if ( hasUserValidators() ) {
-            var userValidator = null, filename = null, virtualFileForDebug = null;
+            var userValidator = null, filename = null;
             try {                
                 for (let v in gina.forms.validators) {
-                    
-                    // Blocking default validators overrive
-                    // if ( typeof(self[el][v]) != 'undefined' ) {
-                    //     continue;
-                    // }
                     filename = '/validators/'+ v + '/main.js';
                     // setting default local error
                     local.errorLabels[v] = 'Condition not satisfied';
                     // converting Buffer to string
                     if ( isGFFCtx ) {
                         //userValidatorError = String.fromCharCode.apply(null, new Uint16Array(gina.forms.validators[v].data));
-                        userValidator = bufferToString(gina.forms.validators[v].data);
+                        userValidator = bufferToString(gina.forms.validators[v].data); // ok
+                        var passedContext = 'var validationContext = this.getValidationContext(),isGFFCtx = validationContext.isGFFCtx,self = validationContext.self,local = validationContext.local,replace = validationContext.replace;';
+                        userValidator = userValidator.replace(/(\)\s+\{|\)\{){1}/, '$&\n\t'+ passedContext);
+                        
                         //userValidator += '\n//#sourceURL='+ v +'.js';
                     } else {
                         userValidator = gina.forms.validators[v].toString();
-                    }        
+                    }
+                    
                     self[el][v] = eval('(' + userValidator + ')\n//# sourceURL='+ v +'.js');
+                    //self[el][v] = Function('errorMessage', 'errorStack', userValidator);
                 }
             } catch (userValidatorError) {
                 throw new Error('[UserFormValidator] Could not evaluate: `'+ filename +'`\n'+userValidatorError.stack);
@@ -1599,7 +1604,6 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     
     for (let el in self) {        
         // Adding fields & validators to context
-        //addField(el);        
         addField(el, self[el]);
     }
     
@@ -1609,6 +1613,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
         addField(el, value);
     };
+        
     
     // self['getExcludedFields'] = function() {
     //     return local.excluded;
@@ -1726,7 +1731,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         // local.data = JSON.parse(JSON.stringify(local.data).replace(/\"(true|false)\"/gi, '$1'))
         return local.data
     }
-
+    
+    /**@js_externs replace*/
     var replace = function(target, fieldObj) {
         var keys = target.match(/%[a-z]+/gi);
         if (keys) {

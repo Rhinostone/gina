@@ -12,7 +12,7 @@ try {
     throw new Error('no context found !\n'+ err.stack)
 }
 
-var cacheless = (process.env.IS_CACHELESS == 'false') ? false : true;
+var cacheless = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
 var mainPath = './controller';
 var frameworkPath = './controller.framework';
 

@@ -63,7 +63,7 @@ Then you need to optimize with closure compiler
 - `ADVANCED_OPTIMIZATIONS` - The best if we can make it work :'( 
 
 ```tty
-$ java -jar ./lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level WHITESPACE_ONLY --jscomp_warning=es5Strict --js ./dist/gina.js --create_source_map ./dist/gina.min.js.map --js_output_file ./dist/gina.min.js
+$ java -jar ./lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level WHITESPACE_ONLY --jscomp_warning=es5Strict --js ./dist/gina.js --create_source_map ./dist/gina.min.js.map --js_output_file ./dist/gina.min.js
 ```
 **Attention:** look into `dist/gina.min.js.map` to modify `./dist/gina.js` to `./gina.js`
 
@@ -76,7 +76,7 @@ $ cd /usr/local/node_modules/gina/node_modules/gina/framework/v.0.1.0/core/asset
 ```
 
 ```tty
-$ java -jar ./lib/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/gina/utils/loader.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
+$ java -jar ./lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/gina/utils/loader.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
 ```
 
 ### Building SASS assets into CSS

@@ -12,6 +12,9 @@ const inherits          = lib.inherits;
 const merge             = lib.merge;
 const console           = lib.logger;
 
+const env     = process.env.NODE_ENV
+    , isDev = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false;
+
 var refreshCore = function() {
        
     var corePath    = getPath('gina').core;
@@ -40,7 +43,7 @@ var refreshCore = function() {
 }
 
 // Express compatibility
-const slice             = Array.prototype.slice;
+const slice = Array.prototype.slice;
 
 
 function ServerEngineClass(options) {
@@ -230,7 +233,7 @@ function ServerEngineClass(options) {
                 
         server.on('request', (request, response) => {
             
-            if (GINA_ENV_IS_DEV) {
+            if (isDev) {
                 refreshCore()
             }
             

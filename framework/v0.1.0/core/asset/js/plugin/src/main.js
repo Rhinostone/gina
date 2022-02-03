@@ -233,9 +233,9 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                        
                         // globals
                         window['GINA_ENV']          = '{{ GINA_ENV }}';
-                        window['GINA_ENV_IS_DEV']   = /true/i.test('{{ GINA_ENV_IS_DEV }}') ? true : false;
+                        window['GINA_ENV_IS_DEV']   = /^true$/i.test('{{ GINA_ENV_IS_DEV }}') ? true : false;
                         if ( typeof(location.search) != 'undefined' && /debug\=/i.test(window.location.search) ) {
-                            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /true/i.test(window.location.search.match(/debug=(true|false)/)[0].split(/\=/)[1]) ? true: false;  
+                            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(window.location.search.match(/debug=(true|false)/)[0].split(/\=/)[1]) ? true: false;  
                         }
 
                         gina["setOptions"](options);

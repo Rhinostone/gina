@@ -3586,7 +3586,23 @@ define("utils/events", function(){});
 
 function PrototypesHelper(instance) {
     
-    var local = instance || null;    
+    var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+    
+    var local = instance || null;
+    // since in for some cases we cannot use gina envVars directly
+    if (        
+        typeof(GINA_DIR) == 'undefined'
+        && !isGFFCtx
+        && typeof(process) != 'undefined' 
+        && process.argv.length > 3 
+        && /^\{/.test(process.argv[2]) 
+    ) {
+        envVars = JSON.parse(process.argv[2]).envVars;
+    }
+    // else if (isGFFCtx) {
+    //     envVars = window;
+    // }
+     
     
     // dateFormat proto
     if ( typeof(local) != 'undefined' && typeof(local.dateFormat) != 'undefined' ) {
@@ -3634,171 +3650,9 @@ function PrototypesHelper(instance) {
         });
     }
     
-    if ( typeof(JSON.clone) == 'undefined' ) {
-        /**
-         * JSON.clone
-         * Clone JSON object
-         * 
-         * Changes made here must be reflected in: 
-         *  - gina/utils/prototypes.js
-         *  - gina/framework/version/helpers/prototypes.js
-         *  - gina/framework/version/core/asset/js/plugin/src/gina/utils/polyfill.js
-         * 
-         * @param {object} source
-         * @param {object} [target]
-         * 
-         * @return {object} cloned JSON object
-         **/
-        
-         var clone = function(source, target) {
-            // if ( source === undefined) {
-            //     source = null;
-            // }
-            if (source == null || typeof source != 'object') return source;
-            if (source.constructor != Object && source.constructor != Array) return source;
-            if (source.constructor == Date || source.constructor == RegExp || source.constructor == Function ||
-                source.constructor == String || source.constructor == Number || source.constructor == Boolean)
-                return new source.constructor(source);
-
-            try {
-                target = target || new source.constructor();
-            } catch (err) {                
-                throw err;
-            }
-            
-            var i       = 0
-                , len   = Object.getOwnPropertyNames(source).length || 0
-                , keys  = Object.keys(source)
-            ;
-            
-            while (i<len) {
-                let key = Object.getOwnPropertyNames(source)[i];
-                if (key == 'undefined') {
-                    i++;
-                    continue;
-                }
-                if (source[key] === undefined) {
-                    var warn = new Error('JSON.clone(...) possible error detected: source['+key+'] is undefined !! Key `'+ key +'` should not be left `undefined`. Assigning to `null`');
-                    warn.stack = warn.stack.replace(/^Error\:\s+/g, '');
-                    if ( typeof(warn.message) != 'undefined' ) {
-                        warn.message = warn.message.replace(/^Error\:\s+/g, '');
-                    }
-                    console.warn(warn);
-                    target[key] = null
-                } else {
-                    target[key] = (typeof target[key] == 'undefined' ) ? clone(source[key], null) : target[key];
-                }
-                
-                i++;
-            }
-            i = null; len = null; keys = null;
-
-            return target;
-        };
-        // TODO - add unit tests
-        // TODO - decide which one we want to keep
-        // Following code should have the same effect as the default code, but error are better handled
-        
-        // var clone = function(source, target) {
-        //     if (source == null || source == undefined || typeof source != 'object') return source;
-        //     if (source.constructor.name != 'Object' && source.constructor.name != 'Array') return source;
-        //     // if (
-        //     //     source.constructor == Date 
-        //     //     || source.constructor == RegExp 
-        //     //     || source.constructor == Function 
-        //     //     || source.constructor == String 
-        //     //     || source.constructor == Number 
-        //     //     || source.constructor == Boolean
-        //     // ) {
-        //     //     return new source.constructor(source)
-        //     // }
-            
-        //     //target = target || new source.constructor();
-        //     target = ( typeof(target) != 'undefined' && target) ? target : new source.constructor();
-        //     var i       = 0
-        //         , len   = Object.getOwnPropertyNames(source).length || 0
-        //         , keys  = Object.keys(source)
-        //         , error = null
-        //     ;
-            
-        //     while (i<len) {
-        //         try {
-        //             //target[keys[i]] = (typeof target[keys[i]] == 'undefined') ? clone(source[keys[i]], null) : target[keys[i]];
-        //             if (typeof target[keys[i]] != 'undefined') {
-        //                 ++i;
-        //                 continue;
-        //             }
-        //             if ( typeof(source[keys[i]]) != 'undefined' ) {
-        //                 let _source = source[keys[i]];
-        //                 if (/^null|undefined$/i.test(_source)) {
-        //                     target[keys[i]] = _source
-        //                 }                        
-        //                 else if (
-        //                     _source.constructor.name == 'Date'
-        //                     || _source.constructor.name == 'RegExp'
-        //                     || _source.constructor.name == 'Function'
-        //                     || _source.constructor.name == 'String'
-        //                     || _source.constructor.name == 'Number'
-        //                     || _source.constructor.name == 'Boolean'
-        //                 ) {
-        //                     target[keys[i]] =  _source
-        //                 } 
-        //                 else if (
-        //                     // _source.constructor.name == 'Date'
-        //                     // || _source.constructor.name == 'RegExp'
-        //                     // || _source.constructor.name == 'Function'
-        //                     // || _source.constructor.name == 'String'
-        //                     // || _source.constructor.name == 'Number'
-        //                     // || _source.constructor.name == 'Boolean'
-        //                     //|| 
-        //                     _source.constructor.name == 'Array'
-        //                     //|| _source.constructor.name == 'Object'
-        //                 ) {
-        //                     //target[keys[i]] = new _source.constructor(_source)
-        //                     target[keys[i]] = _source.slice()
-        //                 }
-        //                 else {
-        //                     //target[keys[i]] = clone(_source[keys[i]], null)
-        //                     target[keys[i]] = new _source.constructor(_source)
-        //                 }
-        //             }
-
-        //             i++;
-        //         } catch (err) {
-        //             var errString = 'JSON.clone(...) error on constructor not supported: ['+ keys[i] +'] `'+ source.constructor.name  +'`\n'+ err.stack;
-        //             console.error(errString);
-        //             error = new Error(errString);
-        //             break;
-        //         }  
-        //     }
-            
-        //     if (error) {
-        //         throw error;
-        //     }
-            
-        //     i = null; len = null; keys = null;
-
-        //     return target;
-                          
-        // };
-        
-        
-        
-        // WHY NOT USE SOMETHING ELSE ?
-        // Could have been fine, but not working when you have references pointing to another object
-        // return Object.assign({}, source);
-        // var clone = function(source, target) {
-        //     return Object.assign(target||{}, source);
-        // };
-        
-        // Performences issue
-        //return JSON.parse(JSON.stringify(source));
-        // var clone = function(source) {
-        //     return JSON.parse(JSON.stringify(source));
-        // };
-        
-        JSON.clone = clone;
-        
+    if ( typeof(JSON.clone) == 'undefined' && !isGFFCtx ) {
+        //JSON.clone = (isGFFCtx) ? require('utils/prototypes.json_clone') : require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
+        JSON.clone = require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
     }
     
     if ( typeof(JSON.escape) == 'undefined' ) {
@@ -6021,11 +5875,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
      * Will apply `Utf8Array` to `String`
      * @param {array} arrayBuffer 
      */
-    var bufferToString = function(arrayBuffer) {
-        // if (!isGFFCtx) {
-            
-        //     return Buffe
-        // }
+    var bufferToString = function(arrayBuffer) {        
         var out     = null
             , i     = null
             , len   = null
@@ -7478,29 +7328,38 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          */
         self[el]['query'] = query;
         
+        
+        self[el]['getValidationContext'] = function() {
+            return {
+                'isGFFCtx'  : isGFFCtx,
+                'self'      : self,
+                'local'     : local,
+                'replace'   : replace
+            }
+        }
         // Merging user validators
         // To debug, open inspector and look into `Extra Scripts`     
         if ( hasUserValidators() ) {
-            var userValidator = null, filename = null, virtualFileForDebug = null;
+            var userValidator = null, filename = null;
             try {                
                 for (let v in gina.forms.validators) {
-                    
-                    // Blocking default validators overrive
-                    // if ( typeof(self[el][v]) != 'undefined' ) {
-                    //     continue;
-                    // }
                     filename = '/validators/'+ v + '/main.js';
                     // setting default local error
                     local.errorLabels[v] = 'Condition not satisfied';
                     // converting Buffer to string
                     if ( isGFFCtx ) {
                         //userValidatorError = String.fromCharCode.apply(null, new Uint16Array(gina.forms.validators[v].data));
-                        userValidator = bufferToString(gina.forms.validators[v].data);
+                        userValidator = bufferToString(gina.forms.validators[v].data); // ok
+                        var passedContext = 'var validationContext = this.getValidationContext(),isGFFCtx = validationContext.isGFFCtx,self = validationContext.self,local = validationContext.local,replace = validationContext.replace;';
+                        userValidator = userValidator.replace(/(\)\s+\{|\)\{){1}/, '$&\n\t'+ passedContext);
+                        
                         //userValidator += '\n//#sourceURL='+ v +'.js';
                     } else {
                         userValidator = gina.forms.validators[v].toString();
-                    }        
+                    }
+                    
                     self[el][v] = eval('(' + userValidator + ')\n//# sourceURL='+ v +'.js');
+                    //self[el][v] = Function('errorMessage', 'errorStack', userValidator);
                 }
             } catch (userValidatorError) {
                 throw new Error('[UserFormValidator] Could not evaluate: `'+ filename +'`\n'+userValidatorError.stack);
@@ -7511,7 +7370,6 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     
     for (let el in self) {        
         // Adding fields & validators to context
-        //addField(el);        
         addField(el, self[el]);
     }
     
@@ -7521,6 +7379,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
         addField(el, value);
     };
+        
     
     // self['getExcludedFields'] = function() {
     //     return local.excluded;
@@ -7638,7 +7497,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         // local.data = JSON.parse(JSON.stringify(local.data).replace(/\"(true|false)\"/gi, '$1'))
         return local.data
     }
-
+    
+    /**@js_externs replace*/
     var replace = function(target, fieldObj) {
         var keys = target.match(/%[a-z]+/gi);
         if (keys) {
@@ -9727,16 +9587,18 @@ define("utils/dom", function(){});
 
     /** imports */
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+    var envIsDev        = null;
     if (isGFFCtx) {
         require('utils/events');
         registerEvents(this.plugin, events);
 
         require('utils/dom');
         require('utils/effects');
-
+        
+        envIsDev = gina.config.envIsDev;
     } else {
-        var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
-        if (cacheless) {
+        envIsDev   = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false;
+        if (envIsDev) {
             delete require.cache[require.resolve('./form-validator')]
         }
     }
@@ -9790,9 +9652,9 @@ define("utils/dom", function(){});
         'resetErrorsDisplay'    : null,
         'resetFields'           : null
     };
-    
+    /**@js_externs local*/
     var local = {
-        rules: {}
+        'rules': {}
     };
     
     var keyboardMapping = {};
@@ -9920,7 +9782,7 @@ define("utils/dom", function(){});
         
         
         // update toolbar
-        if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+        if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
             // update toolbar
             if (!gina.forms.errors)
                 gina.forms.errors = {};
@@ -10099,7 +9961,7 @@ define("utils/dom", function(){});
     var handleErrorsDisplay = function($form, errors, data, fieldName) {
         
         // Toolbar errors display
-        if ( GINA_ENV_IS_DEV )
+        if ( envIsDev )
             var formsErrors = null;
         
         var errorClass  = 'form-item-error' // by default
@@ -10222,7 +10084,7 @@ define("utils/dom", function(){});
                         $err.appendChild($msg);
                     }
 
-                    if ( GINA_ENV_IS_DEV ) {
+                    if ( envIsDev ) {
                         if (!formsErrors) formsErrors = {};
                         if ( !formsErrors[ name ] )
                             formsErrors[ name ] = {};
@@ -10271,7 +10133,7 @@ define("utils/dom", function(){});
                             $msg.appendChild( document.createTextNode(errors[name][e]) );
                             $err.appendChild($msg);
 
-                            if ( GINA_ENV_IS_DEV ) {
+                            if ( envIsDev ) {
                                 if (!formsErrors) formsErrors = {};
                                 if ( !formsErrors[ name ] )
                                     formsErrors[ name ] = {};
@@ -10298,7 +10160,7 @@ define("utils/dom", function(){});
 
             triggerEvent(gina, $form, 'error.' + id, errors)
 
-            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+            if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                 // update toolbar
                 if (!gina.forms.errors)
                     gina.forms.errors = {};
@@ -10310,7 +10172,7 @@ define("utils/dom", function(){});
 
                 window.ginaToolbar.update('forms', objCallback);
             }
-        } else if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar) { // reset toolbar form errors
+        } else if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar) { // reset toolbar form errors
             if (!gina.forms.errors)
                 gina.forms.errors = {};
 
@@ -10325,7 +10187,7 @@ define("utils/dom", function(){});
         if (
             gina 
             && isGFFCtx 
-            && GINA_ENV_IS_DEV
+            && envIsDev
             && instance.$forms[id].isSubmitting
             && /^true$/i.test(instance.$forms[id].isSubmitting) 
             && typeof(window.ginaToolbar) != 'undefined' 
@@ -10702,13 +10564,13 @@ define("utils/dom", function(){});
                                             XHRView = JSON.parse(decodeURIComponent(XHRView.value));
                                             
                                             // update data tab                                                
-                                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
+                                            if ( gina && envIsDev && typeof(window.ginaToolbar) && typeof(XHRData) != 'undefined' ) {
                                                 window.ginaToolbar.update("data-xhr", XHRData);
                                             }
                                             
                                             // update view tab
                                             
-                                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
+                                            if ( gina && envIsDev && typeof(window.ginaToolbar) && typeof(XHRView) != 'undefined' ) {
                                                 window.ginaToolbar.update("view-xhr", XHRView);
                                             }   
 
@@ -10734,7 +10596,7 @@ define("utils/dom", function(){});
                             if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                 try {
                                     // don't refresh for html datas
-                                    if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html|\/json/.test(contentType) ) {
+                                    if ( envIsDev && typeof(XHRData) != 'undefined' && /\/html|\/json/.test(contentType) ) {
                                         window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
@@ -10869,7 +10731,7 @@ define("utils/dom", function(){});
                             if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                 try {
 
-                                    if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' ) {
+                                    if ( envIsDev && typeof(XHRData) != 'undefined' ) {
                                         window.ginaToolbar.update("data-xhr", XHRData);
                                     }
 
@@ -10949,7 +10811,7 @@ define("utils/dom", function(){});
 
                                     // update toolbar
                                     XHRData = result;
-                                    if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
+                                    if ( gina && envIsDev && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                         try {
                                             // update toolbar
                                             window.ginaToolbar.update('data-xhr', XHRData );
@@ -11018,7 +10880,7 @@ define("utils/dom", function(){});
 
                             // update toolbar
                             XHRData = result;
-                            if ( gina && GINA_ENV_IS_DEV && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
+                            if ( gina && envIsDev && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                                 try {
                                     // update toolbar
                                     window.ginaToolbar.update('data-xhr', XHRData );
@@ -11051,7 +10913,7 @@ define("utils/dom", function(){});
                         if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
                             try {
                                 // don't refresh for html datas
-                                if ( GINA_ENV_IS_DEV && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
+                                if ( envIsDev && typeof(XHRData) != 'undefined' && /\/html/.test(contentType) ) {
                                     window.ginaToolbar.update("data-xhr", XHRData);
                                 }
 
@@ -11185,7 +11047,7 @@ define("utils/dom", function(){});
                                         xhr.send(data);
                                         
                                         $form.sent = true;
-                                        if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                                        if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                                             // update toolbar
                                             if (!gina.forms.sent)
                                                 gina.forms.sent = {};
@@ -11238,7 +11100,7 @@ define("utils/dom", function(){});
             }
 
             $form.sent = true;
-            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+            if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                 // update toolbar
                 if (!gina.forms.sent)
                     gina.forms.sent = {};
@@ -11564,7 +11426,7 @@ define("utils/dom", function(){});
                                 dLen--;
                                 d--;
                                 //update toolbar
-                                if (gina && GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {            
+                                if (gina && envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {            
                                     try {
                                         // update toolbar
                                         window.ginaToolbar.update('data-xhr', {files: files});                        
@@ -12374,6 +12236,7 @@ define("utils/dom", function(){});
         return ruleObj
     }
     
+    
     var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
                         
         if (i == len) { // end
@@ -12385,7 +12248,6 @@ define("utils/dom", function(){});
 
         // init root object
         if ( typeof(rootObj) == 'undefined' ) {
-            
             rootObj = {};
             root = 'rootObj';
             
@@ -12750,7 +12612,7 @@ define("utils/dom", function(){});
                                     instance.$forms[formId].isValidating = false;
                                     console.debug('['+ formId +'] onSilentGlobalLiveValidation: '+ gResult.isValid(), gResult);
                                     var isFormValid = gResult.isValid();
-                                    if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                                    if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                                         // update toolbar
                                         if (!gina.forms.errors)
                                             gina.forms.errors = {};
@@ -13452,7 +13314,7 @@ define("utils/dom", function(){});
             }
 
             $form.rules = rule;
-            if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+            if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                 // update toolbar
                 if (!gina.forms.rules)
                     gina.forms.rules = {};
@@ -15249,7 +15111,7 @@ define("utils/dom", function(){});
             var $fields         = validationInfo.$fields;
             validate($form.target, fields, $fields, $form.rules, function onSilentValidation(result){                
                 console.debug('silent validation result[isValid:'+result.isValid()+']: ', result);
-                if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                     // update toolbar
                     if (!gina.forms.errors)
                         gina.forms.errors = {};
@@ -15759,7 +15621,7 @@ define("utils/dom", function(){});
                                             updateSubmitTriggerState( $currentForm, isFormValid);
                                         }
                                         
-                                        if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                                        if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                                             // update toolbar
                                             if (!gina.forms.errors)
                                                 gina.forms.errors = {};
@@ -15804,7 +15666,7 @@ define("utils/dom", function(){});
                                         instance.$forms[formId].isValidating = false;
                                         // console.debug('['+ formId +'] onSilentQueryGlobalLiveValidation: '+ gResult.isValid(), gResult);
                                         isFormValid = gResult.isValid();
-                                        if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                                        if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                                             // update toolbar
                                             if (!gina.forms.errors)
                                                 gina.forms.errors = {};
@@ -16425,7 +16287,7 @@ define("utils/dom", function(){});
                 try {
                     data = formatData( d['toData']() );
 
-                    if ( GINA_ENV_IS_DEV && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                    if ( envIsDev && isGFFCtx && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                         // update toolbar
                         if (!gina.forms.validated)
                             gina.forms.validated = {};
@@ -18205,7 +18067,7 @@ function BindingHelper(handlerContext) {
      *     // mark notification as read
      *     {
      *         call: 'onNotification',
-     *         paypload: {
+     *         payload: {
      *             id: obj.notificationId,
      *             action: 'mark-as-read'
      *         }
@@ -20885,9 +20747,9 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                        
                         // globals
                         window['GINA_ENV']          = '{{ GINA_ENV }}';
-                        window['GINA_ENV_IS_DEV']   = /true/i.test('{{ GINA_ENV_IS_DEV }}') ? true : false;
+                        window['GINA_ENV_IS_DEV']   = /^true$/i.test('{{ GINA_ENV_IS_DEV }}') ? true : false;
                         if ( typeof(location.search) != 'undefined' && /debug\=/i.test(window.location.search) ) {
-                            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /true/i.test(window.location.search.match(/debug=(true|false)/)[0].split(/\=/)[1]) ? true: false;  
+                            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(window.location.search.match(/debug=(true|false)/)[0].split(/\=/)[1]) ? true: false;  
                         }
 
                         gina["setOptions"](options);

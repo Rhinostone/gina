@@ -251,7 +251,7 @@ function ContextHelper(contexts) {
         }
 
         var env = ctx.env || GINA_ENV;
-        var cacheless = GINA_ENV_IS_DEV;
+        var envIsDev = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
         var Config = ctx.gina.Config;
         var conf = null;
 
@@ -355,9 +355,9 @@ function ContextHelper(contexts) {
             }
         }
 
-        var env     = GINA_ENV;
-        var cacheless = GINA_ENV_IS_DEV;
-        var Config  = ctx.gina.Config;
+        var env         = process.env.NODE_ENV || GINA_ENV;
+        var envIsDev    = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;//GINA_ENV_IS_DEV;
+        var Config      = ctx.gina.Config;
         var conf = new Config({
             env             : env,
             projectName     : getContext('projectName'),
@@ -375,7 +375,7 @@ function ContextHelper(contexts) {
 
                 var libToLoad = _(libPath +'/'+ lib, true);
 
-                if (cacheless) delete require.cache[require.resolve(libToLoad)];
+                if (envIsDev) delete require.cache[require.resolve(libToLoad)];
 
                 // init with options
                 try {
@@ -398,7 +398,7 @@ function ContextHelper(contexts) {
                     return new LibClass ({
                         bundle      : bundle,
                         env         : env,
-                        cacheless   : cacheless,
+                        cacheless   : envIsDev,
                         libPath     : libPath
                     })
 

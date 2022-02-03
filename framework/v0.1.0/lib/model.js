@@ -21,7 +21,7 @@ var math        = require('./math');
  * */
 function ModelUtil() {
     var self        = this;
-    var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
+    var cacheless   = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
 
     /**
      * Init
@@ -101,7 +101,7 @@ function ModelUtil() {
     *
     * */
     this.setModelEntity = function(bundle, model, name, module) {
-        var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
+        var cacheless   = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
         
         if (arguments.length > 1) {
             if (!self.entities) {
@@ -570,7 +570,7 @@ function ModelUtil() {
      * */
     getModelEntity = function(bundle, model, entityClassName, conn) {
         if ( typeof(entityClassName) != 'undefined' ) {
-            var cacheless   = (process.env.IS_CACHELESS == 'false') ? false : true;
+            var cacheless   = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
             try {
                 var shortName = entityClassName.substr(0, 1).toLowerCase() + entityClassName.substr(1);
 
