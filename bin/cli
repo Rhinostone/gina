@@ -49,12 +49,19 @@ var debugPort           = null
 ;
 if ( params.length > 0 ) {
     for (var p = 0, len = params.length; p < len; ++p) {
+        if ( /^\-\-debug(\_|\-)port/.test(params[p]) ) {
+            setEnvVar('GINA_DEBUG_PORT', params[p].split(/\=/)[1]);
+            break;
+        }
+        
         if ( /^\-\-(inspect|debug)/.test(params[p]) ) {
             debugBrkEnabled = ( /\-brk/.test(params[p]) ) ? true : false;
             debugPort       = params[p].split(/\=/)[1];
             params.splice(p,1);            
             break;
         }
+        
+        
     }
 }
 
