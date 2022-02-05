@@ -3,7 +3,7 @@
     "version": "{version}",
     "env": "{dev_env}",
     "node_version": "{node_version}",
-    "debug_port": "5858",
+    "debug_port": "{debug_port}",
     "user": "{user}",
     "uid": "{uid}",
     "gid": "{gid}",

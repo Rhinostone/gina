@@ -1,7 +1,8 @@
 var fs = require('fs');
 var os = require('os');
 
-
+var lib         = null;
+var console     = null;
 
 function MainHelper(opt) {
     var self = {
@@ -16,7 +17,8 @@ function MainHelper(opt) {
         require('./prototypes');
 
         //Load librairies.
-
+        lib         = require('../script/lib');
+        console     = lib.logger;
     }
 
     /**
@@ -563,10 +565,12 @@ function MainHelper(opt) {
 
     filterArgs = function() {
 
-        var setget = ( typeof(process.argv[2]) != 'undefined'
+        var setget  = ( typeof(process.argv[2]) != 'undefined'
                             && /(\:set$|\:get$|[-v]|\:version$|[--version])/.test(process.argv[2]))
                             ? true : false
-            , evar = '';
+            , evar  = ''
+            , err   = null
+        ;
 
         if ( typeof(process.env['gina']) == 'undefined') {
             process['gina'] = {}
@@ -598,7 +602,10 @@ function MainHelper(opt) {
                 if (self.protectedVars.indexOf(evar[0]) == -1 ) {
                     process.gina[evar[0]] = evar[1];
                 } else {
-                    throw new Error('gina won\'t override protected env var [ ' +evar[0]+ ' ] or constant.')
+                    //throw new Error('gina won\'t override protected env var [ ' +evar[0]+ ' ] or constant.')
+                    err = new Error('gina won\'t override protected env var [ ' +evar[0]+ ' ] or constant.');
+                    console.error(err.stack||err.message);
+                    return;
                 }
 
             } else {
@@ -708,7 +715,9 @@ function MainHelper(opt) {
             try {
                 return self.config[vendor]
             } catch (err) {
-                throw new Error(msg)
+                //throw new Error(msg);
+                console.error(err.stack||err.message);
+                return;
             }
         } else {
             return self.config
@@ -729,8 +738,13 @@ function MainHelper(opt) {
         }
     }
 
-    setEnvVar = function(key, val, isProtected) {
+    setEnvVar = function(key, val, isProtected) {        
         key = key.toUpperCase();
+        var err                     = null
+            , specialCases          = ['GINA_DEBUG_PORT', 'GINA_CULTURE', 'GINA_TIMEZONE']
+            , isOverrrideAllowed    = (specialCases.indexOf(key) > -1) ? true : false
+        ;
+        
         if (
             key.substr(0, 5) !== 'GINA_' &&
             key.substr(0, 7) !== 'VENDOR_' &&
@@ -741,19 +755,23 @@ function MainHelper(opt) {
         if (
             typeof(process['gina']) != 'undefined' &&
             typeof(process['gina'][key]) != 'undefined' &&
-            process['gina'][key] !== ''
-            ) {
-            throw new Error('wont\'t override env var [ '+ key + ' ]')
+            process['gina'][key] !== '' &&
+            // exceptions
+            !isOverrrideAllowed
+        ) {
+            err = new Error('Sorry, you cannot override env var [ '+ key + ' ]');
+            console.error(err.message);
+            process.exit(1);
         } else {
             //Write env var.
             if ( typeof(process['gina']) == 'undefined') {
                 process['gina'] = {}
             }
             process['gina'][key] = val;
-            if ( typeof(isProtected) != 'undefined' && isProtected == true) {
+            if ( typeof(isProtected) != 'undefined' && isProtected == true) {                
                 self.protectedVars.push(key)
-            }
-        }
+            }            
+        }        
     }
 
     defineDefault = function(obj) {

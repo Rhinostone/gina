@@ -39,6 +39,7 @@ if ( params.length > 0 ) {
 
 // gina defaullt debug port
 debugPort = (debugPort != null) ? debugPort : '--inspect-brk=' + settings.debug_port;
+console.log('You should now start debug on port #'+ settings.debug_port);
 exec('node ' + debugPort +' '+ __dirname +'/cli ' + argv, (error, stdout, stderr) => {
     if (error) {
         console.error(`exec error: ${error}`);

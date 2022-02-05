@@ -12,7 +12,7 @@ Gina was designed to be accessible, flexible, scalable and maintainable. Our mai
 
 Gina comes with essential features at this moment, but most of the things we don't have yet can be replaced by some alternatives written in other languages like: Ruby, PHP, .net, Python or C++. You are free to use such alternatives until we implement similar features.
 
-Note that Gina does not rely on Connect or ExpressJS, still, you can use all plugins or middlewares deigned for thoses framewokrs ;-)
+Note that Gina does not rely on Connect or ExpressJS, still, you can use all plugins or middlewares deigned for thoses frameworks ;-)
 
 ## Getting started with Gina I/O
 

@@ -1121,8 +1121,7 @@ function Server(options) {
                             response.setHeader(h, headerValue)                   
                         } catch (headerError) {
                             console.error(headerError)
-                        }              
-                                               
+                        }
                     }
                 }                    
             }
@@ -1220,11 +1219,7 @@ function Server(options) {
                 
                 if ( !fs.existsSync(asset.filename) ) {
                     throwError({stream: stream}, 404, 'Page not found: \n' + headers[':path']);
-                    return;   
-                    // header[':status'] = 404;
-                    // //console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack|err.message|err));
-                    // stream.respond(header);
-                    // stream.end()
+                    return;
                 }
                     
                 asset.isHandler = true;
@@ -1248,10 +1243,7 @@ function Server(options) {
                     //console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack|err.message|err));
                     var msg = ( header[':status'] == 404 ) ? 'Page not found: \n' + asset.url :  'Internal server error\n' + (err.stack|err.message|err)
                     throwError({stream: pushStream}, header[':status'], msg);
-                    return;   
-                    // stream.respond(header);
-                    // stream.end();
-                    // return;
+                    return;
                 }
                 
                 

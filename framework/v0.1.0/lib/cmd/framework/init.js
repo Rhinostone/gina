@@ -191,7 +191,7 @@ function Initialize(opt) {
      *
      **/
     self.checkIfPorts = function() {
-        console.debug('checking ports...');        
+        console.debug('Checking ports...');        
         var mainConfig  = require(self.opt.homedir + '/main.json');
         var target = _(self.opt.homedir +'/ports.json');
 
@@ -219,7 +219,7 @@ function Initialize(opt) {
      *
      **/
     self.checkIfPortsReverse = function() {
-        console.debug('checking ports.reverse...');
+        console.debug('Checking ports.reverse...');
         var target = _(self.opt.homedir +'/ports.reverse.json');
 
         if ( !fs.existsSync(target) ) {
@@ -294,7 +294,7 @@ function Initialize(opt) {
      **/
 
     self.checkIfSettings = function() {
-        console.debug('checking settings...');
+        console.debug('Checking framework settings...');
         var main            = require( _(self.opt.homedir + '/main.json', true) )
             , version       = _( getEnvVar('GINA_VERSION'), true)
             , env           = _( getEnvVar('GINA_ENV') || main['dev_env'][self.release], true)
@@ -317,7 +317,7 @@ function Initialize(opt) {
                 'timezone' : _( getEnvVar('GINA_TIMEZONE'), true),
                 'dev_env' : env,
                 'node_version': process.version,
-                'debug_port' : process.debugPort,
+                'debug_port' : process.debugPort || 5858,
                 'user' : process.env.USER,
                 'uid' : uid,
                 'gid' : gid,

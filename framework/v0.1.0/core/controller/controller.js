@@ -1093,7 +1093,7 @@ function SuperController(options) {
         // }
 
         if (!jsonObj) {
-            var jsonObj = {}
+            jsonObj = {}
         }
         
         try {
