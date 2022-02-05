@@ -145,13 +145,17 @@ function Logger(opt) {
         try {
             
             //console.log('colors ----> ', colors);
-            
-            opt._maxLevelLen = 0;            
-            for (var l in opt.levels) {
-                if (l.length > opt._maxLevelLen) {
-                    opt._maxLevelLen = l.length;
+            // setting default level string length
+            opt._maxLevelLen = opt._maxLevelLen || 0;
+            if (!opt._maxLevelLen) {
+                for (let l in opt.levels) {
+                    if (l.length > opt._maxLevelLen) {
+                        opt._maxLevelLen = l.length;
+                    }
                 }
-                                
+            }
+
+            for (let l in opt.levels) {
                 
                 if ( typeof(self[l]) == 'undefined' ) {
                     self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ JSON.stringify(self.colors) +', '+ parse +', "'+ l +'", arguments);');
@@ -216,10 +220,10 @@ function Logger(opt) {
         if (content != '') {
             var now = new Date().format('logger');
             var sCount = s.length;
-            if (sCount > opt._maxLevelLen ) {
-                opt._maxLevelLen = sCount;
-            }
-            
+            // if (sCount > opt._maxLevelLen ) {
+            //     opt._maxLevelLen = sCount;                
+            // }
+            //log(sCount, ' vs ', opt._maxLevelLen);
             if ( sCount < opt._maxLevelLen ) {
                 for (; sCount < opt._maxLevelLen; ++sCount ) {
                     s +=' ';
@@ -358,7 +362,7 @@ function Logger(opt) {
     }
 
     self.getLogger = function(details) {
-        console.debug('getting logger');
+        console.debug('Getting logger');
     }
 
     self.log = function() {

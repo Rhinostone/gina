@@ -444,7 +444,7 @@ function Proc(bundle, proc, usePidFile){
 
             if (self.usePidFile) {
                 pathObj.mkdir( function(err, path){
-                    console.debug('[ FRAMEWORK ][ PROC ] Path created ('+ path +') now saving PID ' + bundle);
+                    console.debug('[ FRAMEWORK ][ PROC ] Path created ('+ path +') now saving `'+bundle+'` PID ');
                     //save file
                     if (err)
                         console.debug('[ FRAMEWORK ][ PROC ] Found '+ path +': not replacing');
