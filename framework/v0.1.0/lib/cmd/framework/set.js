@@ -38,6 +38,7 @@ function Set(opt){
             break;
             
             case '--debug_port':
+            case '--debug-port':
                 setDebugPort(v);
             break;            
             
@@ -89,9 +90,10 @@ function Set(opt){
     }
     
     var setDebugPort = function(port) {
+        console.debug('Setting `debug port` to #'+ port);
         // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
         process['gina']['debug_port'] = port;
-        mainSettingsConf['timdebug_portezone'] = port;
+        mainSettingsConf['debug_port'] = port;
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
     }
     

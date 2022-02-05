@@ -759,9 +759,8 @@ function MainHelper(opt) {
             // exceptions
             !isOverrrideAllowed
         ) {
-            err = new Error('Sorry, you cannot override env var [ '+ key + ' ]');
-            console.error(err.message);
-            process.exit(1);
+            err = new Error('Env variable [ '+ key + ' ] is already set');
+            console.warn(err.message);
         } else {
             //Write env var.
             if ( typeof(process['gina']) == 'undefined') {

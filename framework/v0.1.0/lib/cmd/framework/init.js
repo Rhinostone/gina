@@ -244,8 +244,7 @@ function Initialize(opt) {
             var env = getEnvVar('GINA_ENV') || main['dev_env'][self.release]; // dev by default
 
             if ( main.envs[self.release].indexOf(env) < 0 ) {
-                console.error('environment [ ' + env + ' ] not registered.' +
-                    ' See [ man gina-env ].');
+                console.error('Environment [ ' + env + ' ] not registered. See [ man gina-env ].');
                 process.exit(1)
             }
 
@@ -312,12 +311,12 @@ function Initialize(opt) {
         try {
 
             var dic = {
-                'version' : _( getEnvVar('GINA_VERSION'), true),
-                'culture' : _( getEnvVar('GINA_CULTURE'), true),
-                'timezone' : _( getEnvVar('GINA_TIMEZONE'), true),
+                'version' : getEnvVar('GINA_VERSION'),
+                'culture' : getEnvVar('GINA_CULTURE'),
+                'timezone' : getEnvVar('GINA_TIMEZONE'),
                 'dev_env' : env,
                 'node_version': process.version,
-                'debug_port' : process.debugPort || 5858,
+                'debug_port' : getEnvVar('GINA_DEBUG_PORT') || process.debugPort || 5858,
                 'user' : process.env.USER,
                 'uid' : uid,
                 'gid' : gid,
