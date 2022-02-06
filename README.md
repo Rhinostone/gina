@@ -3,27 +3,27 @@
 <strong>Gina I/O</strong> - Node.js MVC and Event Driven framework
 
 > This is a `preview release`. We are looking for people to help us test and improve `Windows` support.
-> Some commands or features might not work since the framework is still under developpement & testing
+> Some commands or features might not work since the framework is still under development & testing
 > We have some applications using the framework in production and we are improving our code in order to release the `1.0.0` version: which should come by the end of 2022. Thank you for your patience !
 
 ## Philosophy behind
 
-Gina was designed to be accessible, flexible, scalable and maintainable. Our main purpose was to allow developpers to create easier and faster web applications.
+Gina was designed to be accessible, flexible, scalable and maintainable. Our main purpose was to allow developers to create easier and faster web applications.
 
 Gina comes with essential features at this moment, but most of the things we don't have yet can be replaced by some alternatives written in other languages like: Ruby, PHP, .net, Python or C++. You are free to use such alternatives until we implement similar features.
 
-Note that Gina does not rely on Connect or ExpressJS, still, you can use all plugins or middlewares deigned for thoses frameworks ;-)
+Note that Gina does not rely on Connect or ExpressJS, still, you can use all plugins or middlewares designed for those frameworks ;-)
 
 ## Getting started with Gina I/O
 
 ### Installing Gina
-Gina aims to be at the same time a framework, a deployment and monitoring environnement for your projects. So, to fully enjoy Gina, we recommend that you install it with the `-g` option.
+Gina aims to be at the same time a framework, a deployment and monitoring environment for your projects. So, to fully enjoy Gina, we recommend that you install it with the `-g` option.
 
 ```  tty
 npm install -g gina@latest
 ```
 
-You can check if gina is properly installed
+You can check if Gina is properly installed
 ```  tty
 gina version
 ```
@@ -31,7 +31,7 @@ __NB.:__ This is a shortcut for `gina framework:version`
 
 
 ### Initializing a project
-Let's create our first project and install gina.
+Let's create our first project and install Gina.
 
 ``` tty
 mkdir myproject && cd myproject
@@ -40,7 +40,7 @@ mkdir myproject && cd myproject
 
 Then you need to __initialize your project__
 
-> on Windows from the Windows CLI, you might need admin privilegies.
+> On Windows from the Windows CLI, you might need admin privileges.
 
 ```  tty
 gina project:add @myproject
@@ -53,12 +53,12 @@ gina project:rm @myproject
 
 ### Creating a bundle (application)
 
-A project is a set of bundles. Gina lets you create all kind of bundles :
-* api & webservices
+A project is a set of bundles. Gina lets you create all kinds of bundles :
+* API & web services
 * frontend & backend applications
 * command lines
 
-Note that the default bundle type is api.
+Note that the default bundle type is API.
 
 Ok ! Let's do it !
 
@@ -77,7 +77,7 @@ gina bundle:start frontend @myproject
 ```
 
 
-Now, visite http://127.0.0.1:3100/  to check your homepage.
+Now, visit http://127.0.0.1:3100/  to check your homepage.
 Isn't it sexy !?
 
 If you need to stop your bundle
@@ -92,7 +92,7 @@ gina bundle:restart frontend @myproject
 
 ### Adding templates
 
-The default bundle renders a json representation of a "Hello World" message.
+The default bundle renders a JSON representation of a "Hello World" message.
 
 Let's add a view on our frontend
 
@@ -108,7 +108,7 @@ Now edit the `home` control in `src/frontend/controllers/controller.js` so that 
 
 Once it's done, you just need to refresh your browser.
 
-Gina is shipped with [Swig](https://node-swig.github.io/swig-templates/) as the default template engine. If you are more confortable with another template engine, you can use your own.
+Gina is shipped with [Swig](https://node-swig.github.io/swig-templates/) as the default template engine. If you are more comfortable with another template engine, you can use your own.
 
 
 
@@ -116,7 +116,7 @@ Gina is shipped with [Swig](https://node-swig.github.io/swig-templates/) as the 
 
 Please, note that you have 2 types of environments : one for the framework, and one for your project & your bundles.
 
-> By default, Gina (the framework) comes with 2 environments : `dev` and `prod`. The default is `prod`. if you are contributing to the framework or prototyping your application or service, we advise to use the `dev` environment.
+> By default, Gina (the framework) comes with 2 environments : `dev` and `prod`. The default is `prod`. if you are contributing to the framework or prototyping your application or service, we advise using the `dev` environment.
 > ```tty
 > gina framework:set --env=dev 
 > ```
@@ -135,26 +135,26 @@ __or for a particular bundle__
 gina env:list frontend @myproject
 ```
 
-#### Setting your application starting environement on runtime
-> This method does not memorise the selected environment as the default one for your application
+#### Setting your application starting environment on runtime
+> This method does not memorize the selected environment as the default one for your application
 
-You can have multiple environments for your project and decide to pick one as the starting env by using `--env=your_env` everytime you have to run a bundle.
+You can have multiple environments for your project and decide to pick one as the starting env by using `--env=your_env` every time you have to run a bundle.
 
 ```tty
 gina bundle:start frontend @myproject --env=prod
 ```
-__NB.:__ Omitting `--env=<env>` will fallback to your project default environement.
+__NB.:__ Omitting `--env=<env>` will fallback to your project default environment.
 
-#### Setting your project or your application default environement
+#### Setting your project or your application default environment
 
 For the entire project & for all bundles inside by default
 ```tty
 gina env:use prod @myproject
 ```
-__NB.:__ If you need to change it for a particular bundle, you still can do it at runtime using `--env=<your env>` to override the default settings. Tihs will not set `<your env>`as the default environment for the whole project.
+__NB.:__ If you need to change it for a particular bundle, you still can do it at runtime using `--env=<your env>` to override the default settings. This will not set `<your env>`as the default environment for the whole project.
 
 
-#### Other operation you can apply to your environment
+#### Other operations you can apply to your environment:
 __Adding a new environment for your project__
 ```tty
 gina env:add staging @myproject
@@ -164,7 +164,7 @@ __Removing an existing environment for your project__
 gina env:rm staging @myproject
 ```
 
-__Defining an existing environment as `developpment` (you can only have one like this)__
+__Defining an existing environment as `development` (you can only have one like this)__
 ```tty
 gina env:link-dev <your new dev env>
 ```
@@ -179,7 +179,7 @@ __Are you starting for the first time ?__
 - If you are a __Windows user__, make sure you are running your command line with sufficient permission; like __"launching your terminal as administrator"__.
 
 
-- If you have just cloned Gina from github, don't forget to run from the project root :
+- If you have just cloned Gina from GitHub, don't forget to run from the project root :
 ```tty
 node node_modules/gina/script/post_install.js
 ```
@@ -188,9 +188,9 @@ node node_modules/gina/script/post_install.js
 __Are you trying to restart after a crash ?__
 
 Before v0.1.0, Gina uses 2 processes for each bundle: one master, one slave.
-Once an excepion is thrown and the program crashes, one of the 2 process can remain in the tasks/processes list.
+Once an exception is thrown and the program crashes, one of the 2 processes can remain in the `tasks/processes` list.
 
-Gina only uses one process per bundle or one per project if you heve decided to merge bundles execution.
+Gina only uses one process per bundle or one per project if you have decided to merge bundles execution.
 This has been mostly observed for Windows users.
 
 - If you are on a POSIX OS, you should look for `gina`, then kill it !
@@ -207,7 +207,7 @@ More documentation and tutorials are coming !
 
 ## License (MIT)
 
-Copyright (c) 2009-2022 [Rhinostone](http://www.rhinostone.com/)
+Copyright © 2009-2022 [Rhinostone](http://www.rhinostone.com/)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
