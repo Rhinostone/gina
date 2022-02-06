@@ -1,6 +1,6 @@
  Gina![Gina I/O](https://raw.githubusercontent.com/Rhinostone/gina/master/core/asset/img/favicon-16x16.png)   
 
->  Gina was designed to be accessible, flexible, scalable and maintainable. Our main purpose was to allow developpers to create easier and faster web applications.
+>  Gina was designed to be accessible, flexible, scalable and maintainable. Our main purpose was to allow developers to create easier and faster web applications.
 >  
 > Essential features are available at this moment, but most of the things we don't have yet can be replaced by some alternatives written in other languages like: Ruby, PHP, .net, Python or C++. You are free to use such alternatives until we implement similar features.   
 
@@ -22,7 +22,7 @@ __Gina works fine with the following versions of Node.js:__
 ## Getting started with Gina I/O
 
 ### Initializing a project
-Let's create our first project and install gina.   
+Let's create our first project and install Gina.   
 Type everything after the __`$`__
 
 ``` tty
@@ -48,13 +48,13 @@ $ node ./node_modules/gina/script/post_install.js
 
 Then you need to __initialize your project__
 
-> On Mac Os X or on Linux
+> On macOS or on Linux
 
 ```  tty
 $ ./gina.sh -i myproject
 ```
 
-> on Windows from the Windows CLI - __NEED TO BE ADMIN !!__
+> on Windows from the Windows CLI - __YOU NEED TO BE ADMIN !!__
 
 ```  tty
 $ gina -i myproject
@@ -65,14 +65,14 @@ __NB:__ All gina commands are launched from the project root.
 
 ### Creating a bundle (application)
 
-A project is a set of bundles. Gina lets you create all kind of bundles :
-* api & webservices
-* frontend & backend applications
-* command lines
+A project is a set of bundles. Gina lets you create all kinds of bundles :
+* API & web services
+* Frontend & backend applications
+* Command lines
 
-Note that the default bundle type is api.
+Note that the default bundle type is API.
 
-Ok ! Let's do it !
+> OK. Now let's do it !
 
 ``` tty
 $ ./gina.sh -a frontend
@@ -86,7 +86,7 @@ You can start the bundle with the following command:
 ```tty
 $ ./gina.sh -s frontend dev
 ```
-Now, visite http://127.0.0.1:3100/  to check your homepage.
+Now, visit http://127.0.0.1:3100/  to check your homepage.
 Isn't it sexy !?
 
 If you need to stop it, just hit `ctrl+c`.
@@ -94,7 +94,7 @@ If you need to stop it, just hit `ctrl+c`.
 
 ### Adding views
 
-The default bundle renders a json representation of a "Hello World" message.
+The default bundle renders a JSON representation of a "Hello World" message.
 
 Let's add views on our frontend
 
@@ -109,7 +109,7 @@ Gina is shipped with [Swig](http://node-swig.github.io/swig-templates/docs/) as 
 
 ## Debugging in Gina
 
-You can attach a remote debuger like [Visual Studio Code](https://code.visualstudio.com/Download) to Gina.
+You can attach a remote debugger like [Visual Studio Code](https://code.visualstudio.com/Download) to Gina.
 
 1. Open your project   
 ![New window](./documentation/img/debug-new1.png)   
@@ -138,7 +138,7 @@ $ ./gina.sh -s frontend dev --inspect-brk=5959
 
 7. Launch your remote debugger & have fun !   
 ![New conf](./documentation/img/debug-conf7.png)   
-	Debugger in action
+    Debugger in action
     ![Debugger in action](./documentation/img/debug-start.png)   
 
 ## Troubleshooting
@@ -168,7 +168,7 @@ NB.: `prod` is optional here; if you don't add it, it will build for prod by def
 
 __Are you trying to restart after a crash ?__
 
-Gina uses 2 processes today: one master, one slave (it will change very soon). Once an excepion is thrown and the program crashes, one of the 2 process can remain in the tasks/processes list.
+Gina uses 2 processes today: one master, one slave (it will change very soon). Once an exception is thrown and the program crashes, one of the 2 processes can remain in the `tasks/processes` list.
 This has been mostly observed for Windows users.
 
 - If you are on a POSIX OS, you should look for `gina`, then kill it !
@@ -182,7 +182,7 @@ After this, try again to start, it should run better.
 __Are you trying to reinstall from the project root ?__
 
 - Go to your project root (where you can see `env.json` & `project.json`)
-- Remove the file `gina`. This bug is related to npm since node 0.12.x and only found on POSIX Operating Systems
+- Remove the file `gina`. This bug is related to npm since Node 0.12.x and only found on POSIX Operating Systems
 ``` tty
 $ rm ./gina
 ```
@@ -197,7 +197,7 @@ More documentation and tutorials are coming !
 
 ## License (MIT)
 
-Copyright (c) 2009-2016 [Rhinostone](http://www.rhinostone.com/)
+Copyright © 2009-2016 [Rhinostone](http://www.rhinostone.com/)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
