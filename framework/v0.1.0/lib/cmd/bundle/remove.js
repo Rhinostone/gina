@@ -34,11 +34,26 @@ function Remove(opt, cmd) {
             console.error('project path not defined in ~/.gina/projects.json for [ '+ self.projectName + ' ]');
             process.exit(1)
         }
+        
+        if (isDefined('project', self.projectName)) {
+            removeBundle(0)
+        } else {
+            //console.error('[ '+ self.projectName+' ] is not an existing project');
+            if ( self.bundles.length == 0) {
+                console.error('Missing argument <bundle_name>');
+            } else if  (!isDefined('project', self.projectName) ) {
+                console.error('[' + self.projectName +'] is not an existing project.');
+            } else {
+                console.error('Missing argument @<project_name>');
+            }
+
+            process.exit(1)
+        }
 
         //var Proc = require( getPath('gina').lib + '/proc');
 
-        //process.exit(0);
-        removeBundle(0)
+        
+        
     }
 
     var removeBundle = function (b) {
@@ -54,7 +69,7 @@ function Remove(opt, cmd) {
 
 
         if (local.force) {
-            // remove without checking
+            // remove without checking            
             remove()
         } else {
             check()
@@ -65,7 +80,7 @@ function Remove(opt, cmd) {
     var check = function() {
 
 
-        rl.setPrompt('Also remove bundle files ? (Y/n):');
+        rl.setPrompt('['+ local.bundle +'] Also remove bundle files ? (Y/n):');
 
         rl.prompt();
 
@@ -107,11 +122,18 @@ function Remove(opt, cmd) {
             console.warn('`'+ folder.toString() +'` is not a valid path')
         } else {
 
+            // removing mounting point: just in case
+            var coreEnv = getCoreEnv(local.bundle);
+            new _(coreEnv.mountPath +'/'+ local.bundle, true).rmSync();
+            
+            // removing folder
             folder = folder.rmSync();
             if (folder instanceof Error) {
                 console.error(folder.stack);
                 process.exit(1)
             }
+            
+                       
 
             // updating project env
             if ( typeof(self.envData) != 'undefined' && typeof(self.envData[local.bundle]) != 'undefined' ) (
@@ -162,6 +184,10 @@ function Remove(opt, cmd) {
 
 
     var end = function() {
+        
+        // last check just in case
+        
+        
 
         lib.generator.createFileFromDataSync(
             self.envData,

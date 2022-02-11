@@ -27,6 +27,9 @@ function CmdHelper(cmd, client, debug) {
         mainConfig : null,
         // framework main config path {string}
         mainConfigPath : null,
+        // framework core env - core/template/conf/env.json
+        coreEnv : null,
+        
         // CMD params list ( starting with --) {object}
         params : {}, //
         nodeParams : [],
@@ -42,7 +45,7 @@ function CmdHelper(cmd, client, debug) {
         projects : null, // defined by filterArgs()
         projectsPath : _(GINA_HOMEDIR + '/projects.json'), // ~/.gina/project.json
         // current project path
-        projectPath : null, // local project/project.json - defined by filterArgs()
+        projectPath : null, // local project/manifest.json - defined by filterArgs()
         projectConfigPath: null, // path to .gina/project.json 
         projectData: {},
         // current project bundles list {array}
@@ -195,12 +198,17 @@ function CmdHelper(cmd, client, debug) {
             ;
 
             cmd.task = argv[2];
-
+            if ( /^project\:/.test(cmd.task) && !/^\@/.test(argv[3]) ) {
+                errMsg = 'This is a project command line. Cannot understand what your are asking with: `'+ process.argv.slice(2).join(' ') +'`';
+                console.error(errMsg);
+                exit(errMsg);
+            }
             // getting CMD params
             getParams();
             console.debug('nodeParams: ', cmd.nodeParams);
-            console.debug('cmd.params: ', cmd.params);            
-
+            console.debug('cmd.params: ', cmd.params);
+            
+            
             var mightBeASomeBundle = true;
             for (; i < len; ++i) {
 
@@ -229,6 +237,9 @@ function CmdHelper(cmd, client, debug) {
                         // --path
                         if ( typeof(cmd.params.path) != 'undefined' ) {
                             if ( /^\.\//.test(cmd.params.path) ) {
+                                if (cmd.params.path == './') {
+                                    cmd.params.path += cmd.projectName;
+                                }
                                 cmd.params.path = cmd.params.path.replace(/^\.\//, process.cwd() +'/')
                             }
                             folder = new _( cmd.params.path, true );
@@ -269,7 +280,31 @@ function CmdHelper(cmd, client, debug) {
                     cmd.bundles.push( argv[i] )
                 }
             }
-
+            
+            // cleanup bundles list in case of `bundle:`task
+            if ( /^bundle\:/.test(cmd.task) ) {
+                var newArgv = argv.slice();
+                // remove the first part of the command line
+                newArgv.splice(0, 3);
+                // filter
+                for (let a = 0, len = newArgv.length; a < len; ++a) {
+                    if ( /^\@/.test(newArgv[a]) ) {
+                        newArgv.splice(a, 1);
+                        len--;
+                        a--;
+                        continue
+                    }
+                    if ( /^\-\-/.test(newArgv[a]) ) {
+                        newArgv.splice(a, 1);
+                        len--;
+                        a--;
+                    }
+                }
+                
+                cmd.bundles = newArgv.slice();
+                newArgv = null;
+            }
+            
             if (cmd.bundles.length == 1 ) {
                 if  ( isValidName(cmd.bundles[0]) ) {
                     cmd.name = cmd.bundles[0]
@@ -277,9 +312,8 @@ function CmdHelper(cmd, client, debug) {
                     console.error('[ ' + cmd.name + ' ] is not a valid bundle name.');
                     process.exit(1)
                 }                
-            }
-
-
+            } // else, might be a bulk operation: look for `isBulkOperation`
+            
             // project name : passed or using the current folder as project name by default
             if ( cmd.projectName == null || typeof(cmd.projectName) == 'undefined' || cmd.projectName == '' ) {
 
@@ -311,10 +345,10 @@ function CmdHelper(cmd, client, debug) {
                 }
                 
                 if ( typeof(cmd.projects[cmd.projectName]) == 'undefined') {                    
-                    cmd.projectPath = _(cmd.projectLocation + '/project.json', true)
+                    cmd.projectPath = _(cmd.projectLocation + '/manifest.json', true)
                 }
                 
-                cmd.projectPath = (!cmd.projectPath) ? _(cmd.projects[cmd.projectName].path + '/project.json', true) : cmd.projectPath;
+                cmd.projectPath = (!cmd.projectPath) ? _(cmd.projects[cmd.projectName].path + '/manifest.json', true) : cmd.projectPath;
 
                 if (typeof (cmd.projects[cmd.projectName]) != 'undefined') // ignore when adding project
                     cmd.envPath = _(cmd.projects[cmd.projectName].path + '/env.json', true);
@@ -337,6 +371,28 @@ function CmdHelper(cmd, client, debug) {
             exit(err.stack);
             return false; // configuration failed
         }
+    }
+    
+    getCoreEnv = function(bundle, env) {
+        var coreEnvPath = _(GINA_CORE + '/template/conf/env.json', true);
+        var coreEnv     = requireJSON(coreEnvPath);
+        
+        var reps = {
+            "frameworkDir"  : GINA_FRAMEWORK_DIR,
+            "executionPath" : _(cmd.projects[cmd.projectName].path, true),
+            "projectPath"   : _(cmd.projects[cmd.projectName].path, true),
+            // "bundlesPath" : appsPath,
+            // "modelsPath" : modelsPath,
+            "env" : env,
+            "bundle" : bundle,
+            "version" : GINA_VERSION
+        };
+
+
+        //console.error("reps ", reps);
+        coreEnv = whisper(reps, coreEnv);
+        
+        return coreEnv
     }
 
     /**
@@ -456,8 +512,9 @@ function CmdHelper(cmd, client, debug) {
                         } 
 
                         // updating port list
-                        if (cmd.portsList.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
-                            cmd.portsList.push(~~port);
+                        //if (cmd.portsList.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
+                        if (cmd.portsList.indexOf(port) < 0 && re.test(ports[protocol][scheme][port])) {
+                            cmd.portsList.push(port);
                             cmd.portsData[protocol][scheme][port] = ports[protocol][scheme][port]
                         }
                     }
@@ -476,6 +533,7 @@ function CmdHelper(cmd, client, debug) {
         cmd.defaultEnv = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['def_env'] : cmd.mainConfig['def_env'][ GINA_SHORT_VERSION ];
         // getting dev env
         cmd.devEnv = (cmd.projectName != null &&typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['dev_env'] : cmd.mainConfig['dev_env'][ GINA_SHORT_VERSION ];
+        //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.defaultEnv; // by default
         // project or bundle environment override through : --env=<some env>
         if ( typeof(cmd.params.env) != 'undefined' && /\:(start|stop|restart|build|deploy)/i.test(cmd.task) ) {
             console.debug('Overriding default project env: '+ cmd.defaultEnv +' => '+ cmd.params.env);
@@ -485,6 +543,8 @@ function CmdHelper(cmd, client, debug) {
                 return false;
             }
             cmd.defaultEnv = process.env.NODE_ENV = cmd.params.env;
+            // override
+            //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.params.env;
         } else {
             delete process.env.NODE_ENV
         }
@@ -529,22 +589,18 @@ function CmdHelper(cmd, client, debug) {
             }
         }
         
-        for (var protocol in ports) {
+        for (let protocol in ports) {
             if ( !protocol || protocol == 'undefined' ) continue;
-            for (var scheme in ports[protocol]) {
+            for (let scheme in ports[protocol]) {
                 if ( !scheme || scheme == 'undefined' ) continue;
-                for (var port in ports[protocol][scheme]) {                
+                for (let port in ports[protocol][scheme]) {                
                     cmd.portsGlobalList.push(~~port); // updating global ports list
                     
-                    if ( hasProject && re.test(ports[protocol][scheme][port]) ) {
-                        cmd.portsList.push(~~port) // updating contextual ports list
+                    if ( hasProject && re.test(ports[protocol][scheme][port]) && cmd.portsList.indexOf(port) < 0 ) {
+                        cmd.portsList.push(port) // updating contextual ports list
                         
                         // updating protocols list
-                        if ( 
-                            //cmd.name && cmd.name == cmd.bundles[b] && reProtoScheme.test(cmd.portsData[protocol][scheme][port]) 
-                            //||
-                            re.test(ports[protocol][scheme][port])
-                        ) {
+                        if ( re.test(ports[protocol][scheme][port]) ) {
                             if ( cmd.protocols.indexOf(protocol) < 0 )
                                 cmd.protocols.push(protocol); // updating contextual protocol list
                             if ( cmd.schemes.indexOf(scheme) < 0 )
@@ -569,9 +625,9 @@ function CmdHelper(cmd, client, debug) {
         // supplementing projects with bundles collection            
         var projectPropertiesPath = null;
         //console.debug('[ ConfigAssetsLoaderHelper ] getting bundles by project ', JSON.stringify(cmd.projects, null, 4));
-        for (var project in cmd.projects) {
+        for (let project in cmd.projects) {
 
-            projectPropertiesPath = _(cmd.projects[project].path + '/project.json', true);
+            projectPropertiesPath = _(cmd.projects[project].path + '/manifest.json', true);
             if (typeof (require.cache[projectPropertiesPath]) != 'undefined') {
                 delete require.cache[require.resolve(projectPropertiesPath)]
             }
@@ -585,16 +641,33 @@ function CmdHelper(cmd, client, debug) {
         }
         
         
-        var bundleConfigPath = null, settings = null;
-        for (var project in cmd.bundlesByProject) { // for each project
+        var bundleConfigPath = null, settings = null, isBulkOperation = false;
+        for (let project in cmd.bundlesByProject) { // for each project
             
             if (!cmd.bundlesByProject[project]) continue;
             
-            for (var bundle in cmd.bundlesByProject[project]) { // for each bundle
+            if ( 
+                !cmd.bundles.length && /^bundle\:/.test(cmd.task)
+                && project == cmd.projectName 
+            ) {
+                isBulkOperation = true;
+            }
+            
+            for (let bundle in cmd.bundlesByProject[project]) { // for each bundle
                 // bundles array list
-                if ( cmd.bundles.indexOf(bundle) < 0 && cmd.projectName != null && project == cmd.projectName) { 
+                if (
+                    !/^bundle\:/.test(cmd.task)
+                    && cmd.bundles.indexOf(bundle) < 0 
+                    && cmd.projectName != null 
+                    && project == cmd.projectName
+                    ||
+                    isBulkOperation
+                    && project == cmd.projectName
+                ) { 
                     cmd.bundles.push(bundle);
                 }            
+                
+                
                 
                 if ( typeof(cmd.bundlesByProject[project][bundle].protocols) == 'undefined' ) {                    
                     cmd.bundlesByProject[project][bundle].protocols = []
@@ -646,6 +719,8 @@ function CmdHelper(cmd, client, debug) {
                             cmd.bundlesByProject[project][bundle].def_scheme = settings.server.scheme
                         }
                     }
+                    
+                    cmd.bundlesByProject[cmd.projectName][bundle].def_env = (cmd.params.env) ? cmd.params.env : cmd.defaultEnv; // by default
                         
                     
                 } else {
@@ -659,7 +734,12 @@ function CmdHelper(cmd, client, debug) {
         if ( cmd.projectName != null && cmd.name != null && typeof(cmd.projects[cmd.projectName]) == 'undefined' ) {
             return false;
         }
-        if ( /bundle\:/.test(cmd.task) && cmd.projectName != null && cmd.name != null && typeof(cmd.bundlesByProject[cmd.projectName][cmd.name]) == 'undefined' ) { 
+        if ( 
+            /bundle\:/.test(cmd.task) 
+            && cmd.projectName != null 
+            && cmd.name != null 
+            && typeof(cmd.bundlesByProject[cmd.projectName][cmd.name]) == 'undefined' 
+        ) { 
             
             errMsg = 'Bundle name `'+ cmd.name +'` not found in your project `@'+ cmd.projectName +'`';            
             //console.debug('task `'+ cmd.task +'` error:');
@@ -741,6 +821,266 @@ function CmdHelper(cmd, client, debug) {
             console.log( '\n' + fs.readFileSync( file ) )
         } catch(err) {
             console.error( err.stack )
+        }
+    }
+    
+    getBundleScanLimit = function(bundle, env) {
+        var limit           = null
+            , i             = 0
+            , maxLimit      = cmd.projects[cmd.projectName].envs.length * cmd.projects[cmd.projectName].protocols.length * cmd.projects[cmd.projectName].schemes.length
+            , portsReverse  = cmd.portsReverseData[bundle +'@'+ cmd.projectName]
+        ;
+        
+        if ( typeof(env) != 'undefined' ) {
+            maxLimit        = cmd.projects[cmd.projectName].protocols.length * cmd.projects[cmd.projectName].schemes.length;
+            portsReverse    = cmd.portsReverseData[bundle +'@'+ cmd.projectName][env];                    
+            for ( let protocol in portsReverse[env]) {
+                for (let scheme in portsReverse[env][protocol]) {
+                    ++i;
+                }
+            }
+            limit = maxLimit - i;
+        } else {
+            for (let env in portsReverse) {
+                for (let protocol in portsReverse[env]) {
+                    for (let scheme in portsReverse[env][protocol]) {
+                        ++i;
+                    }
+                }
+            }
+            limit = maxLimit - i;
+        }
+        
+        return limit;
+    }
+    
+    getPortsList = function() {        
+        var ports = require(_(GINA_HOMEDIR + '/ports.json'));
+        var portsList = []; // list of all ports to ignore whles scanning
+        var protocols = cmd.projects[cmd.projectName].protocols;
+        var schemes = cmd.projects[cmd.projectName].schemes;
+        for (let protocol in ports) {
+            if (protocols.indexOf(protocol) < 0) continue;
+            for (let scheme in ports[protocol]) {
+                if (schemes.indexOf(scheme) < 0) continue;
+                for (let p in ports[protocol][scheme]) {
+                    if ( cmd.portsList.indexOf(p) > -1 ) continue;
+                    portsList.push(p)
+                }
+            }            
+        }
+        portsList.sort();
+        
+        return portsList;
+    }
+    
+    /**
+     * setPorts
+     * Setting bundle ports per env
+     * 
+     * @param {string} bundle
+     * @param {array} portsAvailable
+     * 
+     * @callback cb
+    */
+    setPorts = function(bundle, portsAvailable, cb) {
+        var portsPath           = _(GINA_HOMEDIR + '/ports.json', true)
+            , portsReversePath  = _(GINA_HOMEDIR + '/ports.reverse.json', true)
+            , envDataPath       = _(cmd.projects[cmd.projectName].path + '/env.json', true)
+        ;
+
+        if ( typeof(require.cache[portsPath]) != 'undefined') {
+            delete require.cache[require.resolve(portsPath)]
+        }
+        if ( typeof(require.cache[portsReversePath]) != 'undefined') {
+            delete require.cache[require.resolve(portsReversePath)]
+        }
+        if ( typeof(require.cache[envDataPath]) != 'undefined') {
+            delete require.cache[require.resolve(envDataPath)]
+        }
+
+        var envData             = requireJSON(envDataPath)
+            , portsData         = requireJSON(portsPath)
+            , portsReverseData  = requireJSON(portsReversePath)
+        ;
+
+
+        var content                 = JSON.clone(envData)
+            , ports                 = JSON.clone(portsData)
+            , portsReverse          = JSON.clone(portsReverseData)
+            , allProjectEnvs        = cmd.projects[cmd.projectName].envs
+            , allProjectProtocols   = cmd.projects[cmd.projectName].protocols
+            , allProjectSchemes     = cmd.projects[cmd.projectName].schemes
+        ;
+        
+        
+        
+        // BO project/env.json
+        if ( typeof(content[bundle]) == 'undefined' ) {
+            content[bundle] = {}
+        }
+        
+        // getting available all envs
+        for (let n in cmd.envs) {
+            let newEnv = cmd.envs[n];
+            if (allProjectEnvs.indexOf(newEnv) < 0) {
+                console.debug('adding new env ['+newEnv+'] VS' + JSON.stringify(cmd.envs, null, 2));
+                allProjectEnvs.push(newEnv);
+            }
+        }
+        // getting available all protocols
+        for (let p in cmd.protocols) {
+            let newProtocol = allProjectProtocols[p];
+            if (allProjectProtocols.indexOf(newProtocol) < 0) {
+                console.debug('adding new protocol ['+newProtocol+'] VS' + JSON.stringify(cmd.protocols, null, 2));
+                allProjectProtocols.push(newProtocol);
+            }
+        }
+        // getting available all schemes
+        for (let p in cmd.schemes) {
+            let newScheme = allProjectSchemes[p];
+            if (allProjectSchemes.indexOf(newScheme) < 0) {
+                console.debug('adding new scheme ['+newScheme+'] VS' + JSON.stringify(cmd.schemes, null, 2));
+                allProjectSchemes.push(newScheme);
+            }
+        }
+        // EO project/env.json
+        
+        
+               
+        
+        
+        for (let e in allProjectEnvs) { // ports are to be set for each env
+            let env = allProjectEnvs[e];
+
+            // editing env.json to add host infos
+            if ( typeof(content[bundle][env]) == 'undefined' ) {                
+                content[bundle][env] = {}
+            }
+            if ( typeof(content[bundle][env].host) == 'undefined' ) {
+                content[bundle][env].host = "localhost"
+            }
+            
+            
+            // BO ~/.gina/ports.reverse.json - part 1/2
+            if ( typeof(portsReverse[bundle + '@' + cmd.projectName]) == 'undefined' ) {
+                portsReverse[bundle + '@' + cmd.projectName] = {}
+            }
+            if ( 
+                typeof(portsReverse[bundle + '@' + cmd.projectName][env]) == 'undefined'
+                ||
+                /^string$/i.test( typeof(portsReverse[bundle + '@' + cmd.projectName][env]) )
+            ) {
+                portsReverse[bundle + '@' + cmd.projectName][env] = {}
+            }          
+            // EO ~/.gina/ports.reverse.json - part 1/2
+            
+            
+            // BO ~/.gina/ports.json
+            for (let p in allProjectProtocols) {
+                let protocol = allProjectProtocols[p];
+                if ( typeof(ports[protocol]) == 'undefined' ) {
+                    ports[protocol] = {}
+                }
+                if ( typeof(portsReverse[bundle + '@' + cmd.projectName][env][protocol]) == 'undefined' ) {
+                    portsReverse[bundle + '@' + cmd.projectName][env][protocol] = {}
+                }
+                for (let s in allProjectSchemes) {
+                    let scheme = allProjectSchemes[s];
+                    // skipping none `https` schemes for `http/2`
+                    if ( /^http\/2/.test(protocol) && scheme != 'https' ) {
+                        console.debug('skipping none `https` schemes for `http/2`');
+                        continue;
+                    }
+                    if ( typeof(ports[protocol][scheme]) == 'undefined' ) {
+                        ports[protocol][scheme] = {}
+                    }
+                    if ( typeof(portsReverse[bundle + '@' + cmd.projectName][env][protocol][scheme]) == 'undefined' ) {
+                        portsReverse[bundle + '@' + cmd.projectName][env][protocol][scheme] = {}
+                    }
+                    
+                    let assigned = [];
+                    if ( ports[protocol][scheme].count() > 0 ) {
+                        for (let port in ports[protocol][scheme]) {
+                            let portDescription = ports[protocol][scheme][port] || null;
+                            // already assigned
+                            if ( portDescription && assigned.indexOf(portDescription) > -1 ) {
+                                // cleanup
+                                delete ports[protocol][scheme][port];
+                                portsAvailable.unshift(port);
+                                continue;
+                            }
+                            assigned.push(portDescription);                    
+                        }
+                    }
+                        
+                    
+                    let stringifiedScheme = JSON.stringify(ports[protocol][scheme]);
+                    let patt = new RegExp(bundle +'@'+ cmd.projectName +'/'+ env);
+                    let found = false;
+                    let portToAssign = null;
+                    // do not override if existing
+                    if ( patt.test(stringifiedScheme) ) { // there can multiple matches
+                        found = true;                    
+                        // reusing the same for portsReverse
+                        let re = new RegExp('([0-9]+)\"\:(|\s+)\"('+ bundle +'\@'+ cmd.projectName +'\/'+ env +')', 'g');
+                        let m;
+                        while ((m = re.exec(stringifiedScheme)) !== null) {
+                            // This is necessary to avoid infinite loops with zero-width matches
+                            if (m.index === re.lastIndex) {
+                                re.lastIndex++;
+                            }                        
+                            // The result can be accessed through the `m`-variable.
+                            try {
+                                m.forEach((match, groupIndex) => {
+                                    //console.debug(`Found match, group ${groupIndex}: ${match}`);
+                                    if (groupIndex == 1) {                                    
+                                        portToAssign = ~~match;
+                                        //console.debug('['+bundle+'] port to assign '+ portToAssign + ' - ' + protocol +' '+ scheme);
+                                        throw new Error('breakExeception');
+                                    }
+                                });
+                            } catch (breakExeption) {
+                                break;
+                            }
+                        }                    
+                    }
+                    
+                    if (!portToAssign) {
+                        //console.debug('['+bundle+'] No port to assign '+ portToAssign + ' - ' + protocol +' '+ scheme);
+                        portToAssign = portsAvailable[0];
+                        
+                        // port is no longer available
+                        portsAvailable.splice(0,1);
+                    }
+                    ports[protocol][scheme][portToAssign] = bundle +'@'+ cmd.projectName +'/'+ env;
+                    
+                    // BO ~/.gina/ports.reverse.json - part 2/2
+                    //override needed since it is relying on ports definitions
+                    portsReverse[bundle + '@' + cmd.projectName][env][protocol][scheme] = ~~portToAssign;
+                    // EO ~/.gina/ports.reverse.json - part 2/2
+                        
+                } // EO for (let scheme in schemes)
+            } // for (let protocol in protocols)        
+            // EO ~/.gina/ports.json
+        }
+        
+
+        try {
+            // save to /<project_path>/env.json
+            lib.generator.createFileFromDataSync(content, envDataPath);
+            cmd.envDataWrote = true;
+            
+            // save to ~/.gina/ports.json
+            lib.generator.createFileFromDataSync(ports, portsPath);
+            cmd.portsDataWrote = true;
+            // save to ~/.gina/ports.reverse.json
+            lib.generator.createFileFromDataSync(portsReverse, portsReversePath);
+            cmd.portsReverseDataWrote = true;
+
+            cb(false)
+        } catch (err) {
+            cb(err)
         }
     }
 

@@ -75,7 +75,7 @@ InitProject = function(conf, exports) {
     var testProjectStructure = function(callback) {
         try {
             testProjectStructureDone = true;
-            var project = require(_(workspace.toString() + '/project.json') );
+            var project = require(_(workspace.toString() + '/manifest.json') );
             var isConform = true;
             if (
                 typeof(project['name']) == 'undefined' ||

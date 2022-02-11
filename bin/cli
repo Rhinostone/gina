@@ -9,7 +9,6 @@ var isWin32     = (process.platform === 'win32') ? true : false;
 var binPath     = __dirname;
 var ginaPath    = (binPath.replace(/\\/g, '/')).replace('/bin', '');
 ginaPath = (isWin32) ? ginaPath.replace(/\//g, '\\') : ginaPath;
-
 var help        = require(ginaPath + '/utils/helper.js');
 // loading pack
 var pack        = ginaPath + '/package.json';
@@ -20,6 +19,7 @@ try {
     var packObj         = require(pack);
     var version         = getEnvVar('GINA_VERSION') || packObj.version;
     var frameworkPath   = ginaPath + '/framework/v' + version;
+    var generator   = require(frameworkPath + '/lib/generator');
 
     require(frameworkPath + '/lib');
     var aliases     = require(frameworkPath + '/lib/cmd/aliases.json');
@@ -46,12 +46,16 @@ try {
 var debugPort           = null
     , debugBrkEnabled   = false
     , params            = process.argv
+    , isUpdateRequired  = false
 ;
+var home = getUserHome();
 if ( params.length > 0 ) {
     for (var p = 0, len = params.length; p < len; ++p) {
         if ( /^\-\-debug(\_|\-)port/.test(params[p]) ) {
-            setEnvVar('GINA_DEBUG_PORT', params[p].split(/\=/)[1]);
-            break;
+            let port = params[p].split(/\=/)[1];
+            setEnvVar('GINA_DEBUG_PORT', port);
+            isUpdateRequired = true;            
+            continue;
         }
         
         if ( /^\-\-(inspect|debug)/.test(params[p]) ) {
@@ -67,7 +71,6 @@ if ( params.length > 0 ) {
 
 filterArgs();
 //check for $HOME path, alert if empty.
-var home = getUserHome();
 if (!home) {
     console.error('No ' + ((isWin32) ? 'USERPROFILE' : 'HOME') + ' path found.')
 } else {
@@ -82,6 +85,7 @@ if (!home) {
     setEnvVar('GINA_HOME', home);
     setEnvVar('GINA_DIR', ginaPath);
     setEnvVar('GINA_FRAMEWORK_DIR', frameworkPath);
+    setEnvVar('GINA_CORE', frameworkPath + '/core');
 
     if ( typeof(getEnvVar('GINA_HOMEDIR')) == 'undefined') {
         setEnvVar('GINA_HOMEDIR', home + '/.gina')
@@ -90,7 +94,13 @@ if (!home) {
 }
 setEnvVar('GINA_IS_WIN32', isWin32, true);
 
-
+if (isUpdateRequired) {
+    let settingsPath =  _( home +'/'+ shortVersion +'/settings.json', true );
+    let settings = requireJSON(settingsPath);
+    settings['debug_port'] = getEnvVar('GINA_DEBUG_PORT');
+    console.debug('Updating debug settings: #'+  getEnvVar('GINA_DEBUG_PORT'));
+    generator.createFileFromDataSync(settings, settingsPath);
+}
 
 /**
  * Framework port

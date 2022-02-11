@@ -86,7 +86,7 @@ Model = function(namespace){
 
                     //Will be in Utils.Dev.Factory soon.
                     var produce = function(entityName, i){
-                        console.log("producing ", files[i]);
+                        console.debug("producing ", files[i]);
 
                         utils.config.get('gina', 'project.json', function(err, config){
                             //if (err) logger.error('gina', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);

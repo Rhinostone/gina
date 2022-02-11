@@ -54,7 +54,7 @@ function Rename(opt, cmd) {
         var folder = new _(self.projects[local.source].path)
             , re = new RegExp("\/"+folder.toArray().last()+"$")
             , target = folder.toUnixStyle().replace(re, '/'+ local.target)
-            , project = {}// local project.json
+            , project = {}// local manifest.json
             , pack = {};// local pakage.json
 
             
@@ -72,12 +72,12 @@ function Rename(opt, cmd) {
             // renaming project in config files
             self.projects[local.target].path = target;
 
-            if ( fs.existsSync( _(target +'/project.json') )) {
-                project = require(_(target +'/project.json'));
+            if ( fs.existsSync( _(target +'/manifest.json') )) {
+                project = require(_(target +'/manifest.json'));
                 project['name'] = local.target;
                 lib.generator.createFileFromDataSync(
                     project,
-                    _(target +'/project.json')
+                    _(target +'/manifest.json')
                 )
             }
 

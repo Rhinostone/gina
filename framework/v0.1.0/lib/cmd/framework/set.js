@@ -10,8 +10,8 @@ function Set(opt){
 
     var init = function(opt){
         //if ( typeof(GINA_LOG_LEVEL) != '')
-        var a = [], k, v;
-        for (var i=3; i<process.argv.length; ++i) {
+        var a = [], k = null, v = null;
+        for (let i=3; i<process.argv.length; ++i) {
             a = process.argv[i].split(/=/);
             k = a[0];
             v = a[1];

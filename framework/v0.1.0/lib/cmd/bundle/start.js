@@ -1,3 +1,4 @@
+const { debug } = require('console');
 var fs          = require('fs');
 var spawn       = require('child_process').spawn;
 
@@ -14,10 +15,7 @@ var console     = lib.logger;
  *
  * */
 function Start(opt, cmd) {
-    var self    = {}
-    , local     = {
-        bundle      : null        
-    };
+    var self    = {};
     
 
     var init = function(opt, cmd) {
@@ -31,7 +29,8 @@ function Start(opt, cmd) {
                       
         // start all bundles   
         opt.onlineCount = 0;   
-        opt.notStarted = [];  
+        opt.notStarted = [];
+        
         if (!self.name) {
             start(opt, cmd, 0);
         } else {
@@ -45,7 +44,7 @@ function Start(opt, cmd) {
         var debugStr = null;
         if ( /\-\-(inspect|debug)/.test(opt.argv.join(',')) ) {
             var pArr = null;
-            for (var i = 0, len = opt.argv.length; i<len; i++) {
+            for (let i = 0, len = opt.argv.length; i<len; i++) {
                 if ( /\-\-(inspect|debug)/.test(opt.argv[i]) ) {
                     pArr = opt.argv[i].replace(/\s+/g, '').split(/=/);
                     opt.debugBrkEnabled = /\-brk/.test(pArr[0]);
@@ -56,11 +55,22 @@ function Start(opt, cmd) {
             }            
         }
         
+        
         var isBulkStart = (typeof(bundleIndex) != 'undefined') ? true : false;
+        
         var bundle = (isBulkStart) ? self.bundles[bundleIndex] : self.name;
-
+        // console.debug('bundle -> ', bundle);
+        var env = ( typeof(self.bundlesByProject[self.projectName][bundle].def_env) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_env : self.defaultEnv;
+        // console.debug('env -> ', env);
+        var protocol = self.bundlesByProject[self.projectName][bundle].def_protocol;
+        // console.debug('protocol -> ', protocol);
+        var scheme = self.bundlesByProject[self.projectName][bundle].def_scheme;
+        // console.debug('scheme -> ', scheme);
+        var bundlePort = self.portsReverseData[bundle + '@' + self.projectName][env][protocol][scheme];        
+        // console.debug('port -> ', bundlePort);
+                
         var msg = null;
-        if ( !isDefined('bundle', bundle) ) {
+        if ( !isBulkStart && !isDefined('bundle', bundle) ) {
             msg = 'Bundle [ '+ bundle +' ] is not registered inside `@'+ self.projectName +'`';
             console.error(msg);
             opt.client.write(msg);
@@ -73,7 +83,6 @@ function Start(opt, cmd) {
                 , index     = null
                 , i         = null
                 , len       = null
-                , msg       = null
             ;
             
             isRealApp(bundle, function(err, appPath){
@@ -91,7 +100,7 @@ function Start(opt, cmd) {
                     }
                     console.info(msg);
                     opt.client.write(msg);
-                    
+                                        
                     process.list = (process.list == undefined) ? [] : process.list;
                     setContext('processList', process.list);
                     setContext('ginaProcess', process.pid);
@@ -195,8 +204,9 @@ function Start(opt, cmd) {
                         if (!opt.client.destroyed && !isStarting && !checkCaseCount) {                            
                             isStarting = true;
                             clearInterval(timerId);
-                            ++opt.onlineCount;                            
-                            opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] started :D');
+                            ++opt.onlineCount;
+                            
+                            opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] started on port #'+ bundlePort+' :D');
                             
                             end(opt, cmd, isBulkStart, bundleIndex);
                             return;
@@ -236,7 +246,8 @@ function Start(opt, cmd) {
                     
                 }
                 
-            })//EO isRealApp
+            });//EO isRealApp
+            
         }
     }
     
@@ -269,11 +280,11 @@ function Start(opt, cmd) {
 
 
     var isRealApp = function(bundle, callback) {
-
+        
         var p               = null
             , d             = null
             , env           = self.projects[self.projectName]['def_env']
-            , isDev         = GINA_ENV_IS_DEV
+            , isDev         = ( self.projects[self.projectName]['dev_env'] == env ) ? true : false
             , root          = self.projects[self.projectName].path
             , bundleDir     = null
             , bundlesPath   = null
@@ -282,15 +293,16 @@ function Start(opt, cmd) {
 
         try {
             //This is mostly for dev.
-            var pkg = require( _(root + '/project.json') ).bundles;
-
+            var pkg = requireJSON( _(root + '/manifest.json', true) ).bundles;            
             if ( typeof(pkg[bundle].release.version) == 'undefined' && typeof(pkg[bundle].tag) != 'undefined') {
                 pkg[bundle].release.version = pkg[bundle].tag
             }
+            
+            var path = null, version = null;
             if (
                 pkg[bundle] != 'undefined' && pkg[bundle]['src'] != 'undefined' && isDev
             ) {
-                var path = pkg[bundle].src;
+                path = pkg[bundle].src;
 
                 p = _( root +'/'+ path );//path.replace('/' + bundle, '')
                 d = _( root +'/'+ path + '/index.js' );
@@ -302,8 +314,8 @@ function Start(opt, cmd) {
 
             } else {
                 //Others releases.
-                var path    = 'releases/'+ bundle +'/' + env +'/'+ pkg[bundle].release.version;
-                var version = pkg[bundle].release.version;
+                path    = 'releases/'+ bundle +'/' + env +'/'+ pkg[bundle].release.version;
+                version = pkg[bundle].release.version;
                 p = _( root +'/'+ path );//path.replace('/' + bundle, '')
                 d = _( root +'/'+ path + '/index.js' );
 
@@ -323,28 +335,25 @@ function Start(opt, cmd) {
             bundleInit = d;
         }
 
-
         //Checking root.
-        fs.exists(d, function(exists) {
-            if (exists) {
-                //checking bundle directory.
-                fs.stat(p, function(err, stats) {
+        if ( new _(d, true).existsSync() ) {
+            //checking bundle directory.
+            fs.stat(p, function(err, stats) {
 
-                    if (err) {
-                        callback(err)
+                if (err) {
+                    callback(err)
+                } else {
+
+                    if (stats.isDirectory()) {
+                        callback(false, d)
                     } else {
-
-                        if ( stats.isDirectory() ) {
-                            callback(false, d)
-                        } else {
-                            callback(new Error('[ '+ d +' ] is not a directory'))
-                        }
+                        callback(new Error('[ ' + d + ' ] is not a directory'))
                     }
-                })
-            } else {
-                callback(new Error('[ '+ d +' ] does not exists'))
-            }
-        })
+                }
+            })
+        } else {
+            callback(new Error('[ ' + d + ' ] does not exists'))
+        }
     }
     
 

@@ -14,10 +14,7 @@ var console     = lib.logger;
  * */
 function Restart(opt, cmd) {
     
-    var self    = {}
-    , local     = {
-        bundle      : null        
-    };
+    var self    = {};
     
     var init = function(opt, cmd) {
         // import CMD helpers
@@ -27,7 +24,14 @@ function Restart(opt, cmd) {
         if (!isCmdConfigured()) return false;
         
         self.cmdStr = process.argv.splice(0, 2).join(' ');
-              
+        
+        self.inheritedArgv = [];
+        for (let i = 0, len = process.argv.length; i < len; i++) {
+            if ( /^\-\-/.test(process.argv[i]) ) {
+                self.inheritedArgv.push(process.argv[i])
+            }
+        }
+        
         // start all bundles   
         opt.onlineCount = 0;   
         opt.notStarted = [];  
@@ -42,7 +46,17 @@ function Restart(opt, cmd) {
                 
         var isBulkRestart = (typeof(bundleIndex) != 'undefined') ? true : false;
         var bundle = (isBulkRestart) ? self.bundles[bundleIndex] : self.name;
-        
+                
+        // console.debug('bundle -> ', bundle);
+        var env = ( typeof(self.bundlesByProject[self.projectName][bundle].def_env) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_env : self.defaultEnv;
+        // console.debug('env -> ', env);
+        var protocol = self.bundlesByProject[self.projectName][bundle].def_protocol;
+        // console.debug('protocol -> ', protocol);
+        var scheme = self.bundlesByProject[self.projectName][bundle].def_scheme;
+        // console.debug('scheme -> ', scheme);
+        var bundlePort = self.portsReverseData[bundle + '@' + self.projectName][env][protocol][scheme];        
+        // console.debug('port -> ', bundlePort);
+                
         var msg = null;
         if (!isDefined('bundle', bundle)) {
             
@@ -56,11 +70,15 @@ function Restart(opt, cmd) {
                 if (err) {
                     console.error(err.stack || err.message)
                 }
+                               
 
                 var error = null;
                 //console.debug(' OPTIONS => ', opt.debugPort, opt.debugBrkEnabled);
                 //console.info('running: gina bundle:restart '+ bundle + '@' + self.projectName);
                 cmd = '$gina bundle:stop ' + bundle + ' @' + self.projectName + ' && $gina bundle:start ' + bundle + ' @' + self.projectName;
+                if (self.inheritedArgv != '') {
+                    cmd += ' '+ self.inheritedArgv;
+                }
                 if (opt.debugPort) {
                     cmd += ' --inspect';
                     if (opt.debugBrkEnabled) {
@@ -69,7 +87,7 @@ function Restart(opt, cmd) {
                     cmd += '='+ opt.debugPort
                 }
                 cmd = cmd.replace(/\$gina/g, self.cmdStr);
-                console.debug(cmd);
+                console.debug('Executing: '+cmd);
                 
                 exec(cmd, function(err, data) {
 
@@ -77,15 +95,14 @@ function Restart(opt, cmd) {
                         error = err.toString();
                         console.error(error);
                         //opt.notStopped.push(bundle + '@' + self.projectName);
-                        setTimeout(() => {
+                        return setTimeout(() => {
                             end(opt, cmd, isBulkRestart, bundleIndex, true)
-                        }, 500);
-                    } else {
-                        setTimeout(() => {
-                            end(opt, cmd, isBulkRestart, bundleIndex)
-                        }, 500);
+                        }, 500);                        
                     }
-
+                    setTimeout(() => {
+                        opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] restarted on port #'+ bundlePort+' :D\n');
+                        end(opt, cmd, isBulkRestart, bundleIndex)
+                    }, 500);
                 })
             })//EO isRealApp
         }
@@ -133,7 +150,7 @@ function Restart(opt, cmd) {
 
         try {
             //This is mostly for dev.
-            var pkg = require( _(root + '/project.json') ).bundles;
+            var pkg = require( _(root + '/manifest.json') ).bundles;
 
             if ( typeof(pkg[bundle].release.version) == 'undefined' && typeof(pkg[bundle].tag) != 'undefined') {
                 pkg[bundle].release.version = pkg[bundle].tag
@@ -176,26 +193,24 @@ function Restart(opt, cmd) {
 
 
         //Checking root.
-        fs.exists(d, function(exists) {
-            if (exists) {
-                //checking bundle directory.
-                fs.stat(p, function(err, stats) {
+        if ( new _(d, true).existsSync() ) {
+            //checking bundle directory.
+            fs.stat(p, function(err, stats) {
 
-                    if (err) {
-                        callback(err)
+                if (err) {
+                    callback(err)
+                } else {
+
+                    if (stats.isDirectory()) {
+                        callback(false, d)
                     } else {
-
-                        if ( stats.isDirectory() ) {
-                            callback(false, d)
-                        } else {
-                            callback(new Error('[ '+ d +' ] is not a directory'))
-                        }
+                        callback(new Error('[ ' + d + ' ] is not a directory'))
                     }
-                })
-            } else {
-                callback(new Error('[ '+ d +' ] does not exists'))
-            }
-        })
+                }
+            })
+        } else {
+            callback(new Error('[ ' + d + ' ] does not exists'))
+        }
     }
     
     init(opt, cmd)

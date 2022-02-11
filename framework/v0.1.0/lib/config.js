@@ -133,12 +133,12 @@ function ConfigUtil() {
      * @private
      * */
     this.getSync = function(project, file, i){
+        i = i || 0;
         var maxRetry    = 7
-            , delay     = 300
-            , i         = i || 0;
+            , delay     = 300;
 
         if (typeof(file) == 'undefined') {
-            var file = 'locals.json'
+            file = 'locals.json'
         }
 
         if ( typeof(self.value) != 'undefined' ) {

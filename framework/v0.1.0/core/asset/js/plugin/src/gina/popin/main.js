@@ -1282,7 +1282,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             id = $popin.id;
             $el = document.getElementById(id);
             
-            // load external ressources in order of declaration
+            // load external resources in order of declaration
             // TODO - Add support for stylesheets
             var globalScriptsList   = $popin.parentScripts
                 , scripts           = $el.getElementsByTagName('script')
@@ -1553,7 +1553,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 if (GINA_ENV_IS_DEV)
                     $popin.updateToolbar    = updateToolbar;
                 
-                // Get main ressources
+                // Get main resources
                 $popin.parentScripts    = [];
                 $popin.parentStyles     = [];
                 var domain = gina.config.hostname.replace(/(https|http|)\:\/\//, '').replace(/\:\d+$/, '');

@@ -2,6 +2,7 @@ var fs          = require('fs');
 var readline    = require('readline');
 var rl          = readline.createInterface({ input: process.stdin, output: process.stdout });
 
+
 var CmdHelper   = require('./../helper');
 var console     = lib.logger;
 var scan        = require('../port/inc/scan');
@@ -21,8 +22,7 @@ function Add(opt, cmd) {
             // bundle index while searching or browsing
             b : 0,
             bundle : null,
-            bundlePath : null,
-            ports : []
+            bundlePath : null
         }
     ;
 
@@ -33,12 +33,22 @@ function Add(opt, cmd) {
 
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
+        
+        // var i = 3, envs = [];
+        // for (; i<process.argv.length; ++i) {
+        //     if ( /^\@[a-z0-9_.]/.test(process.argv[i]) ) {
+        //         if ( !isValidName(process.argv[i]) ) {
+        //             console.error('[ '+process.argv[i]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].');
+        //             process.exit(1);
+        //         }
 
+        //     } else if (/^[a-z0-9_.]/.test(process.argv[i])) {
+        //         envs.push(process.argv[i])
+        //     }
+        // }
 
-        if ( isDefined('project', self.projectName) && self.bundles.length > 0) {
-
-            addBundles(0)
-
+        if (isDefined('project', self.projectName)) {
+            addBundles(0);
         } else {
             //console.error('[ '+ self.projectName+' ] is not an existing project');
             if ( self.bundles.length == 0) {
@@ -52,12 +62,13 @@ function Add(opt, cmd) {
             process.exit(1)
         }
     }
+    
+    
 
     /**
      * Add bundles
      *
      * @param {number} b - bundle index
-     * @param {number} e - env index
      *
      * */
     var addBundles = function(b) {
@@ -79,45 +90,36 @@ function Add(opt, cmd) {
 
             local.b             = b;
             local.bundle        = bundle;
+            
             local.envFileSaved  = false;
 
             // find available port
             options = {
-                ignore  : self.portsList,
-                len   : ( self.protocolsAvailable.length * self.envs.length * self.bundles.length )
+                ignore  : getPortsList(),
+                limit   : getBundleScanLimit(bundle)
             };
+            console.log('['+bundle+'] starting ports scan' );
 
-            if (b == 0) {
-                // scanning for available ports ...
-                scan(options, function(err, ports){
+            // scanning for available ports ...
+            scan(options, function(err, ports){
+                if (err) {
+                    rollback(err);
+                    return;
+                }
 
-                    if (err) {
-                        console.error(err.stack|err.message);
-                        process.exit(1)
-                    }
-
-
-                    for (var p = 0; p < ports.length; ++p) {
-                        local.ports.push(ports[p])
-                    }
-
-                    local.ports.sort();
-
-                    try {
-                        check();
-                    } catch (err) {
-                        rollback(err)
-                    }
-                })
-            } else {
-                // skip scan
+                for (let p=0; p<ports.length; ++p) {
+                    self.portsList.push(ports[p])
+                }
+                self.portsList.sort();
+                                
+                console.debug('available ports '+ JSON.stringify(ports, null, 2));
+                self.portsAvailable = ports;
                 try {
                     check();
                 } catch (err) {
                     rollback(err)
                 }
-            }
-
+            })
 
         } else {
             console.error('[ '+ bundle+' ] is not a valid bundle name')
@@ -188,121 +190,46 @@ function Add(opt, cmd) {
         }
     }
 
-    var makeBundle = function(bundle, rewrite) {
+    var makeBundle = async function(bundle, rewrite) {
 
         loadAssets();
 
-        var ports               = JSON.clone(self.portsData) // cloning
-            , portsReverse      = JSON.clone(self.portsReverseData) // cloning
-            , portsList         = local.ports
-            , envs              = self.envs
-            , i                 = 0
-            , assigned          = []
-            , defaultProtocol   = self.defaultProtocol
-            , defaultScheme     = self.defaultScheme
-        ;
-
-        if ( typeof(ports[defaultProtocol]) == 'undefined' ) {
-            ports[defaultProtocol] = {}
-        }
-        
-        if ( typeof(ports[defaultProtocol][defaultScheme]) == 'undefined' ) {
-            ports[defaultProtocol][defaultScheme] = {}
-        }
-
-
-        var portValue = null, portReverseValue = null;
-        var re = null, portsListStr = JSON.stringify(self.portsData);
-
-        console.debug('portsList ', portsList);
-        for (;i < portsList.length; ++i) {
-
-            if ( !ports.count() ) {
-                ports[defaultProtocol] = {};
-                ports[defaultProtocol][defaultScheme] = {};
-                ports[defaultProtocol][defaultScheme][ portsList[i] ] = null;
+        setPorts(bundle, self.portsAvailable, function onPortsSet(err){
+            if (err) {
+                rollback(err);
+                return;
             }
+            
+            if (!local.envFileSaved) {
+                saveEnvFile(function doneSavingEnv(err){
 
-            for ( var protocol in ports ) {
-                for (var scheme in ports[protocol]) {
-                    if ( !ports[protocol][scheme].count() ) {
-                        ports[protocol][scheme][ portsList[i] ] = null;
-                    }
+                    if (err) rollback(err);
 
-                    // updating
-                    for (var port in ports[protocol][scheme]) {
+                    saveProjectFile( function doneSavingProject(err, content) {
 
-
-                        for (var e = 0, envsLen = envs.length; e < envsLen; ++e ) {
-
-                            if (!portsList[i]) break;
-                            // ports
-                            portValue = local.bundle +'@'+ self.projectName +'/'+ envs[e];
-                            re = new RegExp(portValue);
-
-                            if ( !re.test(portsListStr) ) {
-                                ports[protocol][scheme][ portsList[i] ] = portValue;
-
-                                // reverse ports
-                                portReverseValue = portsList[i];
-                                if ( typeof(portsReverse[ local.bundle +'@'+ self.projectName ]) == 'undefined' )
-                                    portsReverse[ local.bundle +'@'+ self.projectName ] = {};
-
-                                if ( typeof(portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ]) == 'undefined' )
-                                    portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ] = {};
-                                    
-                                if ( typeof(portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ]) == 'undefined' )
-                                    portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ] = {};
-
-                                // erasing in order to keep consistency
-                                portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ][ scheme ] = portsList[i];
-
-                                ++i;
-                            }
+                        if ( err ) {
+                            rollback(err);
+                            return;
                         }
-                    }
-                }  
-            }
-        }
 
-        // save to ~/.gina/ports.json
-        lib.generator.createFileFromDataSync(ports, self.portsPath);
-        local.portsDataWrote = true;
-
-        // save to ~/.gina/ports.reverse.json
-        lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
-        local.portsReverseDataWrote = true;
-
-
-        if (!local.envFileSaved) {
-            saveEnvFile(function doneSavingEnv(err){
-
-                if (err) rollback(err);
-
-                saveProjectFile( function doneSavingProject(err, content) {
-
-                    if ( err ) {
-                        rollback(err)
-                    }
-
-                    if (rewrite) {
-                        delete content.bundles[local.bundle]
-                    }
-                    createBundle()
+                        if (rewrite) {
+                            delete content.bundles[local.bundle]
+                        }
+                        createBundle()
+                    })
                 })
-            })
 
-        } else { // importing
-            console.log('Bundle [ '+ local.bundle +' ] has been imported to your project with success ;)');
-            rl.clearLine();
-            ++local.b;
-            addBundles(local.b)
-        }
-
+            } else { // importing
+                console.log('Bundle [ '+ local.bundle +' ] has been imported to your project with success ;)');
+                rl.clearLine();
+                ++local.b;
+                addBundles(local.b)
+            }
+        });
     }
 
     /**
-     * Save project.json
+     * Save manifest.json
      *
      * @param {string} projectPath
      * @param {object} content - Project file content to save
@@ -310,26 +237,31 @@ function Add(opt, cmd) {
      * */
     var saveProjectFile = function(callback) {
 
-        var data = JSON.clone(self.projectData);
-
+        var data    = JSON.clone(self.projectData);
         var version = '0.0.1';
+        var envs    = self.projects[self.projectName].envs;
         data.bundles[local.bundle] = {
             "_comment" : "Your comment goes here.",
             "tag" : ( version.split('.') ).join(''),
             "src" : "src/" + local.bundle,
             "release" : {
-                "version" : version,
-                "link" : "bundles/"+ local.bundle,
-                "release": {
-                    "version": version,
-                    "link": "bundles/"+ local.bundle,
-                    "target": "releases/"+ local.bundle +"/prod/" + version
-                }
+                "version"   : version,
+                "link"      : "bundles/"+ local.bundle,
+                "targets"    : {}
             }
         };
+        //"release/"+ local.bundle +"/prod/" + version
+        for (let i = 0, len = envs.length; i < len; ++i) {
+            let env = envs[i];
+            // ignore target for dev env
+            if ( self.projects[self.projectName]['dev_env'] == env ) {
+                continue;
+            }
+            data.bundles[local.bundle].release.targets[env] = "releases/"+ local.bundle +"/"+ env +"/" + version;
+        }
 
         try {
-
+            //var path = self.projectPath.replace(/\.json$/, env + '.json');
             lib.generator.createFileFromDataSync(data, self.projectPath);
             local.projectDataWrote = true;
 
@@ -400,26 +332,41 @@ function Add(opt, cmd) {
             , sample    = new _( getPath('gina').core + '/template/boilerplate/bundle/' );
 
 
-        sample.cp(target, function done(err) {
+        sample.cp(target, function done(err, destination) {
 
             if (err) {
-
-                rollback(err)
-
-            } else {
-                // Browse, parse and replace keys
-                local.source        = target;
-                local.isInstalled   = false;
-
-                browse(local.source);
-
-                if (local.isInstalled) {
-                    console.log('Bundle [ '+ local.bundle +' ] has been added to your project with success ;)');
-                    rl.clearLine();
-                    ++local.b;
-                    addBundles(local.b)
-                }
+                rollback(err);
+                return;
             }
+            
+            // Browse, parse and replace keys
+            local.source        = target;
+            local.isInstalled   = false;
+            
+            // check installed bundle
+            browse(local.source);            
+
+            if (local.isInstalled) {
+                
+                // remove files we don't want yet
+                new _(destination + '/config/templates.json', true).rmSync();
+                
+                // if first bundle of th project, modify webroot
+                if (self.bundlesByProject[self.projectName].count() == 1) {
+                    var settingsServerPath = _(destination + '/config/settings.server.json', true);
+                    var serverSettings = fs.readFileSync(settingsServerPath).toString();
+                    serverSettings = serverSettings.replace('"webroot": "/{bundle}"', '"webroot": "/"');
+                    lib.generator.createFileFromDataSync(serverSettings, settingsServerPath);
+                }
+                    
+                
+                
+                console.log('Bundle [ '+ local.bundle +' ] has been added to your project with success ;)');
+                rl.clearLine();
+                ++local.b;
+                addBundles(local.b)
+            }
+            
         })
     }
 
@@ -431,14 +378,14 @@ function Add(opt, cmd) {
      * */
     var browse = function(source, list) {
 
-        var bundle = local.bundle
-            , newSource
-            , files = fs.readdirSync(source)
-            , f = 0;
+        var newSource   = null
+            , files     = fs.readdirSync(source)
+            , f         = 0
+        ;
 
         if (source == local.source && typeof(list) == 'undefined') {//root
-            var list = [];// root list
-            for (var l=0; l<files.length; ++l) {
+            list = [];// root list
+            for (let l=0; l<files.length; ++l) {
                 list[l] = _(local.source +'/'+ files[l])
             }
         }
@@ -482,10 +429,11 @@ function Add(opt, cmd) {
     var parse = function(file, list) {
         //console.log('replacing: ', file);
         try {
-            var f;
-            f =(f=file.split(/\//))[f.length-1];
+            var f = null;
+            f = (f=file.split(/\//))[f.length-1];
             var isJS = /\.js/.test(f.substring(f.length-3))
-                , isJSON = /\.js/.test(f.substring(f.length-5));
+                , isJSON = /\.js/.test(f.substring(f.length-5))
+            ;
 
             if ( isJS || isJSON && /config\/app\.json/.test(file) ) {
                 var contentFile = fs.readFileSync(file, 'utf8').toString();
@@ -516,26 +464,19 @@ function Add(opt, cmd) {
 
         var writeFiles = function() {
             //restore env.json
-            if ( typeof(local.envDataWrote) == 'undefined' ) {
-                lib.generator.createFileFromDataSync(self.envData, self.envPath)
-            }
+            lib.generator.createFileFromDataSync(self.envData, self.envPath);
+            
             //restore project.json
-            if ( typeof(local.projectDataWrote) == 'undefined' ) {
-                if ( typeof(self.projectData.bundles[local.bundle]) != 'undefined') {
-                    delete self.projectData.bundles[local.bundle]
-                }
-                lib.generator.createFileFromDataSync(self.projectData, self.projectPath)
+            if ( typeof(self.projectData.bundles[local.bundle]) != 'undefined') {
+                delete self.projectData.bundles[local.bundle]
             }
+            lib.generator.createFileFromDataSync(self.projectData, self.projectPath);
 
             //restore ports.json
-            if ( typeof(local.portsDataWrote) == 'undefined' ) {
-                lib.generator.createFileFromDataSync(self.portsData, self.portsPath)
-            }
+            lib.generator.createFileFromDataSync(self.portsData, self.portsPath);
 
             //restore ports.reverse.json
-            if ( typeof(local.portsReverseDataWrote) == 'undefined' ) {
-                lib.generator.createFileFromDataSync(self.portsReverseData, self.portsReversePath)
-            }
+            lib.generator.createFileFromDataSync(self.portsReverseData, self.portsReversePath);
 
 
             process.exit(1)

@@ -258,7 +258,7 @@ function Router(env) {
         setContext('router', routerObj);
         
         var middleware      = params.middleware || [];
-        var actionFile      = params.param.file; // matches rule name
+        var actionFile      = params.param.file || null; // matches rule name
         var namespace       = params.namespace;
         var routeHasViews   = routerObj.hasViews;
         var isUsingTemplate = conf.template;
