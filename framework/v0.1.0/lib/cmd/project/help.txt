@@ -12,12 +12,14 @@
     $ gina project:add @<project_name> [ —-path=/var/www/<project_name> ] (if no path given, will take the current)
 
     where `/var/www/<project_name>` is the destination path
+    NB.: `--path` can also be a relative path like `--path=./` or `--path=./<project_name>`
+    If you do not specifiy a `<project_name>` for the `--path` argument , gina will reuse the one you used with `@<project_name>`
     
     This command line also supports relative path like `--path=./<project_name>`
 
     2nd method
     ----------
-    From current project path : project name will be by default the current project folder
+    From current project path : project name will be by default the current project folder name
     $ gina project:add
 
 

@@ -14,10 +14,7 @@ var console = lib.logger;
  *
  * */
 function Stop(opt, cmd) {
-    var self = {}
-        , local = {
-            bundle: null
-        };
+    var self = {};
 
     var init = function(opt, cmd) {
         
@@ -44,7 +41,7 @@ function Stop(opt, cmd) {
         var bundle = (isBulkStop) ? self.bundles[bundleIndex] : self.name;
 
         var msg = null;
-        if (!isDefined('bundle', bundle)) {
+        if (!isBulkStop && !isDefined('bundle', bundle)) {
             msg = 'Bundle [ ' + bundle + ' ] is not registered inside `@' + self.projectName + '`';
             console.error(msg);
             end(opt, cmd, isBulkStop, bundleIndex, true)
@@ -151,9 +148,9 @@ function Stop(opt, cmd) {
 
         try {
             //This is mostly for dev.
-            var pkg = require(_(root + '/project.json')).bundles;
+            var pkg = requireJSON(_(root + '/manifest.json')).bundles;
 
-            if (typeof (pkg[bundle].release.version) == 'undefined' && typeof (pkg[bundle].tag) != 'undefined') {
+            if ( typeof(pkg[bundle].release.version) == 'undefined' && typeof (pkg[bundle].tag) != 'undefined' ) {
                 pkg[bundle].release.version = pkg[bundle].tag
             }
             if (
@@ -191,29 +188,31 @@ function Stop(opt, cmd) {
             d = _(root + '/' + bundleDir + '/' + bundle + '/index.js');
             bundleInit = d;
         }
+        
+        // removing mounting point
+        var coreEnv = getCoreEnv(bundle);
+        new _(coreEnv.mountPath +'/'+ bundle, true).rmSync();
 
 
         //Checking root.
-        fs.exists(d, function(exists) {
-            if (exists) {
-                //checking bundle directory.
-                fs.stat(p, function(err, stats) {
+        if ( new _(d, true).existsSync() ) {
+            //checking bundle directory.
+            fs.stat(p, function(err, stats) {
 
-                    if (err) {
-                        callback(err)
+                if (err) {
+                    callback(err)
+                } else {
+
+                    if (stats.isDirectory()) {
+                        callback(false, d)
                     } else {
-
-                        if (stats.isDirectory()) {
-                            callback(false, d)
-                        } else {
-                            callback(new Error('[ ' + d + ' ] is not a directory'))
-                        }
+                        callback(new Error('[ ' + d + ' ] is not a directory'))
                     }
-                })
-            } else {
-                callback(new Error('[ ' + d + ' ] does not exists'))
-            }
-        })
+                }
+            })
+        } else {
+            callback(new Error('[ ' + d + ' ] does not exists'))
+        }
     }
 
 

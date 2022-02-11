@@ -671,11 +671,11 @@ exports['requireJSON: routing.json case'] = function(test) {
     "help": {
         "url": [
             "/help",
-            "/ressources"
+            "/resources"
         ],
         "param": {
             "control": "help",
-            "title": "Ressources"
+            "title": "Resources"
         }
     },
     "docs": {

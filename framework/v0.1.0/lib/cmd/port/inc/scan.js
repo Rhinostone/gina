@@ -9,7 +9,7 @@ var console = lib.logger;
  *  @param {object|bool} err
  *  @param {array} ports
  * */
-module.exports = function scan(opt, cb){
+module.exports = function Scanner(opt, cb){
 
     var defaultOptions = {
         // default binding for localhost

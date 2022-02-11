@@ -1,4 +1,4 @@
-// bundle need to be restarted on changes !!
+// bundle needs to be restarted on changes !!
 {
     // common definitions : will apply for all templates
     "_common": {
@@ -10,7 +10,7 @@
         "http-metas": {
             "content-type": "text/html"
         },
-        // global css - Will fetch from {Bundle}/public
+        // global css - Will fetch from {bundle}/public
         "stylesheets": [
             {
                 "url": "/css/default.css"
@@ -29,7 +29,7 @@
         //"stylesheetsExcluded": "*",        
         // If you also want to get rid of `gina` definitions, use "**" while excluding
         
-        // local css - Will fetch from {Bundle}/public
+        // local css - Will fetch from {bundle}/public
         "stylesheets": [
             {
                 "url": "/css/home.css"

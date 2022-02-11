@@ -229,7 +229,7 @@ if (!isPath) {
 }
 
 
-// Todo - load from env.json or locals  or project.json ??
+// Todo - load from env.json or locals  or manifest.json ??
 /**
  * abort
  * 
@@ -264,7 +264,7 @@ gna.emit = e.emit;
 gna.started = false;
 
 /**
- * Get project conf from project.json
+ * Get project conf from manifest.json
  *
  *
  * @param {function} callback
@@ -272,7 +272,7 @@ gna.started = false;
  * */
 gna.getProjectConfiguration = function (callback){
 
-    var modulesPackage = _(root + '/project.json');
+    var modulesPackage = _(root + '/manifest.json');
     var project     = {}
         , bundles   = [];
     
@@ -352,7 +352,7 @@ gna.getProjectConfiguration = function (callback){
  * */
 gna.mount = process.mount = function(bundlesPath, source, target, type, callback){
     if ( typeof(type) == 'function') {
-        var callback = type;
+        callback = type;
         type = 'dir';
     }
     
@@ -770,33 +770,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                             
                                             instance.completeHeaders(null, request, response);                                            
                                             
-                                            if ( typeof(request.isPreflightRequest) != 'undefined' && request.isPreflightRequest ) {
-                                                
-                                                // var url     = request.url
-                                                //     , ext   = null
-                                                //     , mime  = 'text/plain' // by default
-                                                // ;
-                                                
-                                                // // check if url has an extension
-                                                // if ( /\/([a-z0-9-_]+)\.[a-z0-9]+$/i.test(url) ) {//
-                                                //     ext = url.substr(url.lastIndexOf('.')).match(/(\.[A-Za-z0-9]+)/)[0];
-                                                // } else if ( typeof(request.routing.ext) != 'undefined') { // if not, check route
-                                                //     url = 'https://freelancer-app.fr.local:3154/api/documentation/ '; 
-                                                // } else { // without extension - folder ?
-                                                    
-                                                // }
-                                                // var mime = 
-                                                // /text\/html/.test(request.headers.accept)
-                                                
-                                                // if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['access-control-request-headers']) ) {
-                                                    
-                                                //     // Internet Explorer override
-                                                //     if ( /msie/i.test(request.headers['user-agent']) ) {
-                                                //         response.setHeader('content-type', 'text/plain' + '; charset='+ conf.encoding)
-                                                //     } else {
-                                                //         response.setHeader('content-type', conf.server.coreConfiguration.mime['json'] + '; charset='+ conf.encoding)
-                                                //     }
-                                                // }
+                                            if ( typeof(request.isPreflightRequest) != 'undefined' && request.isPreflightRequest ) {                                                
                                                 var ext = 'html';
                                                 var headers = {    
                                                     // Responses to the OPTIONS method are not cacheable. - https://tools.ietf.org/html/rfc7231#section-4.3.7

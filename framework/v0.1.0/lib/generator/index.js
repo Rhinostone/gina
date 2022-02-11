@@ -77,9 +77,8 @@ var Generator = {
         fs.writeFileSync(target, data);
         fs.chmodSync(target, 0755)
     },
-    createFoldersFromStructureSync : function(structure){
-
-    },
+    // createFoldersFromStructureSync : function(structure){
+    // },
     createPathSync : function(path, callback) {
         var t = path.replace(/\\/g, '\/').split('/');
         var path = '';

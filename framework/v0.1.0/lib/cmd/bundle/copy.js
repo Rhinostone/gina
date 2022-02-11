@@ -6,7 +6,7 @@
  *      * ~/.gina/ports.json
  *      * ~/.gina/portsReverse.json
  *      * update ports on /new/path/to/project/env.json
- *      * update infos on /new/path/to/project/project.json
+ *      * update infos on /new/path/to/project/manifest.json
  *      * No cleanup needed since it's only a copy !
  *
  * The main advantage you are gaining over a simple copy/paste is that gina is going to

@@ -1722,8 +1722,26 @@ function Server(options) {
             //     request.url = self.conf[self.appName][self.env].server.webroot
             // }
             
+                      
             // webroot filter
             var isWebrootHandledByRouting = ( self.conf[self.appName][self.env].server.webroot == request.url && !fs.existsSync( _(self.conf[self.appName][self.env].publicPath +'/index.html', true) ) ) ? true : false;
+            // webrootAutoredirect case  
+            if (
+                request.url == '/'
+                && typeof(self.conf[self.appName][self.env].server.webroot) != 'undefined'
+                && /^true$/i.test(self.conf[self.appName][self.env].server.webrootAutoredirect) 
+            ) {
+                var routing = self.conf[self.appName][self.env].content.routing;
+                if (
+                    typeof(routing['webroot@'+self.appName]) != 'undefined'
+                    && self.conf[self.appName][self.env].server.webroot == routing['webroot@'+self.appName].webroot 
+                ) {
+                    var urls = routing['webroot@'+self.appName].url.split(',');
+                    if ( urls.indexOf('/') > -1 ) {
+                        isWebrootHandledByRouting = true;
+                    }
+                }
+            }
             
             // priority to statics - this portion of code has been duplicated to SuperController : see `isStaticRoute` method
             var staticsArr  = self.conf[self.appName][self.env].publicResources; 

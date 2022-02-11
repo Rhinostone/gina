@@ -73,7 +73,7 @@ function Initialize(opt) {
 
         if ( !getEnvVar('GINA_HOMEDIR') ) {
             setEnvVar('GINA_HOMEDIR', path)
-        } else {
+        } else {
             path = self.opt.homedir = getEnvVar('GINA_HOMEDIR')
         }
 
@@ -301,9 +301,18 @@ function Initialize(opt) {
             , userSettings  = {}
             , target        = _(self.opt.homedir +'/'+ self.release +'/settings.json', true)
         ;
+        
+        // case of debug_port updated
+        var targetObj = new _(target);
+        if ( !getEnvVar('GINA_DEBUG_PORT') && targetObj.existsSync() ) {
+            var localUserSettings = requireJSON(target);
+            if ( typeof(localUserSettings.debug_port) != 'undefined' ) {
+                setEnvVar('GINA_DEBUG_PORT', ~~localUserSettings.debug_port);
+            }
+        }
 
         // updated on framework start : you never know which user is going to start gina (root ? sudo ? regular user)
-        // TODO - user settings override is passed through argv : —-logdir=value  —-tmpdir=value —-rundir=value —-homedir=value
+        // user settings override is passed through argv while using `gina framework:set` : —-logdir=value  —-tmpdir=value —-rundir=value —-homedir=value
 
         var uid     = process.getuid()
             , gid   = process.getgid();
@@ -316,7 +325,7 @@ function Initialize(opt) {
                 'timezone' : getEnvVar('GINA_TIMEZONE'),
                 'dev_env' : env,
                 'node_version': process.version,
-                'debug_port' : getEnvVar('GINA_DEBUG_PORT') || process.debugPort || 5858,
+                'debug_port' : getEnvVar('GINA_DEBUG_PORT') || process.debugPort || 5757,
                 'user' : process.env.USER,
                 'uid' : uid,
                 'gid' : gid,
@@ -330,6 +339,8 @@ function Initialize(opt) {
             settings = whisper(dic, settings);
             settings = merge(userSettings, settings);
             self.settings = settings;
+            
+            setEnvVar('GINA_DEBUG_PORT', settings['debug_port']);
 
             lib.generator.createFileFromDataSync(
                 settings,
@@ -360,11 +371,6 @@ function Initialize(opt) {
     // }
 
     self.end = function() {
-        //getDefined() to list it all
-        //for (var c in process.gina) {
-        //    define(c, process.gina[c])
-        //}
-        //delete  process.gina
         defineDefault(process.gina)
     }
 

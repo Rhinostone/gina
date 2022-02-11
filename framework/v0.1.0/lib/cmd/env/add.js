@@ -61,12 +61,12 @@ function Add(opt, cmd) {
         ;
 
 
-        if ( !fs.existsSync( _(self.projects[self.projectName].path + '/project.json') )) {
+        if ( !fs.existsSync( _(self.projects[self.projectName].path + '/manifest.json') )) {
             console.error('project corrupted');
             process.exit(1)
         }
 
-        self.project = requireJSON(_(self.projects[self.projectName].path + '/project.json'));
+        self.project = requireJSON(_(self.projects[self.projectName].path + '/manifest.json'));
         self.portsList = []; // list of all ports to ignore whles scanning
         var protocols = self.projects[self.projectName].protocols;
         var schemes = self.projects[self.projectName].schemes;
@@ -108,7 +108,7 @@ function Add(opt, cmd) {
             self.portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json');
             self.portsReverseData = require(self.portsReversePath);
 
-            addEnvToBundles(0, 0)
+            addEnvToBundles(0)
         }
     }
 
@@ -118,7 +118,7 @@ function Add(opt, cmd) {
      *
      * @param {string} file
      * */
-    var addEnvToBundles = function(b, e) {
+    var addEnvToBundles = function(b) {
         if (b > self.bundles.length-1) {// done
             try {
                 addEnvToProject();
@@ -130,51 +130,17 @@ function Add(opt, cmd) {
             }
         }
 
-        var bundle  = self.bundles[b]
-            , env   = self.envs[e]
-        ;
+        var bundle  = self.bundles[b] ;
 
         if ( /^[a-z0-9_.]/.test(bundle) ) {
 
             local.bundle    = bundle;
             local.b         = b;
-            local.env       = env;
-            local.e         = e;
-            
-            var getBundleScanLimit = function(bundle, env) {
-                var limit           = null
-                    , i             = 0
-                    , maxLimit      = self.projects[self.projectName].envs.length * self.projects[self.projectName].protocols.length * self.projects[self.projectName].schemes.length
-                    , portsReverse  = self.portsReverseData[bundle +'@'+ self.projectName]
-                ;
-                
-                if ( typeof(env) != 'undefined' ) {
-                    maxLimit        = self.projects[self.projectName].protocols.length * self.projects[self.projectName].schemes.length;
-                    portsReverse    = self.portsReverseData[bundle +'@'+ self.projectName][env];                    
-                    for ( let protocol in portsReverse[env]) {
-                        for (let scheme in portsReverse[env][protocol]) {
-                            ++i;
-                        }
-                    }
-                    limit = maxLimit - i;
-                } else {
-                    for (let env in portsReverse) {
-                        for ( let protocol in portsReverse[env]) {
-                            for (let scheme in portsReverse[env][protocol]) {
-                                ++i;
-                            }
-                        }
-                    }
-                    limit = maxLimit - i;
-                }
-                
-                return limit;
-            }
-            
+                                   
                         
             // find available port
             var options = {
-                ignore  : self.portsList,
+                ignore  : getPortsList(),
                 limit   : getBundleScanLimit(bundle)
             };
             console.log('['+bundle+'] starting ports scan' );
@@ -185,23 +151,22 @@ function Add(opt, cmd) {
                     return;
                 }
 
-                for (var p=0; p<ports.length; ++p) {
+                for (let p=0; p<ports.length; ++p) {
                     self.portsList.push(ports[p])
                 }
                 self.portsList.sort();
-                if ( typeof(self.portsAvailable[local.bundle]) == 'undefined' ) {
-                    self.portsAvailable[local.bundle] = {}
-                }
-                self.portsAvailable[local.bundle][local.env] = ports;
-                                
-                console.debug('available ports '+ JSON.stringify(self.portsAvailable[local.bundle][local.env], null, 2));
                 
-                
-                try {
-                    setPorts();
-                } catch (err) {
-                    rollback(err)
-                }
+                self.portsAvailable = ports;
+                setPorts(local.bundle, self.portsAvailable, function onPortsSet(err) {
+                    if (err) {
+                        rollback(err);
+                        return;
+                    }
+                    
+                    console.debug('available ports '+ JSON.stringify(self.portsAvailable[local.bundle], null, 2));
+                    ++local.b;
+                    addEnvToBundles(local.b)
+                });
             })
 
         } else {
@@ -210,210 +175,206 @@ function Add(opt, cmd) {
         }
     }
 
-    var setPorts = function() {
-        var portsPath           = _(GINA_HOMEDIR + '/ports.json', true)
-            , portsReversePath  = _(GINA_HOMEDIR + '/ports.reverse.json', true)
-            , envDataPath       = _(self.projects[self.projectName].path + '/env.json', true)
-        ;
+    // var setPorts = function(bundle, env) {
+    //     var portsPath           = _(GINA_HOMEDIR + '/ports.json', true)
+    //         , portsReversePath  = _(GINA_HOMEDIR + '/ports.reverse.json', true)
+    //         , envDataPath       = _(self.projects[self.projectName].path + '/env.json', true)
+    //     ;
 
 
-        if ( typeof(require.cache[portsPath]) != 'undefined') {
-            delete require.cache[require.resolve(portsPath)]
-        }
-        if ( typeof(require.cache[portsReversePath]) != 'undefined') {
-            delete require.cache[require.resolve(portsReversePath)]
-        }
-        if ( typeof(require.cache[envDataPath]) != 'undefined') {
-            delete require.cache[require.resolve(envDataPath)]
-        }
+    //     if ( typeof(require.cache[portsPath]) != 'undefined') {
+    //         delete require.cache[require.resolve(portsPath)]
+    //     }
+    //     if ( typeof(require.cache[portsReversePath]) != 'undefined') {
+    //         delete require.cache[require.resolve(portsReversePath)]
+    //     }
+    //     if ( typeof(require.cache[envDataPath]) != 'undefined') {
+    //         delete require.cache[require.resolve(envDataPath)]
+    //     }
 
-        var envData             = requireJSON(envDataPath)
-            , portsData         = require(portsPath)
-            , portsReverseData  = require(portsReversePath)
-        ;
+    //     var envData             = requireJSON(envDataPath)
+    //         , portsData         = require(portsPath)
+    //         , portsReverseData  = require(portsReversePath)
+    //     ;
 
 
-        var content                 = JSON.clone(envData)
-            , ports                 = JSON.clone(portsData)
-            , portsReverse          = JSON.clone(portsReverseData)
-            , allProjectEnvs        = self.projects[self.projectName].envs
-            //, protocols         = self.projects[self.projectName].protocols
-            , allProjectProtocols   = self.projects[self.projectName].protocols
-            //, schemes           = self.projects[self.projectName].schemes
-            , allProjectSchemes     = self.projects[self.projectName].schemes
-            , bundle                = local.bundle
-            , env                   = local.env
-        ;
+    //     var content                 = JSON.clone(envData)
+    //         , ports                 = JSON.clone(portsData)
+    //         , portsReverse          = JSON.clone(portsReverseData)
+    //         , allProjectEnvs        = self.projects[self.projectName].envs
+    //         , allProjectProtocols   = self.projects[self.projectName].protocols
+    //         , allProjectSchemes     = self.projects[self.projectName].schemes
+    //     ;
         
         
         
-        // BO project/env.json
-        if ( typeof(content[bundle]) == 'undefined' ) {
-            content[bundle] = {}
-        }
+    //     // BO project/env.json
+    //     if ( typeof(content[bundle]) == 'undefined' ) {
+    //         content[bundle] = {}
+    //     }
         
-        // getting available all envs
-        for (let n in self.envs) {
-            let newEnv = self.envs[n];
-            if (allProjectEnvs.indexOf(newEnv) < 0) {
-                console.debug('adding new env ['+newEnv+'] VS' + JSON.stringify(self.envs, null, 2));
-                allProjectEnvs.push(newEnv);
-            }
-        }
-        // getting available all protocols
-        for (let p in self.protocols) {
-            let newProtocol = allProjectProtocols[p];
-            if (allProjectProtocols.indexOf(newProtocol) < 0) {
-                console.debug('adding new protocol ['+newProtocol+'] VS' + JSON.stringify(self.protocols, null, 2));
-                allProjectProtocols.push(newProtocol);
-            }
-        }
-        // getting available all schemes
-        for (let p in self.schemes) {
-            let newScheme = allProjectSchemes[p];
-            if (allProjectSchemes.indexOf(newScheme) < 0) {
-                console.debug('adding new scheme ['+newScheme+'] VS' + JSON.stringify(self.schemes, null, 2));
-                allProjectSchemes.push(newScheme);
-            }
-        }
+    //     // getting available all envs
+    //     for (let n in self.envs) {
+    //         let newEnv = self.envs[n];
+    //         if (allProjectEnvs.indexOf(newEnv) < 0) {
+    //             console.debug('adding new env ['+newEnv+'] VS' + JSON.stringify(self.envs, null, 2));
+    //             allProjectEnvs.push(newEnv);
+    //         }
+    //     }
+    //     // getting available all protocols
+    //     for (let p in self.protocols) {
+    //         let newProtocol = allProjectProtocols[p];
+    //         if (allProjectProtocols.indexOf(newProtocol) < 0) {
+    //             console.debug('adding new protocol ['+newProtocol+'] VS' + JSON.stringify(self.protocols, null, 2));
+    //             allProjectProtocols.push(newProtocol);
+    //         }
+    //     }
+    //     // getting available all schemes
+    //     for (let p in self.schemes) {
+    //         let newScheme = allProjectSchemes[p];
+    //         if (allProjectSchemes.indexOf(newScheme) < 0) {
+    //             console.debug('adding new scheme ['+newScheme+'] VS' + JSON.stringify(self.schemes, null, 2));
+    //             allProjectSchemes.push(newScheme);
+    //         }
+    //     }
         
-        // editing env.json to add host infos
-        for (let e in allProjectEnvs) {
-            let env = allProjectEnvs[e];
-            if ( typeof(content[bundle][env]) == 'undefined' ) {
-                content[bundle][env] = {
-                    "host" : "localhost"
-                }
-            }
-        }            
-        // EO project/env.json
+    //     // editing env.json to add host infos
+    //     for (let e in allProjectEnvs) {
+    //         let env = allProjectEnvs[e];
+    //         if ( typeof(content[bundle][env]) == 'undefined' ) {
+    //             content[bundle][env] = {
+    //                 "host" : "localhost"
+    //             }
+    //         }
+    //     }            
+    //     // EO project/env.json
         
         
-        // BO ~/.gina/ports.reverse.json - part 1/2
-        if ( typeof(portsReverse[bundle + '@' + self.projectName]) == 'undefined' ) {
-            portsReverse[bundle + '@' + self.projectName] = {}
-        }
-        if ( 
-            typeof(portsReverse[bundle + '@' + self.projectName][env]) == 'undefined'
-            ||
-            /^string$/i.test( typeof(portsReverse[bundle + '@' + self.projectName][env]) )
-        ) {
-            portsReverse[bundle + '@' + self.projectName][env] = {}
-        }          
-        // EO ~/.gina/ports.reverse.json - part 1/2
+    //     // BO ~/.gina/ports.reverse.json - part 1/2
+    //     if ( typeof(portsReverse[bundle + '@' + self.projectName]) == 'undefined' ) {
+    //         portsReverse[bundle + '@' + self.projectName] = {}
+    //     }
+    //     if ( 
+    //         typeof(portsReverse[bundle + '@' + self.projectName][env]) == 'undefined'
+    //         ||
+    //         /^string$/i.test( typeof(portsReverse[bundle + '@' + self.projectName][env]) )
+    //     ) {
+    //         portsReverse[bundle + '@' + self.projectName][env] = {}
+    //     }          
+    //     // EO ~/.gina/ports.reverse.json - part 1/2
 
         
-        // BO ~/.gina/ports.json
-        for (let p in allProjectProtocols) {
-            let protocol = allProjectProtocols[p];
-            if ( typeof(ports[protocol]) == 'undefined' ) {
-                ports[protocol] = {}
-            }
-            if ( typeof(portsReverse[bundle + '@' + self.projectName][env][protocol]) == 'undefined' ) {
-                portsReverse[bundle + '@' + self.projectName][env][protocol] = {}
-            }
-            for (let s in allProjectSchemes) {
-                let scheme = allProjectSchemes[s];
-                // skipping none `https` schemes for `http/2`
-                if ( /^http\/2/.test(protocol) && scheme != 'https' ) {
-                    console.debug('skipping none `https` schemes for `http/2`');
-                    continue;
-                }
-                if ( typeof(ports[protocol][scheme]) == 'undefined' ) {
-                    ports[protocol][scheme] = {}
-                }
-                if ( typeof(portsReverse[bundle + '@' + self.projectName][env][protocol][scheme]) == 'undefined' ) {
-                    portsReverse[bundle + '@' + self.projectName][env][protocol][scheme] = {}
-                }
+    //     // BO ~/.gina/ports.json
+    //     for (let p in allProjectProtocols) {
+    //         let protocol = allProjectProtocols[p];
+    //         if ( typeof(ports[protocol]) == 'undefined' ) {
+    //             ports[protocol] = {}
+    //         }
+    //         if ( typeof(portsReverse[bundle + '@' + self.projectName][env][protocol]) == 'undefined' ) {
+    //             portsReverse[bundle + '@' + self.projectName][env][protocol] = {}
+    //         }
+    //         for (let s in allProjectSchemes) {
+    //             let scheme = allProjectSchemes[s];
+    //             // skipping none `https` schemes for `http/2`
+    //             if ( /^http\/2/.test(protocol) && scheme != 'https' ) {
+    //                 console.debug('skipping none `https` schemes for `http/2`');
+    //                 continue;
+    //             }
+    //             if ( typeof(ports[protocol][scheme]) == 'undefined' ) {
+    //                 ports[protocol][scheme] = {}
+    //             }
+    //             if ( typeof(portsReverse[bundle + '@' + self.projectName][env][protocol][scheme]) == 'undefined' ) {
+    //                 portsReverse[bundle + '@' + self.projectName][env][protocol][scheme] = {}
+    //             }
                 
-                let assigned = [];
-                if ( ports[protocol][scheme].count() > 0 ) {
-                    for (let port in ports[protocol][scheme]) {
-                        let portDescription = ports[protocol][scheme][port] || null;
-                        // already assigned
-                        if ( portDescription && assigned.indexOf(portDescription) > -1 ) {
-                            // cleanup
-                            delete ports[protocol][scheme][port];
-                            self.portsAvailable[bundle][env].unshift(port);
-                            continue;
-                        }
-                        assigned.push(portDescription);                    
-                    }
-                }
+    //             let assigned = [];
+    //             if ( ports[protocol][scheme].count() > 0 ) {
+    //                 for (let port in ports[protocol][scheme]) {
+    //                     let portDescription = ports[protocol][scheme][port] || null;
+    //                     // already assigned
+    //                     if ( portDescription && assigned.indexOf(portDescription) > -1 ) {
+    //                         // cleanup
+    //                         delete ports[protocol][scheme][port];
+    //                         self.portsAvailable[bundle][env].unshift(port);
+    //                         continue;
+    //                     }
+    //                     assigned.push(portDescription);                    
+    //                 }
+    //             }
                     
                 
-                let stringifiedScheme = JSON.stringify(ports[protocol][scheme]);
-                let patt = new RegExp(bundle +'@'+ self.projectName +'/'+ env);
-                let found = false;
-                let portToAssign = null;
-                // do not override if existing
-                if ( patt.test(stringifiedScheme) ) { // there can multiple matches
-                    found = true;                    
-                    // reusing the same for portsReverse
-                    let re = new RegExp('([0-9]+)\"\:(|\s+)\"('+ bundle +'\@'+ self.projectName +'\/'+ env +')', 'g');
-                    let m;
-                    while ((m = re.exec(stringifiedScheme)) !== null) {
-                        // This is necessary to avoid infinite loops with zero-width matches
-                        if (m.index === re.lastIndex) {
-                            re.lastIndex++;
-                        }                        
-                        // The result can be accessed through the `m`-variable.
-                        try {
-                            m.forEach((match, groupIndex) => {
-                                //console.debug(`Found match, group ${groupIndex}: ${match}`);
-                                if (groupIndex == 1) {                                    
-                                    portToAssign = ~~match;
-                                    //console.debug('['+bundle+'] port to assign '+ portToAssign + ' - ' + protocol +' '+ scheme);
-                                    throw new Error('breakExeception');
-                                }
-                            });
-                        } catch (breakExeption) {
-                            break;
-                        }
-                    }
+    //             let stringifiedScheme = JSON.stringify(ports[protocol][scheme]);
+    //             let patt = new RegExp(bundle +'@'+ self.projectName +'/'+ env);
+    //             let found = false;
+    //             let portToAssign = null;
+    //             // do not override if existing
+    //             if ( patt.test(stringifiedScheme) ) { // there can multiple matches
+    //                 found = true;                    
+    //                 // reusing the same for portsReverse
+    //                 let re = new RegExp('([0-9]+)\"\:(|\s+)\"('+ bundle +'\@'+ self.projectName +'\/'+ env +')', 'g');
+    //                 let m;
+    //                 while ((m = re.exec(stringifiedScheme)) !== null) {
+    //                     // This is necessary to avoid infinite loops with zero-width matches
+    //                     if (m.index === re.lastIndex) {
+    //                         re.lastIndex++;
+    //                     }                        
+    //                     // The result can be accessed through the `m`-variable.
+    //                     try {
+    //                         m.forEach((match, groupIndex) => {
+    //                             //console.debug(`Found match, group ${groupIndex}: ${match}`);
+    //                             if (groupIndex == 1) {                                    
+    //                                 portToAssign = ~~match;
+    //                                 //console.debug('['+bundle+'] port to assign '+ portToAssign + ' - ' + protocol +' '+ scheme);
+    //                                 throw new Error('breakExeception');
+    //                             }
+    //                         });
+    //                     } catch (breakExeption) {
+    //                         break;
+    //                     }
+    //                 }
                     
-                }
+    //             }
                 
-                if (!portToAssign) {
-                    //console.debug('['+bundle+'] No port to assign '+ portToAssign + ' - ' + protocol +' '+ scheme);
-                    portToAssign = self.portsAvailable[bundle][env][0];
-                    // port is no longer available
-                    self.portsAvailable[bundle][env].splice(0,1);
-                }
-                ports[protocol][scheme][portToAssign] = bundle +'@'+ self.projectName +'/'+ env;
+    //             if (!portToAssign) {
+    //                 //console.debug('['+bundle+'] No port to assign '+ portToAssign + ' - ' + protocol +' '+ scheme);
+    //                 portToAssign = self.portsAvailable[bundle][env][0];
+    //                 // port is no longer available
+    //                 self.portsAvailable[bundle][env].splice(0,1);
+    //             }
+    //             ports[protocol][scheme][portToAssign] = bundle +'@'+ self.projectName +'/'+ env;
                 
-                // BO ~/.gina/ports.reverse.json - part 2/2
-                //override needed since it is relying on ports definitions
-                portsReverse[bundle + '@' + self.projectName][env][protocol][scheme] = ~~portToAssign;
-                // EO ~/.gina/ports.reverse.json - part 2/2
+    //             // BO ~/.gina/ports.reverse.json - part 2/2
+    //             //override needed since it is relying on ports definitions
+    //             portsReverse[bundle + '@' + self.projectName][env][protocol][scheme] = ~~portToAssign;
+    //             // EO ~/.gina/ports.reverse.json - part 2/2
                     
-            } // EO for (let scheme in schemes)
-        } // for (let protocol in protocols)        
-        // EO ~/.gina/ports.json
+    //         } // EO for (let scheme in schemes)
+    //     } // for (let protocol in protocols)        
+    //     // EO ~/.gina/ports.json
         
         
 
-        try {
-            // save to /<project_path>/env.json
-            lib.generator.createFileFromDataSync(content, envDataPath);
-            self.envDataWrote = true;
-            // save to ~/.gina/projects.json
-            // lib.generator.createFileFromDataSync(ports, portsPath);
-            // self.projectsDataWrote = true;
+    //     try {
+    //         // save to /<project_path>/env.json
+    //         lib.generator.createFileFromDataSync(content, envDataPath);
+    //         self.envDataWrote = true;
+    //         // save to ~/.gina/projects.json
+    //         // lib.generator.createFileFromDataSync(ports, portsPath);
+    //         // self.projectsDataWrote = true;
             
-            // save to ~/.gina/ports.json
-            lib.generator.createFileFromDataSync(ports, portsPath);
-            self.portsDataWrote = true;
-            // save to ~/.gina/ports.reverse.json
-            lib.generator.createFileFromDataSync(portsReverse, portsReversePath);
-            self.portsReverseDataWrote = true;
+    //         // save to ~/.gina/ports.json
+    //         lib.generator.createFileFromDataSync(ports, portsPath);
+    //         self.portsDataWrote = true;
+    //         // save to ~/.gina/ports.reverse.json
+    //         lib.generator.createFileFromDataSync(portsReverse, portsReversePath);
+    //         self.portsReverseDataWrote = true;
 
-            ++local.b;
-            addEnvToBundles(local.b, local.e)
-        } catch (err) {
-            rollback(err)
-        }
-    }
+    //         ++local.b;
+    //         addEnvToBundles(local.b, local.e)
+    //     } catch (err) {
+    //         rollback(err)
+    //     }
+    // }
 
     /**
      * Adding envs to ~/.gina/projects.json

@@ -208,7 +208,7 @@ function Add(opt, cmd) {
             })
 
         } else {
-            createFile(file, target)
+            createFile(templatesConf, target)
         }
 
     }

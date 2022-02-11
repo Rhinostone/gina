@@ -1,6 +1,7 @@
-// bundle need to be restarted on changes !!
+// bundle needs to be restarted on changes !!
 {  
   "homepage": {
+    "namespace": "content",
     "url": "/",
     "method": "GET",
     "param": {

@@ -74,7 +74,7 @@ function List(opt, cmd) {
         for (; p<list.length; ++p) {
             try {
                 path = projects[list[p]].path;
-                bundles = require( _(path +'/project.json')).bundles;
+                bundles = require( _(path +'/manifest.json')).bundles;
 
                 str += '------------------------------------\n\r';
                 if ( !fs.existsSync(projects[list[p]].path) ) {
@@ -107,7 +107,7 @@ function List(opt, cmd) {
 
     var listProjectOnly = function () {
         var path = self.projects[self.name].path
-            , bundles = require( _(path +'/project.json')).bundles
+            , bundles = require( _(path +'/manifest.json')).bundles
             , b
             , str = '';
 

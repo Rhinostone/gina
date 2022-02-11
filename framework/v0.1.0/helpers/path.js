@@ -1050,10 +1050,10 @@ function PathHelper() {
         exists(p, function(found){
             if ( !found ) {
                 var err = new Error(' mv() - source [ '+p+' ] does not exists !');
-                console.error(err);
-                if ( !callback ) {
-                    throw err
-                }
+                console.error(err);
+                if ( !callback ) {
+                    throw err
+                }
                 callback(err)
             } else {
                 mv(self, target)
@@ -1114,13 +1114,14 @@ function PathHelper() {
      *
      * */
     _.prototype.rmSync = function() {
-
+        
         if ( !existsSync(this.value) ) {
             return this // always return the instance for sync
         }
         cleanSlashes(this);
 
         try {
+            
             browseRemoveSync(this.value);
             return this // always return the instance for sync
         } catch (err) {
@@ -1129,7 +1130,7 @@ function PathHelper() {
     }
 
     var removeFoldersSync = function(list, l, i) {
-        var i = i || 0;
+        i = i || 0;
         if ( typeof(list[l]) == "undefined") {
             return list[l-1][list[l-1].length -1]
         } else {
@@ -1166,9 +1167,10 @@ function PathHelper() {
     }
 
     var browseRemoveSync = function(source, list, folders, i) {
-        var list = ( typeof(list) != 'undefined' ) ? list : [];
-        var folders = ( typeof(folders) != 'undefined' ) ? folders : [];
-        var i = ( typeof(i) != 'undefined' ) ? i : 0;
+        list = ( typeof(list) != 'undefined' ) ? list : [];
+        folders = ( typeof(folders) != 'undefined' ) ? folders : [];
+        i = ( typeof(i) != 'undefined' ) ? i : 0;
+        var err = false;
 
         if (list.length === 0) {
             list.push(source)
@@ -1187,7 +1189,14 @@ function PathHelper() {
             if (stats instanceof Error)
                 return stats;
 
-            if ( stats.isDirectory() ) {
+            if ( stats.isSymbolicLink() ) {
+                err = removeFileSync(source);
+                if (err instanceof Error)
+                    return err;
+                    
+                ++i;
+                browseRemoveSync(list[i], list, folders, i)
+            } else if ( stats.isDirectory() ) {
 
                 if (folders.length == 0) {
                     folders[0] = [];
@@ -1219,7 +1228,7 @@ function PathHelper() {
                 browseRemoveSync(list[i], list, folders, i)
 
             } else {
-                var err = removeFileSync(source);
+                err = removeFileSync(source);
                 if (err instanceof Error)
                     return err;
 
@@ -1303,7 +1312,7 @@ function PathHelper() {
      * */
 
     var removeFolders = function(list, l, i, callback) {
-        var i = i || 0
+        i = i || 0
         if ( typeof(list[l]) == "undefined") {
             callback(false, list[l-1][list[l-1].length -1])
         } else {
@@ -1344,9 +1353,9 @@ function PathHelper() {
     }
 
     var browseRemove = function(source, callback, list, folders, i) {
-        var list = ( typeof(list) != 'undefined' ) ? list : [];
-        var folders = ( typeof(folders) != 'undefined' ) ? folders : [];
-        var i = ( typeof(i) != 'undefined' ) ? i : 0;
+        list = ( typeof(list) != 'undefined' ) ? list : [];
+        folders = ( typeof(folders) != 'undefined' ) ? folders : [];
+        i = ( typeof(i) != 'undefined' ) ? i : 0;
 
         if (list.length === 0) {
             list.push(source)

@@ -190,7 +190,8 @@ function Config(opt) {
                     utilsConfig.set('gina', 'locals.json', {
                         project : utilsConfig.getProjectName(),
                         paths : {
-                            gina   : ginaPath,
+                            project : self.projectName,
+                            gina    : ginaPath,
                             utils   : utilsConfig.__dirname,
                             root    : opt.executionPath,
                             env     : opt.executionPath + '/env.json',
@@ -409,6 +410,41 @@ function Config(opt) {
             return this.standaloneMode
         }
     }
+    
+    var mergeConfig = function(confObject, section, content, i) {
+        
+        if (!Array.isArray(section)) {
+            if (section != '') {
+                section = section.split(/\./g);
+            } else {
+                section = []
+            }
+        }
+                
+        if ( typeof(i) == 'undefined' ) {
+            i = 0
+        }
+        
+        if (!section.length) { // nothing to do here
+            confObject = merge(confObject, content);
+            return
+        }
+        // done
+        if (i == section.length) {
+            return
+        }
+        
+        if ( typeof(confObject[ section[i] ]) == 'undefined' ) {
+            confObject[ section[i] ] = {};            
+        }
+        
+        if (i == section.length-1) {
+            confObject[ section[i] ] =  merge(confObject[ section[i] ], content)
+        }
+        
+        mergeConfig(confObject[ section[i] ], section, content, i+1)
+        
+    }
 
 
     /**
@@ -444,7 +480,7 @@ function Config(opt) {
         var root = new _(self.executionPath).toUnixStyle();
         var pkg  = null;
         try {
-            pkg = require(_(root + '/project.json')).bundles;
+            pkg = require(_(root + '/manifest.json')).bundles;
             // by default but may be overriden           
             masterPort = portsReverse[self.startingApp+'@'+self.projectName][env][projectConf.def_protocol][projectConf.def_scheme]
         } catch (err) {
@@ -455,25 +491,155 @@ function Config(opt) {
 
 
         //For each app.
-        var bundleSettings = null
-            , bundHasSettings = true
-            , bundlesPath   = getPath('bundles')
-            , protocol      = null
-            , scheme        = null
-            , p             = null
+        var cacheless           = self.isCacheless()
+            , bundleSettings    = null
+            , bundHasSettings   = true
+            , bundlesPath       = getPath('bundles')
+            , protocol          = null
+            , scheme            = null
+            , p                 = null
         ;
-            
-        for (var app in content) {
+        
+        // getting bundle config files
+         
+        var configFiles     = null
+            , appPath       = null                       
+            , jsonFile      = null
+            , e             = null
+            , tmpSettings   = null
+            , filesList     = {}
+            , files         = {}
+        ;
+        
+
+        for (let app in content) {
             //Checking if genuine app.
             console.debug('Checking if application [ '+ app +' ] is registered ');
-
-            if ( typeof(content[app][env]) != "undefined" ) {
+            
                 
-                if ( !fs.existsSync(_(bundlesPath +'/'+ app +'/config/settings.json'))) {
-                    bundHasSettings = false
-                } else {
-                    bundleSettings = requireJSON(_(bundlesPath +'/'+ app +'/config/settings.json'));
+            // if ( self.task == 'run' && !self.isCacheless() ) {
+            //     appPath = _(newContent[app][env].bundlesPath + '/' + app)
+            // } else { //getting src path instead
+            //     appPath = _(newContent[app][env].sources + '/' + app);
+            //     newContent[app][env].bundlesPath = newContent[app][env].sources;
+            // }
+            tmpSettings = {};
+            appPath = _(bundlesPath + '/' + app);
+            newContent[app][env].bundlesPath = bundlesPath;
+             
+            if ( typeof(content[app][env]) != "undefined" ) {
+                try {
+                    configFiles = fs.readdirSync(_(appPath + '/config'));
+                } catch (mountingError) {
+                    //console.emerg('Dependency bundle config not found for `'+ app +'/'+ env +'`: trying to load on the fly from src');
+                    console.warn('Dependency bundle config not found for `'+ app +'/'+ env +'`: trying to load on the fly from src');
+                    let appSrcPath = _(root +'/'+ pkg[app].src, true);
+                    configFiles = fs.readdirSync(_(appSrcPath + '/config'));
+                    
+                    console.warn('Dependency bundle config loaded from '+ appSrcPath);
+                    appPath = appSrcPath;
+                    newContent[app][env].bundlesPath = bundlesPath = appSrcPath.replace( new RegExp('/'+ app), '' );
                 }
+                
+                
+                appsPath    = (typeof(content[app][env]['bundlesPath']) != 'undefined')
+                        ? content[app][env].bundlesPath
+                        : template["{bundle}"]["{env}"].bundlesPath
+                ;
+                // Preprocessing settings
+                for (let c = 0, cLen = configFiles.length; c < cLen; ++c) {
+                    let foundDevVersion = false;
+                    let fName = configFiles[c];
+                    
+                    if ( !/^settings\./.test(fName) ) {
+                        continue;
+                    }
+                    
+                    
+                    if (/^\./.test(fName) || /\.dev\.json$/.test(fName) || !/\.json$/.test(fName)  )
+                        continue;
+                    
+                    let name            = fName.replace(/\.json$/, '');
+                    let fNameWithNoExt  = fName.replace(/.json/, '');
+                    let section = fNameWithNoExt.replace(/(^settings\.|^settings$)/, '');
+                                        
+                    if (/\-/.test(name)) {
+                        name = name.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
+                    }
+                    filesList[name] = fName;
+                    // handle registered config files
+                    let main = fName;
+                    let tmp = fName.replace(/.json/, '.' + env + '.json'); // dev
+                    files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};            
+                    let fileContent = files[name];
+                    let filename = _(appPath + '/config/' + tmp);
+                    // loading dev if exists
+                    if ( self.isCacheless() ) {                
+                        try {
+                            exists = fs.existsSync(_(filename, true));
+                            if (cacheless && exists) {
+                                delete require.cache[require.resolve(_(filename, true))];
+                            }
+
+                            if (exists) {
+                                foundDevVersion = true;
+                                jsonFile = requireJSON(_(filename, true));
+                                if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
+                                    fileContent = []
+                                } 
+                                fileContent = merge(jsonFile, fileContent);
+                            }
+
+                        } catch (_err) {
+
+                            if (fs.existsSync(filename)) {
+                                callback(new Error('[ ' + filename + ' ] is malformed !!'))
+                            } else {
+                                fileContent = undefined
+                            }
+                        }
+                    }
+                    // loading main
+                    filename = _(appPath + '/config/' + main);
+                    //Can't do anything without.
+                    try {
+                        exists = fs.existsSync(_(filename, true));
+                        if (cacheless && exists) {
+                            delete require.cache[require.resolve(_(filename, true))];
+                        }
+
+                        if (exists) {      
+                            jsonFile = requireJSON(_(filename, true));
+                            if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
+                                fileContent = []
+                            }             
+                            fileContent = merge(fileContent, jsonFile);
+                        } else {
+                            console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
+                        }
+                    } catch (_err) {
+
+                        if (fs.existsSync(filename)) {
+                            let e = '[ ' + filename + ' ] is malformed !!\n\r' + (_err.stack || _err.message);
+                            console.error(e);
+                            callback(new Error(e))
+                        } else {
+                            fileContent = undefined
+                        }
+                    }
+                    
+                    mergeConfig(tmpSettings, section, requireJSON(_(appPath + '/config/'+ fName)) );                   
+                }
+                bundleSettings = tmpSettings;
+                
+                
+                // if ( !fs.existsSync(_(bundlesPath +'/'+ app +'/config/settings.json'))) {
+                //     bundHasSettings = false
+                // } else {
+                //     // merging with all settings ?
+                    
+                //     bundleSettings = requireJSON(_(bundlesPath +'/'+ app +'/config/settings.json'));
+                // }
                 
                 
                 
@@ -606,15 +772,13 @@ function Config(opt) {
 
                 //console.error("reps ", reps);
                 newContent = whisper(reps, newContent);
-
-
             }
             //Else not in the scenario.
 
         }//EO for.
 
 
-        console.debug('[ '+ app +' ] [ '+ env +' ] Env configuration loaded \n');
+        console.debug('[ '+ self.startingApp +' ] [ '+ env +' ] Env configuration loaded \n');
 
         // TRUE means that all apps sharing the same process will merge into one.
         if (!isStandalone) self.Host.standaloneMode = isStandalone;
@@ -879,7 +1043,8 @@ function Config(opt) {
             fName = configFiles[c];
             // tmp settings - because we need it now
             if ( /^settings\./.test(fName) ) {
-                tmpSettings = merge(tmpSettings, requireJSON(_(appPath + '/config/'+ fName)));
+                //tmpSettings = merge(tmpSettings, requireJSON(_(appPath + '/config/'+ fName)));
+                continue;
             }
             if (/^\./.test(fName) || /\.dev\.json$/.test(fName) || !/\.json$/.test(fName)  )
                 continue;
@@ -996,254 +1161,230 @@ function Config(opt) {
 
         name = 'routing';
         routing = files[name];
-        var r = null, rLen = null;
-        //Server only because of the shared mode VS the standalone mode.
-        //if (cacheless || typeof(reload) != 'undefined' && reload) {
-                        
-            //setting app param
-            var urls = null;
-            // bundle status
-            routing['bundle-status'] = {
-                url: '/bundle-status',
-                method: 'GET',
-                param: {
-                    control: 'getBundleStatus'
-                }
-            };
-            
-            // custom error page
-            routing['custom-error-page'] = {
-                // url will be modified on error
-                url: '/custom-error',
-                method: 'GET',
+        var r = null, rLen = null;                      
+        //setting app param
+        var urls = null;
+        // bundle status
+        routing['status'] = {
+            url: '/status',
+            method: 'GET',
+            param: {
+                control: 'getBundleStatus'
+            }
+        };
+        
+        // custom error page
+        routing['custom-error-page'] = {
+            // url will be modified on error
+            url: '/custom-error',
+            method: 'GET',
+            middleware: [],
+            param: {
+                control: 'renderCustomError',
+                // default data : will be fed on error
+                error: {}
+            }
+        };
+        
+        // creating default rule for auto redirect: / => /webroot            
+        if (
+            hasWebRoot 
+            && wroot != '/'
+            && typeof(routing['webroot@'+ bundle]) == 'undefined'
+        ) {   
+            routing['webroot@'+ bundle] = {
+                method: 'GET, POST, PUT, DELETE, HEAD',
+                // by default
+                url:  wroot.substring(0, wroot.length-1),
                 middleware: [],
                 param: {
-                    control: 'renderCustomError',
-                    // default data : will be fed on error
-                    error: {}
-                }
+                    control: "redirect",
+                    ignoreWebRoot: true,
+                    path: wroot,
+                    code: 302
+                },
+                bundle: bundle,
+                host: conf[bundle][env].host,
+                hostname: conf[bundle][env].server.scheme +'://'+ conf[bundle][env].host +':'+ conf[bundle][env].port[conf[bundle][env].server.protocol][conf[bundle][env].server.scheme],
+                webroot: wroot
             };
-            
-            // creating default rule for auto redirect: / => /webroot            
-            if (
-                hasWebRoot 
-                && wroot != '/'
-                && typeof(routing['webroot@'+ bundle]) == 'undefined'
-            ) {   
-                routing['webroot@'+ bundle] = {
-                    method: 'GET, POST, PUT, DELETE, HEAD',
-                    middleware: [],
-                    param: {
-                        control: "redirect",
-                        ignoreWebRoot: true,
-                        path: wroot,
-                        code: 302
-                    },
-                    bundle: bundle,
-                    host: conf[bundle][env].host,
-                    hostname: conf[bundle][env].server.scheme +'://'+ conf[bundle][env].host +':'+ conf[bundle][env].port[conf[bundle][env].server.protocol][conf[bundle][env].server.scheme],
-                    webroot: wroot
-                };
-                // default hostname
-                if (webrootAutoredirect) {    
-                    routing['webroot@'+ bundle].url = '/,'+ wroot.substring(0, wroot.length-1);
-                } else if (!webrootAutoredirect) {
-                    routing['webroot@'+ bundle].url = wroot.substring(0, wroot.length-1);
+            // default hostname
+            if ( /^true$/i.test(webrootAutoredirect) ) {    
+                routing['webroot@'+ bundle].url = '/,'+ wroot.substring(0, wroot.length-1);
+            }
+        }
+        
+        // upload routes
+        if ( 
+            typeof(tmpSettings.upload) != 'undefined'
+            && typeof(tmpSettings.upload.groups) != 'undefined'
+            && tmpSettings.upload.groups.count() > 0
+        ) {
+            if ( typeof(routing['upload-to-tmp-xml@'+ bundle]) == 'undefined' ) {
+                routing['upload-to-tmp-xml'] = {
+                    "_comment": "Will store file to the project tmp dir",
+                    "url": "/upload",
+                    "method": "POST",
+                    "param": {
+                        "control": "uploadToTmp",
+                        "title": "Upload file"
+                    }
                 }
             }
             
-            // upload routes
+            if ( typeof(routing['upload-delete-from-tmp-xml@'+ bundle]) == 'undefined' ) {
+                routing['upload-delete-from-tmp-xml'] = {
+                    "_comment": "Will remove file from the project tmp dir",
+                    "url": "/upload/delete",
+                    "method": "POST",
+                    "param": {
+                        "control": "deleteFromTmp",
+                        "title": "Delete uploaded file"
+                    }
+                }
+            }
+        }
+        
+        
+        for (let rule in routing) {
+            
+            // checking requirements syntax
+            if ( typeof(routing[rule].requirements) != 'undefined' && routing[rule].requirements.count() > 0 ) {
+                for ( let r in routing[rule].requirements) {
+                    if ( 
+                        !/^\//.test(routing[rule].requirements[r]) 
+                        && !/^validator\:\:/.test(routing[rule].requirements[r])
+                    ) {
+                        let ruleName = ( !/\@/.test(rule) ) ? rule +'@'+ bundle : rule;
+                        err = new Error('['+ruleName+'] Bad routing syntax for `'+r+'` in requirements : must start with `/` or `validator::`');
+                        console.emerg(err.stack||err.message);
+                        process.exit(1);
+                    }
+                }
+            }
+            
+            
+            if (rule == 'webroot@'+ bundle) continue;
+                            
+            localWroot  = wroot; // by default   
+                    
+            if ( typeof(routing[rule].bundle) != 'undefined' && routing[rule].bundle != bundle ) {
+                localWroot  = conf[routing[rule].bundle][env].server.webroot;//conf[bundle][env].server.webroot
+                // formating localWroot to have /mywebroot/
+                localWroot  = ( !/^\//.test(localWroot) ) ? '/' + localWroot : localWroot;
+                localWroot  = ( !/\/$/.test(localWroot) ) ? localWroot + '/' : localWroot;  
+                    
+                // standalone setup
+                if ( isStandalone && bundle != self.startingApp && localWroot == '/') {
+                    localWroot += bundle + '/';            
+                }
+                    
+                conf[routing[rule].bundle][env].server.webroot = localWroot               
+            } else {
+                routing[rule].bundle =  bundle;
+            }
+            localHasWebRoot = (localWroot.length >1) ? true : false;     
+            
+            
+            // default hostname
             if ( 
-                typeof(tmpSettings.upload) != 'undefined'
-                && typeof(tmpSettings.upload.groups) != 'undefined'
-                && tmpSettings.upload.groups.count() > 0
+                typeof(routing[rule].hostname) == 'undefined' && !/^redirect$/.test(routing[rule].param.control)  
+                || !routing[rule].hostname && !/^redirect$/.test(routing[rule].param.control)
             ) {
-                if ( typeof(routing['upload-to-tmp-xml@'+ bundle]) == 'undefined' ) {
-                    routing['upload-to-tmp-xml'] = {
-                        "_comment": "Will store file to the project tmp dir",
-                        "url": "/upload",
-                        "method": "POST",
-                        "param": {
-                            "control": "uploadToTmp",
-                            "title": "Upload file"
-                        }
-                    }
-                }
-                
-                if ( typeof(routing['upload-delete-from-tmp-xml@'+ bundle]) == 'undefined' ) {
-                    routing['upload-delete-from-tmp-xml'] = {
-                        "_comment": "Will remove file from the project tmp dir",
-                        "url": "/upload/delete",
-                        "method": "POST",
-                        "param": {
-                          "control": "deleteFromTmp",
-                          "title": "Delete uploaded file"
-                        }
-                    }
-                }
+                routing[rule].host      = conf[routing[rule].bundle][env].host
+                routing[rule].hostname  = conf[routing[rule].bundle][env].server.scheme +'://'+ routing[rule].host +':'+ conf[routing[rule].bundle][env].port[conf[routing[rule].bundle][env].server.protocol][conf[routing[rule].bundle][env].server.scheme];
+                // default webroot
+                routing[rule].webroot   = localWroot;
             }
+                
             
+            // default method
+            if ( typeof(routing[rule].method) == 'undefined' || !routing[rule].method )
+                routing[rule].method = 'GET';
             
-            for (let rule in routing) {
+            if ( /\,/.test(routing[rule].method) )
+                routing[rule].method = routing[rule].method.replace(/\s+/g, '');     
                 
-                // checking requirements syntax
-                if ( typeof(routing[rule].requirements) != 'undefined' && routing[rule].requirements.count() > 0 ) {
-                    for ( let r in routing[rule].requirements) {
-                        if ( 
-                            !/^\//.test(routing[rule].requirements[r]) 
-                            && !/^validator\:\:/.test(routing[rule].requirements[r])
-                        ) {
-                            let ruleName = ( !/\@/.test(rule) ) ? rule +'@'+ bundle : rule;
-                            err = new Error('['+ruleName+'] Bad routing syntax for `'+r+'` in requirements : must start with `/` or `validator::`');
-                            console.emerg(err.stack||err.message);
-                            process.exit(1);
-                        }
-                    }
-                }
+            // default middleware
+            if ( typeof(routing[rule].middleware) == 'undefined' || !routing[rule].middleware )
+                routing[rule].middleware = [];
+            
+            // default url
+            if ( typeof(routing[rule].url) == 'undefined' || !routing[rule].url )
+                routing[rule].url = '/'+ rule;
                 
+            try {
+                if ( /\,/.test(routing[rule].url) )
+                    routing[rule].url = routing[rule].url.replace(/\s+/g, '');
                 
-                if (rule == 'webroot@'+ bundle) continue;
-                                
-                localWroot  = wroot; // by default   
-                      
-                if ( typeof(routing[rule].bundle) != 'undefined' && routing[rule].bundle != bundle ) {
-                    localWroot  = conf[routing[rule].bundle][env].server.webroot;//conf[bundle][env].server.webroot
-                    // formating localWroot to have /mywebroot/
-                    localWroot  = ( !/^\//.test(localWroot) ) ? '/' + localWroot : localWroot;
-                    localWroot  = ( !/\/$/.test(localWroot) ) ? localWroot + '/' : localWroot;  
-                     
-                    // standalone setup
-                    if ( isStandalone && bundle != self.startingApp && localWroot == '/') {
-                        localWroot += bundle + '/';            
-                    }
-                     
-                    conf[routing[rule].bundle][env].server.webroot = localWroot               
-                } else {
-                    routing[rule].bundle =  bundle;
-                }
-                localHasWebRoot = (localWroot.length >1) ? true : false;     
-                
-                
-                // default hostname
-                if ( 
-                    typeof(routing[rule].hostname) == 'undefined' && !/^redirect$/.test(routing[rule].param.control)  
-                    || !routing[rule].hostname && !/^redirect$/.test(routing[rule].param.control)
-                ) {
-                    routing[rule].host      = conf[routing[rule].bundle][env].host
-                    routing[rule].hostname  = conf[routing[rule].bundle][env].server.scheme +'://'+ routing[rule].host +':'+ conf[routing[rule].bundle][env].port[conf[routing[rule].bundle][env].server.protocol][conf[routing[rule].bundle][env].server.scheme];
-                    // default webroot
-                    routing[rule].webroot   = localWroot;
-                }
-                    
-                
-                // default method
-                if ( typeof(routing[rule].method) == 'undefined' || !routing[rule].method )
-                    routing[rule].method = 'GET';
-                
-                if ( /\,/.test(routing[rule].method) )
-                    routing[rule].method = routing[rule].method.replace(/\s+/g, '');     
-                    
-                // default middleware
-                if ( typeof(routing[rule].middleware) == 'undefined' || !routing[rule].middleware )
-                    routing[rule].middleware = [];
-                
-                // default url
-                if ( typeof(routing[rule].url) == 'undefined' || !routing[rule].url )
-                    routing[rule].url = '/'+ rule;
-                 
-                try {
-                    if ( /\,/.test(routing[rule].url) )
-                        routing[rule].url = routing[rule].url.replace(/\s+/g, '');
-                    
-                } catch (err) {
-                    throw new Error('[ ROUTING ] Error found in your route description: \nbundle: `'+ routing[rule].bundle +'`\nroute: `'+ rule +'`\nurl: `'+ routing[rule].url +'`.\nPlease check your routing configuration: `'+ routing[rule].bundle +'/config/'+ name+'.json` or `'+ routing[rule].bundle +'/config/'+ name+'.'+ env +'.json`');    
-                }                   
-                                                
-                // link route & template if hasViews - inly for GET methods
-                if ( hasViews && /get/i.test(routing[rule].method) && typeof(files['templates'][rule.toLowerCase()]) == 'undefined' ) {
-                    files['templates'][rule.toLowerCase()] = {}
-                }
-
-                routing[rule.toLowerCase() +'@'+ bundle] = routing[rule];
-                delete routing[rule];
-                
-                // default file name
-                file        = rule.toLowerCase();
-                rule        = rule.toLowerCase() +'@'+ bundle;                
-                  
-
-                routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse lookup
-                // route file
-                if (!routing[rule].param) continue;
-                //routing[rule].param.file = ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
-                if ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' && /delete/i.test(routing[rule].method )) {
-                    console.warn('`DELETE` method result should not be rendererd into a file');
-                } else if ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) == 'undefined' /**&& !/delete/i.test(routing[rule].method)*/) {
-                    routing[rule].param.file = file
-                }
-
-                // by default, method is inherited from the request.method
-                if (
-                    localHasWebRoot && typeof(routing[rule].param.path) != 'undefined' && typeof(routing[rule].param.ignoreWebRoot) == 'undefined'
-                    || localHasWebRoot && typeof(routing[rule].param.path) != 'undefined' && !routing[rule].param.ignoreWebRoot
-                ) {
-                    routing[rule].param.path = localWroot + ( /^\//.test(routing[rule].param.path) ) ? routing[rule].param.path.substr(1) : routing[rule].param.path
-                }
-                
-                    
-                // if ( !routing[rule].url.length || routing[rule].url.length == 1) {// adding localWroot if url is missing
-                //     routing[rule].url = localWroot
-                // } else {
-                //     routing[rule].url = localWroot + ( /^\//.test(routing[rule].url) ) ? routing[rule].url.substr(1) : routing[rule].url
-                // }
-                // ignoreWebRoot test to rewrite url webroot
-                if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
-                    //routing[rule].url = (routing[rule].url.length > 1) ? localWroot + routing[rule].url : routing[rule].url;
-                    if ( /\,/.test(routing[rule].url) ) {
-                        urls = routing[rule].url.split(/\,/g);                    
-                        r = 0; rLen = urls.length;
-                        for (; r < rLen; ++r) {                        
-                            urls[r] = ( localHasWebRoot && urls[r].length > 1) ? localWroot + urls[r].substr(1) : ((localHasWebRoot && urls[r].length == 1) ? localWroot : urls[r]);
-                        }
-                        routing[rule].url = urls.join(',');                            
-                    } else {                 
-                        routing[rule].url = ( localHasWebRoot && routing[rule].url.length > 1) ? localWroot + routing[rule].url.substr(1) : ((localHasWebRoot && routing[rule].url.length == 1) ? localWroot : routing[rule].url);
-                    }
-                }
-                    
-                // if (routing[rule].bundle != bundle) { // allowing to override bundle name in routing.json
-                //     // originalRule is used to facilitate cross bundles (hypertext)linking
-                //     originalRules[oRuleCount] = ( isStandalone && routing[rule] && bundle != self.startingApp) ? bundle + '-' + rule : rule;
-                //     ++oRuleCount;
-                // }
-                
+            } catch (err) {
+                throw new Error('[ ROUTING ] Error found in your route description: \nbundle: `'+ routing[rule].bundle +'`\nroute: `'+ rule +'`\nurl: `'+ routing[rule].url +'`.\nPlease check your routing configuration: `'+ routing[rule].bundle +'/config/'+ name+'.json` or `'+ routing[rule].bundle +'/config/'+ name+'.'+ env +'.json`');    
+            }                   
+                                            
+            // link route & template if hasViews - inly for GET methods
+            if ( hasViews && /get/i.test(routing[rule].method) && typeof(files['templates'][rule.toLowerCase()]) == 'undefined' ) {
+                files['templates'][rule.toLowerCase()] = {}
             }
 
-            //files[name] = collectedRules = merge(collectedRules, ((isStandalone && bundle != self.startingApp ) ? standaloneRouting : routing), true);
-
-            // originalRule is used to facilitate cross bundles (hypertext)linking
-            // r = 0;
-            // rLen = originalRules.length;
-            // for (; r < rLen; ++r) { // for each rule ( originalRules[r] )
-            //     files[name][originalRules[r]].originalRule = collectedRules[originalRules[r]].originalRule = (files[name][originalRules[r]].bundle === self.startingApp ) ?  self.getOriginalRule(originalRules[r], files[name]) : self.getOriginalRule(files[name][originalRules[r]].bundle +'-'+ originalRules[r], files[name])
-            // }
+            routing[rule.toLowerCase() +'@'+ bundle] = routing[rule];
+            delete routing[rule];
             
-            self.setRouting(bundle, env, routing);
-            // reverse routing
-            for (let rule in routing) {
-                                
-                if ( /\,/.test(routing[rule].url) ) { 
+            // default file name
+            file        = rule.toLowerCase();
+            rule        = rule.toLowerCase() +'@'+ bundle;                
+                
+
+            routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse lookup
+            // route file
+            if (!routing[rule].param) continue;
+            //routing[rule].param.file = ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
+            if ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' && /delete/i.test(routing[rule].method )) {
+                console.warn('`DELETE` method result should not be rendererd into a file');
+            } else if ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) == 'undefined' /**&& !/delete/i.test(routing[rule].method)*/) {
+                routing[rule].param.file = file
+            }
+
+            // by default, method is inherited from the request.method
+            if (
+                localHasWebRoot && typeof(routing[rule].param.path) != 'undefined' && typeof(routing[rule].param.ignoreWebRoot) == 'undefined'
+                || localHasWebRoot && typeof(routing[rule].param.path) != 'undefined' && !routing[rule].param.ignoreWebRoot
+            ) {
+                routing[rule].param.path = localWroot + ( /^\//.test(routing[rule].param.path) ) ? routing[rule].param.path.substr(1) : routing[rule].param.path
+            }
+            
+               
+            
+            // ignoreWebRoot test to rewrite url webroot
+            if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
+                //routing[rule].url = (routing[rule].url.length > 1) ? localWroot + routing[rule].url : routing[rule].url;
+                if ( /\,/.test(routing[rule].url) ) {
                     urls = routing[rule].url.split(/\,/g);                    
                     r = 0; rLen = urls.length;
                     for (; r < rLen; ++r) {                        
-                        reverseRouting[ urls[r] ] = rule
+                        urls[r] = ( localHasWebRoot && urls[r].length > 1) ? localWroot + urls[r].substr(1) : ((localHasWebRoot && urls[r].length == 1) ? localWroot : urls[r]);
                     }
-                } else {
-                    reverseRouting[ routing[rule].url ] = rule
+                    routing[rule].url = urls.join(',');                            
+                } else {                 
+                    routing[rule].url = ( localHasWebRoot && routing[rule].url.length > 1) ? localWroot + routing[rule].url.substr(1) : ((localHasWebRoot && routing[rule].url.length == 1) ? localWroot : routing[rule].url);
                 }
+            }            
+        }
+        
+        self.setRouting(bundle, env, routing);
+        // reverse routing
+        for (let rule in routing) {
+                            
+            if ( /\,/.test(routing[rule].url) ) { 
+                urls = routing[rule].url.split(/\,/g);                    
+                r = 0; rLen = urls.length;
+                for (; r < rLen; ++r) {                        
+                    reverseRouting[ urls[r] ] = rule
+                }
+            } else {
+                reverseRouting[ routing[rule].url ] = rule
             }
-            self.setReverseRouting(bundle, env, reverseRouting);            
-        //} // EO if (cacheless || typeof(reload) != 'undefined' && reload)
+        }
+        self.setReverseRouting(bundle, env, reverseRouting);
 
         if (!conf[bundle][env].executionPath) {
             conf[bundle][env].executionPath = self.executionPath
@@ -1252,7 +1393,8 @@ function Config(opt) {
         //Constants to be exposed in configuration files.
         var reps = {
             "gina"              : getPath('gina').root,
-            "frameworkDir"      : GINA_FRAMEWORK_DIR,            
+            "frameworkDir"      : GINA_FRAMEWORK_DIR,
+            "bundle"            : bundle,
             "env"               : env,
             // "server.engine"     : conf[bundle][env].engine,
             // "server.protocol"   : conf[bundle][env].protocol,
@@ -1272,8 +1414,7 @@ function Config(opt) {
             "handlersPath"      : conf[bundle][env].handlersPath,
             "sharedPath"        : conf[bundle][env].sharedPath,
             "logsPath"          : conf[bundle][env].logsPath,
-            "tmpPath"           : conf[bundle][env].tmpPath,
-            "bundle"            : bundle,
+            "tmpPath"           : conf[bundle][env].tmpPath,            
             "version"           : getContext('gina').version
         };
         
@@ -1386,19 +1527,10 @@ function Config(opt) {
                             publicResources.push( staticToPublicPath )
                     }
                 }
-
-                // if (hasWebRoot) {
-                //     var wrootKey = wroot.substr(1);
-                //     for (var p in files['statics']) {
-                //         files['statics'][wrootKey +'/'+ p] = files['statics'][p]
-                //     }
-                // }
-
-                //files['statics'] = merge(files['statics'], statics);
                 
                 conf[bundle][env].publicResources = publicResources
             } else if (hasViews) {
-                console.warn('no public dir to scan...')
+                console.warn('['+bundle+'] No public dir to scan...')
             }
 
 
@@ -1777,11 +1909,7 @@ function Config(opt) {
                     delete require.cache[require.resolve(_(loaderSrcPath, true))]
                 }
                 // Attention - ginaLoader cannot be deferred !
-                // if (files['templates']._common.javascriptsDeferEnabled) {
-                //     scriptTag = '\n\t\t<script defer type="text/javascript">'
-                // } else {
                 scriptTag = '\n\t\t<script type="text/javascript">'
-                // }                
                 scriptTag = scriptTag 
                     + '\n\t\t<!--'
                     + '\n\t\t' + fs.readFileSync( _(loaderSrcPath, true)).toString()
@@ -1824,8 +1952,8 @@ function Config(opt) {
       
             
         } else {
-            protocol = conf[bundle][env].server.protocol;
-            scheme = conf[bundle][env].server.scheme;
+            protocol    = conf[bundle][env].server.protocol;
+            scheme      = conf[bundle][env].server.scheme;
         }
         
         conf[bundle][env].server.supportedRequestMethods = conf[bundle][env].content.settings.server.supportedRequestMethods;
@@ -1842,7 +1970,7 @@ function Config(opt) {
         }
     }
     
-    // Todo - browseDirectory -> returns a collection of files & folders paths
+    // Todo - browseDirectory -> returns a collection of files & folders paths, unless it is handled by http/2
     // Will be useful to generate cache
     // var browseDirectory = function(filename, list, i, len) {
         

@@ -51,7 +51,7 @@ If you need to remove this project later
 gina project:rm @myproject
 ```
 
-### Creating a bundle (application)
+### Creating a bundle (application or service)
 
 A project is a set of bundles. Gina lets you create all kinds of bundles :
 * API & web services

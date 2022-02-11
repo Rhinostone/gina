@@ -20,11 +20,11 @@
     "help": {
         "url": [
             "/help",
-            "/ressources"
+            "/resources"
         ],
         "param": {
             "control": "help",
-            "title": "Ressources"
+            "title": "Resources"
         }
     },
     "docs": {

@@ -52,11 +52,11 @@ function Add(opt, cmd) {
 
         
         // creating project file
-        var file = new _(self.projectLocation + '/project.json', true);
+        var file = new _(self.projectLocation + '/manifest.json', true);
         if ( !file.existsSync() ) {
             createProjectFile( file.toString() )
         } else {
-            console.warn('[ project.json ] already exists in this location: '+ file);
+            console.warn('[ manifest.json ] already exists in this location: '+ file);
         }
 
         // creating env file
@@ -136,10 +136,11 @@ function Add(opt, cmd) {
 
         loadAssets();
 
-        var conf        = _(getPath('gina').core +'/template/conf/project.json', true);
+        var conf        = _(getPath('gina').core +'/template/conf/manifest.json', true);
         var contentFile = require(conf);
         var dic = {
-            "project" : self.projectName
+            "project"   : self.projectName,
+            "version"   : "1.0.0"
         };
 
         contentFile = whisper(dic, contentFile); //data
@@ -327,15 +328,6 @@ function Add(opt, cmd) {
                     }
                         
                     for (var scheme in ports[protocol]) {
-                        
-                        // ignore unmatched scheme : in case of the framework update
-                        // if ( self.schemesAvailable.indexOf(scheme) < 0) {
-                        //     delete ports[protocol][scheme];
-                        //     if ( self.schemes.indexOf(scheme) < 0) {
-                        //         delete self.schemes[self.schemes.indexOf(scheme)]; 
-                        //     }                                               
-                        //     continue; 
-                        // } 
                         
                         if ( !ports[protocol][scheme].count() ) {
                             ports[protocol][scheme][ portsList[i] ] = null;
