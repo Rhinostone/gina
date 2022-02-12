@@ -347,6 +347,7 @@ function MainHelper(opt) {
     setEnvVar = function(key, val, isProtected) {        
         key = key.toUpperCase();
         var err                     = null
+            // related task `framework:set` & framework/v.xxx/lib/cmd/framework/init.js 
             , specialCases          = ['GINA_DEBUG_PORT', 'GINA_CULTURE', 'GINA_TIMEZONE']
             , isOverrrideAllowed    = (specialCases.indexOf(key) > -1) ? true : false
         ;

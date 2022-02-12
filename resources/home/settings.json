@@ -1,7 +1,8 @@
 {
     "_comment": "To update these values, go through the command line arguments: --tmpdir=/some/path/tmp --logdir=/some/path/logs",
     "version": "{version}",
-    "env": "{dev_env}",
+    "env": "{env}",
+    "env_is_dev": "{env_is_dev}",
     "node_version": "{node_version}",
     "debug_port": "{debug_port}",
     "user": "{user}",

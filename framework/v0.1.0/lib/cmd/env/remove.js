@@ -6,7 +6,7 @@ var console = lib.logger;
  * TODO - Prompt for confirmation: "This will remove [ environment ] for the whole project. Proceed ? Y/n: "
  * */
 function Remove(opt, cmd) {
-    var self = {};
+    var self = {}, local = { env: null };
 
     var init = function() {
         // import CMD helpers
@@ -17,12 +17,19 @@ function Remove(opt, cmd) {
         
         self.target = _(GINA_HOMEDIR + '/projects.json');
         self.projects   = require(self.target);
-
-
+        var env = local.env = process.argv[3];
+        if ( typeof(env) == 'undefined' || /^\@/.test(env) ) {
+            end( new Error('Missing argument in [ gina env:rm <environment> @<project> ]') )
+        }
+        else if ( typeof(env) != 'undefined' ) {
+            if ( !self.projects[self.projectName].envs.inArray(env) ) { 
+                end( new Error('Environment [ '+env+' ] not found') )
+            }// else, continue
+        }
+        
         if ( typeof(process.argv[4]) != 'undefined') {
             if ( !isValidName(process.argv[4]) ) {
-                console.error('[ '+process.argv[4]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].');
-                process.exit(1);
+                end( new Error('[ '+process.argv[4]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].') );
             }
         } else {
             // is current path == project path ?
@@ -32,94 +39,110 @@ function Remove(opt, cmd) {
                 self.projectName = name
             }
         }
-
-        if ( typeof(process.argv[3]) != 'undefined' ) {
-            if ( !self.projects[self.projectName].envs.inArray(process.argv[3]) ) {                
-                console.error('Environment [ '+process.argv[3]+' ] not found');
-                process.exit(1)
-            }
-        } else {
-            console.error('Missing argument in [ gina env:use <environment> ]');
-            process.exit(1)
-        }
-
+        
         if ( typeof(self.projectName) == 'undefined' ) {
-            console.error('Project name is required: @<project_name>');
-            process.exit(1)
+            end( new Error('Project name is required: @<project_name>') )
         } else if ( typeof(self.projectName) != 'undefined' && isDefined('project', self.projectName) ) {
-            removeEnv(process.argv[3], self.projects, self.target)
+            removeEnv(self.projects, self.target)
         } else {
-            console.error('[ '+self.projectName+' ] is not a valid project name.');
-            process.exit(1)
-        }
+            end( new Error('[ '+self.projectName+' ] is not a valid project name.') )
+        }        
     }
-
-    // var isDefined = function(name) {
-    //     if ( typeof(self.projects[name]) != 'undefined' ) {
-    //         return true
-    //     }
-    //     return false
-    // }
-
-    // var isValidName = function(name) {
-    //     if (name == undefined) return false;
-
-    //     self.projectName = name.replace(/\@/, '');
-    //     var patt = /^[a-z0-9_.]/;
-    //     return patt.test(self.projectName)
-    // }
-
-    var removeEnv = function(env, projects, target) {
+    
+    var removeEnv = function(projects, target) {
+        var err = null, env = local.env;
+        // default `dev env` cannot be removed
         if(env === projects[self.projectName]['dev_env']|| env === projects[self.projectName]['def_env']) {
             if (env === projects[self.projectName]['def_env']) {
-                console.error('Environment [ '+env+' ] is set as "default environment"')
+                err = new Error('Environment [ '+env+' ] is set as "default environment"')
             } else {
-                console.error('Environment [ '+env+' ] is protected')
+                err = new Error('Environment [ '+env+' ] is linked as "development environment"')
             }
-        } else {
+            
+            return end(err);
+        }
 
-            projects[self.projectName]['envs'].splice(projects[self.projectName]['envs'].indexOf(env), 1);
-            lib.generator.createFileFromDataSync(
-                projects,
-                target
-            );
-            // clean ports & reverse ports registered for the project
-            var portsPath = _(GINA_HOMEDIR + '/ports.json')
-                , portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json')
-                , ports = require(portsPath)
-                , portsReverse = require(portsReversePath)
-                , envsPath = _(projects[self.projectName].path +'/env.json')
-                , envs = requireJSON(envsPath);
+        projects[self.projectName]['envs'].splice(projects[self.projectName]['envs'].indexOf(env), 1);
+        lib.generator.createFileFromDataSync(
+            projects,
+            target
+        );
+        // clean ports & reverse ports registered for the project
+        var portsPath = _(GINA_HOMEDIR + '/ports.json')
+            , portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json')
+            , ports = require(portsPath)
+            , portsReverse = require(portsReversePath)
+            , envsPath = _(projects[self.projectName].path +'/env.json')
+            , envs = requireJSON(envsPath);
 
 
-            var patt = new RegExp("@"+ self.projectName +"/"+ env +"$");
-            for (var p in ports) {
-                if ( patt.test(ports[p]) ) {
-                    delete ports[p]
-                }
-            }
-            for (var p in portsReverse) {
-                if ( typeof( portsReverse[p][env]) != 'undefined' ) {
-                    delete portsReverse[p][env]
-                }
-            }
-
-            for (var bundle in envs) {
-                for (var e in envs[bundle]) {
-                    if (e == env) {
-                        delete envs[bundle][e]
+        var patt = new RegExp("\@"+ self.projectName +"/"+ env +"$");
+        for (let protocol in ports) {
+            for (let scheme  in ports[protocol]) {
+                for (let p in ports[protocol][scheme]) {
+                    if ( patt.test(ports[protocol][scheme][p]) ) {
+                        delete ports[protocol][scheme][p]
                     }
                 }
-            }
-
-            lib.generator.createFileFromDataSync(ports, portsPath);
-            lib.generator.createFileFromDataSync(portsReverse, portsReversePath);
-            lib.generator.createFileFromDataSync(envs, envsPath);
-
-            console.log('Environment [ '+env+' ] removed with success');
-            process.exit(0)
+            }                    
         }
+        
+        patt = new RegExp("\@"+ self.projectName +"$");
+        for (let bundle in portsReverse) {
+            if ( patt.test(bundle) ) {
+                for (let e in portsReverse[bundle]) {
+                    if ( e == env ) {
+                        delete portsReverse[bundle][e]
+                    }
+                }
+            }            
+        }
+
+        for (let bundle in envs) {
+            for (let e in envs[bundle]) {
+                if (e == env) {
+                    delete envs[bundle][e]
+                }
+            }
+        }
+
+        lib.generator.createFileFromDataSync(ports, portsPath);
+        lib.generator.createFileFromDataSync(portsReverse, portsReversePath);
+        lib.generator.createFileFromDataSync(envs, envsPath);
+
+        updateManifest();
     };
+    
+    var updateManifest = function() {
+        var env = local.env;
+        var projectData    = JSON.clone(self.projectData);
+        for (let bundle in projectData.bundles) {
+            if ( typeof(projectData.bundles[bundle].release.targets[env]) != 'undefined' ) {                
+                delete projectData.bundles[bundle].release.targets[env]
+            }
+        }
+        
+        lib.generator.createFileFromDataSync(projectData, self.projectPath);
+        
+        end()
+    }
+    
+    var end = function(err) {
+        console.debug('GINA_ENV_IS_DEV ', GINA_ENV_IS_DEV);        
+        if (err) {
+            if (GINA_ENV_IS_DEV) {
+                console.error(err.stack);
+            } else {
+                console.error(err.message);
+            }
+            
+            return process.exit(1);
+        }
+        var env = local.env;
+        console.log('Environment [ '+env+' ] removed with success');
+        
+        return process.exit(0)
+    }
 
     init()
 };

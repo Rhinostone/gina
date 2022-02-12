@@ -70,7 +70,7 @@ function Remove(opt, cmd) {
 
         if (local.force) {
             // remove without checking            
-            remove()
+            remove(local.bundle)
         } else {
             check()
         }
@@ -80,7 +80,7 @@ function Remove(opt, cmd) {
     var check = function() {
 
 
-        rl.setPrompt('['+ local.bundle +'] Also remove bundle files ? (Y/n):');
+        rl.setPrompt('['+ local.bundle +'@'+ self.projectName +'] Also remove bundle files ? (Y/n):');
 
         rl.prompt();
 
@@ -90,7 +90,7 @@ function Remove(opt, cmd) {
                     case 'y':
                     case 'yes':
                         rl.clearLine();
-                        remove();
+                        remove(local.bundle);
 
                     break;
                     case 'n':
@@ -114,69 +114,102 @@ function Remove(opt, cmd) {
             })
     }
     
-    var remove = function () {
-
-        var folder = new _(self.projects[self.projectName].path + '/' + self.projectData.bundles[local.bundle].src);
-
-        if ( !folder.isValidPath() ) {
-            console.warn('`'+ folder.toString() +'` is not a valid path')
-        } else {
-
-            // removing mounting point: just in case
-            var coreEnv = getCoreEnv(local.bundle);
-            new _(coreEnv.mountPath +'/'+ local.bundle, true).rmSync();
-            
-            // removing folder
-            folder = folder.rmSync();
-            if (folder instanceof Error) {
-                console.error(folder.stack);
-                process.exit(1)
-            }
-            
-                       
-
-            // updating project env
-            if ( typeof(self.envData) != 'undefined' && typeof(self.envData[local.bundle]) != 'undefined' ) (
-                delete self.envData[local.bundle]
-            )
-
-            // updating project bundles
-            if ( typeof(self.projectData.bundles) != 'undefined' && typeof(self.projectData.bundles[local.bundle]) != 'undefined' ) (
-                delete self.projectData.bundles[local.bundle]
-            )
-
-            // removing ports
-            var ports               = JSON.clone(self.portsData)
-                , portsReverse      = JSON.clone(self.portsReverseData)
-                , reversePortValue  = null
-                , re                = null
-            ;
-
-            for (var protocol in ports) {
+    var remove = function (bundle) {
+        
+        // reload assets context with changes
+        loadAssets();
                 
-                for (var scheme in ports[protocol]) {
-                    
-                    for (var port in ports[protocol][scheme]) {
+        var hasFolder = true, folderPath = null, folder = null;
+        console.debug('Removing bundle: ', bundle);
+        try {
+            folderPath = _(self.projects[self.projectName].path + '/' + self.projectData.bundles[bundle].src, true);
+            folder = new _(folderPath);
+            
+            if ( !folder.isValidPath() ) {
+                console.warn('`'+ folder.toString() +'` is not a valid path')
+            } else {
+    
+                // removing mounting point: just in case
+                var coreEnv = getCoreEnv(bundle);
+                new _(coreEnv.mountPath +'/'+ bundle, true).rmSync();
+                
+                // removing folder
+                folder = folder.rmSync();
+                if (folder instanceof Error) {
+                    console.error(folder.stack);
+                    process.exit(1)
+                }
+            }
+        } catch(folderException) {
+            hasFolder = false;
+        }
+        
+        
 
-                        re = new RegExp(local.bundle +"\@"+ self.projectName +"\/");
+        // updating project env
+        if ( typeof(self.envData) != 'undefined' && typeof(self.envData[bundle]) != 'undefined' ) (
+            delete self.envData[bundle]
+        )
 
-                        if ( re.test(ports[protocol][scheme][port]) ) {
+        // updating project bundles
+        if ( typeof(self.projectData.bundles) != 'undefined' && typeof(self.projectData.bundles[bundle]) != 'undefined' ) (
+            delete self.projectData.bundles[bundle]
+        )
 
-                            reversePortValue = ports[protocol][scheme][port].split('/')[0];
+        // removing ports
+        var ports               = JSON.clone(self.portsData)
+            , portsReverse      = JSON.clone(self.portsReverseData)
+            , re                = null
+        ;
 
-                            delete portsReverse[reversePortValue];
-                            delete ports[protocol][scheme][port];
-                        }
+        for (let protocol in ports) {                
+            for (let scheme in ports[protocol]) {                    
+                for (let port in ports[protocol][scheme]) {
+                    re = new RegExp(bundle +"\@"+ self.projectName +"\/");
+                    if ( re.test(ports[protocol][scheme][port]) ) {
+                        delete ports[protocol][scheme][port];
                     }
                 }
             }
-
-            // now writing
-            lib.generator.createFileFromDataSync(ports, self.portsPath);
-            lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
-
-            console.log('bundle [ '+ local.bundle+'@'+self.projectName+' ] removed');
         }
+        
+        for (let bundleAddress in portsReverse) {
+            re = new RegExp(bundle +"\@"+ self.projectName);
+            if ( re.test(bundleAddress) ) {
+                delete portsReverse[bundleAddress];
+            }
+        }
+
+        // now writing
+        lib.generator.createFileFromDataSync(ports, self.portsPath);
+        lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
+        
+        // env
+        // var envData = JSON.clone(self.envData);
+        // if ( typeof(envData[bundle]) != 'undefined' ) {
+        //     delete envData[bundle];
+            lib.generator.createFileFromDataSync(
+                self.envData,
+                self.envPath
+            );
+        // }            
+        
+        // manifest
+        // var projectData = JSON.clone(self.projectData);
+        // if ( typeof(projectData.bundles) != 'undefined' && typeof(projectData.bundles[bundle]) != 'undefined' ) {
+        //     delete projectData.bundles[bundle];
+            // if (projectData.bundles.count() == 0) {
+            //     delete projectData.bundles
+            // }
+            lib.generator.createFileFromDataSync(
+                self.projectData,
+                self.projectPath
+            );
+        // }
+        
+
+        console.log('Bundle [ '+ bundle+'@'+self.projectName+' ] removed');
+                
 
         ++local.b;
         removeBundle(local.b);
@@ -184,20 +217,8 @@ function Remove(opt, cmd) {
 
 
     var end = function() {
-        
-        // last check just in case
-        
-        
 
-        lib.generator.createFileFromDataSync(
-            self.envData,
-            self.envPath
-        );
-
-        lib.generator.createFileFromDataSync(
-            self.projectData,
-            self.projectPath
-        );
+        
 
         process.exit(0)
     };

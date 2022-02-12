@@ -193,6 +193,11 @@ function Add(opt, cmd) {
     var makeBundle = async function(bundle, rewrite) {
 
         loadAssets();
+        
+        // if ( /^true$/i.test(rewrite) ) {
+        //     fixPorts
+        //     return
+        // }
 
         setPorts(bundle, self.portsAvailable, function onPortsSet(err){
             if (err) {

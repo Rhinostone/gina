@@ -28,7 +28,8 @@ function Add(opt, cmd) {
 
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
-
+        
+        local.imported = false;
         if ( checkImportMode() ) {
             return;
         }
@@ -116,12 +117,14 @@ function Add(opt, cmd) {
                                 process.exit(1)
                             },
                             function onSuccess() {
+                                local.imported = true;                               
                                 end();
                                 return true;
                             })
 
                     } else {
-                        end()
+                        local.imported = true;
+                        end();
                         return true;
                     }
                 }
@@ -200,8 +203,10 @@ function Add(opt, cmd) {
             "def_scheme": self.defaultScheme
         };
         
-        // crearte/update ports, protocols & schemes
-        addBundlePorts(0);
+        // create/update ports, protocols & schemes
+        if ( /^true$/.test(local.imported) ) {
+            addBundlePorts(0);
+        }
         
 
         // writing file
@@ -267,6 +272,11 @@ function Add(opt, cmd) {
      * 
      * @param {number} b - Bundle index
      */
+    
+    // var addBundlePorts = function(b) {
+        
+    // }
+    
     var addBundlePorts = function(b) {
         loadAssets();
         
