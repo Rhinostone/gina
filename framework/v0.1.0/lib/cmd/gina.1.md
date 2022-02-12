@@ -24,6 +24,7 @@ project
 bundle
 model
 dev
+view
 
 ## ENVIRONMENT
 

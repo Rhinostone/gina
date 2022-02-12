@@ -36,7 +36,9 @@ function Logger(opt) {
         //containers: [],
         //'format' : '',
         //'pipe' : [],
-        levels : { // based on Sylog Severity Levels
+        
+        // Levels are based on Sylog Severity Levels
+        levels : {
             emerg: {
                 code: 0,
                 label: 'Emergency',

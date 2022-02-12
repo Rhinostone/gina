@@ -237,37 +237,28 @@ function Initialize(opt) {
     self.checkEnv = function() {
         // ignored for framework:set
         //if (self.opt.task.Action != 'set' && self.opt.task.topic != 'framework') {
-            var isRegistered = false;
-            var isDev = false;
-            var main = require( self.opt.homedir + '/main.json' );
-            //has registered env ?
-            var env = getEnvVar('GINA_ENV') || main['dev_env'][self.release]; // dev by default
+        var isDev = false;
+        var main = require( self.opt.homedir + '/main.json' );
+        //has registered env ?
+        var env = getEnvVar('GINA_ENV') || main['dev_env'][self.release]; // dev by default
 
-            if ( main.envs[self.release].indexOf(env) < 0 ) {
-                console.error('Environment [ ' + env + ' ] not registered. See [ man gina-env ].');
-                process.exit(1)
-            }
+        if ( main.envs[self.release].indexOf(env) < 0 ) {
+            console.error('Environment [ ' + env + ' ] not registered. See [ man gina-env ].');
+            process.exit(1)
+        }
 
-            // has dev env ?
-            if (
-                typeof(main['dev_env']) == 'undefined' ||
-                typeof(main['dev_env']) != 'undefined' &&
-                typeof(main['dev_env'][self.release]) != 'undefined' &&
-                main.envs[self.release].indexOf(main['dev_env'][self.release]) < 0
-                ) {
-                console.warn('the framework has no dev link ' +
-                    'environment to gina\'s.\nUse: $ gina env:link-dev <your_env>')
-            } else if (
-                typeof(main['dev_env']) != 'undefined' &&
-                typeof(main['dev_env'][self.release]) != 'undefined' &&
-                main.envs[self.release].indexOf(main['dev_env'][self.release]) > -1
-                ) {
-                isDev = true
-            }
-
-            setEnvVar('GINA_ENV_IS_DEV', isDev);
+        // has dev env ?
+        if (
+            typeof(main['dev_env']) == 'undefined' ||
+            typeof(main['dev_env']) != 'undefined' &&
+            typeof(main['dev_env'][self.release]) != 'undefined' &&
+            main.envs[self.release].indexOf(main['dev_env'][self.release]) < 0
+            ) {
+            console.error('the framework has no dev link ' +
+                'environment to gina\'s.\nUse: $ gina env:link-dev <your_env>');
             
-        //}
+            process.exit(1)
+        }
     }
 
     /**
@@ -275,7 +266,7 @@ function Initialize(opt) {
      *
      **/
     self.checkIfProjects = function() {
-        console.debug('checking projects...');
+        console.debug('Checking projects...');
         var target = _(self.opt.homedir +'/projects.json');
 
         if ( !fs.existsSync(target) ) {
@@ -295,9 +286,9 @@ function Initialize(opt) {
     self.checkIfSettings = function() {
         console.debug('Checking framework settings...');
         var main            = require( _(self.opt.homedir + '/main.json', true) )
-            , version       = _( getEnvVar('GINA_VERSION'), true)
-            , env           = _( getEnvVar('GINA_ENV') || main['dev_env'][self.release], true)
-            , settings      = require( _( getPath('gina').root + '/resources/home/settings.json', true ) )
+            , version       = getEnvVar('GINA_VERSION')
+            , env           = getEnvVar('GINA_ENV') || main['def_env'][self.release]
+            , settings      = requireJSON( _( getPath('gina').root + '/resources/home/settings.json', true ) )
             , userSettings  = {}
             , target        = _(self.opt.homedir +'/'+ self.release +'/settings.json', true)
         ;
@@ -320,10 +311,12 @@ function Initialize(opt) {
         try {
 
             var dic = {
-                'version' : getEnvVar('GINA_VERSION'),
+                'version' : version,
+                'env' : env,
+                'env_is_dev' : (main['dev_env'][self.release] == env) ? true : false,
+                'dev_env' : main['dev_env'][self.release],
                 'culture' : getEnvVar('GINA_CULTURE'),
                 'timezone' : getEnvVar('GINA_TIMEZONE'),
-                'dev_env' : env,
                 'node_version': process.version,
                 'debug_port' : getEnvVar('GINA_DEBUG_PORT') || process.debugPort || 5757,
                 'user' : process.env.USER,
@@ -341,6 +334,9 @@ function Initialize(opt) {
             self.settings = settings;
             
             setEnvVar('GINA_DEBUG_PORT', settings['debug_port']);
+            setEnvVar('GINA_ENV_IS_DEV', settings['env_is_dev']);
+            
+            console.debug('Framework env is: ', env);
 
             lib.generator.createFileFromDataSync(
                 settings,

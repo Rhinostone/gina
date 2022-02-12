@@ -437,12 +437,16 @@ function ContextHelper(contexts) {
         } else {
 
             if ( typeof(replaceable) == 'object' &&  !/\[native code\]/.test(replaceable.constructor) ||  typeof(replaceable) == 'function' ) { // /Object/.test(replaceable.constructor)
-                for (var attr in replaceable) {
+                for (let attr in replaceable) {
                     if ( typeof(replaceable[attr]) != 'function') {
                         replaceable[attr] = (typeof(replaceable[attr]) != 'string' && typeof(replaceable[attr]) != 'object') ? JSON.stringify(replaceable[attr], null, 2) : replaceable[attr];
                         if (replaceable[attr] && typeof(replaceable[attr]) != 'object') {
-                            replaceable[attr] = replaceable[attr].replace(/\{(\w+)\}/g, function(s, key) {
-                                return dictionary[key] || s;
+                            replaceable[attr] = replaceable[attr].replace(/\"\{(\w+)\}\"/g, function(s, key) {
+                                if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
+                                    return dictionary[key]
+                                }
+                                //return dictionary[key] || s;
+                                return '"'+ (dictionary[key] || s) +'"';
                             })
                         }
                     }
@@ -452,8 +456,11 @@ function ContextHelper(contexts) {
                 replaceable = JSON.stringify(replaceable, null, 2);
 
                 return JSON.parse(
-                    replaceable.replace(/\{(\w+)\}/g, function(s, key) {
-                        return dictionary[key] || s;
+                    replaceable.replace(/\"\{(\w+)\}\"/g, function(s, key) {                        
+                        if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
+                            return dictionary[key]
+                        }
+                        return '"'+ (dictionary[key] || s) +'"';
                     })
                 )
             }

@@ -124,7 +124,7 @@ function CmdHelper(cmd, client, debug) {
                 arr[0] = arr[0].toLowerCase();
 
                 //Boolean values.
-                if (arr[1] === "true") {
+                if ( typeof(arr[1]) == 'undefined' || arr[1] === "true" ) {
                     arr[1] = true
                 }
 
@@ -141,7 +141,7 @@ function CmdHelper(cmd, client, debug) {
             } else if ( process.argv[a].indexOf('--') > -1 ) {
 
                 if ( cmdArguments.indexOf(process.argv[a]) > -1 )
-                    cmd.params[ process.argv[a] ] = true;
+                    cmd.params[ process.argv[a].replace(/--/, '') ] = true;
                 else
                     cmd.nodeParams.push(process.argv[a]);                    
                 
@@ -198,7 +198,12 @@ function CmdHelper(cmd, client, debug) {
             ;
 
             cmd.task = argv[2];
-            if ( /^project\:/.test(cmd.task) && !/^\@/.test(argv[3]) ) {
+            if ( 
+                /^project\:/.test(cmd.task)
+                // excluded
+                && !/^project\:(list|help|status)/.test(cmd.task)
+                && !/^\@/.test(argv[3]) 
+            ) {
                 errMsg = 'This is a project command line. Cannot understand what your are asking with: `'+ process.argv.slice(2).join(' ') +'`';
                 console.error(errMsg);
                 exit(errMsg);
@@ -406,12 +411,21 @@ function CmdHelper(cmd, client, debug) {
 
         var ports = null;
 
-        if (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined') { // ignore when adding project
+        if (
+            cmd.projectName != null 
+            && typeof(cmd.projects[cmd.projectName]) != 'undefined'
+            //&& !cmd.params['force']
+        ) { // ignore when adding project
             
             
             if ( typeof(require.cache[cmd.projectPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.projectPath)]
             }
+            if ( ! new _(cmd.projectPath).existsSync() ) {
+                console.error('A project with this name is already added. If you want to override, you should try to add: `--force` at the end of your command line');
+                return process.exit(1);
+            }
+            
             cmd.projectData         = requireJSON(cmd.projectPath);
             cmd.projectLocation     = cmd.projects[cmd.projectName].path;
             cmd.bundlesLocation     = _(cmd.projects[cmd.projectName].path +'/src', true);
@@ -571,6 +585,7 @@ function CmdHelper(cmd, client, debug) {
         }
 
         ports = requireJSON(cmd.portsPath);
+        portsReverse = requireJSON(cmd.portsReversePath); 
                     
         // protocols list
         if (cmd.protocols.length == 0)
@@ -616,6 +631,9 @@ function CmdHelper(cmd, client, debug) {
         if ( !cmd.portsData.count() )
             cmd.portsData = ports;
             
+        if ( !cmd.portsReverseData.count() )
+            cmd.portsReverseData = portsReverse;
+            
         if (cmd.protocols.length > 0)
             cmd.protocols.sort();
             
@@ -634,7 +652,12 @@ function CmdHelper(cmd, client, debug) {
             cmd.bundlesByProject[project] = {};
             if (fs.existsSync(cmd.projects[project].path) ) {
                 cmd.projects[project].exists    = true;
+                if ( !new _(projectPropertiesPath).existsSync() ) {
+                    console.error('`'+ projectPropertiesPath +'` not found ! Maybe, you can try to remove the project reference by hand by editing: `'+ _(GINA_HOMEDIR + '/project.json') +'`')
+                }
+                
                 cmd.bundlesByProject[project]   = requireJSON(projectPropertiesPath).bundles;
+                
             } else {
                 cmd.projects[project].exists    = false;
             }
@@ -744,7 +767,7 @@ function CmdHelper(cmd, client, debug) {
             errMsg = 'Bundle name `'+ cmd.name +'` not found in your project `@'+ cmd.projectName +'`';            
             //console.debug('task `'+ cmd.task +'` error:');
             if ( cmd.task != 'bundle:add' ) {
-                console.error(errMsg);
+                console.warn(errMsg);
             }            
             return false;
         }  
@@ -865,10 +888,26 @@ function CmdHelper(cmd, client, debug) {
                 if (schemes.indexOf(scheme) < 0) continue;
                 for (let p in ports[protocol][scheme]) {
                     if ( cmd.portsList.indexOf(p) > -1 ) continue;
-                    portsList.push(p)
+                    portsList.push(''+p)
                 }
             }            
         }
+        // double checking
+        var portsReverse = require(_(GINA_HOMEDIR + '/ports.reverse.json'));
+        for (let bundle in portsReverse) {
+            for (let env in portsReverse[bundle]) {
+                for (let protocole in portsReverse[bundle][env]) {
+                    for (let scheme in portsReverse[bundle][env][protocole]) {
+                        let p = portsReverse[bundle][env][protocole][scheme];
+                        if ( portsList.indexOf(''+p) < 0 ) {
+                            
+                            portsList.push(''+p)
+                        }
+                    }
+                }
+            }
+        }
+        
         portsList.sort();
         
         return portsList;

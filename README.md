@@ -130,10 +130,7 @@ __or for a particular project__
 gina env:list @myproject
 ```
 
-__or for a particular bundle__
-```tty
-gina env:list frontend @myproject
-```
+__NB.:__ when adding an environement, you will do so for the entire project.
 
 #### Setting your application starting environment on runtime
 > This method does not memorize the selected environment as the default one for your application

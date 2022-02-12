@@ -156,14 +156,15 @@ function Add(opt, cmd) {
                 }
                 self.portsList.sort();
                 
-                self.portsAvailable = ports;
-                setPorts(local.bundle, self.portsAvailable, function onPortsSet(err) {
+                console.debug('available ports '+ JSON.stringify(ports, null, 2));
+                //self.portsAvailable = ports;
+                setPorts(local.bundle, ports, function onPortsSet(err) {
                     if (err) {
                         rollback(err);
                         return;
                     }
                     
-                    console.debug('available ports '+ JSON.stringify(self.portsAvailable[local.bundle], null, 2));
+                    //console.debug('available ports '+ JSON.stringify(self.portsAvailable[local.bundle], null, 2));
                     ++local.b;
                     addEnvToBundles(local.b)
                 });
@@ -400,6 +401,10 @@ function Add(opt, cmd) {
             self.projectsPath
         );
         self.projectDataWrote = true
+    }
+    
+    var updateManifest = function() {
+        
     }
 
     var rollback = function(err) {
