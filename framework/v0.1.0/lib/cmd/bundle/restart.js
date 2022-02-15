@@ -1,8 +1,11 @@
 var fs          = require('fs');
+const { runMain } = require('module');
 var exec        = require('child_process').exec;
 
 var CmdHelper   = require('./../helper');
 var console     = lib.logger;
+// var Shell       = lib.Shell;
+
 /**
  * Restart a given bundle or Restart all running bundles at once
  *
@@ -43,7 +46,7 @@ function Restart(opt, cmd) {
     }
     
     var restart = function(opt, cmd, bundleIndex) {
-                
+             
         var isBulkRestart = (typeof(bundleIndex) != 'undefined') ? true : false;
         var bundle = (isBulkRestart) ? self.bundles[bundleIndex] : self.name;
                 
@@ -66,12 +69,13 @@ function Restart(opt, cmd) {
             end(opt, cmd, isBulkRestart, bundleIndex, true)
 
         } else {
+            
             isRealApp(bundle, function(err, appPath) {
                 if (err) {
                     console.error(err.stack || err.message)
                 }
                                
-
+                
                 var error = null;
                 //console.debug(' OPTIONS => ', opt.debugPort, opt.debugBrkEnabled);
                 //console.info('running: gina bundle:restart '+ bundle + '@' + self.projectName);
@@ -86,11 +90,12 @@ function Restart(opt, cmd) {
                     }
                     cmd += '='+ opt.debugPort
                 }
-                cmd = cmd.replace(/\$gina/g, self.cmdStr);
-                console.debug('Executing: '+cmd);
+                cmd = cmd.replace(/\$(gina)/g, self.cmdStr);
                 
-                exec(cmd, function(err, data) {
-
+                console.debug('Executing: '+cmd);
+                // If it is stuck, the problem is not here ... cmd.start should be a good start
+                exec(cmd, function(err, stdout, stderr) {
+                      
                     if (err) {
                         error = err.toString();
                         console.error(error);
@@ -99,8 +104,13 @@ function Restart(opt, cmd) {
                             end(opt, cmd, isBulkRestart, bundleIndex, true)
                         }, 500);                        
                     }
+                    
+                    // retrieve messages from the parent stdout
+                    if (stdout) {
+                        console.log(stdout);
+                    }
                     setTimeout(() => {
-                        opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] restarted on port #'+ bundlePort+' :D\n');
+                        //opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] restarted on port #'+ bundlePort+' :D\n');
                         end(opt, cmd, isBulkRestart, bundleIndex)
                     }, 500);
                 })
@@ -116,8 +126,7 @@ function Restart(opt, cmd) {
             } else {
                 
                 if ( typeof(error) != 'undefined') {
-                    process.exit(1);
-                    return;
+                    return process.exit(1);
                 }
                 if (!opt.client.destroyed)
                     opt.client.emit('end');
@@ -126,7 +135,7 @@ function Restart(opt, cmd) {
             }
         } else {
             if ( typeof(error) != 'undefined') {
-                process.exit(1);
+                return process.exit(1);
             }
             
             if (!opt.client.destroyed)
@@ -208,8 +217,10 @@ function Restart(opt, cmd) {
                     }
                 }
             })
-        } else {
-            callback(new Error('[ ' + d + ' ] does not exists'))
+        }
+        else {
+            console.debug('[ ' + d + ' ] does not exists');            
+            callback(false)
         }
     }
     

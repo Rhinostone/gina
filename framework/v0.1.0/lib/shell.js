@@ -5,20 +5,26 @@ var inherits = require(require.resolve('./inherits'));
 var helpers = require('./../helpers');
 var console = require('./logger');
 
-
+/**
+ * SSH SHELL
+ */
 function Shell () {
 
     var self = this;
     var local = {
         chdir : undefined,
+        console: undefined
     };
 
     this.setOptions = function(opt) {
-
-        local = {
-            chdir : opt.chdir
-        };
-
+        
+        for (let name in opt) {
+            if ( Object.keys(local).indexOf(name) < 0 ) {
+                throw new Error('Option `'+ name +'` not supported !')
+            }
+            console.log('Settings options for ', name);
+            local[name] = opt[name]
+        }
     }
 
     var getOptions = function () {
@@ -47,6 +53,8 @@ function Shell () {
             , error         = false
             , hasCalledBack = false
         ;
+        
+        var _console = ( typeof(local.console) != 'undefined' ) ? local.console : console;
 
         var e = new EventEmitter();
 
@@ -54,7 +62,6 @@ function Shell () {
 
         if ( isWin32() ) {
             throw new Error('Windows platform not supported yet for command line forward');
-            process.exit(1)
         }
 
         if ( typeof(runLocal) != 'undefined' && runLocal == true ) {
@@ -67,7 +74,7 @@ function Shell () {
             cmd = spawn(cmdline.splice(0,1).toString(), cmdline, { cwd: root, stdio: [ 'ignore', out, err ] })
 
         } else {
-            console.debug('running: ssh ', cmdline);
+            _console.debug('running: ssh ', cmdline);
             cmd = spawn('ssh', [ self.host, cmdline ], { stdio: [ 'ignore', out, err ] })
         }
 
@@ -128,7 +135,7 @@ function Shell () {
 
 
             } catch (err) {
-                console.error(err.stack)
+                _console.error(err.stack)
             }
         });
 

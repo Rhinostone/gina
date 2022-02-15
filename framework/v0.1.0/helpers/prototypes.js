@@ -19,7 +19,7 @@ function PrototypesHelper(instance) {
      
     
     // dateFormat proto
-    if ( typeof(local) != 'undefined' && typeof(local.dateFormat) != 'undefined' ) {
+    if ( local && typeof(local) != 'undefined' && typeof(local.dateFormat) != 'undefined' ) {
         for (let method in local.dateFormat) {
             
             if ( typeof(Date[method]) != 'undefined' )

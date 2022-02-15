@@ -23,10 +23,53 @@ try {
 
     require(frameworkPath + '/lib');
     var aliases     = require(frameworkPath + '/lib/cmd/aliases.json');
+    
+    // catching debug|inspect arg
+    var debugPort           = null
+        , debugBrkEnabled   = false
+        , params            = process.argv
+        , isUpdateRequired  = false
+    ;
+        
+    if ( params.length > 0 ) {
+        for (var p = 0, len = params.length; p < len; ++p) {
+            if ( /^\-\-debug(\_|\-)port/.test(params[p]) ) {
+                let port = params[p].split(/\=/)[1];
+                setEnvVar('GINA_DEBUG_PORT', port);
+                isUpdateRequired = true;            
+                continue;
+            }
+            
+            if ( /^\-\-(inspect|debug)/.test(params[p]) ) {
+                debugBrkEnabled = ( /\-brk/.test(params[p]) ) ? true : false;
+                debugPort       = params[p].split(/\=/)[1];
+                params.splice(p,1);            
+                break;
+            }
+        }
+    }
+    
+
+    var shortVersion = version.split('.');
+    shortVersion.splice(2,1);
+    shortVersion = shortVersion.join('.');
+    setEnvVar('GINA_SHORT_VERSION', shortVersion);
+    
+    var home = getUserHome();
+    if ( typeof(getEnvVar('GINA_HOMEDIR')) == 'undefined') {
+        setEnvVar('GINA_HOMEDIR', home + '/.gina')
+    }
+    home = getEnvVar('GINA_HOMEDIR');
+    
+    var settingsPath =  _( home +'/'+ shortVersion +'/settings.json', true );
+    var settings = requireJSON(settingsPath);
+    
+    setEnvVar('GINA_LOG_LEVEL', settings['log_level']);
+    setEnvVar('GINA_VERSION', version);
 
     //Loading logger.
     var console = lib.logger;
-
+    console.setLevel(settings['log_level'], 'gina');
     if ( !fs.existsSync(frameworkPath) ) {
         console.alert('Could not find version ' + version + '.\nFirst try:\n$ gina framework:install ' + version);
         process.exit(1)
@@ -42,32 +85,7 @@ try {
     process.exit(1)
 }
 
-// catching debug|inspect arg
-var debugPort           = null
-    , debugBrkEnabled   = false
-    , params            = process.argv
-    , isUpdateRequired  = false
-;
-var home = getUserHome();
-if ( params.length > 0 ) {
-    for (var p = 0, len = params.length; p < len; ++p) {
-        if ( /^\-\-debug(\_|\-)port/.test(params[p]) ) {
-            let port = params[p].split(/\=/)[1];
-            setEnvVar('GINA_DEBUG_PORT', port);
-            isUpdateRequired = true;            
-            continue;
-        }
-        
-        if ( /^\-\-(inspect|debug)/.test(params[p]) ) {
-            debugBrkEnabled = ( /\-brk/.test(params[p]) ) ? true : false;
-            debugPort       = params[p].split(/\=/)[1];
-            params.splice(p,1);            
-            break;
-        }
-        
-        
-    }
-}
+
 
 filterArgs();
 //check for $HOME path, alert if empty.
@@ -75,32 +93,23 @@ if (!home) {
     console.error('No ' + ((isWin32) ? 'USERPROFILE' : 'HOME') + ' path found.')
 } else {
 
-    setEnvVar('GINA_VERSION', version);
+    
 
-    var shortVersion = version.split('.');
-    shortVersion.splice(2,1);
-    shortVersion = shortVersion.join('.');
-    setEnvVar('GINA_SHORT_VERSION', shortVersion);
-
-    setEnvVar('GINA_HOME', home);
+    setEnvVar('GINA_HOMEDIR', home);
     setEnvVar('GINA_DIR', ginaPath);
     setEnvVar('GINA_FRAMEWORK_DIR', frameworkPath);
     setEnvVar('GINA_CORE', frameworkPath + '/core');
 
-    if ( typeof(getEnvVar('GINA_HOMEDIR')) == 'undefined') {
-        setEnvVar('GINA_HOMEDIR', home + '/.gina')
-    }
-    home = getEnvVar('GINA_HOMEDIR')
+    
 }
 setEnvVar('GINA_IS_WIN32', isWin32, true);
 
-if (isUpdateRequired) {
-    let settingsPath =  _( home +'/'+ shortVersion +'/settings.json', true );
-    let settings = requireJSON(settingsPath);
+if (isUpdateRequired) {    
     settings['debug_port'] = getEnvVar('GINA_DEBUG_PORT');
     console.debug('Updating debug settings: #'+  getEnvVar('GINA_DEBUG_PORT'));
     generator.createFileFromDataSync(settings, settingsPath);
 }
+
 
 /**
  * Framework port
@@ -207,10 +216,12 @@ if (
         
         //Acknowledging ready state.
         if (  /\[ quit \]/.test(data) ) {
-            client.end()
-        } else {
-            console.log( data.toString() + '\n');
+            client.end();
+            return
         }
+        
+        console.log( data.toString() + '\n');
+        
     });
 
     //client end event.

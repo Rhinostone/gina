@@ -131,7 +131,7 @@ cmd.onExec = function(client, isFromFramework, opt) {
         opt.task.topic  = arr[0];
         opt.task.action = arr[1];
         
-        console.debug('[ FRAMEWORK ] is starting conline CLI '+ arr[0] +':'+arr[1]);
+        console.debug('[ FRAMEWORK ] is starting online CLI '+ arr[0] +':'+arr[1]);
         // var hasCmdStarted = false;                    
         // var interval = 1000; // will abort after 5 sec timeout
 

@@ -14,5 +14,6 @@
     "tmpdir": "{tmp_dir}",
     "logdir": "{log_dir}",
     "culture": "{culture}",
-    "timezone": "{timezone}"
+    "timezone": "{timezone}",
+    "log_level": "{log_level}"
 }

@@ -2811,7 +2811,7 @@ function Server(options) {
                     }
                 }
 
-                console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url +'\n'+ msg);
+                console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
                                 
                 header = completeHeaders(header, local.request, res);
                 if ( /http\/2/.test(protocol) && stream) {

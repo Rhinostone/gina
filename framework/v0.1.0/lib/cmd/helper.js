@@ -250,7 +250,8 @@ function CmdHelper(cmd, client, debug) {
                             folder = new _( cmd.params.path, true );
 
 
-                        } else if ( typeof(cmd.params.path) == 'undefined' ) {
+                        }
+                        else if ( typeof(cmd.params.path) == 'undefined' ) {
                             // getting the current path
                             try {
                                 folder = new _( process.cwd(), true );
@@ -388,14 +389,19 @@ function CmdHelper(cmd, client, debug) {
             "projectPath"   : _(cmd.projects[cmd.projectName].path, true),
             // "bundlesPath" : appsPath,
             // "modelsPath" : modelsPath,
-            "env" : env,
+            "env" : env || cmd.projects[cmd.projectName].def_env,
             "bundle" : bundle,
             "version" : GINA_VERSION
         };
 
-
-        //console.error("reps ", reps);
-        coreEnv = whisper(reps, coreEnv);
+        
+        try {
+            //console.error("reps ", reps);
+            coreEnv = whisper(reps, coreEnv);
+        } catch (err) {
+            console.error('`whisper(reps, coreEnv)` - Potential `reps` issue '+ coreEnvPath + ' ?\n' + err.stack);
+        }
+        
         
         return coreEnv
     }

@@ -97,7 +97,14 @@ function Initialize(opt) {
         } else {
             version = getEnvVar('GINA_VERSION')
         }
-
+        
+        if ( !getEnvVar('GINA_SHORT_VERSION') ) {
+            var shortVersion = version.split('.');
+            shortVersion.splice(2,1);
+            shortVersion = shortVersion.join('.');
+            setEnvVar('GINA_SHORT_VERSION', shortVersion);
+        }
+        
 
         var release = version.split('.').splice(0,2).join(".");
         setEnvVar('GINA_RELEASE', release, true);
@@ -145,17 +152,19 @@ function Initialize(opt) {
             // envs
             mainConfig.envs = merge(mainConfig.envs, data.envs, true);
             
-            // updating protocols, schemes & cultures
-            mainConfig.protocols = merge(mainConfig.protocols, data.protocols, true);
-            mainConfig.schemes = merge(mainConfig.schemes, data.schemes, true);
-            mainConfig.cultures = merge(mainConfig.cultures||{}, data.cultures, true);
+            // updating protocols, schemes, cultures, log_levels
+            mainConfig.protocols    = merge(mainConfig.protocols, data.protocols, true);
+            mainConfig.schemes      = merge(mainConfig.schemes, data.schemes, true);
+            mainConfig.cultures     = merge(mainConfig.cultures||{}, data.cultures, true);
+            mainConfig.log_levels   = merge(mainConfig.log_levels||{}, data.log_levels, true);
             
             
             // don't remove def_protocol
-            var defProtocol = mainConfig['def_protocol'][self.release];
-            var defScheme   = mainConfig['def_scheme'][self.release];
-            var defCulture  = mainConfig['def_culture'][self.release];
-            var defTimezone  = mainConfig['def_timezone'][self.release];
+            var defProtocol = (mainConfig['def_protocol']) ? mainConfig['def_protocol'][self.release] : data.def_protocol[self.release];
+            var defScheme   = (mainConfig['def_scheme']) ? mainConfig['def_scheme'][self.release] : data.def_scheme[self.release];
+            var defCulture  = (mainConfig['def_culture']) ? mainConfig['def_culture'][self.release] : data.def_culture[self.release];
+            var defTimezone = (mainConfig['def_timezone']) ? mainConfig['def_timezone'][self.release] : data.def_timezone[self.release];
+            var defLogLevel = (mainConfig['def_log_level']) ? mainConfig['def_log_level'][self.release] : data.def_log_level[self.release];
             
             if ( mainConfig.protocols[self.release].indexOf(defProtocol) < 0 )
                 mainConfig.protocols[self.release].push(defProtocol);
@@ -165,12 +174,18 @@ function Initialize(opt) {
                 
             if ( mainConfig.cultures[self.release].indexOf(defCulture) < 0 )
                 mainConfig.cultures[self.release].push(defCulture);
+            
+            if ( mainConfig.cultures[self.release].indexOf(defCulture) < 0 )
+                mainConfig.cultures[self.release].push(defCulture);
                 
             // Update only when needed
             if (!mainConfig.def_culture)
                 mainConfig.def_culture = data.def_culture;
             if (!mainConfig.def_timezone)
                 mainConfig.def_timezone = data.def_timezone;
+                
+            if (!mainConfig.def_log_level)
+                mainConfig.def_log_level = data.def_log_level;
                 
             mainConfig.protocols[self.release].sort();
             mainConfig.schemes[self.release].sort();
@@ -183,6 +198,8 @@ function Initialize(opt) {
             setEnvVar('GINA_CULTURE', defCulture);
             setEnvVar('GINA_TIMEZONE', defTimezone);
             process.env.TZ = defTimezone;
+            process.env.LOG_LEVEL = defLogLevel;
+            
         }
     }
 
@@ -309,6 +326,11 @@ function Initialize(opt) {
             , gid   = process.getgid();
 
         try {
+            
+            /**
+             * Before updateing here, if you have new settings,
+             * make sure to complete : self.checkIfMain()
+             */
 
             var dic = {
                 'version' : version,
@@ -326,7 +348,8 @@ function Initialize(opt) {
                 'home_dir' : _( getUserHome(), true ),
                 'run_dir' : _( getRunDir(), true ),
                 'tmp_dir' : _( getTmpDir(), true ),
-                'log_dir' : _( getLogDir(), true )
+                'log_dir' : _( getLogDir(), true ),
+                'log_level' : getEnvVar('GINA_LOG_LEVEL') || main['def_log_level'][self.release] || 'info'
             };
 
             settings = whisper(dic, settings);

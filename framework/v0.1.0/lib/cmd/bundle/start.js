@@ -39,7 +39,6 @@ function Start(opt, cmd) {
     }
     
     var start = function(opt, cmd, bundleIndex) {
-        
         // getting the debug port
         var debugStr = null;
         if ( /\-\-(inspect|debug)/.test(opt.argv.join(',')) ) {
@@ -85,12 +84,10 @@ function Start(opt, cmd) {
                 , len       = null
             ;
             
-            isRealApp(bundle, function(err, appPath){
-
+            isRealApp(bundle, function(err, appPath){   
                 if (err) {
                     console.error(err.stack||err.message)
-                } else {
-
+                } else {   
                     if (isStarting)
                         return;
                     
@@ -98,8 +95,10 @@ function Start(opt, cmd) {
                     if (opt.debugPort) {
                         msg += ' (debug port: '+ opt.debugPort +')'
                     }
+                    // To gina log
                     console.info(msg);
-                    opt.client.write(msg);
+                    // to the terminal stdout
+                    opt.client.write('\n\r'+msg);
                                         
                     process.list = (process.list == undefined) ? [] : process.list;
                     setContext('processList', process.list);
@@ -132,6 +131,7 @@ function Start(opt, cmd) {
                     }
                     
                     
+                    
                     var child = spawn(opt.argv[0], params,
                         {
                             detached: true
@@ -154,12 +154,22 @@ function Start(opt, cmd) {
                             clearInterval(timerId);
                             opt.client.write('Sorry my friend, this is taking too long ! Terminating. Check your logs.');
                             child.kill('SIGKILL'); 
-                            if (!opt.client.destroyed)
-                                opt.client.emit('end');                                                        
+                            if (!opt.client.destroyed) {
+                                opt.client.emit('exit');
+                                opt.client.emit('end');
+                            }
+                                
+
+                            //end(opt, cmd, isBulkStart, bundleIndex);
                         }
                     }, maxTimeout);
                     
-                    var checkCaseCount = 2, checkCaseRe = new RegExp('('+bundle + '@' + self.projectName + ' mounted !|Bundle started !)', 'i');
+                    var checkCaseCount = 2
+                        // The 2 flags we need to free the child.stdout if we do not want the command to wait for a timeout
+                        // NB.: you can place flag by using console.notice
+                        , checkCaseRe = new RegExp('('+bundle + '@' + self.projectName + ' mounted !|Bundle started !)', 'i')
+                        , url = null
+                    ;
                     var port = '', errorFound = false;                    
                     child.stdout.on('data', function(data) {
                         
@@ -170,7 +180,7 @@ function Start(opt, cmd) {
                             //opt.client.write(data);                              
                             try {
                                 port = ' #'+ data.match(/port\":\s+\d+/)[0].split(/\:/)[1].trim() +' ';                                
-                                opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] has already been started, or port'+ port+'might be busy'); 
+                                opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] has already been started, or port'+ port+'might be busy'); 
                                                                 
                             } catch(_err) {
                                 opt.client.write(_err);                                
@@ -186,7 +196,7 @@ function Start(opt, cmd) {
                             
                             
                             opt.notStarted.push(bundle + '@' + self.projectName);
-                            opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] aborted :( \n  => Check your logs to see why.');
+                            opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] aborted :( \n  => Check your logs to see why.');
                             // var msg = null;
                             // if ( /\[ error \]/.test(data) ) {
                             //     msg = data.substr(data.lastIndexOf('[ error ]'), 300) +'...';
@@ -194,11 +204,17 @@ function Start(opt, cmd) {
                             // }
                             end(opt, cmd, isBulkStart, bundleIndex);   
                             clearInterval(timerId);
+                            return;
                         }
                         
+                        // Expecting 2 flags (checkCaseCount) to free the child stdout !!
                         if ( checkCaseRe.test(data) ) {                            
                             --checkCaseCount;
-                            //opt.client.write('bundle '+bundle+':'+ checkCaseCount);
+                        }
+                        
+                        // cache bundle state info given by the server while starting
+                        if ( !url && new RegExp('This way please','gmi').test(data)) {
+                            url = '\n   ' + data.match(new RegExp('This way please -> .*','gmi'));
                         }
                         
                         if (!opt.client.destroyed && !isStarting && !checkCaseCount) {                            
@@ -206,18 +222,22 @@ function Start(opt, cmd) {
                             clearInterval(timerId);
                             ++opt.onlineCount;
                             
-                            opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] started on port #'+ bundlePort+' :D');
+                            
+                            opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] started V(-.o)V'+ url);
+                            
                             
                             end(opt, cmd, isBulkStart, bundleIndex);
                             return;
-                        }                        
+                        }
+                        
+                        return;
+                        
                     });
 
                     //when an exception is thrown, it is sent to the client
                     child.stderr.setEncoding('utf8');
                     var error = null;
-                    child.stderr.on('data', function(err) {
-
+                    child.stderr.on('data', function(err) {  
                         error = err.toString();                        
                         
                         if (/Debugger listening|Debugger attached|Warning|address already in use/i.test(error)) {
@@ -230,10 +250,9 @@ function Start(opt, cmd) {
                         } else {
                             console.error(error);
                         }
-                        
                     });
 
-                    child.on('exit', function(code, signal) {                        
+                    child.on('exit', function(code, signal) {                   
                         // handles only signals that cannot be cannot be caught or ignored
                         // ref.: `framework/<version>/lib/proc.js`
                         if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
@@ -253,7 +272,6 @@ function Start(opt, cmd) {
     
     
     var end = function (opt, cmd, isBulkStart, i) {
-        
         if (isBulkStart) {            
             ++i;            
             if ( typeof(self.bundles[i]) != 'undefined' ) {
@@ -265,22 +283,22 @@ function Start(opt, cmd) {
                 if (!opt.client.destroyed)
                     opt.client.emit('end');
             }
-        } else {
-            if (!opt.client.destroyed)
-                opt.client.emit('end');
-            // Force exit in case process is stuck
-            setTimeout(() => {
-                if (!opt.client.destroyed) {
-                    opt.client.emit('exit');
-                }
-            }, 150);
+            return;
         }
+        
+        if (!opt.client.destroyed)
+            opt.client.emit('end');
+        // Force exit in case process is stuck
+        setTimeout(() => {
+            if (!opt.client.destroyed) {
+                opt.client.emit('exit');
+            }
+        }, 150);
     }
 
 
 
-    var isRealApp = function(bundle, callback) {
-        
+    var isRealApp = function(bundle, callback) { 
         var p               = null
             , d             = null
             , env           = self.projects[self.projectName]['def_env']
@@ -334,12 +352,11 @@ function Start(opt, cmd) {
             d = _(root + '/'+ bundleDir +'/'+ bundle + '/index.js');
             bundleInit = d;
         }
-
+         
         //Checking root.
         if ( new _(d, true).existsSync() ) {
             //checking bundle directory.
             fs.stat(p, function(err, stats) {
-
                 if (err) {
                     callback(err)
                 } else {
@@ -351,7 +368,8 @@ function Start(opt, cmd) {
                     }
                 }
             })
-        } else {
+        }
+        else {
             callback(new Error('[ ' + d + ' ] does not exists'))
         }
     }

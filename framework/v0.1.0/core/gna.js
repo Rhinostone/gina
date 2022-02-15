@@ -509,7 +509,7 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         gna.started = true;
         e.once('server#started', function(conf){
 
-
+            
             // open default browser for dev env only
             // if ( isDev) {
             //     var payload = JSON.stringify({
@@ -670,11 +670,11 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
         var core    = gna.core;
         //Get bundle name.
         if (appName == undefined) {
-           var appName = getContext('bundle')
+           appName = getContext('bundle')
         }
 
         if (projectName == undefined) {
-            var projectName = getContext('projectName')
+            projectName = getContext('projectName')
         }
 
         
@@ -805,7 +805,8 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                 e.emit('server#started', conf);
                                 
                                 setTimeout( function onStarted() {
-                                    console.info('[ FRAMEWORK ] Bundle started !',
+                                    
+                                    console.info('[ FRAMEWORK ] Online ...',
                                     '\nbundle: [ ' + conf.bundle +' ]',
                                     '\nenv: [ '+ conf.env +' ]',
                                     '\nengine: ' + conf.server.engine,
@@ -815,13 +816,15 @@ gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
                                     '\ndebugPort: ' + conf.server.debugPort,
                                     '\npid: ' + process.pid,
                                     '\nThis way please -> '+ conf.hostname + conf.server.webroot
-                                    )
+                                    );
+                                    // placing end:flag to allow the CLI to retrieve bundl info from here
+                                    console.notice('[ FRAMEWORK ] Bundle started !');
                                 }, 1000);
 
                             });
 
-
-                            console.debug('[ FRAMEWORK ][ '+ process.pid +' ] '+ conf.bundle +'@'+ core.projectName +' mounted ! ');
+                            // placing strat:flag to allow the CLI to retrieve bundl info from here
+                            console.notice('[ FRAMEWORK ][ '+ process.pid +' ] '+ conf.bundle +'@'+ core.projectName +' mounted !');
                             server.start(instance);
 
 
