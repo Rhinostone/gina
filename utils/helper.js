@@ -368,6 +368,7 @@ function MainHelper(opt) {
         ) {
             err = new Error('Env variable [ '+ key + ' ] is already set');
             console.warn(err.message);
+            return
         } else {
             //Write env var.
             if ( typeof(process['gina']) == 'undefined') {

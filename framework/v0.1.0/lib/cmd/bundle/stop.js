@@ -74,6 +74,8 @@ function Stop(opt, cmd) {
 
                     // matching `grep` CMD PID to be excluded in the next test    
                     var re = new RegExp('(\\bgrep\\W+)(gina: '+ bundle+'@'+ self.projectName+')');
+                    msg = 'Trying to stop bundle [ ' + bundle + '@' + self.projectName + ' ]\n\r';
+                    opt.client.write('\n\r'+msg);
                     
                     if ( !re.test(row[0]) ) {
                         //console.debug('\n'+ row.join('\n'));
@@ -82,14 +84,18 @@ function Stop(opt, cmd) {
                         exec('kill -9 ' + proc, function(err, data) {
                             if (!err) {
                                 ++opt.offlineCount;
-                                console.info('Bundle [ ' + bundle + '@' + self.projectName + ' ] with PID [ ' + proc + ' ] stopped !');
+                                //console.info('Bundle [ ' + bundle + '@' + self.projectName + ' ] with PID [ ' + proc + ' ] stopped !');
+                                opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] with PID [ ' + proc + ' ] stopped !\n');
+                                
                                 end(opt, cmd, isBulkStop, bundleIndex)
                             } else {
                                 console.error( err.toString())
                             }
                         })
                     } else { // not running
-                        console.info('Bundle `' + bundle + '@' + self.projectName + '` is not running');
+                        //console.info('Bundle `' + bundle + '@' + self.projectName + '` is not running');
+                        opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] is not running\n');
+                        
                         ++opt.offlineCount;
                         opt.notStopped.push(bundle + '@' + self.projectName);
                         end(opt, cmd, isBulkStop, bundleIndex)
@@ -105,12 +111,13 @@ function Stop(opt, cmd) {
             if ( typeof(self.bundles[i]) != 'undefined' ) {
                 stop(opt, cmd, i)
             } else {
-                opt.client.write('\n\r[ Offline ] '+ opt.offlineCount +'/'+ self.bundles.length);
-                var notStoppedMsg = '\nThe following bundle could not be stopped or was not running: \n - '+ opt.notStopped.join('\n - ') + '\n\r';
+                opt.client.write('\n\r[ Offline ] '+ opt.offlineCount +'/'+ self.bundles.length +'\r');
+                var notStoppedMsg = '';
                 if (opt.notStopped.length > 1) {
                     notStoppedMsg = '\nThe following bundles could not be stopped or were not running: \n - '+ opt.notStopped.join('\n - ') + '\n\r';
+                    opt.client.write(notStoppedMsg);
                 }
-                opt.client.write(notStoppedMsg);
+                
                 
                 if ( typeof(error) != 'undefined') {
                     process.exit(1);
@@ -211,7 +218,9 @@ function Stop(opt, cmd) {
                 }
             })
         } else {
-            callback(new Error('[ ' + d + ' ] does not exists'))
+            //callback(new Error('[ ' + d + ' ] does not exists'))
+            console.debug('[ ' + d + ' ] does not exists'); 
+            callback(false)
         }
     }
 

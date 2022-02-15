@@ -319,13 +319,14 @@ function ContextHelper(contexts) {
             //    '\n[ 5 ] = '+ __stack[5].getFileName(),
             //    '\n[ 6 ] = '+ __stack[6].getFileName()
             //);
-            var lib         = (arguments.length == 1) ? bundle : lib
-                , bundle    = null
-                , libPath   = null
-                , file      = null
-                , stackFileName = null;
-                //, file      = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
-            for (var i = 1, len = 10; i<len; ++i) {
+             lib    = (arguments.length == 1) ? bundle : lib;
+             bundle = null;
+             var libPath        = null
+                , file          = null
+                , stackFileName = null
+                //, file        = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
+            ;
+            for (let i = 1, len = 10; i<len; ++i) {
                 stackFileName = __stack[i].getFileName();
                 if ( stackFileName && !/node_modules/.test(stackFileName) ) {
                     file = stackFileName;
@@ -431,9 +432,21 @@ function ContextHelper(contexts) {
     whisper = function(dictionary, replaceable, rule) {
         
         if ( typeof(rule) != 'undefined') {
-            return replaceable.replace(rule, function(s, key) {
-                return dictionary[key] || s;
-            })
+            return replaceable
+                // inline rule
+                .replace(rule, function(s, key) {
+                    return dictionary[key] || s;
+                })
+                // generic rules
+                // .replace(/\"\{(\w+)\}\"/g, function(s, key) {
+                //     if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
+                //         return (/^(true|false|null)$/i.test(dictionary[key])) ? dictionary[key] :  s
+                //     }                                    
+                //     return '"'+ (dictionary[key] || s) +'"';
+                // })
+                // .replace(/\{(\w+)\}/g, function(s, key) {
+                //     return dictionary[key] || s;
+                // })
         } else {
 
             if ( typeof(replaceable) == 'object' &&  !/\[native code\]/.test(replaceable.constructor) ||  typeof(replaceable) == 'function' ) { // /Object/.test(replaceable.constructor)
@@ -441,13 +454,16 @@ function ContextHelper(contexts) {
                     if ( typeof(replaceable[attr]) != 'function') {
                         replaceable[attr] = (typeof(replaceable[attr]) != 'string' && typeof(replaceable[attr]) != 'object') ? JSON.stringify(replaceable[attr], null, 2) : replaceable[attr];
                         if (replaceable[attr] && typeof(replaceable[attr]) != 'object') {
-                            replaceable[attr] = replaceable[attr].replace(/\"\{(\w+)\}\"/g, function(s, key) {
-                                if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
-                                    return dictionary[key]
-                                }
-                                //return dictionary[key] || s;
-                                return '"'+ (dictionary[key] || s) +'"';
-                            })
+                            replaceable[attr] = replaceable[attr]
+                                .replace(/\"\{(\w+)\}\"/g, function(s, key) {
+                                    if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
+                                        return (/^(true|false|null)$/i.test(dictionary[key])) ? dictionary[key] : s
+                                    }                                    
+                                    return '"'+ (dictionary[key] || s) +'"';
+                                })
+                                .replace(/\{(\w+)\}/g, function(s, key) {
+                                    return dictionary[key] || s;
+                                })
                         }
                     }
                 }
@@ -456,12 +472,16 @@ function ContextHelper(contexts) {
                 replaceable = JSON.stringify(replaceable, null, 2);
 
                 return JSON.parse(
-                    replaceable.replace(/\"\{(\w+)\}\"/g, function(s, key) {                        
-                        if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
-                            return dictionary[key]
-                        }
-                        return '"'+ (dictionary[key] || s) +'"';
-                    })
+                    replaceable
+                        .replace(/\"\{(\w+)\}\"/g, function(s, key) {                        
+                            if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
+                                return (/^(true|false|null)$/i.test(dictionary[key])) ? dictionary[key] : s
+                            }
+                            return '"'+ (dictionary[key] || s) +'"';
+                        })
+                        .replace(/\{(\w+)\}/g, function(s, key) {
+                            return dictionary[key] || s;
+                        })
                 )
             }
         }

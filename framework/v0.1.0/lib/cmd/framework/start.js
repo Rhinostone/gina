@@ -1,9 +1,9 @@
 'use strict';
 var fs      = require('fs');
 var help    = require( getPath('gina').root + '/utils/helper');
-var child   = require('child_process');
+// var child   = require('child_process');
 var lib     = require( getPath('gina').lib );
-// var helpers     = require( getPath('gina').helpers );
+//var helpers     = require( getPath('gina').helpers );
 var console = lib.logger;
 /**
  * Framework start command - Needs to be launched as [sudo], [admin] or [root]
@@ -20,7 +20,7 @@ function Start(opt){
     //Get services list.
     var self = {};
 
-
+    var console = lib.logger;
 
     //var self = {
     //    opt : opt,
@@ -29,41 +29,20 @@ function Start(opt){
     //};
 
     var init = function(opt){
-
+        
+        
         self.pid        = opt.pid;
         setEnvVar('GINA_PID', opt.pid);
         self.projects   = require(GINA_HOMEDIR + '/projects.json');
         self.services   = [];
         self.bundles    = [];
 
-        cleanPIDs();
-        console.info('Framework ready for connections');
+        cleanPIDs();        
+        //console.info('Framework ready for connections');
+        console.notice('Framework ready for connections\n');
 
-        var frameworkPath = getPath('framework');
+        //var frameworkPath = getPath('framework');
 
-//        setUpLogs( function(err){
-//            if (err)
-//
-//        })
-
-
-        //var services = argv.slice(i+1);
-        //if ( services.length > 0) {//by hand.
-        //    startSelectedServices(services)
-        //} else {
-        //    startAllServices()
-        //}
-
-
-
-
-        //Start services.
-//        if ( !fs.existsSync(frameworkPath) ) {
-//            client.write('gina: could not find version ' + version + '.\nFirst try:\n$ gina framework:install ' + version);
-//            process.exit(1)
-//        } else {
-
-        //}
     };
 
     var cleanPIDs = function() {
@@ -107,38 +86,38 @@ function Start(opt){
      * Check is the service is a real one.
      *
      * */
-    var isReal = function(bundle){
-        return ( typeof(self.bundles[bundle]) != 'undefined') ? true : false
-    };
+    // var isReal = function(bundle){
+    //     return ( typeof(self.bundles[bundle]) != 'undefined') ? true : false
+    // };
 
 
-    var startAllServices = function() {
-        for (var service in self.servicesList) {
-            if (self.servicesList[service] == 'framework') {
-                //spawn cmd + service
-                startService(service)
-            }
-        }
-    };
+    // var startAllServices = function() {
+    //     for (var service in self.servicesList) {
+    //         if (self.servicesList[service] == 'framework') {
+    //             //spawn cmd + service
+    //             startService(service)
+    //         }
+    //     }
+    // };
 
-    var startSelectedServices = function(services){
+    // var startSelectedServices = function(services){
 
-        //process.argv[i]
-        for (var s=0; s < services.length; ++s) {
-            startService(services[s])
-        }
-    };
+    //     //process.argv[i]
+    //     for (var s=0; s < services.length; ++s) {
+    //         startService(services[s])
+    //     }
+    // };
 
-    var startService = function(service) {
-        if (isReal(service)) {
-            var cmd = 'gina '+ self.cmd +' ';
-            console.log('starting service: ', service)
-        } else {
-            console.log('gina: [ '+ service +' ] is not a real service.')
-            //stops all.
+    // var startService = function(service) {
+    //     if (isReal(service)) {
+    //         var cmd = 'gina '+ self.cmd +' ';
+    //         console.log('starting service: ', service)
+    //     } else {
+    //         console.log('gina: [ '+ service +' ] is not a real service.')
+    //         //stops all.
 
-        }
-    }
+    //     }
+    // }
 
     init(opt)
 };

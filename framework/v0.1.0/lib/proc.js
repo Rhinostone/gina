@@ -192,7 +192,7 @@ function Proc(bundle, proc, usePidFile){
             proc.on('SIGTERM', function(code){
 
                 if ( typeof(code) == 'undefined')
-                    var code = 0;
+                    code = 0;
 
                 proc.exit(code);
             });
@@ -200,7 +200,7 @@ function Proc(bundle, proc, usePidFile){
             proc.on('SIGINT', function(code){
 
                 if (code == undefined)
-                    var code = 0;
+                    code = 0;
 
                 console.info('[ FRAMEWORK ][ PROC ] Got exit code. Now killing: ', code);
                 proc.exit(code);//tigger exit event.

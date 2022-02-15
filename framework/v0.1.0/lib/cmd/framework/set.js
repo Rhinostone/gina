@@ -9,7 +9,7 @@ function Set(opt){
     ;
 
     var init = function(opt){
-        //if ( typeof(GINA_LOG_LEVEL) != '')
+        
         var a = [], k = null, v = null;
         for (let i=3; i<process.argv.length; ++i) {
             a = process.argv[i].split(/=/);
@@ -25,6 +25,7 @@ function Set(opt){
     var set = function(k, v) {
         var err = null;
         switch(k) {
+            case '--log_level':
             case '--log-level':
                 setLogLevel(v);
             break;
@@ -54,7 +55,21 @@ function Set(opt){
     }
 
     var setLogLevel = function(level) {
-
+        var supported   = mainConf['log_levels'][GINA_SHORT_VERSION]
+            , err       = null
+        ;
+        if (supported.indexOf(level) < 0) {
+            err = new Error('Log level `'+ level +'` is not supported at the moment');
+            console.error(err.message);
+            return;
+        }
+        // save to ~/.gina/main.json
+        mainConf['def_log_level'][GINA_SHORT_VERSION] = level;        
+        lib.generator.createFileFromDataSync(mainConf, mainConfPath);
+        // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
+        process['gina']['log_level'] = level;
+        mainSettingsConf['log_level'] = level;
+        lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
     }
         
     var setEnv = function(env) {

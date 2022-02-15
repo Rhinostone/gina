@@ -35,5 +35,12 @@
     },
     "def_timezone": {
         "{release}": "Africa/Douala"
+    },
+    "log_levels": {
+        "_comment": "hierarchy",
+        "{release}": [  "trace", "debug", "info", "warn", "error", "fatal" ]
+    },
+    "def_log_level": {
+        "{release}": "info"
     }
 }

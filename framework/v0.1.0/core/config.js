@@ -426,7 +426,7 @@ function Config(opt) {
         }
         
         if (!section.length) { // nothing to do here
-            confObject = merge(confObject, content);
+            confObject = merge(content, confObject);
             return
         }
         // done
@@ -439,7 +439,7 @@ function Config(opt) {
         }
         
         if (i == section.length-1) {
-            confObject[ section[i] ] =  merge(confObject[ section[i] ], content)
+            confObject[ section[i] ] =  merge(content, confObject[ section[i] ])
         }
         
         mergeConfig(confObject[ section[i] ], section, content, i+1)
@@ -511,11 +511,26 @@ function Config(opt) {
             , files         = {}
         ;
         
+        
+        var version = null, middleware = null;
+        try {
+            self.version    = version = require(_(getPath('gina').root +'/package.json' )).version;
+            self.middleware = middleware = fs.readFileSync(_(GINA_FRAMEWORK_DIR + '/MIDDLEWARE')).toString() || 'none';
 
+            setContext('gina.version', version);
+            setContext('gina.middleware', middleware);
+
+        } catch (err) {
+            console.debug(err.stack)
+        }
+        
         for (let app in content) {
             //Checking if genuine app.
             console.debug('Checking if application [ '+ app +' ] is registered ');
             
+            appPath = _(bundlesPath + '/' + app);
+            
+                        
                 
             // if ( self.task == 'run' && !self.isCacheless() ) {
             //     appPath = _(newContent[app][env].bundlesPath + '/' + app)
@@ -523,8 +538,7 @@ function Config(opt) {
             //     appPath = _(newContent[app][env].sources + '/' + app);
             //     newContent[app][env].bundlesPath = newContent[app][env].sources;
             // }
-            tmpSettings = {};
-            appPath = _(bundlesPath + '/' + app);
+            tmpSettings = {};                        
             newContent[app][env].bundlesPath = bundlesPath;
              
             if ( typeof(content[app][env]) != "undefined" ) {
@@ -550,7 +564,7 @@ function Config(opt) {
                 for (let c = 0, cLen = configFiles.length; c < cLen; ++c) {
                     let foundDevVersion = false;
                     let fName = configFiles[c];
-                    
+                    // settings only !
                     if ( !/^settings\./.test(fName) ) {
                         continue;
                     }
@@ -628,10 +642,18 @@ function Config(opt) {
                         }
                     }
                     
-                    mergeConfig(tmpSettings, section, requireJSON(_(appPath + '/config/'+ fName)) );                   
-                }
+                    // tmp settings - because we need it now
+                    if (section != '' ) {
+                        mergeConfig(tmpSettings, section, fileContent );  
+                    } else {                        
+                        tmpSettings = merge(tmpSettings, fileContent, requireJSON(_(appPath + '/config/'+ fName)));
+                    }
+                                      
+                    
+                } //EO for (let c = 0, cLen = configFiles.length; c < cLen; ++c) {
                 bundleSettings = tmpSettings;
-                
+                bundleSettings.tmpSettingFileContent = JSON.clone(bundleSettings);
+                newContent[app][env] = merge(bundleSettings, newContent[app][env]);
                 
                 // if ( !fs.existsSync(_(bundlesPath +'/'+ app +'/config/settings.json'))) {
                 //     bundHasSettings = false
@@ -672,12 +694,18 @@ function Config(opt) {
                     :  template["{bundle}"]["{env}"].projectPath;
            
                 
-                if ( typeof(content[app][env].server ) != 'undefined' ) {
-                    newContent[app][env].server = content[app][env].server;
+                // if ( typeof(content[app][env].server ) != 'undefined' ) {
+                //     newContent[app][env].server = content[app][env].server;
                     
-                } else if ( bundHasSettings && typeof(bundleSettings.server) != 'undefined') {
-                    newContent[app][env].server = bundleSettings.server;
-                } else {
+                // }
+                // else if ( bundHasSettings && typeof(bundleSettings.server) != 'undefined') {
+                //     newContent[app][env].server = bundleSettings.server;
+                // }
+                // else {
+                //     if ( typeof(content[app][env].server ) != 'undefined' ) {
+                //     newContent[app][env].server = template["{bundle}"]["{env}"].server
+                // }
+                if ( typeof(newContent[app][env].server ) != 'undefined' ) {
                     newContent[app][env].server = template["{bundle}"]["{env}"].server
                 }
                 
@@ -744,21 +772,14 @@ function Config(opt) {
                     JSON.parse( JSON.stringify(template["{bundle}"]["{env}"]))//only copy of it.
                 );
 
-
-                //Variables replace. Compare with gina/core/template/conf/env.json.
-                var version = undefined, middleware = undefined;
-                try {
-                    self.version    = version = require(_(getPath('gina').root +'/package.json' )).version;
-                    self.middleware = middleware = fs.readFileSync(_(GINA_FRAMEWORK_DIR + '/MIDDLEWARE')).toString() || 'none';
-
-                    setContext('gina.version', version);
-                    setContext('gina.middleware', middleware);
-
-                } catch (err) {
-                    console.debug(err.stack)
+               
+                if (!newContent[app][env].executionPath) {
+                    newContent[app][env].executionPath = root
                 }
-
-                var reps = {
+                
+                //Constants to be exposed in configuration files.
+                //Variables replace. Compare with gina/core/template/conf/env.json.
+                let reps = {
                     "frameworkDir"  : GINA_FRAMEWORK_DIR,
                     "executionPath" : root,
                     "projectPath"   : projectPath,
@@ -768,8 +789,8 @@ function Config(opt) {
                     "bundle" : app,
                     "version" : version
                 };
-
-
+                
+                bundleSettings = null;
                 //console.error("reps ", reps);
                 newContent = whisper(reps, newContent);
             }
@@ -778,7 +799,7 @@ function Config(opt) {
         }//EO for.
 
 
-        console.debug('[ '+ self.startingApp +' ] [ '+ env +' ] Env configuration loaded \n');
+        console.debug('[ '+ self.startingApp +' ][ '+ env +' ] Env configuration loaded');
 
         // TRUE means that all apps sharing the same process will merge into one.
         if (!isStandalone) self.Host.standaloneMode = isStandalone;
@@ -962,7 +983,6 @@ function Config(opt) {
             , exists        = false
             , protocol      = null
             , scheme        = null
-            , tmpSettings   = {}
         ;
         
 
@@ -998,8 +1018,8 @@ function Config(opt) {
         var hasWebRoot = (wroot.length >1) ? true : false;
         
         // bundle routing
-        if ( typeof(collectedRules) == 'undefined') {
-            var collectedRules = {}
+        if ( !collectedRules || typeof(collectedRules) == 'undefined' ) {
+            collectedRules = {}
         }
         var standaloneRouting   = {}
             , originalRules     = []
@@ -1041,11 +1061,12 @@ function Config(opt) {
             foundDevVersion = false;
 
             fName = configFiles[c];
-            // tmp settings - because we need it now
+            
             if ( /^settings\./.test(fName) ) {
-                //tmpSettings = merge(tmpSettings, requireJSON(_(appPath + '/config/'+ fName)));
-                continue;
+                // already defined before by `loadWithTemplate()`
+                continue;               
             }
+            
             if (/^\./.test(fName) || /\.dev\.json$/.test(fName) || !/\.json$/.test(fName)  )
                 continue;
 
@@ -1216,9 +1237,9 @@ function Config(opt) {
         
         // upload routes
         if ( 
-            typeof(tmpSettings.upload) != 'undefined'
-            && typeof(tmpSettings.upload.groups) != 'undefined'
-            && tmpSettings.upload.groups.count() > 0
+            typeof(conf[bundle][env].upload) != 'undefined'
+            && typeof(conf[bundle][env].upload.groups) != 'undefined'
+            && conf[bundle][env].upload.groups.count() > 0
         ) {
             if ( typeof(routing['upload-to-tmp-xml@'+ bundle]) == 'undefined' ) {
                 routing['upload-to-tmp-xml'] = {
@@ -1339,7 +1360,7 @@ function Config(opt) {
             if (!routing[rule].param) continue;
             //routing[rule].param.file = ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
             if ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' && /delete/i.test(routing[rule].method )) {
-                console.warn('`DELETE` method result should not be rendererd into a file');
+                console.warn('`DELETE` method result should not be rendered into a file');
             } else if ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) == 'undefined' /**&& !/delete/i.test(routing[rule].method)*/) {
                 routing[rule].param.file = file
             }
@@ -1448,14 +1469,26 @@ function Config(opt) {
 
 
         try {                        
-
-            if ( typeof(files['settings']) == 'undefined' ) {
+            
+            // we only need to retrieve the tmpFiles (files[settings])
+            files['settings'] = JSON.clone(conf[bundle][env].tmpSettingFileContent) || {};
+            delete conf[bundle][env].tmpSettingFileContent;
+            
+            //let corePath = getPath('gina').core;
+            //let settingsPath = _(corePath +'/template/conf/settings.json', true);
+            if ( files['settings'].count() == 0 ) {
                 files['settings'] = requireJSON(settingsPath)
-            } else if ( typeof(files['settings']) != 'undefined' ) {
-                var defaultSettings = requireJSON(settingsPath);
-
-                files['settings'] = merge(files['settings'], defaultSettings)
+            } else {
+                var defaultSettings = requireJSON(settingsPath);    
+                files['settings'] = merge( JSON.clone(files['settings']), defaultSettings)
             }
+            // if ( typeof(files['settings']) == 'undefined' ) {
+            //     files['settings'] = requireJSON(settingsPath)
+            // } else if ( typeof(files['settings']) != 'undefined' ) {
+            //     var defaultSettings = requireJSON(settingsPath);
+
+            //     files['settings'] = merge(files['settings'], defaultSettings)
+            // }
 
             if (fs.existsSync(staticsPath))
                 delete require.cache[require.resolve(staticsPath)];
