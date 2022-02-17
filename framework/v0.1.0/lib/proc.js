@@ -50,8 +50,6 @@ var console     = require( _(__dirname + '/logger') );
 var Collection  = require( _(__dirname + '/collection') );
 //var helpers     = require( _(__dirname + '/helpers') );
 
-//console.debug('[ FRAMEWORK ][ PROC ] path ? ', getPaths());
-
 /**
  * @constructor
  *
@@ -125,7 +123,7 @@ function Proc(bundle, proc, usePidFile){
         try {
             var version = process.getVersion(bundle);
         } catch (err) {
-            var bundle = process.argv[3];
+            bundle = process.argv[3];
             //var port = self.getBundlePortByBundleName(bundle);
             //console.debug('[ FRAMEWORK ][ PROC ] Bundle ', bundle,' already running or port[ '+port+' ] is taken by another process...');
             //loggerInstance["trace"]("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
@@ -134,8 +132,8 @@ function Proc(bundle, proc, usePidFile){
         }
 
 
-        var outPath = _(GINA_LOGDIR + '/gina/out.'+bundle+'.'+version+'.log');
-        var errPath = _(GINA_LOGDIR + '/gina/out.'+bundle+'.'+version+'.log');
+        // var outPath = _(GINA_LOGDIR + '/gina/out.'+bundle+'.'+version+'.log');
+        // var errPath = _(GINA_LOGDIR + '/gina/out.'+bundle+'.'+version+'.log');
         //var nodePath = getPath('node');
         //var ginaPath = _(root + '/gina');
 
@@ -440,6 +438,8 @@ function Proc(bundle, proc, usePidFile){
                 process.pids[bundle] = pid;
 
                 list = null;
+                
+                //isBundleMounted(projects, bundlesPath, getContext('bundle'));
             };
 
             if (self.usePidFile) {

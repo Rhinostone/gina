@@ -157,8 +157,8 @@ function Stop(opt, cmd) {
             //This is mostly for dev.
             var pkg = requireJSON(_(root + '/manifest.json')).bundles;
 
-            if ( typeof(pkg[bundle].release.version) == 'undefined' && typeof (pkg[bundle].tag) != 'undefined' ) {
-                pkg[bundle].release.version = pkg[bundle].tag
+            if ( typeof(pkg[bundle].version) == 'undefined' && typeof (pkg[bundle].tag) != 'undefined' ) {
+                pkg[bundle].version = pkg[bundle].tag
             }
             if (
                 pkg[bundle] != 'undefined' && pkg[bundle]['src'] != 'undefined' && isDev
@@ -175,8 +175,8 @@ function Stop(opt, cmd) {
 
             } else {
                 //Others releases.
-                var path = 'releases/' + bundle + '/' + env + '/' + pkg[bundle].release.version;
-                var version = pkg[bundle].release.version;
+                var path = 'releases/' + bundle + '/' + env + '/' + pkg[bundle].version;
+                var version = pkg[bundle].version;
                 p = _(root + '/' + path);//path.replace('/' + bundle, '')
                 d = _(root + '/' + path + '/index.js');
 

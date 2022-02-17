@@ -48,7 +48,6 @@ function Add(opt, cmd) {
                 console.error(err.stack);
                 process.exit(1)
             }
-
         }
 
         
@@ -525,6 +524,5 @@ function Add(opt, cmd) {
     }
 
     init()
-};
-
-module.exports = Add
+}
+module.exports = Add;

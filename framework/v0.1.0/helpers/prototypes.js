@@ -65,7 +65,6 @@ function PrototypesHelper(instance) {
     }
     
     if ( typeof(JSON.clone) == 'undefined' && !isGFFCtx ) {
-        //JSON.clone = (isGFFCtx) ? require('utils/prototypes.json_clone') : require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
         JSON.clone = require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
     }
     

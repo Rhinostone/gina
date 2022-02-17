@@ -83,7 +83,7 @@ function Start(opt, cmd) {
                 , i         = null
                 , len       = null
             ;
-            
+              
             isRealApp(bundle, function(err, appPath){   
                 if (err) {
                     console.error(err.stack||err.message)
@@ -169,13 +169,17 @@ function Start(opt, cmd) {
                         // NB.: you can place flag by using console.notice
                         , checkCaseRe = new RegExp('('+bundle + '@' + self.projectName + ' mounted !|Bundle started !)', 'i')
                         , url = null
+                        , debuggerOn = null
                     ;
                     var port = '', errorFound = false;                    
                     child.stdout.on('data', function(data) {
                         
                         console.log(data);
                         // handle errors
-                        if (/EADDRINUSE.*port/i.test(data) && !errorFound ) {
+                        if ( /EADDRINUSE.*port/i.test(data) && !errorFound ) {
+                            // kill the bundle starting process first
+                            child.kill('SIGKILL');
+                            
                             errorFound = true;
                             //opt.client.write(data);                              
                             try {
@@ -186,24 +190,24 @@ function Start(opt, cmd) {
                                 opt.client.write(_err);                                
                             }  
                             
-                            ++opt.onlineCount;
+                            
+                            ++opt.onlineCount;                            
                             end(opt, cmd, isBulkStart, bundleIndex);   
                             clearInterval(timerId);
-                            child.kill('SIGKILL'); 
+                            return;
                         }
                         
-                        if (/\[ emerg \]/.test(data) ) {
-                            
+                        // catch fatal errors to exit                        
+                        if ( /(\[|\[\s+)emerg/.test(data) ) {
+                            // kill the bundle starting process first
+                            child.kill('SIGKILL');
                             
                             opt.notStarted.push(bundle + '@' + self.projectName);
                             opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] aborted :( \n  => Check your logs to see why.');
-                            // var msg = null;
-                            // if ( /\[ error \]/.test(data) ) {
-                            //     msg = data.substr(data.lastIndexOf('[ error ]'), 300) +'...';
-                            //     opt.client.write(msg)
-                            // }
+                            
+                            ++opt.onlineCount;
                             end(opt, cmd, isBulkStart, bundleIndex);   
-                            clearInterval(timerId);
+                            clearInterval(timerId);                            
                             return;
                         }
                         
@@ -213,17 +217,24 @@ function Start(opt, cmd) {
                         }
                         
                         // cache bundle state info given by the server while starting
+                        if ( !debuggerOn && new RegExp('Debugger listening on','gmi').test(data)) {
+                            debuggerOn = '\n   ' + data.match(new RegExp('Debugger listening on .*','gmi'));
+                        }
                         if ( !url && new RegExp('This way please','gmi').test(data)) {
                             url = '\n   ' + data.match(new RegExp('This way please -> .*','gmi'));
                         }
+                        
+                        
                         
                         if (!opt.client.destroyed && !isStarting && !checkCaseCount) {                            
                             isStarting = true;
                             clearInterval(timerId);
                             ++opt.onlineCount;
                             
-                            
-                            opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] started V(-.o)V'+ url);
+                            if (!debuggerOn) {
+                                debuggerOn = ''
+                            }
+                            opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] started V(-.o)V'+ url + debuggerOn);
                             
                             
                             end(opt, cmd, isBulkStart, bundleIndex);
@@ -303,17 +314,17 @@ function Start(opt, cmd) {
             , d             = null
             , env           = self.projects[self.projectName]['def_env']
             , isDev         = ( self.projects[self.projectName]['dev_env'] == env ) ? true : false
-            , root          = self.projects[self.projectName].path
+            , root          = self.projectLocation
             , bundleDir     = null
             , bundlesPath   = null
             , bundleInit    = null
         ;
 
         try {
-            //This is mostly for dev.
-            var pkg = requireJSON( _(root + '/manifest.json', true) ).bundles;            
-            if ( typeof(pkg[bundle].release.version) == 'undefined' && typeof(pkg[bundle].tag) != 'undefined') {
-                pkg[bundle].release.version = pkg[bundle].tag
+            //This is mostly for dev.                        
+            var pkg = requireJSON( _(root+ '/manifest.json', true) ).bundles;
+            if ( typeof(pkg[bundle].version) == 'undefined' && typeof(pkg[bundle].tag) != 'undefined') {
+                pkg[bundle].version = pkg[bundle].tag
             }
             
             var path = null, version = null;
@@ -332,8 +343,8 @@ function Start(opt, cmd) {
 
             } else {
                 //Others releases.
-                path    = 'releases/'+ bundle +'/' + env +'/'+ pkg[bundle].release.version;
-                version = pkg[bundle].release.version;
+                path    = 'releases/'+ bundle +'/' + env +'/'+ pkg[bundle].version;
+                version = pkg[bundle].version;
                 p = _( root +'/'+ path );//path.replace('/' + bundle, '')
                 d = _( root +'/'+ path + '/index.js' );
 
