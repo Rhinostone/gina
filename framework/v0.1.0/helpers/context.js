@@ -140,18 +140,18 @@ function ContextHelper(contexts) {
     }
 
 
-    var throwError = function(code, err) {
+    var throwError = function(code, err, isFatal) {
         var router      = getContext('router');
         if (router) {
             var res                 = router.response
                 , next              = router.next
                 , hasViews          = router.hasViews
                 , isUsingTemplate   = isUsingTemplate
-                , code              = code;
+            ;
 
 
             if (arguments.length < 2) {
-                var err = code;
+                err = code;
                 code = 500
             }
 
@@ -175,6 +175,10 @@ function ContextHelper(contexts) {
                 }
             }
         } else {
+            if (isFatal && /^true$/.test(isFatal) ) {
+                console.emerg(err.stack||err.message||err);
+                return;
+            }
             throw err
         }
     }
@@ -307,8 +311,8 @@ function ContextHelper(contexts) {
      *
      * */
     getLib = function(bundle, lib) {
-        var ctx       = self.contexts;
-
+        var ctx     = self.contexts;
+        var libPath = null
         if (arguments.length == 1 || !bundle) {
             //console.debug(
             //    '\n[ 0 ] = '+ __stack[0].getFileName(),
@@ -321,8 +325,7 @@ function ContextHelper(contexts) {
             //);
              lib    = (arguments.length == 1) ? bundle : lib;
              bundle = null;
-             var libPath        = null
-                , file          = null
+             var file          = null
                 , stackFileName = null
                 //, file        = ( !/node_modules/.test(__stack[1].getFileName()) ) ?  __stack[1].getFileName() : __stack[2].getFileName()
             ;
@@ -403,12 +406,12 @@ function ContextHelper(contexts) {
                         libPath     : libPath
                     })
 
-                } catch(err) {
-                    throwError(500, err)
+                } catch(err) {                    
+                    throwError(500, err, true)
                 }
 
             } catch (err) {
-                //console.error(err.stack||err.message||err);
+                console.error(err.stack||err.message||err);
                 throwError(500, err);
                 return undefined
             }

@@ -18,6 +18,7 @@
 
 module.exports = function(){
 
+    // `JSON.clone()` is a prototype defined in `GINA_DIR//utils/prototypes.json_clone`
     
     /**
      * Load a json file and removing comments if found

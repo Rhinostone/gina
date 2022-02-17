@@ -117,8 +117,8 @@ function Remove(opt, cmd) {
         var env = local.env;
         var projectData    = JSON.clone(self.projectData);
         for (let bundle in projectData.bundles) {
-            if ( typeof(projectData.bundles[bundle].release.targets[env]) != 'undefined' ) {                
-                delete projectData.bundles[bundle].release.targets[env]
+            if ( typeof(projectData.bundles[bundle].releases[env].target) != 'undefined' ) {                
+                delete projectData.bundles[bundle].releases[env].target
             }
         }
         

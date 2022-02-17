@@ -45,6 +45,7 @@ function Config(opt) {
 
     this.bundles = [];
     this.allBundles = [];
+    this.allEnvs = getContext('envs');
 
     /**
      * Config Constructor
@@ -494,7 +495,7 @@ function Config(opt) {
         var cacheless           = self.isCacheless()
             , bundleSettings    = null
             , bundHasSettings   = true
-            , bundlesPath       = getPath('bundles')
+            , bundlesPath       = getPath('bundles') // symlink handled
             , protocol          = null
             , scheme            = null
             , p                 = null
@@ -548,11 +549,11 @@ function Config(opt) {
                     //console.emerg('Dependency bundle config not found for `'+ app +'/'+ env +'`: trying to load on the fly from src');
                     console.warn('Dependency bundle config not found for `'+ app +'/'+ env +'`: trying to load on the fly from src');
                     let appSrcPath = _(root +'/'+ pkg[app].src, true);
-                    configFiles = fs.readdirSync(_(appSrcPath + '/config'));
-                    
-                    console.warn('Dependency bundle config loaded from '+ appSrcPath);
+                    configFiles = fs.readdirSync(_(appSrcPath + '/config'));                    
+                    setPath('bundles', _(appSrcPath, true));
                     appPath = appSrcPath;
                     newContent[app][env].bundlesPath = bundlesPath = appSrcPath.replace( new RegExp('/'+ app), '' );
+                    console.warn('Dependency bundle config loaded from '+ appSrcPath);
                 }
                 
                 
@@ -562,7 +563,7 @@ function Config(opt) {
                 ;
                 // Preprocessing settings
                 for (let c = 0, cLen = configFiles.length; c < cLen; ++c) {
-                    let foundDevVersion = false;
+                    let foundEnvVersion = false;
                     let fName = configFiles[c];
                     // settings only !
                     if ( !/^settings\./.test(fName) ) {
@@ -570,7 +571,7 @@ function Config(opt) {
                     }
                     
                     
-                    if (/^\./.test(fName) || /\.dev\.json$/.test(fName) || !/\.json$/.test(fName)  )
+                    if (/^\./.test(fName) || new RegExp('\.'+ env +'\.json$').test(fName) || !/\.json$/.test(fName)  )
                         continue;
                     
                     let name            = fName.replace(/\.json$/, '');
@@ -583,34 +584,34 @@ function Config(opt) {
                     filesList[name] = fName;
                     // handle registered config files
                     let main = fName;
-                    let tmp = fName.replace(/.json/, '.' + env + '.json'); // dev
+                    let tmp = fName.replace(/.json/, '.' + env + '.json'); // env version
                     files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};            
                     let fileContent = files[name];
                     let filename = _(appPath + '/config/' + tmp);
-                    // loading dev if exists
-                    if ( self.isCacheless() ) {                
-                        try {
-                            exists = fs.existsSync(_(filename, true));
-                            if (cacheless && exists) {
-                                delete require.cache[require.resolve(_(filename, true))];
+                    exists = fs.existsSync(_(filename, true));
+                    // loading env if exists
+                    if ( self.isCacheless() ) {   
+                        if (exists) {
+                            delete require.cache[require.resolve(_(filename, true))];
+                        }
+                    }
+                    if (new RegExp('\.'+ env +'\.json$').test(fName)) {
+                        foundEnvVersion = true;
+                    }
+                    try {
+                        if (exists) {                            
+                            jsonFile = requireJSON(_(filename, true));
+                            if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
+                                fileContent = []
                             }
-
-                            if (exists) {
-                                foundDevVersion = true;
-                                jsonFile = requireJSON(_(filename, true));
-                                if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
-                                    fileContent = []
-                                } 
-                                fileContent = merge(jsonFile, fileContent);
-                            }
-
-                        } catch (_err) {
-
-                            if (fs.existsSync(filename)) {
-                                callback(new Error('[ ' + filename + ' ] is malformed !!'))
-                            } else {
-                                fileContent = undefined
-                            }
+                            // Fixed priority to env version and/or extended.description if found 
+                            fileContent = merge(jsonFile, fileContent);
+                        }
+                    } catch (_err) {
+                        if (exists) {
+                            callback(new Error('[ ' + filename + ' ] is malformed !!'))
+                        } else {
+                            fileContent = undefined
                         }
                     }
                     // loading main
@@ -627,7 +628,9 @@ function Config(opt) {
                             if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
                                 fileContent = []
                             }             
-                            fileContent = merge(fileContent, jsonFile);
+                            //fileContent = merge(fileContent, jsonFile);
+                            // Fixed priority to env version and/or extended.description if found
+                            fileContent = merge(jsonFile, fileContent);
                         } else {
                             console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
                         }
@@ -644,25 +647,22 @@ function Config(opt) {
                     
                     // tmp settings - because we need it now
                     if (section != '' ) {
+                        if (/\-/.test(section)) {
+                            section = section.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
+                        }
                         mergeConfig(tmpSettings, section, fileContent );  
-                    } else {                        
-                        tmpSettings = merge(tmpSettings, fileContent, requireJSON(_(appPath + '/config/'+ fName)));
+                    } else {
+                        tmpSettings = merge(tmpSettings, fileContent);
                     }
                                       
                     
                 } //EO for (let c = 0, cLen = configFiles.length; c < cLen; ++c) {
+                
                 bundleSettings = tmpSettings;
+                // reused and deleted in `loadBundleConfig()`
                 bundleSettings.tmpSettingFileContent = JSON.clone(bundleSettings);
                 newContent[app][env] = merge(bundleSettings, newContent[app][env]);
-                
-                // if ( !fs.existsSync(_(bundlesPath +'/'+ app +'/config/settings.json'))) {
-                //     bundHasSettings = false
-                // } else {
-                //     // merging with all settings ?
-                    
-                //     bundleSettings = requireJSON(_(bundlesPath +'/'+ app +'/config/settings.json'));
-                // }
-                
+                               
                 
                 
                 // setting protocol & port
@@ -675,7 +675,7 @@ function Config(opt) {
                     p = _(pkg[app].src);
                     content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
                 } else {
-                    p = ( typeof(pkg[app].release.link) != 'undefined' ) ? _(pkg[app].release.link) : _(pkg[app].release.target);
+                    p = ( typeof(pkg[app].link) != 'undefined' ) ? _(pkg[app].link) : _(pkg[app].releases[env].target);
                     content[app][env]['bundlesPath'] = "{executionPath}/"+ p.replace('/' + app, '');
                 }
 
@@ -694,6 +694,7 @@ function Config(opt) {
                     :  template["{bundle}"]["{env}"].projectPath;
            
                 
+                // TODO - remove this after the tests
                 // if ( typeof(content[app][env].server ) != 'undefined' ) {
                 //     newContent[app][env].server = content[app][env].server;
                     
@@ -705,22 +706,29 @@ function Config(opt) {
                 //     if ( typeof(content[app][env].server ) != 'undefined' ) {
                 //     newContent[app][env].server = template["{bundle}"]["{env}"].server
                 // }
-                if ( typeof(newContent[app][env].server ) != 'undefined' ) {
-                    newContent[app][env].server = template["{bundle}"]["{env}"].server
+                // if ( typeof(newContent[app][env].server ) != 'undefined' ) {
+                //     newContent[app][env].server = template["{bundle}"]["{env}"].server
+                // }
+                
+                // just in case someone removes the settings.server.json
+                if ( typeof(newContent[app][env].server ) == 'undefined' ) {
+                    newContent[app][env].server = {}
                 }
                 
-                // getting server protocol: bundle's settings first, if not available ->W project's config
+                // getting server protocol: bundle settings first, if not available ->W project's config
                 // If the users has set a different protocol in its /config/settings.json, it will override the project protocol
                 // at server init (see server.js) 
                 
                 // by default
                 if ( typeof(newContent[app][env].server.protocol) == 'undefined' ) {
-                    newContent[app][env].server.protocol = ( bundHasSettings && typeof(bundleSettings.server) != 'undefined' && typeof(bundleSettings.server.protocol) != 'undefined' ) ? bundleSettings.server.protocol : projectConf.def_protocol; // from ~/.gina/projects.json
-                    newContent[app][env].server.protocolShort = newContent[app][env].server.protocol.split(/\./)[0];
+                    //newContent[app][env].server.protocol = ( bundHasSettings && typeof(bundleSettings.server) != 'undefined' && typeof(bundleSettings.server.protocol) != 'undefined' ) ? bundleSettings.server.protocol : projectConf.def_protocol; // from ~/.gina/projects.json
+                    newContent[app][env].server.protocol = projectConf.def_protocol; // from ~/.gina/projects.json                    
                 }
+                newContent[app][env].server.protocolShort = newContent[app][env].server.protocol.split(/\./)[0];
                 
                 if ( typeof(newContent[app][env].server.scheme) == 'undefined' ) {
-                    newContent[app][env].server.scheme = ( bundHasSettings && typeof(bundleSettings.server) != 'undefined' && typeof(bundleSettings.server.scheme) != 'undefined' ) ? bundleSettings.server.scheme : projectConf.def_scheme; // from ~/.gina/projects.json
+                    //newContent[app][env].server.scheme = ( bundHasSettings && typeof(bundleSettings.server) != 'undefined' && typeof(bundleSettings.server.scheme) != 'undefined' ) ? bundleSettings.server.scheme : projectConf.def_scheme; // from ~/.gina/projects.json
+                    newContent[app][env].server.scheme = projectConf.def_scheme; // from ~/.gina/projects.json
                 }
                 
                 // getting server port
@@ -833,6 +841,11 @@ function Config(opt) {
     this.getAllBundles = function() {
         //Registered apps only.
         return self.allBundles
+    }
+    
+    this.getAllEnvs = function() {
+        //Registered apps only.
+        return self.allEnvs
     }
 
     /**
@@ -1002,6 +1015,7 @@ function Config(opt) {
             
         // bundle web root
         var wroot                   = ( !conf[bundle][env].server.webroot || conf[bundle][env].server.webroot == '' ) ? '/' : conf[bundle][env].server.webroot            
+            // default `webrootAutoredirect` is true
             , webrootAutoredirect   = conf[bundle][env].server.webrootAutoredirect
             , localWroot            = null
             , localHasWebRoot       = null
@@ -1009,7 +1023,10 @@ function Config(opt) {
         // formating wroot to have /mywebroot/
         wroot = ( !/^\//.test(wroot) ) ? '/' + wroot : wroot;
         wroot = ( !/\/$/.test(wroot) ) ? wroot + '/' : wroot;
-        
+        if (wroot == '/' || wroot == '' ) {
+            // disable webrootAutoredirect
+            webrootAutoredirect = conf[bundle][env].server.webrootAutoredirect = false
+        }
         // standalone setup
         if ( isStandalone && bundle != self.startingApp && wroot == '/') {
             wroot += bundle + '/';            
@@ -1045,9 +1062,9 @@ function Config(opt) {
         var main        = '';
         var name        = null;
         
-        var fileContent = null
-            , nameArr   = null
-            , foundDevVersion = null
+        var fileContent         = null
+            , allEnvs           = self.getAllEnvs()
+            , foundEnvVersion   = null
         ;
             
         // getting bundle config files    
@@ -1058,64 +1075,85 @@ function Config(opt) {
             , e         = null
         ;
         for (; c < cLen; ++c) {            
-            foundDevVersion = false;
-
+            foundEnvVersion = false;
             fName = configFiles[c];
+            fNameWithNoExt  = fName.replace(/.json/, '');
+            
+            // do we need it ?
+            // if (conf[bundle][env].files.indexOf(fNameWithNoExt) < 0) {
+            //     conf[bundle][env].files.push(fNameWithNoExt)
+            // }
+            
+            // e.g: if env == `dev` and we have app.prod.json, we should skip it
+            let skipIt = false;
+            for (let e = 0, eLen = allEnvs.length; e < eLen; e++) {
+                let re = new RegExp('\.'+ allEnvs[e] +'\.json$');
+                if ( re.test(fName) && allEnvs[e] != env ) {
+                    // we should skip it
+                    skipIt = true;
+                    break;
+                }
+            }
+            if (skipIt) continue;
             
             if ( /^settings\./.test(fName) ) {
                 // already defined before by `loadWithTemplate()`
                 continue;               
             }
             
-            if (/^\./.test(fName) || /\.dev\.json$/.test(fName) || !/\.json$/.test(fName)  )
+            if (/^\./.test(fName) || new RegExp('\.'+ env +'\.json$').test(fName) || !/\.json$/.test(fName)  )
                 continue;
 
-            name            = fName.replace(/\.json$/, '');
-            fNameWithNoExt  = fName.replace(/.json/, '');
-
+            // e.g: if env == `dev` and we have app.dev.json
+            if (new RegExp('\.'+ env +'\.json$').test(fName)  ) {
+                foundEnvVersion = true;
+            }
+            //name            = fName.replace(/\.json$/, '');
+            // we just want the main name .. not the extended description fullname
+            name            = fName.replace(/\..*/g, '');            
+            let section     = fNameWithNoExt
+                            .replace(/^\w+\./g, '')
+                            .replace(new RegExp('\.'+ env +'\.json$'), '');
+            if (section == fNameWithNoExt) {
+                section = '';
+            }
 
             if (/\-/.test(name)) {
                 name = name.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
             }
 
             filesList[name] = fName;
-
             // handle registered config files
             main = fName;
             tmp = fName.replace(/.json/, '.' + env + '.json'); // dev
             
             files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};            
             fileContent = files[name];
-
+            filename = _(appPath + '/config/' + tmp);
+            exists = fs.existsSync(_(filename, true));
             // loading dev if exists
-            if ( self.isCacheless() ) {
-                filename = _(appPath + '/config/' + tmp);
-                try {
-                    exists = fs.existsSync(_(filename, true));
-                    if (cacheless && exists) {
-                        delete require.cache[require.resolve(_(filename, true))];
-                    }
-
-                    if (exists) {
-                        foundDevVersion = true;
-                        jsonFile = requireJSON(_(filename, true));
-                        if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
-                            fileContent = []
-                        } 
-                        fileContent = merge(jsonFile, fileContent);
-                    }
-
-                } catch (_err) {
-
-                    if (fs.existsSync(filename)) {
-                        callback(new Error('[ ' + filename + ' ] is malformed !!'))
-                    } else {
-                        fileContent = undefined
-                    }
+            if ( self.isCacheless() ) {  
+                if (exists) {
+                    delete require.cache[require.resolve(_(filename, true))];
                 }
             }
-
-
+            
+            try {
+                if (exists) {
+                    jsonFile = requireJSON(_(filename, true));
+                    if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
+                        fileContent = []
+                    }
+                    // Fixed priority to env version and/or extended.description if found 
+                    fileContent = merge(jsonFile, fileContent);
+                }
+            } catch (_err) {
+                if (exists) {
+                    callback(new Error('[ ' + filename + ' ] is malformed !!'))
+                } else {
+                    fileContent = undefined
+                }
+            }
             // loading main
             filename = _(appPath + '/config/' + main);
             //Can't do anything without.
@@ -1130,7 +1168,9 @@ function Config(opt) {
                     if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
                         fileContent = []
                     }             
-                    fileContent = merge(fileContent, jsonFile);
+                    //fileContent = merge(fileContent, jsonFile);
+                    // Fixed priority to env version and/or extended.description if found
+                    fileContent = merge(jsonFile, fileContent);
                 } else {
                     console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
                 }
@@ -1145,27 +1185,37 @@ function Config(opt) {
                 }
             }
 
-            if (/\./.test(fNameWithNoExt)) {
-                nameArr = fNameWithNoExt.split(/\./g);
-                if ( typeof(files[nameArr[0]]) == 'undefined')
-                    files[nameArr[0]] = {};
+            // if (/\./.test(fNameWithNoExt)) {
+            //     let nameArr = fNameWithNoExt.split(/\./g);
+            //     if ( typeof(files[nameArr[0]]) == 'undefined')
+            //         files[nameArr[0]] = {};
                 
-                try {
-                    files = parseFileConf(files, nameArr, files, nameArr.length, 0, fileContent);
-                    continue;
-                } catch (_err) {
-                    e = '[ ' + nameArr + ' ] could not parse file conf !!\n\r' + (_err.stack || _err.message);
-                    console.error(e);
-                    callback(new Error(e))
+            //     try {
+            //         files = parseFileConf(files, nameArr, files, nameArr.length, 0, fileContent);
+            //         continue;
+            //     } catch (_err) {
+            //         e = '[ ' + nameArr + ' ] could not parse file conf !!\n\r' + (_err.stack || _err.message);
+            //         console.error(e);
+            //         callback(new Error(e))
+            //     }
+                
+                
+            // } else {
+            //     files[name] = fileContent;
+            // }
+            
+            if (section != '' ) {
+                if (/\-/.test(section)) {
+                    section = section.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
                 }
-                
-                
+                mergeConfig(files[name], section, fileContent );  
             } else {
-                files[name] = fileContent;
+                files[name] = merge(files[name], fileContent);
             }
+            
 
         } // EO for (var c = 0, cLen = configFiles.length; c < cLen; ++c)
-
+        conf[bundle][env] = merge(files, conf[bundle][env]);
 
         // building file list
         conf[bundle][env].configFiles = filesList;
@@ -1474,21 +1524,12 @@ function Config(opt) {
             files['settings'] = JSON.clone(conf[bundle][env].tmpSettingFileContent) || {};
             delete conf[bundle][env].tmpSettingFileContent;
             
-            //let corePath = getPath('gina').core;
-            //let settingsPath = _(corePath +'/template/conf/settings.json', true);
             if ( files['settings'].count() == 0 ) {
                 files['settings'] = requireJSON(settingsPath)
             } else {
                 var defaultSettings = requireJSON(settingsPath);    
                 files['settings'] = merge( JSON.clone(files['settings']), defaultSettings)
             }
-            // if ( typeof(files['settings']) == 'undefined' ) {
-            //     files['settings'] = requireJSON(settingsPath)
-            // } else if ( typeof(files['settings']) != 'undefined' ) {
-            //     var defaultSettings = requireJSON(settingsPath);
-
-            //     files['settings'] = merge(files['settings'], defaultSettings)
-            // }
 
             if (fs.existsSync(staticsPath))
                 delete require.cache[require.resolve(staticsPath)];

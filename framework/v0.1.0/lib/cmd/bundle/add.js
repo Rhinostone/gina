@@ -247,13 +247,11 @@ function Add(opt, cmd) {
         var envs    = self.projects[self.projectName].envs;
         data.bundles[local.bundle] = {
             "_comment" : "Your comment goes here.",
+            "version"   : version,
             "tag" : ( version.split('.') ).join(''),
             "src" : "src/" + local.bundle,
-            "release" : {
-                "version"   : version,
-                "link"      : "bundles/"+ local.bundle,
-                "targets"    : {}
-            }
+            "link"      : "bundles/"+ local.bundle,
+            "releases" : {}
         };
         //"release/"+ local.bundle +"/prod/" + version
         for (let i = 0, len = envs.length; i < len; ++i) {
@@ -262,7 +260,10 @@ function Add(opt, cmd) {
             if ( self.projects[self.projectName]['dev_env'] == env ) {
                 continue;
             }
-            data.bundles[local.bundle].release.targets[env] = "releases/"+ local.bundle +"/"+ env +"/" + version;
+            if ( typeof(data.bundles[local.bundle].releases[env]) == 'undefined' ) {
+                data.bundles[local.bundle].releases[env] = {}
+            }
+            data.bundles[local.bundle].releases[env].target = "releases/"+ local.bundle +"/"+ env +"/" + version;
         }
 
         try {

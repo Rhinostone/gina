@@ -1474,38 +1474,11 @@ function PathHelper() {
         }
     }
 
-    /**
-     * Set path by name
-     * @param {String} name Path name
-     * @return {String}
-     * */
-    // TODO - remove this
-    // setPath = function(name, path) {
-    //
-    //     if ( typeof(name) == 'object') {
-    //         var paths = getContext('paths');
-    //         for (var n in name) {
-    //             _this.userPaths[n] = _(name[n]);
-        //             merge(paths, _this.userPaths, true)
-    //         }
-    //         setContext("paths", paths)
-    //
-    //     } else {
-    //         if ( typeof(_this.userPaths) == "undefined" || typeof(_this.userPaths[name]) == "undefined" )  {
-    //             _this.userPaths[name] = _(path);
-    //             //PathHelper.userPaths = _this.userPaths;
-    //             //console.debug("what is this ", Helpers, " VS ", _this.userPaths);
-    //             var paths = getContext('paths');
-    //             //console.info(" 1) got config paths " +  paths + " VS "+ _this.userPaths, __stack);
-        //             merge(paths, _this.userPaths, true);
-    //             setContext("paths", paths)
-    //         }
-    //     }
-    // }
+    
 
     var parseCtxObject = function (o, obj) {
 
-        for (var i in o) {
+        for (let i in o) {
             if (o[i] !== null && typeof(o[i]) == 'object') {
                 parseCtxObject(o[i], obj);
             } else if (o[i] == '_content_'){
@@ -1516,22 +1489,41 @@ function PathHelper() {
         return o
     }
 
-    setPath = function(name, path) {
-
+    /**
+     * setPath
+     * Set path by name
+     * 
+     * @param {String} name - Path name
+     * @return {String} path
+     * */
+    setPath = function(name, path) {        
+        
+        if ( !path || typeof(path) == 'undefined' || path == '' ) {
+            throw new Error('setPath(name, path): path cannot be empty or undefined')
+        }
+        // check if symlink to get realpath
+        // var stats = fs.lstatSync(path);
+        // if (stats instanceof Error) {
+        //     throw new stats
+        // }     
+        // if ( stats.isSymbolicLink() ) {            
+        //     path = fs.realpathSync(path)
+        // }
+        var paths = null;
         if ( typeof(name) == 'string' && /\./.test(name) ) {
             var keys        = name.split(/\./g)
                 , newObj    = {}
                 , str       = '{'
                 , _count    = 0;
 
-            for (var k = 0, len = keys.length; k<len; ++k) {
+            for (let k = 0, len = keys.length; k<len; ++k) {
                 str +=  "\""+ keys.splice(0,1)[0] + "\":{";
 
                 ++_count;
                 if (k == len-1) {
                     str = str.substr(0, str.length-1);
                     str += "\"_content_\"";
-                    for (var c = 0; c<_count; ++c) {
+                    for (let c = 0; c<_count; ++c) {
                         str += "}"
                     }
                 }
@@ -1539,17 +1531,17 @@ function PathHelper() {
 
             newObj = parseCtxObject(JSON.parse(str), path);
 
-            var paths = getContext('paths');
+            paths = getContext('paths');
             paths = merge(paths, newObj);
             setContext("paths", paths)
 
         } else {
             // normal case
-            var paths = getContext('paths');
+            paths = getContext('paths');
 
             var userPaths = {};
             if ( typeof(name) == 'object') {
-                for (var n in name) {
+                for (let n in name) {
                     if ( typeof(name) == 'string' && /\./.test(name) ) {
                         setPath(n, name[n])
                     } else {

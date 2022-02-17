@@ -15,6 +15,7 @@
  */
 
 var fs              = require('fs');
+const { promisify } = require('util');
 var EventEmitter    = require('events').EventEmitter;
 var e               = new EventEmitter();
 
@@ -212,6 +213,7 @@ setContext('gina.Router', Router);
 //TODO  - HTTP vs HTTPS
 var Server  = require('./server');
 
+
 var p = new _(process.argv[1]).toUnixStyle().split("/");
 var isSym = false;
 var path;
@@ -259,9 +261,63 @@ var abort = function(err, bundle) {
     process.exit(1);
 };
 
-
 gna.emit = e.emit;
 gna.started = false;
+
+var isBundleMounted = function(projects, bundlesPath, bundle, cb) {
+    var isMounted       = false
+        , env           = process.env.NODE_ENV
+        , manisfestPath = null
+        , manifest      = null
+        , project       = projects[projectName]
+    ;
+    // supported envs
+    setContext('envs', project.envs);
+    
+    // skip this step for workers
+    if (isLoadedThroughWorker) {
+        return cb(false)
+    }
+    try {
+        manisfestPath   = _(project.path + '/manifest.json', true);
+        manifest        = requireJSON(manisfestPath);
+        
+        if ( !new _(manisfestPath).existsSync() ) {
+            throw new Error('Manifest not found in your project `'+ projectName +'`')
+        }
+        
+        isMounted = new _( project.path +'/'+ manifest.bundles[bundle].link ).existsSync();
+        
+        
+    } catch (err) {
+        console.emerg(err);
+        return cb(err);
+    }
+    
+    console.debug('Is `'+ bundle +'` mounted ?', isMounted);
+    if (!gna.started && isMounted) {
+        new _( project.path +'/'+ manifest.bundles[bundle].link ).rmSync();
+        isMounted = false;
+    }
+    if (!isMounted) {
+        var source = null, linkPath = null;
+        try {
+            source = (isDev) ? _( root +'/'+manifest.bundles[bundle].src) : _( root +'/'+ manifest.bundles[bundle].releases[env].target );
+            linkPath =  _( root +'/'+ manifest.bundles[bundle].link );
+            console.debug('Mounting bundle `'+ bundle +'` to : ', linkPath);
+        } catch (err) {
+            return cb(err)
+        }            
+        
+        gna.mount(bundlesPath, source, linkPath, cb)
+    }
+}
+
+
+
+   
+
+    
 
 /**
  * Get project conf from manifest.json
@@ -313,7 +369,7 @@ gna.getProjectConfiguration = function (callback){
 
             var bundle = getContext('bundle');
             var bundlePath = getPath('project') + '/';
-            bundlePath += ( isDev ) ? project.bundles[ bundle ].src : project.bundles[ bundle ].release.link;
+            bundlePath += ( isDev ) ? project.bundles[ bundle ].src : project.bundles[ bundle ].link;
             
             
             for (var b in project.bundles) {
@@ -400,7 +456,6 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
     
     if ( isSourceFound ) {
         //will override existing each time you restart.
-        //var pathToMount = 
         gna.utils.generator.createPathSync(bundlesPath, function onPathCreated(err){
             if (!err) {
                 try {
@@ -412,8 +467,10 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
                         fs.symlinkSync(source, target, type)
                     else
                         fs.symlinkSync(source, target);
-
-                    callback(false)
+                    
+                    // symlink created    
+                    callback(false);
+                    
                 } catch (err) {
                     if (err) {
                         console.emerg('[ FRAMEWORK ] '+ (err.stack||err.message));
@@ -443,562 +500,560 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
 };
 
 
-// get configuration
-gna.getProjectConfiguration( function onGettingProjectConfig(err, project) {
+// mounting bundle if needed
+isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMounted(err) {
+    if (err) {
+        return abort(err);
+    }
+    // get configuration
+    gna.getProjectConfiguration( async function onGettingProjectConfig(err, project) {
 
-    if (err) console.error(err.stack);
+        if (err) console.error(err.stack);
 
+        /**
+         * On middleware initialization
+         *
+         * @callback callback
+         *
+         * */
+        gna.onInitialize = process.onInitialize = function(callback) {
 
-    /**
-     * On middleware initialization
-     *
-     * @callback callback
-     *
-     * */
-    gna.onInitialize = process.onInitialize = function(callback) {
+            gna.initialized = true;
+            e.once('init', function(instance, middleware, conf) {
 
-        gna.initialized = true;
-        e.once('init', function(instance, middleware, conf) {
+                var configuration = config.getInstance();
 
-            var configuration = config.getInstance();
+                modelUtil.loadAllModels(
+                    conf.bundles,
+                    configuration,
+                    env,
+                    function() {
 
-            modelUtil.loadAllModels(
-                conf.bundles,
-                configuration,
-                env,
-                function() {
-
-                    joinContext(conf.contexts);
-                    gna.getConfig = function(name){
-                        var tmp = '';
-                        if ( typeof(name) != 'undefined' ) {
-                            try {
-                                //Protect it.
-                                tmp = JSON.stringify(conf.content[name]);
+                        joinContext(conf.contexts);
+                        gna.getConfig = function(name){
+                            var tmp = '';
+                            if ( typeof(name) != 'undefined' ) {
+                                try {
+                                    //Protect it.
+                                    tmp = JSON.stringify(conf.content[name]);
+                                    return JSON.parse(tmp)
+                                } catch (err) {
+                                    console.error('[ FRAMEWORK ] ', err.stack);
+                                    return undefined
+                                }
+                            } else {                            
+                                tmp = JSON.stringify(conf);
                                 return JSON.parse(tmp)
-                            } catch (err) {
-                                console.error('[ FRAMEWORK ] ', err.stack);
-                                return undefined
                             }
-                        } else {                            
-                            tmp = JSON.stringify(conf);
-                            return JSON.parse(tmp)
+                        };
+                        try {
+                            //configureMiddleware(instance, express); // no, no and no...                        
+                            callback(e, instance, middleware)
+                        } catch (err) {
+                            // TODO Output this to the error logger.
+                            console.error('[ FRAMEWORK ] Could not complete initialization: ', err.stack)
                         }
-                    };
-                    try {
-                        //configureMiddleware(instance, express); // no, no and no...                        
-                        callback(e, instance, middleware)
-                    } catch (err) {
-                        // TODO Output this to the error logger.
-                        console.error('[ FRAMEWORK ] Could not complete initialization: ', err.stack)
-                    }
 
-                })// EO modelUtil
+                    })// EO modelUtil
 
-        })
-    }
+            })
+        }
 
-    /**
-     * On Server started
-     *
-     * @callback callback
-     *
-     * */
-    gna.onStarted = process.onStarted = function(callback) {
+        /**
+         * On Server started
+         *
+         * @callback callback
+         *
+         * */
+        gna.onStarted = process.onStarted = function(callback) {
 
-        gna.started = true;
-        e.once('server#started', function(conf){
+            gna.started = true;
+            e.once('server#started', function(conf){
+
+                
+                // open default browser for dev env only
+                // if ( isDev) {
+                //     var payload = JSON.stringify({
+                //         code    : 200,
+                //         command  : "open"
+                //     });
+                
+                //     if (self.ioClient) { // if client has already made connexion
+                //         payload.command = "reload"
+                //     } else {
+                //         // get default home
+                //         // helper/task::run() should be triggered from ioClient
+                //         //run('open', [conf.hostname + conf.server.webroot])
+                //     }
+                // }
+
+                // will start watchers from here
+                callback()
+            })
+        }
+
+        gna.onRouting = process.onRouting = function(callback) {
+
+            gna.routed = true;
+            e.once('route', function(request, response, next, params) {
+
+                try {
+                    callback(e, request, response, next, params)
+                } catch (err) {
+                    // TODO Output this to the error logger.
+                    console.error('[ FRAMEWORK ] Could not complete routing: ', err.stack)
+                }
+            })
+        }
+
+        gna.getShutdownConnector = process.getShutdownConnector = function(callback) {
+            var connPath = _(bundlesPath +'/'+ appName + '/config/connector.json');
+            fs.readFile(connPath, function onRead(err, content) {
+                try {
+                    callback(err, JSON.parse(content).httpClient.shutdown)
+                } catch (err) {
+                    callback(err)
+                }
+            })
+        }
+
+        gna.onError = process.onError = function(callback) {
+            gna.errorCatched = true;
+            e.on('error', function(err, request, response, next) {
+                
+                callback(err, request, response, next)
+            })
+        }
+
+        gna.getShutdownConnectorSync = process.getShutdownConnectorSync = function() {
+            var connPath = _(bundlesPath +'/'+ appName + '/config/connector.json');
+            try {
+                var content = fs.readFileSync(connPath);
+                return JSON.parse(content).httpClient.shutdown
+            } catch (err) {
+                return undefined
+            }
+        }
+
+        gna.getMountedBundles = process.getMountedBundles = function(callback) {
+            fs.readdir(bundlesPath, function onRead(err, files) {
+                callback(err, files)
+            })
+        }
+
+        gna.getMountedBundlesSync = process.getMountedBundlesSync = function() {
+            try {
+                return fs.readdirSync(bundlesPath)
+            } catch (err) {
+                return err.stack
+            }
+        }
+
+        gna.getRunningBundlesSync = process.getRunningBundlesSync = function() {
+
+            //TODO - Do that thru IPC or thru socket. ???
+            var pidPath = _(getPath('globalTmpPath') +'/pid');
+            var files = fs.readdirSync(pidPath);
+
+            var name = '';
+            var indexTmp = null;
+
+            var content = [];
+            var contentGina = [];
+            var shutdown = [];
+            var shutdownGina = [];
+
+            var bundleGinaPid = getContext('ginaProcess');
+
+            //Sort Bundle / Gina instance to get a array [BUNDLE,GINA,SHUTDOWN,GINASHUTDOWN].
+            for (var f=0; f<files.length; ++f) {
+
+                name = fs.readFileSync( _(pidPath +'/'+ files[f]) ).toString();
+
+                if ( name == "shutdown" ) {
+                    shutdown[0] = {};
+                    shutdown[0]['pid']  = files[f];
+                    shutdown[0]['name'] = name;
+                    shutdown[0]['path'] = _(pidPath +'/'+ files[f]);
+                } else if ( files[f] == bundleGinaPid ){
+                    shutdownGina[0] = {};
+                    shutdownGina[0]['pid']  = files[f];
+                    shutdownGina[0]['name'] = name;
+                    shutdownGina[0]['path'] = _(pidPath +'/'+ files[f]);
+                } else if ( name == "gina" ) {
+                    indexTmp = contentGina.length;
+                    contentGina[indexTmp] = {};
+                    contentGina[indexTmp]['pid']  = files[f];
+                    contentGina[indexTmp]['name'] = name;
+                    contentGina[indexTmp]['path'] = _(pidPath +'/'+ files[f]);
+                } else {
+                    indexTmp = content.length;
+                    content[indexTmp] = {};
+                    content[indexTmp]['pid']  = files[f];
+                    content[indexTmp]['name'] = name;
+                    content[indexTmp]['path'] = _(pidPath +'/'+ files[f]);
+                }
+            }
+
+            //Remove GINA instance, avoid killing gina bundle before/while bundle is remove.
+            //Bundle kill/remove gina instance himself.
+            //content = content.concat(contentGina);
+            content = content.concat(shutdown);
+            content = content.concat(shutdownGina);
+
+            return content
+        }
+
+        gna.getVersion = process.getVersion = function(bundle) {
+            var name = bundle || appName;
+            name = name.replace(/gina: /, '');
+
+            if ( name != undefined) {
+                try {
+                    var str = fs.readFileSync( _(bundlesPath + '/' + bundle + '/config/app.json') ).toString();
+                    var version = JSON.parse(str).version;
+                    return version
+                } catch (err) {
+                    return err
+                }
+            } else {
+                return undefined
+            }
+        }
+
+        /**
+         * Start server
+         *
+         * @param {string} [executionPath]
+         * */    
+        gna.start = process.start = function() { //TODO - Add protocol in arguments
+
+            var core    = gna.core;
+            //Get bundle name.
+            if (appName == undefined) {
+            appName = getContext('bundle')
+            }
+
+            if (projectName == undefined) {
+                projectName = getContext('projectName')
+            }
 
             
-            // open default browser for dev env only
-            // if ( isDev) {
-            //     var payload = JSON.stringify({
-            //         code    : 200,
-            //         command  : "open"
-            //     });
-            
-            //     if (self.ioClient) { // if client has already made connexion
-            //         payload.command = "reload"
-            //     } else {
-            //         // get default home
-            //         // helper/task::run() should be triggered from ioClient
-            //         //run('open', [conf.hostname + conf.server.webroot])
-            //     }
+            core.projectName        = projectName;
+            core.startingApp        = appName; // bundleName
+            core.executionPath      = root;
+            core.ginaPath           = ginaPath;
+
+
+            //Inherits parent (gina) context.
+            if ( typeof(process.argv[3]) != 'undefined' ) {
+                setContext( JSON.parse(process.argv[3]) )
+            }
+
+            //check here for mount point source...
+            // if ( typeof(project.bundles[core.startingApp].version) == 'undefined' && typeof(project.bundles[core.startingApp].tag) != 'undefined') {
+            //     project.bundles[core.startingApp].version = project.bundles[core.startingApp].tag
             // }
+            // project.bundles[core.startingApp].releases[env].target = 'releases/'+ core.startingApp +'/' + env +'/'+ project.bundles[core.startingApp].version;
+            // var source = (isDev) ? _( root +'/'+project.bundles[core.startingApp].src) : _( root +'/'+ project.bundles[core.startingApp].releases[env].target );
+            // var linkPath =  _( root +'/'+ project.bundles[core.startingApp].link );
+            // console.debug('Mounting bundle `'+ appName +'` to : ', linkPath);
+            // gna.mount( bundlesPath, source, linkPath, function onBundleMounted(mountErr) {
 
-            // will start watchers from here
-            callback()
-        })
-    }
+            //     if (mountErr) {
+            //         abort(mountErr.stack);
+            //     }
 
-    gna.onRouting = process.onRouting = function(callback) {
-
-        gna.routed = true;
-        e.once('route', function(request, response, next, params) {
-
-            try {
-                callback(e, request, response, next, params)
-            } catch (err) {
-                // TODO Output this to the error logger.
-                console.error('[ FRAMEWORK ] Could not complete routing: ', err.stack)
-            }
-        })
-    }
-
-    gna.getShutdownConnector = process.getShutdownConnector = function(callback) {
-        var connPath = _(bundlesPath +'/'+ appName + '/config/connector.json');
-        fs.readFile(connPath, function onRead(err, content) {
-            try {
-                callback(err, JSON.parse(content).httpClient.shutdown)
-            } catch (err) {
-                callback(err)
-            }
-        })
-    }
-
-    gna.onError = process.onError = function(callback) {
-        gna.errorCatched = true;
-        e.on('error', function(err, request, response, next) {
-            
-            callback(err, request, response, next)
-        })
-    }
-
-    gna.getShutdownConnectorSync = process.getShutdownConnectorSync = function() {
-        var connPath = _(bundlesPath +'/'+ appName + '/config/connector.json');
-        try {
-            var content = fs.readFileSync(connPath);
-            return JSON.parse(content).httpClient.shutdown
-        } catch (err) {
-            return undefined
-        }
-    }
-
-    gna.getMountedBundles = process.getMountedBundles = function(callback) {
-        fs.readdir(bundlesPath, function onRead(err, files) {
-            callback(err, files)
-        })
-    }
-
-    gna.getMountedBundlesSync = process.getMountedBundlesSync = function() {
-        try {
-            return fs.readdirSync(bundlesPath)
-        } catch (err) {
-            return err.stack
-        }
-    }
-
-    gna.getRunningBundlesSync = process.getRunningBundlesSync = function() {
-
-        //TODO - Do that thru IPC or thru socket. ???
-        var pidPath = _(getPath('globalTmpPath') +'/pid');
-        var files = fs.readdirSync(pidPath);
-
-        var name = '';
-        var indexTmp = null;
-
-        var content = [];
-        var contentGina = [];
-        var shutdown = [];
-        var shutdownGina = [];
-
-        var bundleGinaPid = getContext('ginaProcess');
-
-        //Sort Bundle / Gina instance to get a array [BUNDLE,GINA,SHUTDOWN,GINASHUTDOWN].
-        for (var f=0; f<files.length; ++f) {
-
-            name = fs.readFileSync( _(pidPath +'/'+ files[f]) ).toString();
-
-            if ( name == "shutdown" ) {
-                shutdown[0] = {};
-                shutdown[0]['pid']  = files[f];
-                shutdown[0]['name'] = name;
-                shutdown[0]['path'] = _(pidPath +'/'+ files[f]);
-            } else if ( files[f] == bundleGinaPid ){
-                shutdownGina[0] = {};
-                shutdownGina[0]['pid']  = files[f];
-                shutdownGina[0]['name'] = name;
-                shutdownGina[0]['path'] = _(pidPath +'/'+ files[f]);
-            } else if ( name == "gina" ) {
-                indexTmp = contentGina.length;
-                contentGina[indexTmp] = {};
-                contentGina[indexTmp]['pid']  = files[f];
-                contentGina[indexTmp]['name'] = name;
-                contentGina[indexTmp]['path'] = _(pidPath +'/'+ files[f]);
-            } else {
-                indexTmp = content.length;
-                content[indexTmp] = {};
-                content[indexTmp]['pid']  = files[f];
-                content[indexTmp]['name'] = name;
-                content[indexTmp]['path'] = _(pidPath +'/'+ files[f]);
-            }
-        }
-
-        //Remove GINA instance, avoid killing gina bundle before/while bundle is remove.
-        //Bundle kill/remove gina instance himself.
-        //content = content.concat(contentGina);
-        content = content.concat(shutdown);
-        content = content.concat(shutdownGina);
-
-        return content
-    }
-
-    gna.getVersion = process.getVersion = function(bundle) {
-        var name = bundle || appName;
-        name = name.replace(/gina: /, '');
-
-        if ( name != undefined) {
-            try {
-                var str = fs.readFileSync( _(bundlesPath + '/' + bundle + '/config/app.json') ).toString();
-                var version = JSON.parse(str).version;
-                return version
-            } catch (err) {
-                return err
-            }
-        } else {
-            return undefined
-        }
-    }
-
-    /**
-     * Start server
-     *
-     * @param {string} [executionPath]
-     * */    
-    gna.start = process.start = function() { //TODO - Add protocol in arguments
-
-        var core    = gna.core;
-        //Get bundle name.
-        if (appName == undefined) {
-           appName = getContext('bundle')
-        }
-
-        if (projectName == undefined) {
-            projectName = getContext('projectName')
-        }
-
-        
-        core.projectName        = projectName;
-        core.startingApp        = appName; // bundleName
-        core.executionPath      = root;
-        core.ginaPath           = ginaPath;
+                if (!Config.instance) {
+                    config = new Config({
+                        env             : env,
+                        executionPath   : core.executionPath,
+                        projectName     : core.projectName,
+                        startingApp     : core.startingApp,
+                        ginaPath        : core.ginaPath
+                    });
+                } else {
+                    config = Config.instance
+                }
 
 
-        //Inherits parent (gina) context.
-        if ( typeof(process.argv[3]) != 'undefined' ) {
-            setContext( JSON.parse(process.argv[3]) )
-        }
+                setContext('gina.config', config);
+                config.onReady( function(err, obj){
+                    var isStandalone = obj.isStandalone;
 
-        //check here for mount point source...
-        if ( typeof(project.bundles[core.startingApp].release.version) == 'undefined' && typeof(project.bundles[core.startingApp].tag) != 'undefined') {
-            project.bundles[core.startingApp].release.version = project.bundles[core.startingApp].tag
-        }
-        project.bundles[core.startingApp].release.target = 'releases/'+ core.startingApp +'/' + env +'/'+ project.bundles[core.startingApp].release.version;
+                    if (err) console.error(err, err.stack);
 
-        var source = (isDev) ? _( root +'/'+project.bundles[core.startingApp].src) : _( root +'/'+ project.bundles[core.startingApp].release.target );
-        var tmpSource = _(bundlesPath +'/'+ core.startingApp);
+                    var initialize = function(err, instance, middleware, conf) {
+                        var errMsg = null;
+                        if (!err) {
 
-        var linkPath =  _( root +'/'+ project.bundles[core.startingApp].release.link );
+                            //On user conf complete.
+                            e.on('complete', function(instance){
 
-        gna.mount( bundlesPath, source, linkPath, function onBundleMounted(mountErr) {
+                                server.on('started', function (conf) {
 
-            if (mountErr) {
-                abort(mountErr.stack);
-            }
-
-            if (!Config.instance) {
-                config = new Config({
-                    env             : env,
-                    executionPath   : core.executionPath,
-                    projectName     : core.projectName,
-                    startingApp     : core.startingApp,
-                    ginaPath        : core.ginaPath
-                });
-            } else {
-                config = Config.instance
-            }
-
-
-            setContext('gina.config', config);
-            config.onReady( function(err, obj){
-                var isStandalone = obj.isStandalone;
-
-                if (err) console.error(err, err.stack);
-
-                var initialize = function(err, instance, middleware, conf) {
-                    var errMsg = null;
-                    if (!err) {
-
-                        //On user conf complete.
-                        e.on('complete', function(instance){
-
-                            server.on('started', function (conf) {
-
-                                // setting default global middlewares
-                                if ( typeof(instance.use) == 'function' ) {
-                                    
-                                    // catching unhandled errors
-                                    instance.use( function cathUnhandledErrorMiddlewar(error, request, response, next){
+                                    // setting default global middlewares
+                                    if ( typeof(instance.use) == 'function' ) {
                                         
-                                        if (arguments.length < 4) {
-                                            next        = response;
-                                            response    = request;
-                                            request     = error;
-                                            error       = false ;
-                                        }
-                                        
-                                        if (error) {
-                                            e.emit('error', error, request, response, next)
-                                        } else {
-                                            next()
-                                        }
-                                    });
-                                    
-                                                                        
-                                    instance.use( function composeHeadersMiddleware(error, request, response, next) {
-                                        
-                                        if (arguments.length < 4) {
-                                            next        = response;
-                                            response    = request;
-                                            request     = error;
-                                            error       = false ;
-                                        }
-                                        
-                                        if (error) {
-                                            e.emit('error', error, request, response, next)
-                                        } else {
+                                        // catching unhandled errors
+                                        instance.use( function cathUnhandledErrorMiddlewar(error, request, response, next){
                                             
-                                            instance.completeHeaders(null, request, response);                                            
-                                            
-                                            if ( typeof(request.isPreflightRequest) != 'undefined' && request.isPreflightRequest ) {                                                
-                                                var ext = 'html';
-                                                var headers = {    
-                                                    // Responses to the OPTIONS method are not cacheable. - https://tools.ietf.org/html/rfc7231#section-4.3.7
-                                                    //'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
-                                                    'cache-control': 'no-cache',
-                                                    'pragma': 'no-cache',
-                                                    'expires': '0',
-                                                    'content-type': conf.server.coreConfiguration.mime[ext]
-                                                };             
-                                                
-                                                // if ( /http\/2/.test(conf.server.protocol) ) {
-                                                //     if (!response.stream.destroyed) {
-                                                //         headers[':status'] = 200;
-                                                //         headers[':authority'] = request.headers[':authority'];
-                                                //         response.stream.respond(headers);
-                                                //         response.stream.end();
-                                                //         return;
-                                                //     } 
-                                                // } else {
-                                                    response.writeHead(200, headers);                                                
-                                                    response.end();
-                                                //}
-                                                    
-                                            } else {
-                                                next(false, request, response)
+                                            if (arguments.length < 4) {
+                                                next        = response;
+                                                response    = request;
+                                                request     = error;
+                                                error       = false ;
                                             }
-                                        }                                            
-                                    })
-                                }                                
-                                
-
-                                e.emit('server#started', conf);
-                                
-                                setTimeout( function onStarted() {
+                                            
+                                            if (error) {
+                                                e.emit('error', error, request, response, next)
+                                            } else {
+                                                next()
+                                            }
+                                        });
+                                        
+                                                                            
+                                        instance.use( function composeHeadersMiddleware(error, request, response, next) {
+                                            
+                                            if (arguments.length < 4) {
+                                                next        = response;
+                                                response    = request;
+                                                request     = error;
+                                                error       = false ;
+                                            }
+                                            
+                                            if (error) {
+                                                e.emit('error', error, request, response, next)
+                                            } else {
+                                                
+                                                instance.completeHeaders(null, request, response);                                            
+                                                
+                                                if ( typeof(request.isPreflightRequest) != 'undefined' && request.isPreflightRequest ) {                                                
+                                                    var ext = 'html';
+                                                    var headers = {    
+                                                        // Responses to the OPTIONS method are not cacheable. - https://tools.ietf.org/html/rfc7231#section-4.3.7
+                                                        //'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
+                                                        'cache-control': 'no-cache',
+                                                        'pragma': 'no-cache',
+                                                        'expires': '0',
+                                                        'content-type': conf.server.coreConfiguration.mime[ext]
+                                                    };             
+                                                    
+                                                    // if ( /http\/2/.test(conf.server.protocol) ) {
+                                                    //     if (!response.stream.destroyed) {
+                                                    //         headers[':status'] = 200;
+                                                    //         headers[':authority'] = request.headers[':authority'];
+                                                    //         response.stream.respond(headers);
+                                                    //         response.stream.end();
+                                                    //         return;
+                                                    //     } 
+                                                    // } else {
+                                                        response.writeHead(200, headers);                                                
+                                                        response.end();
+                                                    //}
+                                                        
+                                                } else {
+                                                    next(false, request, response)
+                                                }
+                                            }                                            
+                                        })
+                                    }                                
                                     
-                                    console.info('[ FRAMEWORK ] Online ...',
-                                    '\nbundle: [ ' + conf.bundle +' ]',
-                                    '\nenv: [ '+ conf.env +' ]',
-                                    '\nengine: ' + conf.server.engine,
-                                    '\nprotocol: ' + conf.server.protocol,
-                                    '\nscheme: ' + conf.server.scheme,
-                                    '\nport: ' + conf.server.port,
-                                    '\ndebugPort: ' + conf.server.debugPort,
-                                    '\npid: ' + process.pid,
-                                    '\nThis way please -> '+ conf.hostname + conf.server.webroot
-                                    );
-                                    // placing end:flag to allow the CLI to retrieve bundl info from here
-                                    console.notice('[ FRAMEWORK ] Bundle started !');
-                                }, 1000);
 
+                                    e.emit('server#started', conf);
+                                    
+                                    setTimeout( function onStarted() {
+                                        
+                                        console.info('is now online V(-.o)V',
+                                        '\nbundle: [ ' + conf.bundle +' ]',
+                                        '\nenv: [ '+ conf.env +' ]',
+                                        '\nengine: ' + conf.server.engine,
+                                        '\nprotocol: ' + conf.server.protocol,
+                                        '\nscheme: ' + conf.server.scheme,
+                                        '\nport: ' + conf.server.port,
+                                        '\ndebugPort: ' + conf.server.debugPort,
+                                        '\npid: ' + process.pid,
+                                        '\nThis way please -> '+ conf.hostname + conf.server.webroot
+                                        );
+                                        // placing end:flag to allow the CLI to retrieve bundl info from here
+                                        console.notice('[ FRAMEWORK ] Bundle started !');
+                                    }, 1000);
+
+                                });
+
+                                // placing strat:flag to allow the CLI to retrieve bundl info from here
+                                console.notice('[ FRAMEWORK ][ '+ process.pid +' ] '+ conf.bundle +'@'+ core.projectName +' mounted !');
+                                server.start(instance);
+                                
                             });
 
-                            // placing strat:flag to allow the CLI to retrieve bundl info from here
-                            console.notice('[ FRAMEWORK ][ '+ process.pid +' ] '+ conf.bundle +'@'+ core.projectName +' mounted !');
-                            server.start(instance);
 
 
-                            // switching back logger flow
-                            //console.switchFlow('default');
-                        });
+                            // if (!mountErr) {
+                                // -- BO
+                                e.emit('init', instance, middleware, conf);
+                                //In case there is no user init.
+                                if (!gna.initialized) {
+                                    e.emit('complete', instance);
+                                }
 
 
+                                // -- EO
+                            // } else {
+                            //     errMsg = new Error('[ FRAMEWORK ] Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
+                            //     //console.error(errMsg);
+                            //     abort(errMsg)
+                            // }
 
-                        if (!mountErr) {
-                            // -- BO
-                            e.emit('init', instance, middleware, conf);
-                            //In case there is no user init.
-                            if (!gna.initialized) {
-                                e.emit('complete', instance);
-                            }
-
-
-                            // -- EO
                         } else {
-                            errMsg = new Error('[ FRAMEWORK ] Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
-                            //console.error(errMsg);
-                            abort(errMsg)
+                            errMsg = new Error('[ FRAMEWORK ] '+ (err.stack||err.message));
+                            console.error(errMsg);
                         }
+                    };
 
-                    } else {
-                        errMsg = new Error('[ FRAMEWORK ] '+ (err.stack||err.message));
-                        console.error(errMsg);
-                    }
-                };
+                    var opt = {
+                        projectName     : core.projectName,
+                        bundle          : core.startingApp,
+                        //Apps list.
+                        bundles         : obj.bundles,
+                        allBundles      : obj.allBundles,
+                        env             : obj.env,
+                        isStandalone    : isStandalone,
+                        executionPath   : core.executionPath,
+                        conf            : obj.conf
+                    };
 
-                var opt = {
-                    projectName     : core.projectName,
-                    bundle          : core.startingApp,
-                    //Apps list.
-                    bundles         : obj.bundles,
-                    allBundles      : obj.allBundles,
-                    env             : obj.env,
-                    isStandalone    : isStandalone,
-                    executionPath   : core.executionPath,
-                    conf            : obj.conf
-                };
+                    var server = new Server(opt);
+                    server.onConfigured(initialize);
+                    
 
-                var server = new Server(opt);
-                server.onConfigured(initialize);
-                
+                })//EO config.
+            //})//EO mount.
+        }
 
-            })//EO config.
-        })//EO mount.
-    }
+        /**
+         * Stop server
+         * */
+        gna.stop = process.stop = function(pid, code) {
+            console.info('[ FRAMEWORK ] Stopped service');
+            if (typeof(code) != 'undefined')
+                process.exit(code);
 
-    /**
-     * Stop server
-     * */
-    gna.stop = process.stop = function(pid, code) {
-        console.info('[ FRAMEWORK ] Stopped service');
-        if (typeof(code) != 'undefined')
-            process.exit(code);
+            process.exit()
+        }
 
-        process.exit()
-    }
-
-    /**
-     * Get Status
-     * */
-    gna.status = process.status = function(bundle) {
-        console.info('[ FRAMEWORK ] Getting service status')
-    }
-    /**
-     * Restart server
-     * */
-    gna.restart = process.restart = function() {
-        console.info('[ FRAMEWORK ] Starting service')
-    }
+        /**
+         * Get Status
+         * */
+        gna.status = process.status = function(bundle) {
+            console.info('[ FRAMEWORK ] Getting service status')
+        }
+        /**
+         * Restart server
+         * */
+        gna.restart = process.restart = function() {
+            console.info('[ FRAMEWORK ] Starting service')
+        }
 
 
 
-    var appName = null, path = null;
+        var appName = null, path = null;
 
-    var packs = project.bundles;
-    if (isLoadedThroughCLI) {
-        appName = getContext('bundle');
-        if (!isPath) {
-            //appName = getContext('bundle');
-            if (typeof (packs[appName].release.version) == 'undefined' && typeof (packs[appName].tag) != 'undefined') {
-                packs[appName].release.version = packs[appName].tag
+        var packs = project.bundles;
+        if (isLoadedThroughCLI) {
+            appName = getContext('bundle');
+            if (!isPath) {
+                //appName = getContext('bundle');
+                if (typeof (packs[appName].version) == 'undefined' && typeof (packs[appName].tag) != 'undefined') {
+                    packs[appName].version = packs[appName].tag
+                }
+                packs[appName].releases[env].target = 'releases/' + appName + '/' + env + '/' + packs[appName].version;
+                path = (isDev) ? packs[appName].src : packs[appName].releases[env].target
+            } else {
+                path = _(process.argv[1])
             }
-            packs[appName].release.target = 'releases/' + appName + '/' + env + '/' + packs[appName].release.version;
-            path = (isDev) ? packs[appName].src : packs[appName].release.target
         } else {
             path = _(process.argv[1])
         }
-    } else {
-        path = _(process.argv[1])
-    }
 
-    path = path.replace(root + '/', '');
-    var search = null;
-    if ((/index.js/).test(path) || p[p.length - 1] == 'index') {
-        var self = null;
-        path = (self = path.split('/')).splice(0, self.length - 1).join('/')
-    }
+        path = path.replace(root + '/', '');
+        var search = null;
+        if ((/index.js/).test(path) || p[p.length - 1] == 'index') {
+            var self = null;
+            path = (self = path.split('/')).splice(0, self.length - 1).join('/')
+        }
 
-    try {
-        //finding app.
-        if (!isLoadedThroughWorker) {
-            var target, source, tmp;
-            for (let bundle in packs) {
-                //is bundle ?
-                tmp = '';
-                // For all but dev
-                if (
-                    typeof (packs[bundle].release) != 'undefined' && !isDev
-                ) {
+        try {
+            //finding app.
+            if (!isLoadedThroughWorker) {
+                var target, source, tmp;
+                for (let bundle in packs) {
+                    //is bundle ?
+                    tmp = '';
+                    // For all but dev
+                    if (
+                        typeof (packs[bundle].releases) != 'undefined' && !isDev
+                    ) {
 
 
-                    if (typeof (packs[bundle].release.version) == 'undefined' && typeof (packs[bundle].tag) != 'undefined') {
-                        packs[bundle].release.version = packs[bundle].tag
+                        if (typeof (packs[bundle].version) == 'undefined' && typeof (packs[bundle].tag) != 'undefined') {
+                            packs[bundle].version = packs[bundle].tag
+                        }
+                        packs[bundle].releases[env].target = 'releases/' + bundle + '/' + env + '/' + packs[bundle].version;
+                        tmp = packs[bundle].releases[env].target.replace(/\//g, '').replace(/\\/g, '');
+
+                        if (!appName && tmp == path.replace(/\//g, '').replace(/\\/g, '')) {
+                            appName = bundle;
+                            break
+                        }
+                    } else if (
+                        typeof (packs[bundle].src) != 'undefined' && isDev
+                    ) {
+
+                        tmp = packs[bundle].src.replace(/\//g, '').replace(/\\/g, '');
+                        if (tmp == path.replace(/\//g, '').replace(/\\/g, '')) {
+                            appName = bundle;
+                            break
+                        }
+                    } else {
+                        abort('Path mismatched with env: ' + path);
                     }
-                    packs[bundle].release.target = 'releases/' + bundle + '/' + env + '/' + packs[bundle].release.version;
-                    tmp = packs[bundle].release.target.replace(/\//g, '').replace(/\\/g, '');
-
-                    if (!appName && tmp == path.replace(/\//g, '').replace(/\\/g, '')) {
-                        appName = bundle;
-                        break
-                    }
-                } else if (
-                    typeof (packs[bundle].src) != 'undefined' && isDev
-                ) {
-
-                    tmp = packs[bundle].src.replace(/\//g, '').replace(/\\/g, '');
-                    if (tmp == path.replace(/\//g, '').replace(/\\/g, '')) {
-                        appName = bundle;
-                        break
-                    }
-                } else {
-                    abort('Path mismatched with env: ' + path);
+                    // else, not a bundle
+                } // EO for (let bundle in packs) {
+                
+                if (gna.isAborting) {
+                    return;
                 }
-                // else, not a bundle
-            } // EO for (let bundle in packs) {
-            
-            if (gna.isAborting) {
-                return;
-            }
-            
-            if (appName == undefined) {
-                setContext('bundle', undefined);
-                abort('No bundle found for path: ' + path)
+                
+                if (appName == undefined) {
+                    setContext('bundle', undefined);
+                    abort('No bundle found for path: ' + path)
+                } else {
+                    setContext('bundle', appName);
+                    //to remove after merging gina processes into a single process.
+                    var projectName = getContext('projectName');
+                    var processList = getContext('processList');
+                    process.list = processList;
+                    var bundleProcess = new Proc(appName + '@' + projectName, process);
+                    bundleProcess.register(appName + '@' + projectName, process.pid)
+                }
+
             } else {
-                setContext('bundle', appName);
-                //to remove after merging gina processes into a single process.
+                appName = getContext('bundle');
                 var projectName = getContext('projectName');
                 var processList = getContext('processList');
                 process.list = processList;
                 var bundleProcess = new Proc(appName + '@' + projectName, process);
                 bundleProcess.register(appName + '@' + projectName, process.pid)
             }
+            
+            
 
-        } else {
-            appName = getContext('bundle');
-            var projectName = getContext('projectName');
-            var processList = getContext('processList');
-            process.list = processList;
-            var bundleProcess = new Proc(appName + '@' + projectName, process);
-            bundleProcess.register(appName + '@' + projectName, process.pid)
+        } catch (err) {
+            abort(err)
         }
-        
-        
-
-    } catch (err) {
-        abort(err)
-    }
 
 
-});//EO onDoneGettingProjectConfiguration.
-
+    });//EO onDoneGettingProjectConfiguration.
+});
 module.exports = gna

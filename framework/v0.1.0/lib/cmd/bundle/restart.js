@@ -93,6 +93,9 @@ function Restart(opt, cmd) {
                 cmd = cmd.replace(/\$(gina)/g, self.cmdStr);
                 
                 console.debug('Executing: '+cmd);
+                msg = 'Restarting, please wait ...';
+                opt.client.write('\n\r'+msg +'\n');
+                
                 // If it is stuck, the problem is not here ... cmd.start should be a good start
                 exec(cmd, function(err, stdout, stderr) {
                       
@@ -107,7 +110,7 @@ function Restart(opt, cmd) {
                     
                     // retrieve messages from the parent stdout
                     if (stdout) {
-                        console.log(stdout);
+                        console.log(stdout.replace(/\n\rTrying to.*/gm, ''));
                     }
                     setTimeout(() => {
                         //opt.client.write('  => bundle [ ' + bundle + '@' + self.projectName + ' ] restarted on port #'+ bundlePort+' :D\n');
@@ -161,8 +164,8 @@ function Restart(opt, cmd) {
             //This is mostly for dev.
             var pkg = require( _(root + '/manifest.json') ).bundles;
 
-            if ( typeof(pkg[bundle].release.version) == 'undefined' && typeof(pkg[bundle].tag) != 'undefined') {
-                pkg[bundle].release.version = pkg[bundle].tag
+            if ( typeof(pkg[bundle].version) == 'undefined' && typeof(pkg[bundle].tag) != 'undefined') {
+                pkg[bundle].version = pkg[bundle].tag
             }
             if (
                 pkg[bundle] != 'undefined' && pkg[bundle]['src'] != 'undefined' && isDev
@@ -179,8 +182,8 @@ function Restart(opt, cmd) {
 
             } else {
                 //Others releases.
-                var path    = 'releases/'+ bundle +'/' + env +'/'+ pkg[bundle].release.version;
-                var version = pkg[bundle].release.version;
+                var path    = 'releases/'+ bundle +'/' + env +'/'+ pkg[bundle].version;
+                var version = pkg[bundle].version;
                 p = _( root +'/'+ path );//path.replace('/' + bundle, '')
                 d = _( root +'/'+ path + '/index.js' );
 

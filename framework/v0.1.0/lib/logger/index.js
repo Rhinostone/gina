@@ -16,7 +16,7 @@ var e = new EventEmitter();
 var merge           = require('../merge');
 var helpers         = require('../../helpers');
 if ( typeof(JSON.clone) == 'undefined' ) {
-    require('../../helpers/prototypes')()
+    require(__dirname +'/../../helpers/prototypes')()
 }
 
 /**
@@ -45,6 +45,7 @@ function Logger(opt) {
         
         // Levels are based on Syslog: https://en.wikipedia.org/wiki/Syslog
         levels : {
+            // will also kill the process
             emerg: {
                 code: 0,
                 label: 'Emergency',
@@ -425,12 +426,12 @@ function Logger(opt) {
                 // }
                 
                 //process.stdout.write('\r'+content +'\n\r');
-                return process.stdout.write(content+'\n');                
+                process.stdout.write(content+'\n');                
                 // We should be using this one: not possible because of weird console.*() stdout when we are on the CLI or Framework side
                 //return process.stdout.write(content+'\r')
                 
             } else {
-                return process.emit('message', opt.flow, opt.levels[s].code, s, content);
+                process.emit('message', opt.flow, opt.levels[s].code, s, content);
             }
         }
     }

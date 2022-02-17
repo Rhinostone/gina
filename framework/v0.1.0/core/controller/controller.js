@@ -281,7 +281,7 @@ function SuperController(options) {
             set('page.environment.forms', escape(JSON.stringify(forms))); // export for GFF
             set('page.forms', options.conf.content.forms);
             
-            set('page.environment.hostname', ctx.config.envConf[options.conf.bundle][GINA_ENV].hostname);
+            set('page.environment.hostname', ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].hostname);
             set('page.environment.webroot', options.conf.server.webroot);
             set('page.environment.bundle', options.conf.bundle);
             set('page.environment.project', options.conf.projectName);
