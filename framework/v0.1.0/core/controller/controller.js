@@ -375,7 +375,9 @@ function SuperController(options) {
             
             var swigOptions = {
                 autoescape  : ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape : false,
-                cache       : (local.options.cacheless) ? false : 'memory'
+                // `memory` is no working yet ... advanced rendering setup required
+                //cache       : (local.options.cacheless) ? false : 'memory'
+                cache       : false
             };
             if (dir) {
                 swigOptions.loader = swig.loaders.fs(dir);
@@ -627,9 +629,10 @@ function SuperController(options) {
 
             } catch (err) {
                 // [ martin ]
-                // i sent an email to [ paul@paularmstrongdesigns.com ] on 2014/08 to see if there is
+                // i sent an email to [ paul@paularmstrongdesigns.com ] on 2014/08 to see if there is:
                 // a way of retrieving swig compilation stack traces
                 //var stack = __stack.splice(1).toString().split(',').join('\n');
+                // -> no response...
                 self.throwError(local.res, 500, new Error('template compilation exception encoutered: [ '+path+' ]\n'+(err.stack||err.message)));
                 return;
             }
@@ -787,7 +790,7 @@ function SuperController(options) {
             
             // adding stylesheets
             if (!isWithoutLayout && data.page.view.stylesheets && !/\{\{\s+(page\.view\.stylesheets)\s+\}\}/.test(layout) ) {
-                layout = layout.replace(/\<\/head\>/i, '\n{{ page.view.stylesheets }}\n</head>')
+                layout = layout.replace(/\<\/head\>/i, '\n\t{{ page.view.stylesheets }}\n</head>')
             }
                             
             if (hasViews() && isWithoutLayout) {
@@ -815,6 +818,8 @@ function SuperController(options) {
             }
 
             // adding plugins
+            
+            
             if (
                 hasViews() && self.isCacheless() && !isWithoutLayout 
                 && localOptions.debugMode 
@@ -823,7 +828,7 @@ function SuperController(options) {
                 && typeof(localOptions.debugMode) == 'undefined' 
                 || 
                 hasViews() && localOptions.debugMode 
-            ) {                            
+            ) {
 
                 layout = ''
                     + '{%- set ginaDataInspector                    = JSON.clone(page) -%}'
@@ -890,45 +895,46 @@ function SuperController(options) {
 
                 layout += XHRData + XHRView;
 
-            } else { // production env
-                /**
-                plugin = '\t'
-                    + '\n\t<script type="text/javascript">'
-                    + ' \n\t<!--'
-                    + '\n\t' + localOptions.template.pluginLoader.toString()
-                    + '\t//-->'
-                    + '\n</script>'
-
-                    //+ '\n\t<script type="text/javascript" src="{{ \'/js/vendor/gina/gina.min.js\' | getUrl() }}"></script>'
-                ;
-                */
-                
-                
-                // if ( !/page\.view\.scripts/.test(layout) ) {
-                //     layout = layout.replace(/<\/body>/i, plugin + '\t{{ page.view.scripts }}\n\t</body>');
-                // } else {
-                //     layout = layout.replace(/{{ page.view.scripts }}/i, plugin + '\t{{ page.view.scripts }}');
-                // }
+            } else { // other envs like prod ...
                 
                 // adding javascripts
-                layout.replace('{{ page.view.scripts }}', '');
-                if (isLoadingPartial) {                                
-                    layout += '\t{{ page.view.scripts }}\n';
-                    if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
-                        layout += '\t'+ localOptions.template.ginaLoader +'\n';
-                    }
+                // cleanup first
+                layout.replace('{{ page.view.scripts }}', '');                           
+                // placed in the HEAD excepted when rendering a partial or when `isDeferModeEnabled` == true
+                if (isLoadingPartial) {
+                    layout += '\t{{ page.view.scripts }}';
                 } else {
-                    if ( isDeferModeEnabled && /\<\/head\>/i.test(layout) ) { // placed in the HEAD                                                           
+                    if ( isDeferModeEnabled  ) {
                         layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
-                        
-                    } else { // placed in the BODY                               
+                    } else { // placed in the BODY                                
                         layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
                     }
-                    // ginaLoader cannot be deferred
-                    if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
-                        layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');
-                    }
                 }
+                
+                // ginaLoader cannot be deferred
+                if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                    layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                            
+                }
+                
+                // adding javascripts
+                // layout.replace('{{ page.view.scripts }}', '');
+                // if (isLoadingPartial) {                                
+                //     layout += '\t{{ page.view.scripts }}\n';
+                //     if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                //         layout += '\t'+ localOptions.template.ginaLoader +'\n';
+                //     }
+                // } else {
+                //     if ( isDeferModeEnabled && /\<\/head\>/i.test(layout) ) { // placed in the HEAD                                                           
+                //         layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
+                        
+                //     } else { // placed in the BODY                               
+                //         layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
+                //     }
+                //     // ginaLoader cannot be deferred
+                //     if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                //         layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');
+                //     }
+                // }
             }
             
             
@@ -966,7 +972,7 @@ function SuperController(options) {
             */                     
             
 
-            if ( !local.res.headersSent /**&& !local.options.isRenderingCustomError*/) {
+            if ( !local.res.headersSent ) {
                 local.res.statusCode = ( typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
                 //catching errors
                 if (
