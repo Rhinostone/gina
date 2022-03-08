@@ -83,6 +83,9 @@ function SuperController(options) {
 
     var getInstance = function() {
         local.options = SuperController.instance._options = options;
+        // 2022-03-07 Fix for none-developpement environnements (without cache)
+        self._options = local.options;
+        
         return SuperController.instance;
     }
 
@@ -130,8 +133,13 @@ function SuperController(options) {
      * Check if env is running cacheless
      * */
     this.isCacheless = function() {
-        //return local.options.cacheless;
         return (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false;
+    }
+    /**
+     * Check if the project scope is set for local
+     * */
+    this.isLocalScope = function() {
+        return (/^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL)) ? true : false;
     }
 
     this.setOptions = function(req, res, next, options) {
@@ -382,7 +390,14 @@ function SuperController(options) {
             if (dir) {
                 swigOptions.loader = swig.loaders.fs(dir);
             }
+            if ( typeof(local._swigOptions) == 'undefined' ) {
+                local._swigOptions = JSON.clone(swigOptions);
+            }
             swig.setDefaults(swigOptions);
+            // used for self.engine.compile(tpl, swigOptions)(data)
+            swig.getOptions = function() {
+                return local._swigOptions;
+            }
             // preserve the same timezone as the system
             var defaultTZOffset = new Date().getTimezoneOffset();
             swig.setDefaultTZOffset(defaultTZOffset);
@@ -561,7 +576,7 @@ function SuperController(options) {
                     }
 
                 } else {
-                     path = (!isRenderingCustomError)
+                     path = (!isRenderingCustomError && !/^(\.|\/|\\)/.test(file))
                             ? _(localOptions.template.html +'/'+ file)
                             : file
                 }
@@ -901,40 +916,40 @@ function SuperController(options) {
                 // cleanup first
                 layout.replace('{{ page.view.scripts }}', '');                           
                 // placed in the HEAD excepted when rendering a partial or when `isDeferModeEnabled` == true
-                if (isLoadingPartial) {
-                    layout += '\t{{ page.view.scripts }}';
-                } else {
-                    if ( isDeferModeEnabled  ) {
-                        layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
-                    } else { // placed in the BODY                                
-                        layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
-                    }
-                }
-                
-                // ginaLoader cannot be deferred
-                if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
-                    layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                            
-                }
-                
-                // adding javascripts
-                // layout.replace('{{ page.view.scripts }}', '');
-                // if (isLoadingPartial) {                                
-                //     layout += '\t{{ page.view.scripts }}\n';
-                //     if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
-                //         layout += '\t'+ localOptions.template.ginaLoader +'\n';
-                //     }
+                // if (isLoadingPartial) {
+                //     layout += '\t{{ page.view.scripts }}';
                 // } else {
-                //     if ( isDeferModeEnabled && /\<\/head\>/i.test(layout) ) { // placed in the HEAD                                                           
+                //     if ( isDeferModeEnabled  ) {
                 //         layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
-                        
-                //     } else { // placed in the BODY                               
+                //     } else { // placed in the BODY                                
                 //         layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
                 //     }
-                //     // ginaLoader cannot be deferred
-                //     if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
-                //         layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');
-                //     }
                 // }
+                
+                // // ginaLoader cannot be deferred
+                // if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                //     layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');                            
+                // }
+                
+                // adding javascripts
+                layout.replace('{{ page.view.scripts }}', '');
+                if (isLoadingPartial) {                                
+                    layout += '\t{{ page.view.scripts }}\n';
+                    if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                        layout += '\t'+ localOptions.template.ginaLoader +'\n';
+                    }
+                } else {
+                    if ( isDeferModeEnabled && /\<\/head\>/i.test(layout) ) { // placed in the HEAD                                                           
+                        layout = layout.replace(/\<\/head\>/i, '\t{{ page.view.scripts }}\n\t</head>');
+                        
+                    } else { // placed in the BODY                               
+                        layout = layout.replace(/\<\/body\>/i, '\t{{ page.view.scripts }}\n</body>');
+                    }
+                    // ginaLoader cannot be deferred
+                    if ( !localOptions.template.javascriptsExcluded || localOptions.template.javascriptsExcluded != '**' ) {
+                        layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');
+                    }
+                }
             }
             
             
@@ -1731,6 +1746,15 @@ function SuperController(options) {
 
             if (!local.res.headersSent) {
                 
+                // backing up oldParams
+                var oldParams = local.req[originalMethod.toLowerCase()];
+                var requestParams = req[req.method.toLowerCase()] || {};
+                if ( typeof(requestParams) != 'undefined' && typeof(requestParams.error) != 'undefined' ) {
+                    var redirectError = requestParams.error;
+                    self.throwError(requestParams.error);
+                    return;
+                }
+                
                 if ( 
                     !/GET/i.test(req.method) 
                     || 
@@ -1742,9 +1766,6 @@ function SuperController(options) {
                     code = 303;                                   
                 }
                 
-                // backing up oldParams
-                var oldParams = local.req[originalMethod.toLowerCase()];
-                var requestParams = req[req.method.toLowerCase()] || {};
                 
                 // merging new & olds params
                 requestParams = merge(requestParams, oldParams);
@@ -1753,7 +1774,9 @@ function SuperController(options) {
                 if ( typeof(requestParams.session) != 'undefined' ) {                    
                     delete requestParams.session;
                 }
-                if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {                    
+                if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {   
+                    //if ( typeof(requestParams.error) != 'undefined' )
+                    
                     var inheritedData = null;
                     if ( /\?/.test(path) ) {
                         inheritedData = '&inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));  
@@ -2205,6 +2228,7 @@ function SuperController(options) {
         auth: undefined, // use `"username:password"` for basic authentification
 
         // set to false to ignore certificate verification when requesting on https (443)
+        // same as process.env.NODE_TLS_REJECT_UNAUTHORIZED = "1";
         rejectUnauthorized: true,
 
         headers: {
@@ -2291,6 +2315,10 @@ function SuperController(options) {
             if ( typeof(options[o]) == 'undefined' || options[o] == undefined) {
                 delete options[o]
             }
+        }
+        
+        if (self.isCacheless() || self.isLocalScope() ) {
+            options.rejectUnauthorized = false;
         }
 
         if ( !options.host && !options.hostname ) {
@@ -2419,6 +2447,7 @@ function SuperController(options) {
         if ( typeof(options.scheme) == 'undefined' ) {
             options.scheme = scheme
         }
+        
              
         // reformating scheme
         if( !/\:$/.test(options.scheme) )
@@ -3124,7 +3153,7 @@ function SuperController(options) {
             path: path,
             method: method
         }
-        if (self.isCacheless()) {
+        if (self.isCacheless() || self.isLocalScope() ) {
             opt.rejectUnauthorized = false;
         }
                 

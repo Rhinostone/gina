@@ -3,15 +3,24 @@ function PrototypesHelper(instance) {
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
     
     var local = instance || null;
-    // since in for some cases we cannot use gina envVars directly
+    var envVars = null;
+    // since for some cases we cannot use gina envVars directly
     if (        
         typeof(GINA_DIR) == 'undefined'
         && !isGFFCtx
         && typeof(process) != 'undefined' 
-        && process.argv.length > 3 
-        && /^\{/.test(process.argv[2]) 
+        && process.argv.length > 3
     ) {
-        envVars = JSON.parse(process.argv[2]).envVars;
+        if ( /^\{/.test(process.argv[2]) ) {
+            envVars = JSON.parse(process.argv[2]).envVars;
+        }
+        // minions case
+        else if ( /\.ctx$/.test(process.argv[2]) ) {
+            var fs = require('fs');
+            var envVarFile = process.argv[2].split(/\-\-argv\-filename\=/)[1];
+            envVars = JSON.parse(fs.readFileSync(envVarFile).toString()).envVars;
+        }
+        
     }
     // else if (isGFFCtx) {
     //     envVars = window;
@@ -65,7 +74,11 @@ function PrototypesHelper(instance) {
     }
     
     if ( typeof(JSON.clone) == 'undefined' && !isGFFCtx ) {
-        JSON.clone = require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
+        if ( typeof(envVars) != 'undefined' ) {
+            JSON.clone = require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
+        } else {
+            JSON.clone = require( GINA_DIR +'/utils/prototypes.json_clone');
+        }        
     }
     
     if ( typeof(JSON.escape) == 'undefined' ) {

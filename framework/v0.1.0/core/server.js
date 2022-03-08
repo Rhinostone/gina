@@ -1818,16 +1818,16 @@ function Server(options) {
                     && self.instance._expressMiddlewares.length > 0 
                 ) {                           
                     
-                    nextExpressMiddleware._index        = 0;
-                    nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
-                    nextExpressMiddleware._request      = request;
-                    nextExpressMiddleware._response     = response;
-                    nextExpressMiddleware._next         = next;
-                    nextExpressMiddleware._nextAction   = 'handleStatics';
-                    nextExpressMiddleware._staticProps  = staticProps;
+                    nextMiddleware._index        = 0;
+                    nextMiddleware._count        = self.instance._expressMiddlewares.length-1;
+                    nextMiddleware._request      = request;
+                    nextMiddleware._response     = response;
+                    nextMiddleware._next         = next;
+                    nextMiddleware._nextAction   = 'handleStatics';
+                    nextMiddleware._staticProps  = staticProps;
                     
                     
-                    nextExpressMiddleware()
+                    nextMiddleware()
                 } else {
                     handleStatics(staticProps, request, response, next);  
                 }                         
@@ -2481,44 +2481,44 @@ function Server(options) {
     }
     
     // Express middleware portability when using another engine instead of expressjs
-    var nextExpressMiddleware = function(err) {
+    var nextMiddleware = function(err) {
                 
         var router              = local.router;
         var expressMiddlewares  = self.instance._expressMiddlewares;
         
         if (err) {
-            throwError(nextExpressMiddleware._response, 500, (err.stack|err.message|err), nextExpressMiddleware._next, nextExpressMiddleware._nextAction);
+            throwError(nextMiddleware._response, 500, (err.stack|err.message|err), nextMiddleware._next, nextMiddleware._nextAction);
             return;
         }
         
-        expressMiddlewares[nextExpressMiddleware._index](nextExpressMiddleware._request, nextExpressMiddleware._response, function onNextMiddleware(err, request, response) {
-            ++nextExpressMiddleware._index;  
+        expressMiddlewares[nextMiddleware._index](nextMiddleware._request, nextMiddleware._response, function onNextMiddleware(err, request, response) {
+            ++nextMiddleware._index;  
             
             if (err) {
-                throwError(nextExpressMiddleware._response, 500, (err.stack||err.message||err), nextExpressMiddleware._next, nextExpressMiddleware._nextAction);
+                throwError(nextMiddleware._response, 500, (err.stack||err.message||err), nextMiddleware._next, nextMiddleware._nextAction);
                 return;
             }
             
             if (request)
-                nextExpressMiddleware._request  = request;
+                nextMiddleware._request  = request;
             
             if (response)
-                nextExpressMiddleware._response = response;         
+                nextMiddleware._response = response;         
             
-            if (nextExpressMiddleware._index > nextExpressMiddleware._count) { 
+            if (nextMiddleware._index > nextMiddleware._count) { 
                 
-                if ( nextExpressMiddleware._nextAction == 'route' ) {
+                if ( nextMiddleware._nextAction == 'route' ) {
                     
                     router._server = self.instance;            
-                    router.route(nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next, nextExpressMiddleware._request.routing)
+                    router.route(nextMiddleware._request, nextMiddleware._response, nextMiddleware._next, nextMiddleware._request.routing)
                 
                 } else { // handle statics        
-                    self._responseHeaders = nextExpressMiddleware._response.getHeaders();             
-                    handleStatics(nextExpressMiddleware._staticProps, nextExpressMiddleware._request, nextExpressMiddleware._response, nextExpressMiddleware._next);
+                    self._responseHeaders = nextMiddleware._response.getHeaders();             
+                    handleStatics(nextMiddleware._staticProps, nextMiddleware._request, nextMiddleware._response, nextMiddleware._next);
                 }
                 
             } else {
-                nextExpressMiddleware.call(this, err, true)
+                nextMiddleware.call(this, err, true)
             }                        
         });        
     };
@@ -2737,14 +2737,14 @@ function Server(options) {
 
         if (matched) {
             if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
-                nextExpressMiddleware._index        = 0;
-                nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
-                nextExpressMiddleware._request      = req;
-                nextExpressMiddleware._response     = res;
-                nextExpressMiddleware._next         = next;
-                nextExpressMiddleware._nextAction   = 'route'
+                nextMiddleware._index        = 0;
+                nextMiddleware._count        = self.instance._expressMiddlewares.length-1;
+                nextMiddleware._request      = req;
+                nextMiddleware._response     = res;
+                nextMiddleware._next         = next;
+                nextMiddleware._nextAction   = 'route'
                 
-                nextExpressMiddleware()
+                nextMiddleware()
             } else {
                 router._server = self.instance;
                 router.route(req, res, next, req.routing)
@@ -2907,14 +2907,14 @@ function Server(options) {
                     local.request.routing = routeObj;
                     
                     // if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {                                            
-                    //     nextExpressMiddleware._index        = 0;
-                    //     nextExpressMiddleware._count        = self.instance._expressMiddlewares.length-1;
-                    //     nextExpressMiddleware._request      = local.request;
-                    //     nextExpressMiddleware._response     = res;
-                    //     nextExpressMiddleware._next         = next;
-                    //     nextExpressMiddleware._nextAction   = 'route'
+                    //     nextMiddleware._index        = 0;
+                    //     nextMiddleware._count        = self.instance._expressMiddlewares.length-1;
+                    //     nextMiddleware._request      = local.request;
+                    //     nextMiddleware._response     = res;
+                    //     nextMiddleware._next         = next;
+                    //     nextMiddleware._nextAction   = 'route'
                         
-                    //     nextExpressMiddleware()
+                    //     nextMiddleware()
                     // } else {
                         var router = local.router;
                         if ( typeof(router._server) == 'undefined' ) {

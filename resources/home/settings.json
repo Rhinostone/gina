@@ -3,6 +3,8 @@
     "version": "{version}",
     "env": "{env}",
     "env_is_dev": "{env_is_dev}",
+    "scope": "{scope}",
+    "scope_is_local": "{scope_is_local}",
     "node_version": "{node_version}",
     "debug_port": "{debug_port}",
     "user": "{user}",

@@ -192,8 +192,9 @@ setContext('gina.plugins', plugins);
 
 
 //Setting env.
-var env     = process.env.NODE_ENV || projects[projectName]['def_env']
-    , isDev = (env === projects[projectName]['dev_env']) ? true: false
+var env             = process.env.NODE_ENV || projects[projectName]['def_env']
+    , isDev         = (env === projects[projectName]['dev_env']) ? true: false
+    , isLocalScope  = (projects[projectName]['local_scope'] === projects[projectName]['def_scope']) ? true: false
 ;
 
 gna.env = process.env.NODE_ENV = env;
@@ -201,6 +202,7 @@ gna.os.isWin32 = process.env.isWin32 = isWin32;
 gna.isAborting = false;
 //Cahceless is also defined in the main config : Config::isCacheless().
 process.env.NODE_ENV_IS_DEV = (/^true$/i.test(isDev)) ? true : false;
+process.env.NODE_SCOPE_IS_LOCAL = (/^true$/i.test(isLocalScope)) ? true : false;
 
 
 var bundlesPath = (isDev) ? projects[projectName]['path'] + '/src' : projects[projectName]['path'] + '/bundles';

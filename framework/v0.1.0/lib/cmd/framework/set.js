@@ -34,6 +34,10 @@ function Set(opt){
                 setEnv(v);
             break;
             
+            case '--scope':
+                setScope(v)
+            break;
+            
             case '--culture':
                 setCulture(v);
             break;
@@ -82,6 +86,20 @@ function Set(opt){
             return;
         }
         mainConf['def_env'][GINA_SHORT_VERSION] = env;
+        // save to ~/.gina/main.json
+        lib.generator.createFileFromDataSync(mainConf, mainConfPath);
+    }
+    
+    var setScope = function(scope) {
+        var supported   = mainConf['scopes'][GINA_SHORT_VERSION]
+            , err       = null
+        ;
+        if (supported.indexOf(scope) < 0) {
+            err = new Error('Scope `'+ scope +'` is not supported at the moment');
+            console.error(err.message);
+            return;
+        }
+        mainConf['def_scope'][GINA_SHORT_VERSION] = scope;
         // save to ~/.gina/main.json
         lib.generator.createFileFromDataSync(mainConf, mainConfPath);
     }

@@ -59,7 +59,7 @@ function Initialize(opt) {
         var path = getPath('gina').lib + filename;
 
         try {
-            if ( GINA_ENV_IS_DEV )
+            if ( GINA_ENV_IS_DEV || GINA_SCOPE_IS_LOCAL)
                 delete require.cache[require.resolve(path)];
             require(path)(opt, cmd)
         } catch(err) {
@@ -144,63 +144,75 @@ function Initialize(opt) {
                 console.error(err.stack);
                 process.exit(1)
             }
-        } else {
-            // update if needed : like the version number ...
-            var mainConfig  = require(target);
-            mainConfig      = whisper(dic, mainConfig);
-            
-            // envs
-            mainConfig.envs = merge(mainConfig.envs, data.envs, true);
-            
-            // updating protocols, schemes, cultures, log_levels
-            mainConfig.protocols    = merge(mainConfig.protocols, data.protocols, true);
-            mainConfig.schemes      = merge(mainConfig.schemes, data.schemes, true);
-            mainConfig.cultures     = merge(mainConfig.cultures||{}, data.cultures, true);
-            mainConfig.log_levels   = merge(mainConfig.log_levels||{}, data.log_levels, true);
-            
-            
-            // don't remove def_protocol
-            var defProtocol = (mainConfig['def_protocol']) ? mainConfig['def_protocol'][self.release] : data.def_protocol[self.release];
-            var defScheme   = (mainConfig['def_scheme']) ? mainConfig['def_scheme'][self.release] : data.def_scheme[self.release];
-            var defCulture  = (mainConfig['def_culture']) ? mainConfig['def_culture'][self.release] : data.def_culture[self.release];
-            var defTimezone = (mainConfig['def_timezone']) ? mainConfig['def_timezone'][self.release] : data.def_timezone[self.release];
-            var defLogLevel = (mainConfig['def_log_level']) ? mainConfig['def_log_level'][self.release] : data.def_log_level[self.release];
-            
-            if ( mainConfig.protocols[self.release].indexOf(defProtocol) < 0 )
-                mainConfig.protocols[self.release].push(defProtocol);
-            
-            if ( mainConfig.schemes[self.release].indexOf(defScheme) < 0 )
-                mainConfig.schemes[self.release].push(defScheme);
-                
-            if ( mainConfig.cultures[self.release].indexOf(defCulture) < 0 )
-                mainConfig.cultures[self.release].push(defCulture);
-            
-            if ( mainConfig.cultures[self.release].indexOf(defCulture) < 0 )
-                mainConfig.cultures[self.release].push(defCulture);
-                
-            // Update only when needed
-            if (!mainConfig.def_culture)
-                mainConfig.def_culture = data.def_culture;
-            if (!mainConfig.def_timezone)
-                mainConfig.def_timezone = data.def_timezone;
-                
-            if (!mainConfig.def_log_level)
-                mainConfig.def_log_level = data.def_log_level;
-                
-            mainConfig.protocols[self.release].sort();
-            mainConfig.schemes[self.release].sort();
-            mainConfig.cultures[self.release].sort();
-            
-            // commit
-            lib.generator.createFileFromDataSync(mainConfig, target);
-            
-            setEnvVar('GINA_CULTURES', mainConfig.cultures[self.release]);
-            setEnvVar('GINA_CULTURE', defCulture);
-            setEnvVar('GINA_TIMEZONE', defTimezone);
-            process.env.TZ = defTimezone;
-            process.env.LOG_LEVEL = defLogLevel;
-            
         }
+        //else {
+        // update if needed : like the version number ...
+        var mainConfig  = require(target);
+        mainConfig      = whisper(dic, mainConfig);
+        
+        // check if new definitions after update
+        for (let k in data) {
+            if ( typeof(mainConfig[k]) == 'undefined' ) {
+                mainConfig[k] = ( typeof(data[k]) == 'object' ) ? JSON.clone(data[k]) : data[k];
+            }
+        }
+        
+        
+        // envs
+        mainConfig.envs = merge(mainConfig.envs, data.envs, true);
+        // scopes
+        mainConfig.scopes = merge(mainConfig.scopes, data.scopes, true);
+        
+        // updating protocols, schemes, cultures, log_levels
+        mainConfig.protocols    = merge(mainConfig.protocols, data.protocols, true);
+        mainConfig.schemes      = merge(mainConfig.schemes, data.schemes, true);
+        mainConfig.cultures     = merge(mainConfig.cultures||{}, data.cultures, true);
+        mainConfig.log_levels   = merge(mainConfig.log_levels||{}, data.log_levels, true);
+        
+        
+        // don't remove def_protocol
+        var defProtocol = (mainConfig['def_protocol']) ? mainConfig['def_protocol'][self.release] : data.def_protocol[self.release];
+        var defScheme   = (mainConfig['def_scheme']) ? mainConfig['def_scheme'][self.release] : data.def_scheme[self.release];
+        var defCulture  = (mainConfig['def_culture']) ? mainConfig['def_culture'][self.release] : data.def_culture[self.release];
+        var defTimezone = (mainConfig['def_timezone']) ? mainConfig['def_timezone'][self.release] : data.def_timezone[self.release];
+        var defLogLevel = (mainConfig['def_log_level']) ? mainConfig['def_log_level'][self.release] : data.def_log_level[self.release];
+        
+        
+        if ( mainConfig.protocols[self.release].indexOf(defProtocol) < 0 )
+            mainConfig.protocols[self.release].push(defProtocol);
+        
+        if ( mainConfig.schemes[self.release].indexOf(defScheme) < 0 )
+            mainConfig.schemes[self.release].push(defScheme);
+            
+        if ( mainConfig.cultures[self.release].indexOf(defCulture) < 0 )
+            mainConfig.cultures[self.release].push(defCulture);
+        
+        if ( mainConfig.cultures[self.release].indexOf(defCulture) < 0 )
+            mainConfig.cultures[self.release].push(defCulture);
+            
+        // Update only when needed
+        if (!mainConfig.def_culture)
+            mainConfig.def_culture = data.def_culture;
+        if (!mainConfig.def_timezone)
+            mainConfig.def_timezone = data.def_timezone;
+            
+        if (!mainConfig.def_log_level)
+            mainConfig.def_log_level = data.def_log_level;
+            
+        mainConfig.protocols[self.release].sort();
+        mainConfig.schemes[self.release].sort();
+        mainConfig.cultures[self.release].sort();
+        
+        // commit
+        lib.generator.createFileFromDataSync(mainConfig, target);
+        
+        setEnvVar('GINA_CULTURES', mainConfig.cultures[self.release]);
+        setEnvVar('GINA_CULTURE', defCulture);
+        setEnvVar('GINA_TIMEZONE', defTimezone);
+        process.env.TZ = defTimezone;
+        process.env.LOG_LEVEL = defLogLevel;
+            
+        //}
     }
 
     /**
@@ -218,9 +230,9 @@ function Initialize(opt) {
                 , schemes   = mainConfig.schemes[self.release]
                 , ports     = {};
             
-            for (var p = 0, pLen = protocols.length; p < pLen; ++p) {
+            for (let p = 0, pLen = protocols.length; p < pLen; ++p) {
                 ports[protocols[p]] = {};
-                for (var s = 0, sLen = schemes.length; s < sLen; ++s) {
+                for (let s = 0, sLen = schemes.length; s < sLen; ++s) {
                     ports[protocols[p]][schemes[s]] = {}
                 }
             }                
@@ -254,10 +266,9 @@ function Initialize(opt) {
     self.checkEnv = function() {
         // ignored for framework:set
         //if (self.opt.task.Action != 'set' && self.opt.task.topic != 'framework') {
-        var isDev = false;
         var main = require( self.opt.homedir + '/main.json' );
         //has registered env ?
-        var env = getEnvVar('GINA_ENV') || main['dev_env'][self.release]; // dev by default
+        var env     = getEnvVar('GINA_ENV') || main['dev_env'][self.release]; // dev by default
 
         if ( main.envs[self.release].indexOf(env) < 0 ) {
             console.error('Environment [ ' + env + ' ] not registered. See [ man gina-env ].');
@@ -270,27 +281,40 @@ function Initialize(opt) {
             typeof(main['dev_env']) != 'undefined' &&
             typeof(main['dev_env'][self.release]) != 'undefined' &&
             main.envs[self.release].indexOf(main['dev_env'][self.release]) < 0
-            ) {
-            console.error('the framework has no dev link ' +
-                'environment to gina\'s.\nUse: $ gina env:link-dev <your_env>');
+        ) {
+            console.error('the framework has no dev env linked to any' +
+                'environment to gina\'s.\nUse: $ gina env:link-dev <your_new_dev_env>');
             
             process.exit(1)
         }
     }
-
+    
     /**
-     * Checking projects
+     * Check scope
      *
-     **/
-    self.checkIfProjects = function() {
-        console.debug('Checking projects...');
-        var target = _(self.opt.homedir +'/projects.json');
+     * */
+    self.checkScope = function() {
+        // ignored for framework:set
+        var main = require( self.opt.homedir + '/main.json' );
+        //has registered scope ?
+        var scope   = getEnvVar('GINA_SCOPE') || main['local_scope'][self.release]; // scope by default
+        if ( main.scopes[self.release].indexOf(scope) < 0 ) {
+            console.error('Scope [ ' + scope + ' ] not registered. See [ man gina-scope ].');
+            process.exit(1)
+        }
 
-        if ( !fs.existsSync(target) ) {
-            lib.generator.createFileFromDataSync(
-                {},
-                target
-            )
+        
+        // has local scope ?
+        if (
+            typeof(main['local_scope']) == 'undefined' ||
+            typeof(main['local_scope']) != 'undefined' &&
+            typeof(main['local_scope'][self.release]) != 'undefined' &&
+            main.scopes[self.release].indexOf(main['local_scope'][self.release]) < 0
+        ) {
+            console.error('the framework has no local scope linked to any ' +
+                'scope to gina\'s.\nUse: $ gina scope:link-local <your_new_local_scope>');
+            
+            process.exit(1)
         }
     }
 
@@ -305,6 +329,7 @@ function Initialize(opt) {
         var main            = require( _(self.opt.homedir + '/main.json', true) )
             , version       = getEnvVar('GINA_VERSION')
             , env           = getEnvVar('GINA_ENV') || main['def_env'][self.release]
+            , scope         = getEnvVar('GINA_SCOPE') || main['def_scope'][self.release]
             , settings      = requireJSON( _( getPath('gina').root + '/resources/home/settings.json', true ) )
             , userSettings  = {}
             , target        = _(self.opt.homedir +'/'+ self.release +'/settings.json', true)
@@ -337,6 +362,9 @@ function Initialize(opt) {
                 'env' : env,
                 'env_is_dev' : (main['dev_env'][self.release] == env) ? true : false,
                 'dev_env' : main['dev_env'][self.release],
+                'scope' : scope,
+                'scope_is_local' : (main['local_scope'][self.release] == scope) ? true : false,
+                'local_scope': main['local_scope'][self.release],
                 'culture' : getEnvVar('GINA_CULTURE'),
                 'timezone' : getEnvVar('GINA_TIMEZONE'),
                 'node_version': process.version,
@@ -358,6 +386,7 @@ function Initialize(opt) {
             
             setEnvVar('GINA_DEBUG_PORT', settings['debug_port']);
             setEnvVar('GINA_ENV_IS_DEV', settings['env_is_dev']);
+            setEnvVar('GINA_SCOPE_IS_LOCAL', settings['scope_is_local']);
             
             console.debug('Framework env is: ', env);
 
@@ -370,13 +399,73 @@ function Initialize(opt) {
             process.exit(1)
         }
     }
-
-    self.readSettings = function() {
-        var name = '';
-        for (var s in self.settings) {
-            if (!/^\_/.test(s) && !getEnvVar('GINA_' + s.toUpperCase()) ) {
-                setEnvVar('GINA_' + s.toUpperCase(), self.settings[s])
+    
+    /**
+     * Checking projects
+     *
+     **/
+     self.checkIfProjects = function() {
+        console.debug('Checking projects...');
+        var main = requireJSON( self.opt.homedir + '/main.json' );
+        var target = _(self.opt.homedir +'/projects.json', true);
+        
+        if ( !fs.existsSync(target) ) {
+            lib.generator.createFileFromDataSync(
+                {},
+                target
+            )
+        }
+        
+        var projects = requireJSON(target);
+        var newProjects = JSON.clone(projects);
+        for (let name in projects) {
+            let project = projects[name];
+            for (let prop in main) {
+                if ( typeof(project[prop]) != 'undefined' ) continue;
+                //if ( !Array.isArray(main[prop][self.release]) ) continue;
+                
+                if ( !newProjects[name][prop] /**&& Array.isArray(main[prop][self.release])*/ ) {
+                    newProjects[name][prop] = null;
+                }
+                newProjects[name][prop] = JSON.clone(main[prop][self.release])
             }
+        }
+        
+        //console.debug('----> ', JSON.stringify(newProjects, null, 2));
+        lib.generator.createFileFromDataSync(
+            newProjects,
+            target
+        )
+        
+    }
+
+    
+    
+    
+    self.checkIfCertificatesDir = function() {
+        var certsDir = new _( getEnvVar('GINA_HOMEDIR') + '/certificates', true);
+        var theRSARootCertsDir = new _(certsDir.toString() + '/RSARootCerts', true);
+        var scopesDir = new _(certsDir.toString() + '/scopes', true);
+        
+        if ( !certsDir.existsSync() ) {
+            certsDir.mkdirSync()
+        }
+        if ( !theRSARootCertsDir.existsSync() ) {
+            theRSARootCertsDir.mkdirSync()
+        }
+        if ( !scopesDir.existsSync() ) {
+            scopesDir.mkdirSync()
+        }
+        
+        var mainConfig = require( _(self.opt.homedir + '/main.json', true) );
+        var scopes = mainConfig.scopes[self.release];
+        
+        for (let i = 0, len = scopes.length; i < len; i++) {
+            let scopeDir = new _( scopesDir.toString() +'/'+ scopes[i], true);
+            if ( !scopeDir.existsSync() ) {
+                scopeDir.mkdirSync()
+            } 
+            
         }
     }
 
@@ -388,6 +477,14 @@ function Initialize(opt) {
     // self.checkFrameworkLocals = function() {
 
     // }
+    
+    self.readSettings = function() {
+        for (let s in self.settings) {
+            if (!/^\_/.test(s) && !getEnvVar('GINA_' + s.toUpperCase()) ) {
+                setEnvVar('GINA_' + s.toUpperCase(), self.settings[s])
+            }
+        }
+    }
 
     self.end = function() {
         defineDefault(process.gina)

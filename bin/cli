@@ -118,15 +118,16 @@ var port = 8124;
 
 // |-> framework/{version}/lib/cmd
 var allowedOffline = [
-    'dev:',
     'build:',
+    'bundle:',
+    'dev:',
     'env:',
     'framework:',
-    'project:',
-    'bundle:',
     'port:',
+    'project:',
     'protocol:',
     'scheme:',
+    'scope:',
     'view:',
     '--', //options or other aliases.
     '-' //options or other aliases.
