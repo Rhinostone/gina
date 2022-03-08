@@ -4,5 +4,6 @@
   "--force",
   "--more",
   "--with-bundles",
-  "--with-envs"
+  "--with-envs",
+  "--scope"
 ]

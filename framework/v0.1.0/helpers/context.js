@@ -21,9 +21,9 @@ function ContextHelper(contexts) {
 
     var self = {};
     
-    if ( typeof(merge) == 'undefined' ) {
-        var merge  = require('./../lib/merge');
-    }
+    // if ( typeof(merge) == 'undefined' ) {
+    //     merge  = require('./../lib/merge');
+    // }
 
     /**
      * ContextHelper Constructor
@@ -31,7 +31,7 @@ function ContextHelper(contexts) {
     var init = function(contexts) {
 
         if ( typeof(contexts) == 'undefined' ) {
-            var contexts = {
+            contexts = {
                 paths : {}
             }
         }
@@ -72,7 +72,9 @@ function ContextHelper(contexts) {
     }
 
     setContext = function(name, obj, force) {
-
+        // redefinition needed for none-dev env: cache issue
+        var merge = require('./../lib/merge');
+        
         if (arguments.length > 1) {
             //console.log("Globla setter active ", name, obj);
             if ( typeof(name) == 'undefined' || name == '' ) {

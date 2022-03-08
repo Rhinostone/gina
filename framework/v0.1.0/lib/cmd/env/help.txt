@@ -19,7 +19,7 @@
     $ gina env:add <bundle_name>/<env_name> @<project_name>
 
 
-[ Removing an existing environments ]
+[ Removing an existing environment ]
 
     $ gina env:remove <env_name> @<project_name>
 

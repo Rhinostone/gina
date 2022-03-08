@@ -400,8 +400,7 @@ function Router(env) {
              * @param {object} [options] - Controller options
              *
              * @return {object} controllerInstance
-             * */
-            
+             * */            
             var requireController = function (namespace, options) {
 
                 var cacheless   = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
@@ -423,13 +422,13 @@ function Router(env) {
 
                 try {
 
-                    if (cacheless) {
+                    //if (cacheless) {
                         // Super controller
                         delete require.cache[require.resolve(_(corePath +'/controller/index.js', true))];
                         require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
 
                         delete require.cache[require.resolve(filename)];
-                    }
+                    //}
 
                     var SuperController     = require.cache[_(corePath +'/controller/index.js', true)];
                                         
@@ -456,8 +455,7 @@ function Router(env) {
                                         
                     return controller;
                 } catch (err) {
-                    serverInstance.throwError(response, 500, err );
-                    return;
+                    return serverInstance.throwError(response, 500, err );
                 }
             };
             

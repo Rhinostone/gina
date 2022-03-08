@@ -30,8 +30,8 @@
 function DateFormatHelper() {
     
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
-
     var merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+    
     
     // if ( typeof(define) === 'function' && define.amd ) {
     //     var Date = this.Date;
@@ -123,10 +123,26 @@ function DateFormatHelper() {
     }
 
     var format = function(date, mask, utc) {
+        
+        // if ( typeof(merge) == 'undefined' || !merge ) {
+        //     merge = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+            
+        // }
+        
         var dF          = self
             , i18n      = dF.i18n[dF.lang] || dF.i18n['en']
-            , masksList = merge(i18n.masks, dF.masks)
+            //, masksList = merge(i18n.masks, dF.masks)
+            , masksList = null
         ;
+        
+        try {
+            masksList = merge(i18n.masks, dF.masks);
+        } catch( mergeErr) {
+            // called from logger - redefinition needed for none-dev env: cache issue
+            isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+            merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+            masksList = merge(i18n.masks, dF.masks);
+        }
         
         if ( typeof(dF.i18n[dF.culture]) != 'undefined' ) {
             i18n  = dF.i18n[dF.culture];
