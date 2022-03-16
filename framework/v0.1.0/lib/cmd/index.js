@@ -59,7 +59,7 @@ cmd.getString = function() {
  *
  * @param {string} name
  *
- * @return {string|object} content
+ * @returns {string|object} content
  * */
 cmd.getOption = function(name) {
     return cmd.option[name]

@@ -399,7 +399,7 @@ function Router(env) {
              * @param {string} namespace - Controller namespace
              * @param {object} [options] - Controller options
              *
-             * @return {object} controllerInstance
+             * @returns {object} controllerInstance
              * */            
             var requireController = function (namespace, options) {
 

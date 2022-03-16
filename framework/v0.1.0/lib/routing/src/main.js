@@ -54,7 +54,7 @@ function Routing() {
      * @param {string} [bundle]
      * @param {string} [env] 
      * 
-     * @return {object} urlProps - { .host, .hostname, .webroot }
+     * @returns {object} urlProps - { .host, .hostname, .webroot }
      */
     self.getUrlProps = function(bundle, env) {
         var config = null, urlProps = {}, _route = null;
@@ -133,7 +133,7 @@ function Routing() {
      * @param {object} [response] - only used for query validation
      * @param {object} [next] - only used for query validation
      *
-     * @return {object|false} foundRoute
+     * @returns {object|false} foundRoute
      * */
     self.compareUrls = async function(params, url, request, response, next) {
         
@@ -169,7 +169,7 @@ function Routing() {
      * Check if rule has params
      *
      * @param {string} pathname
-     * @return {boolean} found
+     * @returns {boolean} found
      *
      * @private
      * */
@@ -186,7 +186,7 @@ function Routing() {
      * @param {object} [response] - Only used for query validation
      * @param {object} [next] - Only used for query validation
      *
-     * @return {object} foundRoute
+     * @returns {object} foundRoute
      *
      * */
     var parseRouting = async function(params, url, request, response, next) {
@@ -546,7 +546,7 @@ function Routing() {
      * @param {string} urlVal
      * @param {object} params
      *
-     * @return {boolean} true|false - `true` if it fits
+     * @returns {boolean} true|false - `true` if it fits
      *
      * @private
      * */
@@ -913,7 +913,7 @@ function Routing() {
      * @param {object} params
      * @param {number} [urlIndex] in case you have more than one url registered for the current route, you can select the one you want to use. Default is 0.
      *
-     * @return {object} route
+     * @returns {object} route
      * */
     self.getRoute = function(rule, params, urlIndex) {
         
@@ -1164,7 +1164,7 @@ function Routing() {
      * @param {object} [request] 
      * @param {boolean} [isOverridinMethod] // will replace request.method by the provided method - Used for redirections
      * 
-     * @return {object|boolean} route - when route is found; `false` when not found
+     * @returns {object|boolean} route - when route is found; `false` when not found
      * */
     
     self.getRouteByUrl = function (url, bundle, method, request, isOverridinMethod) {

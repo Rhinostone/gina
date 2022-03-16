@@ -10,7 +10,7 @@
  * @param {object} source
  * @param {object} [target]
  * 
- * @return {object} cloned JSON object
+ * @returns {object} cloned JSON object
  **/
 function JSONClone(source, target) {
     if (source == null || typeof source != 'object') return source;

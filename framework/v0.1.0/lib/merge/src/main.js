@@ -12,7 +12,7 @@ function Merge() {
      * @param {object} source - Source object
      * @param {boolean} [override] - Override when copying
      *
-     * @return {object} [result]
+     * @returns {object} [result]
      * */
     var browse = function (target, source) {
         

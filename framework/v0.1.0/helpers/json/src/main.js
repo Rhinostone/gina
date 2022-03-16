@@ -23,7 +23,7 @@ module.exports = function(){
     /**
      * Load a json file and removing comments if found
      *
-     * @return {string} filename - path
+     * @returns {string} filename - path
      * */
     requireJSON = function(filename){        
         

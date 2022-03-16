@@ -128,7 +128,7 @@ function ConfigUtil() {
      * Get sync config file if exists
      *
      * @param {string} app - App name
-     * @return {object} config - App Configuration
+     * @returns {object} config - App Configuration
      *
      * @private
      * */
@@ -415,7 +415,7 @@ function ConfigUtil() {
      *
      * @param {string} namespace
      * @param {object} [config ] - Config object
-     * @return {*} value - Can be String or Array
+     * @returns {*} value - Can be String or Array
      *
      * @private
      * */
@@ -469,7 +469,7 @@ function ConfigUtil() {
     /**
      * Get project name
      *
-     * @return {string} projectName
+     * @returns {string} projectName
      *
      * */
     this.getProjectName = function(){

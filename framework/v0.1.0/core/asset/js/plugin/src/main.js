@@ -105,6 +105,53 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
 
     var gina = {
         /**
+         * `_global` is used mainly for google closure compilation in some cases
+         * where eval() is called
+         * It will store extenal variable definitions
+         * e.g.: 
+         *  root -> window.root
+         *  then you need to call :
+         *      gina._global.register({'root': yourValue });
+         *      => `window.root`now accessible
+         *  before using:
+         *      eval(root +'=value');
+         *  
+         *  when not required anymore
+         *      gina._global.unregister(['root])
+         */
+        /**@js_externs _global*/
+        _global: {
+            
+            /**@js_externs register*/
+            register: function(variables) {
+                if ( typeof(variables) != 'undefined') {
+                    for (let k in variables) {                        
+                        // if ( typeof(window[k]) != 'undefined' ) {
+                        //     // already register
+                        //     continue;
+                        //     //throw new Error('Gina cannot register _global.'+k+': variable name need to be changed, or you need to called `_global.unregister(['+k+'])` in order to use it');
+                        // }
+                        //window.gina['_global'][k] = variables[k];                        
+                        window[k] = variables[k];
+                    }
+                }
+            },
+            /**@js_externs unregister*/
+            unregister: function(variables) {
+                if ( typeof(variables) == 'undefined' || !Array.isArray(variables)) {
+                    throw new Error('`variables` needs to ba an array')
+                }
+                
+                for (let i = 0, len = variables.length; i < len; i++) {
+                    //delete  window.gina['_global'][ variables[i] ];
+                    //if ( typeof(window[ variables[i] ]) != 'undefined' ) {
+                        //console.debug('now removing: '+ variables[i]);
+                        delete window[ variables[i] ]
+                    //}
+                }
+            }
+        },
+        /**
          * ready
          * This is the one public interface use to wrap `handlers`
          * It is an equivalent of jQuery(document).ready(cb)

@@ -169,7 +169,7 @@ Model = function(namespace){
     /**
      * Get Model Configuration
      *
-     * @return {object|undefined} configuration
+     * @returns {object|undefined} configuration
      * */
     this.getConfig = function(){
         if (configuration) {

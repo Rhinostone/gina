@@ -29,7 +29,7 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
         /**
          * Returns the roster widget element.
          * @this {Window}
-         * @return {ComputedStyle}
+         * @returns {ComputedStyle}
          */
 
         window.getComputedStyle = function(el, pseudo) {

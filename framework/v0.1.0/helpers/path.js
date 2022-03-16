@@ -43,7 +43,7 @@ function PathHelper() {
      * @param {string} path - Path to convert
      * @param {boolean} [force] - Force conversion to match platform style (Only for string conversion)
      *
-     * @return {string|object} converted
+     * @returns {string|object} converted
      * */
 
     _ = function(path, force) {
@@ -129,7 +129,7 @@ function PathHelper() {
 
     /**
      * _.toString() Convert path object to string
-     * @return {String} path
+     * @returns {String} path
      *
      * Usage:
      * var myPathObj = new _("my/path/string");
@@ -146,7 +146,7 @@ function PathHelper() {
 
     /**
      * _.toArray() Convert path object to array
-     * @return {Array} path
+     * @returns {Array} path
      *
      * Usage:
      * var myPathObj = new _("my/path/string");
@@ -1254,7 +1254,7 @@ function PathHelper() {
             //console.debug(" does it exists ? ", p, exists );
             if (!found) {
                 //console.debug("done removing ", p);
-                callback(new Error('`'+p+'` does not found'), p)
+                callback(new Error('`'+p+'` not found'), p)
 
             } else {
                 rm(p).onComplete( function(err, path) {
@@ -1457,7 +1457,7 @@ function PathHelper() {
      * /data/folder/other file ( "/data/folder/other\ file" )
      * \\192.168.0.1\folder\file ( "\\\\192.168.0.1\\folder\\file" )
      *
-     * @return {boolean} isReal
+     * @returns {boolean} isReal
      *
      * @callback [ cb ]
      * @param {boolean} isReal
@@ -1494,7 +1494,7 @@ function PathHelper() {
      * Set path by name
      * 
      * @param {String} name - Path name
-     * @return {String} path
+     * @returns {String} path
      * */
     setPath = function(name, path) {        
         
@@ -1563,7 +1563,7 @@ function PathHelper() {
     /**
      * Get path by name
      * @param {String} name Path name
-     * @return {String} path
+     * @returns {String} path
      * */
     getPath = function(name) {
         var paths = getContext('paths');

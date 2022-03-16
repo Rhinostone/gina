@@ -9,7 +9,7 @@ var Class = function() {
      * @param {object} Class
      * @param {boolean} [autoInit]
      *
-     * @return {Object} instance - Class instance
+     * @returns {Object} instance - Class instance
      * */
     this.construct = function(Class, autoInit){
         var _this = this;

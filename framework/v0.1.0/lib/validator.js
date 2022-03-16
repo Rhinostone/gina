@@ -400,7 +400,7 @@ function Validator(data, errorLabels) {
          *
          * @param {string} [mask] - by default "yyyy-mm-dd"
          *
-         * @return {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
+         * @returns {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
          * */
         self[el].isDate = function(mask) {
             var val = this.value;
@@ -473,7 +473,7 @@ function Validator(data, errorLabels) {
         /**
          * Exclude when converting back to datas
          *
-         * @return {object} data
+         * @returns {object} data
          * */
         self[el].exclude = function() {
             //if (!this.value) return self[this.name];
@@ -492,7 +492,7 @@ function Validator(data, errorLabels) {
     /**
      * Check if errors found during validation
      *
-     * @return {boolean}
+     * @returns {boolean}
      * */
     self.isValid = function() {
         var i = local.errors.count();

@@ -365,7 +365,7 @@ function Proc(bundle, proc, usePidFile){
     /**
      * Get PID
      * @param {string} bundle
-     * @return {number} PID
+     * @returns {number} PID
      * */
     self.getPID = function(){
 

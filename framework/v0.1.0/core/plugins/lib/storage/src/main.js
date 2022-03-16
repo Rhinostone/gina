@@ -240,7 +240,7 @@ function StoragePlugin(options) {
      * @param {object} filter
      * @param {object} [options] - e.g.: limit
      *
-     * @return {array} result
+     * @returns {array} result
      * */
     function collectionFind(filter, options) {
         if (!filter) {
@@ -369,7 +369,7 @@ function StoragePlugin(options) {
      *
      * @param {object} filter
      *
-     * @return {array} result
+     * @returns {array} result
      * */
     function collectionDelete(filter) {
 

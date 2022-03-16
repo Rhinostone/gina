@@ -97,7 +97,7 @@ function SuperController(options) {
      * isHttp2
      * Returns `true` if server configured for HTTP/2
      * 
-     * @return {boolean} isHttp2
+     * @returns {boolean} isHttp2
      */
     var isHttp2 = function() {
         var options =  local.options;  
@@ -111,7 +111,7 @@ function SuperController(options) {
      * isSecured
      * Returns `true` if server configured to handle a HTTPS exchanges
      * 
-     * @return {boolean} isSecured
+     * @returns {boolean} isSecured
      */
     var isSecured = function() {
         return /https/.test(local.options.conf.server.scheme)
@@ -434,7 +434,7 @@ function SuperController(options) {
      * @param {object} userData
      * @param {boolean} [displayToolbar]
      * @param {object} [errOptions]
-     * @return {void}
+     * @returns {void}
      * */
     this.render = async function(userData, displayToolbar, errOptions) {
         var err = null;
@@ -1271,7 +1271,7 @@ function SuperController(options) {
      * @param {string|object} value - value to set
      * @param {boolean} [override]
      *
-     * @return {void}
+     * @returns {void}
      * */
     var set = function(name, value, override) {
 
@@ -1308,7 +1308,7 @@ function SuperController(options) {
      * Get data
      *
      * @param {String} variable Data name to set
-     * @return {Object | String} data Data object or String
+     * @returns {Object | String} data Data object or String
      * */
     var get = function(variable) {
         return local.userData[variable]
@@ -1357,7 +1357,7 @@ function SuperController(options) {
      * @param {array} resArr
      * @param {object} resObj
      *
-     * @return {object} content
+     * @returns {object} content
      *
      * @private
      * */
@@ -3016,7 +3016,7 @@ function SuperController(options) {
      * @callback [ next ]
      * @param {string | boolean} err
      *
-     * @return {string | boolean} err
+     * @returns {string | boolean} err
      * */
     this.forward404Unless = function(condition, req, res, next) {
         var pathname = req.url;
@@ -3182,9 +3182,8 @@ function SuperController(options) {
      * Get config
      *
      * @param {string} [name] - Conf name without extension.
-     * @return {object} config
+     * @returns {object} config
      *
-     * TODO - Protect result
      * */
     this.getConfig = function(name) {
         if ( typeof(name) != 'undefined' ) {
@@ -3194,7 +3193,7 @@ function SuperController(options) {
                 //config = Object.freeze(local.options.conf.content[name]);
                 //Object.seal(local.options.conf.content[name]);
                 //Object.freeze(local.options.conf.content[name]);
-                return local.options.conf.content[name];
+                return JSON.clone(local.options.conf.content[name]);
             } catch (err) {
                 return undefined;
             }
@@ -3210,7 +3209,7 @@ function SuperController(options) {
      *
      * @param {string} [shortCountryCode] - e.g. EN
      *
-     * @return {object} locales
+     * @returns {object} locales
      * */
     this.getLocales = function (shortCountryCode) {
 
@@ -3234,7 +3233,7 @@ function SuperController(options) {
          *
          * @param {string} [code] - e.g.: short, long, fifa, m49
          *
-         * @return {object} countries - countries code & value list
+         * @returns {object} countries - countries code & value list
          * */
         var getCountries = function (code) {
             var list = {}, cde = 'short', name = null;
@@ -3269,7 +3268,7 @@ function SuperController(options) {
      * Get forms rules
      *
      *
-     * @return {object} rules
+     * @returns {object} rules
      *
      * */
     this.getFormsRules = function () {
@@ -3619,7 +3618,7 @@ function SuperController(options) {
      * @param {number} code
      * @param {string} msg
      *
-     * @return {void}
+     * @returns {void}
      * */
     this.throwError = function(res, code, msg) {
         self.isProcessingError = true;

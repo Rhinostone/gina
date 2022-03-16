@@ -231,7 +231,7 @@ function DateFormatHelper() {
      *
      * @param {string} format
      *
-     * @return {string} maskName
+     * @returns {string} maskName
      * */
     // var getMaskNameFromFormat = function (format) {
 
@@ -253,7 +253,7 @@ function DateFormatHelper() {
      *  TODO - add a closure to `ignoreFromList(array)` based on Lib::Validator
      *
      *  @param {object} dateTo
-     *  @return {number} count
+     *  @returns {number} count
      * */
     var countDaysTo = function(date, dateTo) {
 
@@ -284,7 +284,7 @@ function DateFormatHelper() {
      *  @param {object} dateTo
      *  @param {string} [ mask ]
      *
-     *  @return {array} dates
+     *  @returns {array} dates
      * */
     var getDaysTo = function(date, dateTo, mask) {
 
@@ -337,7 +337,7 @@ function DateFormatHelper() {
      * @param {object} [date] if not defined, will take today's value
      * @param {string} [code] - us|eu
      * 
-     * @return {number} quarterNumber - 1 to 4
+     * @returns {number} quarterNumber - 1 to 4
      */
     var fiscalCodes = ['us', 'eu', 'corporate'];
     var getQuarter = function(date, code) {
@@ -386,7 +386,7 @@ function DateFormatHelper() {
      * @param {object} date 
      * @param {string} code
      * 
-     * @return halfYear number - 1 to 2
+     * @returns halfYear number - 1 to 2
      */
     var getHalfYear = function(date, code) {
         if (
@@ -419,7 +419,7 @@ function DateFormatHelper() {
      * 
      * @param {object} [date] if not defined, will take today's value
      * 
-     * @return {number} weekNumber
+     * @returns {number} weekNumber
      */
     var getWeekISO8601 = function(date) {
         // Copy date so don't modify original
@@ -439,7 +439,7 @@ function DateFormatHelper() {
      * 
      * @param {object} [date] if not defined, will take today's value
      * 
-     * @return {number} weekNumber - 1 to 53
+     * @returns {number} weekNumber - 1 to 53
      */
     var getWeek = function(date, standardMethod) {
         if ( typeof(date) == 'undefined' ) {

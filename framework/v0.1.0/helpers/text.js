@@ -20,7 +20,7 @@ module.exports = function(){
      * @todo
      * __ Translate a given string into the i18n for local value
      *
-     * @return {string} i18nValue Return the translated string
+     * @returns {string} i18nValue Return the translated string
      * */
     __ = function(str){
         var self = __;
@@ -41,7 +41,7 @@ module.exports = function(){
 /**
  * trim prototype
  *
- * @return {string} result
+ * @returns {string} result
  * */
 if (!String.prototype.trim) {
     String.prototype.trim = function(){
@@ -52,20 +52,20 @@ if (!String.prototype.trim) {
 /**
  * ltrim prototype
  *
- * @return {string} result
+ * @returns {string} result
  * */
 String.prototype.ltrim=function(){return this.replace(/^\s+/,'');};
 
 /**
  * rtrim prototype
  *
- * @return {string} result
+ * @returns {string} result
  * */
 String.prototype.rtrim=function(){return this.replace(/\s+$/,'');};
 
 /**
  * gtrim prototype - Global / full trim
  *
- * @return {string} result
+ * @returns {string} result
  * */
 String.prototype.gtrim=function(){return this.replace(/(?:(?:^|\n)\s+|\s+(?:$|\n))/g,'').replace(/\s+/g,' ');};
